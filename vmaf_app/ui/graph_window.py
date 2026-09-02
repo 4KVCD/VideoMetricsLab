@@ -17,9 +17,9 @@ import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
-    QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QCheckBox, QFileDialog, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QTableWidget, QTableWidgetItem,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
 from vmaf_app.core.models import FrameScore, VmafRunResult
@@ -32,6 +32,10 @@ _PALETTE = [
     "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
     "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD",
 ]
+
+# How many series the top panel shows before it starts scrolling -- past
+# this the list would crowd out the plot it's describing.
+_VISIBLE_SERIES_ROWS = 4
 
 # How many "x steps" to search either side of the cursor for a point to lock
 # onto -- see the step calculation in _MetricPage._on_mouse_moved.
@@ -327,28 +331,28 @@ class GraphWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
 
-        # --- top: series list (left) + statistics (right), shared across all
-        # metric tabs -- side by side instead of stacked, so this whole
-        # section takes less vertical space away from the plot below.
-        top = QWidget()
+        # --- top: one box holding the series list (left) and their stats
+        # (right), shared across all metric tabs. Both are capped at four
+        # videos' worth of height and scroll beyond that, so a long list
+        # can't crowd out the plot below.
+        top = QGroupBox("Series and statistics")
         top_layout = QHBoxLayout(top)
 
-        series_col = QVBoxLayout()
-        series_col.addWidget(QLabel("<b>Series</b>"))
         self.series_list_layout = QVBoxLayout()
         self.series_list_layout.setAlignment(Qt.AlignTop)
+        self.series_list_layout.setContentsMargins(0, 0, 0, 0)
         series_list_container = QWidget()
         series_list_container.setLayout(self.series_list_layout)
-        series_col.addWidget(series_list_container)
-        series_col.addStretch(1)
-        top_layout.addLayout(series_col)
+        self.series_scroll = QScrollArea()
+        self.series_scroll.setWidget(series_list_container)
+        self.series_scroll.setWidgetResizable(True)
+        self.series_scroll.setFrameShape(QFrame.NoFrame)
+        self.series_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.series_scroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
+        top_layout.addWidget(self.series_scroll)
 
-        stats_col = QVBoxLayout()
-        stats_col.addWidget(QLabel("<b>Statistics</b>"))
         self.stats_table = QTableWidget()
-        self.stats_table.setMaximumHeight(160)
-        stats_col.addWidget(self.stats_table)
-        top_layout.addLayout(stats_col, stretch=1)
+        top_layout.addWidget(self.stats_table, stretch=1)
 
         root.addWidget(top)
 
@@ -372,6 +376,7 @@ class GraphWindow(QMainWindow):
         root.addWidget(self._build_action_bar())
 
         self._setup_stats_table()
+        self._cap_panel_heights()
 
     def _build_page(self, metric: MetricSpec) -> _MetricPage:
         page = _MetricPage(metric)
@@ -411,6 +416,41 @@ class GraphWindow(QMainWindow):
 
         layout.addStretch(1)
         return bar
+
+    def _cap_panel_heights(self) -> None:
+        """Holds the series list and stats table to VISIBLE_SERIES_ROWS rows
+        each, scrolling beyond that. Measured from the widgets' own metrics
+        rather than a hardcoded pixel height, so it still fits at any font
+        size or display scaling."""
+        row_height = self.stats_table.verticalHeader().defaultSectionSize()
+        header_height = self.stats_table.horizontalHeader().sizeHint().height()
+        scrollbar = self.stats_table.horizontalScrollBar()
+        chrome = 2 * self.stats_table.frameWidth()
+        if scrollbar is not None and scrollbar.isVisible():
+            chrome += scrollbar.height()
+        self.stats_table.setMaximumHeight(
+            header_height + _VISIBLE_SERIES_ROWS * row_height + chrome + 2
+        )
+
+        # The series rows are custom widgets, so take the height from a real
+        # one when there is one and fall back to the table's row height.
+        rows = [
+            self.series_list_layout.itemAt(i).widget()
+            for i in range(self.series_list_layout.count())
+            if self.series_list_layout.itemAt(i).widget() is not None
+        ]
+        series_row_height = rows[0].sizeHint().height() if rows else row_height
+        self.series_scroll.setMaximumHeight(_VISIBLE_SERIES_ROWS * series_row_height + 4)
+
+        # Wide enough for the longest label plus its swatch and remove
+        # button: sharing an HBox with the stats table otherwise squeezes
+        # this down to its minimum and clips the buttons.
+        if rows:
+            widest = max(row.sizeHint().width() for row in rows)
+            bar = self.series_scroll.verticalScrollBar()
+            if bar is not None and bar.isVisible():
+                widest += bar.width()
+            self.series_scroll.setMinimumWidth(min(widest + 8, 420))
 
     def _current_metric(self) -> MetricSpec:
         return METRICS[self.tabs.currentIndex()] if self.tabs.currentIndex() >= 0 else METRICS[0]
@@ -550,3 +590,4 @@ class GraphWindow(QMainWindow):
                 if col == 0:
                     item.setForeground(QColor(entry.color))
                 self.stats_table.setItem(row, col, item)
+        self._cap_panel_heights()

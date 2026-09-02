@@ -531,3 +531,37 @@ def test_hovering_does_not_change_the_view(qapp):
     _hover_middle(win, "vmaf")
     assert chart.x_range() == before_x
     assert chart.y_range() == before_y
+
+
+# ------------------------------------------------------------------ top panel sizing
+
+def test_series_and_stats_are_capped_at_four_rows(qapp):
+    from vmaf_app.ui.graph_window import _VISIBLE_SERIES_ROWS
+
+    win = GraphWindow()
+    win.resize(1400, 900)
+    win.show()
+    for i in range(7):  # more series than the panel shows at once
+        win.add_run(_fake_result(f"{i}.mp4", vmaf_value=90.0 + i), f"s{i}")
+    qapp.processEvents()
+
+    row_height = win.stats_table.verticalHeader().defaultSectionSize()
+    header = win.stats_table.horizontalHeader().sizeHint().height()
+    # Both panels stop growing at four rows and scroll past that, rather
+    # than pushing the plot off the bottom of the window.
+    assert win.stats_table.maximumHeight() <= header + _VISIBLE_SERIES_ROWS * row_height + 30
+    assert win.series_scroll.maximumHeight() <= _VISIBLE_SERIES_ROWS * row_height * 2
+    assert win.stats_table.rowCount() == 7  # all series still listed, just scrolled
+
+
+def test_series_panel_is_wide_enough_for_its_rows(qapp):
+    # Sharing a row with the stats table squeezed this to its minimum and
+    # clipped the per-series remove buttons.
+    win = GraphWindow()
+    win.resize(1400, 900)
+    win.show()
+    win.add_run(_fake_result("a-fairly-long-encode-name.mp4"), "a-fairly-long-encode-name")
+    qapp.processEvents()
+
+    row = win.series_list_layout.itemAt(0).widget()
+    assert win.series_scroll.minimumWidth() >= min(row.sizeHint().width(), 420)
