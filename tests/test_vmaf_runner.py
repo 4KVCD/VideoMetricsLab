@@ -383,6 +383,7 @@ def test_xpsnr_reference_split_also_applies_to_resample_tests():
 
     assert "[ref]split=2[ref_xpsnr][ref_vmaf]" in graph
     assert "[xmain][ref_vmaf]libvmaf=" in graph
+    assert "xpsnr=stats_file=xpsnr_log.txt" in graph
 
 
 def test_xpsnr_requested_but_no_log_path_is_a_noop():
@@ -400,19 +401,6 @@ def test_xpsnr_requested_but_no_log_path_is_a_noop():
 
     assert "xpsnr" not in graph
 
-
-def test_xpsnr_stage_also_available_for_resample_tests():
-    source_info = _info("source.mov", 1920, 1080)
-    options = VmafOptions(
-        model="version=vmaf_v0.6.1", compute_xpsnr=True, resample_test=ResampleTarget(width=960, label="480p"),
-    )
-
-    graph = _build_resample_test_filtergraph(
-        source_info, options, source_crop=None, hwaccel_used=None,
-        log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
-    )
-
-    assert "xpsnr=stats_file=xpsnr_log.txt" in graph
 
 
 def test_parse_xpsnr_log_converts_1_indexed_to_0_indexed_frames(tmp_path):

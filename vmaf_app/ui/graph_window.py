@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -84,12 +84,20 @@ class SeriesEntry:
     visible: bool = True
 
 
+_HOVER_PLACEHOLDER = (
+    "Hover to inspect a point (locks onto the lowest nearby score at or below "
+    "your cursor, so dips are easy to land on).\n"
+    "Scroll to zoom, drag to pan, double-click to reset."
+)
+
+
 @dataclass
 class _MetricCurve:
     stats: VmafStats
     # Held once per add_run rather than re-derived on every hover move --
     # that per-call work was a measured CPU bottleneck on a long run.
     values: np.ndarray
+    label: str = ""  # the series' display name, for sizing the hover readout
     visible: bool = True
 
 
@@ -120,26 +128,19 @@ class _MetricPage(QWidget):
         self.no_data_label.setVisible(False)
         layout.addWidget(self.no_data_label)
 
-        self.hover_label = QLabel(
-            "Hover to inspect a point (locks onto the lowest nearby score at or below "
-            "your cursor, so dips are easy to land on). Scroll to zoom, drag to pan, "
-            "double-click to reset."
-        )
+        self.hover_label = QLabel(_HOVER_PLACEHOLDER)
         self.hover_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.hover_label.setStyleSheet("font-family: Consolas, monospace; padding: 6px;")
-        # Fixed height + plain text + no wrap, all for the same reason: this
+        # Explicit size + plain text + no wrap, all for the same reason: this
         # is rewritten on every mouse move, and anything that lets its size
         # hint change invalidates the layout of the whole tab (chart, stats
         # table and all) on each one. That relayout, not the painting, was
-        # measured as ~76% of the total cost of a hover.
-        self.hover_label.setFixedHeight(90)
+        # measured as ~76% of the total cost of a hover. The size is derived
+        # from the series set (_fit_hover_label), never from the text under
+        # the cursor, so it stays put while the mouse moves.
         self.hover_label.setWordWrap(False)
         self.hover_label.setTextFormat(Qt.PlainText)  # skips Qt's rich-text sniffing per update
-        # Kept to its natural width rather than stretched across the window:
-        # repaint cost is proportional to the damaged area, and a full-width
-        # strip made every mouse move repaint ~2400x90px of mostly blank
-        # space. A stretch to its right takes up the slack instead.
-        self.hover_label.setMaximumWidth(560)
+        self._fit_hover_label()
         hover_row = QHBoxLayout()
         hover_row.setContentsMargins(0, 0, 0, 0)
         hover_row.addWidget(self.hover_label)
@@ -166,15 +167,18 @@ class _MetricPage(QWidget):
             times=entry.times, values=values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
-            stats=compute_stats(values, self.metric.thresholds), values=values, visible=entry.visible,
+            stats=compute_stats(values, self.metric.thresholds), values=values,
+            label=entry.label, visible=entry.visible,
         )
         self._update_no_data_label()
+        self._fit_hover_label()
 
     def remove_curve(self, series_id: int) -> None:
         if self._curves.pop(series_id, None) is None:
             return
         self.chart.remove_series(series_id)
         self._update_no_data_label()
+        self._fit_hover_label()
 
     def set_visible(self, series_id: int, visible: bool) -> None:
         curve = self._curves.get(series_id)
@@ -182,12 +186,53 @@ class _MetricPage(QWidget):
             return
         curve.visible = visible
         self.chart.set_series_visible(series_id, visible)
+        self._fit_hover_label()
 
     def _update_no_data_label(self) -> None:
         self.no_data_label.setVisible(not self._curves)
 
     def _on_pointer_left(self) -> None:
         self.chart.set_cursor_time(None)
+
+    def _fit_hover_label(self) -> None:
+        """Sizes the readout to the widest/tallest text it can actually show.
+
+        A hardcoded size clipped real content: long encode names ran past the
+        old 560px cap mid-number, and the delta line -- the longest of the
+        lot -- lost its value entirely. The size still must not change per
+        hover (that relayout was the dominant hover cost), so it is derived
+        from the series set here and left alone while the mouse moves.
+        """
+        fm = QFontMetrics(self.hover_label.font())
+        labels = self._visible_labels()
+
+        # The widest each line can get, with digits standing in at their
+        # fattest so the size doesn't shift as the values under the cursor do.
+        lines = ["Time: 0:00:00.00"]
+        for label in labels:
+            lines.append(
+                f"[{label}]  frame {'8' * 7}   t=0:00:00.00   "
+                f"{self.metric.label}={self.metric.value_format.format(-88.88)}"
+            )
+        if len(labels) == 2:
+            lines.append(f"Δ ({labels[0]} − {labels[1]}) = -88.88")
+        if not labels:
+            lines = _HOVER_PLACEHOLDER.splitlines()
+
+        padding = 16  # the 6px stylesheet padding either side, plus a margin
+        width = max(fm.horizontalAdvance(line) for line in lines) + padding
+        height = len(lines) * fm.lineSpacing() + padding
+
+        # A maximum rather than a fixed width: the label never claims more
+        # room than its text needs (hover repaint cost scales with the damaged
+        # area, and a full-window strip repainted mostly blank space), but it
+        # can still shrink if the window is narrower than the text.
+        self.hover_label.setMaximumWidth(width)
+        self.hover_label.setFixedHeight(height)
+
+    def _visible_labels(self) -> list[str]:
+        """Names of the series currently plotted on this page, in display order."""
+        return [c.label for c in self._curves.values() if c.visible]
 
     def _set_hover_text(self, text: str) -> None:
         # Dragging across one frame's worth of pixels reports the same thing

@@ -34,6 +34,7 @@ def test_empty_frames_returns_zeroed_stats():
     assert stats.count == 0
     assert stats.thresholds == []
     assert stats.histogram == []
+    assert dict(stats.summary)["Mean"] == "0.00"  # summary must format, not raise
 
 
 def test_histogram_bins_cover_all_frames():
@@ -73,7 +74,3 @@ def test_low_percentiles_are_monotonically_non_increasing():
     assert stats.percentile_1 >= stats.percentile_0_1
 
 
-def test_empty_frames_summary_does_not_raise():
-    stats = compute_stats([])
-    summary = dict(stats.summary)
-    assert summary["Mean"] == "0.00"

@@ -424,52 +424,14 @@ def test_graph_x_axis_renders_hms_ticks(qapp):
 
 # ------------------------------------------------------------------ Y-axis auto-scaling
 
-def test_y_axis_bottom_rounds_down_to_nearest_5_below_lowest_score(qapp):
-    win = GraphWindow()
-    win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
-    sid = next(iter(win._entries))
-    # one real low point (62 -> floors the axis to 60)
-    result = win._entries[sid].result
-    vmaf = result.frames.vmaf.copy()
-    vmaf[3] = 62.0
-    result.frames = result.frames.with_values("vmaf", vmaf)
-    win.add_run(result, win._entries[sid].label)  # rebuild the curve/stats
-
-    y_range = win._pages["vmaf"].chart.y_range()
-    assert y_range[0] == 60
 
 
-def test_y_axis_bottom_stays_at_0_when_nothing_is_below_60(qapp):
-    win = GraphWindow()
-    win.add_run(_fake_result("a.mp4", vmaf_value=90.0))  # every frame is 90.0, well above 60
-
-    y_range = win._pages["vmaf"].chart.y_range()
-    assert y_range[0] == 90 - (90 % 5)  # 90 is already a multiple of 5, so floor(90/5)*5 == 90
 
 
-def test_y_axis_stays_sane_when_every_score_is_identical(qapp):
-    # Regression test: a lossless/near-lossless run where every frame scores
-    # exactly 100 floored the axis bottom to 100 too, and asking pyqtgraph
-    # for a zero-height range made it substitute its own -- which came out
-    # as 50..150, i.e. half the plot showing impossible >100 scores.
-    win = GraphWindow()
-    win.add_run(_fake_result("perfect.mp4", vmaf_value=100.0))
-
-    y_range = win._pages["vmaf"].chart.y_range()
-    assert y_range[1] == 100          # still capped at the ceiling
-    assert y_range[0] < y_range[1]    # and not a degenerate zero-height range
-    assert y_range[0] >= 90           # tight around the data, not wildly zoomed out
-
-
-def test_y_axis_top_is_capped_exactly_at_100_with_no_headroom(qapp):
-    win = GraphWindow()
-    win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
-
-    y_range = win._pages["vmaf"].chart.y_range()
-    assert y_range[1] == 100  # no margin/wasted space above VMAF's ceiling
-
-
-def test_y_axis_ignores_hidden_series_lowest_point(qapp):
+def test_hiding_a_series_reaches_the_charts_y_range(qapp):
+    # The y-range rules themselves are covered directly in test_chart.py;
+    # what this checks is that the window's visibility toggle actually
+    # reaches the chart that computes them.
     win = GraphWindow()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
     win.add_run(_fake_result("b.mp4", vmaf_value=40.0))
@@ -632,3 +594,76 @@ def test_clicking_a_rows_remove_cell_removes_the_series(qapp):
     assert _row_for(win, "b").text() == "b"
 
 
+
+
+# ------------------------------------------------------- hover readout sizing
+
+def _hover_label_fits(page) -> tuple[bool, bool]:
+    """(width fits, height fits) for whatever the readout currently shows."""
+    from PySide6.QtGui import QFontMetrics
+    fm = QFontMetrics(page.hover_label.font())
+    lines = page.hover_label.text().split("\n")
+    widest = max(fm.horizontalAdvance(line) for line in lines)
+    return widest <= page.hover_label.width(), \
+        len(lines) * fm.lineSpacing() <= page.hover_label.height()
+
+
+def test_hover_readout_is_not_clipped_by_long_series_names(qapp):
+    # The readout used to be pinned to 560x90px, which cut real content: long
+    # encode names ran off the right mid-number, and the delta line -- the
+    # longest of the lot -- lost its value entirely.
+    long_a = "Top Gun Maverick 1080p QP 24 fast 1 sub"
+    long_b = "Top Gun Maverick 1080p QP 24 faster 1 sub"
+    win = GraphWindow()
+    win.resize(1700, 950)
+    win.show()
+    win.add_run(_fake_result("a.mp4", vmaf_value=91.0), long_a)
+    win.add_run(_fake_result("b.mp4", vmaf_value=93.0), long_b)
+    qapp.processEvents()
+
+    _hover_middle(win, "vmaf")
+    page = win._pages["vmaf"]
+
+    text = page.hover_label.text()
+    assert "Δ" in text and text.strip().endswith(("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+    width_ok, height_ok = _hover_label_fits(page)
+    assert width_ok, f"readout clipped horizontally: {page.hover_label.width()}px"
+    assert height_ok, f"readout clipped vertically: {page.hover_label.height()}px"
+
+
+def test_hover_readout_fits_every_series_when_many_are_shown(qapp):
+    win = GraphWindow()
+    win.resize(1700, 950)
+    win.show()
+    for i in range(6):
+        win.add_run(_fake_result(f"{i}.mp4", vmaf_value=90.0 + i), f"encode-number-{i}-with-a-long-name")
+    qapp.processEvents()
+
+    _hover_middle(win, "vmaf")
+    page = win._pages["vmaf"]
+
+    assert len(page.hover_label.text().split("\n")) == 7  # time + 6 series
+    width_ok, height_ok = _hover_label_fits(page)
+    assert width_ok and height_ok
+
+
+def test_hover_readout_size_does_not_change_while_hovering(qapp):
+    # The size is derived from the series set, never from the text under the
+    # cursor: letting it change per mouse move re-laid out the whole tab
+    # (chart and table included), which measured as ~76% of a hover's cost.
+    win = GraphWindow()
+    win.resize(1700, 950)
+    win.show()
+    win.add_run(_fake_result("a.mp4", vmaf_value=91.0), "an-encode-with-a-long-name")
+    qapp.processEvents()
+
+    page = win._pages["vmaf"]
+    chart = page.chart
+    x0, x1 = chart.x_range()
+    y0, y1 = chart.y_range()
+
+    _hover(win, "vmaf", x0 + (x1 - x0) * 0.1, (y0 + y1) / 2)
+    before = page.hover_label.size()
+    for frac in (0.3, 0.5, 0.7, 0.9):
+        _hover(win, "vmaf", x0 + (x1 - x0) * frac, (y0 + y1) / 2)
+        assert page.hover_label.size() == before, f"readout resized at {frac}"

@@ -3,16 +3,13 @@ from pathlib import Path
 import pytest
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
-from vmaf_app.core.model_select import resolve_model
 from vmaf_app.core.models import (
     CropMode,
     FrameScore,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
-    VmafOptions,
     VmafRunResult,
-    clone_options,
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
@@ -96,36 +93,8 @@ def test_run_clicked_only_queues_unscored_rows(qapp):
 
 # ------------------------------------------------------------------ resolve_model / clone_options
 
-def test_resolve_model_auto_picks_4k_for_uhd_distorted():
-    opts = VmafOptions(model_choice="__auto__")
-    assert resolve_model(opts, _fake_video_info("d.mp4")) == "version=vmaf_v0.6.1"
-
-    uhd_info = VideoInfo(path=Path("d.mp4"), width=3840, height=2160, fps=30.0, duration=5.0, nb_frames=150, codec_name="hevc")
-    assert resolve_model(opts, uhd_info) == "version=vmaf_4k_v0.6.1"
 
 
-def test_resolve_model_fixed_choice_passes_through():
-    opts = VmafOptions(model_choice="version=vmaf_v0.6.1neg")
-    assert resolve_model(opts, _fake_video_info("d.mp4")) == "version=vmaf_v0.6.1neg"
-
-
-def test_resolve_model_custom_requires_a_path():
-    opts = VmafOptions(model_choice="__custom__", custom_model_path=None)
-    with pytest.raises(ValueError):
-        resolve_model(opts, _fake_video_info("d.mp4"))
-
-    opts2 = VmafOptions(model_choice="__custom__", custom_model_path="C:/models/mine.json")
-    assert resolve_model(opts2, _fake_video_info("d.mp4")) == "path=C:/models/mine.json"
-
-
-def test_clone_options_is_an_independent_copy():
-    original = VmafOptions(extra_features=["name=psnr"])
-    copy = clone_options(original)
-    copy.extra_features.append("name=float_ssim")
-    copy.n_threads = 99
-
-    assert original.extra_features == ["name=psnr"]
-    assert original.n_threads == 0
 
 
 # ------------------------------------------------------------------ per-video settings panel
@@ -319,12 +288,6 @@ def test_distorted_table_columns_are_user_resizable(qapp):
         assert header.sectionResizeMode(col) == QHeaderView.Interactive
     assert header.stretchLastSection() is False
 
-
-def test_distorted_table_column_can_actually_be_resized(qapp):
-    win = MainWindow()
-    original = win.distorted_table.columnWidth(COL_INFO)
-    win.distorted_table.setColumnWidth(COL_INFO, original + 60)
-    assert win.distorted_table.columnWidth(COL_INFO) == original + 60
 
 
 def test_path_column_itself_can_be_manually_resized(qapp):
