@@ -110,7 +110,6 @@ def load_run(path: Path) -> tuple[VmafRunResult, str]:
         distorted_crop=_crop_from_dict(data.get("distorted_crop")),
         source_info=_info_from_dict(data["source_info"]),
         distorted_info=_info_from_dict(data["distorted_info"]),
-        raw_log_path=None,
         # Missing in files saved before "test both directions" existed --
         # SOURCE_TO_DISTORTED was the only behavior then, so it's the correct
         # default for those older files, not just an arbitrary fallback.

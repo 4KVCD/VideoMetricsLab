@@ -329,7 +329,6 @@ class VmafRunResult:
     distorted_crop: CropBox | None
     source_info: VideoInfo
     distorted_info: VideoInfo
-    raw_log_path: Path | None = None
     # Which direction resolution mismatches were resolved in for this run --
     # recorded (not just derived from the row's *current* options) so a
     # reloaded/cached result always reflects what actually produced these

@@ -417,6 +417,66 @@ def _parse_xpsnr_log(xpsnr_log_path: Path) -> dict[int, float]:
     return result
 
 
+#: (hwaccel or None for software, model resolved relative to the run's temp
+#: dir, libvmaf log path, xpsnr log path or None) -> the ffmpeg argv to run.
+#: The two run flavours differ only in this, so _execute_run takes it as a
+#: parameter rather than duplicating the whole pipeline around it.
+CommandBuilder = Callable[[str | None, str | None, Path, Path | None], list[str]]
+
+
+def _execute_run(
+    build_command: CommandBuilder,
+    *,
+    options: VmafOptions,
+    fps: float,
+    total_frames: int,
+    hwaccel: str | None,
+    tmp_prefix: str,
+    on_progress: ProgressCallback | None,
+    on_status: Callable[[str], None] | None,
+    cancel_event: threading.Event | None,
+    process_handle: ProcessHandle | None,
+) -> FrameScores:
+    """Runs one ffmpeg invocation to completion and parses its logs.
+
+    Shared by run_vmaf and run_resample_test, which previously carried
+    byte-identical copies of the temp-dir setup, the GPU-decode fallback, the
+    exit-code/missing-log checks and the log parsing -- four places a fix had
+    to be remembered in, and one of them would eventually be missed.
+    """
+    with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
+        log_path = tmpdir / "vmaf_log.json"
+        xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
+        resolved_model = _resolve_model_for_cwd(options.model, tmpdir)
+
+        def run_with(accel: str | None):
+            cmd = build_command(accel, resolved_model, log_path, xpsnr_log_path)
+            return _run_ffmpeg(
+                cmd, total_frames, on_progress, cancel_event,
+                cwd=tmpdir, process_handle=process_handle,
+            )
+
+        if on_status:
+            on_status(f"Running ffmpeg (GPU decode: {hwaccel or 'off'})...")
+        result = run_with(hwaccel)
+
+        if result.returncode != 0 and hwaccel is not None:
+            # GPU decode path failed to launch/decode -- retry on CPU.
+            if on_status:
+                on_status("GPU decode failed, retrying with software decode...")
+            result = run_with(None)
+
+        if result.returncode != 0:
+            tail = "\n".join(result.stderr.splitlines()[-25:])
+            raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
+
+        if not log_path.exists():
+            raise VmafRunError("ffmpeg finished but no VMAF log was produced.", stderr_tail=result.stderr[-2000:])
+
+        return _parse_log(log_path, fps, xpsnr_log_path)
+
+
 def run_vmaf(
     source_info: VideoInfo,
     distorted_info: VideoInfo,
@@ -441,54 +501,27 @@ def run_vmaf(
     if options.gpu_decode_source:
         hwaccel = pick_hwaccel(options.gpu_vendor, source_info.codec_name)
 
-    with tempfile.TemporaryDirectory(prefix="vmaf_run_") as tmpdir_str:
-        tmpdir = Path(tmpdir_str)
-        log_path = tmpdir / "vmaf_log.json"
-        xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
-        resolved_model = _resolve_model_for_cwd(options.model, tmpdir)
+    def build_command(accel, model, log_path, xpsnr_log_path):
         filtergraph = _build_filtergraph(
-            source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, log_path,
-            model=resolved_model, xpsnr_log_path=xpsnr_log_path,
+            source_info, distorted_info, options, source_crop, distorted_crop, accel, log_path,
+            model=model, xpsnr_log_path=xpsnr_log_path,
         )
-        total_frames = estimate_total_frames(distorted_info, options)
-
-        if on_status:
-            on_status(f"Running ffmpeg (GPU decode: {hwaccel or 'off'})...")
-
-        cmd = _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, hwaccel, options.duration_limit)
-        result = _run_ffmpeg(
-            cmd, total_frames, on_progress, cancel_event, cwd=tmpdir, process_handle=process_handle,
+        return _build_ffmpeg_cmd(
+            distorted_info.path, source_info.path, filtergraph, accel, options.duration_limit,
         )
 
-        if result.returncode != 0 and hwaccel is not None:
-            # GPU decode path failed to launch/decode -- retry on CPU.
-            if on_status:
-                on_status("GPU decode failed, retrying with software decode...")
-            filtergraph = _build_filtergraph(
-                source_info, distorted_info, options, source_crop, distorted_crop, None, log_path,
-                model=resolved_model, xpsnr_log_path=xpsnr_log_path,
-            )
-            cmd = _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, None, options.duration_limit)
-            result = _run_ffmpeg(
-                cmd, total_frames, on_progress, cancel_event, cwd=tmpdir, process_handle=process_handle,
-            )
-            hwaccel = None
-
-        if result.returncode != 0:
-            tail = "\n".join(result.stderr.splitlines()[-25:])
-            raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
-
-        if not log_path.exists():
-            raise VmafRunError("ffmpeg finished but no VMAF log was produced.", stderr_tail=result.stderr[-2000:])
-
-        frames = _parse_log(log_path, distorted_info.fps, xpsnr_log_path)
-
-        # Copy the raw log out of the temp dir so the caller can keep it if wanted.
-        persisted_log = Path(tempfile.gettempdir()) / f"vmaf_last_run_{id(frames)}.json"
-        try:
-            persisted_log.write_bytes(log_path.read_bytes())
-        except OSError:
-            persisted_log = None
+    frames = _execute_run(
+        build_command,
+        options=options,
+        fps=distorted_info.fps,
+        total_frames=estimate_total_frames(distorted_info, options),
+        hwaccel=hwaccel,
+        tmp_prefix="vmaf_run_",
+        on_progress=on_progress,
+        on_status=on_status,
+        cancel_event=cancel_event,
+        process_handle=process_handle,
+    )
 
     return VmafRunResult(
         source=source_info.path,
@@ -500,7 +533,6 @@ def run_vmaf(
         distorted_crop=distorted_crop,
         source_info=source_info,
         distorted_info=distorted_info,
-        raw_log_path=persisted_log,
         scale_direction=options.scale_direction,
     )
 
@@ -532,50 +564,25 @@ def run_resample_test(
     if options.gpu_decode_source:
         hwaccel = pick_hwaccel(options.gpu_vendor, source_info.codec_name)
 
-    with tempfile.TemporaryDirectory(prefix="vmaf_resample_") as tmpdir_str:
-        tmpdir = Path(tmpdir_str)
-        log_path = tmpdir / "vmaf_log.json"
-        xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
-        resolved_model = _resolve_model_for_cwd(options.model, tmpdir)
+    def build_command(accel, model, log_path, xpsnr_log_path):
         filtergraph = _build_resample_test_filtergraph(
-            source_info, options, source_crop, hwaccel, log_path, model=resolved_model,
-            xpsnr_log_path=xpsnr_log_path,
+            source_info, options, source_crop, accel, log_path,
+            model=model, xpsnr_log_path=xpsnr_log_path,
         )
-        total_frames = estimate_total_frames(source_info, options)
+        return _build_resample_cmd(source_info.path, filtergraph, accel, options.duration_limit)
 
-        if on_status:
-            on_status(f"Running ffmpeg (GPU decode: {hwaccel or 'off'})...")
-
-        cmd = _build_resample_cmd(source_info.path, filtergraph, hwaccel, options.duration_limit)
-        result = _run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd=tmpdir, process_handle=process_handle)
-
-        if result.returncode != 0 and hwaccel is not None:
-            if on_status:
-                on_status("GPU decode failed, retrying with software decode...")
-            filtergraph = _build_resample_test_filtergraph(
-                source_info, options, source_crop, None, log_path, model=resolved_model,
-                xpsnr_log_path=xpsnr_log_path,
-            )
-            cmd = _build_resample_cmd(source_info.path, filtergraph, None, options.duration_limit)
-            result = _run_ffmpeg(
-                cmd, total_frames, on_progress, cancel_event, cwd=tmpdir, process_handle=process_handle,
-            )
-            hwaccel = None
-
-        if result.returncode != 0:
-            tail = "\n".join(result.stderr.splitlines()[-25:])
-            raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
-
-        if not log_path.exists():
-            raise VmafRunError("ffmpeg finished but no VMAF log was produced.", stderr_tail=result.stderr[-2000:])
-
-        frames = _parse_log(log_path, source_info.fps, xpsnr_log_path)
-
-        persisted_log = Path(tempfile.gettempdir()) / f"vmaf_last_run_{id(frames)}.json"
-        try:
-            persisted_log.write_bytes(log_path.read_bytes())
-        except OSError:
-            persisted_log = None
+    frames = _execute_run(
+        build_command,
+        options=options,
+        fps=source_info.fps,
+        total_frames=estimate_total_frames(source_info, options),
+        hwaccel=hwaccel,
+        tmp_prefix="vmaf_resample_",
+        on_progress=on_progress,
+        on_status=on_status,
+        cancel_event=cancel_event,
+        process_handle=process_handle,
+    )
 
     distorted_path = synthetic_resample_distorted_path(source_info.path, options.resample_test)
     return VmafRunResult(
@@ -588,5 +595,4 @@ def run_resample_test(
         distorted_crop=source_crop,  # same crop applies to both branches, since both come from the same source
         source_info=source_info,
         distorted_info=source_info,  # after the round trip it's back at the source's own resolution
-        raw_log_path=persisted_log,
     )
