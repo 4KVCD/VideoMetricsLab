@@ -10,15 +10,12 @@ since it's the same set of runs either way.
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-import pyqtgraph as pg
-import pyqtgraph.exporters  # noqa: F401 - registers pg.exporters.ImageExporter
-from PySide6.QtCore import QEvent, QObject, Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
@@ -29,6 +26,7 @@ from vmaf_app.core.models import FrameScore, VmafRunResult
 from vmaf_app.core.run_io import export_csv, load_run, save_run
 from vmaf_app.core.stats import DEFAULT_THRESHOLDS, VmafStats, compute_stats
 from vmaf_app.core.time_format import format_hms
+from vmaf_app.ui.chart import ChartSeries, ChartWidget
 
 _PALETTE = [
     "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
@@ -39,11 +37,6 @@ _PALETTE = [
 # onto -- see the step calculation in _MetricPage._on_mouse_moved.
 _HOVER_SEARCH_STEPS = 5
 
-# Smallest Y span a bounded-scale plot (VMAF) will ever show, so a run whose
-# scores are all identical still gets a real axis instead of a zero-height
-# (and then pyqtgraph-substituted, wildly wrong) one -- see _update_y_range.
-_Y_AXIS_MIN_SPAN = 5
-
 
 @dataclass
 class MetricSpec:
@@ -51,7 +44,7 @@ class MetricSpec:
     label: str  # tab title / series-list column label
     axis_label: str  # plot Y-axis label
     value_format: str  # format spec for hover-text values, e.g. "{:.2f}"
-    fixed_y_max: float | None  # VMAF's natural ceiling (100); None = let pyqtgraph auto-range
+    fixed_y_max: float | None  # VMAF's natural ceiling (100); None = autoscale to the data
     thresholds: list[tuple[str, float]] = field(default_factory=list)  # only meaningful on VMAF's fixed 0-100 scale
 
     def value(self, frame: FrameScore) -> float | None:
@@ -64,42 +57,6 @@ METRICS: list[MetricSpec] = [
     MetricSpec("ssim", "SSIM", "SSIM", "{:.4f}", fixed_y_max=None),
     MetricSpec("xpsnr", "XPSNR", "XPSNR (dB)", "{:.2f}", fixed_y_max=None),
 ]
-
-
-class TimeAxisItem(pg.AxisItem):
-    """An axis that renders tick values as H:M:S instead of raw seconds."""
-
-    def tickStrings(self, values, scale, spacing):
-        return [format_hms(v) for v in values]
-
-
-class _CrosshairOverlay(QWidget):
-    """Draws just the vertical hover line, as a plain-QPainter widget stacked
-    on top of the plot's viewport instead of a pyqtgraph scene item.
-
-    A pyqtgraph item living in the same GL-backed scene as the curves means
-    every setPos() on it invalidates that scene -- and QOpenGLWidget redraws
-    its whole framebuffer on any invalidation, so moving only the crosshair
-    was repainting every curve and axis too on every mouse move. This widget
-    is a separate, ordinary (non-GL) sibling that Qt composites on top of the
-    plot's backing store, so updating it only repaints this thin transparent
-    layer -- the curves/axes underneath are untouched.
-    """
-
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.setAttribute(Qt.WA_NoSystemBackground)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.line_x: float | None = None
-
-    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
-        if self.line_x is None:
-            return
-        painter = QPainter(self)
-        painter.setPen(pg.mkPen("#999", width=1))
-        painter.drawLine(int(self.line_x), 0, int(self.line_x), self.height())
-        painter.end()
 
 
 @dataclass
@@ -115,12 +72,11 @@ class SeriesEntry:
 
 @dataclass
 class _MetricCurve:
-    curve: pg.PlotDataItem
     stats: VmafStats
-    # Cached once per add_run rather than rebuilt on every hover move -- see
-    # _on_mouse_moved, which used to be the actual measured CPU bottleneck
-    # for exactly this kind of per-call list-building on a long run.
+    # Held once per add_run rather than re-derived on every hover move --
+    # that per-call work was a measured CPU bottleneck on a long run.
     values: np.ndarray
+    visible: bool = True
 
 
 class _MetricPage(QWidget):
@@ -132,26 +88,18 @@ class _MetricPage(QWidget):
     def __init__(self, metric: MetricSpec, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.metric = metric
-        self._curves: dict[int, _MetricCurve] = {}  # series_id -> curve/stats, only entries with data
-        self._autorange_frozen = False
+        self._curves: dict[int, _MetricCurve] = {}  # series_id -> stats/values, only entries with data
+        self._hover_text = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        use_opengl = os.environ.get("QT_QPA_PLATFORM") != "offscreen"
-        pg.setConfigOptions(antialias=False, background="w", foreground="k", useOpenGL=use_opengl)
-
-        self.plot_widget = pg.PlotWidget(axisItems={"bottom": TimeAxisItem(orientation="bottom")})
-        self.plot_widget.setLabel("bottom", "Time (H:M:S)")
-        self.plot_widget.setLabel("left", metric.axis_label)
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.25)
-        if metric.fixed_y_max is not None:
-            self.plot_widget.setYRange(0, metric.fixed_y_max, padding=0)
-        layout.addWidget(self.plot_widget)
+        self.chart = ChartWidget(y_axis_label=metric.axis_label, fixed_y_max=metric.fixed_y_max)
+        layout.addWidget(self.chart, stretch=1)
 
         self.no_data_label = QLabel(
             f"No {metric.label} data among the currently visible series -- "
-            f"check \"Also compute {metric.label}\" before running to see it here."
+            f"tick the {metric.label} column header before running to see it here."
         )
         self.no_data_label.setAlignment(Qt.AlignCenter)
         self.no_data_label.setStyleSheet("color: #888; font-style: italic; padding: 12px;")
@@ -159,25 +107,34 @@ class _MetricPage(QWidget):
         layout.addWidget(self.no_data_label)
 
         self.hover_label = QLabel(
-            "Hover over the graph to inspect a point (locks onto the lowest nearby "
-            "score at or below your cursor, so dips are easy to land on)."
+            "Hover to inspect a point (locks onto the lowest nearby score at or below "
+            "your cursor, so dips are easy to land on). Scroll to zoom, drag to pan, "
+            "double-click to reset."
         )
         self.hover_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.hover_label.setStyleSheet("font-family: Consolas, monospace; padding: 6px;")
-        self.hover_label.setMinimumHeight(90)
-        self.hover_label.setWordWrap(True)
-        layout.addWidget(self.hover_label)
+        # Fixed height + plain text + no wrap, all for the same reason: this
+        # is rewritten on every mouse move, and anything that lets its size
+        # hint change invalidates the layout of the whole tab (chart, stats
+        # table and all) on each one. That relayout, not the painting, was
+        # measured as ~76% of the total cost of a hover.
+        self.hover_label.setFixedHeight(90)
+        self.hover_label.setWordWrap(False)
+        self.hover_label.setTextFormat(Qt.PlainText)  # skips Qt's rich-text sniffing per update
+        # Kept to its natural width rather than stretched across the window:
+        # repaint cost is proportional to the damaged area, and a full-width
+        # strip made every mouse move repaint ~2400x90px of mostly blank
+        # space. A stretch to its right takes up the slack instead.
+        self.hover_label.setMaximumWidth(560)
+        hover_row = QHBoxLayout()
+        hover_row.setContentsMargins(0, 0, 0, 0)
+        hover_row.addWidget(self.hover_label)
+        hover_row.addStretch(1)
+        layout.addLayout(hover_row)
 
-        viewport = self.plot_widget.viewport()
-        self._crosshair_overlay = _CrosshairOverlay(viewport)
-        self._crosshair_overlay.setGeometry(viewport.rect())
-        self._crosshair_overlay.show()
-        self._crosshair_overlay.raise_()
-        viewport.installEventFilter(self)
-
-        # The mouse-move proxy is created by GraphWindow, not here -- it
-        # needs the shared _entries map (by series id -> SeriesEntry) that
-        # only GraphWindow owns, since the same series appears on every page.
+        self.chart.left.connect(self._on_pointer_left)
+        # chart.hovered is connected by GraphWindow -- the handler needs the
+        # shared series map that only GraphWindow owns.
 
     # ------------------------------------------------------------------ curves
     def set_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
@@ -191,59 +148,39 @@ class _MetricPage(QWidget):
         if values is None or len(values) == 0:
             self._update_no_data_label()
             return
-        curve = self.plot_widget.plot(entry.times, values, pen=pg.mkPen(color, width=2))
-        curve.setDownsampling(auto=True, method="peak")
-        curve.setClipToView(True)
-        curve.setVisible(entry.visible)
-        stats = compute_stats(values, self.metric.thresholds)
-        self._curves[series_id] = _MetricCurve(curve=curve, stats=stats, values=values)
+        self.chart.set_series(series_id, ChartSeries(
+            times=entry.times, values=values, color=color, visible=entry.visible,
+        ))
+        self._curves[series_id] = _MetricCurve(
+            stats=compute_stats(values, self.metric.thresholds), values=values, visible=entry.visible,
+        )
         self._update_no_data_label()
-        self._update_y_range()
-        self._unfreeze_autorange()
 
     def remove_curve(self, series_id: int) -> None:
-        entry = self._curves.pop(series_id, None)
-        if entry is None:
+        if self._curves.pop(series_id, None) is None:
             return
-        self.plot_widget.removeItem(entry.curve)
+        self.chart.remove_series(series_id)
         self._update_no_data_label()
-        self._update_y_range()
-        self._unfreeze_autorange()
 
     def set_visible(self, series_id: int, visible: bool) -> None:
-        entry = self._curves.get(series_id)
-        if entry is None:
+        curve = self._curves.get(series_id)
+        if curve is None:
             return
-        entry.curve.setVisible(visible)
-        self._update_y_range()
+        curve.visible = visible
+        self.chart.set_series_visible(series_id, visible)
 
     def _update_no_data_label(self) -> None:
         self.no_data_label.setVisible(not self._curves)
 
-    # ------------------------------------------------------------------ Y range
-    def _update_y_range(self) -> None:
-        if self.metric.fixed_y_max is None:
-            return  # unbounded metric (PSNR/SSIM/XPSNR) -- pyqtgraph's own autorange handles it
-        visible_stats = [c.stats for c in self._curves.values() if c.curve.isVisible()]
-        y_min = 0 if not visible_stats else int(min(s.minimum for s in visible_stats) // 5) * 5
-        # A run where every frame scores the ceiling (a lossless or
-        # near-lossless encode) floors to the ceiling too, and asking for a
-        # zero-height range makes pyqtgraph substitute its own -- which came
-        # out as 50..150, i.e. half the plot showing impossible >100 scores.
-        # Always leave at least one 5-point band below the ceiling.
-        y_min = min(y_min, self.metric.fixed_y_max - _Y_AXIS_MIN_SPAN)
-        # Capped exactly at the metric's ceiling -- no headroom margin above
-        # it, so the highest points sit right at the plot's own top edge
-        # instead of leaving a strip of empty space above 100.
-        self.plot_widget.setYRange(y_min, self.metric.fixed_y_max, padding=0)
+    def _on_pointer_left(self) -> None:
+        self.chart.set_cursor_time(None)
 
-    def _unfreeze_autorange(self) -> None:
-        """Re-enables autorange after the data actually changes, so the next
-        paint still fits new/removed data -- _on_mouse_moved freezes it again
-        on the next hover. See _on_mouse_moved for why it's frozen at all."""
-        self._autorange_frozen = False
-        vb = self.plot_widget.getPlotItem().vb
-        vb.enableAutoRange(x=True, y=(self.metric.fixed_y_max is None))
+    def _set_hover_text(self, text: str) -> None:
+        # Dragging across one frame's worth of pixels reports the same thing
+        # every time; repainting it again is pure waste.
+        if text != self._hover_text:
+            self._hover_text = text
+            self.hover_label.setText(text)
 
     # ------------------------------------------------------------------ hover
     @staticmethod
@@ -325,74 +262,46 @@ class _MetricPage(QWidget):
             return fallback_time
         return x  # nothing nearby in any series -- just use the raw cursor time
 
-    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if obj is self.plot_widget.viewport() and event.type() == QEvent.Resize:
-            self._crosshair_overlay.setGeometry(obj.rect())
-        return super().eventFilter(obj, event)
-
-    def _on_mouse_moved(self, evt, entries_by_id: dict[int, SeriesEntry]) -> None:
-        pos = evt[0]
-        if not self.plot_widget.sceneBoundingRect().contains(pos):
-            self._crosshair_overlay.line_x = None
-            self._crosshair_overlay.update()
-            return
-        view_box = self.plot_widget.getPlotItem().vb
-        if not self._autorange_frozen:
-            # Left on since the last data change, autorange makes the
-            # ViewBox re-evaluate "should I refit the view" on every single
-            # repaint -- real, measured CPU cost, for zero benefit once
-            # hovering (not changing data) is all that's happening. Frozen
-            # here rather than immediately on a data change because doing it
-            # there can race ahead of the widget having real geometry.
-            view_box.enableAutoRange(x=False, y=False)
-            self._autorange_frozen = True
-        mouse_point = view_box.mapSceneToView(pos)
-        x, y = mouse_point.x(), mouse_point.y()
-        self._crosshair_overlay.line_x = self.plot_widget.mapFromScene(pos).x()
-        self._crosshair_overlay.update()
-
-        x_range = view_box.viewRange()[0]
-        viewport_px = max(1.0, view_box.width())
-        x_per_pixel = (x_range[1] - x_range[0]) / viewport_px
-
-        # (entry, cached values) for every series actually plotted (has data
-        # for this metric) and currently visible.
+    def on_hover(self, x: float, y: float, entries_by_id: dict[int, SeriesEntry]) -> None:
+        """Cursor moved to time `x`, value `y`: pick the frame(s) to report
+        and put the crosshair on the chosen moment."""
+        x_per_pixel = self.chart.seconds_per_pixel()
         visible = [
             (entries_by_id[sid], c.values)
-            for sid, c in self._curves.items() if c.curve.isVisible()
+            for sid, c in self._curves.items() if c.visible
         ]
+        if not visible:
+            self.chart.set_cursor_time(x)
+            self._set_hover_text(f"Time: {format_hms(x, decimals=2)}")
+            return
 
         lines = [f"Time: {format_hms(x, decimals=2)}"]
         found: list[tuple[str, float]] = []
 
         if len(visible) > 1:
+            # Every series reports the SAME moment -- snapping each to its own
+            # nearest dip would compare different frames against each other.
             target_time = self._find_shared_hover_time(visible, x, y, x_per_pixel)
-            for entry, values in visible:
-                idx = self._nearest_index_by_time(entry.times, target_time)
-                fr = entry.result.frames[idx]
-                val = self.metric.value(fr)
-                lines.append(
-                    f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
-                    f"{self.metric.label}={self.metric.value_format.format(val)}"
-                )
-                found.append((entry.label, val))
+            picks = [(entry, self._nearest_index_by_time(entry.times, target_time)) for entry, _ in visible]
         else:
-            for entry, values in visible:
-                step = max(entry.step, x_per_pixel)
-                half_window = step * _HOVER_SEARCH_STEPS
-                idx = self._find_hover_index(entry, values, x, y, half_window)
-                fr = entry.result.frames[idx]
-                val = self.metric.value(fr)
-                lines.append(
-                    f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
-                    f"{self.metric.label}={self.metric.value_format.format(val)}"
-                )
-                found.append((entry.label, val))
+            entry, values = visible[0]
+            half_window = max(entry.step, x_per_pixel) * _HOVER_SEARCH_STEPS
+            picks = [(entry, self._find_hover_index(entry, values, x, y, half_window))]
+
+        for entry, idx in picks:
+            fr = entry.result.frames[idx]
+            val = self.metric.value(fr)
+            lines.append(
+                f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
+                f"{self.metric.label}={self.metric.value_format.format(val)}"
+            )
+            found.append((entry.label, val))
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
             lines.append(f"Δ ({label_a} − {label_b}) = {val_a - val_b:+.2f}")
 
+        self.chart.set_cursor_time(float(picks[0][0].times[picks[0][1]]))
         self.hover_label.setText("\n".join(lines))
 
 
@@ -466,10 +375,7 @@ class GraphWindow(QMainWindow):
 
     def _build_page(self, metric: MetricSpec) -> _MetricPage:
         page = _MetricPage(metric)
-        page._proxy = pg.SignalProxy(
-            page.plot_widget.scene().sigMouseMoved, rateLimit=60,
-            slot=lambda evt, p=page: p._on_mouse_moved(evt, self._entries),
-        )
+        page.chart.hovered.connect(lambda x, y, p=page: p.on_hover(x, y, self._entries))
         self._pages[metric.key] = page
         return page
 
@@ -537,7 +443,6 @@ class GraphWindow(QMainWindow):
 
         # This list IS the legend -- a color swatch beside each label plays
         # the same role a legend's line sample would, without sitting on top
-        # of the data the way pyqtgraph's own in-plot legend used to.
         swatch = QLabel()
         swatch.setFixedSize(16, 16)
         swatch.setStyleSheet(f"background-color: {color}; border-radius: 2px;")
@@ -605,8 +510,7 @@ class GraphWindow(QMainWindow):
         if not path:
             return
         page = self._pages[self._current_metric().key]
-        exporter = pg.exporters.ImageExporter(page.plot_widget.plotItem)
-        exporter.export(path)
+        page.chart.render_to_pixmap().save(path)
 
     def _on_export_csv(self) -> None:
         if not self._entries:
@@ -634,7 +538,7 @@ class GraphWindow(QMainWindow):
         self._setup_stats_table()
         metric = self._current_metric()
         page = self._pages[metric.key]
-        visible_ids = [sid for sid, c in page._curves.items() if c.curve.isVisible()]
+        visible_ids = [sid for sid, c in page._curves.items() if c.visible]
         self.stats_table.setRowCount(len(visible_ids))
         for row, sid in enumerate(visible_ids):
             entry = self._entries[sid]

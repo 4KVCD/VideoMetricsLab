@@ -1,4 +1,3 @@
 PySide6>=6.11
-pyqtgraph>=0.14
 numpy>=2.0
 psutil>=6.0

@@ -65,8 +65,16 @@ def _long_result(name: str, n_frames: int, fps: float = 30.0) -> VmafRunResult:
     )
 
 
-def _hover(win: GraphWindow, metric: str, scene_pos) -> None:
-    win._pages[metric]._on_mouse_moved([scene_pos], win._entries)
+def _hover(win: GraphWindow, metric: str, time: float, value: float) -> None:
+    win._pages[metric].on_hover(time, value, win._entries)
+
+
+def _hover_middle(win: GraphWindow, metric: str) -> None:
+    """Hover the middle of the chart's current view, at mid-height."""
+    chart = win._pages[metric].chart
+    x0, x1 = chart.x_range()
+    y0, y1 = chart.y_range()
+    _hover(win, metric, (x0 + x1) / 2, (y0 + y1) / 2)
 
 
 # ------------------------------------------------------------------ window basics
@@ -145,11 +153,11 @@ def test_unchecking_a_series_hides_its_curve_on_every_page_and_drops_it_from_sta
 
     entry_a[1].checkbox.setChecked(False)
 
-    assert win._pages["vmaf"]._curves[sid_a].curve.isVisible() is False
+    assert win._pages["vmaf"]._curves[sid_a].visible is False
     assert win.stats_table.rowCount() == 1  # only the still-checked series shows in the stats table
 
     entry_a[1].checkbox.setChecked(True)
-    assert win._pages["vmaf"]._curves[sid_a].curve.isVisible() is True
+    assert win._pages["vmaf"]._curves[sid_a].visible is True
     assert win.stats_table.rowCount() == 2
 
 
@@ -296,8 +304,7 @@ def test_hover_diff_shown_for_exactly_two_visible_series(qapp):
     win.add_run(_fake_result("b.mp4", vmaf_value=80.0))
 
     page = win._pages["vmaf"]
-    scene_pos = page.plot_widget.mapToScene(page.plot_widget.rect().center())
-    _hover(win, "vmaf", scene_pos)
+    _hover_middle(win, "vmaf")
 
     assert "Δ" in page.hover_label.text()  # the delta (Δ) line appears
     assert "10.00" in page.hover_label.text()  # 90 - 80 = 10
@@ -309,8 +316,7 @@ def test_hover_diff_not_shown_for_a_single_series(qapp):
     win.add_run(_fake_result("a.mp4"))
 
     page = win._pages["vmaf"]
-    scene_pos = page.plot_widget.mapToScene(page.plot_widget.rect().center())
-    _hover(win, "vmaf", scene_pos)
+    _hover_middle(win, "vmaf")
 
     assert "Δ" not in page.hover_label.text()
 
@@ -322,8 +328,7 @@ def test_hover_on_psnr_tab_reports_psnr_not_vmaf(qapp):
     win.tabs.setCurrentIndex(1)  # PSNR -- lazily builds its page
 
     page = win._pages["psnr"]
-    scene_pos = page.plot_widget.mapToScene(page.plot_widget.rect().center())
-    _hover(win, "psnr", scene_pos)
+    _hover_middle(win, "psnr")
 
     assert "PSNR=45.00" in page.hover_label.text()
     assert "VMAF=" not in page.hover_label.text()
@@ -366,9 +371,7 @@ def test_hover_finds_a_narrow_dip_even_when_zoomed_out_over_a_long_run(qapp):
 
     page = win._pages["vmaf"]
     dip_time = (dip_start + 5) / fps
-    view_box = page.plot_widget.getPlotItem().vb
-    scene_pos = view_box.mapViewToScene(QPointF(dip_time, 90))  # hover over the dip's X, well above its Y
-    _hover(win, "vmaf", scene_pos)
+    _hover(win, "vmaf", dip_time, 90)  # over the dip's X, well above its Y
 
     assert "VMAF=30.00" in page.hover_label.text()
 
@@ -382,8 +385,7 @@ def test_hover_text_uses_hms_format(qapp):
 
     page = win._pages["vmaf"]
     # Hover near the middle of the plot (~2 minutes in).
-    scene_pos = page.plot_widget.mapToScene(page.plot_widget.rect().center())
-    _hover(win, "vmaf", scene_pos)
+    _hover_middle(win, "vmaf")
 
     text = page.hover_label.text()
     assert "Time: 0:0" in text  # H:M:S, not a bare "120.00s" style value
@@ -392,8 +394,11 @@ def test_hover_text_uses_hms_format(qapp):
 
 def test_graph_x_axis_renders_hms_ticks(qapp):
     win = GraphWindow()
-    axis = win._pages["vmaf"].plot_widget.getAxis("bottom")
-    assert axis.tickStrings([0, 65, 3725], 1, 1) == ["0:00:00", "0:01:05", "1:02:05"]
+    win.add_run(_long_result("a.mp4", n_frames=30 * 3725, fps=30.0))  # just over an hour
+    labels = win._pages["vmaf"].chart.time_tick_labels()
+    assert labels, "expected some time ticks"
+    assert all(label.count(":") == 2 for label in labels), labels  # H:M:S, not bare seconds
+    assert labels[0].startswith("0:")
 
 
 # ------------------------------------------------------------------ Y-axis auto-scaling
@@ -409,7 +414,7 @@ def test_y_axis_bottom_rounds_down_to_nearest_5_below_lowest_score(qapp):
     result.frames = result.frames.with_values("vmaf", vmaf)
     win.add_run(result, win._entries[sid].label)  # rebuild the curve/stats
 
-    y_range = win._pages["vmaf"].plot_widget.getPlotItem().vb.viewRange()[1]
+    y_range = win._pages["vmaf"].chart.y_range()
     assert y_range[0] == 60
 
 
@@ -417,7 +422,7 @@ def test_y_axis_bottom_stays_at_0_when_nothing_is_below_60(qapp):
     win = GraphWindow()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))  # every frame is 90.0, well above 60
 
-    y_range = win._pages["vmaf"].plot_widget.getPlotItem().vb.viewRange()[1]
+    y_range = win._pages["vmaf"].chart.y_range()
     assert y_range[0] == 90 - (90 % 5)  # 90 is already a multiple of 5, so floor(90/5)*5 == 90
 
 
@@ -429,7 +434,7 @@ def test_y_axis_stays_sane_when_every_score_is_identical(qapp):
     win = GraphWindow()
     win.add_run(_fake_result("perfect.mp4", vmaf_value=100.0))
 
-    y_range = win._pages["vmaf"].plot_widget.getPlotItem().vb.viewRange()[1]
+    y_range = win._pages["vmaf"].chart.y_range()
     assert y_range[1] == 100          # still capped at the ceiling
     assert y_range[0] < y_range[1]    # and not a degenerate zero-height range
     assert y_range[0] >= 90           # tight around the data, not wildly zoomed out
@@ -439,7 +444,7 @@ def test_y_axis_top_is_capped_exactly_at_100_with_no_headroom(qapp):
     win = GraphWindow()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
 
-    y_range = win._pages["vmaf"].plot_widget.getPlotItem().vb.viewRange()[1]
+    y_range = win._pages["vmaf"].chart.y_range()
     assert y_range[1] == 100  # no margin/wasted space above VMAF's ceiling
 
 
@@ -451,7 +456,7 @@ def test_y_axis_ignores_hidden_series_lowest_point(qapp):
 
     entry_b.checkbox.setChecked(False)  # hide the low series
 
-    y_range = win._pages["vmaf"].plot_widget.getPlotItem().vb.viewRange()[1]
+    y_range = win._pages["vmaf"].chart.y_range()
     assert y_range[0] == 90  # bottom reflects only the visible (90.0) series, not the hidden 40.0 one
 
 
@@ -471,11 +476,9 @@ def test_multi_series_hover_reports_the_same_frame_for_every_series(qapp):
     entry_a = next(e for e in win._entries.values() if e.label == "a")
 
     page = win._pages["vmaf"]
-    view_box = page.plot_widget.getPlotItem().vb
     # Hover at frame a's dip -- below the 95 baseline, so it qualifies as
     # "at or below cursor Y" for whichever series is checked first.
-    scene_pos = view_box.mapViewToScene(QPointF(entry_a.times[5], 70))
-    _hover(win, "vmaf", scene_pos)
+    _hover(win, "vmaf", float(entry_a.times[5]), 70)
 
     text = page.hover_label.text()
     frame_a = int(re.search(r"\[a\]\s+frame\s+(\d+)", text).group(1))
@@ -497,47 +500,34 @@ def test_single_series_hover_still_uses_independent_dip_snap(qapp):
     assert idx == 5
 
 
-# ------------------------------------------------------------------ autorange freeze/unfreeze (CPU)
+# ------------------------------------------------------------------ view fitting
 
-def test_autorange_freezes_on_first_hover_not_before(qapp):
-    win = GraphWindow()
-    win.show()
-    win.add_run(_dip_result("a.mp4"))
-    qapp.processEvents()
-
-    page = win._pages["vmaf"]
-    assert page._autorange_frozen is False  # still on right after adding data
-
-    scene_pos = page.plot_widget.mapToScene(page.plot_widget.rect().center())
-    _hover(win, "vmaf", scene_pos)
-
-    assert page._autorange_frozen is True
-
-
-def test_adding_a_run_after_hover_still_fits_the_new_longer_range(qapp):
+def test_adding_a_longer_run_expands_the_view_to_show_it(qapp):
     win = GraphWindow()
     win.resize(1000, 700)
     win.show()
     win.add_run(_values_result("a.mp4", [90.0] * 100))  # ~3.3s at 30fps
     qapp.processEvents()
 
-    page = win._pages["vmaf"]
-    scene_pos = page.plot_widget.mapToScene(page.plot_widget.rect().center())
-    _hover(win, "vmaf", scene_pos)
-    assert page._autorange_frozen is True  # frozen by the hover above
+    chart = win._pages["vmaf"].chart
+    assert chart.x_range()[1] < 10
 
-    # A much longer second run is added -- the X view must still expand to
-    # show it, even though autorange was just frozen by the hover. pyqtgraph's
-    # own auto-range fit can take a couple of event-loop passes to fully
-    # settle (queued internally rather than applied synchronously), which is
-    # imperceptible in a normally-running app but means a test needs to pump
-    # a few more iterations rather than asserting after exactly one.
     win.add_run(_values_result("b.mp4", [90.0] * 100_000))  # ~3333s at 30fps
-    vb = page.plot_widget.getPlotItem().vb
-    for _ in range(10):
-        qapp.processEvents()
-        if vb.viewRange()[0][1] > 1000:
-            break
+    qapp.processEvents()
 
-    x_max = vb.viewRange()[0][1]
-    assert x_max > 1000  # view now spans (most of) the ~3333s run, not just the original ~3.3s
+    assert chart.x_range()[1] > 1000  # now spans the longer run, not just the first
+
+
+def test_hovering_does_not_change_the_view(qapp):
+    # Hovering must never re-fit or shift the axes -- only move the crosshair.
+    win = GraphWindow()
+    win.resize(1000, 700)
+    win.show()
+    win.add_run(_dip_result("a.mp4"))
+    qapp.processEvents()
+
+    chart = win._pages["vmaf"].chart
+    before_x, before_y = chart.x_range(), chart.y_range()
+    _hover_middle(win, "vmaf")
+    assert chart.x_range() == before_x
+    assert chart.y_range() == before_y
