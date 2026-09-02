@@ -65,6 +65,21 @@ def test_y_range_keeps_a_real_span_when_every_score_is_the_ceiling(qapp):
     assert low < high
 
 
+def test_all_nan_series_does_not_poison_the_axis(qapp):
+    # A metric column can exist with no value on any frame (e.g. XPSNR parsed
+    # from a stats file that came up empty). nanmin/nanmax return NaN for it,
+    # which made the whole y-range NaN and rendered a blank chart.
+    chart = _chart(qapp)
+    chart.set_series(0, _series([np.nan] * 50))
+    low, high = chart.y_range()
+    assert np.isfinite(low) and np.isfinite(high) and low < high
+
+    # ...and a real series alongside it still sets the range on its own.
+    chart.set_series(1, _series([70.0] * 50))
+    assert chart.y_range()[0] == pytest.approx(70.0, abs=10.0)
+    chart.render_to_pixmap()  # must not raise
+
+
 def test_unbounded_metric_autoscales_around_its_data(qapp):
     chart = _chart(qapp, fixed_y_max=None)  # e.g. PSNR in dB
     chart.set_series(0, _series([40.0, 42.0, 38.0]))

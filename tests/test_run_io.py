@@ -40,6 +40,34 @@ def test_save_and_load_round_trips_frames(tmp_path):
     assert loaded.model == result.model
 
 
+def test_save_and_load_preserves_scores_bit_for_bit(tmp_path):
+    # Real ffmpeg scores are not round decimals. Rounding them to 6dp on save
+    # landed between two float32 values, so a reloaded run no longer equalled
+    # the one that produced it -- silently drifting every cached result.
+    result = _sample_result()
+    rng = np.random.default_rng(0)
+    n = len(result.frames)
+    result.frames = FrameScores(
+        frame=result.frames.frame,
+        time=result.frames.time,
+        vmaf=rng.uniform(0, 100, n).astype(np.float32),
+        psnr=rng.uniform(20, 60, n).astype(np.float32),
+        ssim=rng.uniform(0, 1, n).astype(np.float32),
+        xpsnr=rng.uniform(20, 60, n).astype(np.float32),
+    )
+    out_path = tmp_path / "run.vmafrun.json"
+    save_run(result, out_path, label="exact")
+
+    loaded, _ = load_run(out_path)
+    for metric in ("vmaf", "psnr", "ssim", "xpsnr"):
+        np.testing.assert_array_equal(
+            loaded.frames.values(metric), result.frames.values(metric), err_msg=metric,
+        )
+    # `time` is the one column deliberately rounded (to 6dp / 1us) to keep the
+    # file small; that is far finer than anything displayed or searched on.
+    np.testing.assert_allclose(loaded.frames.time, result.frames.time, atol=1e-6)
+
+
 def test_export_csv_writes_header_and_all_rows(tmp_path):
     result = _sample_result()
     out_path = tmp_path / "run.csv"

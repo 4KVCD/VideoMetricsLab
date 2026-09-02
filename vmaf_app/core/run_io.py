@@ -41,15 +41,20 @@ def _info_from_dict(d: dict) -> VideoInfo:
 def _frames_to_rows(frames: FrameScores) -> list[list]:
     """The on-disk shape is unchanged (one row per frame) so files written by
     older versions still load -- the arrays are just unpacked to write."""
+    # Scores are written unrounded: they are float32, so float(v) is already
+    # the shortest decimal that reads back to the same bits, and rounding to
+    # 6dp would land between two float32s and break an exact reload. Only
+    # `time` is rounded -- it is float64 and derived from frame/fps, where
+    # microsecond precision is far beyond what anything displays.
     def column(metric: str) -> list:
         arr = frames.values(metric)
         if arr is None:
             return [None] * len(frames)
-        return [None if math.isnan(v) else round(float(v), 6) for v in arr]
+        return [None if math.isnan(v) else float(v) for v in arr]
 
     psnr, ssim, xpsnr = column("psnr"), column("ssim"), column("xpsnr")
     return [
-        [int(frames.frame[i]), round(float(frames.time[i]), 6), round(float(frames.vmaf[i]), 6),
+        [int(frames.frame[i]), round(float(frames.time[i]), 6), float(frames.vmaf[i]),
          psnr[i], ssim[i], xpsnr[i]]
         for i in range(len(frames))
     ]

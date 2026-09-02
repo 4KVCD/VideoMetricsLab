@@ -151,7 +151,11 @@ class ChartWidget(QWidget):
         self.view_changed.emit()
 
     def _recompute_y_range(self) -> None:
-        visible = self._visible_series()
+        # A series can be entirely NaN (a metric column present but with no
+        # value for any frame). nanmin/nanmax warn and return NaN for those,
+        # which would poison the axis into a NaN range and silently render a
+        # blank chart, so they're skipped rather than fed in.
+        visible = [s for s in self._visible_series() if np.isfinite(s.values).any()]
         if not visible:
             self._y_range = (0.0, self.fixed_y_max or 1.0)
             return
