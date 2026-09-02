@@ -461,7 +461,14 @@ class MainWindow(QMainWindow):
         self.crop_combo.currentIndexChanged.connect(self._on_panel_edited)
         form.addRow("Black-bar handling:", self.crop_combo)
 
-        options_layout.addLayout(form)
+        # The two groups sit side by side rather than stacked: the panel is
+        # full window width now, so stacking them left a lot of empty space
+        # to the right and pushed the file table up.
+        columns = QHBoxLayout()
+        basic_column = QWidget()
+        basic_column.setLayout(form)
+        columns.addWidget(basic_column, stretch=1)
+        options_layout.addLayout(columns)
 
         adv_box = QGroupBox("Advanced")
         adv_box.setCheckable(False)
@@ -514,7 +521,7 @@ class MainWindow(QMainWindow):
         metrics_hint.setWordWrap(True)
         adv_form.addRow(metrics_hint)
 
-        options_layout.addWidget(adv_box)
+        columns.addWidget(adv_box, stretch=1)
         options_layout.addStretch(1)
 
         return options_box
