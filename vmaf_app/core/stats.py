@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 import numpy as np
 
@@ -112,7 +113,7 @@ def compute_stats(
 
     histogram = []
     edges = HISTOGRAM_BIN_EDGES
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in pairwise(edges):
         in_bin = (data >= lo) & (data <= hi if hi == edges[-1] else data < hi)
         count = int(np.count_nonzero(in_bin))
         histogram.append(HistogramBin(lo, hi, count, 100.0 * count / n))

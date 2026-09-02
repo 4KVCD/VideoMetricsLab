@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from vmaf_app.core.models import VideoInfo, VmafOptions, VmafRunResult
+from vmaf_app.core.models import VideoInfo, VmafOptions
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, run_resample_test, run_vmaf
 
@@ -86,7 +86,7 @@ class VmafWorker(QThread):
             except VmafRunError as e:
                 self.job_failed.emit(i, str(e), e.stderr_tail)
                 continue
-            except Exception as e:  # noqa: BLE001 - surface any unexpected error to the UI
+            except Exception as e:
                 self.job_failed.emit(i, str(e), "")
                 continue
             self.job_finished.emit(i, result)

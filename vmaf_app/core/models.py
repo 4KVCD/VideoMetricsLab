@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 
@@ -146,6 +146,17 @@ class VmafOptions:
     resample_test: ResampleTarget | None = None
 
 
+def clone_options(opts: VmafOptions) -> VmafOptions:
+    """A real copy, not a shared reference -- each row needs its own
+    VmafOptions instance so editing one row can never bleed into another.
+
+    `extra_features` is the reason this exists rather than a bare
+    dataclasses.replace(): it's a mutable list, and a shallow copy would
+    leave every row appending into the same one.
+    """
+    return replace(opts, extra_features=list(opts.extra_features))
+
+
 @dataclass(frozen=True, slots=True)
 class FrameScore:
     """A single frame's scores. This is a read-only *view* type -- convenient
@@ -186,7 +197,7 @@ class FrameScores:
     both of which genuinely occur.
     """
 
-    __slots__ = ("frame", "time", "vmaf", "psnr", "ssim", "xpsnr")
+    __slots__ = ("frame", "psnr", "ssim", "time", "vmaf", "xpsnr")
 
     def __init__(
         self,

@@ -1,0 +1,33 @@
+# Lint configuration. Run with:  ruff check vmaf_app tests
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = [
+    "F",    # pyflakes: unused imports/names, real bugs
+    "E9",   # syntax / IO errors
+    "B",    # bugbear: likely-wrong constructs (mutable defaults, zip without strict, ...)
+    "UP",   # pyupgrade: modern syntax for our target version
+    "SIM",  # simplifiable code
+    "I",    # import sorting
+    "N",    # pep8-naming
+    "RUF",
+]
+ignore = [
+    "E501",    # line length is advisory here, not enforced
+    "RUF001",  # we use real typographic characters (minus sign, ellipsis) in UI strings
+    "RUF012",  # ClassVar annotations aren't worth the noise on small test doubles
+    # `class X(str, Enum)` rather than StrEnum is deliberate and load-bearing:
+    # saved runs on disk hold the plain member values, and the two differ in
+    # what str()/format() produce. Switching would silently change what gets
+    # written to every .vmafrun.json.
+    "UP042",
+]
+
+[lint.per-file-ignores]
+# Qt's own API is camelCase, so overriding it means camelCase methods,
+# arguments and signals. These are silenced wholesale for the UI layer rather
+# than by a dozen individual noqa directives; a stray non-Qt camelCase name
+# here is a far smaller risk than the churn of maintaining those.
+"vmaf_app/ui/*.py" = ["N802", "N803", "N815"]
+"tests/*.py" = ["N802"]

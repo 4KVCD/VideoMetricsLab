@@ -20,47 +20,71 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QRect, Qt, QTime, Signal
+from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox,
-    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox,
-    QProgressBar, QPushButton, QSpinBox, QSplitter, QStyle, QStyleOptionButton, QTableWidget,
-    QTableWidgetItem, QTimeEdit, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QTableWidgetItem,
+    QTimeEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.ffprobe import ProbeError, probe_video
 from vmaf_app.core.gpu import detected_gpu_vendors
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
-    RESAMPLE_TARGET_CHOICES, CropMode, GpuVendor, ResampleTarget, ScaleDirection, VideoInfo, VmafOptions,
-    synthetic_resample_distorted_path, synthetic_scale_direction_variant_path,
+    RESAMPLE_TARGET_CHOICES,
+    CropMode,
+    GpuVendor,
+    ResampleTarget,
+    ScaleDirection,
+    VideoInfo,
+    VmafOptions,
+    clone_options,
+    synthetic_resample_distorted_path,
+    synthetic_scale_direction_variant_path,
 )
 from vmaf_app.core.run_io import load_run, save_run
-from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.stats import stats_for_run
+from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import estimate_total_frames
+from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.graph_window import GraphWindow
+from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
 from vmaf_app.ui.worker import VmafJob, VmafWorker
 
 _MODEL_CHOICES = [
-    ("Auto (recommended: picks 4K model for UHD distorted video)", "__auto__"),
+    ("Auto (recommended: picks 4K model for UHD distorted video)", AUTO_MODEL_CHOICE),
     ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
     ("VMAF v0.6.1neg (no enhancement gain)", "version=vmaf_v0.6.1neg"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
-    ("Custom model file...", "__custom__"),
+    ("Custom model file...", CUSTOM_MODEL_CHOICE),
 ]
 
 _SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
 
 _GPU_VENDOR_BY_INDEX = {0: GpuVendor.AUTO, 1: GpuVendor.NVIDIA, 2: GpuVendor.INTEL, 3: GpuVendor.AMD}
 _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
-
-# A distorted video at or above this resolution is considered UHD/4K for the
-# purpose of auto-selecting the 4K VMAF model (matches the "4K or higher" ask).
-_4K_WIDTH_THRESHOLD = 3840
-_4K_HEIGHT_THRESHOLD = 2160
 
 COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR = range(9)
 
@@ -74,167 +98,14 @@ _METRIC_COLUMNS = [
     (COL_XPSNR, "XPSNR", "xpsnr"),
 ]
 
-_NOT_COMPUTED = "N/A"
-
-
-class CheckableHeaderView(QHeaderView):
-    """A horizontal header where chosen sections carry a checkbox, the way
-    FFMetrics' PSNR/SSIM/XPSNR columns do -- so which metrics get computed is
-    set right above the column the results land in, instead of hidden away in
-    a separate options panel."""
-
-    sectionToggled = Signal(int, bool)
-
-    def __init__(self, checkable: dict[int, bool], parent=None):
-        super().__init__(Qt.Horizontal, parent)
-        self._checked = dict(checkable)
-        self.setSectionsClickable(True)
-
-    def is_checked(self, section: int) -> bool:
-        return self._checked.get(section, False)
-
-    def set_checked(self, section: int, value: bool) -> None:
-        if section in self._checked and self._checked[section] != value:
-            self._checked[section] = value
-            self.updateSection(section)
-
-    def _indicator_rect(self, rect) -> QRect:
-        size = self.style().pixelMetric(QStyle.PM_IndicatorWidth, None, self)
-        return QRect(rect.x() + 4, rect.y() + (rect.height() - size) // 2, size, size)
-
-    def paintSection(self, painter, rect, logicalIndex: int) -> None:  # noqa: N802 - Qt override
-        painter.save()
-        super().paintSection(painter, rect, logicalIndex)
-        painter.restore()
-        if logicalIndex not in self._checked:
-            return
-        opt = QStyleOptionButton()
-        opt.rect = self._indicator_rect(rect)
-        opt.state = QStyle.State_Enabled | (
-            QStyle.State_On if self._checked[logicalIndex] else QStyle.State_Off
-        )
-        self.style().drawPrimitive(QStyle.PE_IndicatorCheckBox, opt, painter, self)
-
-    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
-        index = self.logicalIndexAt(event.position().toPoint())
-        if index in self._checked:
-            self._checked[index] = not self._checked[index]
-            self.updateSection(index)
-            self.sectionToggled.emit(index, self._checked[index])
-            return
-        super().mousePressEvent(event)
-
-
-def _model_for_resolution(width: int, height: int) -> str:
-    if width >= _4K_WIDTH_THRESHOLD or height >= _4K_HEIGHT_THRESHOLD:
-        return "version=vmaf_4k_v0.6.1"
-    return "version=vmaf_v0.6.1"
-
-
-def resolve_model(options: VmafOptions, distorted_info: VideoInfo) -> str:
-    """Resolves a row's model_choice (+ custom_model_path) into the concrete
-    ffmpeg model= value, applying 4K auto-selection if chosen."""
-    if options.model_choice == "__custom__":
-        if not options.custom_model_path:
-            raise ValueError("No custom model file selected.")
-        # run_vmaf() copies this into its per-run temp dir and references
-        # it by bare filename, so the raw absolute path is fine here.
-        return f"path={options.custom_model_path}"
-    if options.model_choice == "__auto__":
-        return _model_for_resolution(distorted_info.width, distorted_info.height)
-    return options.model_choice
-
-
-def clone_options(opts: VmafOptions) -> VmafOptions:
-    """A real copy, not a shared reference -- each row needs its own
-    VmafOptions instance so editing one row can never bleed into another."""
-    return replace(opts, extra_features=list(opts.extra_features))
-
-
-class FillColumnTable(QTableWidget):
-    """A QTableWidget where one column (`fill_column`) always expands to
-    fill whatever space is left over after the others, while STILL being
-    drag-resizable by the user -- Qt's own Stretch resize mode fills leftover
-    space too, but disables dragging for that column entirely, which doesn't
-    work when that's the one column users most want to resize (Path).
-    """
-
-    def __init__(self, rows: int, cols: int, fill_column: int, other_columns: list[int], parent=None):
-        super().__init__(rows, cols, parent)
-        self._fill_column = fill_column
-        self._other_columns = other_columns
-        self._recalculating = False
-        # Remembers a manual drag of the fill column past its "natural fill"
-        # width. Without this, any later resizeEvent (e.g. the window itself
-        # being resized) called _recalculate_fill_column() unconditionally
-        # and clamped the column straight back down to the leftover-space
-        # width, silently undoing the drag instead of letting it grow past
-        # the available room and produce a horizontal scrollbar.
-        self._fill_column_user_width: int | None = None
-        self.horizontalHeader().sectionResized.connect(self._on_section_resized)
-
-    def setHorizontalHeader(self, header) -> None:  # noqa: N802 - Qt override
-        # Swapping in a different header (e.g. the checkable metric header)
-        # drops the connection __init__ made to the *old* one, which
-        # silently disables the fill-column behaviour entirely -- the column
-        # simply stops responding to any other column being resized.
-        super().setHorizontalHeader(header)
-        header.sectionResized.connect(self._on_section_resized)
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._recalculate_fill_column()
-
-    def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
-        if self._recalculating:
-            return
-        if logical_index == self._fill_column:
-            self._fill_column_user_width = new_size  # a manual drag of the fill column's own edge
-            return
-        self._recalculate_fill_column()
-
-    def _recalculate_fill_column(self) -> None:
-        if self._recalculating:
-            return
-        other_total = sum(self.columnWidth(c) for c in self._other_columns)
-        natural = max(60, self.viewport().width() - other_total)
-        target = max(natural, self._fill_column_user_width) if self._fill_column_user_width is not None else natural
-        if target == self.columnWidth(self._fill_column):
-            return
-        self._recalculating = True
-        try:
-            self.setColumnWidth(self._fill_column, target)
-        finally:
-            self._recalculating = False
-
-
 class CompletedRun:
+    """A finished run plus the label it's shown under and its summary stats,
+    computed once here rather than recomputed everywhere it's displayed."""
+
     def __init__(self, result, label: str):
         self.result = result
         self.label = label
         self.stats = stats_for_run(result)
-
-
-def _media_info_string(info: VideoInfo) -> str:
-    return ", ".join([f"{info.width}x{info.height}", f"{info.fps:.2f}fps", info.codec_name])
-
-
-def _vmaf_band_colour(mean: float) -> QColor:
-    """A soft background tint by VMAF band, so a column of encodes can be
-    scanned at a glance the way FFMetrics' highlighted scores can be."""
-    if mean >= 95:
-        return QColor(198, 239, 206)  # comfortably transparent-looking green
-    if mean >= 90:
-        return QColor(255, 235, 156)  # amber
-    return QColor(255, 199, 206)      # pink
-
-
-def _bitrate_string(info: VideoInfo) -> str:
-    if not info.bit_rate:
-        return "N/A"
-    if info.bit_rate >= 1_000_000:
-        return f"{info.bit_rate / 1_000_000:.1f} Mb/s"
-    return f"{info.bit_rate // 1000} kb/s"
 
 
 @dataclass
@@ -283,7 +154,7 @@ class MainWindow(QMainWindow):
         self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
         self._on_table_selection_changed()
 
-    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def closeEvent(self, event) -> None:
         # A run still in flight owns a live ffmpeg subprocess. Without
         # cancelling it here, closing the window leaves ffmpeg running in the
         # background chewing CPU/GPU with nothing to report to, and tears
@@ -358,7 +229,7 @@ class MainWindow(QMainWindow):
         metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
             0, 9, fill_column=COL_PATH,
-            other_columns=[COL_CHECK, COL_INFO, COL_SCALING, COL_BITRATE] + metric_cols,
+            other_columns=[COL_CHECK, COL_INFO, COL_SCALING, COL_BITRATE, *metric_cols],
         )
         self.metric_header = CheckableHeaderView(
             # VMAF has no checkbox: it's what the app computes, always.
@@ -661,7 +532,7 @@ class MainWindow(QMainWindow):
         self._source_info = info
         self.source_edit.setText(path)
         self.source_info_label.setText(
-            f"{_media_info_string(info)}, {_bitrate_string(info)}  ({format_hms(info.duration, decimals=1)})"
+            f"{media_info_string(info)}, {bitrate_string(info)}  ({format_hms(info.duration, decimals=1)})"
         )
         # A different/newly-picked source might match a previously cached
         # (source, distorted) pair for rows that are already in the table.
@@ -715,7 +586,7 @@ class MainWindow(QMainWindow):
             if item is None:
                 continue
             if not enabled[col]:
-                item.setText(_NOT_COMPUTED)
+                item.setText(NOT_COMPUTED)
                 item.setForeground(QColor("#999"))
                 item.setFont(QFont())
                 item.setBackground(QColor(0, 0, 0, 0))
@@ -733,7 +604,7 @@ class MainWindow(QMainWindow):
             item.setForeground(QColor("#000"))
             # Only VMAF has a universally meaningful "good/bad" scale to
             # colour against (0-100); dB and SSIM don't.
-            item.setBackground(_vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+            item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
         self.distorted_table.resizeColumnToContents(COL_VMAF)
 
     @staticmethod
@@ -801,9 +672,9 @@ class MainWindow(QMainWindow):
             scaling_item.setText("")
             scaling_item.setToolTip("")
         else:
-            item.setText(_media_info_string(info))
+            item.setText(media_info_string(info))
             item.setToolTip(format_hms(info.duration, decimals=1))
-            self.distorted_table.item(row, COL_BITRATE).setText(_bitrate_string(info))
+            self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
             tag, explanation = self._resize_mismatch(row, info)
             scaling_item.setText(tag)
             scaling_item.setToolTip(explanation)
@@ -1043,7 +914,7 @@ class MainWindow(QMainWindow):
                 1 if opts.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE else 0
             )
 
-            ms = int(round(opts.duration_limit * 1000))
+            ms = round(opts.duration_limit * 1000)
             self.duration_edit.setTime(QTime(0, 0, 0, 0).addMSecs(ms))
 
             # Which metrics to compute lives in the table's column headers
@@ -1132,7 +1003,7 @@ class MainWindow(QMainWindow):
     def _on_model_changed(self, index: int) -> None:
         if self._syncing_panel:
             return
-        if _MODEL_CHOICES[index][1] == "__custom__":
+        if _MODEL_CHOICES[index][1] == CUSTOM_MODEL_CHOICE:
             path, _ = QFileDialog.getOpenFileName(self, "Select VMAF model file (.json)")
             if path:
                 self._panel_custom_model_path = path
@@ -1347,7 +1218,7 @@ class MainWindow(QMainWindow):
             return
         try:
             result, label = load_run(Path(path))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             QMessageBox.critical(self, "Failed to load run", str(e))
             return
         run = CompletedRun(result, label)

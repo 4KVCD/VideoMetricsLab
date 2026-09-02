@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.ui.chart import ChartSeries, ChartWidget, _nice_time_step, _nice_value_step

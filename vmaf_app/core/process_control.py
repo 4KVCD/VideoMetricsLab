@@ -8,6 +8,7 @@ rebooting loses the run, same as a hard cancel would.
 """
 from __future__ import annotations
 
+import contextlib
 import threading
 
 import psutil
@@ -65,7 +66,7 @@ class ProcessHandle:
 
     @staticmethod
     def _try(pid: int, action: str) -> None:
-        try:
+        # The process finishing on its own between the check and the call
+        # is normal, not an error -- pausing/resuming a dead process is a no-op.
+        with contextlib.suppress(psutil.NoSuchProcess):
             getattr(psutil.Process(pid), action)()
-        except psutil.NoSuchProcess:
-            pass

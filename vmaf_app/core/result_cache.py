@@ -50,7 +50,7 @@ def load_cached(source: Path, distorted: Path) -> tuple[VmafRunResult, str] | No
         return None
     try:
         return load_run(path)
-    except Exception:  # noqa: BLE001 - a corrupt/unreadable cache entry just means a cache miss
+    except Exception:
         return None
 
 

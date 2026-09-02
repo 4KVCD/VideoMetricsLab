@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import platform
 import subprocess
-from dataclasses import dataclass
 from functools import lru_cache
 
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path

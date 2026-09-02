@@ -10,8 +10,8 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 
@@ -19,7 +19,13 @@ from vmaf_app.core.crop_detect import detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import pick_hwaccel
 from vmaf_app.core.models import (
-    CropBox, CropMode, FrameScores, GpuVendor, ScaleDirection, VideoInfo, VmafOptions, VmafRunResult,
+    CropBox,
+    CropMode,
+    FrameScores,
+    ScaleDirection,
+    VideoInfo,
+    VmafOptions,
+    VmafRunResult,
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
@@ -33,8 +39,10 @@ class VmafRunError(RuntimeError):
         self.stderr_tail = stderr_tail
 
 
-class Cancelled(RuntimeError):
-    pass
+class Cancelled(RuntimeError):  # noqa: N818 - a cancellation, not an error condition
+    """Raised when the user cancels a run mid-flight. Deliberately not named
+    `CancelledError`: nothing went wrong, and callers treat it as an expected
+    outcome rather than a failure to report."""
 
 
 def _resolve_crops(
@@ -334,7 +342,7 @@ def _resolve_model_for_cwd(model: str, tmpdir: Path) -> str:
 
 
 def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -> FrameScores:
-    with open(log_path, "r", encoding="utf-8") as f:
+    with open(log_path, encoding="utf-8") as f:
         data = json.load(f)
 
     xpsnr_by_frame = _parse_xpsnr_log(xpsnr_log_path) if xpsnr_log_path is not None else {}
@@ -401,7 +409,7 @@ def _parse_xpsnr_log(xpsnr_log_path: Path) -> dict[int, float]:
     if not xpsnr_log_path.exists():
         return {}
     result: dict[int, float] = {}
-    with open(xpsnr_log_path, "r", encoding="utf-8") as f:
+    with open(xpsnr_log_path, encoding="utf-8") as f:
         for line in f:
             m = _XPSNR_LINE_RE.match(line)
             if m:

@@ -2,7 +2,11 @@ import pytest
 
 from vmaf_app.core import ffmpeg_locate
 from vmaf_app.core.ffmpeg_locate import (
-    MINIMUM_FFMPEG_VERSION, ToolStatus, ToolsStatus, format_version, parse_version,
+    MINIMUM_FFMPEG_VERSION,
+    ToolsStatus,
+    ToolStatus,
+    format_version,
+    parse_version,
 )
 
 

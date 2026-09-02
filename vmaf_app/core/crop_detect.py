@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 import subprocess
-from dataclasses import dataclass
 
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.models import CropBox, VideoInfo

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QLineF, QPoint, QPointF, QRect, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core.time_format import format_hms
@@ -196,7 +196,7 @@ class ChartWidget(QWidget):
     def pixel_for_time(self, t: float) -> int:
         rect = self.plot_rect()
         x0, x1 = self.x_range()
-        return rect.left() + int(round((t - x0) / max(1e-9, x1 - x0) * rect.width()))
+        return rect.left() + round((t - x0) / max(1e-9, x1 - x0) * rect.width())
 
     def time_tick_labels(self) -> list[str]:
         """The X-axis labels for the current view, in order -- the same
@@ -221,11 +221,11 @@ class ChartWidget(QWidget):
         self._cache = None
         self.update()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def resizeEvent(self, event) -> None:
         self._cache = None
         super().resizeEvent(event)
 
-    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def paintEvent(self, event) -> None:
         if self._cache is None or self._cache.size() != self.size():
             self._rebuild_cache()
         painter = QPainter(self)
@@ -319,7 +319,7 @@ class ChartWidget(QWidget):
             # Few enough points to draw honestly as a polyline.
             xs = rect.left() + (times[lo:hi] - x0) / max(1e-9, x1 - x0) * width
             ys = to_py(values[lo:hi].astype(np.float64))
-            polygon = QPolygonF([QPointF(float(x), float(y)) for x, y in zip(xs, ys)])
+            polygon = QPolygonF([QPointF(float(x), float(y)) for x, y in zip(xs, ys, strict=True)])
             painter.drawPolyline(polygon)
             return
 
@@ -347,7 +347,7 @@ class ChartWidget(QWidget):
         bottom = to_py(mins[good].astype(np.float64))
         painter.drawLines([
             QLineF(float(x), float(t), float(x), float(b))
-            for x, t, b in zip(xs, top, bottom)
+            for x, t, b in zip(xs, top, bottom, strict=True)
         ])
 
     # ------------------------------------------------------------------ cursor
@@ -368,7 +368,7 @@ class ChartWidget(QWidget):
                 self.update(QRect(x - 1, rect.top(), 3, rect.height()))
 
     # ------------------------------------------------------------------ input
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseMoveEvent(self, event) -> None:
         pos = event.position().toPoint()
         if self._pan_origin is not None and self._pan_view is not None:
             span = self._pan_view[1] - self._pan_view[0]
@@ -382,26 +382,26 @@ class ChartWidget(QWidget):
             return
         self.hovered.emit(self.time_at(pos.x()), self.value_at(pos.y()))
 
-    def leaveEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def leaveEvent(self, event) -> None:
         self.left.emit()
         super().leaveEvent(event)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             self._pan_origin = event.position().toPoint()
             self._pan_view = self.x_range()
             self.setCursor(Qt.ClosedHandCursor)
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             self._pan_origin = None
             self._pan_view = None
             self.unsetCursor()
 
-    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseDoubleClickEvent(self, event) -> None:
         self.reset_view()
 
-    def wheelEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def wheelEvent(self, event) -> None:
         """Zooms the time axis around the pointer, so whatever is under the
         cursor stays under it."""
         steps = event.angleDelta().y() / 120.0

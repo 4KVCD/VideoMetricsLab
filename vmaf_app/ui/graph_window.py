@@ -17,9 +17,22 @@ import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-    QMainWindow, QMessageBox, QPushButton, QScrollArea, QTableWidget, QTableWidgetItem,
-    QTabWidget, QVBoxLayout, QWidget,
+    QCheckBox,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from vmaf_app.core.models import FrameScore, VmafRunResult
@@ -540,7 +553,7 @@ class GraphWindow(QMainWindow):
             return
         try:
             result, label = load_run(Path(path))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             QMessageBox.critical(self, "Failed to load run", str(e))
             return
         self.add_run(result, label)

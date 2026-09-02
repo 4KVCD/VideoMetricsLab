@@ -2,10 +2,19 @@ import os
 from pathlib import Path
 
 from vmaf_app.core.models import (
-    CropBox, ResampleTarget, ScaleDirection, VideoInfo, VmafOptions, synthetic_resample_distorted_path,
+    CropBox,
+    ResampleTarget,
+    ScaleDirection,
+    VideoInfo,
+    VmafOptions,
+    synthetic_resample_distorted_path,
 )
 from vmaf_app.core.vmaf_runner import (
-    _build_ffmpeg_cmd, _build_filtergraph, _build_resample_cmd, _build_resample_test_filtergraph, _hw_native_format,
+    _build_ffmpeg_cmd,
+    _build_filtergraph,
+    _build_resample_cmd,
+    _build_resample_test_filtergraph,
+    _hw_native_format,
 )
 
 
@@ -433,6 +442,7 @@ def test_parse_log_keeps_a_genuine_zero_psnr_or_ssim(tmp_path):
     # with `metrics.get("psnr_y") or metrics.get("psnr")` discarded the 0.0
     # and fell through, losing a legitimate score.
     import json
+
     from vmaf_app.core.vmaf_runner import _parse_log
 
     log_path = tmp_path / "vmaf_log.json"

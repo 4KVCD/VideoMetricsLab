@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 _SETTINGS_ORG = "VmafApp"
@@ -59,7 +59,7 @@ def exe_name(name: str) -> str:
     return f"{name}.exe" if os.name == "nt" else name
 
 
-@lru_cache(maxsize=None)
+@cache
 def find_binary(name: str) -> str:
     """Returns a path (or bare name) to invoke for `name` (ffmpeg/ffprobe)."""
     exe = f"{name}.exe" if os.name == "nt" else name
@@ -128,7 +128,7 @@ def check_tool(name: str) -> ToolStatus:
     path = find_binary(name)
     try:
         proc = subprocess.run([path, "-version"], capture_output=True, text=True, timeout=15)
-    except Exception as e:  # noqa: BLE001 - any failure here means "not usable"
+    except Exception as e:
         return ToolStatus(name=name, path=path, runnable=False, error=str(e))
     if proc.returncode != 0:
         return ToolStatus(

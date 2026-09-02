@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import FrameScore, VideoInfo, VmafRunResult

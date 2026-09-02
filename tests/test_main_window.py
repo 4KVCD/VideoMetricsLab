@@ -1,18 +1,34 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QTableWidgetSelectionRange
+from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
-from PySide6.QtWidgets import QHeaderView
-
+from vmaf_app.core.model_select import resolve_model
 from vmaf_app.core.models import (
-    CropMode, FrameScore, GpuVendor, ResampleTarget, ScaleDirection, VideoInfo, VmafOptions, VmafRunResult,
-    synthetic_resample_distorted_path, synthetic_scale_direction_variant_path,
+    CropMode,
+    FrameScore,
+    ResampleTarget,
+    ScaleDirection,
+    VideoInfo,
+    VmafOptions,
+    VmafRunResult,
+    clone_options,
+    synthetic_resample_distorted_path,
+    synthetic_scale_direction_variant_path,
 )
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui.main_window import (
-    COL_BITRATE, COL_CHECK, COL_INFO, COL_PATH, COL_PSNR, COL_SCALING, COL_SSIM, COL_VMAF, COL_XPSNR,
-    CompletedRun, MainWindow, clone_options, resolve_model,
+    COL_BITRATE,
+    COL_CHECK,
+    COL_INFO,
+    COL_PATH,
+    COL_PSNR,
+    COL_SCALING,
+    COL_SSIM,
+    COL_VMAF,
+    COL_XPSNR,
+    CompletedRun,
+    MainWindow,
 )
 
 
@@ -277,14 +293,14 @@ def test_show_graph_clicked_again_after_more_rows_finish_shows_all_of_them(qapp)
     # window without syncing in anything newly completed.
     win = MainWindow()
     rows = [win._add_table_row(Path(f"{c}.mp4")) for c in "ab"]
-    for row, name in zip(rows, "ab"):
+    for row, name in zip(rows, "ab", strict=True):
         win._rows[row].completed_run = _fake_completed_run(name)
 
     win._on_show_graph_clicked()
     assert len(win._graph_window._entries) == 2
 
     more_rows = [win._add_table_row(Path(f"{c}.mp4")) for c in "cd"]
-    for row, name in zip(more_rows, "cd"):
+    for row, name in zip(more_rows, "cd", strict=True):
         win._rows[row].completed_run = _fake_completed_run(name)
 
     win._on_show_graph_clicked()
@@ -996,7 +1012,7 @@ def test_rows_added_after_a_metric_toggle_inherit_it(qapp):
 def test_missing_tools_show_an_actionable_banner(qapp, monkeypatch):
     # The "Locate ffmpeg" button used to be built into a layout that was
     # never attached to anything, so the warning banner had no way to act on.
-    from vmaf_app.core.ffmpeg_locate import ToolStatus, ToolsStatus
+    from vmaf_app.core.ffmpeg_locate import ToolsStatus, ToolStatus
 
     broken = ToolsStatus(
         ffmpeg=ToolStatus("ffmpeg", "ffmpeg.exe", False, None, "not found"),
@@ -1017,7 +1033,7 @@ def test_missing_tools_show_an_actionable_banner(qapp, monkeypatch):
 
 
 def test_too_old_ffmpeg_is_reported_in_the_banner(qapp, monkeypatch):
-    from vmaf_app.core.ffmpeg_locate import ToolStatus, ToolsStatus
+    from vmaf_app.core.ffmpeg_locate import ToolsStatus, ToolStatus
 
     old = ToolsStatus(
         ffmpeg=ToolStatus("ffmpeg", "ffmpeg.exe", True, (6, 1, 1)),
@@ -1032,7 +1048,7 @@ def test_too_old_ffmpeg_is_reported_in_the_banner(qapp, monkeypatch):
 
 
 def test_healthy_tools_leave_the_banner_hidden(qapp, monkeypatch):
-    from vmaf_app.core.ffmpeg_locate import ToolStatus, ToolsStatus
+    from vmaf_app.core.ffmpeg_locate import ToolsStatus, ToolStatus
 
     good = ToolsStatus(
         ffmpeg=ToolStatus("ffmpeg", "ffmpeg.exe", True, (9, 0, 1)),
