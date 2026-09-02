@@ -138,10 +138,7 @@ class _MetricPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        use_opengl = (
-            os.environ.get("QT_QPA_PLATFORM") != "offscreen"
-            and os.environ.get("VMAF_FORCE_RASTER") != "1"
-        )
+        use_opengl = os.environ.get("QT_QPA_PLATFORM") != "offscreen"
         pg.setConfigOptions(antialias=False, background="w", foreground="k", useOpenGL=use_opengl)
 
         self.plot_widget = pg.PlotWidget(axisItems={"bottom": TimeAxisItem(orientation="bottom")})
