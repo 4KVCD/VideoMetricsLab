@@ -409,13 +409,13 @@ class GraphWindow(QMainWindow):
         root.addWidget(top)
 
         # --- below: one tab per metric, each with its own full-width plot ---
-        # Each tab's plot is its own OpenGL-backed widget, and the *first*
-        # one created in the whole process pays a large one-time GL driver
-        # initialization cost (~170MB, measured) -- building all 4 up front
-        # means paying a smaller (but non-zero, ~15-20MB each) share of that
-        # for tabs the user may never look at. Only VMAF (the default,
-        # always-visible tab) is built eagerly; PSNR/SSIM/XPSNR are built
-        # lazily the first time their tab is actually selected.
+        # Each tab's plot keeps a cached QPixmap of the drawn curves, sized to
+        # the plot area, so a hover repaints the crosshair rather than the
+        # whole series. That pixmap is the tab's main cost (~3.4MB each at a
+        # 1700x900 window, measured), so tabs are built lazily: only VMAF (the
+        # default, always-visible tab) is built eagerly, and PSNR/SSIM/XPSNR
+        # the first time they're actually selected. Tabs the user never opens
+        # then cost nothing.
         self.tabs = QTabWidget()
         self._pages: dict[str, _MetricPage] = {}
         vmaf_page = self._build_page(METRICS[0])

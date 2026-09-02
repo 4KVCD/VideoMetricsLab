@@ -184,11 +184,10 @@ def test_graph_has_one_tab_per_metric(qapp):
 
 
 def test_non_default_tabs_are_not_built_until_first_visited(qapp):
-    # Each tab's plot is its own OpenGL widget; building all 4 up front
-    # meant paying real memory for tabs the user may never look at (an
-    # actual measured ~15-20MB apiece on top of the ~170MB one-time GL
-    # driver cost the first plot pays regardless). Only the default (VMAF)
-    # tab should exist right away.
+    # Each tab's plot caches a QPixmap of its drawn curves (~3.4MB at a
+    # 1700x900 window, measured), so building all 4 up front meant paying
+    # real memory for tabs the user may never look at. Only the default
+    # (VMAF) tab should exist right away.
     win = GraphWindow()
     assert "vmaf" in win._pages
     assert "psnr" not in win._pages
