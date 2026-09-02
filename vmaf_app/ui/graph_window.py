@@ -15,11 +15,10 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QAbstractItemView,
     QFileDialog,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -27,7 +26,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -81,7 +79,6 @@ class SeriesEntry:
     result: VmafRunResult
     label: str
     color: str
-    checkbox: QCheckBox
     times: np.ndarray
     step: float  # typical time delta between consecutive points in this series
     visible: bool = True
@@ -344,27 +341,24 @@ class GraphWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
 
-        # --- top: one box holding the series list (left) and their stats
-        # (right), shared across all metric tabs. Both are capped at four
-        # videos' worth of height and scroll beyond that, so a long list
-        # can't crowd out the plot below.
+        # --- top: one table that is BOTH the series list and the statistics,
+        # shared across all metric tabs. The first column carries each
+        # series' colour swatch, its visibility checkbox and its name, so
+        # there's a single row per video instead of the same list of videos
+        # repeated in two side-by-side panels. Capped at four videos' worth
+        # of height, scrolling beyond that, so a long list can't crowd out
+        # the plot below.
         top = QGroupBox("Series and statistics")
         top_layout = QHBoxLayout(top)
 
-        self.series_list_layout = QVBoxLayout()
-        self.series_list_layout.setAlignment(Qt.AlignTop)
-        self.series_list_layout.setContentsMargins(0, 0, 0, 0)
-        series_list_container = QWidget()
-        series_list_container.setLayout(self.series_list_layout)
-        self.series_scroll = QScrollArea()
-        self.series_scroll.setWidget(series_list_container)
-        self.series_scroll.setWidgetResizable(True)
-        self.series_scroll.setFrameShape(QFrame.NoFrame)
-        self.series_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.series_scroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        top_layout.addWidget(self.series_scroll)
-
         self.stats_table = QTableWidget()
+        self.stats_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.stats_table.itemChanged.connect(self._on_stats_item_changed)
+        self.stats_table.cellClicked.connect(self._on_stats_cell_clicked)
+        # Guards the itemChanged handler while _refresh_stats_table is
+        # populating cells: setting a checkstate there would otherwise
+        # re-enter and rebuild the table from inside its own rebuild.
+        self._populating_stats = False
         top_layout.addWidget(self.stats_table, stretch=1)
 
         root.addWidget(top)
@@ -431,39 +425,19 @@ class GraphWindow(QMainWindow):
         return bar
 
     def _cap_panel_heights(self) -> None:
-        """Holds the series list and stats table to VISIBLE_SERIES_ROWS rows
-        each, scrolling beyond that. Measured from the widgets' own metrics
-        rather than a hardcoded pixel height, so it still fits at any font
-        size or display scaling."""
+        """Holds the table to _VISIBLE_SERIES_ROWS rows, scrolling beyond
+        that, so a long list of videos can't crowd out the plot below.
+        Measured from the widget's own metrics rather than a hardcoded pixel
+        height, so it still fits at any font size or display scaling."""
         row_height = self.stats_table.verticalHeader().defaultSectionSize()
         header_height = self.stats_table.horizontalHeader().sizeHint().height()
-        scrollbar = self.stats_table.horizontalScrollBar()
         chrome = 2 * self.stats_table.frameWidth()
+        scrollbar = self.stats_table.horizontalScrollBar()
         if scrollbar is not None and scrollbar.isVisible():
             chrome += scrollbar.height()
         self.stats_table.setMaximumHeight(
             header_height + _VISIBLE_SERIES_ROWS * row_height + chrome + 2
         )
-
-        # The series rows are custom widgets, so take the height from a real
-        # one when there is one and fall back to the table's row height.
-        rows = [
-            self.series_list_layout.itemAt(i).widget()
-            for i in range(self.series_list_layout.count())
-            if self.series_list_layout.itemAt(i).widget() is not None
-        ]
-        series_row_height = rows[0].sizeHint().height() if rows else row_height
-        self.series_scroll.setMaximumHeight(_VISIBLE_SERIES_ROWS * series_row_height + 4)
-
-        # Wide enough for the longest label plus its swatch and remove
-        # button: sharing an HBox with the stats table otherwise squeezes
-        # this down to its minimum and clips the buttons.
-        if rows:
-            widest = max(row.sizeHint().width() for row in rows)
-            bar = self.series_scroll.verticalScrollBar()
-            if bar is not None and bar.isVisible():
-                widest += bar.width()
-            self.series_scroll.setMinimumWidth(min(widest + 8, 420))
 
     def _current_metric(self) -> MetricSpec:
         return METRICS[self.tabs.currentIndex()] if self.tabs.currentIndex() >= 0 else METRICS[0]
@@ -472,10 +446,49 @@ class GraphWindow(QMainWindow):
         metric = self._current_metric()
         headers = ["Series", "Mean", "Median", "StDev", "Min", "Max", "10% Low", "5% Low", "1% Low", "0.1% Low"]
         headers += [f"{cmp_op} {thresh:g}" for cmp_op, thresh in metric.thresholds]
+        headers.append("")  # the per-row remove button
         self.stats_table.setColumnCount(len(headers))
         self.stats_table.setHorizontalHeaderLabels(headers)
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.stats_table.verticalHeader().setVisible(False)
+
+    def _series_name_item(self, entry: SeriesEntry) -> QTableWidgetItem:
+        """The first cell: colour swatch, visibility checkbox and label in
+        one, which is what lets this table double as the series list."""
+        item = QTableWidgetItem(entry.label)
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable)
+        item.setCheckState(Qt.Checked if entry.visible else Qt.Unchecked)
+        # The swatch plays the legend's role -- it's drawn by the item itself
+        # rather than being a separate widget in a separate list.
+        swatch = QPixmap(12, 12)
+        swatch.fill(QColor(entry.color))
+        item.setData(Qt.DecorationRole, swatch)
+        font = item.font()
+        font.setBold(True)
+        item.setFont(font)
+        item.setForeground(QColor(entry.color))
+        return item
+
+    def _series_id_at_row(self, row: int) -> int | None:
+        item = self.stats_table.item(row, 0)
+        sid = None if item is None else item.data(Qt.UserRole)
+        return None if sid is None else int(sid)
+
+    def _on_stats_cell_clicked(self, row: int, column: int) -> None:
+        """Clicking the last column's ✕ drops that series from the graph."""
+        if column != self.stats_table.columnCount() - 1:
+            return
+        series_id = self._series_id_at_row(row)
+        if series_id is not None:
+            self.remove_run(series_id)
+
+    def _on_stats_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._populating_stats or item.column() != 0:
+            return
+        series_id = item.data(Qt.UserRole)
+        if series_id is None:
+            return
+        self._set_series_visible(int(series_id), item.checkState() == Qt.Checked)
 
     # ------------------------------------------------------------------ public API
     def add_run(self, result: VmafRunResult, label: str | None = None) -> None:
@@ -494,32 +507,9 @@ class GraphWindow(QMainWindow):
         times = result.frames.time
         step = float(times[-1] - times[0]) / (len(times) - 1) if len(times) > 1 else 1.0
 
-        # This list IS the legend -- a color swatch beside each label plays
-        # the same role a legend's line sample would, without sitting on top
-        swatch = QLabel()
-        swatch.setFixedSize(16, 16)
-        swatch.setStyleSheet(f"background-color: {color}; border-radius: 2px;")
-
-        checkbox = QCheckBox(label)
-        checkbox.setChecked(True)
-        checkbox.setStyleSheet(f"QCheckBox {{ color: {color}; font-weight: bold; }}")
-        checkbox.stateChanged.connect(lambda state, s=sid: self._on_visibility_changed(s, state))
-        remove_btn = QPushButton("x")
-        remove_btn.setFixedWidth(24)
-        remove_btn.clicked.connect(lambda _, s=sid: self.remove_run(s))
-        row = QWidget()
-        row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 8)
-        row_layout.addWidget(swatch)
-        row_layout.addWidget(checkbox)
-        row_layout.addWidget(remove_btn)
-        self.series_list_layout.addWidget(row)
-
         entry = SeriesEntry(
-            result=result, label=label, color=color, checkbox=checkbox,
-            times=times, step=step, visible=True,
+            result=result, label=label, color=color, times=times, step=step, visible=True,
         )
-        entry._row_widget = row  # type: ignore[attr-defined]
         self._entries[sid] = entry
 
         for page in self._pages.values():
@@ -533,18 +523,22 @@ class GraphWindow(QMainWindow):
             return
         for page in self._pages.values():
             page.remove_curve(series_id)
-        entry._row_widget.setParent(None)  # type: ignore[attr-defined]
+        self._refresh_stats_table()
+
+    def set_series_visible(self, series_id: int, visible: bool) -> None:
+        """Shows/hides one series' curve on every metric tab, keeping its row
+        in the table so it can be switched back on."""
+        self._set_series_visible(series_id, visible)
         self._refresh_stats_table()
 
     # ------------------------------------------------------------------ interaction
-    def _on_visibility_changed(self, series_id: int, state: int) -> None:
+    def _set_series_visible(self, series_id: int, visible: bool) -> None:
         entry = self._entries.get(series_id)
-        if entry is None:
+        if entry is None or entry.visible == visible:
             return
-        entry.visible = bool(state)
+        entry.visible = visible
         for page in self._pages.values():
-            page.set_visible(series_id, entry.visible)
-        self._refresh_stats_table()
+            page.set_visible(series_id, visible)
 
     # ------------------------------------------------------------------ actions
     def _on_add_saved_run(self) -> None:
@@ -588,19 +582,40 @@ class GraphWindow(QMainWindow):
 
     # ------------------------------------------------------------------ stats table
     def _refresh_stats_table(self) -> None:
-        self._setup_stats_table()
-        metric = self._current_metric()
-        page = self._pages[metric.key]
-        visible_ids = [sid for sid, c in page._curves.items() if c.visible]
-        self.stats_table.setRowCount(len(visible_ids))
-        for row, sid in enumerate(visible_ids):
-            entry = self._entries[sid]
-            s = page._curves[sid].stats
-            values = [entry.label] + [v for _, v in s.summary]
-            values += [f"{t.percentage:.1f}%" for t in s.thresholds]
-            for col, val in enumerate(values):
-                item = QTableWidgetItem(val)
-                if col == 0:
-                    item.setForeground(QColor(entry.color))
-                self.stats_table.setItem(row, col, item)
+        self._populating_stats = True
+        try:
+            self._setup_stats_table()
+            page = self._pages[self._current_metric().key]
+            # EVERY series gets a row, not just the visible ones: this table
+            # is the series list, so an unchecked series still needs its row
+            # to be checked again through. A series with no data for the
+            # current metric (XPSNR never computed, say) keeps its row too,
+            # with the statistic cells left blank.
+            self.stats_table.setRowCount(len(self._entries))
+            for row, (sid, entry) in enumerate(self._entries.items()):
+                self.stats_table.setItem(row, 0, self._series_name_item(entry))
+                self.stats_table.item(row, 0).setData(Qt.UserRole, sid)
+
+                curve = page._curves.get(sid)
+                if curve is None:
+                    cells = [""] * (self.stats_table.columnCount() - 2)
+                else:
+                    s = curve.stats
+                    cells = [v for _, v in s.summary]
+                    cells += [f"{t.percentage:.1f}%" for t in s.thresholds]
+                for col, val in enumerate(cells, start=1):
+                    self.stats_table.setItem(row, col, QTableWidgetItem(val))
+
+                # The remove control is a plain item handled by cellClicked,
+                # not a QPushButton in a cell widget: cell widgets are
+                # reparented into the viewport and the first one gets
+                # positioned before the ResizeToContents column widths have
+                # settled, which painted it over column 0.
+                remove = QTableWidgetItem("✕")
+                remove.setFlags(Qt.ItemIsEnabled)
+                remove.setTextAlignment(Qt.AlignCenter)
+                remove.setToolTip(f"Remove {entry.label} from the graph")
+                self.stats_table.setItem(row, self.stats_table.columnCount() - 1, remove)
+        finally:
+            self._populating_stats = False
         self._cap_panel_heights()

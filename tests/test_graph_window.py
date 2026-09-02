@@ -14,6 +14,15 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
+def _row_for(win, label: str):
+    """The merged table's first-column item for a series, by label."""
+    for row in range(win.stats_table.rowCount()):
+        item = win.stats_table.item(row, 0)
+        if item is not None and item.text() == label:
+            return item
+    raise AssertionError(f"no row for {label!r}")
+
+
 def _fake_result(distorted_name: str, vmaf_value: float = 90.0, with_other_metrics: bool = False) -> VmafRunResult:
     info = VideoInfo(
         path=Path(distorted_name), width=1920, height=1080, fps=30.0, duration=5.0,
@@ -151,14 +160,19 @@ def test_unchecking_a_series_hides_its_curve_on_every_page_and_drops_it_from_sta
     entry_a = next((sid, e) for sid, e in win._entries.items() if Path(e.result.distorted) == Path("a.mp4"))
     sid_a = entry_a[0]
 
-    entry_a[1].checkbox.setChecked(False)
+    win.set_series_visible(sid_a, False)
 
     assert win._pages["vmaf"]._curves[sid_a].visible is False
-    assert win.stats_table.rowCount() == 1  # only the still-checked series shows in the stats table
+    # The stats table doubles as the series list, so a hidden series KEEPS
+    # its row (just unchecked) -- dropping it would leave no way to switch
+    # the series back on.
+    assert win.stats_table.rowCount() == 2
+    assert _row_for(win, "a").checkState() == Qt.Unchecked
 
-    entry_a[1].checkbox.setChecked(True)
+    win.set_series_visible(sid_a, True)
     assert win._pages["vmaf"]._curves[sid_a].visible is True
     assert win.stats_table.rowCount() == 2
+    assert _row_for(win, "a").checkState() == Qt.Checked
 
 
 # ------------------------------------------------------------------ per-metric tabs
@@ -246,7 +260,7 @@ def test_stats_table_reflects_the_currently_active_tab(qapp):
     assert "Mean" in headers_psnr
 
 
-def test_stats_table_excludes_series_with_no_data_for_the_active_metric(qapp):
+def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
     win = GraphWindow()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True), "a")
     win.add_run(_fake_result("b.mp4", with_other_metrics=False), "b")
@@ -255,8 +269,15 @@ def test_stats_table_excludes_series_with_no_data_for_the_active_metric(qapp):
     assert win.stats_table.rowCount() == 2
 
     win.tabs.setCurrentIndex(1)  # PSNR -- only "a" has it
-    assert win.stats_table.rowCount() == 1
-    assert win.stats_table.item(0, 0).text() == "a"
+    # Both rows stay -- the table is the series list, so dropping "b" here
+    # would make it un-removable and un-toggleable from this tab. "b" just
+    # has no statistics to show.
+    assert win.stats_table.rowCount() == 2
+    assert _row_for(win, "a").text() == "a"
+    a_row = win.stats_table.row(_row_for(win, "a"))
+    b_row = win.stats_table.row(_row_for(win, "b"))
+    assert win.stats_table.item(a_row, 1).text() != ""
+    assert win.stats_table.item(b_row, 1).text() == ""
 
 
 # ------------------------------------------------------------------ stats table columns (extensible)
@@ -452,9 +473,9 @@ def test_y_axis_ignores_hidden_series_lowest_point(qapp):
     win = GraphWindow()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
     win.add_run(_fake_result("b.mp4", vmaf_value=40.0))
-    entry_b = next(e for e in win._entries.values() if e.label == "b")  # label is the stem, not the full filename
 
-    entry_b.checkbox.setChecked(False)  # hide the low series
+    sid_b = next(sid for sid, e in win._entries.items() if e.label == "b")
+    win.set_series_visible(sid_b, False)  # hide the low series
 
     y_range = win._pages["vmaf"].chart.y_range()
     assert y_range[0] == 90  # bottom reflects only the visible (90.0) series, not the hidden 40.0 one
@@ -535,7 +556,7 @@ def test_hovering_does_not_change_the_view(qapp):
 
 # ------------------------------------------------------------------ top panel sizing
 
-def test_series_and_stats_are_capped_at_four_rows(qapp):
+def test_the_table_is_capped_at_four_rows(qapp):
     from vmaf_app.ui.graph_window import _VISIBLE_SERIES_ROWS
 
     win = GraphWindow()
@@ -547,21 +568,67 @@ def test_series_and_stats_are_capped_at_four_rows(qapp):
 
     row_height = win.stats_table.verticalHeader().defaultSectionSize()
     header = win.stats_table.horizontalHeader().sizeHint().height()
-    # Both panels stop growing at four rows and scroll past that, rather
+    # The table stops growing at four rows and scrolls past that, rather
     # than pushing the plot off the bottom of the window.
     assert win.stats_table.maximumHeight() <= header + _VISIBLE_SERIES_ROWS * row_height + 30
-    assert win.series_scroll.maximumHeight() <= _VISIBLE_SERIES_ROWS * row_height * 2
     assert win.stats_table.rowCount() == 7  # all series still listed, just scrolled
 
 
-def test_series_panel_is_wide_enough_for_its_rows(qapp):
-    # Sharing a row with the stats table squeezed this to its minimum and
-    # clipped the per-series remove buttons.
-    win = GraphWindow()
-    win.resize(1400, 900)
-    win.show()
-    win.add_run(_fake_result("a-fairly-long-encode-name.mp4"), "a-fairly-long-encode-name")
-    qapp.processEvents()
+# ------------------------------------------------- the merged series/stats table
 
-    row = win.series_list_layout.itemAt(0).widget()
-    assert win.series_scroll.minimumWidth() >= min(row.sizeHint().width(), 420)
+def test_the_stats_table_is_also_the_series_list(qapp):
+    # There used to be a separate series list beside the stats table, which
+    # repeated the same list of videos twice. One row per series now carries
+    # its swatch, checkbox and name alongside its statistics.
+    win = GraphWindow()
+    win.add_run(_fake_result("a.mp4"))
+    win.add_run(_fake_result("b.mp4"))
+
+    assert win.stats_table.rowCount() == 2
+    item = _row_for(win, "a")
+    assert item.checkState() == Qt.Checked
+    assert item.data(Qt.DecorationRole) is not None, "row should carry its colour swatch"
+    assert not hasattr(win, "series_scroll"), "the separate series list should be gone"
+
+
+def test_ticking_the_row_checkbox_toggles_the_curve(qapp):
+    win = GraphWindow()
+    win.add_run(_fake_result("a.mp4"))
+    sid = next(iter(win._entries))
+
+    _row_for(win, "a").setCheckState(Qt.Unchecked)
+    assert win._pages["vmaf"]._curves[sid].visible is False
+
+    _row_for(win, "a").setCheckState(Qt.Checked)
+    assert win._pages["vmaf"]._curves[sid].visible is True
+
+
+def test_a_series_with_no_data_for_this_metric_keeps_its_row(qapp):
+    # Only VMAF is computed here, so on the PSNR tab this series has no
+    # curve. Its row must still be present (blank stats) or there would be
+    # no way to see or remove it from that tab.
+    win = GraphWindow()
+    win.add_run(_fake_result("a.mp4"))
+    win.tabs.setCurrentIndex(1)  # PSNR
+
+    assert win.stats_table.rowCount() == 1
+    assert _row_for(win, "a").text() == "a"
+    assert win.stats_table.item(0, 1).text() == ""
+
+
+def test_clicking_a_rows_remove_cell_removes_the_series(qapp):
+    win = GraphWindow()
+    win.add_run(_fake_result("a.mp4"))
+    win.add_run(_fake_result("b.mp4"))
+
+    last_col = win.stats_table.columnCount() - 1
+    row = next(r for r in range(win.stats_table.rowCount())
+               if win.stats_table.item(r, 0).text() == "a")
+    assert win.stats_table.item(row, last_col).text() == "✕"
+    win.stats_table.cellClicked.emit(row, last_col)
+
+    assert win.stats_table.rowCount() == 1
+    assert len(win._entries) == 1
+    assert _row_for(win, "b").text() == "b"
+
+
