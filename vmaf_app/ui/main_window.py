@@ -1,0 +1,1409 @@
+"""Main window: pick a reference video and one or more distorted videos,
+configure VMAF options per video, run, and browse/compare completed results.
+
+The distorted-file list is a table (path / media info / VMAF score) so each
+file's score -- or live "Frame N" progress while it's running -- is visible
+at a glance in the row itself, the way FFMetrics shows it.
+
+Each row carries its own VmafOptions (crop handling, model, GPU decode,
+etc.) instead of one shared global setting. The Options panel acts as an
+inspector for whichever row(s) are selected in the table: selecting a row
+loads its settings into the panel, and editing the panel writes back to
+every currently-selected row (so you can batch-edit several at once, or
+give a single video its own crop/model/etc. independent of the rest).
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+
+from PySide6.QtCore import QRect, Qt, QTime, Signal
+from PySide6.QtGui import QColor, QFont
+from PySide6.QtWidgets import (
+    QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox,
+    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox,
+    QProgressBar, QPushButton, QSpinBox, QSplitter, QStyle, QStyleOptionButton, QTableWidget,
+    QTableWidgetItem, QTimeEdit, QVBoxLayout, QWidget,
+)
+
+from vmaf_app.core import result_cache
+from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
+from vmaf_app.core.ffprobe import ProbeError, probe_video
+from vmaf_app.core.gpu import detected_gpu_vendors
+from vmaf_app.core.models import (
+    RESAMPLE_TARGET_CHOICES, CropMode, GpuVendor, ResampleTarget, ScaleDirection, VideoInfo, VmafOptions,
+    synthetic_resample_distorted_path, synthetic_scale_direction_variant_path,
+)
+from vmaf_app.core.run_io import load_run, save_run
+from vmaf_app.core.time_format import format_hms
+from vmaf_app.core.stats import stats_for_run
+from vmaf_app.core.vmaf_runner import estimate_total_frames
+from vmaf_app.ui.graph_window import GraphWindow
+from vmaf_app.ui.worker import VmafJob, VmafWorker
+
+_MODEL_CHOICES = [
+    ("Auto (recommended: picks 4K model for UHD distorted video)", "__auto__"),
+    ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
+    ("VMAF v0.6.1neg (no enhancement gain)", "version=vmaf_v0.6.1neg"),
+    ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
+    ("Custom model file...", "__custom__"),
+]
+
+_SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
+
+_GPU_VENDOR_BY_INDEX = {0: GpuVendor.AUTO, 1: GpuVendor.NVIDIA, 2: GpuVendor.INTEL, 3: GpuVendor.AMD}
+_GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
+
+# A distorted video at or above this resolution is considered UHD/4K for the
+# purpose of auto-selecting the 4K VMAF model (matches the "4K or higher" ask).
+_4K_WIDTH_THRESHOLD = 3840
+_4K_HEIGHT_THRESHOLD = 2160
+
+COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR = range(9)
+
+# The metric columns, in table order: (column, label, the VmafOptions field or
+# libvmaf feature it maps to). VMAF has no toggle -- it's what the app exists
+# to compute, and the whole pipeline is built on libvmaf.
+_METRIC_COLUMNS = [
+    (COL_PSNR, "PSNR", "name=psnr"),
+    (COL_SSIM, "SSIM", "name=float_ssim"),
+    (COL_VMAF, "VMAF", None),
+    (COL_XPSNR, "XPSNR", "xpsnr"),
+]
+
+_NOT_COMPUTED = "N/A"
+
+
+class CheckableHeaderView(QHeaderView):
+    """A horizontal header where chosen sections carry a checkbox, the way
+    FFMetrics' PSNR/SSIM/XPSNR columns do -- so which metrics get computed is
+    set right above the column the results land in, instead of hidden away in
+    a separate options panel."""
+
+    sectionToggled = Signal(int, bool)
+
+    def __init__(self, checkable: dict[int, bool], parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self._checked = dict(checkable)
+        self.setSectionsClickable(True)
+
+    def is_checked(self, section: int) -> bool:
+        return self._checked.get(section, False)
+
+    def set_checked(self, section: int, value: bool) -> None:
+        if section in self._checked and self._checked[section] != value:
+            self._checked[section] = value
+            self.updateSection(section)
+
+    def _indicator_rect(self, rect) -> QRect:
+        size = self.style().pixelMetric(QStyle.PM_IndicatorWidth, None, self)
+        return QRect(rect.x() + 4, rect.y() + (rect.height() - size) // 2, size, size)
+
+    def paintSection(self, painter, rect, logicalIndex: int) -> None:  # noqa: N802 - Qt override
+        painter.save()
+        super().paintSection(painter, rect, logicalIndex)
+        painter.restore()
+        if logicalIndex not in self._checked:
+            return
+        opt = QStyleOptionButton()
+        opt.rect = self._indicator_rect(rect)
+        opt.state = QStyle.State_Enabled | (
+            QStyle.State_On if self._checked[logicalIndex] else QStyle.State_Off
+        )
+        self.style().drawPrimitive(QStyle.PE_IndicatorCheckBox, opt, painter, self)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+        index = self.logicalIndexAt(event.position().toPoint())
+        if index in self._checked:
+            self._checked[index] = not self._checked[index]
+            self.updateSection(index)
+            self.sectionToggled.emit(index, self._checked[index])
+            return
+        super().mousePressEvent(event)
+
+
+def _model_for_resolution(width: int, height: int) -> str:
+    if width >= _4K_WIDTH_THRESHOLD or height >= _4K_HEIGHT_THRESHOLD:
+        return "version=vmaf_4k_v0.6.1"
+    return "version=vmaf_v0.6.1"
+
+
+def resolve_model(options: VmafOptions, distorted_info: VideoInfo) -> str:
+    """Resolves a row's model_choice (+ custom_model_path) into the concrete
+    ffmpeg model= value, applying 4K auto-selection if chosen."""
+    if options.model_choice == "__custom__":
+        if not options.custom_model_path:
+            raise ValueError("No custom model file selected.")
+        # run_vmaf() copies this into its per-run temp dir and references
+        # it by bare filename, so the raw absolute path is fine here.
+        return f"path={options.custom_model_path}"
+    if options.model_choice == "__auto__":
+        return _model_for_resolution(distorted_info.width, distorted_info.height)
+    return options.model_choice
+
+
+def clone_options(opts: VmafOptions) -> VmafOptions:
+    """A real copy, not a shared reference -- each row needs its own
+    VmafOptions instance so editing one row can never bleed into another."""
+    return replace(opts, extra_features=list(opts.extra_features))
+
+
+class FillColumnTable(QTableWidget):
+    """A QTableWidget where one column (`fill_column`) always expands to
+    fill whatever space is left over after the others, while STILL being
+    drag-resizable by the user -- Qt's own Stretch resize mode fills leftover
+    space too, but disables dragging for that column entirely, which doesn't
+    work when that's the one column users most want to resize (Path).
+    """
+
+    def __init__(self, rows: int, cols: int, fill_column: int, other_columns: list[int], parent=None):
+        super().__init__(rows, cols, parent)
+        self._fill_column = fill_column
+        self._other_columns = other_columns
+        self._recalculating = False
+        # Remembers a manual drag of the fill column past its "natural fill"
+        # width. Without this, any later resizeEvent (e.g. the window itself
+        # being resized) called _recalculate_fill_column() unconditionally
+        # and clamped the column straight back down to the leftover-space
+        # width, silently undoing the drag instead of letting it grow past
+        # the available room and produce a horizontal scrollbar.
+        self._fill_column_user_width: int | None = None
+        self.horizontalHeader().sectionResized.connect(self._on_section_resized)
+
+    def setHorizontalHeader(self, header) -> None:  # noqa: N802 - Qt override
+        # Swapping in a different header (e.g. the checkable metric header)
+        # drops the connection __init__ made to the *old* one, which
+        # silently disables the fill-column behaviour entirely -- the column
+        # simply stops responding to any other column being resized.
+        super().setHorizontalHeader(header)
+        header.sectionResized.connect(self._on_section_resized)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._recalculate_fill_column()
+
+    def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
+        if self._recalculating:
+            return
+        if logical_index == self._fill_column:
+            self._fill_column_user_width = new_size  # a manual drag of the fill column's own edge
+            return
+        self._recalculate_fill_column()
+
+    def _recalculate_fill_column(self) -> None:
+        if self._recalculating:
+            return
+        other_total = sum(self.columnWidth(c) for c in self._other_columns)
+        natural = max(60, self.viewport().width() - other_total)
+        target = max(natural, self._fill_column_user_width) if self._fill_column_user_width is not None else natural
+        if target == self.columnWidth(self._fill_column):
+            return
+        self._recalculating = True
+        try:
+            self.setColumnWidth(self._fill_column, target)
+        finally:
+            self._recalculating = False
+
+
+class CompletedRun:
+    def __init__(self, result, label: str):
+        self.result = result
+        self.label = label
+        self.stats = stats_for_run(result)
+
+
+def _media_info_string(info: VideoInfo) -> str:
+    return ", ".join([f"{info.width}x{info.height}", f"{info.fps:.2f}fps", info.codec_name])
+
+
+def _vmaf_band_colour(mean: float) -> QColor:
+    """A soft background tint by VMAF band, so a column of encodes can be
+    scanned at a glance the way FFMetrics' highlighted scores can be."""
+    if mean >= 95:
+        return QColor(198, 239, 206)  # comfortably transparent-looking green
+    if mean >= 90:
+        return QColor(255, 235, 156)  # amber
+    return QColor(255, 199, 206)      # pink
+
+
+def _bitrate_string(info: VideoInfo) -> str:
+    if not info.bit_rate:
+        return "N/A"
+    if info.bit_rate >= 1_000_000:
+        return f"{info.bit_rate / 1_000_000:.1f} Mb/s"
+    return f"{info.bit_rate // 1000} kb/s"
+
+
+@dataclass
+class RowData:
+    path: Path
+    video_info: VideoInfo | None = None
+    completed_run: CompletedRun | None = None
+    options: VmafOptions = field(default_factory=VmafOptions)
+    # True only for a "Test both" companion row (see
+    # _add_opposite_scale_direction_rows), where options.scale_direction is
+    # set explicitly and unambiguously to whichever direction this row
+    # exists to represent -- unlike a normal row, where it's just whatever
+    # the panel's default happened to be when the row was added, and a
+    # cached/loaded result's own recorded direction is more trustworthy.
+    scale_direction_pinned: bool = False
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("VMAF Calculator")
+        self.resize(1280, 800)
+        self.setMinimumSize(1050, 650)
+
+        self._source_info: VideoInfo | None = None
+        self._rows: list[RowData] = []
+        self._worker: VmafWorker | None = None
+        self._graph_window: GraphWindow | None = None
+        # These track the active run by RowData *identity*, not by table row
+        # index: removing a row mid-run shifts every later index down, which
+        # used to make a finishing job write its result to the wrong row --
+        # or crash with IndexError when the shifted index ran off the end.
+        self._job_rows: list[RowData] = []  # job index -> the row that job belongs to
+        self._job_total_frames: list[int] = []  # job index -> estimated frame count, for queue ETA
+        self._checked_rows_for_run: list[RowData] = []  # rows checked when Run was clicked, incl. already-scored ones
+        self._current_job_index: int | None = None
+
+        # Per-video settings machinery: the Options panel is an inspector for
+        # whichever rows are selected, not one global setting.
+        self._default_options = VmafOptions()  # what a newly-added row starts with
+        self._panel_target_rows: list[int] = []  # rows the panel currently edits
+        self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
+        self._syncing_panel = False  # guards against write-back while populating the panel programmatically
+
+        self._build_ui()
+        self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
+        self._on_table_selection_changed()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        # A run still in flight owns a live ffmpeg subprocess. Without
+        # cancelling it here, closing the window leaves ffmpeg running in the
+        # background chewing CPU/GPU with nothing to report to, and tears
+        # down a QThread that's still executing.
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.wait(5000)
+        # The graph window is a real independent top-level window now (not a
+        # Qt child of this one -- see _open_or_update_graph for why), so it
+        # no longer gets destroyed automatically when this window closes.
+        # Close it explicitly so the app doesn't leave an orphaned window
+        # (and process) running in the background.
+        if self._graph_window is not None:
+            self._graph_window.close()
+        super().closeEvent(event)
+
+    # ------------------------------------------------------------------ UI construction
+    def _build_ui(self) -> None:
+        central = QWidget()
+        self.setCentralWidget(central)
+        root = QVBoxLayout(central)
+
+        # Banner + its action button live in one row that is actually added
+        # to the layout -- the button used to be built into a throwaway
+        # layout that was never attached, so it never appeared and the
+        # warning was unactionable.
+        banner_row = QHBoxLayout()
+        self._ffmpeg_banner = QLabel()
+        self._ffmpeg_banner.setStyleSheet("background: #fff3cd; padding: 6px; border: 1px solid #ffe08a;")
+        self._ffmpeg_banner.setWordWrap(True)
+        self._ffmpeg_banner.setVisible(False)
+        self._locate_ffmpeg_btn = QPushButton("Locate ffmpeg.exe...")
+        self._locate_ffmpeg_btn.clicked.connect(self._on_locate_ffmpeg)
+        self._locate_ffmpeg_btn.setVisible(False)
+        banner_row.addWidget(self._ffmpeg_banner, stretch=1)
+        banner_row.addWidget(self._locate_ffmpeg_btn)
+        root.addLayout(banner_row)
+
+        splitter = QSplitter(Qt.Vertical)
+        root.addWidget(splitter, stretch=1)
+
+        # Videos on top, options underneath it (not beside it), so the file
+        # table gets the full window width -- it's the part that grows with
+        # the number of encodes being compared.
+        splitter.addWidget(self._build_files_panel())
+        splitter.addWidget(self._build_options_panel())
+        splitter.addWidget(self._build_run_panel())
+        splitter.setSizes([420, 260, 120])
+
+    def _build_files_panel(self) -> QWidget:
+        files_box = QGroupBox("Videos")
+        files_layout = QVBoxLayout(files_box)
+
+        files_layout.addWidget(QLabel("Reference (source) video:"))
+        src_row = QHBoxLayout()
+        self.source_edit = QLineEdit()
+        self.source_edit.setReadOnly(True)
+        src_browse = QPushButton("Browse...")
+        src_browse.clicked.connect(self._on_browse_source)
+        src_row.addWidget(self.source_edit, stretch=1)
+        src_row.addWidget(src_browse)
+        files_layout.addLayout(src_row)
+        self.source_info_label = QLabel("No source selected.")
+        self.source_info_label.setStyleSheet("color: #666;")
+        files_layout.addWidget(self.source_info_label)
+
+        files_layout.addWidget(QLabel(
+            "Distorted video(s) to compare against the source "
+            "(select one or more below to edit their settings underneath; "
+            "tick a metric's column header to compute it):"
+        ))
+        metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
+        self.distorted_table = FillColumnTable(
+            0, 9, fill_column=COL_PATH,
+            other_columns=[COL_CHECK, COL_INFO, COL_SCALING, COL_BITRATE] + metric_cols,
+        )
+        self.metric_header = CheckableHeaderView(
+            # VMAF has no checkbox: it's what the app computes, always.
+            {COL_PSNR: False, COL_SSIM: False, COL_XPSNR: False},
+            self.distorted_table,
+        )
+        self.distorted_table.setHorizontalHeader(self.metric_header)
+        self.metric_header.sectionToggled.connect(self._on_metric_column_toggled)
+        self.distorted_table.setHorizontalHeaderLabels(
+            ["", "File name", "Media info", "Scaling", "Bitrate", "   PSNR", "   SSIM", "VMAF", "   XPSNR"]
+        )
+        self.distorted_table.verticalHeader().setVisible(False)
+        self.distorted_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.distorted_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.distorted_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.distorted_table.itemSelectionChanged.connect(self._on_table_selection_changed)
+        self.distorted_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.distorted_table.customContextMenuRequested.connect(self._on_table_context_menu)
+        # All columns are Interactive (drag-resizable), including PATH --
+        # FillColumnTable makes PATH additionally auto-fill whatever space is
+        # left over (see its docstring) instead of sitting at a fixed width
+        # with wasted space beside it. INFO/BITRATE/VMAF are also kept snug to
+        # their actual content automatically (see _set_row_info/
+        # _set_row_vmaf_text) the way ResizeToContents used to look. A
+        # horizontal scrollbar still appears if the columns don't all fit,
+        # rather than squeezing everything down to fit the window.
+        header = self.distorted_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(False)
+        self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.distorted_table.setColumnWidth(COL_CHECK, 28)
+        self.distorted_table.setColumnWidth(COL_INFO, 150)
+        self.distorted_table.setColumnWidth(COL_SCALING, 90)
+        self.distorted_table.setColumnWidth(COL_BITRATE, 65)
+        for col, _, _ in _METRIC_COLUMNS:
+            self.distorted_table.setColumnWidth(col, 78)
+        files_layout.addWidget(self.distorted_table, stretch=1)
+
+        dist_btn_row = QHBoxLayout()
+        add_dist_btn = QPushButton("Add files...")
+        add_dist_btn.clicked.connect(self._on_add_distorted)
+        add_resample_btn = QPushButton("Add resolution test...")
+        add_resample_btn.setToolTip(
+            "Tests VMAF for downscaling the source to a lower resolution and "
+            "scaling it back up -- no separate distorted file needed."
+        )
+        add_resample_btn.clicked.connect(self._on_add_resample_test)
+        remove_dist_btn = QPushButton("Remove selected")
+        remove_dist_btn.clicked.connect(self._on_remove_distorted)
+        dist_btn_row.addWidget(add_dist_btn)
+        dist_btn_row.addWidget(add_resample_btn)
+        dist_btn_row.addWidget(remove_dist_btn)
+        dist_btn_row.addStretch(1)
+        files_layout.addLayout(dist_btn_row)
+
+        return files_box
+
+    def _build_options_panel(self) -> QWidget:
+        # --- per-video options inspector (below the file table) ---
+        options_box = QGroupBox("Options")
+        options_layout = QVBoxLayout(options_box)
+        self.options_box = options_box
+
+        self.panel_target_label = QLabel("")
+        self.panel_target_label.setStyleSheet("color: #666; font-style: italic;")
+        self.panel_target_label.setWordWrap(True)
+        options_layout.addWidget(self.panel_target_label)
+
+        form = QFormLayout()
+        self.model_combo = QComboBox()
+        for name, _ in _MODEL_CHOICES:
+            self.model_combo.addItem(name)
+        self.model_combo.currentIndexChanged.connect(self._on_model_changed)
+        form.addRow("VMAF model:", self.model_combo)
+
+        self.gpu_checkbox = QCheckBox("Use GPU decoding for source video")
+        self.gpu_checkbox.setChecked(True)
+        self.gpu_vendor_combo = QComboBox()
+        self.gpu_vendor_combo.addItems(["Auto-detect", "NVIDIA", "Intel", "AMD"])
+        self.gpu_checkbox.stateChanged.connect(
+            lambda st: self.gpu_vendor_combo.setEnabled(bool(st))
+        )
+        self.gpu_checkbox.stateChanged.connect(self._on_panel_edited)
+        self.gpu_vendor_combo.currentIndexChanged.connect(self._on_panel_edited)
+        gpu_row = QHBoxLayout()
+        gpu_row.addWidget(self.gpu_checkbox)
+        gpu_row.addWidget(self.gpu_vendor_combo)
+        form.addRow("GPU decode:", gpu_row)
+
+        detected = detected_gpu_vendors()
+        if detected:
+            names = ", ".join(v.value.upper() for v in detected)
+            form.addRow("", QLabel(f"Detected GPU(s): {names}"))
+
+        self.crop_combo = QComboBox()
+        self.crop_combo.addItems([
+            "Auto-detect black bars (recommended)",
+            "None (use full frame)",
+        ])
+        self.crop_combo.currentIndexChanged.connect(self._on_panel_edited)
+        form.addRow("Black-bar handling:", self.crop_combo)
+
+        options_layout.addLayout(form)
+
+        adv_box = QGroupBox("Advanced")
+        adv_box.setCheckable(False)
+        adv_form = QFormLayout(adv_box)
+
+        self.threads_spin = QSpinBox()
+        self.threads_spin.setRange(0, 128)
+        self.threads_spin.setValue(0)
+        self.threads_spin.setSpecialValueText("Auto")
+        self.threads_spin.valueChanged.connect(self._on_panel_edited)
+        adv_form.addRow("libvmaf threads:", self.threads_spin)
+
+        self.subsample_spin = QSpinBox()
+        self.subsample_spin.setRange(1, 60)
+        self.subsample_spin.setValue(1)
+        self.subsample_spin.valueChanged.connect(self._on_panel_edited)
+        adv_form.addRow("Frame subsample (1 = every frame):", self.subsample_spin)
+
+        self.duration_edit = QTimeEdit()
+        self.duration_edit.setDisplayFormat("HH:mm:ss.zzz")
+        self.duration_edit.setTime(QTime(0, 0, 0, 0))
+        self.duration_edit.timeChanged.connect(self._on_panel_edited)
+        adv_form.addRow("Duration limit (00:00:00.000 = full video):", self.duration_edit)
+
+        self.scale_algo_combo = QComboBox()
+        self.scale_algo_combo.addItems(_SCALE_ALGORITHMS)
+        self.scale_algo_combo.currentIndexChanged.connect(self._on_panel_edited)
+        adv_form.addRow("Scaling algorithm:", self.scale_algo_combo)
+
+        self.scale_direction_combo = QComboBox()
+        self.scale_direction_combo.addItems([
+            "Scale source down to match distorted (default)",
+            "Scale distorted up to match source",
+            "Test both (adds a comparison row)",
+        ])
+        self.scale_direction_combo.setToolTip(
+            "When the two resolutions differ: either evaluate quality at the resolution actually\n"
+            "delivered (source scaled to match distorted -- the default), or as if the distorted\n"
+            "video were upscaled back to the source's native resolution for playback.\n"
+            "\"Test both\" doesn't change this row -- it adds a second row for the same distorted\n"
+            "file using the other direction, so you can run and compare both."
+        )
+        self.scale_direction_combo.currentIndexChanged.connect(self._on_scale_direction_combo_changed)
+        adv_form.addRow("Resolution mismatch:", self.scale_direction_combo)
+
+        metrics_hint = QLabel(
+            "PSNR / SSIM / XPSNR are toggled from their column headers in the table above."
+        )
+        metrics_hint.setStyleSheet("color: #666; font-style: italic;")
+        metrics_hint.setWordWrap(True)
+        adv_form.addRow(metrics_hint)
+
+        options_layout.addWidget(adv_box)
+        options_layout.addStretch(1)
+
+        return options_box
+
+    def _build_run_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        run_row = QHBoxLayout()
+        self.run_btn = QPushButton("Run VMAF")
+        self.run_btn.clicked.connect(self._on_run_clicked)
+        self.pause_btn = QPushButton("Pause")
+        self.pause_btn.setEnabled(False)
+        self.pause_btn.setCheckable(True)
+        self.pause_btn.clicked.connect(self._on_pause_clicked)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self._on_cancel_clicked)
+        run_row.addWidget(self.run_btn)
+        run_row.addWidget(self.pause_btn)
+        run_row.addWidget(self.cancel_btn)
+        run_row.addStretch(1)
+
+        load_btn = QPushButton("Load saved run...")
+        load_btn.clicked.connect(self._on_load_saved_run)
+        save_btn = QPushButton("Save selected...")
+        save_btn.clicked.connect(self._on_save_selected)
+        compare_btn = QPushButton("Compare selected in graph")
+        compare_btn.clicked.connect(self._on_compare_selected)
+        self.show_graph_btn = QPushButton("Show graph window")
+        self.show_graph_btn.setToolTip("Reopens the comparison graph as you last left it (e.g. after closing it).")
+        self.show_graph_btn.clicked.connect(self._on_show_graph_clicked)
+        run_row.addWidget(load_btn)
+        run_row.addWidget(save_btn)
+        run_row.addWidget(compare_btn)
+        run_row.addWidget(self.show_graph_btn)
+        layout.addLayout(run_row)
+
+        self.status_label = QLabel("")
+        layout.addWidget(self.status_label)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        layout.addWidget(self.progress_bar)
+        self.progress_detail_label = QLabel("")
+        self.progress_detail_label.setStyleSheet("color: #666;")
+        layout.addWidget(self.progress_detail_label)
+        layout.addStretch(1)
+
+        return panel
+
+    # ------------------------------------------------------------------ ffmpeg availability
+    def _check_ffmpeg(self, *, prompt: bool = False) -> bool:
+        """Verifies ffmpeg AND ffprobe both actually run, and that ffmpeg is
+        new enough. Returns whether everything checks out. With prompt=True
+        (startup), offers a file picker to point at ffmpeg.exe rather than
+        just complaining in a banner."""
+        status = check_tools()
+        if status.ok:
+            self._ffmpeg_banner.setVisible(False)
+            return True
+
+        problems = status.problems
+        self._ffmpeg_banner.setText("  ".join(problems) + "  Click \"Locate ffmpeg.exe...\" to point at it.")
+        self._ffmpeg_banner.setVisible(True)
+        self._locate_ffmpeg_btn.setVisible(True)
+
+        # A headless run (tests -- see tests/conftest.py) has nobody to answer
+        # a modal dialog, so it would block forever rather than prompt.
+        if prompt and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            answer = QMessageBox.warning(
+                self, "ffmpeg not usable",
+                "\n".join(problems)
+                + f"\n\nffmpeg was looked for at:\n  {status.ffmpeg.path}"
+                + f"\nffprobe at:\n  {status.ffprobe.path}"
+                + "\n\nWould you like to point the app at ffmpeg.exe now?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                return self._on_locate_ffmpeg()
+        return False
+
+    def _on_locate_ffmpeg(self) -> bool:
+        """Asks for ffmpeg.exe itself (not its folder -- a file picker is far
+        less ambiguous), then expects ffprobe alongside it, asking separately
+        only if it isn't there."""
+        ffmpeg_exe = exe_name("ffmpeg")
+        ffprobe_exe = exe_name("ffprobe")
+        chosen, _ = QFileDialog.getOpenFileName(
+            self, f"Select {ffmpeg_exe}", "", f"{ffmpeg_exe} ({ffmpeg_exe});;All files (*)",
+        )
+        if not chosen:
+            return False
+
+        directory = Path(chosen).parent
+        if not (directory / ffprobe_exe).exists():
+            QMessageBox.information(
+                self, "ffprobe needed too",
+                f"{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\n"
+                f"The app needs both. Please select {ffprobe_exe} as well "
+                f"(it normally ships in the same folder).",
+            )
+            probe_chosen, _ = QFileDialog.getOpenFileName(
+                self, f"Select {ffprobe_exe}", str(directory), f"{ffprobe_exe} ({ffprobe_exe});;All files (*)",
+            )
+            if not probe_chosen:
+                return False
+            if Path(probe_chosen).parent != directory:
+                QMessageBox.warning(
+                    self, "Different folders",
+                    f"{ffmpeg_exe} and {ffprobe_exe} need to be in the same folder for the app to find both.",
+                )
+                return False
+
+        set_ffmpeg_dir_override(str(directory))
+        status = check_tools()
+        if not status.ok:
+            QMessageBox.warning(self, "Still not usable", "\n".join(status.problems))
+            self._check_ffmpeg()
+            return False
+        self._ffmpeg_banner.setVisible(False)
+        self._locate_ffmpeg_btn.setVisible(False)
+        self.status_label.setText(
+            f"Using ffmpeg {format_version(status.ffmpeg.version)} from {directory}"
+        )
+        return True
+
+    # ------------------------------------------------------------------ source selection
+    def _on_browse_source(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select reference (source) video")
+        if not path:
+            return
+        try:
+            info = probe_video(Path(path))
+        except ProbeError as e:
+            QMessageBox.critical(self, "Could not read video", str(e))
+            return
+        self._source_info = info
+        self.source_edit.setText(path)
+        self.source_info_label.setText(
+            f"{_media_info_string(info)}, {_bitrate_string(info)}  ({format_hms(info.duration, decimals=1)})"
+        )
+        # A different/newly-picked source might match a previously cached
+        # (source, distorted) pair for rows that are already in the table.
+        for row in range(len(self._rows)):
+            self._try_load_cached_result(row)
+
+    # ------------------------------------------------------------------ distorted-file table
+    def _add_table_row(self, path: Path) -> int:
+        row = self.distorted_table.rowCount()
+        self.distorted_table.insertRow(row)
+
+        check_item = QTableWidgetItem()
+        check_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        check_item.setCheckState(Qt.Checked)
+        self.distorted_table.setItem(row, COL_CHECK, check_item)
+
+        path_item = QTableWidgetItem(path.name)
+        path_item.setToolTip(str(path))  # full path still available on hover
+        self.distorted_table.setItem(row, COL_PATH, path_item)
+        self.distorted_table.setItem(row, COL_INFO, QTableWidgetItem("Probing..."))
+        self.distorted_table.setItem(row, COL_SCALING, QTableWidgetItem(""))
+        self.distorted_table.setItem(row, COL_BITRATE, QTableWidgetItem(""))
+        for col, _, _ in _METRIC_COLUMNS:
+            item = QTableWidgetItem("")
+            item.setTextAlignment(Qt.AlignCenter)
+            self.distorted_table.setItem(row, col, item)
+
+        # New rows start with a copy of whatever the panel last showed, so
+        # adding several similar files in a row doesn't mean reconfiguring
+        # each one from scratch -- but it's still an independent copy from
+        # this point on, so editing one row never affects another.
+        self._rows.append(RowData(path=path, options=clone_options(self._default_options)))
+        self._set_row_metrics(row)
+        return row
+
+    def _set_row_metrics(self, row: int) -> None:
+        """Fills the PSNR/SSIM/VMAF/XPSNR cells for a row: the mean score if
+        it's been computed, "N/A" if that metric isn't switched on for this
+        row, and blank while it's enabled but not computed yet."""
+        row_data = self._rows[row]
+        run = row_data.completed_run
+        opts = row_data.options
+        enabled = {
+            COL_PSNR: "name=psnr" in opts.extra_features,
+            COL_SSIM: "name=float_ssim" in opts.extra_features,
+            COL_VMAF: True,
+            COL_XPSNR: opts.compute_xpsnr,
+        }
+        for col, _, _ in _METRIC_COLUMNS:
+            item = self.distorted_table.item(row, col)
+            if item is None:
+                continue
+            if not enabled[col]:
+                item.setText(_NOT_COMPUTED)
+                item.setForeground(QColor("#999"))
+                item.setFont(QFont())
+                item.setBackground(QColor(0, 0, 0, 0))
+                continue
+            value = self._metric_mean(run, col) if run is not None else None
+            if value is None:
+                item.setText("")
+                item.setBackground(QColor(0, 0, 0, 0))
+                item.setFont(QFont())
+                continue
+            item.setText(f"{value:.4f}" if col == COL_SSIM else f"{value:.2f}")
+            font = QFont()
+            font.setBold(True)
+            item.setFont(font)
+            item.setForeground(QColor("#000"))
+            # Only VMAF has a universally meaningful "good/bad" scale to
+            # colour against (0-100); dB and SSIM don't.
+            item.setBackground(_vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+        self.distorted_table.resizeColumnToContents(COL_VMAF)
+
+    @staticmethod
+    def _metric_mean(run: CompletedRun, column: int) -> float | None:
+        if column == COL_VMAF:
+            return run.stats.mean
+        attr = {COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        values = [v for v in (getattr(f, attr) for f in run.result.frames) if v is not None]
+        return sum(values) / len(values) if values else None
+
+    def _resize_mismatch(self, row: int, distorted_info: VideoInfo) -> tuple[str, str]:
+        """(short tag, full explanation) for which of the two resolutions got
+        resized to match the other, when they differ -- important now that a
+        row can exist for either direction (see "Test both"), so it's not
+        ambiguous which one a given row/result represents.
+
+        The short tag goes in its own narrow Scaling column and the full
+        sentence is the tooltip: spelled out inline it made Media info far
+        too wide to scan.
+
+        Uses the *actual* direction a completed run used (what really
+        produced its scores, and still right even if the row's settings were
+        edited afterward), falling back to the row's current setting before
+        it's been run -- UNLESS the row is a "Test both" companion, whose
+        direction is fixed and known for certain by construction (see
+        RowData.scale_direction_pinned): a result cached before that field
+        existed loads as SOURCE_TO_DISTORTED regardless of what actually
+        produced it, which is simply wrong for a row that exists only to
+        represent DISTORTED_TO_SOURCE.
+        """
+        source_info = self._source_info
+        if source_info is None:
+            return "", ""
+        if (source_info.width, source_info.height) == (distorted_info.width, distorted_info.height):
+            return "", "Source and distorted are the same resolution -- no scaling needed."
+        row_data = self._rows[row]
+        if row_data.scale_direction_pinned:
+            direction = row_data.options.scale_direction
+        else:
+            direction = (
+                row_data.completed_run.result.scale_direction if row_data.completed_run is not None
+                else row_data.options.scale_direction
+            )
+        if direction == ScaleDirection.DISTORTED_TO_SOURCE:
+            return "↑ distorted", (
+                f"Distorted upscaled {distorted_info.width}x{distorted_info.height} -> "
+                f"{source_info.width}x{source_info.height} to match the source."
+            )
+        return "↓ source", (
+            f"Source downscaled {source_info.width}x{source_info.height} -> "
+            f"{distorted_info.width}x{distorted_info.height} to match the distorted video."
+        )
+
+    def _set_row_info(self, row: int, info: VideoInfo | None, error: str | None = None) -> None:
+        item = self.distorted_table.item(row, COL_INFO)
+        scaling_item = self.distorted_table.item(row, COL_SCALING)
+        if error:
+            item.setText("Probe failed")
+            item.setToolTip(error)
+            item.setForeground(Qt.red)
+            self.distorted_table.item(row, COL_BITRATE).setText("")
+            scaling_item.setText("")
+            scaling_item.setToolTip("")
+        else:
+            item.setText(_media_info_string(info))
+            item.setToolTip(format_hms(info.duration, decimals=1))
+            self.distorted_table.item(row, COL_BITRATE).setText(_bitrate_string(info))
+            tag, explanation = self._resize_mismatch(row, info)
+            scaling_item.setText(tag)
+            scaling_item.setToolTip(explanation)
+            self._rows[row].video_info = info
+        # Keeps these snug to whatever's actually in them (never wider than
+        # needed) while staying user-draggable in between updates.
+        self.distorted_table.resizeColumnToContents(COL_INFO)
+        self.distorted_table.resizeColumnToContents(COL_BITRATE)
+        self.distorted_table.resizeColumnToContents(COL_SCALING)
+
+    def _set_row_vmaf_text(self, row: int, text: str, *, bold: bool = False, color=None) -> None:
+        item = self.distorted_table.item(row, COL_VMAF)
+        item.setText(text)
+        font = QFont()
+        font.setBold(bold)
+        item.setFont(font)
+        if color is not None:
+            item.setForeground(color)
+        self.distorted_table.resizeColumnToContents(COL_VMAF)
+
+    def _set_resample_row_info(self, row: int, target: ResampleTarget) -> None:
+        info = self._source_info
+        assert info is not None
+        down_h = max(2, round(target.width * info.height / info.width / 2) * 2)
+        item = self.distorted_table.item(row, COL_INFO)
+        item.setText(f"Downscale to {target.width}x{down_h}, upscale back to {info.width}x{info.height}")
+        item.setToolTip(format_hms(info.duration, decimals=1))
+        self.distorted_table.item(row, COL_BITRATE).setText("N/A")
+        self.distorted_table.resizeColumnToContents(COL_INFO)
+        self.distorted_table.resizeColumnToContents(COL_BITRATE)
+
+    def _on_add_resample_test(self) -> None:
+        if self._source_info is None:
+            QMessageBox.warning(self, "No source", "Please select a reference (source) video first.")
+            return
+
+        labels = [t.label for t in RESAMPLE_TARGET_CHOICES]
+        label, ok = QInputDialog.getItem(
+            self, "Add resolution test", "Downscale to (then scale back up):", labels, 1, editable=False,
+        )
+        if not ok:
+            return
+        target = next(t for t in RESAMPLE_TARGET_CHOICES if t.label == label)
+
+        synthetic_path = synthetic_resample_distorted_path(self._source_info.path, target)
+        if any(r.path == synthetic_path for r in self._rows):
+            QMessageBox.information(
+                self, "Already added", f"A {label} resolution test for this source is already in the list."
+            )
+            return
+
+        row = self._add_table_row(synthetic_path)
+        self._rows[row].options.resample_test = target
+        self._rows[row].video_info = self._source_info
+        self._set_resample_row_info(row, target)
+        self._try_load_cached_result(row)
+
+    def _on_add_distorted(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(self, "Select distorted video(s)")
+        existing = {r.path for r in self._rows}
+        for p in paths:
+            path_obj = Path(p)
+            if path_obj in existing:
+                continue
+            row = self._add_table_row(path_obj)
+            try:
+                info = probe_video(path_obj)
+            except ProbeError as e:
+                self._set_row_info(row, None, error=str(e))
+                continue
+            self._set_row_info(row, info)
+            self._try_load_cached_result(row)
+
+    def _on_remove_distorted(self) -> None:
+        rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()}, reverse=True)
+        for row in rows:
+            self.distorted_table.removeRow(row)
+            del self._rows[row]
+        self._on_table_selection_changed()
+
+    # ------------------------------------------------------------------ persistent result cache
+    def _try_load_cached_result(self, row: int) -> bool:
+        """If a previous run for this exact (source, distorted) file name+size
+        pair was cached to disk, loads it into the row instead of leaving it
+        to be recomputed. Returns whether a cached result was applied."""
+        if self._source_info is None:
+            return False
+        row_data = self._rows[row]
+        if row_data.completed_run is not None:
+            return False
+        cached = result_cache.load_cached(self._source_info.path, row_data.path)
+        if cached is None:
+            return False
+        result, label = cached
+        run = CompletedRun(result, label)
+        row_data.completed_run = run
+        row_data.video_info = result.distorted_info
+        if row_data.options.resample_test is not None:
+            self._set_resample_row_info(row, row_data.options.resample_test)
+        else:
+            self._set_row_info(row, result.distorted_info)
+        self._set_row_metrics(row)
+        self.distorted_table.item(row, COL_VMAF).setToolTip(
+            f"mean {run.stats.mean:.2f}   min {run.stats.minimum:.2f}   max {run.stats.maximum:.2f}   "
+            f"({run.stats.count} frames)\nLoaded from a previous run (same filename+size) -- "
+            f"right-click to recompute."
+        )
+        return True
+
+    def _on_table_context_menu(self, pos) -> None:
+        rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
+        if not rows:
+            return
+        menu = QMenu(self)
+        recompute_action = menu.addAction("Recompute VMAF (ignore cached/previous result)")
+        chosen = menu.exec(self.distorted_table.viewport().mapToGlobal(pos))
+        if chosen == recompute_action:
+            self._recompute_rows(rows)
+
+    def _recompute_rows(self, rows: list[int]) -> None:
+        for row in rows:
+            row_data = self._rows[row]
+            row_data.completed_run = None
+            self._set_row_metrics(row)
+            self.distorted_table.item(row, COL_VMAF).setToolTip("")
+            if self._source_info is not None:
+                result_cache.clear(self._source_info.path, row_data.path)
+            # Refreshes the resize-mismatch note (Info column) back to the
+            # row's *current* settings -- without this it kept showing
+            # whatever the just-cleared run had actually used until the next
+            # run finished, which is stale/misleading in between.
+            if row_data.video_info is not None and row_data.options.resample_test is None:
+                self._set_row_info(row, row_data.video_info)
+        self.status_label.setText(
+            f"Cleared {len(rows)} result(s) -- make sure they're checked, then click Run VMAF to recompute."
+        )
+
+    def _add_opposite_scale_direction_rows(self, rows: list[int]) -> None:
+        """For each selected row with a mismatched resolution, adds a second
+        row for the *same* distorted file with the opposite ScaleDirection,
+        so both "scale source down" and "scale distorted up" can be run and
+        compared side by side instead of having to pick one and re-run to
+        see the other.
+        """
+        if self._source_info is None:
+            QMessageBox.warning(self, "No source", "Please select a reference (source) video first.")
+            return
+
+        added = 0
+        for row in rows:
+            row_data = self._rows[row]
+            if row_data.options.resample_test is not None:
+                continue  # scale direction doesn't apply to a resolution round-trip test row
+            if row_data.scale_direction_pinned:
+                # Already a companion row -- the row it was created from is
+                # its opposite direction, so the pair is complete. Without
+                # this, "Test both" on a companion produced a redundant
+                # third row named "x [upscale-...] [downscale-...]".
+                continue
+            info = row_data.video_info
+            if info is None or (info.width, info.height) == (self._source_info.width, self._source_info.height):
+                continue  # no probed info yet, or resolutions already match -- both directions are equivalent
+
+            opposite = (
+                ScaleDirection.DISTORTED_TO_SOURCE
+                if row_data.options.scale_direction == ScaleDirection.SOURCE_TO_DISTORTED
+                else ScaleDirection.SOURCE_TO_DISTORTED
+            )
+            synthetic_path = synthetic_scale_direction_variant_path(row_data.path, opposite)
+            if any(r.path == synthetic_path for r in self._rows):
+                continue  # already added
+
+            new_row = self._add_table_row(synthetic_path)
+            new_row_data = self._rows[new_row]
+            new_row_data.options = clone_options(row_data.options)
+            new_row_data.options.scale_direction = opposite
+            new_row_data.scale_direction_pinned = True
+            new_row_data.video_info = info
+            self._set_row_info(new_row, info)
+            self._try_load_cached_result(new_row)
+            added += 1
+
+        if added == 0:
+            QMessageBox.information(
+                self, "Nothing to add",
+                "Selected row(s) either already have a matching-opposite row, don't have a resolution "
+                "mismatch against the source, or aren't a normal comparison (e.g. a resolution test)."
+            )
+        else:
+            self.status_label.setText(
+                f"Added {added} row(s) testing the opposite scaling direction -- check them and click Run VMAF."
+            )
+
+    # ------------------------------------------------------------------ per-video settings panel
+    def _on_table_selection_changed(self) -> None:
+        rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
+        self._panel_target_rows = rows
+
+        if not rows:
+            self.options_box.setEnabled(False)
+            self.panel_target_label.setText(
+                "Select one or more videos in the table to view or edit their settings."
+            )
+            return
+
+        self.options_box.setEnabled(True)
+        if len(rows) == 1:
+            self.panel_target_label.setText(f"Settings for: {self._rows[rows[0]].path.name}")
+        else:
+            self.panel_target_label.setText(
+                f"Settings for {len(rows)} selected videos -- editing anything below applies to all of them."
+            )
+        self._write_panel_options(self._rows[rows[0]].options)
+
+    def _write_panel_options(self, opts: VmafOptions) -> None:
+        """Populates the panel widgets from `opts` without triggering the
+        write-back handlers that would otherwise fire on every setValue()."""
+        self._syncing_panel = True
+        try:
+            model_index = next(
+                (i for i, (_, key) in enumerate(_MODEL_CHOICES) if key == opts.model_choice), 0
+            )
+            self.model_combo.setCurrentIndex(model_index)
+            self._panel_custom_model_path = opts.custom_model_path
+
+            self.gpu_checkbox.setChecked(opts.gpu_decode_source)
+            self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
+            self.gpu_vendor_combo.setEnabled(opts.gpu_decode_source)
+
+            self.crop_combo.setCurrentIndex(0 if opts.crop_mode == CropMode.AUTO else 1)
+
+            self.threads_spin.setValue(opts.n_threads)
+            self.subsample_spin.setValue(opts.n_subsample)
+            algo_index = _SCALE_ALGORITHMS.index(opts.scale_algorithm) if opts.scale_algorithm in _SCALE_ALGORITHMS else 0
+            self.scale_algo_combo.setCurrentIndex(algo_index)
+            self.scale_direction_combo.setCurrentIndex(
+                1 if opts.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE else 0
+            )
+
+            ms = int(round(opts.duration_limit * 1000))
+            self.duration_edit.setTime(QTime(0, 0, 0, 0).addMSecs(ms))
+
+            # Which metrics to compute lives in the table's column headers
+            # now, so reflect this row's options back onto them.
+            self.metric_header.set_checked(COL_PSNR, "name=psnr" in opts.extra_features)
+            self.metric_header.set_checked(COL_SSIM, "name=float_ssim" in opts.extra_features)
+            self.metric_header.set_checked(COL_XPSNR, opts.compute_xpsnr)
+        finally:
+            self._syncing_panel = False
+
+    def _read_panel_options(self) -> VmafOptions:
+        extra_features = []
+        if self.metric_header.is_checked(COL_PSNR):
+            extra_features.append("name=psnr")
+        if self.metric_header.is_checked(COL_SSIM):
+            extra_features.append("name=float_ssim")
+
+        vendor = _GPU_VENDOR_BY_INDEX[self.gpu_vendor_combo.currentIndex()] if self.gpu_checkbox.isChecked() else GpuVendor.NONE
+        crop_mode = CropMode.AUTO if self.crop_combo.currentIndex() == 0 else CropMode.NONE
+        duration_limit = QTime(0, 0, 0, 0).msecsTo(self.duration_edit.time()) / 1000.0
+        model_choice = _MODEL_CHOICES[self.model_combo.currentIndex()][1]
+        scale_direction = (
+            ScaleDirection.DISTORTED_TO_SOURCE if self.scale_direction_combo.currentIndex() == 1
+            else ScaleDirection.SOURCE_TO_DISTORTED
+        )
+
+        return VmafOptions(
+            model="",  # resolved per-job at run time via resolve_model(), once each row's distorted video is known
+            model_choice=model_choice,
+            custom_model_path=self._panel_custom_model_path,
+            extra_features=extra_features,
+            n_threads=self.threads_spin.value(),
+            n_subsample=self.subsample_spin.value(),
+            scale_algorithm=self.scale_algo_combo.currentText(),
+            scale_direction=scale_direction,
+            compute_xpsnr=self.metric_header.is_checked(COL_XPSNR),
+            duration_limit=duration_limit,
+            gpu_decode_source=self.gpu_checkbox.isChecked(),
+            gpu_vendor=vendor,
+            crop_mode=crop_mode,
+        )
+
+    def _on_metric_column_toggled(self, column: int, checked: bool) -> None:
+        """A metric's column header is a global switch: it applies to every
+        row (and becomes the default for rows added later), matching how
+        FFMetrics treats its metric columns. Rows that already have a score
+        keep it -- unticking just means "don't compute this next run"."""
+        if self._syncing_panel:
+            return
+        feature = next(f for c, _, f in _METRIC_COLUMNS if c == column)
+        # Every existing row, plus the template new rows are cloned from --
+        # only the metric flag is touched, so each row keeps its own model,
+        # crop, GPU and scaling settings.
+        for opts in [rd.options for rd in self._rows] + [self._default_options]:
+            if column == COL_XPSNR:
+                opts.compute_xpsnr = checked
+            elif checked and feature not in opts.extra_features:
+                opts.extra_features.append(feature)
+            elif not checked and feature in opts.extra_features:
+                opts.extra_features.remove(feature)
+        for row in range(len(self._rows)):
+            self._set_row_metrics(row)
+
+    def _on_panel_edited(self, *_args) -> None:
+        if self._syncing_panel:
+            return
+        new_options = self._read_panel_options()
+        self._default_options = clone_options(new_options)
+        for row in self._panel_target_rows:
+            self._rows[row].options = clone_options(new_options)
+
+    def _on_scale_direction_combo_changed(self, index: int) -> None:
+        if self._syncing_panel:
+            return
+        if index == 2:
+            # "Test both" isn't a real per-row value (ScaleDirection only has
+            # the two actual states) -- it's a one-shot action that adds a
+            # sibling row for the other direction, leaving this row's own
+            # direction untouched. Revert the combo to reflect that.
+            self._add_opposite_scale_direction_rows(self._panel_target_rows)
+            if self._panel_target_rows:
+                self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
+            return
+        self._on_panel_edited()
+
+    def _on_model_changed(self, index: int) -> None:
+        if self._syncing_panel:
+            return
+        if _MODEL_CHOICES[index][1] == "__custom__":
+            path, _ = QFileDialog.getOpenFileName(self, "Select VMAF model file (.json)")
+            if path:
+                self._panel_custom_model_path = path
+            else:
+                self.model_combo.setCurrentIndex(0)  # reverts to Auto; re-enters this handler, then falls through below
+                return
+        self._on_panel_edited()
+
+    # ------------------------------------------------------------------ run
+    def _checked_rows(self) -> list[int]:
+        rows = []
+        for row in range(self.distorted_table.rowCount()):
+            if self.distorted_table.item(row, COL_CHECK).checkState() == Qt.Checked:
+                rows.append(row)
+        return rows
+
+    def _on_run_clicked(self) -> None:
+        if self._source_info is None:
+            QMessageBox.warning(self, "No source", "Please select a reference (source) video.")
+            return
+        checked_rows = self._checked_rows()
+        if not checked_rows:
+            QMessageBox.warning(self, "No distorted videos", "Check at least one distorted video to run.")
+            return
+
+        # Checking a row you already have a score for (e.g. it was checked
+        # before you added more files) shouldn't silently recompute it --
+        # skip anything already scored. To force a redo, remove and re-add
+        # the row (or uncheck/recheck won't do it -- that's intentional).
+        already_scored_rows = [r for r in checked_rows if self._rows[r].completed_run is not None]
+        rows_to_run = [r for r in checked_rows if self._rows[r].completed_run is None]
+
+        if not rows_to_run:
+            self.status_label.setText(
+                f"All {len(already_scored_rows)} checked video(s) already have a VMAF score -- nothing to run."
+            )
+            already_done_runs = [self._rows[r].completed_run for r in already_scored_rows]
+            if already_done_runs:
+                self._open_or_update_graph(already_done_runs)
+            return
+
+        jobs = []
+        job_rows = []
+        job_total_frames = []
+        for row in rows_to_run:
+            row_data = self._rows[row]
+            dist_info = row_data.video_info
+            if dist_info is None:
+                try:
+                    dist_info = probe_video(row_data.path)
+                    row_data.video_info = dist_info
+                    self._set_row_info(row, dist_info)
+                except ProbeError as e:
+                    self._set_row_info(row, None, error=str(e))
+                    continue
+            try:
+                model = resolve_model(row_data.options, dist_info)
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid options", f"{row_data.path.name}: {e}")
+                return
+            job_options = replace(row_data.options, model=model)
+            jobs.append(VmafJob(
+                self._source_info, dist_info, job_options, label=row_data.path.stem,
+                result_distorted_path=row_data.path,
+            ))
+            job_rows.append(row_data)
+            # A resample test's output timeline is driven by the source (see
+            # run_resample_test), not this row's (synthetic) "distorted" info.
+            reference_for_frames = self._source_info if job_options.resample_test is not None else dist_info
+            job_total_frames.append(estimate_total_frames(reference_for_frames, job_options))
+
+        if not jobs:
+            return
+
+        self._job_rows = job_rows
+        self._job_total_frames = job_total_frames
+        # Held as RowData, not indices, so removing a row mid-run can't
+        # silently repoint these at a different row.
+        self._checked_rows_for_run = [self._rows[r] for r in checked_rows]
+        self._current_job_index = None
+        if already_scored_rows:
+            self.status_label.setText(
+                f"Skipping {len(already_scored_rows)} already-scored video(s); running {len(jobs)}..."
+            )
+        self.run_btn.setEnabled(False)
+        self.pause_btn.setEnabled(True)
+        self.pause_btn.setChecked(False)
+        self.pause_btn.setText("Pause")
+        self.cancel_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+
+        self._worker = VmafWorker(jobs, self)
+        self._worker.job_started.connect(self._on_job_started)
+        self._worker.progress.connect(self._on_job_progress)
+        self._worker.status.connect(self._on_job_status)
+        self._worker.job_finished.connect(self._on_job_finished)
+        self._worker.job_failed.connect(self._on_job_failed)
+        self._worker.all_finished.connect(self._on_all_finished)
+        self._worker.start()
+
+    def _on_cancel_clicked(self) -> None:
+        if self._worker is not None:
+            self._worker.cancel()
+            self.status_label.setText("Cancelling...")
+
+    def _on_pause_clicked(self) -> None:
+        if self._worker is None:
+            return
+        if self.pause_btn.isChecked():
+            self._worker.pause()
+            self.pause_btn.setText("Resume")
+            self.status_label.setText("Paused.")
+        else:
+            self._worker.resume()
+            self.pause_btn.setText("Pause")
+            self.status_label.setText("Resumed.")
+
+    def _on_job_started(self, index: int, label: str) -> None:
+        self._current_job_index = index
+        self.status_label.setText(f"Running: {label}  (file {index + 1} of {len(self._job_rows)})")
+        self.progress_bar.setValue(0)
+        self.progress_detail_label.setText("")
+
+    def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
+        # Live progress (queued/starting/frame N of M/paused) belongs in the
+        # status bar above -- it already shows the running file, fps and ETA
+        # -- not the VMAF column, which is for the final score.
+        pct = int(100 * current / total) if total > 0 else 0
+        self.progress_bar.setValue(min(pct, 100))
+
+        file_count = len(self._job_rows)
+        if fps > 0:
+            file_eta = format_hms(max(0, total - current) / fps)
+            frames_done_before_this_job = sum(self._job_total_frames[:index])
+            queue_total = sum(self._job_total_frames)
+            queue_remaining = max(0, queue_total - (frames_done_before_this_job + current))
+            queue_eta = format_hms(queue_remaining / fps)
+            self.progress_detail_label.setText(
+                f"{fps:.1f} fps   |   File ETA: {file_eta}   |   Queue ETA: {queue_eta}"
+                f"   (file {index + 1} of {file_count})"
+            )
+        else:
+            self.progress_detail_label.setText(f"file {index + 1} of {file_count}")
+
+    def _on_job_status(self, index: int, message: str) -> None:
+        self.status_label.setText(message)
+
+    def _row_index_of(self, row_data: RowData) -> int | None:
+        """The table row this RowData currently sits at, or None if it was
+        removed while the run was in flight. Compared by identity, not `==`:
+        two different rows can be field-equal (e.g. the same file added
+        twice before probing), and list.index() would find the wrong one."""
+        for i, rd in enumerate(self._rows):
+            if rd is row_data:
+                return i
+        return None
+
+    def _on_job_finished(self, index: int, result) -> None:
+        row_data = self._job_rows[index]
+        row = self._row_index_of(row_data)
+        if row is None:
+            return  # the row was removed mid-run; nothing to write the result to
+        label = row_data.path.stem
+        run = CompletedRun(result, label)
+        row_data.completed_run = run
+        if row_data.options.resample_test is None:
+            self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
+        self._set_row_metrics(row)
+        self.distorted_table.item(row, COL_VMAF).setToolTip(
+            f"mean {run.stats.mean:.2f}   min {run.stats.minimum:.2f}   max {run.stats.maximum:.2f}   "
+            f"({run.stats.count} frames)"
+        )
+        if self._source_info is not None:
+            result_cache.store(self._source_info.path, row_data.path, result, label)
+
+    def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
+        row = self._row_index_of(self._job_rows[index])
+        if row is None:
+            return  # the row was removed mid-run
+        self._set_row_vmaf_text(row, "Failed", color=Qt.red)
+        detail = f"{message}\n\n{stderr_tail}" if stderr_tail else message
+        self.distorted_table.item(row, COL_VMAF).setToolTip(detail)
+
+    def _on_all_finished(self) -> None:
+        self.run_btn.setEnabled(True)
+        self.pause_btn.setEnabled(False)
+        self.pause_btn.setChecked(False)
+        self.pause_btn.setText("Pause")
+        self.cancel_btn.setEnabled(False)
+        self._current_job_index = None
+        self.status_label.setText("Done.")
+        self.progress_bar.setValue(100)
+        self.progress_detail_label.setText("")
+        # Includes rows that were already scored and skipped, not just ones
+        # run this batch, so the comparison graph reflects everything checked.
+        # Rows removed mid-run are skipped rather than indexed into.
+        finished_runs = [
+            rd.completed_run for rd in self._checked_rows_for_run
+            if rd.completed_run and self._row_index_of(rd) is not None
+        ]
+        if finished_runs:
+            self._open_or_update_graph(finished_runs)
+
+    # ------------------------------------------------------------------ results actions
+    def _selected_runs(self) -> list[CompletedRun]:
+        rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
+        return [self._rows[r].completed_run for r in rows if self._rows[r].completed_run]
+
+    def _on_load_saved_run(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Load saved VMAF run", "", "VMAF run (*.vmafrun.json *.json)")
+        if not path:
+            return
+        try:
+            result, label = load_run(Path(path))
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.critical(self, "Failed to load run", str(e))
+            return
+        run = CompletedRun(result, label)
+        row = self._add_table_row(result.distorted)
+        self._rows[row].video_info = result.distorted_info
+        self._rows[row].completed_run = run
+        self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
+        self._set_row_info(row, result.distorted_info)
+        self._set_row_metrics(row)
+        self.distorted_table.item(row, COL_VMAF).setToolTip("Loaded from saved run")
+
+    def _on_save_selected(self) -> None:
+        runs = self._selected_runs()
+        if not runs:
+            QMessageBox.information(self, "Nothing selected", "Select one or more completed rows to save.")
+            return
+        if len(runs) == 1:
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save VMAF run", f"{runs[0].label}.vmafrun.json", "VMAF run (*.vmafrun.json)"
+            )
+            if path:
+                save_run(runs[0].result, Path(path), label=runs[0].label)
+            return
+        directory = QFileDialog.getExistingDirectory(self, "Choose folder to save runs into")
+        if not directory:
+            return
+        for run in runs:
+            safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in run.label)
+            save_run(run.result, Path(directory) / f"{safe}.vmafrun.json", label=run.label)
+
+    def _on_compare_selected(self) -> None:
+        runs = self._selected_runs()
+        if not runs:
+            QMessageBox.information(self, "Nothing selected", "Select one or more completed rows to compare.")
+            return
+        self._open_or_update_graph(runs)
+
+    def _on_show_graph_clicked(self) -> None:
+        # Syncs in every currently-completed row every time -- not just
+        # whatever was completed the first time this was clicked -- so
+        # checking back mid-run (e.g. 4 of 8 done) shows all 4, not just
+        # however many were done the first time the window was opened.
+        all_runs = [r.completed_run for r in self._rows if r.completed_run]
+        if not all_runs:
+            if self._graph_window is not None:
+                self._graph_window.show()
+                self._graph_window.raise_()
+                self._graph_window.activateWindow()
+                return
+            QMessageBox.information(
+                self, "No results yet", "Run or load at least one VMAF result before opening the graph."
+            )
+            return
+        self._open_or_update_graph(all_runs)
+
+    def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
+        if self._graph_window is None:
+            # No Qt parent, deliberately: passing one makes Qt set this
+            # window's native Win32 *owner* to the main window's HWND, and
+            # an owned window never gets its own taskbar button (or groups
+            # with the app) regardless of window-type flags -- it also
+            # minimizes to a small floating title bar instead of the
+            # taskbar. closeEvent() below closes this window explicitly when
+            # the main window closes, since it's no longer a Qt child that
+            # would get destroyed automatically.
+            self._graph_window = GraphWindow()
+        for run in runs:
+            self._graph_window.add_run(run.result, run.label)
+        self._graph_window.show()
+        self._graph_window.raise_()
+        self._graph_window.activateWindow()

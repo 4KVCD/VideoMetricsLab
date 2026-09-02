@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.vmafrun.json
+
+# throwaway benchmark/QA scratch space (includes sample .mp4s)
+tests_scratch/
+# stdout/stderr captured from launching the GUI
+gui_stdout.log
+gui_stderr.log
