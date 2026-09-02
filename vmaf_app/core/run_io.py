@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from pathlib import Path
 
-from vmaf_app.core.models import CropBox, FrameScore, ScaleDirection, VideoInfo, VmafRunResult
+import numpy as np
+
+from vmaf_app.core.models import CropBox, FrameScores, ScaleDirection, VideoInfo, VmafRunResult
 
 FORMAT_VERSION = 1
 
@@ -35,6 +38,42 @@ def _info_from_dict(d: dict) -> VideoInfo:
     )
 
 
+def _frames_to_rows(frames: FrameScores) -> list[list]:
+    """The on-disk shape is unchanged (one row per frame) so files written by
+    older versions still load -- the arrays are just unpacked to write."""
+    def column(metric: str) -> list:
+        arr = frames.values(metric)
+        if arr is None:
+            return [None] * len(frames)
+        return [None if math.isnan(v) else round(float(v), 6) for v in arr]
+
+    psnr, ssim, xpsnr = column("psnr"), column("ssim"), column("xpsnr")
+    return [
+        [int(frames.frame[i]), round(float(frames.time[i]), 6), round(float(frames.vmaf[i]), 6),
+         psnr[i], ssim[i], xpsnr[i]]
+        for i in range(len(frames))
+    ]
+
+
+def _rows_to_frames(rows: list[list]) -> FrameScores:
+    if not rows:
+        return FrameScores.empty()
+
+    def column(index: int) -> np.ndarray | None:
+        # fr[5] (xpsnr) is missing in files saved before XPSNR support existed.
+        values = [r[index] if len(r) > index else None for r in rows]
+        if all(v is None for v in values):
+            return None
+        return np.array([np.nan if v is None else v for v in values], dtype=np.float32)
+
+    return FrameScores(
+        frame=np.array([r[0] for r in rows], dtype=np.int32),
+        time=np.array([r[1] for r in rows], dtype=np.float64),
+        vmaf=np.array([r[2] for r in rows], dtype=np.float32),
+        psnr=column(3), ssim=column(4), xpsnr=column(5),
+    )
+
+
 def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> None:
     payload = {
         "format_version": FORMAT_VERSION,
@@ -48,18 +87,14 @@ def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> Non
         "source_info": _info_to_dict(result.source_info),
         "distorted_info": _info_to_dict(result.distorted_info),
         "scale_direction": result.scale_direction.value,
-        "frames": [[f.frame, round(f.time, 6), f.vmaf, f.psnr, f.ssim, f.xpsnr] for f in result.frames],
+        "frames": _frames_to_rows(result.frames),
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def load_run(path: Path) -> tuple[VmafRunResult, str]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    frames = [
-        # fr[5] (xpsnr) is missing in files saved before XPSNR support existed.
-        FrameScore(frame=fr[0], time=fr[1], vmaf=fr[2], psnr=fr[3], ssim=fr[4], xpsnr=fr[5] if len(fr) > 5 else None)
-        for fr in data["frames"]
-    ]
+    frames = _rows_to_frames(data["frames"])
     result = VmafRunResult(
         source=Path(data["source"]),
         distorted=Path(data["distorted"]),

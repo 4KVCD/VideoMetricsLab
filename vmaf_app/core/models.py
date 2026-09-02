@@ -1,9 +1,13 @@
 """Shared data structures used across the core pipeline and UI."""
 from __future__ import annotations
 
+import math
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+import numpy as np
 
 
 class CropMode(str, Enum):
@@ -142,8 +146,18 @@ class VmafOptions:
     resample_test: ResampleTarget | None = None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class FrameScore:
+    """A single frame's scores. This is a read-only *view* type -- convenient
+    to pass around and read, but never how a whole run is stored (see
+    FrameScores): a feature-length run is hundreds of thousands of frames,
+    and one Python object per frame costs ~180 bytes against 28 in packed
+    arrays.
+
+    Frozen deliberately: indexing a FrameScores builds one of these on the
+    fly, so assigning to it would update a throwaway object and silently
+    lose the write. Better to raise than to quietly do nothing.
+    """
     frame: int
     time: float
     vmaf: float
@@ -152,11 +166,152 @@ class FrameScore:
     xpsnr: float | None = None
 
 
+# Metric name -> whether it's optional (PSNR/SSIM/XPSNR are only computed on
+# request; VMAF always is). Ordered as they're presented to the user.
+METRIC_NAMES = ("vmaf", "psnr", "ssim", "xpsnr")
+
+
+class FrameScores:
+    """Per-frame scores for a whole run, stored as packed arrays rather than
+    one object per frame (structure-of-arrays).
+
+    Behaves like a sequence of FrameScore -- len(), indexing and iteration
+    all work -- so readability at call sites is unchanged, but indexing
+    builds a throwaway view rather than retaining an object per frame. Hot
+    paths (plotting, stats, hover) should read the arrays directly instead:
+    `scores.vmaf` rather than `[f.vmaf for f in scores]`.
+
+    An optional metric that wasn't computed is None rather than an array of
+    NaN, so "not computed" stays distinguishable from a real 0.0 score --
+    both of which genuinely occur.
+    """
+
+    __slots__ = ("frame", "time", "vmaf", "psnr", "ssim", "xpsnr")
+
+    def __init__(
+        self,
+        frame: np.ndarray,
+        time: np.ndarray,
+        vmaf: np.ndarray,
+        psnr: np.ndarray | None = None,
+        ssim: np.ndarray | None = None,
+        xpsnr: np.ndarray | None = None,
+    ) -> None:
+        self.frame = np.asarray(frame, dtype=np.int32)
+        # float64 for time: bisect during hover needs to stay exact across a
+        # multi-hour run, where float32 only has ~0.001s of resolution.
+        self.time = np.asarray(time, dtype=np.float64)
+        self.vmaf = np.asarray(vmaf, dtype=np.float32)
+        self.psnr = None if psnr is None else np.asarray(psnr, dtype=np.float32)
+        self.ssim = None if ssim is None else np.asarray(ssim, dtype=np.float32)
+        self.xpsnr = None if xpsnr is None else np.asarray(xpsnr, dtype=np.float32)
+
+    @classmethod
+    def empty(cls) -> FrameScores:
+        f32, i32, f64 = np.float32, np.int32, np.float64
+        return cls(np.empty(0, i32), np.empty(0, f64), np.empty(0, f32))
+
+    @classmethod
+    def from_frames(cls, frames: Sequence[FrameScore]) -> FrameScores:
+        """Packs a list of per-frame objects (tests, older save files) down
+        into arrays."""
+        if not frames:
+            return cls.empty()
+
+        def column(attr: str) -> np.ndarray | None:
+            values = [getattr(f, attr) for f in frames]
+            if all(v is None for v in values):
+                return None
+            return np.array([np.nan if v is None else v for v in values], dtype=np.float32)
+
+        return cls(
+            frame=np.array([f.frame for f in frames], dtype=np.int32),
+            time=np.array([f.time for f in frames], dtype=np.float64),
+            vmaf=np.array([f.vmaf for f in frames], dtype=np.float32),
+            psnr=column("psnr"), ssim=column("ssim"), xpsnr=column("xpsnr"),
+        )
+
+    def values(self, metric: str) -> np.ndarray | None:
+        """The array for a metric by name, or None if it wasn't computed."""
+        return getattr(self, metric)
+
+    def has(self, metric: str) -> bool:
+        return self.values(metric) is not None
+
+    def __len__(self) -> int:
+        return int(self.frame.shape[0])
+
+    def __bool__(self) -> bool:
+        return len(self) > 0
+
+    def __getitem__(self, index: int | slice) -> FrameScore | FrameScores:
+        if isinstance(index, slice):
+            def sliced(arr: np.ndarray | None) -> np.ndarray | None:
+                return None if arr is None else arr[index]
+
+            return FrameScores(
+                frame=self.frame[index], time=self.time[index], vmaf=self.vmaf[index],
+                psnr=sliced(self.psnr), ssim=sliced(self.ssim), xpsnr=sliced(self.xpsnr),
+            )
+
+        def optional(arr: np.ndarray | None) -> float | None:
+            if arr is None:
+                return None
+            value = float(arr[index])
+            # NaN is how "no value for this particular frame" is stored
+            # inside an otherwise-present column.
+            return None if math.isnan(value) else value
+
+        return FrameScore(
+            frame=int(self.frame[index]),
+            time=float(self.time[index]),
+            vmaf=float(self.vmaf[index]),
+            psnr=optional(self.psnr), ssim=optional(self.ssim), xpsnr=optional(self.xpsnr),
+        )
+
+    def with_values(self, metric: str, values: np.ndarray | None) -> FrameScores:
+        """A copy with one metric's column replaced -- the supported way to
+        change scores, since the per-frame views are read-only."""
+        columns = {m: self.values(m) for m in ("psnr", "ssim", "xpsnr")}
+        if metric in columns:
+            columns[metric] = values
+            return FrameScores(self.frame, self.time, self.vmaf, **columns)
+        if metric == "vmaf":
+            return FrameScores(self.frame, self.time, values, **columns)
+        raise KeyError(f"unknown metric {metric!r}")
+
+    def __iter__(self) -> Iterator[FrameScore]:
+        for i in range(len(self)):
+            yield self[i]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FrameScores):
+            return NotImplemented
+        if not (np.array_equal(self.frame, other.frame) and np.array_equal(self.time, other.time)
+                and np.array_equal(self.vmaf, other.vmaf)):
+            return False
+        for metric in ("psnr", "ssim", "xpsnr"):
+            a, b = self.values(metric), other.values(metric)
+            if (a is None) != (b is None):
+                return False
+            if a is not None and not np.array_equal(a, b, equal_nan=True):
+                return False
+        return True
+
+    def nbytes(self) -> int:
+        total = self.frame.nbytes + self.time.nbytes + self.vmaf.nbytes
+        for metric in ("psnr", "ssim", "xpsnr"):
+            arr = self.values(metric)
+            if arr is not None:
+                total += arr.nbytes
+        return total
+
+
 @dataclass
 class VmafRunResult:
     source: Path
     distorted: Path
-    frames: list[FrameScore]
+    frames: FrameScores
     fps: float
     model: str
     source_crop: CropBox | None
@@ -169,3 +324,11 @@ class VmafRunResult:
     # reloaded/cached result always reflects what actually produced these
     # scores, even if the row's own settings were changed since.
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
+
+    def __post_init__(self) -> None:
+        # Accept a plain list of FrameScore and pack it. Callers that build a
+        # result by hand (and every older caller) stay valid, while storage
+        # is always the array form -- there's exactly one representation to
+        # reason about downstream.
+        if not isinstance(self.frames, FrameScores):
+            self.frames = FrameScores.from_frames(self.frames)

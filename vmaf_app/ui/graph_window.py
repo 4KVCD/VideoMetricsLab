@@ -10,11 +10,11 @@ since it's the same set of runs either way.
 """
 from __future__ import annotations
 
-import bisect
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.exporters  # noqa: F401 - registers pg.exporters.ImageExporter
 from PySide6.QtCore import QEvent, QObject, Qt
@@ -108,7 +108,7 @@ class SeriesEntry:
     label: str
     color: str
     checkbox: QCheckBox
-    times: list[float]
+    times: np.ndarray
     step: float  # typical time delta between consecutive points in this series
     visible: bool = True
 
@@ -120,7 +120,7 @@ class _MetricCurve:
     # Cached once per add_run rather than rebuilt on every hover move -- see
     # _on_mouse_moved, which used to be the actual measured CPU bottleneck
     # for exactly this kind of per-call list-building on a long run.
-    values: list[float]
+    values: np.ndarray
 
 
 class _MetricPage(QWidget):
@@ -184,15 +184,13 @@ class _MetricPage(QWidget):
         """(Re)builds this series' curve on this page from its current data,
         or removes it if the run has no data for this metric."""
         self.remove_curve(series_id)
-        # PSNR/SSIM/XPSNR are always computed for every frame of a run or
-        # none at all -- it's a per-run option (a checkbox before running),
-        # never a per-frame one -- so checking the first frame is enough to
-        # know whether this metric applies to the whole run, and `values`
-        # always lines up index-for-index with `entry.times` with no gaps.
-        if not entry.result.frames or self.metric.value(entry.result.frames[0]) is None:
+        # PSNR/SSIM/XPSNR are computed for a whole run or not at all -- it's
+        # a per-run option, never a per-frame one -- so the array is either
+        # present or None, and lines up index-for-index with entry.times.
+        values = entry.result.frames.values(self.metric.key)
+        if values is None or len(values) == 0:
             self._update_no_data_label()
             return
-        values = [self.metric.value(f) for f in entry.result.frames]
         curve = self.plot_widget.plot(entry.times, values, pen=pg.mkPen(color, width=2))
         curve.setDownsampling(auto=True, method="peak")
         curve.setClipToView(True)
@@ -249,8 +247,8 @@ class _MetricPage(QWidget):
 
     # ------------------------------------------------------------------ hover
     @staticmethod
-    def _nearest_index_by_time(times: list[float], x: float) -> int:
-        idx = bisect.bisect_left(times, x)
+    def _nearest_index_by_time(times: np.ndarray, x: float) -> int:
+        idx = int(np.searchsorted(times, x, side="left"))
         if idx <= 0:
             return 0
         if idx >= len(times):
@@ -258,7 +256,7 @@ class _MetricPage(QWidget):
         return idx if (times[idx] - x) < (x - times[idx - 1]) else idx - 1
 
     def _find_hover_index(
-        self, entry: SeriesEntry, values: list[float], x: float, y: float, half_window: float,
+        self, entry: SeriesEntry, values: np.ndarray, x: float, y: float, half_window: float,
     ) -> int:
         """Finds the frame to report for this series at the cursor.
 
@@ -267,37 +265,27 @@ class _MetricPage(QWidget):
         every point within `half_window` of the cursor's time position and:
         prefers the one closest in time that's at or below the cursor's Y
         position -- so hovering anywhere near a dip "grabs" it; and falls
-        back to the single lowest-value point in that neighborhood if
+        back to the single lowest-value point in that neighbourhood if
         nothing there is at or below the cursor's Y.
 
-        Only used when a single series is visible on this page -- see
-        _find_shared_hover_time for why comparing multiple series needs a
-        shared target time instead.
+        Vectorised: zoomed out over a long run this window spans thousands
+        of frames, and it runs on every mouse move.
         """
         times = entry.times
-        lo = bisect.bisect_left(times, x - half_window)
-        hi = bisect.bisect_right(times, x + half_window)
+        lo = int(np.searchsorted(times, x - half_window, side="left"))
+        hi = int(np.searchsorted(times, x + half_window, side="right"))
         if lo >= hi:
             return self._nearest_index_by_time(times, x)
 
-        best_below_idx = -1
-        best_below_dist = 0.0
-        fallback_idx = lo
-        fallback_val = values[lo]
-        for i in range(lo, hi):
-            v = values[i]
-            if v <= y:
-                dist = abs(times[i] - x)
-                if best_below_idx == -1 or dist < best_below_dist:
-                    best_below_idx = i
-                    best_below_dist = dist
-            if v < fallback_val:
-                fallback_val = v
-                fallback_idx = i
-        return best_below_idx if best_below_idx != -1 else fallback_idx
+        window = values[lo:hi]
+        at_or_below = np.flatnonzero(window <= y)
+        if at_or_below.size:
+            nearest = np.abs(times[lo:hi][at_or_below] - x).argmin()
+            return lo + int(at_or_below[nearest])
+        return lo + int(np.nanargmin(window))
 
     def _find_shared_hover_time(
-        self, pages: list[tuple[SeriesEntry, list[float]]], x: float, y: float, x_per_pixel: float,
+        self, pages: list[tuple[SeriesEntry, np.ndarray]], x: float, y: float, x_per_pixel: float,
     ) -> float:
         """The multi-series equivalent of _find_hover_index: picks ONE target
         time using the same dip-snap rule (nearest-in-time among points
@@ -305,34 +293,37 @@ class _MetricPage(QWidget):
         falling back to the single lowest point if none qualify) so every
         series' readout refers to the exact same moment.
         """
-        found_below = False
-        best_below_time = 0.0
+        best_below_time: float | None = None
         best_below_dist = 0.0
-        found_any = False
-        fallback_time = 0.0
+        fallback_time: float | None = None
         fallback_val = 0.0
-        for entry, values in pages:
-            step = max(entry.step, x_per_pixel)
-            half_window = step * _HOVER_SEARCH_STEPS
-            times = entry.times
-            lo = bisect.bisect_left(times, x - half_window)
-            hi = bisect.bisect_right(times, x + half_window)
-            for i in range(lo, hi):
-                t = times[i]
-                v = values[i]
-                if not found_any or v < fallback_val:
-                    fallback_time, fallback_val = t, v
-                found_any = True
-                if v <= y:
-                    dist = abs(t - x)
-                    if not found_below or dist < best_below_dist:
-                        best_below_time = t
-                        best_below_dist = dist
-                        found_below = True
 
-        if not found_any:
-            return x
-        return best_below_time if found_below else fallback_time
+        for entry, values in pages:
+            times = entry.times
+            half_window = max(entry.step, x_per_pixel) * _HOVER_SEARCH_STEPS
+            lo = int(np.searchsorted(times, x - half_window, side="left"))
+            hi = int(np.searchsorted(times, x + half_window, side="right"))
+            if lo >= hi:
+                continue
+            window_times, window_values = times[lo:hi], values[lo:hi]
+
+            lowest = int(np.nanargmin(window_values))
+            if fallback_time is None or window_values[lowest] < fallback_val:
+                fallback_time, fallback_val = float(window_times[lowest]), float(window_values[lowest])
+
+            at_or_below = np.flatnonzero(window_values <= y)
+            if at_or_below.size:
+                distances = np.abs(window_times[at_or_below] - x)
+                nearest = int(distances.argmin())
+                if best_below_time is None or distances[nearest] < best_below_dist:
+                    best_below_time = float(window_times[at_or_below[nearest]])
+                    best_below_dist = float(distances[nearest])
+
+        if best_below_time is not None:
+            return best_below_time
+        if fallback_time is not None:
+            return fallback_time
+        return x  # nothing nearby in any series -- just use the raw cursor time
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if obj is self.plot_widget.viewport() and event.type() == QEvent.Resize:
@@ -541,8 +532,8 @@ class GraphWindow(QMainWindow):
         sid = self._next_id
         self._next_id += 1
 
-        times = [f.time for f in result.frames]
-        step = (times[-1] - times[0]) / (len(times) - 1) if len(times) > 1 else 1.0
+        times = result.frames.time
+        step = float(times[-1] - times[0]) / (len(times) - 1) if len(times) > 1 else 1.0
 
         # This list IS the legend -- a color swatch beside each label plays
         # the same role a legend's line sample would, without sitting on top

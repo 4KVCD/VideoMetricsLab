@@ -270,7 +270,7 @@ def test_hover_locks_onto_a_dip_below_cursor_y_even_if_not_exactly_under_cursor(
 
     # Cursor sits exactly at the dip's time, at Y=70 -- well above the dip
     # (60) but below the surrounding baseline (95), so only the dip qualifies.
-    values = [f.vmaf for f in entry.result.frames]
+    values = entry.result.frames.vmaf
     idx = page._find_hover_index(entry, values, x=entry.times[5], y=70, half_window=0.05)
     assert idx == 5
 
@@ -284,7 +284,7 @@ def test_hover_falls_back_to_local_minimum_when_nothing_is_below_cursor_y(qapp):
     # Cursor near frame 2 (values 95,93,95 nearby), Y=70 -- nothing in this
     # neighborhood is <=70 (the big dip at frame 5 is outside the window), so
     # it should fall back to the lowest VMAF in the neighborhood (93 @ idx 2).
-    values = [f.vmaf for f in entry.result.frames]
+    values = entry.result.frames.vmaf
     idx = page._find_hover_index(entry, values, x=entry.times[2], y=70, half_window=0.05)
     assert idx == 2
 
@@ -402,9 +402,12 @@ def test_y_axis_bottom_rounds_down_to_nearest_5_below_lowest_score(qapp):
     win = GraphWindow()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
     sid = next(iter(win._entries))
-    # override one frame to create a real low point (62 -> floor to 60)
-    win._entries[sid].result.frames[3].vmaf = 62.0
-    win.add_run(win._entries[sid].result, win._entries[sid].label)  # rebuild the curve/stats from the mutated frames
+    # one real low point (62 -> floors the axis to 60)
+    result = win._entries[sid].result
+    vmaf = result.frames.vmaf.copy()
+    vmaf[3] = 62.0
+    result.frames = result.frames.with_values("vmaf", vmaf)
+    win.add_run(result, win._entries[sid].label)  # rebuild the curve/stats
 
     y_range = win._pages["vmaf"].plot_widget.getPlotItem().vb.viewRange()[1]
     assert y_range[0] == 60
@@ -489,7 +492,7 @@ def test_single_series_hover_still_uses_independent_dip_snap(qapp):
     entry = next(iter(win._entries.values()))
     page = win._pages["vmaf"]
 
-    values = [f.vmaf for f in entry.result.frames]
+    values = entry.result.frames.vmaf
     idx = page._find_hover_index(entry, values, x=entry.times[5], y=70, half_window=0.05)
     assert idx == 5
 

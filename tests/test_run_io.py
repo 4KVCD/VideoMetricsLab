@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from vmaf_app.core.models import CropBox, FrameScore, VideoInfo, VmafRunResult
+import numpy as np
+
+from vmaf_app.core.models import CropBox, FrameScore, FrameScores, VideoInfo, VmafRunResult
 from vmaf_app.core.run_io import export_csv, load_run, save_run
 
 
@@ -53,11 +55,16 @@ def test_csv_export_keeps_genuine_zero_metric_values(tmp_path):
     # Exporting with `value or ""` turned those into empty cells, making a
     # real score indistinguishable from "this metric wasn't computed".
     result = _sample_result()
-    result.frames = result.frames[:2]
-    result.frames[0].psnr = 0.0
-    result.frames[0].ssim = 0.0
-    result.frames[0].xpsnr = 0.0
-    result.frames[1].psnr = None  # genuinely not computed
+    # frame 0 scores a legitimate 0.0 on every optional metric; frame 1 has
+    # no PSNR at all (NaN = "not computed for this frame")
+    result.frames = FrameScores(
+        frame=np.array([0, 1], dtype=np.int32),
+        time=np.array([0.0, 1 / 24], dtype=np.float64),
+        vmaf=np.array([0.0, 50.0], dtype=np.float32),
+        psnr=np.array([0.0, np.nan], dtype=np.float32),
+        ssim=np.array([0.0, 0.5], dtype=np.float32),
+        xpsnr=np.array([0.0, 30.0], dtype=np.float32),
+    )
     out_path = tmp_path / "run.csv"
     export_csv(result, out_path)
 
@@ -69,7 +76,9 @@ def test_csv_export_keeps_genuine_zero_metric_values(tmp_path):
 
 def test_xpsnr_round_trips(tmp_path):
     result = _sample_result()
-    result.frames[0].xpsnr = 42.5
+    xpsnr = np.full(len(result.frames), np.nan, dtype=np.float32)
+    xpsnr[0] = 42.5
+    result.frames = result.frames.with_values("xpsnr", xpsnr)
     out_path = tmp_path / "run.vmafrun.json"
     save_run(result, out_path, label="x")
 

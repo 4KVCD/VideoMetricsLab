@@ -14,10 +14,12 @@ give a single video its own crop/model/etc. independent of the rest).
 """
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QRect, Qt, QTime, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
@@ -731,9 +733,12 @@ class MainWindow(QMainWindow):
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
         if column == COL_VMAF:
             return run.stats.mean
-        attr = {COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
-        values = [v for v in (getattr(f, attr) for f in run.result.frames) if v is not None]
-        return sum(values) / len(values) if values else None
+        metric = {COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        values = run.result.frames.values(metric)
+        if values is None or len(values) == 0:
+            return None
+        mean = float(np.nanmean(values))
+        return None if math.isnan(mean) else mean
 
     def _resize_mismatch(self, row: int, distorted_info: VideoInfo) -> tuple[str, str]:
         """(short tag, full explanation) for which of the two resolutions got

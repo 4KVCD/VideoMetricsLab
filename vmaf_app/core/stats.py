@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from vmaf_app.core.models import VmafRunResult
 
 # Default threshold breakdown requested: >95, >90, >85, <85, <80, <70
@@ -72,31 +74,26 @@ class VmafStats:
         ]
 
 
-def _percentile(sorted_values: list[float], pct: float) -> float:
-    if not sorted_values:
-        return 0.0
-    if len(sorted_values) == 1:
-        return sorted_values[0]
-    k = (len(sorted_values) - 1) * (pct / 100.0)
-    f = int(k)
-    c = min(f + 1, len(sorted_values) - 1)
-    if f == c:
-        return sorted_values[f]
-    return sorted_values[f] + (sorted_values[c] - sorted_values[f]) * (k - f)
-
-
 def compute_stats(
-    values: list[float],
+    values,
     thresholds: list[tuple[str, float]] | None = None,
 ) -> VmafStats:
     """Despite the name (kept for the VMAF-specific callers/tests that exist
-    already), this works over any list of per-frame float scores -- PSNR,
+    already), this works over any sequence of per-frame float scores -- PSNR,
     SSIM and XPSNR reuse it for their own stats tables in the graph window,
     just with VMAF-specific `thresholds` left empty since ">95"-style bands
     only make sense on VMAF's fixed 0-100 scale.
+
+    Accepts a numpy array or a plain list. Computed vectorised: a run is
+    hundreds of thousands of frames and this is called once per metric per
+    series, so a Python-level sort + several passes was real, avoidable time.
+    NaN entries (a metric present for only some frames) are ignored rather
+    than poisoning every statistic.
     """
     thresholds = thresholds if thresholds is not None else DEFAULT_THRESHOLDS
-    n = len(values)
+    data = np.asarray(values, dtype=np.float64)
+    data = data[~np.isnan(data)]
+    n = int(data.size)
     if n == 0:
         return VmafStats(
             count=0, mean=0, median=0, stdev=0, minimum=0, maximum=0,
@@ -104,41 +101,29 @@ def compute_stats(
             thresholds=[], histogram=[],
         )
 
-    sorted_values = sorted(values)
-    mean = sum(values) / n
-    variance = sum((v - mean) ** 2 for v in values) / n
-    stdev = variance ** 0.5
-    median = _percentile(sorted_values, 50)
-    p10 = _percentile(sorted_values, 10)
-    p5 = _percentile(sorted_values, 5)
-    p1 = _percentile(sorted_values, 1)
-    p01 = _percentile(sorted_values, 0.1)
+    # One sort, then every percentile is a lookup into it.
+    ordered = np.sort(data)
+    p10, p5, p1, p01 = (float(v) for v in np.percentile(ordered, [10, 5, 1, 0.1], method="linear"))
 
     threshold_stats = []
     for cmp_op, thresh in thresholds:
-        if cmp_op == ">":
-            count = sum(1 for v in values if v > thresh)
-        else:
-            count = sum(1 for v in values if v < thresh)
+        count = int(np.count_nonzero(data > thresh if cmp_op == ">" else data < thresh))
         threshold_stats.append(ThresholdStat(cmp_op, thresh, count, 100.0 * count / n))
 
     histogram = []
     edges = HISTOGRAM_BIN_EDGES
     for lo, hi in zip(edges[:-1], edges[1:]):
-        is_last = hi == edges[-1]
-        if is_last:
-            count = sum(1 for v in values if lo <= v <= hi)
-        else:
-            count = sum(1 for v in values if lo <= v < hi)
+        in_bin = (data >= lo) & (data <= hi if hi == edges[-1] else data < hi)
+        count = int(np.count_nonzero(in_bin))
         histogram.append(HistogramBin(lo, hi, count, 100.0 * count / n))
 
     return VmafStats(
         count=n,
-        mean=mean,
-        median=median,
-        stdev=stdev,
-        minimum=sorted_values[0],
-        maximum=sorted_values[-1],
+        mean=float(data.mean()),
+        median=float(np.median(ordered)),
+        stdev=float(data.std()),  # population stdev, matching the previous behaviour
+        minimum=float(ordered[0]),
+        maximum=float(ordered[-1]),
         percentile_10=p10,
         percentile_5=p5,
         percentile_1=p1,
@@ -149,4 +134,4 @@ def compute_stats(
 
 
 def stats_for_run(result: VmafRunResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
-    return compute_stats([f.vmaf for f in result.frames], thresholds)
+    return compute_stats(result.frames.vmaf, thresholds)

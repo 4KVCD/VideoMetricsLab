@@ -13,11 +13,13 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
+
 from vmaf_app.core.crop_detect import detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import pick_hwaccel
 from vmaf_app.core.models import (
-    CropBox, CropMode, FrameScore, GpuVendor, ScaleDirection, VideoInfo, VmafOptions, VmafRunResult,
+    CropBox, CropMode, FrameScores, GpuVendor, ScaleDirection, VideoInfo, VmafOptions, VmafRunResult,
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
@@ -331,16 +333,25 @@ def _resolve_model_for_cwd(model: str, tmpdir: Path) -> str:
     return f"path={dest.name}"
 
 
-def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -> list[FrameScore]:
+def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -> FrameScores:
     with open(log_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     xpsnr_by_frame = _parse_xpsnr_log(xpsnr_log_path) if xpsnr_log_path is not None else {}
 
-    frames_out: list[FrameScore] = []
+    # Accumulated as plain lists and packed into arrays at the end, rather
+    # than one FrameScore object per frame: a feature-length run is hundreds
+    # of thousands of frames, and those objects would be built only to be
+    # thrown away here.
+    frame_nums: list[int] = []
+    vmafs: list[float] = []
+    psnrs: list[float | None] = []
+    ssims: list[float | None] = []
+    xpsnrs: list[float | None] = []
+
     for fr in data.get("frames", []):
         metrics = fr.get("metrics", {})
-        frame_num = int(fr.get("frameNum", len(frames_out)))
+        frame_num = int(fr.get("frameNum", len(frame_nums)))
         vmaf = metrics.get("vmaf")
         if vmaf is None:
             continue
@@ -353,17 +364,29 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         ssim = metrics.get("float_ssim")
         if ssim is None:
             ssim = metrics.get("ssim")
-        frames_out.append(
-            FrameScore(
-                frame=frame_num,
-                time=frame_num / fps if fps > 0 else 0.0,
-                vmaf=float(vmaf),
-                psnr=psnr,
-                ssim=ssim,
-                xpsnr=xpsnr_by_frame.get(frame_num),
-            )
-        )
-    return frames_out
+        frame_nums.append(frame_num)
+        vmafs.append(float(vmaf))
+        psnrs.append(psnr)
+        ssims.append(ssim)
+        xpsnrs.append(xpsnr_by_frame.get(frame_num))
+
+    if not frame_nums:
+        return FrameScores.empty()
+
+    frame_arr = np.array(frame_nums, dtype=np.int32)
+    time_arr = frame_arr / fps if fps > 0 else np.zeros(len(frame_nums), dtype=np.float64)
+
+    def column(values: list[float | None]) -> np.ndarray | None:
+        if all(v is None for v in values):
+            return None  # metric wasn't requested for this run at all
+        return np.array([np.nan if v is None else v for v in values], dtype=np.float32)
+
+    return FrameScores(
+        frame=frame_arr,
+        time=time_arr,
+        vmaf=np.array(vmafs, dtype=np.float32),
+        psnr=column(psnrs), ssim=column(ssims), xpsnr=column(xpsnrs),
+    )
 
 
 _XPSNR_LINE_RE = re.compile(r"n:\s*(\d+)\s+XPSNR y:\s*(-?[\d.]+)")
