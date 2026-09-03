@@ -51,7 +51,6 @@ from PySide6.QtWidgets import (
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
-from vmaf_app.core.ffprobe import ProbeError, probe_video
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
@@ -162,8 +161,10 @@ class MainWindow(QMainWindow):
         self._rows: list[RowData] = []
         self._worker: VmafWorker | None = None
         self._probe_worker: ProbeWorker | None = None
+        self._source_probe_worker: ProbeWorker | None = None
         self._probe_workers: list[ProbeWorker] = []
         self._probe_generation = 0
+        self._source_probe_generation = 0
         # These track the active run by RowData *identity*, not by table row
         # index: removing a row mid-run shifts every later index down, which
         # used to make a finishing job write its result to the wrong row --
@@ -834,13 +835,49 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Select reference (source) video")
         if not path:
             return
-        try:
-            info = probe_video(Path(path))
-        except ProbeError as e:
-            QMessageBox.critical(self, "Could not read video", str(e))
+        self.source_info_label.setText(f"Reading {Path(path).name}...")
+        self.status_label.setText("Reading source video...")
+        self._start_source_probe(Path(path))
+
+    def _start_source_probe(self, path: Path) -> None:
+        """Reads a selected reference without freezing the main window."""
+        if self._source_probe_worker is not None and self._source_probe_worker.isRunning():
+            self._source_probe_worker.cancel()
+        self._source_probe_generation += 1
+        generation = self._source_probe_generation
+        worker = ProbeWorker([path], None, False, {}, parent=self)
+        self._source_probe_worker = worker
+        self._probe_workers.append(worker)
+        worker.probed.connect(
+            lambda selected, info, error, g=generation:
+            self._on_source_probed_if_current(g, selected, info, error)
+        )
+        worker.finished_all.connect(
+            lambda g=generation, w=worker: self._on_source_probe_finished(g, w)
+        )
+        worker.start()
+
+    def _on_source_probed_if_current(
+        self, generation: int, path: Path, info, error: str
+    ) -> None:
+        if generation != self._source_probe_generation:
             return
+        if info is None:
+            previous = self._source_info
+            self.source_info_label.setText(
+                (
+                    f"{media_info_string(previous)}, {bitrate_string(previous)}  "
+                    f"({format_hms(previous.duration, decimals=1)})"
+                )
+                if previous is not None else "No source selected."
+            )
+            QMessageBox.critical(self, "Could not read video", error)
+            return
+        self._apply_source_info(path, info)
+
+    def _apply_source_info(self, path: Path, info: VideoInfo) -> None:
         self._source_info = info
-        self.source_edit.setText(path)
+        self.source_edit.setText(str(path))
         self.source_info_label.setText(
             f"{media_info_string(info)}, {bitrate_string(info)}  ({format_hms(info.duration, decimals=1)})"
         )
@@ -859,6 +896,15 @@ class MainWindow(QMainWindow):
                 # source, which is a dangerously plausible comparison.
                 self._invalidate_completed_result(row)
             self._reload_cached_for_all_rows()
+
+    def _on_source_probe_finished(self, generation: int, worker: ProbeWorker) -> None:
+        if worker in self._probe_workers:
+            self._probe_workers.remove(worker)
+        worker.deleteLater()
+        if generation == self._source_probe_generation:
+            self._source_probe_worker = None
+            self.status_label.setText("Ready.")
+            self._on_table_selection_changed()
 
     # ------------------------------------------------------------------ distorted-file table
     def _add_table_row(self, path: Path) -> int:
@@ -1598,6 +1644,11 @@ class MainWindow(QMainWindow):
     def _on_run_clicked(self) -> None:
         if self._worker is not None and self._worker.isRunning():
             return
+        if self._source_probe_worker is not None and self._source_probe_worker.isRunning():
+            QMessageBox.information(
+                self, "Still reading source", "Wait for the source video to finish loading."
+            )
+            return
         if self._source_info is None:
             QMessageBox.warning(self, "No source", "Please select a reference (source) video.")
             return
@@ -1629,13 +1680,17 @@ class MainWindow(QMainWindow):
             row_data = self._rows[row]
             dist_info = row_data.video_info
             if dist_info is None:
-                try:
-                    dist_info = probe_video(row_data.path)
-                    row_data.video_info = dist_info
-                    self._set_row_info(row, dist_info)
-                except ProbeError as e:
-                    self._set_row_info(row, None, error=str(e))
-                    continue
+                still_reading = any(worker.isRunning() for worker in self._probe_workers)
+                QMessageBox.information(
+                    self,
+                    "Still reading videos" if still_reading else "Unreadable video",
+                    (
+                        "Wait for every checked distorted video to finish loading before running."
+                        if still_reading else
+                        f"{row_data.path.name} could not be read. Remove it or add the file again to retry."
+                    ),
+                )
+                return
             try:
                 if row_data.options.resample_test is None:
                     validate_video_pair(self._source_info, dist_info, row_data.options)

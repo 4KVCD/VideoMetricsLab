@@ -1,3 +1,5 @@
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,7 @@ from vmaf_app.core.models import (
     synthetic_scale_direction_variant_path,
 )
 from vmaf_app.ui import main_window as main_window_module
+from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.main_window import (
     COL_BITRATE,
     COL_CHECK,
@@ -703,13 +706,6 @@ def test_run_clicked_builds_a_job_for_a_resample_row_without_probing(qapp, monke
     monkeypatch.setattr(main_window_module.QInputDialog, "getItem", lambda *a, **kw: ("480p", True))
     win._on_add_resample_test()
 
-    # probe_video must never be called for a resample row -- there's no real
-    # distorted file on disk at its synthetic path to probe.
-    monkeypatch.setattr(
-        main_window_module, "probe_video",
-        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("probe_video should not be called")),
-    )
-
     win._on_run_clicked()
 
     assert win._worker is not None
@@ -1194,6 +1190,40 @@ def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, 
     stale_info = _fake_video_info("stale.mp4")
     old.probed.emit(Path("a.mp4"), stale_info, "")
     assert win._rows[row].video_info is None
+
+
+def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_probe(path):
+        started.set()
+        release.wait(10.0)
+        return _fake_video_info(str(path))
+
+    monkeypatch.setattr(probe_worker_module, "probe_video", slow_probe)
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getOpenFileName",
+        staticmethod(lambda *a, **k: ("slow-source.mp4", "")),
+    )
+    win = MainWindow()
+
+    before = time.monotonic()
+    win._on_browse_source()
+    elapsed = time.monotonic() - before
+
+    assert elapsed < 1.0
+    assert started.wait(5.0)
+    assert win._source_info is None
+
+    release.set()
+    deadline = time.monotonic() + 10.0
+    while win._source_probe_worker is not None and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+
+    assert win._source_info is not None
+    assert win.source_edit.text() == "slow-source.mp4"
 
 
 def test_cache_result_is_rejected_if_options_changed_while_it_loaded(qapp, tmp_path):

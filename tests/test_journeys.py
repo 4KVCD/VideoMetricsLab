@@ -414,8 +414,10 @@ def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypat
         main_window_module.QFileDialog, "getOpenFileName",
         staticmethod(lambda *a, **k: ("C:/vid/sourceB.mkv", "")),
     )
-    monkeypatch.setattr(main_window_module, "probe_video",
-                        lambda p: _info(str(p)))
+    monkeypatch.setattr(
+        win, "_start_source_probe",
+        lambda p: win._apply_source_info(p, _info(str(p))),
+    )
     win._on_browse_source()
 
     assert win._rows[r].completed_run is None, "the old source's score must not stand"
