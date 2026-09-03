@@ -55,8 +55,15 @@ def _run_single_window(path: str, start: float, window: float, limit: float) -> 
     ]
     try:
         proc = proc_util.run(cmd, capture_output=True, text=True, timeout=60)
-    except Exception:
-        return None
+    except Exception as e:
+        raise CropDetectError(
+            f"Could not run crop detection for {path}: {e}"
+        ) from e
+
+    if proc.returncode != 0:
+        detail = proc.stderr.strip().splitlines()
+        tail = detail[-1] if detail else f"ffmpeg exited with code {proc.returncode}"
+        raise CropDetectError(f"Crop detection failed for {path}: {tail}")
 
     matches = _CROP_RE.findall(proc.stderr)
     if not matches:
@@ -66,17 +73,25 @@ def _run_single_window(path: str, start: float, window: float, limit: float) -> 
 
 
 def detect_crop(info: VideoInfo, limit: float = 24 / 255) -> CropBox:
-    """Detects the black-bar crop box for a video. Returns a no-op crop
-    (full frame) if detection fails or finds nothing to crop."""
+    """Detects the black-bar crop box, or raises when it cannot analyze it."""
     path = str(info.path)
     boxes: list[CropBox] = []
+    failures: list[str] = []
     for start in _sample_offsets(info.duration):
-        box = _run_single_window(path, start, _SAMPLE_WINDOW_SECONDS, limit)
+        try:
+            box = _run_single_window(path, start, _SAMPLE_WINDOW_SECONDS, limit)
+        except CropDetectError as e:
+            failures.append(str(e))
+            continue
         if box is not None:
             boxes.append(box)
 
     if not boxes:
-        return CropBox(w=info.width, h=info.height, x=0, y=0)
+        detail = failures[-1] if failures else "ffmpeg produced no crop measurements"
+        raise CropDetectError(
+            f"Could not auto-detect black bars in {info.path}: {detail}. "
+            "Choose 'None (use full frame)' for this video to continue without cropping."
+        )
 
     counts: dict[tuple[int, int, int, int], int] = {}
     for b in boxes:
