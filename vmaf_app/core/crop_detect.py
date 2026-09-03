@@ -10,10 +10,17 @@ across windows, rather than trusting a single long pass.
 from __future__ import annotations
 
 import re
+import subprocess
+import threading
+import time
+from typing import TYPE_CHECKING
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.models import CropBox, VideoInfo
+
+if TYPE_CHECKING:
+    from vmaf_app.core.process_control import ProcessHandle
 
 _CROP_RE = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
 
@@ -23,6 +30,10 @@ _SAMPLE_SPAN = (0.1, 0.9)  # fraction of duration to sample within
 
 
 class CropDetectError(RuntimeError):
+    pass
+
+
+class CropDetectCancelled(RuntimeError):  # noqa: N818 - expected control flow
     pass
 
 
@@ -43,7 +54,11 @@ def _sample_offsets(duration: float) -> list[float]:
     return [lo + i * step for i in range(_SAMPLE_COUNT)]
 
 
-def _run_single_window(path: str, start: float, window: float, limit: float) -> CropBox | None:
+def _run_single_window(
+    path: str, start: float, window: float, limit: float,
+    cancel_event: threading.Event | None = None,
+    process_handle: ProcessHandle | None = None,
+) -> CropBox | None:
     cmd = [
         ffmpeg_path(),
         "-nostdin", "-hide_banner",
@@ -53,33 +68,71 @@ def _run_single_window(path: str, start: float, window: float, limit: float) -> 
         "-vf", f"cropdetect=limit={limit}:round=2:reset=0",
         "-f", "null", "-",
     ]
+    proc = None
     try:
-        proc = proc_util.run(cmd, capture_output=True, text=True, timeout=60)
+        proc = proc_util.popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        if process_handle is not None:
+            process_handle.attach(proc.pid)
+        active_seconds = 0.0
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                proc.terminate()
+            started = time.monotonic()
+            try:
+                _stdout, stderr = proc.communicate(timeout=0.2)
+                break
+            except subprocess.TimeoutExpired as e:
+                if process_handle is None or not process_handle.is_pause_requested:
+                    active_seconds += time.monotonic() - started
+                if active_seconds >= 60:
+                    proc.terminate()
+                    proc.communicate(timeout=5)
+                    raise CropDetectError(
+                        f"Crop detection timed out for {path}"
+                    ) from e
+        if cancel_event is not None and cancel_event.is_set():
+            raise CropDetectCancelled("Crop detection cancelled")
     except Exception as e:
+        if isinstance(e, (CropDetectError, CropDetectCancelled)):
+            raise
         raise CropDetectError(
             f"Could not run crop detection for {path}: {e}"
         ) from e
+    finally:
+        if process_handle is not None and proc is not None:
+            process_handle.detach()
 
     if proc.returncode != 0:
-        detail = proc.stderr.strip().splitlines()
+        detail = stderr.strip().splitlines()
         tail = detail[-1] if detail else f"ffmpeg exited with code {proc.returncode}"
         raise CropDetectError(f"Crop detection failed for {path}: {tail}")
 
-    matches = _CROP_RE.findall(proc.stderr)
+    matches = _CROP_RE.findall(stderr)
     if not matches:
         return None
     w, h, x, y = (int(v) for v in matches[-1])
     return CropBox(w=w, h=h, x=x, y=y)
 
 
-def detect_crop(info: VideoInfo, limit: float = 24 / 255) -> CropBox:
+def detect_crop(
+    info: VideoInfo, limit: float = 24 / 255,
+    cancel_event: threading.Event | None = None,
+    process_handle: ProcessHandle | None = None,
+) -> CropBox:
     """Detects the black-bar crop box, or raises when it cannot analyze it."""
     path = str(info.path)
     boxes: list[CropBox] = []
     failures: list[str] = []
     for start in _sample_offsets(info.duration):
+        if cancel_event is not None and cancel_event.is_set():
+            raise CropDetectCancelled("Crop detection cancelled")
         try:
-            box = _run_single_window(path, start, _SAMPLE_WINDOW_SECONDS, limit)
+            box = _run_single_window(
+                path, start, _SAMPLE_WINDOW_SECONDS, limit,
+                cancel_event=cancel_event, process_handle=process_handle,
+            )
         except CropDetectError as e:
             failures.append(str(e))
             continue

@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 from vmaf_app.core.models import (
     CropBox,
     ResampleTarget,
@@ -434,6 +436,34 @@ def test_progress_frame_estimate_is_not_divided_by_libvmaf_subsampling():
     )
 
     assert estimate_total_frames(info, VmafOptions(n_subsample=10)) == 300
+
+
+def test_crop_detection_receives_run_cancel_and_process_controls(monkeypatch):
+    import threading
+
+    from vmaf_app.core import vmaf_runner
+    from vmaf_app.core.crop_detect import CropDetectCancelled
+    from vmaf_app.core.process_control import ProcessHandle
+    from vmaf_app.core.vmaf_runner import Cancelled
+
+    source = VideoInfo(Path("s.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
+    distorted = VideoInfo(Path("d.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
+    cancel = threading.Event()
+    handle = ProcessHandle()
+    received = []
+
+    def cancelled_crop(info, **kwargs):
+        received.append((kwargs["cancel_event"], kwargs["process_handle"]))
+        raise CropDetectCancelled("cancelled")
+
+    monkeypatch.setattr(vmaf_runner, "detect_crop", cancelled_crop)
+
+    with pytest.raises(Cancelled):
+        vmaf_runner.run_vmaf(
+            source, distorted, VmafOptions(),
+            cancel_event=cancel, process_handle=handle,
+        )
+    assert received == [(cancel, handle)]
 
 
 def test_parse_log_keeps_a_genuine_zero_psnr_or_ssim(tmp_path):

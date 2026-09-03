@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.crop_detect import detect_crop
+from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import pick_hwaccel
 from vmaf_app.core.models import (
@@ -49,6 +49,8 @@ class Cancelled(RuntimeError):  # noqa: N818 - a cancellation, not an error cond
 def _resolve_crops(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     status_callback: Callable[[str], None] | None,
+    cancel_event: threading.Event | None = None,
+    process_handle: ProcessHandle | None = None,
 ) -> tuple[CropBox | None, CropBox | None]:
     if options.crop_mode == CropMode.NONE:
         return None, None
@@ -58,10 +60,20 @@ def _resolve_crops(
 
     if status_callback:
         status_callback("Detecting black bars in source...")
-    src_crop = detect_crop(source_info)
+    try:
+        src_crop = detect_crop(
+            source_info, cancel_event=cancel_event, process_handle=process_handle
+        )
+    except CropDetectCancelled as e:
+        raise Cancelled("Cancelled by user") from e
     if status_callback:
         status_callback("Detecting black bars in distorted...")
-    dist_crop = detect_crop(distorted_info)
+    try:
+        dist_crop = detect_crop(
+            distorted_info, cancel_event=cancel_event, process_handle=process_handle
+        )
+    except CropDetectCancelled as e:
+        raise Cancelled("Cancelled by user") from e
     return src_crop, dist_crop
 
 
@@ -497,7 +509,10 @@ def run_vmaf(
     run a distinct identity instead of one colliding with/overwriting the
     other, the same way a resample test's synthetic path already does.
     """
-    source_crop, distorted_crop = _resolve_crops(source_info, distorted_info, options, on_status)
+    source_crop, distorted_crop = _resolve_crops(
+        source_info, distorted_info, options, on_status,
+        cancel_event=cancel_event, process_handle=process_handle,
+    )
 
     hwaccel = None
     if options.gpu_decode_source:
@@ -558,7 +573,12 @@ def run_resample_test(
     if options.crop_mode == CropMode.AUTO:
         if on_status:
             on_status("Detecting black bars in source...")
-        source_crop = detect_crop(source_info)
+        try:
+            source_crop = detect_crop(
+                source_info, cancel_event=cancel_event, process_handle=process_handle
+            )
+        except CropDetectCancelled as e:
+            raise Cancelled("Cancelled by user") from e
     elif options.crop_mode == CropMode.MANUAL:
         source_crop = options.manual_source_crop
 
