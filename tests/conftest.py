@@ -7,7 +7,9 @@ then leaked into every later test in the run AND into the installed app.
 """
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -16,8 +18,17 @@ import pytest
 # rather than failing it.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QStandardPaths
+
 from vmaf_app.core import result_cache
 from vmaf_app.core.settings import Settings
+
+
+def _real_user_cache_dir() -> Path:
+    """Where the installed app keeps results. Nothing in the suite may touch
+    it, so it is resolved once here to be recognised and refused."""
+    base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+    return Path(base) / "results_cache"
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +39,35 @@ def isolate_user_state(tmp_path, monkeypatch):
 
     cache = tmp_path / "results_cache"
     cache.mkdir()
+
+    # Written as a real settings file rather than only set through the
+    # override, because MainWindow's constructor re-applies whatever its
+    # loaded Settings say. With cache_dir blank that is None -- "use the
+    # platform folder" -- so simply building a window silently un-isolated
+    # the suite and pointed it back at the user's own cache.
+    settings_file.write_text(
+        json.dumps({"cache_dir": str(cache)}), encoding="utf-8"
+    )
+
+    real_override = result_cache.set_cache_dir_override
+    real_cache = _real_user_cache_dir()
+
+    def guarded_override(directory):
+        # A backstop for the same leak arriving by another route (a test
+        # that saves a fresh Settings, say). Failing loudly is the point:
+        # the previous symptom was a test quietly reading and writing real
+        # user data, which stays invisible until it corrupts something.
+        if directory is None:
+            real_override(cache)
+            return
+        if Path(directory) == real_cache:
+            raise AssertionError(
+                f"a test pointed the results cache at the user's real folder "
+                f"({real_cache}); it must stay inside tmp_path"
+            )
+        real_override(Path(directory))
+
+    monkeypatch.setattr(result_cache, "set_cache_dir_override", guarded_override)
     result_cache.set_cache_dir_override(cache)
     yield
-    result_cache.set_cache_dir_override(None)
+    real_override(None)

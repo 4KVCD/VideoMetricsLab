@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 CORE = Path(__file__).resolve().parent.parent / "vmaf_app" / "core"
 
 # These use Qt purely as a platform abstraction -- QSettings for the
@@ -88,3 +90,38 @@ def test_the_hidden_flag_is_only_applied_on_windows():
         assert kwargs.get("creationflags") == 0x0800_0000
     else:
         assert kwargs == {}, "the flag does not exist off Windows"
+
+
+def test_building_a_window_does_not_repoint_the_cache_at_the_user(tmp_path):
+    """The suite's isolation must survive MainWindow's constructor.
+
+    It did not: the constructor re-applies whatever its loaded Settings say
+    the cache directory is, and a blank setting means "the platform folder"
+    -- so every test that built a window was reading and writing the user's
+    real results cache, however carefully the fixture had redirected it.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    from vmaf_app.core import result_cache
+    from vmaf_app.ui.main_window import MainWindow
+
+    QApplication.instance() or QApplication([])
+    before = result_cache.cache_dir()
+    assert tmp_path in before.parents or before == tmp_path / "results_cache"
+
+    MainWindow()
+
+    assert result_cache.cache_dir() == before, (
+        "constructing the window moved the cache out of the test's temp folder"
+    )
+
+
+def test_the_isolation_guard_refuses_the_users_real_cache_directory():
+    """The fixture's backstop has to actually fire, or it is decoration."""
+    from PySide6.QtCore import QStandardPaths
+
+    from vmaf_app.core import result_cache
+
+    real = Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)) / "results_cache"
+    with pytest.raises(AssertionError, match="real folder"):
+        result_cache.set_cache_dir_override(real)
