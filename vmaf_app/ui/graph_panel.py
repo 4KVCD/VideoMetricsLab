@@ -79,7 +79,18 @@ class MetricSpec:
         """A signed difference at this metric's own precision. SSIM's whole
         range is 0-1, so the 2dp used for VMAF/PSNR rounds every real SSIM
         difference to "0.00"."""
+        if np.isposinf(delta):
+            return "+∞"
+        if np.isneginf(delta):
+            return "−∞"
         return self.value_format.replace("{:", "{:+").format(delta)
+
+    def format_value(self, value: float) -> str:
+        if np.isposinf(value):
+            return "∞"
+        if np.isneginf(value):
+            return "−∞"
+        return self.value_format.format(value)
 
 
 METRICS: list[MetricSpec] = [
@@ -98,7 +109,7 @@ def _is_reportable(value: float | None) -> bool:
     raised TypeError on None and printed "nan" for NaN -- and a delta taken
     against either produced a meaningless number rather than no number.
     """
-    return value is not None and bool(np.isfinite(value))
+    return value is not None and not bool(np.isnan(value))
 
 
 @dataclass
@@ -414,12 +425,14 @@ class _MetricPage(QWidget):
                 # some frames). Formatting None here raised TypeError.
                 lines.append(f"{prefix}no {self.metric.label}")
                 continue
-            lines.append(f"{prefix}{self.metric.label}={self.metric.value_format.format(val)}")
+            lines.append(f"{prefix}{self.metric.label}={self.metric.format_value(val)}")
             found.append((entry.label, float(val)))
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
-            lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(val_a - val_b)}")
+            delta = val_a - val_b
+            if not np.isnan(delta):
+                lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(delta)}")
 
         self.chart.set_cursor_time(float(picks[0][0].times[picks[0][1]]))
         self.hover_label.setText("\n".join(lines))
@@ -460,7 +473,7 @@ class _MetricPage(QWidget):
                 continue
             lines.append(
                 f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
-                f"{self.metric.label}={self.metric.value_format.format(val)}"
+                f"{self.metric.label}={self.metric.format_value(val)}"
             )
             found.append((entry.label, float(val)))
             if cursor_time is None:
@@ -468,7 +481,9 @@ class _MetricPage(QWidget):
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
-            lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(val_a - val_b)}")
+            delta = val_a - val_b
+            if not np.isnan(delta):
+                lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(delta)}")
 
         if cursor_time is not None:
             self.chart.set_cursor_time(cursor_time)

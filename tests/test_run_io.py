@@ -114,6 +114,26 @@ def test_xpsnr_round_trips(tmp_path):
     assert loaded.frames[0].xpsnr == 42.5
 
 
+def test_infinite_xpsnr_round_trips_as_standards_compliant_json(tmp_path):
+    import json
+
+    result = _sample_result()
+    result.frames = result.frames.with_values(
+        "xpsnr", np.full(len(result.frames), np.inf, dtype=np.float32)
+    )
+    out_path = tmp_path / "perfect.vmafrun.json"
+    save_run(result, out_path, label="perfect")
+
+    # Reject JavaScript-style bare Infinity constants: the portable file
+    # must remain valid JSON even though the underlying metric is infinite.
+    json.loads(
+        out_path.read_text(encoding="utf-8"),
+        parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+    )
+    loaded, _ = load_run(out_path)
+    assert np.isposinf(loaded.frames.xpsnr).all()
+
+
 def test_loading_a_run_saved_before_xpsnr_existed_does_not_raise(tmp_path):
     # Simulates an old save file whose frame tuples are 5 elements (no xpsnr).
     import json

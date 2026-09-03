@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -828,6 +829,21 @@ def test_a_delta_is_only_taken_between_two_finite_values(qapp):
     assert "0.9900" in text
     assert "no SSIM" in text
     assert "Δ" not in text
+
+
+def test_infinite_xpsnr_is_reported_as_a_perfect_score(qapp):
+    panel = GraphPanel()
+    result = _nan_metric_result("perfect.mkv", "xpsnr")
+    result.frames.xpsnr[:] = np.inf
+    panel.add_run(result, "perfect")
+    page = _page(panel, "xpsnr")
+
+    assert page.show_frame(3, panel._entries)
+    assert "XPSNR=∞" in page.hover_label.text()
+    assert "no XPSNR" not in page.hover_label.text()
+    # The infinity has no drawable Y coordinate, but export must still
+    # include its statistics and never pass infinity into Qt geometry.
+    assert not panel.render_export_image().isNull()
 
 
 # --------------------------------------------------- hover readout sizing

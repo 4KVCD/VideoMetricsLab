@@ -569,7 +569,10 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
     )
 
 
-_XPSNR_LINE_RE = re.compile(r"n:\s*(\d+)\s+XPSNR y:\s*(-?[\d.]+)")
+_XPSNR_NUMBER = r"[+-]?(?:inf|nan|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)"
+_XPSNR_LINE_RE = re.compile(
+    rf"n:\s*(\d+)\s+XPSNR y:\s*({_XPSNR_NUMBER})", re.IGNORECASE
+)
 
 
 def _parse_xpsnr_log(xpsnr_log_path: Path) -> dict[int, float]:

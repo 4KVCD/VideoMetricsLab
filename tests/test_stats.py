@@ -74,3 +74,15 @@ def test_low_percentiles_are_monotonically_non_increasing():
     assert stats.percentile_1 >= stats.percentile_0_1
 
 
+def test_perfect_infinite_metric_has_mean_and_percentiles_without_warnings():
+    stats = compute_stats([float("inf")] * 5, thresholds=[])
+
+    assert stats.count == 5
+    assert stats.mean == float("inf")
+    assert stats.minimum == float("inf")
+    assert stats.percentile_1 == float("inf")
+    summary = dict(stats.summary())
+    assert summary["Mean"] == "∞"
+    assert summary["StDev"] == "—"
+
+

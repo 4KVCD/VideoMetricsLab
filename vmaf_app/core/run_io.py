@@ -83,7 +83,18 @@ def _frames_to_rows(frames: FrameScores) -> list[list]:
         arr = frames.values(metric)
         if arr is None:
             return [None] * len(frames)
-        return [None if math.isnan(v) else float(v) for v in arr]
+        values = []
+        for value in arr:
+            if math.isnan(value):
+                values.append(None)
+            elif math.isinf(value):
+                # JSON has no numeric infinity. A string keeps the file
+                # standards-compliant and NumPy accepts it as a float when
+                # loading the run again.
+                values.append("Infinity" if value > 0 else "-Infinity")
+            else:
+                values.append(float(value))
+        return values
 
     psnr, ssim, xpsnr = column("psnr"), column("ssim"), column("xpsnr")
     return [
@@ -127,7 +138,7 @@ def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> Non
         "scale_direction": result.scale_direction.value,
         "frames": _frames_to_rows(result.frames),
     }
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
 
 
 def load_run(path: Path) -> tuple[VmafRunResult, str]:

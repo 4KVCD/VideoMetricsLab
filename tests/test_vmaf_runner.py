@@ -426,6 +426,18 @@ def test_parse_xpsnr_log_converts_1_indexed_to_0_indexed_frames(tmp_path):
     assert result[1] == -0.8422  # xpsnr's n=2 -> our frame 1 (also confirms negative values parse)
 
 
+def test_parse_xpsnr_log_preserves_infinity_for_a_perfect_frame(tmp_path):
+    from vmaf_app.core.vmaf_runner import _parse_xpsnr_log
+
+    log_path = tmp_path / "xpsnr.txt"
+    log_path.write_text(
+        "n:    1  XPSNR y: inf  XPSNR u: inf  XPSNR v: inf\n",
+        encoding="utf-8",
+    )
+
+    assert _parse_xpsnr_log(log_path) == {0: float("inf")}
+
+
 def test_parse_xpsnr_log_missing_file_returns_empty_dict(tmp_path):
     from vmaf_app.core.vmaf_runner import _parse_xpsnr_log
 

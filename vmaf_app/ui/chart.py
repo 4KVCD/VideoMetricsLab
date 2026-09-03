@@ -317,10 +317,25 @@ class ChartWidget(QWidget):
         count = hi - lo
         if count <= width * 2:
             # Few enough points to draw honestly as a polyline.
+            visible_values = values[lo:hi].astype(np.float64)
+            good = np.isfinite(visible_values)
+            if not good.any():
+                return
             xs = rect.left() + (times[lo:hi] - x0) / max(1e-9, x1 - x0) * width
-            ys = to_py(values[lo:hi].astype(np.float64))
-            polygon = QPolygonF([QPointF(float(x), float(y)) for x, y in zip(xs, ys, strict=True)])
-            painter.drawPolyline(polygon)
+            # Draw each contiguous finite section separately: joining across
+            # NaN/∞ would invent a line through a missing frame, and passing
+            # infinity into QPointF is undefined.
+            boundaries = np.flatnonzero(np.diff(np.r_[False, good, False]))
+            for start, end in boundaries.reshape(-1, 2):
+                ys = to_py(visible_values[start:end])
+                points = [
+                    QPointF(float(x), float(y))
+                    for x, y in zip(xs[start:end], ys, strict=True)
+                ]
+                if len(points) == 1:
+                    painter.drawPoint(points[0])
+                else:
+                    painter.drawPolyline(QPolygonF(points))
             return
 
         # More frames than pixels: reduce to one min/max pair per column so

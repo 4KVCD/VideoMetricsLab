@@ -82,7 +82,16 @@ class VmafStats:
 
     def summary(self, value_format: str = "{:.2f}") -> list[tuple[str, str]]:
         """`values`, rendered at the metric's own precision."""
-        return [(label, value_format.format(value)) for label, value in self.values]
+        def formatted(value: float) -> str:
+            if np.isnan(value):
+                return "—"
+            if np.isposinf(value):
+                return "∞"
+            if np.isneginf(value):
+                return "−∞"
+            return value_format.format(value)
+
+        return [(label, formatted(value)) for label, value in self.values]
 
 
 def compute_stats(
@@ -114,7 +123,17 @@ def compute_stats(
 
     # One sort, then every percentile is a lookup into it.
     ordered = np.sort(data)
-    p10, p5, p1, p01 = (float(v) for v in np.percentile(ordered, [10, 5, 1, 0.1], method="linear"))
+    if np.isposinf(ordered).all():
+        p10 = p5 = p1 = p01 = float("inf")
+    elif np.isneginf(ordered).all():
+        p10 = p5 = p1 = p01 = float("-inf")
+    else:
+        with np.errstate(invalid="ignore"):
+            p10, p5, p1, p01 = (
+                float(v) for v in np.percentile(
+                    ordered, [10, 5, 1, 0.1], method="linear"
+                )
+            )
 
     threshold_stats = []
     for cmp_op, thresh in thresholds:
@@ -128,11 +147,15 @@ def compute_stats(
         count = int(np.count_nonzero(in_bin))
         histogram.append(HistogramBin(lo, hi, count, 100.0 * count / n))
 
+    with np.errstate(invalid="ignore"):
+        mean = float(data.mean())
+        stdev = float(data.std())
+
     return VmafStats(
         count=n,
-        mean=float(data.mean()),
+        mean=mean,
         median=float(np.median(ordered)),
-        stdev=float(data.std()),  # population stdev, matching the previous behaviour
+        stdev=stdev,  # population stdev; undefined for an infinite population
         minimum=float(ordered[0]),
         maximum=float(ordered[-1]),
         percentile_10=p10,
