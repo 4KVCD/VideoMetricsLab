@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -133,3 +134,36 @@ def test_finishing_a_run_does_not_block_the_window(qapp, tmp_path, monkeypatch):
 
     release.set()
     assert win._file_writes.wait_until_idle(10.0)
+
+
+def test_recompute_is_ordered_after_a_pending_cache_store(qapp, monkeypatch):
+    """A clear issued while store is running must be last, or the supposedly
+    ignored result is recreated as soon as the background write finishes."""
+    from tests.test_main_window import _fake_completed_run, _fake_video_info
+    from vmaf_app.core import result_cache
+    from vmaf_app.ui.main_window import MainWindow
+
+    started = threading.Event()
+    release = threading.Event()
+    order = []
+
+    def slow_store(*args, **kwargs):
+        started.set()
+        release.wait(10.0)
+        order.append("store")
+
+    monkeypatch.setattr(result_cache, "store", slow_store)
+    monkeypatch.setattr(result_cache, "clear", lambda *a, **k: order.append("clear"))
+
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("distorted.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._on_job_finished(0, _fake_completed_run("distorted.mp4").result)
+    assert started.wait(5.0)
+
+    win._recompute_rows([row])
+    release.set()
+    assert win._file_writes.wait_until_idle(10.0)
+
+    assert order == ["store", "clear"]

@@ -175,6 +175,7 @@ class MainWindow(QMainWindow):
         self._current_job_index: int | None = None
         self._run_failed_count = 0
         self._run_was_cancelled = False
+        self._cache_clear_result: list[int] | None = None
 
         # Per-video settings machinery: the Options panel is an inspector for
         # whichever rows are selected, not one global setting.
@@ -451,27 +452,28 @@ class MainWindow(QMainWindow):
     def _on_clear_cache(self) -> None:
         directory = result_cache.cache_dir()
         entries = list(directory.glob("*.vmafrun.json"))
-        if not entries:
+        if not entries and self._file_writes.pending == 0:
             self.settings_status.setText("There are no saved results to clear.")
+            return
+        if self._cache_clear_result is not None:
+            self.settings_status.setText("Saved results are already being cleared.")
             return
         confirm = QMessageBox.question(
             self, "Clear saved results",
-            f"Delete {len(entries)} saved result(s) from {directory}?\n\n"
+            f"Delete saved results from {directory}?\n\n"
             "Videos already scored will have to be recomputed.",
         )
         if confirm != QMessageBox.Yes:
             return
-        # Only this app's own entries, by extension -- never the folder
-        # itself, which may be somewhere the user also keeps other things.
-        removed = 0
-        for entry in entries:
-            try:
-                entry.unlink()
-                removed += 1
-            except OSError:
-                pass
-        self.settings_status.setText(f"Removed {removed} saved result(s).")
-        self._refresh_settings_status()
+        # Cache writes and deletion share the same serial queue. If a run
+        # just finished, its pending store therefore lands before clear_all
+        # rather than recreating an entry after the user cleared everything.
+        self._cache_clear_result = []
+        self._file_writes.submit(
+            "clear saved results",
+            lambda: self._cache_clear_result.append(result_cache.clear_all()),
+        )
+        self.settings_status.setText("Clearing saved results...")
 
     def _build_files_panel(self) -> QWidget:
         files_box = QGroupBox("Videos")
@@ -1281,14 +1283,24 @@ class MainWindow(QMainWindow):
             self._recompute_rows(rows)
 
     def _recompute_rows(self, rows: list[int]) -> None:
+        # A cache read already in flight must not put back the exact result
+        # the user just asked to ignore.
+        if self._probe_worker is not None and self._probe_worker.isRunning():
+            self._probe_worker.cancel()
+        self._probe_generation += 1
         for row in rows:
             row_data = self._rows[row]
             row_data.completed_run = None
             self._set_row_metrics(row)
             self.distorted_table.item(row, COL_VMAF).setToolTip("")
             if self._source_info is not None:
-                result_cache.clear(
-                    self._source_info.path, row_data.path, row_data.options
+                self._file_writes.submit(
+                    f"clear cached result for {row_data.path.name}",
+                    partial(
+                        result_cache.clear,
+                        self._source_info.path, row_data.path,
+                        clone_options(row_data.options),
+                    ),
                 )
             # Refreshes the resize-mismatch note (Info column) back to the
             # row's *current* settings -- without this it kept showing
@@ -1878,6 +1890,11 @@ class MainWindow(QMainWindow):
 
     def _on_file_writes_idle(self) -> None:
         self.save_btn.setEnabled(True)
+        if self._cache_clear_result is not None:
+            removed = sum(self._cache_clear_result)
+            self._cache_clear_result = None
+            self.settings_status.setText(f"Removed {removed} saved result(s).")
+            self._refresh_settings_status()
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
         # Reported in the status line rather than a modal: these finish in

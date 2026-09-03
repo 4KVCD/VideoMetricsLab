@@ -98,3 +98,15 @@ def store(
 
 def clear(source: Path, distorted: Path, options: VmafOptions) -> None:
     _cache_path(source, distorted, options).unlink(missing_ok=True)
+
+
+def clear_all() -> int:
+    """Removes only this app's cached result files and returns the count."""
+    removed = 0
+    for path in _cache_dir().glob("*.vmafrun.json"):
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed

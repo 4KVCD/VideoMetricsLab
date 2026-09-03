@@ -507,6 +507,7 @@ def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypa
 
     win = MainWindow()
     win._on_clear_cache()
+    assert win._file_writes.wait_until_idle(10.0)
 
     assert not app_result.exists()
     assert unrelated.read_text(encoding="utf-8") == "important"
@@ -617,6 +618,7 @@ def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatc
     )
 
     win._recompute_rows([row])
+    assert win._file_writes.wait_until_idle(10.0)
 
     assert win._rows[row].completed_run is None
     assert result_cache.load_cached(source, distorted, win._rows[row].options) is None
