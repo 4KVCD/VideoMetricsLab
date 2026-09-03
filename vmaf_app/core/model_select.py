@@ -6,7 +6,7 @@ for 4K auto-selection had to import a private name out of a UI module.
 """
 from __future__ import annotations
 
-from vmaf_app.core.models import VideoInfo, VmafOptions
+from vmaf_app.core.models import VmafOptions
 
 # A distorted video at or above this resolution is considered UHD/4K for the
 # purpose of auto-selecting the 4K VMAF model (matches the "4K or higher" ask).
@@ -29,9 +29,15 @@ def model_for_resolution(width: int, height: int) -> str:
     return DEFAULT_MODEL
 
 
-def resolve_model(options: VmafOptions, distorted_info: VideoInfo) -> str:
+def resolve_model(options: VmafOptions, width: int, height: int) -> str:
     """Resolves a row's model_choice (+ custom_model_path) into the concrete
     ffmpeg model= value, applying 4K auto-selection if chosen.
+
+    `width`/`height` are the size the two videos are actually COMPARED at,
+    not either input's own resolution -- one side is scaled to the other
+    before libvmaf sees it, so a 1080p encode measured with "upscale
+    distorted to source" against a 4K master is a 4K comparison. See
+    vmaf_runner.analysis_dimensions.
 
     Raises ValueError if the row asks for a custom model but names no file.
     """
@@ -42,5 +48,5 @@ def resolve_model(options: VmafOptions, distorted_info: VideoInfo) -> str:
         # it by bare filename, so the raw absolute path is fine here.
         return f"path={options.custom_model_path}"
     if options.model_choice == AUTO_MODEL_CHOICE:
-        return model_for_resolution(distorted_info.width, distorted_info.height)
+        return model_for_resolution(width, height)
     return options.model_choice

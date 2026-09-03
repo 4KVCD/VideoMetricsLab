@@ -69,7 +69,13 @@ from vmaf_app.core.run_io import load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.time_format import format_hms
-from vmaf_app.core.vmaf_runner import VmafRunError, estimate_total_frames, validate_video_pair
+from vmaf_app.core.vmaf_runner import (
+    VmafRunError,
+    analysis_dimensions,
+    estimate_total_frames,
+    resample_analysis_dimensions,
+    validate_video_pair,
+)
 from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.graph_panel import GraphPanel
@@ -1696,7 +1702,21 @@ class MainWindow(QMainWindow):
             try:
                 if row_data.options.resample_test is None:
                     validate_video_pair(self._source_info, dist_info, row_data.options)
-                model = resolve_model(row_data.options, dist_info)
+                # Sized by what the run will actually compare, not by the
+                # distorted file's own resolution -- one side is scaled to
+                # the other before libvmaf sees it. The runner re-resolves
+                # this after auto-crop, which it cannot know here.
+                if row_data.options.resample_test is not None:
+                    analysis_size = resample_analysis_dimensions(
+                        self._source_info, row_data.options.manual_source_crop
+                    )
+                else:
+                    analysis_size = analysis_dimensions(
+                        self._source_info, dist_info, row_data.options,
+                        row_data.options.manual_source_crop,
+                        row_data.options.manual_distorted_crop,
+                    )
+                model = resolve_model(row_data.options, *analysis_size)
             except (ValueError, VmafRunError) as e:
                 QMessageBox.warning(self, "Invalid options", f"{row_data.path.name}: {e}")
                 return

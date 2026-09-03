@@ -20,6 +20,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import HwAccelPlan, plan_hwaccel
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution
 from vmaf_app.core.models import (
     CropBox,
     CropMode,
@@ -319,16 +320,47 @@ def _build_libvmaf_stage(
     return ";".join(chains)
 
 
+def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
+    return (crop.w, crop.h) if crop else (info.width, info.height)
+
+
+def analysis_dimensions(
+    source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
+) -> tuple[int, int]:
+    """The size frames are actually compared at.
+
+    One side is scaled to the other before they reach libvmaf, so neither
+    input's own resolution need be the analysis resolution: a 1080p encode
+    measured with "upscale distorted to source" against a 4K master is
+    compared at 4K. Cropping moves it too. Shared with _build_filtergraph so
+    the two cannot disagree about what the run does.
+    """
+    dist_content = _content_size(distorted_info, distorted_crop)
+    ref_content = _content_size(source_info, source_crop)
+    if ref_content == dist_content:
+        return dist_content
+    if options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
+        return ref_content
+    return dist_content
+
+
+def resample_analysis_dimensions(
+    source_info: VideoInfo, source_crop: CropBox | None = None
+) -> tuple[int, int]:
+    """A round-trip test compares two branches of one input at the source's
+    own (cropped) size -- the downscale is undone before comparison."""
+    return _content_size(source_info, source_crop)
+
+
 def _build_filtergraph(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
     hwaccel: HwAccelPlan, log_path: Path, model: str | None = None,
     xpsnr_log_path: Path | None = None,
 ) -> str:
-    dist_content_w = distorted_crop.w if distorted_crop else distorted_info.width
-    dist_content_h = distorted_crop.h if distorted_crop else distorted_info.height
-    ref_content_w = source_crop.w if source_crop else source_info.width
-    ref_content_h = source_crop.h if source_crop else source_info.height
+    dist_content_w, dist_content_h = _content_size(distorted_info, distorted_crop)
+    ref_content_w, ref_content_h = _content_size(source_info, source_crop)
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
     upscale_distorted = resolutions_differ and options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE
 
@@ -716,10 +748,19 @@ def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
     return ladder
 
 
+def _auto_model_or(options: VmafOptions, dimensions: tuple[int, int]) -> str:
+    """The model to actually run with. Only Auto is re-decided here; an
+    explicit or custom choice is the user's and is left alone."""
+    if options.model_choice != AUTO_MODEL_CHOICE:
+        return options.model
+    return model_for_resolution(*dimensions)
+
+
 def _execute_run(
     build_command: CommandBuilder,
     *,
     options: VmafOptions,
+    model: str | None = None,
     fps: float,
     total_frames: int,
     hwaccel: HwAccelPlan,
@@ -740,7 +781,9 @@ def _execute_run(
         tmpdir = Path(tmpdir_str)
         log_path = tmpdir / "vmaf_log.json"
         xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
-        resolved_model = _resolve_model_for_cwd(options.model, tmpdir)
+        resolved_model = _resolve_model_for_cwd(
+            model if model is not None else options.model, tmpdir
+        )
 
         def run_with(plan: HwAccelPlan):
             cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
@@ -813,6 +856,16 @@ def run_vmaf(
             options.gpu_vendor, source_info.codec_name, distorted_info.codec_name
         )
 
+    # Auto picks its model from the size frames are compared at, which is
+    # only known now: it depends on the scale direction and on crops that
+    # were detected a moment ago, not on either input's own resolution.
+    effective_model = _auto_model_or(
+        options,
+        analysis_dimensions(
+            source_info, distorted_info, options, source_crop, distorted_crop
+        ),
+    )
+
     def build_command(plan, model, log_path, xpsnr_log_path):
         filtergraph = _build_filtergraph(
             source_info, distorted_info, options, source_crop, distorted_crop, plan, log_path,
@@ -825,6 +878,7 @@ def run_vmaf(
     frames = _execute_run(
         build_command,
         options=options,
+        model=effective_model,
         fps=distorted_info.fps,
         total_frames=estimate_total_frames(distorted_info, options, source_info),
         hwaccel=hwaccel,
@@ -840,7 +894,7 @@ def run_vmaf(
         distorted=result_distorted_path or distorted_info.path,
         frames=frames,
         fps=distorted_info.fps,
-        model=options.model,
+        model=effective_model,
         source_crop=source_crop,
         distorted_crop=distorted_crop,
         source_info=source_info,
@@ -883,6 +937,10 @@ def run_resample_test(
         # One input file, so there is no distorted side to decide.
         hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name)
 
+    effective_model = _auto_model_or(
+        options, resample_analysis_dimensions(source_info, source_crop)
+    )
+
     def build_command(plan, model, log_path, xpsnr_log_path):
         filtergraph = _build_resample_test_filtergraph(
             source_info, options, source_crop, plan.source, log_path,
@@ -893,6 +951,7 @@ def run_resample_test(
     frames = _execute_run(
         build_command,
         options=options,
+        model=effective_model,
         fps=source_info.fps,
         total_frames=estimate_total_frames(source_info, options),
         hwaccel=hwaccel,
@@ -909,7 +968,7 @@ def run_resample_test(
         distorted=distorted_path,
         frames=frames,
         fps=source_info.fps,
-        model=options.model,
+        model=effective_model,
         source_crop=source_crop,
         distorted_crop=source_crop,  # same crop applies to both branches, since both come from the same source
         source_info=source_info,
