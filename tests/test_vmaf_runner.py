@@ -14,6 +14,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.vmaf_runner import (
+    VmafRunError,
     _bit_depth,
     _build_ffmpeg_cmd,
     _build_filtergraph,
@@ -23,6 +24,7 @@ from vmaf_app.core.vmaf_runner import (
     _hw_native_format,
     analysis_pix_fmt,
     estimate_total_frames,
+    validate_display_geometry,
 )
 
 
@@ -490,7 +492,9 @@ def test_crop_detection_receives_run_cancel_and_process_controls(monkeypatch):
     [
         ({"fps": 24.0}, {"fps": 30.0}, "Frame rates"),
         ({"duration": 10.0}, {"duration": 12.0}, "Durations"),
-        ({"sar": "1:1"}, {"sar": "4:3"}, "aspect ratios"),
+        # Mismatched pixel aspect is no longer a *timeline* check -- it moved
+        # to validate_display_geometry, which runs after cropping. See
+        # test_two_videos_of_different_shapes_are_rejected below.
         ({"nominal_fps": 60.0}, {"nominal_fps": 30.0}, "Variable-frame-rate"),
     ],
 )
@@ -987,3 +991,111 @@ def test_a_duration_limit_still_bounds_the_shorter_input():
     distorted = _fs_info("distorted.mkv", nb_frames=32)
 
     assert estimate_total_frames(distorted, options, source) == 15
+
+
+# ------------------------------------------------- display geometry (shape)
+
+def _shaped(name, w, h, sar="1:1"):
+    return VideoInfo(
+        path=Path(name), width=w, height=h, fps=30.0, duration=10.0,
+        nb_frames=300, codec_name="h264", sar=sar, pix_fmt="yuv420p",
+    )
+
+
+def test_a_letterboxed_source_against_a_cropped_encode_is_rejected_uncropped():
+    """THE case this exists for. A 1920x1080 source whose real content is a
+    letterboxed 1920x816, compared with crop off against an already-cropped
+    960x408 encode of it: the filtergraph scales 1920x1080 straight to
+    960x408, squashing 16:9 into 2.35:1. libvmaf accepts it and returns a
+    number -- 0.4977 on the real fixture, against 87.14 for the same pair
+    cropped correctly. A wrong score is worse than a refused one.
+    """
+    with pytest.raises(VmafRunError, match="different shapes"):
+        validate_display_geometry(
+            _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 960, 408),
+            None, None,
+        )
+
+
+def test_the_same_pair_is_accepted_once_the_letterbox_is_cropped_off():
+    # Cropping is exactly what makes them comparable, which is why the check
+    # runs after crops are resolved rather than before.
+    validate_display_geometry(
+        _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 960, 408),
+        CropBox(w=1920, h=816, x=0, y=132), None,
+    )
+
+
+def test_the_same_shape_at_a_different_resolution_is_accepted():
+    validate_display_geometry(
+        _shaped("source.mkv", 3840, 2160), _shaped("encode.mkv", 1280, 720), None, None
+    )
+
+
+def test_different_sars_describing_the_same_picture_are_accepted():
+    # 1440x1080 with 4:3 pixels IS 16:9. The old check compared SAR strings
+    # and rejected this valid pair outright.
+    validate_display_geometry(
+        _shaped("source.mkv", 1920, 1080, sar="1:1"),
+        _shaped("encode.mkv", 1440, 1080, sar="4:3"),
+        None, None,
+    )
+
+
+def test_matching_sar_strings_do_not_excuse_a_mismatched_shape():
+    with pytest.raises(VmafRunError, match="different shapes"):
+        validate_display_geometry(
+            _shaped("source.mkv", 1920, 1080, sar="1:1"),
+            _shaped("encode.mkv", 1920, 1440, sar="1:1"),
+            None, None,
+        )
+
+
+def test_square_pixels_are_assumed_when_the_sar_is_unknown():
+    for unknown in ("", "N/A", "0:1", "garbage"):
+        validate_display_geometry(
+            _shaped("source.mkv", 1920, 1080, sar=unknown),
+            _shaped("encode.mkv", 1920, 1080, sar="1:1"),
+            None, None,
+        )
+
+
+def test_rounding_to_even_dimensions_is_not_treated_as_a_mismatch():
+    # Encoders round to even dimensions, so a 0.1%-off shape is normal.
+    validate_display_geometry(
+        _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 1918, 1080), None, None
+    )
+
+
+def test_a_manual_crop_that_changes_the_shape_is_rejected():
+    with pytest.raises(VmafRunError, match="different shapes"):
+        validate_display_geometry(
+            _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 1920, 1080),
+            CropBox(w=1920, h=816, x=0, y=132), None,
+        )
+
+
+def test_a_run_checks_geometry_after_resolving_crops(monkeypatch):
+    # Ordering matters: checking before the crop was resolved would reject
+    # every letterboxed source, which is the normal case.
+    from vmaf_app.core import vmaf_runner
+
+    order = []
+    monkeypatch.setattr(
+        vmaf_runner, "_resolve_crops",
+        lambda *a, **k: (order.append("crops"), (None, None))[1],
+    )
+
+    def spy(*args, **kwargs):
+        order.append("geometry")
+        raise VmafRunError("different shapes")
+
+    monkeypatch.setattr(vmaf_runner, "validate_display_geometry", spy)
+
+    with pytest.raises(VmafRunError):
+        vmaf_runner.run_vmaf(
+            _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 960, 408),
+            VmafOptions(),
+        )
+
+    assert order == ["crops", "geometry"]

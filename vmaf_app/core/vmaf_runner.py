@@ -62,14 +62,6 @@ def validate_video_pair(
             f"Frame rates do not match ({source_info.fps:.3f} vs "
             f"{distorted_info.fps:.3f} fps)."
         )
-    source_sar = source_info.sar if source_info.sar not in {"", "N/A", "0:1"} else "1:1"
-    distorted_sar = (
-        distorted_info.sar if distorted_info.sar not in {"", "N/A", "0:1"} else "1:1"
-    )
-    if source_sar != distorted_sar:
-        raise VmafRunError(
-            f"Sample aspect ratios do not match ({source_sar} vs {distorted_sar})."
-        )
     if source_info.duration > 0 and distorted_info.duration > 0:
         compared_limit = options.duration_limit
         if compared_limit <= 0:
@@ -84,6 +76,81 @@ def validate_video_pair(
             raise VmafRunError(
                 "The duration limit extends beyond the end of one of the videos."
             )
+
+
+#: Two shapes count as the same if they agree to within this fraction. Wide
+#: enough for the rounding that even dimensions force (1918x1080 against
+#: 1920x1080 differs by 0.1%), far tighter than any real mismatch: 4:3
+#: against 16:9 is 33% apart, and the letterbox case below is 32%.
+_ASPECT_TOLERANCE = 0.01
+
+
+def _sar_fraction(sar: str) -> tuple[int, int]:
+    """A sample aspect ratio as a fraction. Unknown/unset means square."""
+    if sar in {"", "N/A", "0:1"}:
+        return 1, 1
+    try:
+        num, den = (int(part) for part in sar.split(":", 1))
+    except ValueError:
+        return 1, 1
+    if num <= 0 or den <= 0:
+        return 1, 1
+    return num, den
+
+
+def display_aspect_ratio(info: VideoInfo, crop: CropBox | None = None) -> float:
+    """The shape of the picture as displayed, after cropping.
+
+    Storage dimensions alone are not the shape: non-square pixels stretch
+    them, and a crop changes them. This is what has to match between two
+    videos, not the raw SAR string -- 1920x1080 SAR 1:1 and 1440x1080 SAR
+    4:3 are the same 16:9 picture stored two ways.
+    """
+    width = crop.w if crop else info.width
+    height = crop.h if crop else info.height
+    if height <= 0:
+        return 0.0
+    num, den = _sar_fraction(info.sar)
+    return (width * num) / (height * den)
+
+
+def validate_display_geometry(
+    source_info: VideoInfo, distorted_info: VideoInfo,
+    source_crop: CropBox | None, distorted_crop: CropBox | None,
+) -> None:
+    """Rejects a pair whose pictures are different shapes after cropping.
+
+    The filtergraph scales one side to the other's exact width and height,
+    which silently stretches a mismatched shape until libvmaf accepts it.
+    The result is a real number computed from a geometrically wrong
+    comparison, and it looks like any other score: a 1920x1080 source whose
+    content is a letterboxed 1920x816, compared with crop off against an
+    already-cropped 960x408 encode of it, scored 0.4977 -- against 87.14
+    for the same pair cropped correctly.
+
+    Run after crops are resolved, because cropping is exactly what makes a
+    letterboxed source and a cropped encode comparable. Before it they
+    legitimately differ.
+    """
+    source_dar = display_aspect_ratio(source_info, source_crop)
+    distorted_dar = display_aspect_ratio(distorted_info, distorted_crop)
+    if source_dar <= 0 or distorted_dar <= 0:
+        return  # degenerate metadata; nothing meaningful to compare
+    if abs(source_dar - distorted_dar) <= _ASPECT_TOLERANCE * max(source_dar, distorted_dar):
+        return
+
+    def describe(info: VideoInfo, crop: CropBox | None, dar: float) -> str:
+        shape = f"{crop.w}x{crop.h} (cropped)" if crop else f"{info.width}x{info.height}"
+        return f"{shape}, {dar:.3f}:1"
+
+    raise VmafRunError(
+        "The two videos are different shapes after cropping: "
+        f"source {describe(source_info, source_crop, source_dar)} versus "
+        f"distorted {describe(distorted_info, distorted_crop, distorted_dar)}. "
+        "Scoring them would stretch one to fit the other and the result would "
+        "be meaningless. If one is letterboxed, set black-bar handling to "
+        "'Auto-detect' so the bars are removed before comparison."
+    )
 
 
 def _resolve_crops(
@@ -736,6 +803,9 @@ def run_vmaf(
         source_info, distorted_info, options, on_status,
         cancel_event=cancel_event, process_handle=process_handle,
     )
+    # After cropping, not before: removing a letterbox is precisely what
+    # makes a padded source and an already-cropped encode the same shape.
+    validate_display_geometry(source_info, distorted_info, source_crop, distorted_crop)
 
     hwaccel = HwAccelPlan()
     if options.gpu_decode:
