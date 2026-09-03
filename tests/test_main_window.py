@@ -1095,6 +1095,23 @@ def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
     assert win._rows[row].completed_run is completed
 
 
+def test_score_option_change_rechecks_cache_for_the_new_combination(qapp, monkeypatch):
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("a.mp4"))
+    win.distorted_table.selectRow(row)
+    win._on_table_selection_changed()
+
+    lookups = []
+    monkeypatch.setattr(
+        win, "_start_probe",
+        lambda paths, **kwargs: lookups.append((paths, kwargs)),
+    )
+    win.subsample_spin.setValue(2)
+
+    assert lookups == [([Path("a.mp4")], {"probe_again": False})]
+
+
 def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, monkeypatch):
     class FakeSignal:
         def __init__(self):

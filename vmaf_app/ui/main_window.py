@@ -1083,6 +1083,20 @@ class MainWindow(QMainWindow):
             self._set_row_metrics(row)
         self._start_probe([r.path for r in self._rows], probe_again=False)
 
+    def _reload_cached_for_rows(self, rows: list[int]) -> None:
+        """Checks newly-selected score settings without blocking the UI.
+
+        Cache identity includes the calculation options. When a user returns
+        to a model/subsample/crop/metric combination they already ran, that
+        result should reappear instead of requiring another feature-length
+        computation.
+        """
+        if self._source_info is None or not self._settings.use_cache:
+            return
+        paths = list(dict.fromkeys(self._rows[row].path for row in rows))
+        if paths:
+            self._start_probe(paths, probe_again=False)
+
     def _set_row_status(self, row: int, text: str) -> None:
         item = self.distorted_table.item(row, COL_INFO)
         if item is not None:
@@ -1438,6 +1452,7 @@ class MainWindow(QMainWindow):
         # Every existing row, plus the template new rows are cloned from --
         # only the metric flag is touched, so each row keeps its own model,
         # crop, GPU and scaling settings.
+        changed_rows = []
         for row, rd in enumerate(self._rows):
             opts = rd.options
             before = clone_options(opts)
@@ -1449,6 +1464,7 @@ class MainWindow(QMainWindow):
                 opts.extra_features.remove(feature)
             if opts != before:
                 self._invalidate_completed_result(row)
+                changed_rows.append(row)
         opts = self._default_options
         if column == COL_XPSNR:
             opts.compute_xpsnr = checked
@@ -1458,6 +1474,7 @@ class MainWindow(QMainWindow):
             opts.extra_features.remove(feature)
         for row in range(len(self._rows)):
             self._set_row_metrics(row)
+        self._reload_cached_for_rows(changed_rows)
 
     def _invalidate_completed_result(self, row: int) -> None:
         """Marks a row stale after an option that affects its run changes."""
@@ -1484,10 +1501,13 @@ class MainWindow(QMainWindow):
             return
         new_options = self._read_panel_options()
         self._default_options = clone_options(new_options)
+        changed_rows = []
         for row in self._panel_target_rows:
             if self._rows[row].options != new_options:
                 self._invalidate_completed_result(row)
+                changed_rows.append(row)
             self._rows[row].options = clone_options(new_options)
+        self._reload_cached_for_rows(changed_rows)
 
     def _on_panel_field_edited(self, field_name: str) -> None:
         if self._syncing_panel:
@@ -1509,9 +1529,12 @@ class MainWindow(QMainWindow):
 
         apply(self._default_options)
         execution_only = field_name in {"gpu", "n_threads"}
+        changed_rows = []
         for row in self._panel_target_rows:
             if apply(self._rows[row].options) and not execution_only:
                 self._invalidate_completed_result(row)
+                changed_rows.append(row)
+        self._reload_cached_for_rows(changed_rows)
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:
         if self._syncing_panel:
