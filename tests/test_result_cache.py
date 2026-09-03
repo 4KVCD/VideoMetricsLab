@@ -12,6 +12,7 @@ def _isolated_cache_dir(tmp_path, monkeypatch):
 
 
 def _make_file(path: Path, size: int) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"x" * size)
     return path
 
@@ -58,6 +59,28 @@ def test_cache_miss_when_filename_differs_even_with_same_size(tmp_path):
     result_cache.store(source, a, _fake_result(source, a), label="a")
 
     assert result_cache.load_cached(source, b) is None
+
+
+def test_cache_miss_for_same_filename_and_size_in_a_different_directory(tmp_path):
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    a = _make_file(tmp_path / "encode-a" / "movie.mp4", 500)
+    b = _make_file(tmp_path / "encode-b" / "movie.mp4", 500)
+    result_cache.store(source, a, _fake_result(source, a), label="a")
+
+    assert result_cache.load_cached(source, b) is None
+
+
+def test_cache_miss_when_a_same_size_file_is_replaced_in_place(tmp_path):
+    import os
+
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "movie.mp4", 500)
+    result_cache.store(source, distorted, _fake_result(source, distorted), label="old")
+    old_mtime = distorted.stat().st_mtime_ns
+    distorted.write_bytes(b"y" * 500)
+    os.utime(distorted, ns=(old_mtime + 1_000_000, old_mtime + 1_000_000))
+
+    assert result_cache.load_cached(source, distorted) is None
 
 
 def test_clear_removes_the_cached_entry(tmp_path):

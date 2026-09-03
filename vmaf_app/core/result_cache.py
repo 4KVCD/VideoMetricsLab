@@ -1,12 +1,4 @@
-"""Persists computed VMAF results to disk, keyed by the source and distorted
-files' name+size, so relaunching the app with the same files doesn't require
-recomputing.
-
-Keying is deliberately just filename+size (not a full content hash, and not
-the options that were used) -- fast to check, and matches what was asked
-for. "Recompute" is always available as an escape hatch if the files were
-re-encoded to the same name/size, or the options used should change.
-"""
+"""Persists computed VMAF results so identical inputs can be reused safely."""
 from __future__ import annotations
 
 import hashlib
@@ -41,11 +33,18 @@ def _cache_dir() -> Path:
 
 
 def _file_identity(path: Path) -> str:
+    path = Path(path).resolve()
     try:
-        size = Path(path).stat().st_size
+        stat = path.stat()
+        size = stat.st_size
+        modified = stat.st_mtime_ns
     except OSError:
         size = -1
-    return f"{Path(path).name}:{size}"
+        modified = -1
+    # The absolute path prevents two different files with the same basename
+    # and size from sharing a result. mtime catches an in-place replacement
+    # that happens to retain its exact byte length without hashing a movie.
+    return f"{path}:{size}:{modified}"
 
 
 def cache_key(source: Path, distorted: Path) -> str:
