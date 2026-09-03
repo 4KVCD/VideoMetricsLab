@@ -2316,3 +2316,146 @@ def test_a_new_test_for_the_new_source_is_not_a_duplicate(qapp, tmp_path, monkey
     assert len(win._rows) == 1
     assert win._rows[0].options.resample_test.width == 1280
     assert "small" in win._rows[0].path.name
+
+
+
+# --------------------- a loaded run belongs to the source it was measured on
+
+def _saved_run_file(tmp_path, source, distorted, name="run.vmafrun.json"):
+    from vmaf_app.core.run_io import save_run
+
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    result.source_info = _fake_video_info(str(source))
+    result.source_info.path = source
+    path = tmp_path / name
+    save_run(result, path, label=distorted.stem)
+    return path
+
+
+def _load_saved(win, monkeypatch, run_file):
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getOpenFileName",
+        staticmethod(lambda *a, **k: (str(run_file), "")),
+    )
+    win._on_load_saved_run()
+
+
+def test_loading_a_run_with_no_source_selected_adopts_its_source(qapp, tmp_path, monkeypatch):
+    """A result belongs to a (source, distorted) PAIR. With nothing to
+    contradict, the window takes the run's own reference so the two cannot
+    disagree about what was compared."""
+    source = tmp_path / "sourceA.mp4"
+    distorted = tmp_path / "encode.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+    run_file = _saved_run_file(tmp_path, source, distorted)
+
+    win = MainWindow()
+    assert win._source_info is None
+    _load_saved(win, monkeypatch, run_file)
+
+    assert win._source_info is not None
+    assert win._same_source(win._source_info.path, source)
+    assert str(source) in win.source_edit.text()
+    assert win._rows[0].completed_run is not None
+
+
+def test_a_run_from_a_different_source_is_not_silently_shown_under_this_one(
+    qapp, tmp_path, monkeypatch
+):
+    # The reported defect: the source field stayed on B while the row
+    # displayed A's score underneath it.
+    source_a = tmp_path / "sourceA.mp4"
+    source_b = tmp_path / "sourceB.mp4"
+    distorted = tmp_path / "encode.mp4"
+    for path in (source_a, source_b, distorted):
+        path.write_bytes(b"x" * 100)
+    run_file = _saved_run_file(tmp_path, source_a, distorted)
+
+    win = MainWindow()
+    win._apply_source_info(source_b, _fake_video_info(str(source_b)))
+    asked = []
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "question",
+        lambda *a, **k: asked.append(a) or main_window_module.QMessageBox.No,
+    )
+    _load_saved(win, monkeypatch, run_file)
+
+    assert asked, "the mismatch was not raised with the user"
+    assert win._rows == [], "the run was added under the wrong source anyway"
+    assert win._same_source(win._source_info.path, source_b), "the source changed uninvited"
+
+
+def test_accepting_the_prompt_switches_the_window_to_the_runs_source(
+    qapp, tmp_path, monkeypatch
+):
+    source_a = tmp_path / "sourceA.mp4"
+    source_b = tmp_path / "sourceB.mp4"
+    distorted = tmp_path / "encode.mp4"
+    for path in (source_a, source_b, distorted):
+        path.write_bytes(b"x" * 100)
+    run_file = _saved_run_file(tmp_path, source_a, distorted)
+
+    win = MainWindow()
+    win._apply_source_info(source_b, _fake_video_info(str(source_b)))
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "question",
+        lambda *a, **k: main_window_module.QMessageBox.Yes,
+    )
+    _load_saved(win, monkeypatch, run_file)
+
+    assert win._same_source(win._source_info.path, source_a)
+    assert len(win._rows) == 1
+    assert win._rows[0].completed_run is not None
+
+
+def test_selecting_the_matching_source_keeps_a_loaded_run(qapp, tmp_path, monkeypatch):
+    """Reproduction B: loading a run for source A and then selecting A threw
+    the run away, because a source change invalidated every row
+    indiscriminately. Selecting the very reference a result was measured
+    against confirms it -- it cannot invalidate it."""
+    source = tmp_path / "sourceA.mp4"
+    distorted = tmp_path / "encode.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+    run_file = _saved_run_file(tmp_path, source, distorted)
+
+    win = MainWindow()
+    _load_saved(win, monkeypatch, run_file)
+    assert win._rows[0].completed_run is not None
+
+    win._apply_source_info(source, _fake_video_info(str(source)))
+
+    assert win._rows[0].completed_run is not None, "selecting its own source wiped the run"
+
+
+def test_selecting_a_different_source_still_invalidates_a_loaded_run(
+    qapp, tmp_path, monkeypatch
+):
+    source_a = tmp_path / "sourceA.mp4"
+    source_b = tmp_path / "sourceB.mp4"
+    distorted = tmp_path / "encode.mp4"
+    for path in (source_a, source_b, distorted):
+        path.write_bytes(b"x" * 100)
+    run_file = _saved_run_file(tmp_path, source_a, distorted)
+
+    win = MainWindow()
+    _load_saved(win, monkeypatch, run_file)
+    win._apply_source_info(source_b, _fake_video_info(str(source_b)))
+
+    assert win._rows[0].completed_run is None
+
+
+def test_the_same_source_written_two_ways_is_recognised(qapp, tmp_path):
+    # A saved run records whatever path was used when it ran. A textual
+    # comparison would call one file two different sources.
+    win = MainWindow()
+    source = tmp_path / "sourceA.mp4"
+    source.write_bytes(b"x" * 100)
+
+    assert win._same_source(source, Path(str(source).replace("\\", "/")))
+    assert win._same_source(source, tmp_path / "." / "sourceA.mp4")
+    assert not win._same_source(source, tmp_path / "other.mp4")
+    assert not win._same_source(None, source)

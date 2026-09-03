@@ -955,6 +955,16 @@ class MainWindow(QMainWindow):
             # Scores belong to a (source, distorted) pair, so a new source
             # invalidates every one of them until the cache says otherwise.
             for row in range(len(self._rows)):
+                completed = self._rows[row].completed_run
+                if completed is not None and self._same_source(
+                    completed.result.source, path
+                ):
+                    # This result was measured against exactly the reference
+                    # just selected, so selecting it CONFIRMS the result
+                    # rather than invalidating it. Discarding it here is what
+                    # made loading a saved run and then picking its own
+                    # source wipe the run.
+                    continue
                 # A curve is the visual form of the same (source,
                 # distorted) result. Clearing only the table value left the
                 # old source's curve on screen under the newly selected
@@ -2070,6 +2080,22 @@ class MainWindow(QMainWindow):
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
         return [self._rows[r].completed_run for r in rows if self._rows[r].completed_run]
 
+    @staticmethod
+    def _same_source(a: Path | None, b: Path | None) -> bool:
+        """Whether two paths name the same reference video.
+
+        Normalised, because a saved run records whatever path was used when
+        it ran -- relative or absolute, either slash, any case on Windows --
+        and a textual comparison would call the same file two different
+        sources.
+        """
+        if a is None or b is None:
+            return False
+        try:
+            return Path(a).resolve() == Path(b).resolve()
+        except OSError:
+            return Path(a) == Path(b)
+
     def _on_load_saved_run(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Load saved VMAF run", "", "VMAF run (*.vmafrun.json *.json)")
         if not path:
@@ -2079,6 +2105,17 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Failed to load run", str(e))
             return
+        # A result belongs to a (source, distorted) PAIR. Dropping it into
+        # the table under whatever source happens to be selected presents a
+        # comparison that was never made -- the row showed one video's score
+        # underneath a different reference.
+        if self._source_info is None:
+            # Nothing to contradict: adopt the run's own reference, so the
+            # window and the result agree about what was compared.
+            self._adopt_source_from_run(result)
+        elif not self._same_source(self._source_info.path, result.source)                 and not self._offer_to_switch_source(result):
+            return
+
         run = CompletedRun(result, label)
         row = self._add_table_row(result.distorted)
         row_data = self._rows[row]
@@ -2099,6 +2136,40 @@ class MainWindow(QMainWindow):
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
         self.distorted_table.item(row, COL_VMAF).setToolTip("Loaded from saved run")
+
+    def _adopt_source_from_run(self, result) -> None:
+        """Points the window at the reference a loaded run was measured
+        against, so the two cannot disagree."""
+        self._source_info = result.source_info
+        self.source_edit.setText(str(result.source))
+        info = result.source_info
+        self.source_info_label.setText(
+            f"{media_info_string(info)}, {bitrate_string(info)}  "
+            f"({format_hms(info.duration, decimals=1)})  [from saved run]"
+        )
+
+    def _offer_to_switch_source(self, result) -> bool:
+        """Asks before showing a run measured against a different reference.
+
+        Returns whether to go ahead. Answering yes switches the window to
+        the run's own source, which is the only arrangement in which the
+        table and the result mean the same thing.
+        """
+        answer = QMessageBox.question(
+            self, "Different source video",
+            f"This saved run was measured against:\n    {result.source}\n\n"
+            f"but the selected source is:\n    {self._source_info.path}\n\n"
+            "Scores from two different references cannot be compared. "
+            "Switch the source to the one this run used?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return False
+        self._adopt_source_from_run(result)
+        # Every other row was scored against the previous reference.
+        for row in range(len(self._rows)):
+            self._invalidate_completed_result(row)
+        return True
 
     def _on_save_selected(self) -> None:
         runs = self._selected_runs()
