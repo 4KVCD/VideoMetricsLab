@@ -125,3 +125,30 @@ def test_the_isolation_guard_refuses_the_users_real_cache_directory():
     real = Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)) / "results_cache"
     with pytest.raises(AssertionError, match="real folder"):
         result_cache.set_cache_dir_override(real)
+
+
+def test_the_documented_smoke_command_is_runnable():
+    """The smoke script is the only end-to-end check there is, so it going
+    stale is expensive: it was both unimportable from the repository root
+    (a script's own directory goes first on sys.path, not the caller's) and
+    written against a two-argument progress callback the runner stopped
+    calling when fps was added. Neither failure showed up until someone ran
+    it, which is exactly when it is least welcome.
+
+    This imports it and inspects the callback, without launching ffmpeg.
+    """
+    import inspect
+    import runpy
+
+    module = runpy.run_path(
+        str(Path(__file__).resolve().parent / "smoke_run.py"),
+        run_name="not_main",  # importing must not start a run
+    )
+
+    assert module["parse_args"]([]).ten_bit is False
+    assert module["parse_args"](["--10bit"]).ten_bit is True
+
+    source = inspect.getsource(module["main"])
+    assert "def on_progress(current, total, fps)" in source, (
+        "the progress callback no longer matches ProgressCallback"
+    )
