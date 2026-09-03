@@ -441,6 +441,26 @@ def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):
 
 # ------------------------------------------------------------------ persistent result cache
 
+def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypatch):
+    from vmaf_app.core import result_cache
+
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    app_result = tmp_path / "abc.vmafrun.json"
+    app_result.write_text("{}", encoding="utf-8")
+    unrelated = tmp_path / "family_budget.json"
+    unrelated.write_text("important", encoding="utf-8")
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "question",
+        lambda *a, **kw: main_window_module.QMessageBox.Yes,
+    )
+
+    win = MainWindow()
+    win._on_clear_cache()
+
+    assert not app_result.exists()
+    assert unrelated.read_text(encoding="utf-8") == "important"
+
+
 def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
     monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)

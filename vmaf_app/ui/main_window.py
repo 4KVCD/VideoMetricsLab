@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
         self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
 
         directory = result_cache.cache_dir()
-        entries = list(directory.glob("*.json"))
+        entries = list(directory.glob("*.vmafrun.json"))
         total = sum(f.stat().st_size for f in entries) / 1_048_576
         self.settings_cache_summary.setText(
             f"{len(entries)} saved result(s), {total:.1f} MB in {directory}"
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
 
     def _on_clear_cache(self) -> None:
         directory = result_cache.cache_dir()
-        entries = list(directory.glob("*.json"))
+        entries = list(directory.glob("*.vmafrun.json"))
         if not entries:
             self.settings_status.setText("There are no saved results to clear.")
             return
