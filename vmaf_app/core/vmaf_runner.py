@@ -102,7 +102,8 @@ def _resolve_crops(
         status_callback("Detecting black bars in source...")
     try:
         src_crop = detect_crop(
-            source_info, cancel_event=cancel_event, process_handle=process_handle
+            source_info, cancel_event=cancel_event, process_handle=process_handle,
+            duration_limit=options.duration_limit,
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
@@ -110,7 +111,8 @@ def _resolve_crops(
         status_callback("Detecting black bars in distorted...")
     try:
         dist_crop = detect_crop(
-            distorted_info, cancel_event=cancel_event, process_handle=process_handle
+            distorted_info, cancel_event=cancel_event, process_handle=process_handle,
+            duration_limit=options.duration_limit,
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
@@ -798,7 +800,8 @@ def run_resample_test(
             on_status("Detecting black bars in source...")
         try:
             source_crop = detect_crop(
-                source_info, cancel_event=cancel_event, process_handle=process_handle
+                source_info, cancel_event=cancel_event, process_handle=process_handle,
+                duration_limit=options.duration_limit,
             )
         except CropDetectCancelled as e:
             raise Cancelled("Cancelled by user") from e

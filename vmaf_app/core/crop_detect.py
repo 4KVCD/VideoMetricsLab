@@ -37,13 +37,24 @@ class CropDetectCancelled(RuntimeError):  # noqa: N818 - expected control flow
     pass
 
 
-def _sample_offsets(duration: float) -> list[float]:
+def _sample_window(duration: float) -> float:
+    """How much media each sample reads.
+
+    Clamped to the interval being analysed, so a short scored segment is not
+    measured using footage from beyond it.
+    """
+    if duration <= 0:
+        return _SAMPLE_WINDOW_SECONDS
+    return min(_SAMPLE_WINDOW_SECONDS, duration)
+
+
+def _sample_offsets(duration: float, window: float = _SAMPLE_WINDOW_SECONDS) -> list[float]:
     if duration <= 0:
         return [0.0]
     # -ss is a window *start*. Every sample must leave enough media for the
     # whole analysis window; the previous formula sent most samples beyond
     # EOF on clips shorter than ~17 seconds.
-    max_start = max(0.0, duration - _SAMPLE_WINDOW_SECONDS)
+    max_start = max(0.0, duration - window)
     lo = min(duration * _SAMPLE_SPAN[0], max_start)
     hi = min(duration * _SAMPLE_SPAN[1], max_start)
     if hi <= lo:
@@ -116,21 +127,40 @@ def _run_single_window(
     return CropBox(w=w, h=h, x=x, y=y)
 
 
+def analysed_duration(info: VideoInfo, duration_limit: float = 0.0) -> float:
+    """How much of `info` a run will actually compare."""
+    if duration_limit <= 0:
+        return info.duration
+    if info.duration <= 0:
+        return duration_limit
+    return min(info.duration, duration_limit)
+
+
 def detect_crop(
     info: VideoInfo, limit: float = 24 / 255,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
+    duration_limit: float = 0.0,
 ) -> CropBox:
-    """Detects the black-bar crop box, or raises when it cannot analyze it."""
+    """Detects the black-bar crop box, or raises when it cannot analyze it.
+
+    `duration_limit` is the run's own limit. Every sample is taken from
+    inside the stretch that will actually be scored: a film that is
+    full-frame for its opening seconds and letterboxed afterwards would
+    otherwise be measured on footage the comparison never looks at, and the
+    detected bars cropped away from content that is really there.
+    """
     path = str(info.path)
     boxes: list[CropBox] = []
     failures: list[str] = []
-    for start in _sample_offsets(info.duration):
+    scored_duration = analysed_duration(info, duration_limit)
+    window = _sample_window(scored_duration)
+    for start in _sample_offsets(scored_duration, window):
         if cancel_event is not None and cancel_event.is_set():
             raise CropDetectCancelled("Crop detection cancelled")
         try:
             box = _run_single_window(
-                path, start, _SAMPLE_WINDOW_SECONDS, limit,
+                path, start, window, limit,
                 cancel_event=cancel_event, process_handle=process_handle,
             )
         except CropDetectError as e:
