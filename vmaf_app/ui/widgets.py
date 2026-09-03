@@ -59,13 +59,30 @@ class CheckableHeaderView(QHeaderView):
         )
         self.style().drawPrimitive(QStyle.PE_IndicatorCheckBox, opt, painter, self)
 
+    def section_indicator_rect(self, section: int) -> QRect:
+        """Where this section's checkbox is drawn, in viewport coordinates.
+
+        Same geometry paintSection uses, so what is clickable is exactly
+        what is visible.
+        """
+        return self._indicator_rect(QRect(
+            self.sectionViewportPosition(section), 0,
+            self.sectionSize(section), self.height(),
+        ))
+
     def mousePressEvent(self, event) -> None:
-        index = self.logicalIndexAt(event.position().toPoint())
-        if index in self._checked:
+        pos = event.position().toPoint()
+        index = self.logicalIndexAt(pos)
+        if index in self._checked and self.section_indicator_rect(index).contains(pos):
             self._checked[index] = not self._checked[index]
             self.updateSection(index)
             self.sectionToggled.emit(index, self._checked[index])
             return
+        # Anywhere else in the section is an ordinary header click: dragging
+        # the boundary to resize the column, or sorting. Toggling on the
+        # whole section meant the column could not be resized without also
+        # turning the metric on and off, and made every near-miss of the
+        # checkbox silently change what the next run would compute.
         super().mousePressEvent(event)
 
 
