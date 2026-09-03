@@ -2174,3 +2174,145 @@ def test_closing_with_nothing_running_still_closes_immediately(qapp):
     win.closeEvent(event)
 
     assert event.isAccepted()
+
+
+
+# --------------- resolution tests belong to the source they were added for
+
+def _add_resolution_test(win, monkeypatch, label="1440p"):
+    monkeypatch.setattr(
+        main_window_module.QInputDialog, "getItem", lambda *a, **k: (label, True)
+    )
+    win._on_add_resample_test()
+
+
+def test_changing_the_source_removes_its_resolution_tests(qapp, tmp_path, monkeypatch):
+    """A resolution test downscales and re-upscales THE SOURCE -- it has no
+    distorted file of its own. Its synthetic path, media info, description
+    and identity all come from the source selected when it was added, so a
+    2560-wide "downscale" test added for a 3840-wide master becomes an
+    UPSCALE against a 1280-wide one: a measurement the test never meant to
+    make, on a row still describing the old source.
+    """
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    for path in (big, small):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    _add_resolution_test(win, monkeypatch, "1440p")
+    assert len(win._rows) == 1
+    assert win._rows[0].options.resample_test.width == 2560
+
+    monkeypatch.setattr(main_window_module.QMessageBox, "information", lambda *a, **k: None)
+    win._apply_source_info(small, _fake_video_info_res(str(small), 1280, 720))
+
+    assert win._rows == [], "a 2560 downscale test survived a move to a 1280 source"
+
+
+def test_the_user_is_told_which_resolution_tests_were_removed(qapp, tmp_path, monkeypatch):
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    for path in (big, small):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    _add_resolution_test(win, monkeypatch, "1440p")
+
+    messages = []
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "information",
+        lambda parent, title, text, *a, **k: messages.append((title, text)),
+    )
+    win._apply_source_info(small, _fake_video_info_res(str(small), 1280, 720))
+
+    assert messages, "rows vanished with no explanation"
+    title, text = messages[0]
+    assert "Resolution test" in title
+    assert "big" in text, "the message should name what was removed"
+
+
+def test_ordinary_distorted_rows_survive_a_source_change(qapp, tmp_path, monkeypatch):
+    # They are compared against the source, not derived from it, so they
+    # remain meaningful -- only their scores are invalidated.
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    encode = tmp_path / "encode.mkv"
+    for path in (big, small, encode):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    row = win._add_table_row(encode)
+    win._rows[row].video_info = _fake_video_info_res(str(encode), 1920, 1080)
+    _add_resolution_test(win, monkeypatch, "1440p")
+    assert len(win._rows) == 2
+
+    monkeypatch.setattr(main_window_module.QMessageBox, "information", lambda *a, **k: None)
+    win._apply_source_info(small, _fake_video_info_res(str(small), 1280, 720))
+
+    assert [rd.path for rd in win._rows] == [encode]
+
+
+def test_a_removed_resolution_tests_curve_goes_with_it(qapp, tmp_path, monkeypatch):
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    for path in (big, small):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    _add_resolution_test(win, monkeypatch, "1440p")
+    row = 0
+    result = _fake_completed_run(str(win._rows[row].path)).result
+    win._rows[row].completed_run = CompletedRun(result, "test")
+    win.graph_panel.add_run(
+        result, "test", identity=win._rows[row].completed_run.graph_identity
+    )
+    assert len(win.graph_panel._entries) == 1
+
+    monkeypatch.setattr(main_window_module.QMessageBox, "information", lambda *a, **k: None)
+    win._apply_source_info(small, _fake_video_info_res(str(small), 1280, 720))
+
+    assert len(win.graph_panel._entries) == 0, "a removed row left its curve behind"
+
+
+def test_no_message_when_there_were_no_resolution_tests(qapp, tmp_path, monkeypatch):
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    for path in (big, small):
+        path.write_bytes(b"x" * 100)
+
+    messages = []
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "information",
+        lambda *a, **k: messages.append(a),
+    )
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    win._apply_source_info(small, _fake_video_info_res(str(small), 1280, 720))
+
+    assert messages == []
+
+
+def test_a_new_test_for_the_new_source_is_not_a_duplicate(qapp, tmp_path, monkeypatch):
+    # With the stale row gone, adding the same target for the new source
+    # cannot collide with a leftover row under the old source's path.
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    for path in (big, small):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    _add_resolution_test(win, monkeypatch, "1080p")
+
+    monkeypatch.setattr(main_window_module.QMessageBox, "information", lambda *a, **k: None)
+    win._apply_source_info(small, _fake_video_info_res(str(small), 1920, 1080))
+    _add_resolution_test(win, monkeypatch, "720p")
+
+    assert len(win._rows) == 1
+    assert win._rows[0].options.resample_test.width == 1280
+    assert "small" in win._rows[0].path.name

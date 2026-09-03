@@ -946,6 +946,11 @@ class MainWindow(QMainWindow):
         # Each of those is a multi-MB JSON parse, so with a few long videos
         # loaded this froze the window for seconds; it goes to the worker,
         # which already knows how to load a cached result and report it.
+        # A resolution test is derived from the source, unlike a distorted
+        # file, which merely gets compared against it -- so it cannot survive
+        # the source changing underneath it.
+        dropped = self._remove_rows_owned_by_the_previous_source()
+
         if self._rows:
             # Scores belong to a (source, distorted) pair, so a new source
             # invalidates every one of them until the cache says otherwise.
@@ -956,6 +961,46 @@ class MainWindow(QMainWindow):
                 # source, which is a dangerously plausible comparison.
                 self._invalidate_completed_result(row)
             self._reload_cached_for_all_rows()
+
+        if dropped:
+            QMessageBox.information(
+                self, "Resolution tests removed",
+                f"{len(dropped)} resolution test(s) belonged to the previous "
+                "source and have been removed:\n\n"
+                + "\n".join(f"  {name}" for name in dropped)
+                + "\n\nAdd them again to test the new source.",
+            )
+
+    def _remove_rows_owned_by_the_previous_source(self) -> list[str]:
+        """Drops resolution-test rows and returns what was removed.
+
+        Such a row has no distorted file of its own: it downscales and
+        re-upscales THE SOURCE, so its synthetic path, its media info, its
+        description and its identity all come from the source that was
+        selected when it was added. Leaving it in place after the source
+        changed left a row describing one video while the job would have run
+        against another -- and a target width chosen as a downscale of a
+        3840-wide master is an UPSCALE of a 1280-wide one, which the test was
+        never meant to measure.
+
+        Removing them is deliberate rather than migrating them: the target
+        list depends on the new source's width, two migrated rows can
+        collapse onto the same test, and silently rewriting what a row means
+        is worse than saying it is gone.
+        """
+        removed: list[str] = []
+        for row in range(len(self._rows) - 1, -1, -1):
+            row_data = self._rows[row]
+            if row_data.options.resample_test is None:
+                continue
+            if row_data.completed_run is not None:
+                self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
+            self.distorted_table.removeRow(row)
+            del self._rows[row]
+            removed.append(row_data.path.name)
+        if removed:
+            self._on_table_selection_changed()
+        return list(reversed(removed))
 
     def _on_source_probe_finished(self, generation: int, worker: ProbeWorker) -> None:
         if worker in self._probe_workers:
