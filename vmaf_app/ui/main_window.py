@@ -841,8 +841,12 @@ class MainWindow(QMainWindow):
         if self._rows:
             # Scores belong to a (source, distorted) pair, so a new source
             # invalidates every one of them until the cache says otherwise.
-            for row_data in self._rows:
-                row_data.completed_run = None
+            for row in range(len(self._rows)):
+                # A curve is the visual form of the same (source,
+                # distorted) result. Clearing only the table value left the
+                # old source's curve on screen under the newly selected
+                # source, which is a dangerously plausible comparison.
+                self._invalidate_completed_result(row)
             self._reload_cached_for_all_rows()
 
     # ------------------------------------------------------------------ distorted-file table

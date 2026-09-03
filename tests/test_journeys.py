@@ -407,6 +407,7 @@ def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypat
     win._rows[r].video_info = _info("C:/vid/a.mkv", 1920, 1080)
     _finish_run(win, [(r, _result(Path("C:/vid/a.mkv"), source_a))])
     assert win._rows[r].completed_run is not None
+    assert_graph_matches_rows(win)
 
     monkeypatch.setattr(win, "_start_probe", lambda *a, **k: None)
     monkeypatch.setattr(
@@ -418,6 +419,8 @@ def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypat
     win._on_browse_source()
 
     assert win._rows[r].completed_run is None, "the old source's score must not stand"
+    assert_graph_matches_rows(win)
+    assert not win.graph_panel._entries, "the old source's curve must not stand either"
 
 
 def test_saving_two_runs_with_the_same_label_keeps_both_files(qapp, tmp_path, monkeypatch):
