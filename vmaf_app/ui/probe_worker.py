@@ -13,7 +13,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core import result_cache
-from vmaf_app.core.ffprobe import ProbeError, probe_video
+from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import VideoInfo, VmafOptions, VmafRunResult
 
 
@@ -43,28 +43,33 @@ class ProbeWorker(QThread):
         self._cancelled = True
 
     def run(self) -> None:
-        for path in self._paths:
-            if self._cancelled:
-                break
-            if self._probe_media:
-                try:
-                    info: VideoInfo | None = probe_video(path)
-                    error = ""
-                except ProbeError as e:
-                    info, error = None, str(e)
-                self.probed.emit(path, info, error)
+        try:
+            for path in self._paths:
+                if self._cancelled:
+                    break
+                if self._probe_media:
+                    try:
+                        info: VideoInfo | None = probe_video(path)
+                        error = ""
+                    except Exception as e:
+                        # This is a background boundary: even an unexpected
+                        # probe failure must become a row error rather than
+                        # silently killing the QThread before cleanup.
+                        info, error = None, str(e)
+                    self.probed.emit(path, info, error)
 
-            if self._cancelled or not self._use_cache or self._source is None:
-                continue
-            # A miss is the normal case and must not be reported as a
-            # failure; the row simply stays unscored until it is run.
-            cached = result_cache.load_cached(
-                self._source, path, self._cache_options[path]
-            )
-            if cached is not None:
-                result, label = cached
-                self.cached_found.emit(path, result, label)
-        self.finished_all.emit()
+                if self._cancelled or not self._use_cache or self._source is None:
+                    continue
+                # A miss is the normal case and must not be reported as a
+                # failure; the row simply stays unscored until it is run.
+                cached = result_cache.load_cached(
+                    self._source, path, self._cache_options[path]
+                )
+                if cached is not None:
+                    result, label = cached
+                    self.cached_found.emit(path, result, label)
+        finally:
+            self.finished_all.emit()
 
 
 __all__ = ["ProbeWorker", "VmafRunResult"]

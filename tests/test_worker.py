@@ -4,9 +4,9 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import FrameScore, ResampleTarget, VideoInfo, VmafOptions, VmafRunResult
+from vmaf_app.core.vmaf_runner import Cancelled
 from vmaf_app.ui import worker as worker_module
 from vmaf_app.ui.worker import VmafJob, VmafWorker
-from vmaf_app.core.vmaf_runner import Cancelled
 
 
 @pytest.fixture(scope="module")

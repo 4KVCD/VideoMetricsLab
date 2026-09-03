@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from vmaf_app.core import proc as proc_util
@@ -37,6 +38,10 @@ def probe_video(path: Path) -> VideoInfo:
             "ffprobe was not found. Make sure ffmpeg is installed and on PATH, "
             "or set a custom ffmpeg folder in Settings."
         ) from e
+    except subprocess.TimeoutExpired as e:
+        raise ProbeError(f"ffprobe timed out while reading {path}") from e
+    except OSError as e:
+        raise ProbeError(f"Could not start ffprobe for {path}: {e}") from e
 
     if proc.returncode != 0:
         raise ProbeError(f"ffprobe failed for {path}:\n{proc.stderr.strip()}")

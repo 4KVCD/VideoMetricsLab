@@ -5,7 +5,6 @@ import pytest
 from vmaf_app.core import result_cache
 from vmaf_app.core.models import FrameScore, VideoInfo, VmafOptions, VmafRunResult
 
-
 OPTIONS = VmafOptions()
 
 
