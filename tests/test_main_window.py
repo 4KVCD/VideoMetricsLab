@@ -467,6 +467,31 @@ def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):
 
 # ------------------------------------------------------------------ persistent result cache
 
+def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypatch):
+    win = MainWindow()
+    info = _fake_video_info("saved.mp4")
+    result = VmafRunResult(
+        source=Path("source.mp4"), distorted=Path("saved.mp4"),
+        frames=[
+            FrameScore(0, 0.0, 90.0, psnr=42.0, ssim=0.9876, xpsnr=39.0),
+            FrameScore(1, 1 / 30, 92.0, psnr=44.0, ssim=0.9890, xpsnr=41.0),
+        ],
+        fps=30.0, model="version=vmaf_v0.6.1", source_crop=None,
+        distorted_crop=None, source_info=info, distorted_info=info,
+    )
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getOpenFileName",
+        lambda *a, **kw: ("saved.vmafrun.json", ""),
+    )
+    monkeypatch.setattr(main_window_module, "load_run", lambda _path: (result, "saved"))
+
+    win._on_load_saved_run()
+
+    assert win.distorted_table.item(0, COL_PSNR).text() == "43.00"
+    assert win.distorted_table.item(0, COL_SSIM).text() == "0.9883"
+    assert win.distorted_table.item(0, COL_XPSNR).text() == "40.00"
+
+
 def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
 

@@ -1755,8 +1755,20 @@ class MainWindow(QMainWindow):
             return
         run = CompletedRun(result, label)
         row = self._add_table_row(result.distorted)
-        self._rows[row].video_info = result.distorted_info
-        self._rows[row].completed_run = run
+        row_data = self._rows[row]
+        row_data.video_info = result.distorted_info
+        row_data.completed_run = run
+        # The optional-metric columns are driven by row options. Seed those
+        # flags from the data that is actually present in the saved result,
+        # otherwise valid PSNR/SSIM/XPSNR arrays render as "N/A".
+        row_data.options.extra_features = []
+        if result.frames.has("psnr"):
+            row_data.options.extra_features.append("name=psnr")
+        if result.frames.has("ssim"):
+            row_data.options.extra_features.append("name=float_ssim")
+        row_data.options.compute_xpsnr = result.frames.has("xpsnr")
+        row_data.options.model = result.model
+        row_data.options.scale_direction = result.scale_direction
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
