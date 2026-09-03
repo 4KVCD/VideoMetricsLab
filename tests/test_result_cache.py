@@ -3,7 +3,15 @@ from pathlib import Path
 import pytest
 
 from vmaf_app.core import result_cache
-from vmaf_app.core.models import FrameScore, VideoInfo, VmafOptions, VmafRunResult
+from vmaf_app.core.models import (
+    CropMode,
+    FrameScore,
+    GpuVendor,
+    ScaleDirection,
+    VideoInfo,
+    VmafOptions,
+    VmafRunResult,
+)
 
 OPTIONS = VmafOptions()
 
@@ -108,6 +116,50 @@ def test_cache_miss_when_calculation_options_change(tmp_path):
     changed = VmafOptions(n_subsample=5, extra_features=["name=psnr"])
     result_cache.store(
         source, distorted, _fake_result(source, distorted), label="original", options=original
+    )
+
+    assert result_cache.load_cached(source, distorted, changed) is None
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        VmafOptions(gpu_decode=False),
+        VmafOptions(gpu_vendor=GpuVendor.NVIDIA),
+        VmafOptions(n_threads=12),
+        VmafOptions(gpu_decode=False, gpu_vendor=GpuVendor.AMD, n_threads=4),
+    ],
+)
+def test_cache_hit_survives_execution_only_option_changes(tmp_path, changed):
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="original", options=VmafOptions(),
+    )
+
+    assert result_cache.load_cached(source, distorted, changed) is not None
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        VmafOptions(model_choice="version=vmaf_v0.6.1neg"),
+        VmafOptions(crop_mode=CropMode.NONE),
+        VmafOptions(scale_algorithm="lanczos"),
+        VmafOptions(scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
+        VmafOptions(extra_features=["name=psnr"]),
+        VmafOptions(compute_xpsnr=True),
+        VmafOptions(duration_limit=2.0),
+        VmafOptions(n_subsample=5),
+    ],
+)
+def test_cache_miss_survives_score_or_output_option_changes(tmp_path, changed):
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="original", options=VmafOptions(),
     )
 
     assert result_cache.load_cached(source, distorted, changed) is None

@@ -1498,8 +1498,9 @@ class MainWindow(QMainWindow):
             return changed
 
         apply(self._default_options)
+        execution_only = field_name in {"gpu", "n_threads"}
         for row in self._panel_target_rows:
-            if apply(self._rows[row].options):
+            if apply(self._rows[row].options) and not execution_only:
                 self._invalidate_completed_result(row)
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:

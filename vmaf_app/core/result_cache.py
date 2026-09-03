@@ -51,6 +51,12 @@ def _file_identity(path: Path) -> str:
 
 def _options_identity(options: VmafOptions) -> str:
     values = asdict(options)
+    # These only control how the same decoded frames are produced or how
+    # libvmaf schedules its work. They do not change which frames/metrics
+    # belong in the result, so changing performance hardware or thread count
+    # must not force a feature-length video to be recalculated.
+    for execution_only in ("gpu_decode", "gpu_vendor", "n_threads"):
+        values.pop(execution_only, None)
     custom_model = options.custom_model_path
     if custom_model:
         values["custom_model_path"] = _file_identity(Path(custom_model))

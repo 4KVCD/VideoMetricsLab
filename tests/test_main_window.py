@@ -1078,6 +1078,23 @@ def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
     assert win._rows[row].completed_run is None
 
 
+@pytest.mark.parametrize("control", ["gpu", "threads"])
+def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    completed = _fake_completed_run("a.mp4")
+    win._rows[row].completed_run = completed
+    win.distorted_table.selectRow(row)
+    win._on_table_selection_changed()
+
+    if control == "gpu":
+        win.gpu_checkbox.setChecked(not win.gpu_checkbox.isChecked())
+    else:
+        win.threads_spin.setValue(7)
+
+    assert win._rows[row].completed_run is completed
+
+
 def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, monkeypatch):
     class FakeSignal:
         def __init__(self):
