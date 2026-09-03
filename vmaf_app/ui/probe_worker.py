@@ -26,11 +26,15 @@ class ProbeWorker(QThread):
     cached_found = Signal(object, object, str)
     finished_all = Signal()
 
-    def __init__(self, paths: list[Path], source: Path | None, use_cache: bool, parent=None):
+    def __init__(self, paths: list[Path], source: Path | None, use_cache: bool,
+                 probe_media: bool = True, parent=None):
         super().__init__(parent)
         self._paths = list(paths)
         self._source = source
         self._use_cache = use_cache
+        # False when only the source changed: the distorted files are the
+        # same, so only their cached results need re-checking.
+        self._probe_media = probe_media
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -40,12 +44,13 @@ class ProbeWorker(QThread):
         for path in self._paths:
             if self._cancelled:
                 break
-            try:
-                info: VideoInfo | None = probe_video(path)
-                error = ""
-            except ProbeError as e:
-                info, error = None, str(e)
-            self.probed.emit(path, info, error)
+            if self._probe_media:
+                try:
+                    info: VideoInfo | None = probe_video(path)
+                    error = ""
+                except ProbeError as e:
+                    info, error = None, str(e)
+                self.probed.emit(path, info, error)
 
             if self._cancelled or not self._use_cache or self._source is None:
                 continue

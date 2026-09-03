@@ -796,8 +796,15 @@ class MainWindow(QMainWindow):
         )
         # A different/newly-picked source might match a previously cached
         # (source, distorted) pair for rows that are already in the table.
-        for row in range(len(self._rows)):
-            self._try_load_cached_result(row)
+        # Each of those is a multi-MB JSON parse, so with a few long videos
+        # loaded this froze the window for seconds; it goes to the worker,
+        # which already knows how to load a cached result and report it.
+        if self._rows:
+            # Scores belong to a (source, distorted) pair, so a new source
+            # invalidates every one of them until the cache says otherwise.
+            for row_data in self._rows:
+                row_data.completed_run = None
+            self._reload_cached_for_all_rows()
 
     # ------------------------------------------------------------------ distorted-file table
     def _add_table_row(self, path: Path) -> int:
@@ -1014,21 +1021,38 @@ class MainWindow(QMainWindow):
             self._set_row_status(row, "Reading...")
         self._start_probe(new_paths)
 
+    def _reload_cached_for_all_rows(self) -> None:
+        """Re-checks every row against the current source, in the background.
+
+        Called when the source changes: which cached result applies depends
+        on the (source, distorted) pair, so every row's score may now be
+        different -- or gone.
+        """
+        for row in range(len(self._rows)):
+            self._set_row_metrics(row)
+        self._start_probe([r.path for r in self._rows], probe_again=False)
+
     def _set_row_status(self, row: int, text: str) -> None:
         item = self.distorted_table.item(row, COL_INFO)
         if item is not None:
             item.setText(text)
             item.setForeground(QColor("#999"))
 
-    def _start_probe(self, paths: list[Path]) -> None:
+    def _start_probe(self, paths: list[Path], *, probe_again: bool = True) -> None:
         """Probes `paths` in the background, filling their rows as results
         arrive. A probe already running is cancelled first -- the newer
-        selection is the one the user is waiting on."""
+        selection is the one the user is waiting on.
+
+        `probe_again=False` skips re-reading the media info, for when only
+        the source changed and the distorted files themselves have not.
+        """
         if self._probe_worker is not None and self._probe_worker.isRunning():
             self._probe_worker.cancel()
             self._probe_worker.wait(2000)
         source = self._source_info.path if self._source_info else None
-        self._probe_worker = ProbeWorker(paths, source, self._settings.use_cache)
+        self._probe_worker = ProbeWorker(
+            paths, source, self._settings.use_cache, probe_media=probe_again
+        )
         self._probe_worker.probed.connect(self._on_probed)
         self._probe_worker.cached_found.connect(self._on_cached_found)
         self._probe_worker.finished_all.connect(self._on_probe_finished)

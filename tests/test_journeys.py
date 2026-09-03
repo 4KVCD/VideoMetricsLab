@@ -362,3 +362,59 @@ def test_the_readout_fits_every_line_it_prints(qapp):
         f"{len(lines)} lines need {needed}px but the readout is "
         f"{page.hover_label.height()}px -- the last line is cut off"
     )
+
+
+def test_changing_the_source_does_not_reload_caches_on_the_ui_thread(qapp, monkeypatch):
+    # A cached result is a multi-MB JSON parse. Re-checking every row inline
+    # when the source changed froze the window for hundreds of ms per row --
+    # seconds with a handful of feature-length videos loaded.
+    win = MainWindow()
+    for name in ("a", "b", "c", "d"):
+        r = win._add_table_row(Path(f"C:/vid/{name}.mkv"))
+        win._rows[r].video_info = _info(f"C:/vid/{name}.mkv", 1920, 1080)
+
+    loaded_inline = []
+    monkeypatch.setattr(
+        main_window_module, "result_cache",
+        type("Spy", (), {
+            "load_cached": staticmethod(lambda *a: loaded_inline.append(a)),
+            "store": staticmethod(lambda *a: None),
+            "clear": staticmethod(lambda *a: None),
+            "cache_dir": staticmethod(lambda: Path(".")),
+            "set_cache_dir_override": staticmethod(lambda *a: None),
+        })(),
+    )
+    started = []
+    monkeypatch.setattr(win, "_start_probe", lambda paths, **kw: started.append((paths, kw)))
+
+    win._source_info = _info("C:/vid/newsource.mkv")
+    win._reload_cached_for_all_rows()
+
+    assert not loaded_inline, "cached results must not be parsed on the UI thread"
+    assert started, "the reload should be handed to the worker"
+    paths, kwargs = started[0]
+    assert len(paths) == 4
+    assert kwargs.get("probe_again") is False, "the distorted files have not changed"
+
+
+def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypatch):
+    # A score is for a (source, distorted) pair. Keeping the old numbers
+    # against a new source would show a comparison that was never made.
+    win = MainWindow()
+    source_a = _info("C:/vid/sourceA.mkv")
+    win._source_info = source_a
+    r = win._add_table_row(Path("C:/vid/a.mkv"))
+    win._rows[r].video_info = _info("C:/vid/a.mkv", 1920, 1080)
+    _finish_run(win, [(r, _result(Path("C:/vid/a.mkv"), source_a))])
+    assert win._rows[r].completed_run is not None
+
+    monkeypatch.setattr(win, "_start_probe", lambda *a, **k: None)
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getOpenFileName",
+        staticmethod(lambda *a, **k: ("C:/vid/sourceB.mkv", "")),
+    )
+    monkeypatch.setattr(main_window_module, "probe_video",
+                        lambda p: _info(str(p)))
+    win._on_browse_source()
+
+    assert win._rows[r].completed_run is None, "the old source's score must not stand"
