@@ -1029,6 +1029,60 @@ def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
     assert win._rows[row].completed_run is None
 
 
+def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, monkeypatch):
+    class FakeSignal:
+        def __init__(self):
+            self.callbacks = []
+
+        def connect(self, callback):
+            self.callbacks.append(callback)
+
+        def emit(self, *args):
+            for callback in self.callbacks:
+                callback(*args)
+
+    class FakeProbeWorker:
+        instances = []
+
+        def __init__(self, *args, **kwargs):
+            self.probed = FakeSignal()
+            self.cached_found = FakeSignal()
+            self.finished_all = FakeSignal()
+            self.cancelled = False
+            self.running = False
+            self.deleted = False
+            self.instances.append(self)
+
+        def start(self):
+            self.running = True
+
+        def isRunning(self):
+            return self.running
+
+        def cancel(self):
+            self.cancelled = True
+
+        def wait(self, _ms):
+            raise AssertionError("the UI must not block for an arbitrary timeout")
+
+        def deleteLater(self):
+            self.deleted = True
+
+    monkeypatch.setattr(main_window_module, "ProbeWorker", FakeProbeWorker)
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+
+    win._start_probe([Path("a.mp4")])
+    old = FakeProbeWorker.instances[-1]
+    win._start_probe([Path("a.mp4")])
+
+    assert old.cancelled
+    assert old in win._probe_workers
+    stale_info = _fake_video_info("stale.mp4")
+    old.probed.emit(Path("a.mp4"), stale_info, "")
+    assert win._rows[row].video_info is None
+
+
 def test_metric_columns_show_each_metrics_own_mean(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")

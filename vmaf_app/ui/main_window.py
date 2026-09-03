@@ -154,6 +154,8 @@ class MainWindow(QMainWindow):
         self._rows: list[RowData] = []
         self._worker: VmafWorker | None = None
         self._probe_worker: ProbeWorker | None = None
+        self._probe_workers: list[ProbeWorker] = []
+        self._probe_generation = 0
         # These track the active run by RowData *identity*, not by table row
         # index: removing a row mid-run shifts every later index down, which
         # used to make a finishing job write its result to the wrong row --
@@ -185,6 +187,10 @@ class MainWindow(QMainWindow):
         if self._worker is not None and self._worker.isRunning():
             self._worker.cancel()
             self._worker.wait(5000)
+        for worker in self._probe_workers:
+            if worker.isRunning():
+                worker.cancel()
+                worker.wait(5000)
         # Remember the window size, if asked to. The graph is a tab now, so
         # there is no second window to tear down.
         if self._settings.remember_window_size:
@@ -1065,19 +1071,41 @@ class MainWindow(QMainWindow):
         the source changed and the distorted files themselves have not.
         """
         if self._probe_worker is not None and self._probe_worker.isRunning():
+            # Keep the old QThread alive until it exits. Replacing the only
+            # reference after a fixed two-second wait could destroy a still-
+            # running worker and crash Qt on a slow/network file.
             self._probe_worker.cancel()
-            self._probe_worker.wait(2000)
+        self._probe_generation += 1
+        generation = self._probe_generation
         source = self._source_info.path if self._source_info else None
-        self._probe_worker = ProbeWorker(
+        worker = ProbeWorker(
             paths, source, self._settings.use_cache,
             {rd.path: clone_options(rd.options) for rd in self._rows if rd.path in paths},
             probe_media=probe_again,
         )
-        self._probe_worker.probed.connect(self._on_probed)
-        self._probe_worker.cached_found.connect(self._on_cached_found)
-        self._probe_worker.finished_all.connect(self._on_probe_finished)
+        self._probe_worker = worker
+        self._probe_workers.append(worker)
+        worker.probed.connect(
+            lambda path, info, error, g=generation:
+            self._on_probed_if_current(g, path, info, error)
+        )
+        worker.cached_found.connect(
+            lambda path, result, label, g=generation:
+            self._on_cached_if_current(g, path, result, label)
+        )
+        worker.finished_all.connect(
+            lambda g=generation, w=worker: self._on_probe_finished(g, w)
+        )
         self.status_label.setText(f"Reading {len(paths)} video(s)...")
-        self._probe_worker.start()
+        worker.start()
+
+    def _on_probed_if_current(self, generation: int, path: Path, info, error: str) -> None:
+        if generation == self._probe_generation:
+            self._on_probed(path, info, error)
+
+    def _on_cached_if_current(self, generation: int, path: Path, result, label: str) -> None:
+        if generation == self._probe_generation:
+            self._on_cached_found(path, result, label)
 
     def _on_probed(self, path: Path, info, error: str) -> None:
         row = self._row_index_of_path(path)
@@ -1104,9 +1132,16 @@ class MainWindow(QMainWindow):
         # everything without any further action.
         self.graph_panel.add_run(result, label)
 
-    def _on_probe_finished(self) -> None:
-        self.status_label.setText("Ready.")
-        self._on_table_selection_changed()
+    def _on_probe_finished(
+        self, generation: int | None = None, worker: ProbeWorker | None = None
+    ) -> None:
+        if worker is not None:
+            if worker in self._probe_workers:
+                self._probe_workers.remove(worker)
+            worker.deleteLater()
+        if generation is None or generation == self._probe_generation:
+            self.status_label.setText("Ready.")
+            self._on_table_selection_changed()
 
     def _row_index_of_path(self, path: Path) -> int | None:
         for i, row in enumerate(self._rows):
