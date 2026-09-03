@@ -12,7 +12,7 @@ def test_unexpected_probe_failure_is_reported_and_worker_always_finishes(monkeyp
     path = Path("broken.mp4")
     monkeypatch.setattr(
         probe_worker_module, "probe_video",
-        lambda _path: (_ for _ in ()).throw(TimeoutError("unexpected timeout")),
+        lambda _path, **kwargs: (_ for _ in ()).throw(TimeoutError("unexpected timeout")),
     )
     worker = ProbeWorker(
         [path], None, False, {path: VmafOptions()}

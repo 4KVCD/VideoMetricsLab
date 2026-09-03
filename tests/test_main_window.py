@@ -916,7 +916,7 @@ def test_closing_waits_for_the_graph_export_queue(qapp, monkeypatch):
     waited = []
     monkeypatch.setattr(
         win.graph_panel, "wait_until_file_writes_idle",
-        lambda: waited.append(True) or True,
+        lambda *a: waited.append(True) or True,
     )
 
     event = QCloseEvent()
@@ -928,14 +928,14 @@ def test_closing_waits_for_the_graph_export_queue(qapp, monkeypatch):
 
 def test_close_is_refused_if_a_file_write_does_not_finish(qapp, monkeypatch):
     win = MainWindow()
-    monkeypatch.setattr(win._file_writes, "wait_until_idle", lambda: True)
-    monkeypatch.setattr(win.graph_panel, "wait_until_file_writes_idle", lambda: False)
+    monkeypatch.setattr(win._file_writes, "wait_until_idle", lambda *a: True)
+    monkeypatch.setattr(win.graph_panel, "wait_until_file_writes_idle", lambda *a: False)
 
     event = QCloseEvent()
     win.closeEvent(event)
 
     assert not event.isAccepted()
-    assert "Still finishing file writes" in win.status_label.text()
+    assert "Finishing up" in win.status_label.text()
 
 
 # ------------------------------------------------------------------ fps / ETA display
@@ -1212,7 +1212,7 @@ def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
     started = threading.Event()
     release = threading.Event()
 
-    def slow_probe(path):
+    def slow_probe(path, process_handle=None):
         started.set()
         release.wait(10.0)
         return _fake_video_info(str(path))
@@ -1770,7 +1770,7 @@ def _blocking_probe(monkeypatch, release):
 
     probed = []
 
-    def slow_probe(path):
+    def slow_probe(path, process_handle=None):
         probed.append(Path(path))
         release.wait(10.0)
         return _fake_video_info(str(path))
@@ -2073,3 +2073,104 @@ def test_an_unchanged_row_still_receives_its_result(qapp, tmp_path):
     win._on_job_finished(0, result)
 
     assert win._rows[row].completed_run is not None
+
+
+
+# ------------------------------- shutdown must not outrun its own threads
+
+class _LiveWorker:
+    """A worker that reports itself running until it is told to stop."""
+
+    def __init__(self):
+        self.running = True
+        self.cancelled = False
+        self.waited_ms = []
+
+    def isRunning(self):
+        return self.running
+
+    def cancel(self):
+        self.cancelled = True
+
+    def wait(self, ms=None):
+        self.waited_ms.append(ms)
+        return False  # never finishes within the wait
+
+    def deleteLater(self):
+        pass
+
+
+def test_closing_does_not_accept_while_a_probe_is_still_running(qapp):
+    """The reported defect: closeEvent waited a flat five seconds per worker
+    and then closed anyway, destroying the widgets those threads were still
+    posting into and leaving an ffprobe orphaned."""
+    win = MainWindow()
+    worker = _LiveWorker()
+    win._probe_workers.append(worker)
+
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert worker.cancelled, "the probe was never asked to stop"
+    assert not event.isAccepted(), "the window closed with a thread still alive"
+
+
+def test_closing_does_not_block_the_ui_thread_for_seconds(qapp):
+    import time
+
+    win = MainWindow()
+    win._probe_workers.append(_LiveWorker())
+
+    began = time.monotonic()
+    win.closeEvent(QCloseEvent())
+    elapsed = time.monotonic() - began
+
+    assert elapsed < 1.0, f"closing blocked the UI thread for {elapsed:.1f}s"
+
+
+def test_a_second_close_does_not_cancel_twice_but_still_refuses(qapp):
+    win = MainWindow()
+    worker = _LiveWorker()
+    win._probe_workers.append(worker)
+
+    win.closeEvent(QCloseEvent())
+    second = QCloseEvent()
+    win.closeEvent(second)
+
+    assert not second.isAccepted()
+    assert win._closing
+
+
+def test_the_window_closes_once_the_workers_have_finished(qapp):
+    win = MainWindow()
+    worker = _LiveWorker()
+    win._probe_workers.append(worker)
+
+    win.closeEvent(QCloseEvent())
+    assert win._closing
+
+    worker.running = False  # the cancelled probe exits
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert event.isAccepted(), "the window refused to close with nothing left running"
+
+
+def test_a_running_vmaf_job_also_holds_the_close(qapp):
+    win = MainWindow()
+    win._worker = _LiveWorker()
+
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert win._worker.cancelled
+    assert not event.isAccepted()
+
+
+def test_closing_with_nothing_running_still_closes_immediately(qapp):
+    win = MainWindow()
+
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert event.isAccepted()

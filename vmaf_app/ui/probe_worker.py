@@ -13,8 +13,9 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core import result_cache
-from vmaf_app.core.ffprobe import probe_video
+from vmaf_app.core.ffprobe import ProbeCancelled, probe_video
 from vmaf_app.core.models import VideoInfo, VmafOptions, VmafRunResult
+from vmaf_app.core.process_control import ProcessHandle
 
 
 class ProbeWorker(QThread):
@@ -45,9 +46,15 @@ class ProbeWorker(QThread):
         # same, so only their cached results need re-checking.
         self._probe_media = probe_media
         self._cancelled = False
+        # ffprobe on a large file over a slow or network disk takes many
+        # seconds. Setting a flag cannot interrupt a probe already blocked
+        # inside that call, so cancellation goes through the handle and
+        # terminates the subprocess itself.
+        self._process = ProcessHandle()
 
     def cancel(self) -> None:
         self._cancelled = True
+        self._process.terminate()
 
     def run(self) -> None:
         try:
@@ -56,8 +63,12 @@ class ProbeWorker(QThread):
                     break
                 if self._probe_media:
                     try:
-                        info: VideoInfo | None = probe_video(path)
+                        info: VideoInfo | None = probe_video(
+                            path, process_handle=self._process
+                        )
                         error = ""
+                    except ProbeCancelled:
+                        break
                     except Exception as e:
                         # This is a background boundary: even an unexpected
                         # probe failure must become a row error rather than

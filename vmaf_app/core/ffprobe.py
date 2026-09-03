@@ -8,10 +8,15 @@ from pathlib import Path
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffprobe_path
 from vmaf_app.core.models import VideoInfo
+from vmaf_app.core.process_control import ProcessHandle
 
 
 class ProbeError(RuntimeError):
     pass
+
+
+class ProbeCancelled(RuntimeError):  # noqa: N818 - expected control flow
+    """Raised when a probe is abandoned on purpose, e.g. at shutdown."""
 
 
 def _parse_frame_rate(rate_str: str) -> float:
@@ -22,7 +27,15 @@ def _parse_frame_rate(rate_str: str) -> float:
     return float(rate_str)
 
 
-def probe_video(path: Path) -> VideoInfo:
+def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> VideoInfo:
+    """Reads `path`'s media info.
+
+    `process_handle` makes the probe abandonable. ffprobe on a large file on
+    a slow or network disk can take many seconds, and a plain
+    subprocess.run() cannot be interrupted -- the flag a canceller sets is
+    invisible to a call already blocked inside it. That is what let the
+    window be torn down with an ffprobe still running underneath it.
+    """
     cmd = [
         ffprobe_path(),
         "-v", "error",
@@ -32,22 +45,36 @@ def probe_video(path: Path) -> VideoInfo:
         str(path),
     ]
     try:
-        proc = proc_util.run(cmd, capture_output=True, text=True, timeout=60)
+        proc = proc_util.popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
     except FileNotFoundError as e:
         raise ProbeError(
             "ffprobe was not found. Make sure ffmpeg is installed and on PATH, "
             "or set a custom ffmpeg folder in Settings."
         ) from e
-    except subprocess.TimeoutExpired as e:
-        raise ProbeError(f"ffprobe timed out while reading {path}") from e
     except OSError as e:
         raise ProbeError(f"Could not start ffprobe for {path}: {e}") from e
 
+    if process_handle is not None:
+        process_handle.attach(proc.pid)
+    try:
+        stdout, stderr = proc.communicate(timeout=60)
+    except subprocess.TimeoutExpired as e:
+        proc.kill()
+        proc.communicate()
+        raise ProbeError(f"ffprobe timed out while reading {path}") from e
+    finally:
+        if process_handle is not None:
+            process_handle.detach()
+
     if proc.returncode != 0:
-        raise ProbeError(f"ffprobe failed for {path}:\n{proc.stderr.strip()}")
+        if process_handle is not None and process_handle.was_terminated:
+            raise ProbeCancelled(f"Probe of {path} was cancelled")
+        raise ProbeError(f"ffprobe failed for {path}:\n{stderr.strip()}")
 
     try:
-        data = json.loads(proc.stdout)
+        data = json.loads(stdout)
     except json.JSONDecodeError as e:
         raise ProbeError(f"Could not parse ffprobe output for {path}") from e
 

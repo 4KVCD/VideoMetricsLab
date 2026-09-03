@@ -21,7 +21,7 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTime, QUrl
+from PySide6.QtCore import Qt, QTime, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -209,6 +209,9 @@ class MainWindow(QMainWindow):
         # every background handler that would otherwise re-enable them.
         self._run_active = False
         self._cache_clear_result: list[int] | None = None
+        # Set once the user has asked to close: background work has been
+        # told to stop and the window closes itself when it actually has.
+        self._closing = False
 
         # Per-video settings machinery: the Options panel is an inspector for
         # whichever rows are selected, not one global setting.
@@ -221,27 +224,45 @@ class MainWindow(QMainWindow):
         self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
         self._on_table_selection_changed()
 
-    def closeEvent(self, event) -> None:
-        # A run still in flight owns a live ffmpeg subprocess. Without
-        # cancelling it here, closing the window leaves ffmpeg running in the
-        # background chewing CPU/GPU with nothing to report to, and tears
-        # down a QThread that's still executing.
+    def _close_when_idle(self) -> None:
+        """Retries the close once the work it was waiting on has finished."""
+        if self._closing:
+            self.close()
+
+    def _live_workers(self) -> list:
+        """Every background thread that must finish before the UI it writes
+        into can be destroyed."""
+        workers = [w for w in self._probe_workers if w.isRunning()]
         if self._worker is not None and self._worker.isRunning():
-            self._worker.cancel()
-            self._worker.wait(5000)
-        for worker in self._probe_workers:
-            if worker.isRunning():
+            workers.append(self._worker)
+        return workers
+
+    def closeEvent(self, event) -> None:
+        # Shutdown is asynchronous rather than a blocking wait. A run owns a
+        # live ffmpeg, and a probe owns a live ffprobe that can take many
+        # seconds on a large file; the old code waited a flat five seconds
+        # per worker on the GUI thread and then closed anyway -- destroying
+        # widgets those threads were still posting into, which is a crash and
+        # an orphaned subprocess rather than a slow exit.
+        if not self._closing:
+            self._closing = True
+            for worker in self._live_workers():
                 worker.cancel()
-                worker.wait(5000)
+
+        pending = self._live_workers()
         # Closing mid-write would lose a cached/saved result or truncate a
         # graph CSV export. The graph owns a separate serial queue, so both
-        # must drain before the last window is allowed to disappear.
-        writes_finished = self._file_writes.wait_until_idle()
-        graph_writes_finished = self.graph_panel.wait_until_file_writes_idle()
-        if not writes_finished or not graph_writes_finished:
+        # must drain too.
+        writes_finished = self._file_writes.wait_until_idle(0.5)
+        graph_writes_finished = self.graph_panel.wait_until_file_writes_idle(0.5)
+        if pending or not writes_finished or not graph_writes_finished:
             self.status_label.setText(
-                "Still finishing file writes; close again after they complete."
+                "Finishing up; the window will close on its own."
             )
+            # Re-check shortly. Each cancelled worker also calls back here as
+            # it finishes, so this timer is only a backstop for the write
+            # queues, which have no completion signal of their own.
+            QTimer.singleShot(200, self._close_when_idle)
             event.ignore()
             return
         # Remember the window size, if asked to. The graph is a tab now, so

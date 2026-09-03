@@ -19,6 +19,14 @@ class ProcessHandle:
         self._lock = threading.Lock()
         self._pid: int | None = None
         self._want_paused = False
+        # Set when terminate() is called, so a non-zero exit can be told
+        # apart from a genuine failure of the tool.
+        self._terminated = False
+
+    @property
+    def was_terminated(self) -> bool:
+        with self._lock:
+            return self._terminated
 
     def attach(self, pid: int) -> None:
         """Called when a new ffmpeg process starts; re-applies a pause
@@ -56,6 +64,7 @@ class ProcessHandle:
         loop to notice a cancellation flag that will never get checked."""
         with self._lock:
             pid = self._pid
+            self._terminated = True
         if pid is not None:
             self._try(pid, "terminate")
 
