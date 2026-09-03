@@ -731,3 +731,100 @@ def test_removing_a_series_by_its_distorted_path(qapp):
     assert Path(next(iter(win._entries.values())).result.distorted) == Path("b.mp4")
 
     assert win.remove_by_path(Path("never-added.mp4")) is False
+
+
+# ------------------------------------------------- missing metric values
+
+def _page(panel: GraphPanel, key: str):
+    """The page for a metric, selecting its tab first -- pages other than
+    VMAF are only built when their tab is first visited."""
+    from vmaf_app.ui.graph_panel import METRICS
+    panel.tabs.setCurrentIndex([m.key for m in METRICS].index(key))
+    return panel._pages[key]
+
+
+def _nan_metric_result(name: str, metric: str, n: int = 10) -> VmafRunResult:
+    """A run that HAS the metric column but no finite value in it.
+
+    This is not hypothetical: libvmaf writes the key with a null/NaN when a
+    feature fails on a frame, and an n_subsample run scores only every Nth
+    frame. A whole column of them is the degenerate end of the same case.
+    """
+    info = VideoInfo(
+        path=Path(name), width=1920, height=1080, fps=30.0, duration=n / 30.0,
+        nb_frames=n, codec_name="h264",
+    )
+    frames = [
+        FrameScore(
+            frame=i, time=i / 30.0, vmaf=90.0,
+            psnr=float("nan") if metric == "psnr" else None,
+            ssim=float("nan") if metric == "ssim" else None,
+            xpsnr=float("nan") if metric == "xpsnr" else None,
+        )
+        for i in range(n)
+    ]
+    return VmafRunResult(
+        source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=30.0,
+        model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
+        source_info=info, distorted_info=info,
+    )
+
+
+@pytest.mark.parametrize("metric", ["psnr", "ssim", "xpsnr"])
+def test_hovering_an_all_nan_metric_does_not_crash(qapp, metric):
+    # np.nanargmin raises ValueError on an all-NaN slice, so this used to
+    # take the whole hover handler down on every mouse move over the page.
+    panel = GraphPanel()
+    panel.add_run(_nan_metric_result("a.mkv", metric), "a")
+    page = _page(panel, metric)
+
+    page.on_hover(0.1, 50.0, panel._entries)
+
+    assert f"no {page.metric.label}" in page.hover_label.text()
+
+
+@pytest.mark.parametrize("metric", ["psnr", "ssim", "xpsnr"])
+def test_hovering_two_all_nan_series_reports_no_delta(qapp, metric):
+    # The multi-series path pools every series' window before picking one
+    # shared moment, so it had its own copy of the nanargmin call.
+    panel = GraphPanel()
+    panel.add_run(_nan_metric_result("a.mkv", metric), "a")
+    panel.add_run(_nan_metric_result("b.mkv", metric), "b")
+    page = _page(panel, metric)
+
+    page.on_hover(0.1, 50.0, panel._entries)
+    text = page.hover_label.text()
+
+    assert "Δ" not in text, "a difference was reported between two missing values"
+    assert text.count(f"no {page.metric.label}") == 2
+
+
+def test_a_series_with_some_missing_frames_still_reports_the_finite_ones(qapp):
+    panel = GraphPanel()
+    result = _nan_metric_result("a.mkv", "ssim")
+    result.frames.ssim[5] = 0.9876  # one real value in a column of NaN
+    panel.add_run(result, "a")
+    page = _page(panel, "ssim")
+
+    page.show_frame(5, panel._entries)
+    assert "0.9876" in page.hover_label.text()
+
+    page.show_frame(4, panel._entries)
+    assert "no SSIM" in page.hover_label.text()
+
+
+def test_a_delta_is_only_taken_between_two_finite_values(qapp):
+    panel = GraphPanel()
+    good = _nan_metric_result("a.mkv", "ssim")
+    good.frames.ssim[:] = 0.99
+    missing = _nan_metric_result("b.mkv", "ssim")
+    panel.add_run(good, "a")
+    panel.add_run(missing, "b")
+    page = _page(panel, "ssim")
+
+    page.show_frame(3, panel._entries)
+    text = page.hover_label.text()
+
+    assert "0.9900" in text
+    assert "no SSIM" in text
+    assert "Δ" not in text

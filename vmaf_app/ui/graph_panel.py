@@ -82,6 +82,17 @@ METRICS: list[MetricSpec] = [
 ]
 
 
+def _is_reportable(value: float | None) -> bool:
+    """Whether a metric value can be shown and differenced.
+
+    None means the run never computed this metric; NaN means it computed it
+    for the run but not for this frame. Both used to reach str.format, which
+    raised TypeError on None and printed "nan" for NaN -- and a delta taken
+    against either produced a meaningless number rather than no number.
+    """
+    return value is not None and bool(np.isfinite(value))
+
+
 @dataclass
 class SeriesEntry:
     result: VmafRunResult
@@ -233,6 +244,7 @@ class _MetricPage(QWidget):
             )
         if len(labels) == 2:
             lines.append(f"Δ ({labels[0]} − {labels[1]}) = -88.88")
+
         if not labels:
             lines = _HOVER_PLACEHOLDER.splitlines()
 
@@ -294,11 +306,19 @@ class _MetricPage(QWidget):
             return self._nearest_index_by_time(times, x)
 
         window = values[lo:hi]
+        # NaN compares False against everything, so a missing value can never
+        # be picked as "at or below the cursor" -- that part needs no guard.
         at_or_below = np.flatnonzero(window <= y)
         if at_or_below.size:
             nearest = np.abs(times[lo:hi][at_or_below] - x).argmin()
             return lo + int(at_or_below[nearest])
-        return lo + int(np.nanargmin(window))
+        finite = np.flatnonzero(np.isfinite(window))
+        if finite.size == 0:
+            # Every point near the cursor is missing this metric. nanargmin
+            # raises on an all-NaN slice, so the nearest frame in time is
+            # reported instead and the readout says it has no value.
+            return self._nearest_index_by_time(times, x)
+        return lo + int(finite[np.argmin(window[finite])])
 
     def _find_shared_hover_time(
         self, pages: list[tuple[SeriesEntry, np.ndarray]], x: float, y: float, x_per_pixel: float,
@@ -323,9 +343,12 @@ class _MetricPage(QWidget):
                 continue
             window_times, window_values = times[lo:hi], values[lo:hi]
 
-            lowest = int(np.nanargmin(window_values))
-            if fallback_time is None or window_values[lowest] < fallback_val:
-                fallback_time, fallback_val = float(window_times[lowest]), float(window_values[lowest])
+            finite = np.flatnonzero(np.isfinite(window_values))
+            if finite.size:
+                lowest = int(finite[np.argmin(window_values[finite])])
+                if fallback_time is None or window_values[lowest] < fallback_val:
+                    fallback_time = float(window_times[lowest])
+                    fallback_val = float(window_values[lowest])
 
             at_or_below = np.flatnonzero(window_values <= y)
             if at_or_below.size:
@@ -370,11 +393,15 @@ class _MetricPage(QWidget):
         for entry, idx in picks:
             fr = entry.result.frames[idx]
             val = self.metric.value(fr)
-            lines.append(
-                f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
-                f"{self.metric.label}={self.metric.value_format.format(val)}"
-            )
-            found.append((entry.label, val))
+            prefix = f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
+            if not _is_reportable(val):
+                # A run can carry the column while individual frames have no
+                # score (libvmaf's n_subsample, or a metric that failed on
+                # some frames). Formatting None here raised TypeError.
+                lines.append(f"{prefix}no {self.metric.label}")
+                continue
+            lines.append(f"{prefix}{self.metric.label}={self.metric.value_format.format(val)}")
+            found.append((entry.label, float(val)))
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
@@ -414,14 +441,14 @@ class _MetricPage(QWidget):
                 continue
             fr = frames[idx]
             val = self.metric.value(fr)
-            if val is None:
+            if not _is_reportable(val):
                 lines.append(f"[{entry.label}]  no {self.metric.label} for this frame")
                 continue
             lines.append(
                 f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
                 f"{self.metric.label}={self.metric.value_format.format(val)}"
             )
-            found.append((entry.label, val))
+            found.append((entry.label, float(val)))
             if cursor_time is None:
                 cursor_time = float(fr.time)
 
