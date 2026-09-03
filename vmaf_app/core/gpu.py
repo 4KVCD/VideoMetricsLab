@@ -7,9 +7,9 @@ software decode if the hardware path fails to launch.
 from __future__ import annotations
 
 import platform
-import subprocess
 from functools import lru_cache
 
+from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.models import GpuVendor
 
@@ -30,7 +30,7 @@ _VENDOR_PREFERRED_HWACCEL = {
 @lru_cache(maxsize=1)
 def available_hwaccels() -> set[str]:
     try:
-        proc = subprocess.run(
+        proc = proc_util.run(
             [ffmpeg_path(), "-hide_banner", "-hwaccels"],
             capture_output=True, text=True, timeout=15,
         )
@@ -54,7 +54,7 @@ def detected_gpu_vendors() -> list[GpuVendor]:
     if platform.system() != "Windows":
         return []
     try:
-        proc = subprocess.run(
+        proc = proc_util.run(
             [
                 "powershell", "-NoProfile", "-Command",
                 "(Get-CimInstance Win32_VideoController).Name",

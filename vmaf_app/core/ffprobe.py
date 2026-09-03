@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
+from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffprobe_path
 from vmaf_app.core.models import VideoInfo
 
@@ -31,7 +31,7 @@ def probe_video(path: Path) -> VideoInfo:
         str(path),
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        proc = proc_util.run(cmd, capture_output=True, text=True, timeout=60)
     except FileNotFoundError as e:
         raise ProbeError(
             "ffprobe was not found. Make sure ffmpeg is installed and on PATH, "

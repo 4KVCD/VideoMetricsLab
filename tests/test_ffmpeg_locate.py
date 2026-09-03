@@ -90,7 +90,7 @@ def test_check_tool_parses_a_real_version_from_the_binary(monkeypatch):
         stderr = ""
 
     monkeypatch.setattr(ffmpeg_locate, "find_binary", lambda name: "ffmpeg")
-    monkeypatch.setattr(ffmpeg_locate.subprocess, "run", lambda *a, **k: FakeProc())
+    monkeypatch.setattr(ffmpeg_locate.proc_util, "run", lambda *a, **k: FakeProc())
 
     status = ffmpeg_locate.check_tool("ffmpeg")
     assert status.runnable is True

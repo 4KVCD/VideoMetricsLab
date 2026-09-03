@@ -10,8 +10,8 @@ across windows, rather than trusting a single long pass.
 from __future__ import annotations
 
 import re
-import subprocess
 
+from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.models import CropBox, VideoInfo
 
@@ -49,7 +49,7 @@ def _run_single_window(path: str, start: float, window: float, limit: float) -> 
         "-f", "null", "-",
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        proc = proc_util.run(cmd, capture_output=True, text=True, timeout=60)
     except Exception:
         return None
 

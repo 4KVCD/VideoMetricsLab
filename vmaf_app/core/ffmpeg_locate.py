@@ -8,10 +8,11 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 from dataclasses import dataclass
 from functools import cache, lru_cache
 from pathlib import Path
+
+from vmaf_app.core import proc as proc_util
 
 _SETTINGS_ORG = "VmafApp"
 _SETTINGS_APP = "VmafCalculator"
@@ -139,7 +140,7 @@ def check_tool(name: str) -> ToolStatus:
     both present and executable, rather than just a path that exists."""
     path = find_binary(name)
     try:
-        proc = subprocess.run([path, "-version"], capture_output=True, text=True, timeout=15)
+        proc = proc_util.run([path, "-version"], capture_output=True, text=True, timeout=15)
     except Exception as e:
         return ToolStatus(name=name, path=path, runnable=False, error=str(e))
     if proc.returncode != 0:

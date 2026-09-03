@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import pick_hwaccel
@@ -265,7 +266,7 @@ def _run_ffmpeg(
     on_progress: ProgressCallback | None, cancel_event: threading.Event | None,
     cwd: Path, process_handle: ProcessHandle | None = None,
 ) -> subprocess.CompletedProcess:
-    proc = subprocess.Popen(
+    proc = proc_util.popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, cwd=str(cwd),
     )
     if process_handle is not None:

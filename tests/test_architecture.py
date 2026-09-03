@@ -47,3 +47,44 @@ def test_core_does_not_import_the_ui_layer():
     }
     offenders = {k: v for k, v in offenders.items() if v}
     assert not offenders, f"core must not depend on ui: {offenders}"
+
+
+def test_no_core_module_spawns_a_visible_console_window():
+    """Every subprocess must go through vmaf_app.core.proc.
+
+    The app runs under pythonw.exe, which has no console, so a child process
+    started without CREATE_NO_WINDOW gets its own console window that flashes
+    up and vanishes. With one per added video it looks like a malfunction.
+    Calling subprocess directly is how that comes back.
+    """
+    offenders: dict[str, list[str]] = {}
+    for path in CORE.glob("*.py"):
+        if path.name == "proc.py":
+            continue  # the one place that is allowed to call it
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        bad = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            value = node.func.value
+            if isinstance(value, ast.Name) and value.id == "subprocess" \
+                    and node.func.attr in {"run", "Popen", "call", "check_output"}:
+                bad.append(f"subprocess.{node.func.attr} at line {node.lineno}")
+        if bad:
+            offenders[path.name] = bad
+    assert not offenders, (
+        f"these bypass vmaf_app.core.proc and will flash a console window: {offenders}"
+    )
+
+
+def test_the_hidden_flag_is_only_applied_on_windows():
+    import os
+
+    from vmaf_app.core.proc import hidden_kwargs
+
+    kwargs = hidden_kwargs()
+    if os.name == "nt":
+        assert kwargs.get("creationflags") == 0x0800_0000
+    else:
+        assert kwargs == {}, "the flag does not exist off Windows"
