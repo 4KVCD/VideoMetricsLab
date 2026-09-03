@@ -418,3 +418,32 @@ def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypat
     win._on_browse_source()
 
     assert win._rows[r].completed_run is None, "the old source's score must not stand"
+
+
+def test_saving_two_runs_with_the_same_label_keeps_both_files(qapp, tmp_path, monkeypatch):
+    """Two rows can carry the same label -- the same basename from two
+    folders is the everyday case -- and saving them into one folder used to
+    write both to <label>.vmafrun.json, losing the first."""
+    win = MainWindow()
+    source = _info("C:/vid/source.mkv")
+    win._source_info = source
+
+    rows = []
+    for folder, score in (("a", 95.0), ("b", 70.0)):
+        path = Path(f"C:/vid/{folder}/movie.mkv")
+        row = win._add_table_row(path)
+        win._rows[row].video_info = _info(str(path), 1920, 1080)
+        rows.append((row, _result(path, source, score)))
+    _finish_run(win, rows)
+    win.distorted_table.selectAll()
+
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getExistingDirectory",
+        lambda *a, **k: str(tmp_path),
+    )
+    win._on_save_selected()
+
+    saved = sorted(p.name for p in tmp_path.glob("*.vmafrun.json"))
+    assert saved == ["movie.vmafrun.json", "movie_2.vmafrun.json"], (
+        "one run overwrote the other"
+    )

@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app.core.models import FrameScore, VmafRunResult
-from vmaf_app.core.run_io import export_csv, load_run, save_run
+from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
 from vmaf_app.core.stats import DEFAULT_THRESHOLDS, VmafStats, compute_stats
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
@@ -802,11 +802,16 @@ class GraphPanel(QWidget):
         directory = QFileDialog.getExistingDirectory(self, "Choose export folder")
         if not directory:
             return
+        reserved: set[Path] = set()
         for entry in self._entries.values():
-            safe_label = "".join(c if c.isalnum() or c in "-_." else "_" for c in entry.label)
-            out_path = Path(directory) / f"{safe_label}.csv"
-            export_csv(entry.result, out_path)
-        QMessageBox.information(self, "Export complete", f"Exported {len(self._entries)} CSV file(s) to {directory}")
+            export_csv(
+                entry.result,
+                unique_output_path(Path(directory), entry.label, ".csv", reserved),
+            )
+        QMessageBox.information(
+            self, "Export complete",
+            f"Exported {len(self._entries)} CSV file(s) to {directory}",
+        )
 
     def save_run_for_later(self, result: VmafRunResult, label: str) -> None:
         path, _ = QFileDialog.getSaveFileName(

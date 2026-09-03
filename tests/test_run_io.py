@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core.models import CropBox, FrameScore, FrameScores, VideoInfo, VmafRunResult
-from vmaf_app.core.run_io import export_csv, load_run, save_run
+from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
 
 
 def _sample_result() -> VmafRunResult:
@@ -126,3 +126,56 @@ def test_loading_a_run_saved_before_xpsnr_existed_does_not_raise(tmp_path):
 
     loaded, _ = load_run(out_path)
     assert loaded.frames[0].xpsnr is None
+
+
+# ------------------------------------------------------ unique output paths
+
+def test_a_second_run_with_the_same_label_gets_its_own_file(tmp_path):
+    # Two encodes named movie.mp4 from different folders, or one file
+    # compared twice under different options, both reduce to "movie".
+    reserved: set[Path] = set()
+    first = unique_output_path(tmp_path, "movie", ".csv", reserved)
+    second = unique_output_path(tmp_path, "movie", ".csv", reserved)
+
+    assert first.name == "movie.csv"
+    assert second.name == "movie_2.csv"
+    assert first != second
+
+
+def test_reservations_hold_before_anything_is_written(tmp_path):
+    # Within one export loop the earlier file may not exist on disk yet, so
+    # checking only Path.exists() would hand out the same name twice.
+    reserved: set[Path] = set()
+    names = [unique_output_path(tmp_path, "movie", ".csv", reserved).name for _ in range(4)]
+
+    assert names == ["movie.csv", "movie_2.csv", "movie_3.csv", "movie_4.csv"]
+    assert not any((tmp_path / n).exists() for n in names)
+
+
+def test_a_file_already_on_disk_is_never_overwritten(tmp_path):
+    (tmp_path / "movie.csv").write_text("existing", encoding="utf-8")
+
+    path = unique_output_path(tmp_path, "movie", ".csv")
+
+    assert path.name == "movie_2.csv"
+    assert (tmp_path / "movie.csv").read_text(encoding="utf-8") == "existing"
+
+
+def test_characters_a_filename_cannot_carry_are_replaced(tmp_path):
+    path = unique_output_path(tmp_path, "a/b:c*d", ".csv")
+    assert path.name == "a_b_c_d.csv"
+
+
+def test_a_label_with_nothing_usable_still_produces_a_name(tmp_path):
+    assert unique_output_path(tmp_path, "///", ".csv").name == "___.csv"
+    assert unique_output_path(tmp_path, "", ".csv").name == "run.csv"
+
+
+def test_two_labels_that_sanitise_to_the_same_stem_do_not_collide(tmp_path):
+    # "a b" and "a/b" both become "a_b" -- the collision appears only after
+    # sanitising, so deduplicating the labels beforehand would miss it.
+    reserved: set[Path] = set()
+    first = unique_output_path(tmp_path, "a b", ".csv", reserved)
+    second = unique_output_path(tmp_path, "a/b", ".csv", reserved)
+
+    assert (first.name, second.name) == ("a_b.csv", "a_b_2.csv")

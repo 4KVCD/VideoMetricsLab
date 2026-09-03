@@ -14,6 +14,37 @@ from vmaf_app.core.models import CropBox, FrameScores, ScaleDirection, VideoInfo
 FORMAT_VERSION = 1
 
 
+def safe_filename_stem(label: str) -> str:
+    """A series label reduced to something usable as a filename."""
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in label)
+
+
+def unique_output_path(
+    directory: Path, label: str, suffix: str, reserved: set[Path] | None = None
+) -> Path:
+    """A path in `directory` for `label` that collides with nothing.
+
+    Batch exports name their files after the series label, and two labels
+    collide easily -- the same basename from two directories, or one file
+    compared twice under different options, both reduce to "movie". Writing
+    them in a loop meant the second silently replaced the first, and the
+    user was told N files had been written when fewer existed.
+
+    Checks both what is already on disk and what this batch has already
+    claimed (via `reserved`, which is updated in place), because within a
+    single loop the earlier file may not have been written yet.
+    """
+    reserved = reserved if reserved is not None else set()
+    stem = safe_filename_stem(label) or "run"
+    candidate = directory / f"{stem}{suffix}"
+    counter = 2
+    while candidate in reserved or candidate.exists():
+        candidate = directory / f"{stem}_{counter}{suffix}"
+        counter += 1
+    reserved.add(candidate)
+    return candidate
+
+
 def _crop_to_dict(c: CropBox | None) -> dict | None:
     return None if c is None else {"w": c.w, "h": c.h, "x": c.x, "y": c.y}
 

@@ -939,3 +939,31 @@ def test_vmaf_and_psnr_statistics_stay_at_two_decimals(qapp):
     row = _stats_row(panel, "a")
     assert "91.23" in row
     assert "91.2346" not in row
+
+
+# ------------------------------------------------ batch export collisions
+
+def test_exporting_two_series_with_the_same_label_keeps_both_files(qapp, tmp_path, monkeypatch):
+    # Two rows can legitimately carry the same label -- movie.mp4 from two
+    # folders, or one file compared twice under different options. Both used
+    # to be written to movie.csv, so the second silently replaced the first
+    # and the "Exported 2 CSV file(s)" message was a lie.
+    from vmaf_app.ui import graph_panel as graph_panel_module
+
+    panel = GraphPanel()
+    panel.add_run(_values_result("a/movie.mkv", [90.0] * 10), "movie")
+    panel.add_run(_values_result("b/movie.mkv", [70.0] * 10), "movie")
+
+    monkeypatch.setattr(
+        graph_panel_module.QFileDialog, "getExistingDirectory",
+        lambda *a, **k: str(tmp_path),
+    )
+    monkeypatch.setattr(graph_panel_module.QMessageBox, "information", lambda *a, **k: None)
+
+    panel._on_export_csv()
+
+    written = sorted(p.name for p in tmp_path.glob("*.csv"))
+    assert written == ["movie.csv", "movie_2.csv"]
+    # And they hold different runs, rather than one being written twice.
+    assert tmp_path.joinpath("movie.csv").read_text(encoding="utf-8") != \
+        tmp_path.joinpath("movie_2.csv").read_text(encoding="utf-8")

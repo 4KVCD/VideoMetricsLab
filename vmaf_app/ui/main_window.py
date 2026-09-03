@@ -65,7 +65,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
-from vmaf_app.core.run_io import load_run, save_run
+from vmaf_app.core.run_io import load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.time_format import format_hms
@@ -1806,9 +1806,13 @@ class MainWindow(QMainWindow):
         directory = QFileDialog.getExistingDirectory(self, "Choose folder to save runs into")
         if not directory:
             return
+        reserved: set[Path] = set()
         for run in runs:
-            safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in run.label)
-            save_run(run.result, Path(directory) / f"{safe}.vmafrun.json", label=run.label)
+            save_run(
+                run.result,
+                unique_output_path(Path(directory), run.label, ".vmafrun.json", reserved),
+                label=run.label,
+            )
 
     def _on_compare_selected(self) -> None:
         runs = self._selected_runs()
