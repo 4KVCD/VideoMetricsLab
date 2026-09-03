@@ -316,17 +316,18 @@ def _run_ffmpeg(
 
 
 def estimate_total_frames(reference_info: VideoInfo, options: VmafOptions) -> int:
-    """The number of frames libvmaf will actually score: `reference_info` is
+    """The number of frames ffmpeg will process: `reference_info` is
     whichever video drives the output timeline (the distorted video for a
     normal run, the source for a resolution round-trip test), bounded by
-    duration_limit and thinned by n_subsample. Used both to size the
-    progress bar during a run and, upfront, to estimate total queue time
-    across jobs that haven't started yet.
+    duration_limit. libvmaf's n_subsample reduces how many frames receive a
+    score, but ffmpeg's progress counter still reports every decoded/output
+    frame, so applying n_subsample here made progress exceed 100% and broke
+    both ETAs. Used to size progress and estimate the queued work.
     """
     frame_count = reference_info.estimated_frame_count
     if options.duration_limit > 0:
         frame_count = min(frame_count, round(options.duration_limit * reference_info.fps))
-    return frame_count // max(1, options.n_subsample)
+    return frame_count
 
 
 def _resolve_model_for_cwd(model: str, tmpdir: Path) -> str:

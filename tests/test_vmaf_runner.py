@@ -425,6 +425,17 @@ def test_parse_xpsnr_log_missing_file_returns_empty_dict(tmp_path):
     assert _parse_xpsnr_log(tmp_path / "does_not_exist.txt") == {}
 
 
+def test_progress_frame_estimate_is_not_divided_by_libvmaf_subsampling():
+    from vmaf_app.core.vmaf_runner import estimate_total_frames
+
+    info = VideoInfo(
+        path=Path("movie.mp4"), width=1920, height=1080, fps=30.0,
+        duration=10.0, nb_frames=300, codec_name="h264",
+    )
+
+    assert estimate_total_frames(info, VmafOptions(n_subsample=10)) == 300
+
+
 def test_parse_log_keeps_a_genuine_zero_psnr_or_ssim(tmp_path):
     # libvmaf reports a real 0.0 for badly degraded frames. Reading these
     # with `metrics.get("psnr_y") or metrics.get("psnr")` discarded the 0.0
