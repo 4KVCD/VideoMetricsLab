@@ -142,6 +142,31 @@ def test_editing_with_multiple_rows_selected_applies_to_all_of_them(qapp):
     assert win._rows[row_c].options.crop_mode == CropMode.AUTO
 
 
+def test_multi_row_edit_preserves_each_rows_unrelated_settings(qapp):
+    win = MainWindow()
+    row_a = win._add_table_row(Path("a.mp4"))
+    row_b = win._add_table_row(Path("b.mp4"))
+    win._rows[row_a].options.n_threads = 2
+    win._rows[row_a].options.gpu_decode_source = False
+    win._rows[row_b].options.n_threads = 11
+    win._rows[row_b].options.gpu_decode_source = True
+    win.distorted_table.setRangeSelected(
+        QTableWidgetSelectionRange(
+            row_a, 0, row_b, win.distorted_table.columnCount() - 1
+        ),
+        True,
+    )
+
+    win.crop_combo.setCurrentIndex(1)
+
+    assert win._rows[row_a].options.crop_mode == CropMode.NONE
+    assert win._rows[row_b].options.crop_mode == CropMode.NONE
+    assert win._rows[row_a].options.n_threads == 2
+    assert win._rows[row_b].options.n_threads == 11
+    assert win._rows[row_a].options.gpu_decode_source is False
+    assert win._rows[row_b].options.gpu_decode_source is True
+
+
 def test_selecting_a_row_loads_its_own_settings_into_the_panel(qapp):
     win = MainWindow()
     row_a = win._add_table_row(Path("a.mp4"))

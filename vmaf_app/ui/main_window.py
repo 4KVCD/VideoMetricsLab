@@ -574,8 +574,12 @@ class MainWindow(QMainWindow):
         self.gpu_checkbox.stateChanged.connect(
             lambda st: self.gpu_vendor_combo.setEnabled(bool(st))
         )
-        self.gpu_checkbox.stateChanged.connect(self._on_panel_edited)
-        self.gpu_vendor_combo.currentIndexChanged.connect(self._on_panel_edited)
+        self.gpu_checkbox.stateChanged.connect(
+            lambda _value: self._on_panel_field_edited("gpu")
+        )
+        self.gpu_vendor_combo.currentIndexChanged.connect(
+            lambda _value: self._on_panel_field_edited("gpu")
+        )
         gpu_row = QHBoxLayout()
         gpu_row.addWidget(self.gpu_checkbox)
         gpu_row.addWidget(self.gpu_vendor_combo)
@@ -591,7 +595,9 @@ class MainWindow(QMainWindow):
             "Auto-detect black bars (recommended)",
             "None (use full frame)",
         ])
-        self.crop_combo.currentIndexChanged.connect(self._on_panel_edited)
+        self.crop_combo.currentIndexChanged.connect(
+            lambda _value: self._on_panel_field_edited("crop_mode")
+        )
         form.addRow("Black-bar handling:", self.crop_combo)
 
         # The two groups sit side by side rather than stacked: the panel is
@@ -611,24 +617,32 @@ class MainWindow(QMainWindow):
         self.threads_spin.setRange(0, 128)
         self.threads_spin.setValue(0)
         self.threads_spin.setSpecialValueText("Auto")
-        self.threads_spin.valueChanged.connect(self._on_panel_edited)
+        self.threads_spin.valueChanged.connect(
+            lambda _value: self._on_panel_field_edited("n_threads")
+        )
         adv_form.addRow("libvmaf threads:", self.threads_spin)
 
         self.subsample_spin = QSpinBox()
         self.subsample_spin.setRange(1, 60)
         self.subsample_spin.setValue(1)
-        self.subsample_spin.valueChanged.connect(self._on_panel_edited)
+        self.subsample_spin.valueChanged.connect(
+            lambda _value: self._on_panel_field_edited("n_subsample")
+        )
         adv_form.addRow("Frame subsample (1 = every frame):", self.subsample_spin)
 
         self.duration_edit = QTimeEdit()
         self.duration_edit.setDisplayFormat("HH:mm:ss.zzz")
         self.duration_edit.setTime(QTime(0, 0, 0, 0))
-        self.duration_edit.timeChanged.connect(self._on_panel_edited)
+        self.duration_edit.timeChanged.connect(
+            lambda _value: self._on_panel_field_edited("duration_limit")
+        )
         adv_form.addRow("Duration limit (00:00:00.000 = full video):", self.duration_edit)
 
         self.scale_algo_combo = QComboBox()
         self.scale_algo_combo.addItems(_SCALE_ALGORITHMS)
-        self.scale_algo_combo.currentIndexChanged.connect(self._on_panel_edited)
+        self.scale_algo_combo.currentIndexChanged.connect(
+            lambda _value: self._on_panel_field_edited("scale_algorithm")
+        )
         adv_form.addRow("Scaling algorithm:", self.scale_algo_combo)
 
         self.scale_direction_combo = QComboBox()
@@ -1377,6 +1391,12 @@ class MainWindow(QMainWindow):
         self.distorted_table.item(row, COL_VMAF).setToolTip("")
 
     def _on_panel_edited(self, *_args) -> None:
+        """Replace all options (kept for programmatic callers/tests).
+
+        Widget signals use _on_panel_field_edited so editing one control in
+        a mixed multi-row selection cannot copy unrelated values from the
+        first selected row over all the others.
+        """
         if self._syncing_panel:
             return
         new_options = self._read_panel_options()
@@ -1385,6 +1405,29 @@ class MainWindow(QMainWindow):
             if self._rows[row].options != new_options:
                 self._invalidate_completed_result(row)
             self._rows[row].options = clone_options(new_options)
+
+    def _on_panel_field_edited(self, field_name: str) -> None:
+        if self._syncing_panel:
+            return
+        panel = self._read_panel_options()
+        fields = {
+            "gpu": ("gpu_decode_source", "gpu_vendor"),
+            "model": ("model", "model_choice", "custom_model_path"),
+        }.get(field_name, (field_name,))
+
+        def apply(target: VmafOptions) -> bool:
+            changed = False
+            for name in fields:
+                value = getattr(panel, name)
+                if getattr(target, name) != value:
+                    setattr(target, name, value)
+                    changed = True
+            return changed
+
+        apply(self._default_options)
+        for row in self._panel_target_rows:
+            if apply(self._rows[row].options):
+                self._invalidate_completed_result(row)
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:
         if self._syncing_panel:
@@ -1398,7 +1441,7 @@ class MainWindow(QMainWindow):
             if self._panel_target_rows:
                 self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
             return
-        self._on_panel_edited()
+        self._on_panel_field_edited("scale_direction")
 
     def _on_model_changed(self, index: int) -> None:
         if self._syncing_panel:
@@ -1410,7 +1453,7 @@ class MainWindow(QMainWindow):
             else:
                 self.model_combo.setCurrentIndex(0)  # reverts to Auto; re-enters this handler, then falls through below
                 return
-        self._on_panel_edited()
+        self._on_panel_field_edited("model")
 
     # ------------------------------------------------------------------ run
     def _checked_rows(self) -> list[int]:
