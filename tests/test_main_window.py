@@ -1149,6 +1149,33 @@ def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, 
     assert win._rows[row].video_info is None
 
 
+def test_cache_result_is_rejected_if_options_changed_while_it_loaded(qapp, tmp_path):
+    from vmaf_app.core import result_cache
+
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "distorted.mp4"
+    source.write_bytes(b"source")
+    distorted.write_bytes(b"distorted")
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    old_key = result_cache.cache_key(source, distorted, win._rows[row].options)
+
+    # This is exactly what can happen while ProbeWorker is parsing a large
+    # cached JSON file: the row remains editable before its signal arrives.
+    win._rows[row].options.n_subsample = 2
+    cached_result = _fake_completed_run(str(distorted)).result
+    cached_result.source = source
+    cached_result.distorted = distorted
+    win._on_cached_if_current(
+        win._probe_generation, distorted, cached_result, "old settings", old_key
+    )
+
+    assert win._rows[row].completed_run is None
+
+
 def test_metric_columns_show_each_metrics_own_mean(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")

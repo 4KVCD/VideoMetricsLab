@@ -22,8 +22,10 @@ class ProbeWorker(QThread):
 
     # (path, VideoInfo or None, error message or "")
     probed = Signal(object, object, str)
-    # (path, VmafRunResult, label) -- only for videos with a cached result
-    cached_found = Signal(object, object, str)
+    # (path, VmafRunResult, label, cache key) -- only for videos with a
+    # cached result. The key lets the UI reject a result if the row's options
+    # changed while this background read was in flight.
+    cached_found = Signal(object, object, str, str)
     finished_all = Signal()
 
     def __init__(self, paths: list[Path], source: Path | None, use_cache: bool,
@@ -67,7 +69,10 @@ class ProbeWorker(QThread):
                 )
                 if cached is not None:
                     result, label = cached
-                    self.cached_found.emit(path, result, label)
+                    key = result_cache.cache_key(
+                        self._source, path, self._cache_options[path]
+                    )
+                    self.cached_found.emit(path, result, label, key)
         finally:
             self.finished_all.emit()
 

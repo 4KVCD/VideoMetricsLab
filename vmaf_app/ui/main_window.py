@@ -1117,8 +1117,8 @@ class MainWindow(QMainWindow):
             self._on_probed_if_current(g, path, info, error)
         )
         worker.cached_found.connect(
-            lambda path, result, label, g=generation:
-            self._on_cached_if_current(g, path, result, label)
+            lambda path, result, label, key, g=generation:
+            self._on_cached_if_current(g, path, result, label, key)
         )
         worker.finished_all.connect(
             lambda g=generation, w=worker: self._on_probe_finished(g, w)
@@ -1130,8 +1130,18 @@ class MainWindow(QMainWindow):
         if generation == self._probe_generation:
             self._on_probed(path, info, error)
 
-    def _on_cached_if_current(self, generation: int, path: Path, result, label: str) -> None:
-        if generation == self._probe_generation:
+    def _on_cached_if_current(
+        self, generation: int, path: Path, result, label: str, key: str
+    ) -> None:
+        if generation != self._probe_generation or self._source_info is None:
+            return
+        row = self._row_index_of_path(path)
+        if row is None:
+            return
+        current_key = result_cache.cache_key(
+            self._source_info.path, path, self._rows[row].options
+        )
+        if key == current_key:
             self._on_cached_found(path, result, label)
 
     def _on_probed(self, path: Path, info, error: str) -> None:
