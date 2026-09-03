@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
 from vmaf_app.core.models import (
@@ -912,6 +913,33 @@ def test_closing_mid_run_cancels_the_worker(qapp, monkeypatch):
     win.close()
 
     assert cancelled == [True]
+
+
+def test_closing_waits_for_the_graph_export_queue(qapp, monkeypatch):
+    win = MainWindow()
+    waited = []
+    monkeypatch.setattr(
+        win.graph_panel, "wait_until_file_writes_idle",
+        lambda: waited.append(True) or True,
+    )
+
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert waited == [True]
+    assert event.isAccepted()
+
+
+def test_close_is_refused_if_a_file_write_does_not_finish(qapp, monkeypatch):
+    win = MainWindow()
+    monkeypatch.setattr(win._file_writes, "wait_until_idle", lambda: True)
+    monkeypatch.setattr(win.graph_panel, "wait_until_file_writes_idle", lambda: False)
+
+    event = QCloseEvent()
+    win.closeEvent(event)
+
+    assert not event.isAccepted()
+    assert "Still finishing file writes" in win.status_label.text()
 
 
 # ------------------------------------------------------------------ fps / ETA display

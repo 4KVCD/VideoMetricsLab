@@ -962,6 +962,10 @@ class GraphPanel(QWidget):
     def _on_file_write_failed(self, description: str, error: str) -> None:
         self.status_label.setText(f"Could not {description}: {error}")
 
+    def wait_until_file_writes_idle(self, timeout_seconds: float = 30.0) -> bool:
+        """Lets the owning window protect graph exports during shutdown."""
+        return self._file_writes.wait_until_idle(timeout_seconds)
+
     def _on_export_png(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export graph", "vmaf_graph.png", "PNG image (*.png)")
         if not path:

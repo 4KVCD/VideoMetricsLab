@@ -200,8 +200,17 @@ class MainWindow(QMainWindow):
             if worker.isRunning():
                 worker.cancel()
                 worker.wait(5000)
-        # Closing mid-write would lose the result that was being cached.
-        self._file_writes.wait_until_idle()
+        # Closing mid-write would lose a cached/saved result or truncate a
+        # graph CSV export. The graph owns a separate serial queue, so both
+        # must drain before the last window is allowed to disappear.
+        writes_finished = self._file_writes.wait_until_idle()
+        graph_writes_finished = self.graph_panel.wait_until_file_writes_idle()
+        if not writes_finished or not graph_writes_finished:
+            self.status_label.setText(
+                "Still finishing file writes; close again after they complete."
+            )
+            event.ignore()
+            return
         # Remember the window size, if asked to. The graph is a tab now, so
         # there is no second window to tear down.
         if self._settings.remember_window_size:
