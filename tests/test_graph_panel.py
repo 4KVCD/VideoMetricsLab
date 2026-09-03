@@ -875,3 +875,67 @@ def test_the_readout_is_not_sized_to_both_states_stacked(qapp):
     gap = page.hover_label.height() - empty._pages["vmaf"].hover_label.height()
 
     assert gap == 2 * fm.lineSpacing()
+
+
+# ------------------------------------------------- statistics precision
+
+def _ssim_result(name: str, ssim_values: list[float]) -> VmafRunResult:
+    n = len(ssim_values)
+    info = VideoInfo(
+        path=Path(name), width=1920, height=1080, fps=30.0, duration=n / 30.0,
+        nb_frames=n, codec_name="h264",
+    )
+    frames = [
+        FrameScore(frame=i, time=i / 30.0, vmaf=90.0, ssim=v)
+        for i, v in enumerate(ssim_values)
+    ]
+    return VmafRunResult(
+        source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=30.0,
+        model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
+        source_info=info, distorted_info=info,
+    )
+
+
+def _stats_row(panel: GraphPanel, label: str) -> list[str]:
+    for row in range(panel.stats_table.rowCount()):
+        item = panel.stats_table.item(row, 0)
+        if item is not None and item.text() == label:
+            # Columns 1..n-1: the statistics themselves. Column 0 is the
+            # series name and the last is the remove control, and including
+            # the name would make any two rows differ for free.
+            return [
+                (panel.stats_table.item(row, col).text()
+                 if panel.stats_table.item(row, col) is not None else "")
+                for col in range(1, panel.stats_table.columnCount() - 1)
+            ]
+    raise AssertionError(f"no stats row for {label!r}")
+
+
+def test_ssim_statistics_keep_four_decimal_places(qapp):
+    # SSIM's whole range is 0-1. At VMAF's 2dp every encode above about 0.995
+    # reads "1.00", which is most of them.
+    panel = GraphPanel()
+    panel.add_run(_ssim_result("a.mkv", [0.9876] * 10), "a")
+    _page(panel, "ssim")
+
+    assert "0.9876" in _stats_row(panel, "a")
+
+
+def test_two_encodes_that_differ_only_in_ssim_detail_look_different(qapp):
+    # The point of the table is comparing encodes. Rounding that makes two
+    # different results render identically is worse than no number.
+    panel = GraphPanel()
+    panel.add_run(_ssim_result("a.mkv", [0.9912] * 10), "a")
+    panel.add_run(_ssim_result("b.mkv", [0.9948] * 10), "b")
+    _page(panel, "ssim")
+
+    assert _stats_row(panel, "a") != _stats_row(panel, "b")
+
+
+def test_vmaf_and_psnr_statistics_stay_at_two_decimals(qapp):
+    panel = GraphPanel()
+    panel.add_run(_values_result("a.mkv", [91.23456] * 10), "a")
+
+    row = _stats_row(panel, "a")
+    assert "91.23" in row
+    assert "91.2346" not in row

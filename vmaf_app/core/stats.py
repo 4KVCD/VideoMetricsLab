@@ -57,22 +57,32 @@ class VmafStats:
     histogram: list[HistogramBin] = field(default_factory=list)
 
     @property
-    def summary(self) -> list[tuple[str, str]]:
-        """(label, formatted value) pairs for display. This is the single
-        place that defines what shows up in the graph window's stats table --
-        add a stat here (and compute it in compute_stats()) and it appears
-        there automatically, no UI code changes needed."""
+    def values(self) -> list[tuple[str, float]]:
+        """(label, value) pairs. This is the single place that defines what
+        shows up in the graph's stats table -- add a stat here (and compute
+        it in compute_stats()) and it appears there automatically, no UI code
+        changes needed.
+
+        Unformatted, because the right precision depends on the metric: 2dp
+        suits VMAF's 0-100 and PSNR's dB, and destroys SSIM, whose entire
+        range is 0-1. The caller knows which metric it is asking about; this
+        does not.
+        """
         return [
-            ("Mean", f"{self.mean:.2f}"),
-            ("Median", f"{self.median:.2f}"),
-            ("StDev", f"{self.stdev:.2f}"),
-            ("Min", f"{self.minimum:.2f}"),
-            ("Max", f"{self.maximum:.2f}"),
-            ("10% Low", f"{self.percentile_10:.2f}"),
-            ("5% Low", f"{self.percentile_5:.2f}"),
-            ("1% Low", f"{self.percentile_1:.2f}"),
-            ("0.1% Low", f"{self.percentile_0_1:.2f}"),
+            ("Mean", self.mean),
+            ("Median", self.median),
+            ("StDev", self.stdev),
+            ("Min", self.minimum),
+            ("Max", self.maximum),
+            ("10% Low", self.percentile_10),
+            ("5% Low", self.percentile_5),
+            ("1% Low", self.percentile_1),
+            ("0.1% Low", self.percentile_0_1),
         ]
+
+    def summary(self, value_format: str = "{:.2f}") -> list[tuple[str, str]]:
+        """`values`, rendered at the metric's own precision."""
+        return [(label, value_format.format(value)) for label, value in self.values]
 
 
 def compute_stats(

@@ -34,7 +34,7 @@ def test_empty_frames_returns_zeroed_stats():
     assert stats.count == 0
     assert stats.thresholds == []
     assert stats.histogram == []
-    assert dict(stats.summary)["Mean"] == "0.00"  # summary must format, not raise
+    assert dict(stats.summary())["Mean"] == "0.00"  # summary must format, not raise
 
 
 def test_histogram_bins_cover_all_frames():
@@ -54,7 +54,7 @@ def test_percentile_1_and_0_1_low_with_a_large_sample():
 
 def test_summary_reflects_the_computed_values():
     stats = compute_stats([90, 92, 94, 96, 98])
-    summary = dict(stats.summary)
+    summary = dict(stats.summary())
     assert summary["Mean"] == "94.00"
     assert summary["Min"] == "90.00"
     assert summary["Max"] == "98.00"

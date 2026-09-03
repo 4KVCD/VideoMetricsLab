@@ -821,7 +821,8 @@ class GraphPanel(QWidget):
         self._populating_stats = True
         try:
             self._setup_stats_table()
-            page = self._pages[self._current_metric().key]
+            metric = self._current_metric()
+            page = self._pages[metric.key]
             # EVERY series gets a row, not just the visible ones: this table
             # is the series list, so an unchecked series still needs its row
             # to be checked again through. A series with no data for the
@@ -837,7 +838,10 @@ class GraphPanel(QWidget):
                     cells = [""] * (self.stats_table.columnCount() - 2)
                 else:
                     s = curve.stats
-                    cells = [v for _, v in s.summary]
+                    # At the metric's own precision: SSIM's whole range is
+                    # 0-1, so VMAF's 2dp collapses most real differences
+                    # between encodes into an identical-looking row.
+                    cells = [v for _, v in s.summary(metric.value_format)]
                     cells += [f"{t.percentage:.1f}%" for t in s.thresholds]
                 for col, val in enumerate(cells, start=1):
                     self.stats_table.setItem(row, col, QTableWidgetItem(val))
