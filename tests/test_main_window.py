@@ -1192,6 +1192,26 @@ def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, 
     assert win._rows[row].video_info is None
 
 
+def test_finished_probe_is_not_reused_after_qt_deletes_it(qapp, monkeypatch):
+    class FinishedWorker:
+        def __init__(self):
+            self.deleted = False
+
+        def deleteLater(self):
+            self.deleted = True
+
+    win = MainWindow()
+    worker = FinishedWorker()
+    win._probe_worker = worker
+    win._probe_workers.append(worker)
+
+    win._on_probe_finished(win._probe_generation, worker)
+
+    assert win._probe_worker is None
+    assert worker not in win._probe_workers
+    assert worker.deleted
+
+
 def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
     started = threading.Event()
     release = threading.Event()

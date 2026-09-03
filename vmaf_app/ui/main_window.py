@@ -1252,6 +1252,8 @@ class MainWindow(QMainWindow):
         if worker is not None:
             if worker in self._probe_workers:
                 self._probe_workers.remove(worker)
+            if worker is self._probe_worker:
+                self._probe_worker = None
             worker.deleteLater()
         if generation is None or generation == self._probe_generation:
             self.status_label.setText("Ready.")
