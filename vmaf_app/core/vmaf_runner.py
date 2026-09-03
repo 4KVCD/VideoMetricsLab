@@ -116,13 +116,70 @@ def _resolve_crops(
     return src_crop, dist_crop
 
 
-def _hw_native_format(source_pix_fmt: str) -> str:
+def _hw_native_format(pix_fmt: str) -> str:
     """The system-memory pixel format a cuda/qsv/d3d11va hw surface downloads
-    to, based on the source's bit depth. 10/12-bit 4:2:0 sources decode to a
+    to, based on that input's bit depth. 10/12-bit 4:2:0 video decodes to a
     p010-family surface; everything else (including 8-bit) decodes to nv12."""
-    if "10le" in source_pix_fmt or "12le" in source_pix_fmt or "p010" in source_pix_fmt:
+    if _bit_depth(pix_fmt) > 8:
         return "p010le"
     return "nv12"
+
+
+#: Analysis bit depth -> the planar 4:2:0 format both branches are converted
+#: to before they meet. libvmaf compares two streams that must agree on
+#: format, so one has to be picked for the pair.
+_ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
+
+#: Depth digits sit immediately after the planar marker and at the end of
+#: the name: yuv420p10le, gbrp12be, yuv444p16le. Anchoring on that "p" is
+#: what keeps nv12 (8-bit semi-planar, whose 12 is part of the *name*) and
+#: rgb24 (8-bit, whose 24 is bits per pixel) from being read as deep.
+_PLANAR_DEPTH_RE = re.compile(r"p(\d{1,2})(?:le|be)?$")
+#: Single-plane formats put the digits straight after the plane name.
+_GRAY_DEPTH_RE = re.compile(r"^(?:gray|ya)(\d{1,2})(?:le|be)?$")
+#: The semi-planar hardware-surface formats: digits in the middle, and
+#: "p010" means 10 significant bits stored in 16.
+_HW_SURFACE_DEPTHS = (("p016", 16), ("p012", 12), ("p010", 10))
+
+
+def _bit_depth(pix_fmt: str) -> int:
+    """The bit depth encoded in an ffmpeg pixel-format name.
+
+    ffmpeg spells depth into the name rather than reporting it separately,
+    and the 8-bit names carry no depth digits at all. Anything unrecognised
+    is treated as 8-bit, which is the safe direction: it costs precision
+    only for a format the pipeline was never going to handle specially.
+    """
+    name = (pix_fmt or "").lower()
+    if not name:
+        return 8
+    for token, depth in _HW_SURFACE_DEPTHS:
+        if name.startswith(token):
+            return depth
+    for pattern in (_PLANAR_DEPTH_RE, _GRAY_DEPTH_RE):
+        match = pattern.search(name)
+        if match:
+            return int(match.group(1))
+    return 8
+
+
+def analysis_pix_fmt(*pix_fmts: str) -> str:
+    """The common format the inputs are converted to before comparison.
+
+    Takes the *deepest* of the inputs, so a 10-bit master compared against
+    an 8-bit encode promotes the encode rather than truncating the master.
+    Everything used to be forced to 8-bit yuv420p, which quietly discarded
+    two bits of both sides on any HDR/10-bit comparison and put a floor
+    under PSNR/XPSNR that had nothing to do with the encode being measured.
+    """
+    depth = max((_bit_depth(f) for f in pix_fmts), default=8)
+    if depth <= 8:
+        return _ANALYSIS_FORMAT_BY_DEPTH[8]
+    if depth <= 10:
+        return _ANALYSIS_FORMAT_BY_DEPTH[10]
+    # libvmaf accepts up to 12-bit; deeper sources (16-bit intermediates)
+    # are analysed at 12 rather than being dropped back to 8.
+    return _ANALYSIS_FORMAT_BY_DEPTH[12]
 
 
 def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None = None) -> list[str]:
@@ -189,11 +246,16 @@ def _build_filtergraph(
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
     upscale_distorted = resolutions_differ and options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE
 
+    # Both branches have to reach libvmaf in the same pixel format, and that
+    # format is chosen from the deeper of the two inputs -- see
+    # analysis_pix_fmt for why it is not simply yuv420p.
+    analysis_format = analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt)
+
     # --- distorted (main, input 0) chain ---
     main_ops = []
     if distorted_crop and not distorted_crop.is_noop(distorted_info.width, distorted_info.height):
         main_ops.append(distorted_crop.as_filter())
-    main_ops.append("format=yuv420p")
+    main_ops.append(f"format={analysis_format}")
     if upscale_distorted:
         # Scale the distorted video UP to the source's resolution instead of
         # the default (scaling the source down to the distorted video's
@@ -207,11 +269,11 @@ def _build_filtergraph(
     if hwaccel_used:
         # hwdownload can only emit the hw surface's native format -- nv12 for
         # 8-bit cuda decode, p010le for 10-bit (common for UHD/HDR masters) --
-        # it can't itself target yuv420p, so that conversion needs its own
-        # separate format filter afterwards.
+        # it can't itself target the analysis format, so that conversion
+        # needs its own separate format filter afterwards.
         ref_ops.append("hwdownload")
         ref_ops.append(f"format={_hw_native_format(source_info.pix_fmt)}")
-    ref_ops.append("format=yuv420p")
+    ref_ops.append(f"format={analysis_format}")
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
         ref_ops.append(source_crop.as_filter())
 
@@ -246,13 +308,17 @@ def _build_resample_test_filtergraph(
     down_w = target.width
     down_h = max(2, round(down_w * orig_h / orig_w / 2) * 2)  # even, preserves the source's own aspect ratio
 
+    # A round-trip test has one input, so the analysis format comes from
+    # the source alone -- see analysis_pix_fmt.
+    analysis_format = analysis_pix_fmt(source_info.pix_fmt)
+
     base_ops = []
     if hwaccel_used:
         # See _build_filtergraph's identical comment: hwdownload can only
-        # emit the hw surface's native format, not yuv420p directly.
+        # emit the hw surface's native format, not the analysis format.
         base_ops.append("hwdownload")
         base_ops.append(f"format={_hw_native_format(source_info.pix_fmt)}")
-    base_ops.append("format=yuv420p")
+    base_ops.append(f"format={analysis_format}")
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
         base_ops.append(source_crop.as_filter())
     base_chain = f"[0:v]{','.join(base_ops)}[base]"

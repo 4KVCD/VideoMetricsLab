@@ -12,11 +12,13 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.vmaf_runner import (
+    _bit_depth,
     _build_ffmpeg_cmd,
     _build_filtergraph,
     _build_resample_cmd,
     _build_resample_test_filtergraph,
     _hw_native_format,
+    analysis_pix_fmt,
 )
 
 
@@ -512,3 +514,100 @@ def test_parse_log_keeps_a_genuine_zero_psnr_or_ssim(tmp_path):
     assert frames[0].psnr == 0.0
     assert frames[0].ssim == 0.0
     assert frames[1].psnr == 25.5
+
+
+# --------------------------------------------------- analysis bit depth
+
+@pytest.mark.parametrize(("pix_fmt", "expected"), [
+    ("yuv420p", 8), ("nv12", 8), ("nv21", 8), ("rgb24", 8), ("yuyv422", 8), ("", 8),
+    ("yuv420p10le", 10), ("yuv422p10le", 10), ("p010le", 10),
+    ("yuv420p12le", 12), ("gbrp12be", 12),
+    ("yuv444p16le", 16), ("p016le", 16), ("gray10le", 10),
+])
+def test_bit_depth_is_read_from_the_pixel_format_name(pix_fmt, expected):
+    # rgb24 is the trap: the 24 is bits per *pixel*, not per component, so a
+    # "any digits in the name" rule would call an 8-bit format 24-bit.
+    assert _bit_depth(pix_fmt) == expected
+
+
+@pytest.mark.parametrize(("formats", "expected"), [
+    (("yuv420p", "yuv420p"), "yuv420p"),
+    (("yuv420p10le", "yuv420p10le"), "yuv420p10le"),
+    (("yuv420p12le", "yuv420p12le"), "yuv420p12le"),
+    # Mixed depths promote the shallower side rather than truncating the
+    # deeper one -- a 10-bit master must not be measured through an 8-bit
+    # pipe just because the encode under test is 8-bit.
+    (("yuv420p10le", "yuv420p"), "yuv420p10le"),
+    (("yuv420p", "yuv420p10le"), "yuv420p10le"),
+    (("yuv420p12le", "yuv420p10le"), "yuv420p12le"),
+    # libvmaf tops out at 12-bit, so deeper intermediates analyse at 12.
+    (("yuv444p16le", "yuv420p"), "yuv420p12le"),
+])
+def test_analysis_format_takes_the_deeper_of_the_two_inputs(formats, expected):
+    assert analysis_pix_fmt(*formats) == expected
+
+
+@pytest.mark.parametrize(("source_fmt", "distorted_fmt", "expected"), [
+    ("yuv420p", "yuv420p", "yuv420p"),
+    ("yuv420p10le", "yuv420p10le", "yuv420p10le"),
+    ("yuv420p10le", "yuv420p", "yuv420p10le"),
+    ("yuv420p12le", "yuv420p10le", "yuv420p12le"),
+])
+def test_both_branches_are_converted_to_the_same_analysis_format(
+    source_fmt, distorted_fmt, expected
+):
+    # Both chains must name the SAME format: libvmaf compares two streams
+    # and a mismatch either errors out or silently inserts a conversion
+    # nobody chose.
+    graph = _build_filtergraph(
+        _info("source.mov", 1920, 1080, pix_fmt=source_fmt),
+        _info("distorted.mp4", 1920, 1080, pix_fmt=distorted_fmt),
+        VmafOptions(model="version=vmaf_v0.6.1"),
+        source_crop=None, distorted_crop=None, hwaccel_used=None,
+        log_path=Path("log.json"),
+    )
+    main_chain, ref_chain, _ = graph.split(";")
+
+    assert f"format={expected}" in main_chain
+    assert f"format={expected}" in ref_chain
+    if expected != "yuv420p":
+        assert "format=yuv420p," not in graph and "format=yuv420p[" not in graph
+
+
+def test_a_ten_bit_source_is_not_analysed_at_eight_bits():
+    # The regression this guards: every comparison used to end with a
+    # hard-coded format=yuv420p, so a 10-bit master and a 10-bit encode were
+    # both truncated to 8-bit before a single metric was computed.
+    graph = _build_filtergraph(
+        _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
+        _info("encode.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
+        VmafOptions(model="version=vmaf_v0.6.1"),
+        source_crop=None, distorted_crop=None, hwaccel_used=None,
+        log_path=Path("log.json"),
+    )
+    assert "format=yuv420p10le" in graph
+    assert "format=yuv420p," not in graph
+
+
+def test_a_ten_bit_resample_test_stays_ten_bit():
+    graph = _build_resample_test_filtergraph(
+        _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
+        VmafOptions(model="version=vmaf_v0.6.1", resample_test=ResampleTarget(width=1920, label="1080p")),
+        source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
+    )
+    assert "format=yuv420p10le" in graph
+
+
+def test_gpu_download_feeds_the_analysis_format_rather_than_replacing_it():
+    # hwdownload can only emit the surface's native format, so the chain has
+    # to be hwdownload -> p010le -> the analysis format. Dropping that last
+    # step leaves libvmaf comparing semi-planar p010 against planar yuv.
+    graph = _build_filtergraph(
+        _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
+        _info("encode.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
+        VmafOptions(model="version=vmaf_v0.6.1"),
+        source_crop=None, distorted_crop=None, hwaccel_used="cuda",
+        log_path=Path("log.json"),
+    )
+    _, ref_chain, _ = graph.split(";")
+    assert "hwdownload,format=p010le,format=yuv420p10le" in ref_chain
