@@ -29,9 +29,14 @@ class CropDetectError(RuntimeError):
 def _sample_offsets(duration: float) -> list[float]:
     if duration <= 0:
         return [0.0]
-    lo = duration * _SAMPLE_SPAN[0]
-    hi = duration * _SAMPLE_SPAN[1]
-    hi = max(hi, lo + _SAMPLE_WINDOW_SECONDS)
+    # -ss is a window *start*. Every sample must leave enough media for the
+    # whole analysis window; the previous formula sent most samples beyond
+    # EOF on clips shorter than ~17 seconds.
+    max_start = max(0.0, duration - _SAMPLE_WINDOW_SECONDS)
+    lo = min(duration * _SAMPLE_SPAN[0], max_start)
+    hi = min(duration * _SAMPLE_SPAN[1], max_start)
+    if hi <= lo:
+        return [lo]
     if _SAMPLE_COUNT == 1:
         return [(lo + hi) / 2]
     step = (hi - lo) / (_SAMPLE_COUNT - 1)
