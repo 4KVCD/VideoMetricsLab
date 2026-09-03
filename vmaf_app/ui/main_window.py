@@ -1344,15 +1344,36 @@ class MainWindow(QMainWindow):
         # Every existing row, plus the template new rows are cloned from --
         # only the metric flag is touched, so each row keeps its own model,
         # crop, GPU and scaling settings.
-        for opts in [rd.options for rd in self._rows] + [self._default_options]:
+        for row, rd in enumerate(self._rows):
+            opts = rd.options
+            before = clone_options(opts)
             if column == COL_XPSNR:
                 opts.compute_xpsnr = checked
             elif checked and feature not in opts.extra_features:
                 opts.extra_features.append(feature)
             elif not checked and feature in opts.extra_features:
                 opts.extra_features.remove(feature)
+            if opts != before:
+                self._invalidate_completed_result(row)
+        opts = self._default_options
+        if column == COL_XPSNR:
+            opts.compute_xpsnr = checked
+        elif checked and feature not in opts.extra_features:
+            opts.extra_features.append(feature)
+        elif not checked and feature in opts.extra_features:
+            opts.extra_features.remove(feature)
         for row in range(len(self._rows)):
             self._set_row_metrics(row)
+
+    def _invalidate_completed_result(self, row: int) -> None:
+        """Marks a row stale after an option that affects its run changes."""
+        row_data = self._rows[row]
+        if row_data.completed_run is None:
+            return
+        row_data.completed_run = None
+        self.graph_panel.remove_by_path(row_data.path)
+        self._set_row_metrics(row)
+        self.distorted_table.item(row, COL_VMAF).setToolTip("")
 
     def _on_panel_edited(self, *_args) -> None:
         if self._syncing_panel:
@@ -1360,6 +1381,8 @@ class MainWindow(QMainWindow):
         new_options = self._read_panel_options()
         self._default_options = clone_options(new_options)
         for row in self._panel_target_rows:
+            if self._rows[row].options != new_options:
+                self._invalidate_completed_result(row)
             self._rows[row].options = clone_options(new_options)
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:

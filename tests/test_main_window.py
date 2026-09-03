@@ -932,6 +932,33 @@ def test_ticking_a_metric_column_header_enables_it_for_every_row(qapp):
     assert win.distorted_table.item(0, COL_PSNR).text() == "N/A"
 
 
+def test_changing_a_metric_marks_an_existing_result_stale_and_runnable(qapp):
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")
+    win.graph_panel.add_run(win._rows[row].completed_run.result, "a")
+
+    win._on_metric_column_toggled(COL_PSNR, True)
+
+    assert win._rows[row].completed_run is None
+    assert win.distorted_table.item(row, COL_VMAF).text() == ""
+    assert not win.graph_panel._entries
+
+
+def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")
+    win.distorted_table.selectRow(row)
+    win._on_table_selection_changed()
+
+    win.subsample_spin.setValue(5)
+
+    assert win._rows[row].completed_run is None
+
+
 def test_metric_columns_show_each_metrics_own_mean(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
