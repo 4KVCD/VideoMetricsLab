@@ -105,6 +105,19 @@ def test_readding_the_same_file_replaces_its_series_instead_of_duplicating(qapp)
     assert a_entries[0].result.frames[0].vmaf == 99.0
 
 
+def test_refreshing_a_hidden_series_does_not_make_it_visible_again(qapp):
+    win = GraphPanel()
+    win.add_run(_fake_result("a.mp4", vmaf_value=80.0))
+    sid = next(iter(win._entries))
+    win.set_series_visible(sid, False)
+
+    win.add_run(_fake_result("a.mp4", vmaf_value=99.0))
+
+    assert len(win._entries) == 1
+    assert win._entries[sid].visible is False
+    assert win._pages["vmaf"]._curves[sid].visible is False
+
+
 # ------------------------------------------------------------------ multi-series color + visibility
 
 def test_each_series_gets_a_distinct_color(qapp):

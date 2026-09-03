@@ -113,6 +113,7 @@ class CompletedRun:
         self.result = result
         self.label = label
         self.stats = stats_for_run(result)
+        self.graph_identity = object()
 
 
 @dataclass
@@ -1142,7 +1143,9 @@ class MainWindow(QMainWindow):
         self._set_row_metrics(row)
         # Keep the graph in step as results land, so opening the tab shows
         # everything without any further action.
-        self.graph_panel.add_run(result, label)
+        self.graph_panel.add_run(
+            result, label, identity=run.graph_identity
+        )
 
     def _on_probe_finished(
         self, generation: int | None = None, worker: ProbeWorker | None = None
@@ -1166,7 +1169,9 @@ class MainWindow(QMainWindow):
         for row in rows:
             # The graph goes with it: a curve whose row is gone can no longer
             # be removed from anywhere.
-            self.graph_panel.remove_by_path(self._rows[row].path)
+            completed = self._rows[row].completed_run
+            if completed is not None:
+                self.graph_panel.remove_by_identity(completed.graph_identity)
             self.distorted_table.removeRow(row)
             del self._rows[row]
         self._on_table_selection_changed()
@@ -1187,7 +1192,8 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.Yes:
             return
         for row_data in self._rows:
-            self.graph_panel.remove_by_path(row_data.path)
+            if row_data.completed_run is not None:
+                self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
         self.distorted_table.setRowCount(0)
         self._rows.clear()
         self._on_table_selection_changed()
@@ -1434,8 +1440,12 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         if row_data.completed_run is None:
             return
+        graph_identity = row_data.completed_run.graph_identity
         row_data.completed_run = None
-        self.graph_panel.remove_by_path(row_data.path)
+        if not self.graph_panel.remove_by_identity(graph_identity):
+            # Backward-compatible fallback for a series added directly by
+            # path before row-scoped graph identities existed.
+            self.graph_panel.remove_by_path(row_data.path)
         self._set_row_metrics(row)
         self.distorted_table.item(row, COL_VMAF).setToolTip("")
 
@@ -1699,7 +1709,9 @@ class MainWindow(QMainWindow):
         )
         # Straight onto the graph: a run that has finished is a curve, and
         # waiting for a button press to see it serves nobody.
-        self.graph_panel.add_run(result, label)
+        self.graph_panel.add_run(
+            result, label, identity=run.graph_identity
+        )
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
         self._run_failed_count += 1
@@ -1826,10 +1838,15 @@ class MainWindow(QMainWindow):
         """
         for row in self._rows:
             if row.completed_run is not None:
-                self.graph_panel.add_run(row.completed_run.result, row.completed_run.label)
+                self.graph_panel.add_run(
+                    row.completed_run.result, row.completed_run.label,
+                    identity=row.completed_run.graph_identity, restore=False,
+                )
 
     def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
         """Adds runs to the graph tab and brings it to the front."""
         for run in runs:
-            self.graph_panel.add_run(run.result, run.label)
+            self.graph_panel.add_run(
+                run.result, run.label, identity=run.graph_identity
+            )
         self.tabs.setCurrentIndex(TAB_GRAPH)

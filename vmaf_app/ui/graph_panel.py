@@ -90,6 +90,7 @@ class SeriesEntry:
     times: np.ndarray
     step: float  # typical time delta between consecutive points in this series
     visible: bool = True
+    identity: object | None = None
 
 
 _HOVER_PLACEHOLDER = (
@@ -462,6 +463,7 @@ class GraphPanel(QWidget):
         super().__init__(parent)
 
         self._entries: dict[int, SeriesEntry] = {}
+        self._suppressed_identities: set[object] = set()
         self._next_id = 0
 
         root = QVBoxLayout(self)
@@ -648,30 +650,41 @@ class GraphPanel(QWidget):
         self._set_series_visible(int(series_id), item.checkState() == Qt.Checked)
 
     # ------------------------------------------------------------------ public API
-    def add_run(self, result: VmafRunResult, label: str | None = None) -> None:
-        # Re-adding the same distorted file (e.g. re-selecting rows that are
-        # already shown, or the window being reopened and repopulated)
-        # replaces its existing series instead of stacking a duplicate.
-        # Replacing a series keeps its colour: add_run is called again for
-        # the same video on every tab switch and as each job finishes, and
-        # taking the next palette entry each time walked four videos from
-        # blue/orange/green/red into brown/pink/grey.
-        reuse_color: str | None = None
-        for existing_id, entry in list(self._entries.items()):
-            if Path(entry.result.distorted) == Path(result.distorted):
-                reuse_color = entry.color
-                self.remove_run(existing_id)
-
+    def add_run(
+        self, result: VmafRunResult, label: str | None = None, *,
+        identity: object | None = None, restore: bool = True,
+    ) -> None:
+        # Callers with real rows provide that row/run's stable identity, so
+        # two separately loaded runs of the same distorted path can coexist.
+        # Direct users retain the historical "one series per path" behavior.
+        identity = identity if identity is not None else ("path", str(Path(result.distorted).resolve()))
+        if identity in self._suppressed_identities:
+            if not restore:
+                return
+            self._suppressed_identities.discard(identity)
         label = label or Path(result.distorted).stem
-        color = reuse_color or _PALETTE[self._next_id % len(_PALETTE)]
-        sid = self._next_id
-        self._next_id += 1
-
         times = result.frames.time
         step = float(times[-1] - times[0]) / (len(times) - 1) if len(times) > 1 else 1.0
 
+        for sid, existing in self._entries.items():
+            if existing.identity == identity:
+                existing.result = result
+                existing.label = label
+                existing.times = times
+                existing.step = step
+                for page in self._pages.values():
+                    page.set_curve(sid, existing, existing.color)
+                self._refresh_stats_table()
+                self._refresh_frame_range()
+                return
+
+        color = _PALETTE[self._next_id % len(_PALETTE)]
+        sid = self._next_id
+        self._next_id += 1
+
         entry = SeriesEntry(
-            result=result, label=label, color=color, times=times, step=step, visible=True,
+            result=result, label=label, color=color, times=times, step=step,
+            visible=True, identity=identity,
         )
         self._entries[sid] = entry
 
@@ -690,14 +703,23 @@ class GraphPanel(QWidget):
         """
         for series_id, entry in list(self._entries.items()):
             if Path(entry.result.distorted) == Path(distorted):
-                self.remove_run(series_id)
+                self.remove_run(series_id, suppress=False)
                 return True
         return False
 
-    def remove_run(self, series_id: int) -> None:
+    def remove_by_identity(self, identity: object) -> bool:
+        for series_id, entry in list(self._entries.items()):
+            if entry.identity == identity:
+                self.remove_run(series_id, suppress=False)
+                return True
+        return False
+
+    def remove_run(self, series_id: int, *, suppress: bool = True) -> None:
         entry = self._entries.pop(series_id, None)
         if entry is None:
             return
+        if suppress and entry.identity is not None:
+            self._suppressed_identities.add(entry.identity)
         for page in self._pages.values():
             page.remove_curve(series_id)
         self._refresh_stats_table()
@@ -729,7 +751,9 @@ class GraphPanel(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Failed to load run", str(e))
             return
-        self.add_run(result, label)
+        self.add_run(
+            result, label, identity=("saved-file", str(Path(path).resolve()))
+        )
 
     def _on_export_png(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export graph", "vmaf_graph.png", "PNG image (*.png)")

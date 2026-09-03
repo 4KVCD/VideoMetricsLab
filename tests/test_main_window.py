@@ -1326,6 +1326,36 @@ def test_opening_the_graph_tab_shows_completed_rows_without_pressing_anything(qa
     assert len(win.graph_panel._entries) == 1
 
 
+def test_graph_remove_button_is_not_undone_by_switching_tabs(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")
+    win._sync_graph()
+    sid = next(iter(win.graph_panel._entries))
+
+    win.graph_panel.remove_run(sid)
+    win.tabs.setCurrentIndex(TAB_VIDEOS)
+    win.tabs.setCurrentIndex(TAB_GRAPH)
+
+    assert not win.graph_panel._entries
+
+
+def test_separate_runs_of_the_same_distorted_path_can_be_compared(qapp):
+    win = MainWindow()
+    first = _fake_completed_run("same.mp4")
+    second = _fake_completed_run("same.mp4")
+    first.label = "same — model 1"
+    second.label = "same — model 2"
+    second.result.model = "version=vmaf_v0.6.1neg"
+
+    win._open_or_update_graph([first, second])
+
+    assert len(win.graph_panel._entries) == 2
+    assert {entry.label for entry in win.graph_panel._entries.values()} == {
+        "same — model 1", "same — model 2"
+    }
+
+
 def test_removing_a_video_removes_its_curve(qapp):
     win = MainWindow()
     for name in ("a.mp4", "b.mp4"):
