@@ -1,12 +1,19 @@
 """GPU / hardware-decode capability detection.
 
 We keep this deliberately conservative: pick a decode hwaccel that's likely
-to work for the source video's codec, and let vmaf_runner fall back to
+to work for a given video's codec, and let vmaf_runner fall back to
 software decode if the hardware path fails to launch.
+
+The two inputs of a comparison are decided independently. They are
+unrelated bitstreams -- a 10-bit HEVC master against an AV1 encode of it --
+so one can be GPU-decodable on this machine while the other is not, and a
+single shared answer would have to be "no" whenever either side was
+unsupported.
 """
 from __future__ import annotations
 
 import platform
+from dataclasses import dataclass
 from functools import lru_cache
 
 from vmaf_app.core import proc as proc_util
@@ -93,3 +100,44 @@ def pick_hwaccel(vendor: GpuVendor, codec_name: str) -> str | None:
     if candidate and candidate in hwaccels and codec_name in _HWACCEL_CODEC_SUPPORT.get(candidate, set()):
         return candidate
     return None
+
+
+@dataclass(frozen=True)
+class HwAccelPlan:
+    """The ffmpeg -hwaccel to use for each input of one run.
+
+    None on either side means "decode this one in software". Both being
+    None is the all-CPU plan, which is also what every fallback eventually
+    reaches.
+    """
+
+    source: str | None = None
+    distorted: str | None = None
+
+    @property
+    def uses_gpu(self) -> bool:
+        return self.source is not None or self.distorted is not None
+
+    def describe(self) -> str:
+        """For the status line, so it is visible which input actually got
+        hardware decode -- otherwise a silent per-input fallback looks
+        identical to a run that never tried."""
+        if not self.uses_gpu:
+            return "off"
+        return f"source {self.source or 'cpu'}, distorted {self.distorted or 'cpu'}"
+
+
+def plan_hwaccel(
+    vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None
+) -> HwAccelPlan:
+    """Chooses hardware decode for each input separately.
+
+    `distorted_codec` of None is the round-trip-test case: there is only one
+    input file, so there is nothing to decide for the distorted side.
+    """
+    return HwAccelPlan(
+        source=pick_hwaccel(vendor, source_codec),
+        distorted=(
+            pick_hwaccel(vendor, distorted_codec) if distorted_codec is not None else None
+        ),
+    )

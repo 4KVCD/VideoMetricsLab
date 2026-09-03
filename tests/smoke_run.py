@@ -19,7 +19,7 @@ def main():
 
     options = VmafOptions(
         model="version=vmaf_v0.6.1",
-        gpu_decode_source=True,
+        gpu_decode=True,
         gpu_vendor=GpuVendor.AUTO,
         crop_mode=CropMode.AUTO,
     )

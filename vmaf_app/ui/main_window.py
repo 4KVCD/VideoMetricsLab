@@ -257,7 +257,7 @@ class MainWindow(QMainWindow):
         """The options a newly added video starts from. Only a starting
         point: each row's own settings are edited in the Options panel."""
         return VmafOptions(
-            gpu_decode_source=self._settings.default_gpu_decode,
+            gpu_decode=self._settings.default_gpu_decode,
             extra_features=self._settings.default_extra_features(),
             compute_xpsnr=self._settings.default_compute_xpsnr,
         )
@@ -338,7 +338,7 @@ class MainWindow(QMainWindow):
         )
         hint.setStyleSheet("color: #666; font-style: italic;")
         defaults_layout.addWidget(hint)
-        self.settings_default_gpu = QCheckBox("Use GPU decoding for the source video")
+        self.settings_default_gpu = QCheckBox("Use GPU decoding")
         self.settings_default_gpu.setChecked(self._settings.default_gpu_decode)
         self.settings_default_gpu.toggled.connect(self._on_settings_edited)
         defaults_layout.addWidget(self.settings_default_gpu)
@@ -576,7 +576,12 @@ class MainWindow(QMainWindow):
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         form.addRow("VMAF model:", self.model_combo)
 
-        self.gpu_checkbox = QCheckBox("Use GPU decoding for source video")
+        self.gpu_checkbox = QCheckBox("Use GPU decoding")
+        self.gpu_checkbox.setToolTip(
+            "Hardware-decodes the source and the distorted video. Each is "
+            "decided separately, and either one falls back to the CPU on its "
+            "own if this GPU can't decode its format."
+        )
         self.gpu_checkbox.setChecked(True)
         self.gpu_vendor_combo = QComboBox()
         self.gpu_vendor_combo.addItems(["Auto-detect", "NVIDIA", "Intel", "AMD"])
@@ -1346,9 +1351,9 @@ class MainWindow(QMainWindow):
             self.model_combo.setCurrentIndex(model_index)
             self._panel_custom_model_path = opts.custom_model_path
 
-            self.gpu_checkbox.setChecked(opts.gpu_decode_source)
+            self.gpu_checkbox.setChecked(opts.gpu_decode)
             self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
-            self.gpu_vendor_combo.setEnabled(opts.gpu_decode_source)
+            self.gpu_vendor_combo.setEnabled(opts.gpu_decode)
 
             self.crop_combo.setCurrentIndex(0 if opts.crop_mode == CropMode.AUTO else 1)
 
@@ -1398,7 +1403,7 @@ class MainWindow(QMainWindow):
             scale_direction=scale_direction,
             compute_xpsnr=self.metric_header.is_checked(COL_XPSNR),
             duration_limit=duration_limit,
-            gpu_decode_source=self.gpu_checkbox.isChecked(),
+            gpu_decode=self.gpu_checkbox.isChecked(),
             gpu_vendor=vendor,
             crop_mode=crop_mode,
         )
@@ -1470,7 +1475,7 @@ class MainWindow(QMainWindow):
             return
         panel = self._read_panel_options()
         fields = {
-            "gpu": ("gpu_decode_source", "gpu_vendor"),
+            "gpu": ("gpu_decode", "gpu_vendor"),
             "model": ("model", "model_choice", "custom_model_path"),
         }.get(field_name, (field_name,))
 

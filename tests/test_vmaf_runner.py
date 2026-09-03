@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import (
     CropBox,
     ResampleTarget,
@@ -18,6 +19,7 @@ from vmaf_app.core.vmaf_runner import (
     _build_filtergraph,
     _build_resample_cmd,
     _build_resample_test_filtergraph,
+    _fallback_ladder,
     _hw_native_format,
     analysis_pix_fmt,
 )
@@ -37,7 +39,7 @@ def test_scales_reference_to_distorted_resolution_when_they_differ():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options,
-        source_crop=None, distorted_crop=None, hwaccel_used=None,
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
         log_path=Path("log.json"),
     )
 
@@ -57,7 +59,7 @@ def test_source_is_downscaled_not_distorted_upscaled_when_distorted_is_lower_res
 
     graph = _build_filtergraph(
         source_info, distorted_info, VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel_used=None, log_path=Path("log.json"),
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     main_chain, ref_chain, _ = graph.split(";")
@@ -74,7 +76,7 @@ def test_upscale_distorted_mode_scales_distorted_up_to_source_resolution():
     graph = _build_filtergraph(
         source_info, distorted_info,
         VmafOptions(model="version=vmaf_v0.6.1", scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
-        source_crop=None, distorted_crop=None, hwaccel_used=None, log_path=Path("log.json"),
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     main_chain, ref_chain, _ = graph.split(";")
@@ -88,7 +90,7 @@ def test_upscale_distorted_mode_is_a_noop_when_resolutions_already_match():
 
     graph = _build_filtergraph(
         info_a, info_b, VmafOptions(model="version=vmaf_v0.6.1", scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
-        source_crop=None, distorted_crop=None, hwaccel_used=None, log_path=Path("log.json"),
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     assert "scale=" not in graph
@@ -101,7 +103,7 @@ def test_no_scale_filter_when_resolutions_already_match():
 
     graph = _build_filtergraph(
         info_a, info_b, options, source_crop=None, distorted_crop=None,
-        hwaccel_used=None, log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     assert "scale=" not in graph
@@ -118,7 +120,7 @@ def test_crop_filters_applied_and_scale_targets_cropped_distorted_dims():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, source_crop, distorted_crop,
-        hwaccel_used=None, log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     assert "crop=1920:817:0:131" in graph  # source crop
@@ -136,7 +138,7 @@ def test_noop_crop_is_skipped():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, full_frame_crop, full_frame_crop,
-        hwaccel_used=None, log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     assert "crop=" not in graph
@@ -149,7 +151,7 @@ def test_hwdownload_inserted_when_gpu_decode_used():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used="cuda", log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
     )
 
     assert "[1:v]hwdownload,format=nv12,format=yuv420p" in graph
@@ -165,7 +167,7 @@ def test_hwdownload_uses_p010_for_10bit_source():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used="cuda", log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
     )
 
     assert "[1:v]hwdownload,format=p010le,format=yuv420p" in graph
@@ -181,7 +183,7 @@ def test_default_n_threads_resolves_to_cpu_count_not_omitted():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used=None, log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     libvmaf_part = graph.split("libvmaf=", 1)[1]
@@ -190,7 +192,7 @@ def test_default_n_threads_resolves_to_cpu_count_not_omitted():
 
 def test_duration_limit_adds_output_side_t_flag():
     cmd = _build_ffmpeg_cmd(
-        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf", hwaccel=None, duration_limit=30.0,
+        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf", hwaccel=HwAccelPlan(), duration_limit=30.0,
     )
     # -t must come after -lavfi (an output option, bounding the whole
     # filtered output) not before either -i (which would just be misplaced).
@@ -202,7 +204,7 @@ def test_duration_limit_adds_output_side_t_flag():
 
 def test_no_duration_limit_omits_t_flag_by_default():
     cmd = _build_ffmpeg_cmd(
-        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf", hwaccel=None,
+        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf", hwaccel=HwAccelPlan(),
     )
     assert "-t" not in cmd
 
@@ -224,7 +226,7 @@ def test_libvmaf_options_include_model_threads_subsample_and_features():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used=None, log_path=Path("log.json"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
     )
 
     libvmaf_part = graph.split("libvmaf=", 1)[1]
@@ -330,7 +332,7 @@ def test_xpsnr_not_requested_by_default():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used=None, log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr.txt"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr.txt"),
     )
 
     assert "xpsnr" not in graph
@@ -344,7 +346,7 @@ def test_xpsnr_stage_sits_between_decode_and_libvmaf():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used=None, log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
     )
 
     assert "[main][ref_xpsnr]xpsnr=stats_file=xpsnr_log.txt[xmain]" in graph
@@ -364,7 +366,7 @@ def test_xpsnr_splits_the_reference_so_libvmaf_still_gets_its_own_copy():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used=None, log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
     )
 
     assert "[ref]split=2[ref_xpsnr][ref_vmaf]" in graph
@@ -401,7 +403,7 @@ def test_xpsnr_requested_but_no_log_path_is_a_noop():
 
     graph = _build_filtergraph(
         source_info, distorted_info, options, None, None,
-        hwaccel_used=None, log_path=Path("log.json"), xpsnr_log_path=None,
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=None,
     )
 
     assert "xpsnr" not in graph
@@ -564,7 +566,7 @@ def test_both_branches_are_converted_to_the_same_analysis_format(
         _info("source.mov", 1920, 1080, pix_fmt=source_fmt),
         _info("distorted.mp4", 1920, 1080, pix_fmt=distorted_fmt),
         VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel_used=None,
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
         log_path=Path("log.json"),
     )
     main_chain, ref_chain, _ = graph.split(";")
@@ -583,7 +585,7 @@ def test_a_ten_bit_source_is_not_analysed_at_eight_bits():
         _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
         _info("encode.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
         VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel_used=None,
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
         log_path=Path("log.json"),
     )
     assert "format=yuv420p10le" in graph
@@ -607,7 +609,7 @@ def test_gpu_download_feeds_the_analysis_format_rather_than_replacing_it():
         _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
         _info("encode.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
         VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel_used="cuda",
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(source="cuda"),
         log_path=Path("log.json"),
     )
     _, ref_chain, _ = graph.split(";")
@@ -742,3 +744,155 @@ def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_pa
     assert result.returncode == 0
     assert "ffmpeg stderr" in result.stderr
     assert seen == [(1, 100, 0.0), (2, 100, 24.0)]
+
+
+# --------------------------------------------- per-input hardware decode
+
+def test_each_input_gets_its_own_hwaccel_options():
+    # -hwaccel is a per-input option in ffmpeg: it applies to the next -i on
+    # the command line. That is what lets the two inputs decode differently,
+    # and it is why the options must sit immediately before their own -i.
+    cmd = _build_ffmpeg_cmd(
+        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf",
+        hwaccel=HwAccelPlan(source="cuda", distorted="d3d11va"),
+    )
+    distorted_at = cmd.index(str(Path("distorted.mp4").resolve()))
+    source_at = cmd.index(str(Path("source.mp4").resolve()))
+
+    # Each input reads as: -hwaccel X -hwaccel_output_format X -i <path>
+    assert cmd[distorted_at - 5:distorted_at] == [
+        "-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11va", "-i",
+    ]
+    assert cmd[source_at - 5:source_at] == [
+        "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i",
+    ]
+
+
+def test_only_the_accelerated_input_gets_hwaccel_options():
+    cmd = _build_ffmpeg_cmd(
+        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf",
+        hwaccel=HwAccelPlan(source="cuda", distorted=None),
+    )
+    distorted_at = cmd.index(str(Path("distorted.mp4").resolve()))
+    source_at = cmd.index(str(Path("source.mp4").resolve()))
+
+    assert cmd[distorted_at - 2] != "-hwaccel_output_format",         "the software-decoded input got hwaccel options"
+    assert cmd[source_at - 5:source_at] == [
+        "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i",
+    ]
+    assert cmd.count("-hwaccel") == 1
+
+
+def test_a_gpu_decoded_distorted_input_is_downloaded_before_filtering():
+    # Hardware frames are surfaces, not pixels: crop and format can't touch
+    # them. Without the hwdownload the filtergraph fails to configure.
+    graph = _build_filtergraph(
+        _info("source.mov", 1920, 1080), _info("distorted.mp4", 1920, 1080),
+        VmafOptions(model="version=vmaf_v0.6.1"),
+        source_crop=None, distorted_crop=CropBox(x=0, y=20, w=1920, h=1040),
+        hwaccel=HwAccelPlan(distorted="cuda"), log_path=Path("log.json"),
+    )
+    main_chain = graph.split(";")[0]
+
+    assert main_chain.startswith("[0:v]hwdownload,format=nv12,crop=")
+    assert "hwdownload" not in graph.split(";")[1], "the source was not GPU-decoded"
+
+
+def test_a_ten_bit_distorted_input_downloads_through_p010():
+    graph = _build_filtergraph(
+        _info("source.mov", 1920, 1080, pix_fmt="yuv420p10le"),
+        _info("distorted.mp4", 1920, 1080, pix_fmt="yuv420p10le"),
+        VmafOptions(model="version=vmaf_v0.6.1"),
+        source_crop=None, distorted_crop=None,
+        hwaccel=HwAccelPlan(source="cuda", distorted="cuda"), log_path=Path("log.json"),
+    )
+    main_chain, ref_chain, _ = graph.split(";")
+
+    assert "hwdownload,format=p010le,format=yuv420p10le" in main_chain
+    assert "hwdownload,format=p010le,format=yuv420p10le" in ref_chain
+
+
+def test_the_distorted_input_falls_back_to_cpu_before_the_source_does():
+    # The distorted file is the arbitrary one -- whatever encoder settings
+    # are under test -- while the source is usually a known-good master, so
+    # it is the first suspect when hardware decode fails.
+    ladder = _fallback_ladder(HwAccelPlan(source="cuda", distorted="cuda"))
+
+    assert ladder == [
+        HwAccelPlan(source="cuda", distorted="cuda"),
+        HwAccelPlan(source="cuda", distorted=None),
+        HwAccelPlan(),
+    ]
+
+
+@pytest.mark.parametrize(("plan", "expected"), [
+    (HwAccelPlan(), [HwAccelPlan()]),
+    (HwAccelPlan(source="cuda"), [HwAccelPlan(source="cuda"), HwAccelPlan()]),
+    (HwAccelPlan(distorted="qsv"), [HwAccelPlan(distorted="qsv"), HwAccelPlan()]),
+])
+def test_every_ladder_ends_at_software_decode_without_repeating_a_plan(plan, expected):
+    ladder = _fallback_ladder(plan)
+    assert ladder == expected
+    assert ladder[-1] == HwAccelPlan(), "the last resort must be all-CPU"
+    assert len(set(ladder)) == len(ladder), "a plan that already failed is retried"
+
+
+def test_a_run_retries_down_the_ladder_until_one_succeeds(monkeypatch, tmp_path):
+    from vmaf_app.core import vmaf_runner
+
+    attempts = []
+    statuses = []
+
+    def fake_run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
+        plan = cmd[0]
+        attempts.append(plan)
+        # Only all-software decode works on this imaginary machine.
+        code = 0 if not plan.uses_gpu else 1
+        if code == 0:
+            (Path(cwd) / "vmaf_log.json").write_text('{"frames": []}', encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, code, "", "decoder error")
+
+    monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
+
+    vmaf_runner._execute_run(
+        lambda plan, model, log_path, xpsnr_log_path: [plan],
+        options=VmafOptions(), fps=30.0, total_frames=10,
+        hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
+        tmp_prefix="test_", on_progress=None, on_status=statuses.append,
+        cancel_event=None, process_handle=None,
+    )
+
+    assert attempts == _fallback_ladder(HwAccelPlan(source="cuda", distorted="cuda"))
+    # The status line names which input actually got hardware decode --
+    # otherwise a silent per-input fallback looks like a run that never tried.
+    assert "source cuda, distorted cuda" in statuses[0]
+    assert "source cuda, distorted cpu" in statuses[1]
+    assert "off" in statuses[2]
+
+
+def test_a_failed_attempt_does_not_leave_a_log_for_the_retry_to_parse(monkeypatch, tmp_path):
+    # ffmpeg can write a partial log before a decoder gives up. If the retry
+    # then fails to produce one, that stale file would be parsed as though it
+    # were the retry's own output -- a truncated run reported as a complete one.
+    from vmaf_app.core import vmaf_runner
+
+    seen_existing_log = []
+
+    def fake_run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
+        log = Path(cwd) / "vmaf_log.json"
+        seen_existing_log.append(log.exists())
+        log.write_text('{"frames": []}', encoding="utf-8")  # a partial log
+        return subprocess.CompletedProcess(cmd, 1, "", "decoder error")
+
+    monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
+
+    with pytest.raises(vmaf_runner.VmafRunError):
+        vmaf_runner._execute_run(
+            lambda plan, model, log_path, xpsnr_log_path: [plan],
+            options=VmafOptions(), fps=30.0, total_frames=10,
+            hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
+            tmp_prefix="test_", on_progress=None, on_status=None,
+            cancel_event=None, process_handle=None,
+        )
+
+    assert seen_existing_log == [False, False, False]

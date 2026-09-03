@@ -19,7 +19,7 @@ import numpy as np
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-from vmaf_app.core.gpu import pick_hwaccel
+from vmaf_app.core.gpu import HwAccelPlan, plan_hwaccel
 from vmaf_app.core.models import (
     CropBox,
     CropMode,
@@ -237,7 +237,7 @@ def _build_libvmaf_stage(
 def _build_filtergraph(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
-    hwaccel_used: str | None, log_path: Path, model: str | None = None,
+    hwaccel: HwAccelPlan, log_path: Path, model: str | None = None,
     xpsnr_log_path: Path | None = None,
 ) -> str:
     dist_content_w = distorted_crop.w if distorted_crop else distorted_info.width
@@ -254,6 +254,12 @@ def _build_filtergraph(
 
     # --- distorted (main, input 0) chain ---
     main_ops = []
+    if hwaccel.distorted:
+        # Same shape as the reference chain below: frames arrive as hardware
+        # surfaces and have to come back to system memory before any filter
+        # that isn't hardware-aware -- including the crop -- can touch them.
+        main_ops.append("hwdownload")
+        main_ops.append(f"format={_hw_native_format(distorted_info.pix_fmt)}")
     if distorted_crop and not distorted_crop.is_noop(distorted_info.width, distorted_info.height):
         main_ops.append(distorted_crop.as_filter())
     main_ops.append(f"format={analysis_format}")
@@ -267,7 +273,7 @@ def _build_filtergraph(
 
     # --- source / reference (input 1) chain ---
     ref_ops = []
-    if hwaccel_used:
+    if hwaccel.source:
         # hwdownload can only emit the hw surface's native format -- nv12 for
         # 8-bit cuda decode, p010le for 10-bit (common for UHD/HDR masters) --
         # it can't itself target the analysis format, so that conversion
@@ -339,18 +345,27 @@ _PROGRESS_FRAME_RE = re.compile(r"frame=(\d+)")
 _PROGRESS_FPS_RE = re.compile(r"fps=\s*([\d.]+)")
 
 
+def _hwaccel_args(hwaccel: str | None) -> list[str]:
+    """The -hwaccel options for ONE input. ffmpeg reads these as per-input
+    options, applying to the next -i on the command line, which is what
+    allows the two inputs to be decoded differently."""
+    if not hwaccel:
+        return []
+    return ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel]
+
+
 def _build_ffmpeg_cmd(
     distorted_path: Path, source_path: Path, filtergraph: str,
-    hwaccel: str | None, duration_limit: float = 0.0,
+    hwaccel: HwAccelPlan, duration_limit: float = 0.0,
 ) -> list[str]:
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y"]
     # -i paths are plain argv (not filtergraph syntax) so absolute Windows
     # paths are fine here even though they aren't inside the filtergraph --
     # but they must be made absolute first, since ffmpeg's cwd is set to a
     # temp dir below (see _build_filtergraph's log_path/model comment).
+    cmd += _hwaccel_args(hwaccel.distorted)
     cmd += ["-i", str(Path(distorted_path).resolve())]
-    if hwaccel:
-        cmd += ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel]
+    cmd += _hwaccel_args(hwaccel.source)
     cmd += ["-i", str(Path(source_path).resolve())]
     cmd += _build_ffmpeg_output_args(filtergraph, duration_limit)
     return cmd
@@ -360,8 +375,7 @@ def _build_resample_cmd(
     source_path: Path, filtergraph: str, hwaccel: str | None, duration_limit: float = 0.0,
 ) -> list[str]:
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y"]
-    if hwaccel:
-        cmd += ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel]
+    cmd += _hwaccel_args(hwaccel)
     cmd += ["-i", str(Path(source_path).resolve())]
     cmd += _build_ffmpeg_output_args(filtergraph, duration_limit)
     return cmd
@@ -575,11 +589,29 @@ def _parse_xpsnr_log(xpsnr_log_path: Path) -> dict[int, float]:
     return result
 
 
-#: (hwaccel or None for software, model resolved relative to the run's temp
-#: dir, libvmaf log path, xpsnr log path or None) -> the ffmpeg argv to run.
-#: The two run flavours differ only in this, so _execute_run takes it as a
-#: parameter rather than duplicating the whole pipeline around it.
-CommandBuilder = Callable[[str | None, str | None, Path, Path | None], list[str]]
+#: (hwaccel plan, model resolved relative to the run's temp dir, libvmaf
+#: log path, xpsnr log path or None) -> the ffmpeg argv to run. The two run
+#: flavours differ only in this, so _execute_run takes it as a parameter
+#: rather than duplicating the whole pipeline around it.
+CommandBuilder = Callable[[HwAccelPlan, str | None, Path, Path | None], list[str]]
+
+
+def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
+    """The plans to try, in order, until one of them runs.
+
+    Hardware decode can fail for reasons no capability table predicts: a
+    profile the fixed-function decoder does not implement, a driver that
+    reports the codec but rejects the specific bitstream, an exhausted
+    decode session. The distorted file is tried-then-dropped first because
+    it is the arbitrary one -- the source is usually a known-good master
+    while the distorted side is whatever encoder settings are under test.
+    """
+    ladder = [plan]
+    if plan.distorted is not None:
+        ladder.append(HwAccelPlan(source=plan.source))
+    if plan.source is not None:
+        ladder.append(HwAccelPlan())
+    return ladder
 
 
 def _execute_run(
@@ -588,7 +620,7 @@ def _execute_run(
     options: VmafOptions,
     fps: float,
     total_frames: int,
-    hwaccel: str | None,
+    hwaccel: HwAccelPlan,
     tmp_prefix: str,
     on_progress: ProgressCallback | None,
     on_status: Callable[[str], None] | None,
@@ -608,23 +640,34 @@ def _execute_run(
         xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
         resolved_model = _resolve_model_for_cwd(options.model, tmpdir)
 
-        def run_with(accel: str | None):
-            cmd = build_command(accel, resolved_model, log_path, xpsnr_log_path)
+        def run_with(plan: HwAccelPlan):
+            cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
             return _run_ffmpeg(
                 cmd, total_frames, on_progress, cancel_event,
                 cwd=tmpdir, process_handle=process_handle,
             )
 
-        if on_status:
-            on_status(f"Running ffmpeg (GPU decode: {hwaccel or 'off'})...")
-        result = run_with(hwaccel)
-
-        if result.returncode != 0 and hwaccel is not None:
-            # GPU decode path failed to launch/decode -- retry on CPU.
+        ladder = _fallback_ladder(hwaccel)
+        result = None
+        for attempt, plan in enumerate(ladder):
             if on_status:
-                on_status("GPU decode failed, retrying with software decode...")
-            result = run_with(None)
+                if attempt == 0:
+                    on_status(f"Running ffmpeg (GPU decode: {plan.describe()})...")
+                else:
+                    on_status(
+                        f"GPU decode failed, retrying (GPU decode: {plan.describe()})..."
+                    )
+            result = run_with(plan)
+            if result.returncode == 0:
+                break
+            # A stale log from the failed attempt would otherwise be parsed
+            # as if the retry had produced it -- ffmpeg can write a partial
+            # log before the decoder gives up.
+            log_path.unlink(missing_ok=True)
+            if xpsnr_log_path is not None:
+                xpsnr_log_path.unlink(missing_ok=True)
 
+        assert result is not None  # the ladder always has at least one plan
         if result.returncode != 0:
             tail = "\n".join(result.stderr.splitlines()[-25:])
             raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
@@ -659,17 +702,19 @@ def run_vmaf(
         cancel_event=cancel_event, process_handle=process_handle,
     )
 
-    hwaccel = None
-    if options.gpu_decode_source:
-        hwaccel = pick_hwaccel(options.gpu_vendor, source_info.codec_name)
+    hwaccel = HwAccelPlan()
+    if options.gpu_decode:
+        hwaccel = plan_hwaccel(
+            options.gpu_vendor, source_info.codec_name, distorted_info.codec_name
+        )
 
-    def build_command(accel, model, log_path, xpsnr_log_path):
+    def build_command(plan, model, log_path, xpsnr_log_path):
         filtergraph = _build_filtergraph(
-            source_info, distorted_info, options, source_crop, distorted_crop, accel, log_path,
+            source_info, distorted_info, options, source_crop, distorted_crop, plan, log_path,
             model=model, xpsnr_log_path=xpsnr_log_path,
         )
         return _build_ffmpeg_cmd(
-            distorted_info.path, source_info.path, filtergraph, accel, options.duration_limit,
+            distorted_info.path, source_info.path, filtergraph, plan, options.duration_limit,
         )
 
     frames = _execute_run(
@@ -727,16 +772,17 @@ def run_resample_test(
     elif options.crop_mode == CropMode.MANUAL:
         source_crop = options.manual_source_crop
 
-    hwaccel = None
-    if options.gpu_decode_source:
-        hwaccel = pick_hwaccel(options.gpu_vendor, source_info.codec_name)
+    hwaccel = HwAccelPlan()
+    if options.gpu_decode:
+        # One input file, so there is no distorted side to decide.
+        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name)
 
-    def build_command(accel, model, log_path, xpsnr_log_path):
+    def build_command(plan, model, log_path, xpsnr_log_path):
         filtergraph = _build_resample_test_filtergraph(
-            source_info, options, source_crop, accel, log_path,
+            source_info, options, source_crop, plan.source, log_path,
             model=model, xpsnr_log_path=xpsnr_log_path,
         )
-        return _build_resample_cmd(source_info.path, filtergraph, accel, options.duration_limit)
+        return _build_resample_cmd(source_info.path, filtergraph, plan.source, options.duration_limit)
 
     frames = _execute_run(
         build_command,

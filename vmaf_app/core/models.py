@@ -143,7 +143,9 @@ class VmafOptions:
 
     duration_limit: float = 0.0  # seconds; 0 = no limit, process the full video
 
-    gpu_decode_source: bool = True
+    # Applies to BOTH inputs; each is planned separately (see gpu.plan_hwaccel)
+    # and each falls back to software decode on its own.
+    gpu_decode: bool = True
     gpu_vendor: GpuVendor = GpuVendor.AUTO
 
     crop_mode: CropMode = CropMode.AUTO
