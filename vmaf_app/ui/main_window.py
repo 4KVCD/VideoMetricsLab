@@ -72,6 +72,7 @@ from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import estimate_total_frames
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.graph_panel import GraphPanel
+from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
 from vmaf_app.ui.worker import VmafJob, VmafWorker
 
@@ -152,6 +153,7 @@ class MainWindow(QMainWindow):
         self._source_info: VideoInfo | None = None
         self._rows: list[RowData] = []
         self._worker: VmafWorker | None = None
+        self._probe_worker: ProbeWorker | None = None
         # These track the active run by RowData *identity*, not by table row
         # index: removing a row mid-run shifts every later index down, which
         # used to make a finishing job write its result to the wrong row --
@@ -233,6 +235,10 @@ class MainWindow(QMainWindow):
 
         self.graph_panel = GraphPanel()
         self.tabs.addTab(self.graph_panel, "Graph")
+        # Opening the tab is enough; pressing a button to populate it was
+        # a leftover from when it was a separate window that had to be
+        # opened explicitly.
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self.tabs.addTab(self._build_settings_panel(), "Settings")
 
@@ -523,9 +529,12 @@ class MainWindow(QMainWindow):
         add_resample_btn.clicked.connect(self._on_add_resample_test)
         remove_dist_btn = QPushButton("Remove selected")
         remove_dist_btn.clicked.connect(self._on_remove_distorted)
+        self.remove_all_btn = QPushButton("Remove all")
+        self.remove_all_btn.clicked.connect(self._on_remove_all_distorted)
         dist_btn_row.addWidget(add_dist_btn)
         dist_btn_row.addWidget(add_resample_btn)
         dist_btn_row.addWidget(remove_dist_btn)
+        dist_btn_row.addWidget(self.remove_all_btn)
         dist_btn_row.addStretch(1)
         files_layout.addLayout(dist_btn_row)
 
@@ -978,28 +987,109 @@ class MainWindow(QMainWindow):
 
     def _on_add_distorted(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(self, "Select distorted video(s)")
+        if not paths:
+            return
         existing = {r.path for r in self._rows}
-        for p in paths:
-            path_obj = Path(p)
-            if path_obj in existing:
-                continue
-            row = self._add_table_row(path_obj)
-            try:
-                info = probe_video(path_obj)
-            except ProbeError as e:
-                self._set_row_info(row, None, error=str(e))
-                continue
+        new_paths = [Path(p) for p in paths if Path(p) not in existing]
+        if not new_paths:
+            return
+
+        # The rows appear immediately; probing each file and loading its
+        # cached result happen on a worker, because together they are a
+        # couple of seconds for a handful of long videos and used to freeze
+        # the window for the whole time.
+        for path in new_paths:
+            row = self._add_table_row(path)
+            self._set_row_status(row, "Reading...")
+        self._start_probe(new_paths)
+
+    def _set_row_status(self, row: int, text: str) -> None:
+        item = self.distorted_table.item(row, COL_INFO)
+        if item is not None:
+            item.setText(text)
+            item.setForeground(QColor("#999"))
+
+    def _start_probe(self, paths: list[Path]) -> None:
+        """Probes `paths` in the background, filling their rows as results
+        arrive. A probe already running is cancelled first -- the newer
+        selection is the one the user is waiting on."""
+        if self._probe_worker is not None and self._probe_worker.isRunning():
+            self._probe_worker.cancel()
+            self._probe_worker.wait(2000)
+        source = self._source_info.path if self._source_info else None
+        self._probe_worker = ProbeWorker(paths, source, self._settings.use_cache)
+        self._probe_worker.probed.connect(self._on_probed)
+        self._probe_worker.cached_found.connect(self._on_cached_found)
+        self._probe_worker.finished_all.connect(self._on_probe_finished)
+        self.status_label.setText(f"Reading {len(paths)} video(s)...")
+        self._probe_worker.start()
+
+    def _on_probed(self, path: Path, info, error: str) -> None:
+        row = self._row_index_of_path(path)
+        if row is None:
+            return  # removed while the probe was in flight
+        if info is None:
+            self._set_row_info(row, None, error=error)
+        else:
             self._set_row_info(row, info)
-            self._try_load_cached_result(row)
+
+    def _on_cached_found(self, path: Path, result, label: str) -> None:
+        row = self._row_index_of_path(path)
+        if row is None:
+            return
+        row_data = self._rows[row]
+        if row_data.completed_run is not None:
+            return
+        run = CompletedRun(result, label)
+        row_data.completed_run = run
+        row_data.video_info = result.distorted_info
+        self._set_row_info(row, result.distorted_info)
+        self._set_row_metrics(row)
+        # Keep the graph in step as results land, so opening the tab shows
+        # everything without any further action.
+        self.graph_panel.add_run(result, label)
+
+    def _on_probe_finished(self) -> None:
+        self.status_label.setText("Ready.")
+        self._on_table_selection_changed()
+
+    def _row_index_of_path(self, path: Path) -> int | None:
+        for i, row in enumerate(self._rows):
+            if row.path == path:
+                return i
+        return None
 
     def _on_remove_distorted(self) -> None:
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()}, reverse=True)
         for row in rows:
+            # The graph goes with it: a curve whose row is gone can no longer
+            # be removed from anywhere.
+            self.graph_panel.remove_by_path(self._rows[row].path)
             self.distorted_table.removeRow(row)
             del self._rows[row]
         self._on_table_selection_changed()
 
     # ------------------------------------------------------------------ persistent result cache
+    def _on_remove_all_distorted(self) -> None:
+        if not self._rows:
+            return
+        # Confirmed, because it can discard a lot of completed work from the
+        # table at once. The cached results themselves are untouched, so
+        # re-adding a video brings its scores straight back.
+        answer = QMessageBox.question(
+            self, "Remove all videos",
+            f"Remove all {len(self._rows)} video(s) from the list?\n\n"
+            "Saved results are kept -- re-adding a video shows its scores again.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        for row_data in self._rows:
+            self.graph_panel.remove_by_path(row_data.path)
+        self.distorted_table.setRowCount(0)
+        self._rows.clear()
+        self._on_table_selection_changed()
+
     def _try_load_cached_result(self, row: int) -> bool:
         """If a previous run for this exact (source, distorted) file name+size
         pair was cached to disk, loads it into the row instead of leaving it
@@ -1422,6 +1512,9 @@ class MainWindow(QMainWindow):
         )
         if self._source_info is not None:
             result_cache.store(self._source_info.path, row_data.path, result, label)
+        # Straight onto the graph: a run that has finished is a curve, and
+        # waiting for a button press to see it serves nobody.
+        self.graph_panel.add_run(result, label)
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
         row = self._row_index_of(self._job_rows[index])
@@ -1512,6 +1605,21 @@ class MainWindow(QMainWindow):
             )
             return
         self._open_or_update_graph(all_runs)
+
+    def _on_tab_changed(self, index: int) -> None:
+        if index == TAB_GRAPH:
+            self._sync_graph()
+
+    def _sync_graph(self) -> None:
+        """Makes the graph show every completed row.
+
+        add_run replaces a series with the same distorted path rather than
+        stacking a duplicate, so this is safe to call as often as it likes --
+        on every tab switch, and whenever a row gains a result.
+        """
+        for row in self._rows:
+            if row.completed_run is not None:
+                self.graph_panel.add_run(row.completed_run.result, row.completed_run.label)
 
     def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
         """Adds runs to the graph tab and brings it to the front."""

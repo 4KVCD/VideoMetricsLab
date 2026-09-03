@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -373,6 +374,72 @@ class _MetricPage(QWidget):
         self.hover_label.setText("\n".join(lines))
 
 
+    def show_frame(self, frame: int, entries_by_id: dict[int, SeriesEntry]) -> bool:
+        """Reports every visible series at one exact frame number.
+
+        Unlike hovering -- which snaps to a nearby dip so a curve is easy to
+        land on -- this reports the frame asked for, so two runs can be
+        compared at a specific moment. Returns whether any series had it.
+        """
+        visible = [
+            (entries_by_id[sid], c.values)
+            for sid, c in self._curves.items() if c.visible
+        ]
+        if not visible:
+            self._set_hover_text(f"Frame {frame}: no visible series.")
+            return False
+
+        lines = [f"Frame {frame}"]
+        found: list[tuple[str, float]] = []
+        cursor_time: float | None = None
+
+        for entry, _values in visible:
+            frames = entry.result.frames
+            idx = int(np.searchsorted(frames.frame, frame))
+            # A run can be shorter than another, or subsampled, so the frame
+            # may not exist in it -- that is reported rather than silently
+            # showing a neighbouring frame's score.
+            if idx >= len(frames) or int(frames.frame[idx]) != frame:
+                lines.append(f"[{entry.label}]  frame {frame} not in this run")
+                continue
+            fr = frames[idx]
+            val = self.metric.value(fr)
+            if val is None:
+                lines.append(f"[{entry.label}]  no {self.metric.label} for this frame")
+                continue
+            lines.append(
+                f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
+                f"{self.metric.label}={self.metric.value_format.format(val)}"
+            )
+            found.append((entry.label, val))
+            if cursor_time is None:
+                cursor_time = float(fr.time)
+
+        if len(found) == 2:
+            (label_a, val_a), (label_b, val_b) = found
+            lines.append(f"Δ ({label_a} − {label_b}) = {val_a - val_b:+.2f}")
+
+        if cursor_time is not None:
+            self.chart.set_cursor_time(cursor_time)
+        self._set_hover_text("\n".join(lines))
+        return bool(found)
+
+    def frame_range(self, entries_by_id: dict[int, SeriesEntry]) -> tuple[int, int]:
+        """The frame numbers spanned by the visible series, for bounding the
+        jump-to-frame control."""
+        lo, hi = None, None
+        for sid, curve in self._curves.items():
+            if not curve.visible:
+                continue
+            frames = entries_by_id[sid].result.frames
+            if len(frames) == 0:
+                continue
+            first, last = int(frames.frame[0]), int(frames.frame[-1])
+            lo = first if lo is None else min(lo, first)
+            hi = last if hi is None else max(hi, last)
+        return (lo or 0, hi if hi is not None else 0)
+
+
 class GraphPanel(QWidget):
     """The comparison graph, as a page of the main window's tab bar.
 
@@ -453,6 +520,7 @@ class GraphPanel(QWidget):
             for sid, entry in self._entries.items():
                 page.set_curve(sid, entry, entry.color)
         self._refresh_stats_table()
+        self._refresh_frame_range()
 
     # ------------------------------------------------------------------ UI setup
     def _build_action_bar(self) -> QWidget:
@@ -471,8 +539,38 @@ class GraphPanel(QWidget):
         export_csv_btn.clicked.connect(self._on_export_csv)
         layout.addWidget(export_csv_btn)
 
+        layout.addSpacing(16)
+        layout.addWidget(QLabel("Go to frame:"))
+        self.frame_spin = QSpinBox()
+        self.frame_spin.setRange(0, 0)
+        self.frame_spin.setKeyboardTracking(False)  # jump on commit, not per digit typed
+        self.frame_spin.setToolTip(
+            "Reports every visible series at this exact frame, so two encodes "
+            "can be compared at one moment."
+        )
+        self.frame_spin.valueChanged.connect(self._on_frame_requested)
+        layout.addWidget(self.frame_spin)
+        go_btn = QPushButton("Go")
+        go_btn.clicked.connect(lambda: self._on_frame_requested(self.frame_spin.value()))
+        layout.addWidget(go_btn)
+
         layout.addStretch(1)
         return bar
+
+    def _on_frame_requested(self, frame: int) -> None:
+        page = self._pages[self._current_metric().key]
+        page.show_frame(int(frame), self._entries)
+
+    def _refresh_frame_range(self) -> None:
+        """Keeps the jump-to-frame control bounded by what is actually
+        plotted, so it can't ask for a frame no series has."""
+        page = self._pages.get(self._current_metric().key)
+        if page is None:
+            return
+        lo, hi = page.frame_range(self._entries)
+        blocked = self.frame_spin.blockSignals(True)
+        self.frame_spin.setRange(lo, max(lo, hi))
+        self.frame_spin.blockSignals(blocked)
 
     def _cap_panel_heights(self) -> None:
         """Holds the table to _VISIBLE_SERIES_ROWS rows, scrolling beyond
@@ -566,6 +664,20 @@ class GraphPanel(QWidget):
             page.set_curve(sid, entry, color)
 
         self._refresh_stats_table()
+        self._refresh_frame_range()
+
+    def remove_by_path(self, distorted: Path) -> bool:
+        """Drops the series for a distorted file, if it has one.
+
+        Used when its row is removed from the videos list: leaving the curve
+        behind would show a comparison the user has just discarded, with no
+        row left to remove it from.
+        """
+        for series_id, entry in list(self._entries.items()):
+            if Path(entry.result.distorted) == Path(distorted):
+                self.remove_run(series_id)
+                return True
+        return False
 
     def remove_run(self, series_id: int) -> None:
         entry = self._entries.pop(series_id, None)
@@ -574,12 +686,14 @@ class GraphPanel(QWidget):
         for page in self._pages.values():
             page.remove_curve(series_id)
         self._refresh_stats_table()
+        self._refresh_frame_range()
 
     def set_series_visible(self, series_id: int, visible: bool) -> None:
         """Shows/hides one series' curve on every metric tab, keeping its row
         in the table so it can be switched back on."""
         self._set_series_visible(series_id, visible)
         self._refresh_stats_table()
+        self._refresh_frame_range()
 
     # ------------------------------------------------------------------ interaction
     def _set_series_visible(self, series_id: int, visible: bool) -> None:

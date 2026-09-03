@@ -638,3 +638,83 @@ def test_the_hover_readout_is_measured_in_the_font_it_renders_in(qapp):
     fm = QFontMetrics(page.hover_label.font())
     widest = max(fm.horizontalAdvance(line) for line in page.hover_label.text().splitlines())
     assert widest <= page.hover_label.maximumWidth(), "the placeholder is clipped"
+
+
+# ------------------------------------------------------------------ jump to frame
+
+def test_going_to_a_frame_reports_every_visible_series_at_that_exact_frame(qapp):
+    # Unlike hovering, which snaps to a nearby dip so a curve is easy to
+    # land on, this must report the frame asked for -- that is the point of
+    # comparing two encodes at one moment.
+    win = GraphPanel()
+    win.add_run(_values_result("a.mp4", [90.0, 91.0, 20.0, 93.0]), "a")
+    win.add_run(_values_result("b.mp4", [80.0, 81.0, 82.0, 83.0]), "b")
+
+    page = win._pages["vmaf"]
+    assert page.show_frame(1, win._entries) is True
+
+    text = page.hover_label.text()
+    assert text.startswith("Frame 1")
+    assert "VMAF=91.00" in text and "VMAF=81.00" in text
+    assert "VMAF=20.00" not in text, "must not snap to the nearby dip"
+
+
+def test_going_to_a_frame_shows_the_difference_for_exactly_two_series(qapp):
+    win = GraphPanel()
+    win.add_run(_values_result("a.mp4", [90.0, 90.0]), "a")
+    win.add_run(_values_result("b.mp4", [80.0, 80.0]), "b")
+
+    win._pages["vmaf"].show_frame(0, win._entries)
+    assert "Δ" in win._pages["vmaf"].hover_label.text()
+
+
+def test_a_frame_missing_from_one_run_is_reported_not_faked(qapp):
+    # A shorter or subsampled run simply may not have that frame; showing a
+    # neighbour's score under the requested number would be a lie.
+    win = GraphPanel()
+    win.add_run(_values_result("long.mp4", [90.0] * 10), "long")
+    win.add_run(_values_result("short.mp4", [80.0] * 3), "short")
+
+    page = win._pages["vmaf"]
+    assert page.show_frame(7, win._entries) is True  # the long one has it
+    text = page.hover_label.text()
+    assert "not in this run" in text
+    assert "VMAF=90.00" in text
+
+
+def test_the_frame_control_is_bounded_by_what_is_plotted(qapp):
+    win = GraphPanel()
+    assert win.frame_spin.maximum() == 0, "nothing plotted yet"
+
+    win.add_run(_values_result("a.mp4", [90.0] * 25), "a")
+    assert win.frame_spin.maximum() == 24
+    assert win.frame_spin.minimum() == 0
+
+    sid = next(iter(win._entries))
+    win.remove_run(sid)
+    assert win.frame_spin.maximum() == 0, "range follows removal"
+
+
+def test_going_to_a_frame_with_nothing_visible_says_so(qapp):
+    win = GraphPanel()
+    win.add_run(_values_result("a.mp4", [90.0, 91.0]), "a")
+    sid = next(iter(win._entries))
+    win.set_series_visible(sid, False)
+
+    page = win._pages["vmaf"]
+    assert page.show_frame(0, win._entries) is False
+    assert "no visible series" in page.hover_label.text()
+
+
+# ------------------------------------------------------------------ removal
+
+def test_removing_a_series_by_its_distorted_path(qapp):
+    win = GraphPanel()
+    win.add_run(_values_result("a.mp4", [90.0]), "a")
+    win.add_run(_values_result("b.mp4", [80.0]), "b")
+
+    assert win.remove_by_path(Path("a.mp4")) is True
+    assert len(win._entries) == 1
+    assert Path(next(iter(win._entries.values())).result.distorted) == Path("b.mp4")
+
+    assert win.remove_by_path(Path("never-added.mp4")) is False

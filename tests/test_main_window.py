@@ -1060,3 +1060,60 @@ def test_the_settings_tab_reports_the_tools_it_found(qapp):
     win = MainWindow()
     assert win.settings_ffmpeg_status.text(), "the ffmpeg status should say something"
     assert "saved result" in win.settings_cache_summary.text()
+
+
+# ------------------------------------------------------------------ graph stays in step
+
+def test_opening_the_graph_tab_shows_completed_rows_without_pressing_anything(qapp):
+    # The graph used to stay empty until "Show graph" was pressed -- a
+    # leftover from when it was a window that had to be opened.
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")
+
+    assert len(win.graph_panel._entries) == 0
+    win.tabs.setCurrentIndex(TAB_GRAPH)
+    assert len(win.graph_panel._entries) == 1
+
+
+def test_removing_a_video_removes_its_curve(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        row = win._add_table_row(Path(name))
+        win._rows[row].completed_run = _fake_completed_run(name)
+    win.tabs.setCurrentIndex(TAB_GRAPH)
+    assert len(win.graph_panel._entries) == 2
+
+    win.distorted_table.selectRow(0)
+    win._on_remove_distorted()
+    assert len(win._rows) == 1
+    assert len(win.graph_panel._entries) == 1, "the removed video's curve must go too"
+
+
+def test_remove_all_clears_the_table_and_the_graph(qapp, monkeypatch):
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "question",
+        lambda *a, **k: main_window_module.QMessageBox.Yes,
+    )
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        row = win._add_table_row(Path(name))
+        win._rows[row].completed_run = _fake_completed_run(name)
+    win.tabs.setCurrentIndex(TAB_GRAPH)
+    assert len(win.graph_panel._entries) == 3
+
+    win._on_remove_all_distorted()
+    assert win._rows == []
+    assert win.distorted_table.rowCount() == 0
+    assert len(win.graph_panel._entries) == 0
+
+
+def test_remove_all_can_be_declined(qapp, monkeypatch):
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "question",
+        lambda *a, **k: main_window_module.QMessageBox.No,
+    )
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._on_remove_all_distorted()
+    assert len(win._rows) == 1

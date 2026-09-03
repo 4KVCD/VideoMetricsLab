@@ -1,0 +1,61 @@
+"""Probes newly added videos, and loads their cached results, off the UI
+thread.
+
+Both steps are slow enough to be felt: ffprobe is a subprocess launch
+(~70ms for a small file, more for a large one on a slow disk), and a cached
+result for a feature-length run is a ~9MB JSON parse (~140ms). Doing eight
+videos inline froze the window for a couple of seconds with no feedback.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+from PySide6.QtCore import QThread, Signal
+
+from vmaf_app.core import result_cache
+from vmaf_app.core.ffprobe import ProbeError, probe_video
+from vmaf_app.core.models import VideoInfo, VmafRunResult
+
+
+class ProbeWorker(QThread):
+    """Emits one signal per video, in the order they were given."""
+
+    # (path, VideoInfo or None, error message or "")
+    probed = Signal(object, object, str)
+    # (path, VmafRunResult, label) -- only for videos with a cached result
+    cached_found = Signal(object, object, str)
+    finished_all = Signal()
+
+    def __init__(self, paths: list[Path], source: Path | None, use_cache: bool, parent=None):
+        super().__init__(parent)
+        self._paths = list(paths)
+        self._source = source
+        self._use_cache = use_cache
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        for path in self._paths:
+            if self._cancelled:
+                break
+            try:
+                info: VideoInfo | None = probe_video(path)
+                error = ""
+            except ProbeError as e:
+                info, error = None, str(e)
+            self.probed.emit(path, info, error)
+
+            if self._cancelled or not self._use_cache or self._source is None:
+                continue
+            # A miss is the normal case and must not be reported as a
+            # failure; the row simply stays unscored until it is run.
+            cached = result_cache.load_cached(self._source, path)
+            if cached is not None:
+                result, label = cached
+                self.cached_found.emit(path, result, label)
+        self.finished_all.emit()
+
+
+__all__ = ["ProbeWorker", "VmafRunResult"]
