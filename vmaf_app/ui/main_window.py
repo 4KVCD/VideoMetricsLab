@@ -126,6 +126,17 @@ class CompletedRun:
 @dataclass
 class RowData:
     path: Path
+    # The file actually decoded, when `path` is a synthetic stand-in.
+    #
+    # A "Test both directions" companion row and a resolution test both carry
+    # a well-formed but NON-EXISTENT path, so they read as separate rows and
+    # separate graph series. That path is useless for cache identity: it has
+    # no size and no modification time, so replacing the real video leaves
+    # the key unchanged and a stale score loads for the new content. Cache
+    # lookups therefore key on this instead -- the row still keeps its own
+    # options, and scale_direction/resample_test already tell the two
+    # variants of one file apart.
+    media_path: Path | None = None
     video_info: VideoInfo | None = None
     completed_run: CompletedRun | None = None
     options: VmafOptions = field(default_factory=VmafOptions)
@@ -136,6 +147,12 @@ class RowData:
     # the panel's default happened to be when the row was added, and a
     # cached/loaded result's own recorded direction is more trustworthy.
     scale_direction_pinned: bool = False
+
+    @property
+    def identity_path(self) -> Path:
+        """The path cache identity is taken from -- the real file when this
+        row's own path is a synthetic stand-in."""
+        return self.media_path if self.media_path is not None else self.path
 
 
 class MainWindow(QMainWindow):
@@ -1123,6 +1140,11 @@ class MainWindow(QMainWindow):
             return
 
         row = self._add_table_row(synthetic_path)
+        # A round-trip test decodes only the source; the "distorted" side is
+        # synthesised in the filtergraph. The source is therefore the file
+        # whose identity the cache must follow, and the target resolution is
+        # already part of the options.
+        self._rows[row].media_path = self._source_info.path
         self._rows[row].options.resample_test = target
         self._rows[row].video_info = self._source_info
         self._set_resample_row_info(row, target)
@@ -1196,6 +1218,9 @@ class MainWindow(QMainWindow):
         worker = ProbeWorker(
             paths, source, self._settings.use_cache,
             {rd.path: clone_options(rd.options) for rd in self._rows if rd.path in paths},
+            cache_paths={
+                rd.path: rd.identity_path for rd in self._rows if rd.path in paths
+            },
             probe_media=probe_again,
         )
         self._probe_worker = worker
@@ -1227,7 +1252,8 @@ class MainWindow(QMainWindow):
         if row is None:
             return
         current_key = result_cache.cache_key(
-            self._source_info.path, path, self._rows[row].options
+            self._source_info.path, self._rows[row].identity_path,
+            self._rows[row].options,
         )
         if key == current_key:
             self._on_cached_found(path, result, label)
@@ -1322,7 +1348,7 @@ class MainWindow(QMainWindow):
         if row_data.completed_run is not None:
             return False
         cached = result_cache.load_cached(
-            self._source_info.path, row_data.path, row_data.options
+            self._source_info.path, row_data.identity_path, row_data.options
         )
         if cached is None:
             return False
@@ -1371,7 +1397,7 @@ class MainWindow(QMainWindow):
                     f"clear cached result for {row_data.path.name}",
                     partial(
                         result_cache.clear,
-                        self._source_info.path, row_data.path,
+                        self._source_info.path, row_data.identity_path,
                         clone_options(row_data.options), cache_directory,
                     ),
                 )
@@ -1425,6 +1451,10 @@ class MainWindow(QMainWindow):
             new_row_data.options = clone_options(row_data.options)
             new_row_data.options.scale_direction = opposite
             new_row_data.scale_direction_pinned = True
+            # The companion decodes the SAME file as the row it came from;
+            # only the scale direction differs, and that is already part of
+            # the cache identity through the options.
+            new_row_data.media_path = row_data.identity_path
             new_row_data.video_info = info
             self._set_row_info(new_row, info)
             self._try_load_cached_result(new_row)
@@ -1859,7 +1889,10 @@ class MainWindow(QMainWindow):
             f"cache {label}",
             partial(
                 result_cache.store,
-                result.source, result.distorted, result, label, cache_options,
+                # The key uses the row's REAL file, not result.distorted --
+                # which for a synthetic row is a path that does not exist and
+                # so carries no size or mtime to notice a replacement by.
+                result.source, row_data.identity_path, result, label, cache_options,
                 result_cache.cache_dir(),
             ),
         )

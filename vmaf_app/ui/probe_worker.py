@@ -29,13 +29,18 @@ class ProbeWorker(QThread):
     finished_all = Signal()
 
     def __init__(self, paths: list[Path], source: Path | None, use_cache: bool,
-                 cache_options: dict[Path, VmafOptions], probe_media: bool = True,
-                 parent=None):
+                 cache_options: dict[Path, VmafOptions],
+                 cache_paths: dict[Path, Path] | None = None,
+                 probe_media: bool = True, parent=None):
         super().__init__(parent)
         self._paths = list(paths)
         self._source = source
         self._use_cache = use_cache
         self._cache_options = cache_options
+        # Row path -> the real file its cache identity comes from. They
+        # differ only for synthetic rows (a "test both" companion, a
+        # resolution test), whose own path does not exist on disk.
+        self._cache_paths = cache_paths or {}
         # False when only the source changed: the distorted files are the
         # same, so only their cached results need re-checking.
         self._probe_media = probe_media
@@ -65,11 +70,12 @@ class ProbeWorker(QThread):
                 # A miss is the normal case and must not be reported as a
                 # failure; the row simply stays unscored until it is run.
                 options = self._cache_options[path]
+                identity = self._cache_paths.get(path, path)
                 # Capture identity before parsing the file. If either video
                 # is replaced during a long read, the UI will reject this
                 # token rather than accepting old scores under the new file.
-                key = result_cache.cache_key(self._source, path, options)
-                cached = result_cache.load_cached(self._source, path, options)
+                key = result_cache.cache_key(self._source, identity, options)
+                cached = result_cache.load_cached(self._source, identity, options)
                 if cached is not None:
                     result, label = cached
                     self.cached_found.emit(path, result, label, key)

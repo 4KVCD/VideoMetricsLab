@@ -1652,3 +1652,113 @@ def test_a_queued_recompute_deletes_from_the_folder_it_was_asked_about(qapp, tmp
 
     assert result_cache.load_cached(source, distorted, options, folder_a) is None
     assert result_cache.load_cached(source, distorted, options, folder_b) is not None
+
+
+# ------------------------- cache identity of synthetic ("test both") rows
+
+def _real_pair(tmp_path, distorted_bytes=b"d" * 500):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "movie.mp4"
+    distorted.write_bytes(distorted_bytes)
+    return source, distorted
+
+
+def _companion_row(win, tmp_path):
+    """A 'Test both scaling directions' companion row for the one real file."""
+    source, distorted = _real_pair(tmp_path)
+    win._source_info = _fake_video_info_res(str(source), 3840, 2160)
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    win._rows[row].video_info = _fake_video_info_res(str(distorted), 1920, 1080)
+    win.distorted_table.selectRow(row)
+    win._add_opposite_scale_direction_rows([row])
+    assert len(win._rows) == 2, "the companion row was not created"
+    return source, distorted, win._rows[1]
+
+
+def test_a_companion_rows_identity_follows_the_file_it_actually_decodes(qapp, tmp_path):
+    # The companion carries a synthetic path that does not exist, so
+    # _file_identity records size and mtime as -1 for it: nothing about the
+    # real video reaches the key.
+    from vmaf_app.core import result_cache
+
+    win = MainWindow()
+    source, distorted, companion = _companion_row(win, tmp_path)
+
+    assert companion.path != distorted, "the companion should have its own row identity"
+    assert companion.identity_path == distorted
+
+    before = result_cache.cache_key(source, companion.identity_path, companion.options)
+    distorted.write_bytes(b"REPLACED" * 200)  # different content, different size
+    after = result_cache.cache_key(source, companion.identity_path, companion.options)
+
+    assert before != after, "replacing the real video left the companion's key unchanged"
+
+
+def test_the_two_scale_directions_still_have_separate_keys(qapp, tmp_path):
+    from vmaf_app.core import result_cache
+
+    win = MainWindow()
+    source, _distorted, companion = _companion_row(win, tmp_path)
+    original = win._rows[0]
+
+    assert original.identity_path == companion.identity_path, "same physical file"
+    assert original.options.scale_direction != companion.options.scale_direction
+    assert result_cache.cache_key(source, original.identity_path, original.options) != \
+        result_cache.cache_key(source, companion.identity_path, companion.options)
+
+
+def test_the_companion_keeps_its_own_graph_identity(qapp, tmp_path):
+    # Sharing a cache key would be wrong; sharing a row/series identity would
+    # make the two directions overwrite each other on the plot.
+    win = MainWindow()
+    _source, distorted, companion = _companion_row(win, tmp_path)
+
+    assert companion.path != win._rows[0].path
+    assert "upscale-distorted-to-source" in companion.path.name
+    assert companion.path != distorted
+
+
+def test_a_resolution_test_row_follows_the_source_file(qapp, tmp_path, monkeypatch):
+    from vmaf_app.core import result_cache
+
+    source = tmp_path / "master.mkv"
+    source.write_bytes(b"s" * 1000)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info_res(str(source), 3840, 2160)
+    win._source_info.path = source
+    monkeypatch.setattr(
+        main_window_module.QInputDialog, "getItem", lambda *a, **k: ("1080p", True)
+    )
+    win._on_add_resample_test()
+    assert len(win._rows) == 1
+    row_data = win._rows[0]
+
+    assert row_data.identity_path == source
+    before = result_cache.cache_key(source, row_data.identity_path, row_data.options)
+    source.write_bytes(b"REPLACED" * 400)
+    after = result_cache.cache_key(source, row_data.identity_path, row_data.options)
+
+    assert before != after, "replacing the source left the resolution test's key unchanged"
+
+
+def test_a_stale_companion_result_is_not_loaded_after_the_file_changes(qapp, tmp_path):
+    from vmaf_app.core import result_cache
+
+    win = MainWindow()
+    source, distorted, companion = _companion_row(win, tmp_path)
+
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = companion.path
+    result_cache.store(
+        source, companion.identity_path, result, "movie", companion.options
+    )
+    assert win._try_load_cached_result(1), "the freshly stored result should load"
+
+    win._rows[1].completed_run = None
+    distorted.write_bytes(b"REPLACED" * 200)
+
+    assert not win._try_load_cached_result(1), "a stale score loaded for replaced content"
