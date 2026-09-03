@@ -22,6 +22,7 @@ from vmaf_app.core.vmaf_runner import (
     _fallback_ladder,
     _hw_native_format,
     analysis_pix_fmt,
+    estimate_total_frames,
 )
 
 
@@ -349,7 +350,8 @@ def test_xpsnr_stage_sits_between_decode_and_libvmaf():
         hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
     )
 
-    assert "[main][ref_xpsnr]xpsnr=stats_file=xpsnr_log.txt[xmain]" in graph
+    assert "[main][ref_xpsnr]xpsnr=stats_file=xpsnr_log.txt:" in graph
+    assert "[xmain]" in graph
     assert "[xmain][ref_vmaf]libvmaf=" in graph  # libvmaf consumes xpsnr's passthrough output, not [main] directly
 
 
@@ -910,3 +912,78 @@ def test_a_failed_attempt_does_not_leave_a_log_for_the_retry_to_parse(monkeypatc
         )
 
     assert seen_existing_log == [False, False, False, False]
+
+
+# ------------------------------------------- frame-count mismatch (framesync)
+
+def _fs_info(name, *, nb_frames, fps=30.0):
+    return VideoInfo(
+        path=Path(name), width=320, height=180, fps=fps,
+        duration=nb_frames / fps, nb_frames=nb_frames, codec_name="ffv1",
+        pix_fmt="yuv420p",
+    )
+
+
+@pytest.mark.parametrize("compute_xpsnr", [False, True])
+def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
+    """libvmaf and xpsnr are both framesync filters, and framesync's defaults
+    extend the last frame of the secondary input past its EOF. A distorted
+    file two frames longer than its source -- routine encoder padding, well
+    inside the duration tolerance -- therefore scored two extra frames
+    against a frozen copy of the source's final frame.
+
+    Measured on a 30-vs-32-frame fixture: 32 scores, the last two 48.31 and
+    31.27, dragging the mean from 99.64 to 95.84.
+    """
+    graph = _build_filtergraph(
+        _info("source.mkv", 320, 180), _info("distorted.mkv", 320, 180),
+        VmafOptions(model="version=vmaf_v0.6.1", compute_xpsnr=compute_xpsnr),
+        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
+        log_path=Path("log.json"),
+        xpsnr_log_path=Path("xpsnr.txt") if compute_xpsnr else None,
+    )
+
+    libvmaf_stage = graph.split("libvmaf=")[1]
+    assert "shortest=1" in libvmaf_stage
+    assert "repeatlast=0" in libvmaf_stage
+    if compute_xpsnr:
+        # xpsnr sits before libvmaf and does its own framesync, so it needs
+        # the same treatment or its stats file gains the phantom frames even
+        # when the VMAF log does not.
+        xpsnr_stage = graph.split("xpsnr=")[1].split("[xmain]")[0]
+        assert "shortest=1" in xpsnr_stage
+        assert "repeatlast=0" in xpsnr_stage
+
+
+def test_a_resample_test_needs_no_framesync_guard_but_still_carries_it():
+    # A round-trip test splits ONE decoded input, so both branches are the
+    # same length by construction. The options are harmless there and keeping
+    # them in one place is what stops the two builders drifting apart.
+    graph = _build_resample_test_filtergraph(
+        _info("source.mkv", 3840, 2160),
+        VmafOptions(model="version=vmaf_v0.6.1",
+                    resample_test=ResampleTarget(width=1920, label="1080p")),
+        source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
+    )
+    assert "shortest=1" in graph and "repeatlast=0" in graph
+
+
+def test_progress_is_sized_to_the_shorter_of_the_two_inputs():
+    # The run now ends at the shorter input, so sizing progress to the
+    # distorted file's own length would leave the bar stuck short of 100%.
+    options = VmafOptions()
+    source = _fs_info("source.mkv", nb_frames=30)
+    distorted = _fs_info("distorted.mkv", nb_frames=32)
+
+    assert estimate_total_frames(distorted, options, source) == 30
+    assert estimate_total_frames(source, options, distorted) == 30
+    # One input only (a round-trip test) is unaffected.
+    assert estimate_total_frames(distorted, options) == 32
+
+
+def test_a_duration_limit_still_bounds_the_shorter_input():
+    options = VmafOptions(duration_limit=0.5)  # 15 frames at 30fps
+    source = _fs_info("source.mkv", nb_frames=30)
+    distorted = _fs_info("distorted.mkv", nb_frames=32)
+
+    assert estimate_total_frames(distorted, options, source) == 15

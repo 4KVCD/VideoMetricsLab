@@ -203,7 +203,20 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
         opts.append(f"n_subsample={options.n_subsample}")
     if options.extra_features:
         opts.append("feature=" + "|".join(options.extra_features))
+    opts += _FRAMESYNC_OPTS
     return opts
+
+
+#: Both libvmaf and xpsnr are framesync filters, and framesync's defaults are
+#: wrong for measurement: repeatlast=true extends the last frame of the
+#: secondary input past its EOF, and eof_action=repeat keeps the comparison
+#: going. A distorted file two frames longer than the source -- routine
+#: encoder padding, and well inside the duration tolerance -- therefore got
+#: two extra "scores" comparing real distorted frames against a frozen copy
+#: of the source's final frame. Those frames score terribly (48 and 31 on a
+#: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
+#: the run silently reports a worse encode than was delivered.
+_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0"]
 
 
 def _build_libvmaf_stage(
@@ -227,7 +240,10 @@ def _build_libvmaf_stage(
         # encode actually is. It does NOT error out, so the scores just come
         # back quietly, plausibly wrong.
         chains.append("[ref]split=2[ref_xpsnr][ref_vmaf]")
-        chains.append(f"[main][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}[xmain]")
+        chains.append(
+            f"[main][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}:"
+            + ":".join(_FRAMESYNC_OPTS) + "[xmain]"
+        )
         main_label = "xmain"
         ref_label = "ref_vmaf"
     chains.append(f"[{main_label}][{ref_label}]libvmaf=" + ":".join(libvmaf_opts))
@@ -485,7 +501,9 @@ def _reap(proc: subprocess.Popen, drain_thread: threading.Thread | None) -> None
                 pipe.close()
 
 
-def estimate_total_frames(reference_info: VideoInfo, options: VmafOptions) -> int:
+def estimate_total_frames(
+    reference_info: VideoInfo, options: VmafOptions, other_info: VideoInfo | None = None
+) -> int:
     """The number of frames ffmpeg will process: `reference_info` is
     whichever video drives the output timeline (the distorted video for a
     normal run, the source for a resolution round-trip test), bounded by
@@ -493,8 +511,16 @@ def estimate_total_frames(reference_info: VideoInfo, options: VmafOptions) -> in
     score, but ffmpeg's progress counter still reports every decoded/output
     frame, so applying n_subsample here made progress exceed 100% and broke
     both ETAs. Used to size progress and estimate the queued work.
+
+    `other_info` is the second input of a two-input comparison. The graph now
+    stops at whichever input ends first (see _FRAMESYNC_OPTS), so a distorted
+    file longer than its source produces fewer frames than its own length
+    suggests -- without this the progress bar would stop short of 100% and
+    the ETA would never be reached.
     """
     frame_count = reference_info.estimated_frame_count
+    if other_info is not None:
+        frame_count = min(frame_count, other_info.estimated_frame_count)
     if options.duration_limit > 0:
         frame_count = min(frame_count, round(options.duration_limit * reference_info.fps))
     return frame_count
@@ -728,7 +754,7 @@ def run_vmaf(
         build_command,
         options=options,
         fps=distorted_info.fps,
-        total_frames=estimate_total_frames(distorted_info, options),
+        total_frames=estimate_total_frames(distorted_info, options, source_info),
         hwaccel=hwaccel,
         tmp_prefix="vmaf_run_",
         on_progress=on_progress,
