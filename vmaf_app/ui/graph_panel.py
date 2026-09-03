@@ -13,6 +13,7 @@ This is a QWidget, not a window: it is one page of the main window's tabs.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +41,7 @@ from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_p
 from vmaf_app.core.stats import DEFAULT_THRESHOLDS, VmafStats, compute_stats
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
+from vmaf_app.ui.file_worker import FileWriteQueue
 
 _PALETTE = [
     "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
@@ -504,6 +506,12 @@ class GraphPanel(QWidget):
         self._entries: dict[int, SeriesEntry] = {}
         self._suppressed_identities: set[object] = set()
         self._next_id = 0
+        # Exports of a feature-length run are seconds of serialisation each;
+        # done inline they froze the window. See FileWriteQueue.
+        self._file_writes = FileWriteQueue(self)
+        self._file_writes.write_failed.connect(self._on_file_write_failed)
+        self._file_writes.became_idle.connect(self._on_file_writes_idle)
+        self._export_destination: str | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -549,6 +557,13 @@ class GraphPanel(QWidget):
 
         root.addWidget(self._build_action_bar())
 
+        # Background writes report here rather than through a dialog: they
+        # finish minutes later, and a modal stealing focus by then is worse
+        # than the thing it announces.
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #666;")
+        root.addWidget(self.status_label)
+
         self._setup_stats_table()
         self._cap_panel_heights()
 
@@ -585,7 +600,7 @@ class GraphPanel(QWidget):
         export_png_btn.clicked.connect(self._on_export_png)
         layout.addWidget(export_png_btn)
 
-        export_csv_btn = QPushButton("Export CSV...")
+        self.export_csv_btn = export_csv_btn = QPushButton("Export CSV...")
         export_csv_btn.clicked.connect(self._on_export_csv)
         layout.addWidget(export_csv_btn)
 
@@ -923,6 +938,15 @@ class GraphPanel(QWidget):
                 painter.drawText(x + _EXPORT_GAP, baseline, cell)
                 x += width
 
+    def _on_file_writes_idle(self) -> None:
+        self.export_csv_btn.setEnabled(True)
+        if self._export_destination is not None:
+            self.status_label.setText(f"Export complete: {self._export_destination}")
+            self._export_destination = None
+
+    def _on_file_write_failed(self, description: str, error: str) -> None:
+        self.status_label.setText(f"Could not {description}: {error}")
+
     def _on_export_png(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export graph", "vmaf_graph.png", "PNG image (*.png)")
         if not path:
@@ -936,15 +960,20 @@ class GraphPanel(QWidget):
         directory = QFileDialog.getExistingDirectory(self, "Choose export folder")
         if not directory:
             return
+        # A CSV of a feature-length run is bigger than its cached JSON, and
+        # this writes one per series -- easily tens of seconds of a frozen
+        # window if it ran here. Only the export button is disabled while it
+        # runs; the graph stays usable.
+        self.export_csv_btn.setEnabled(False)
         reserved: set[Path] = set()
         for entry in self._entries.values():
-            export_csv(
-                entry.result,
-                unique_output_path(Path(directory), entry.label, ".csv", reserved),
+            out_path = unique_output_path(Path(directory), entry.label, ".csv", reserved)
+            self._file_writes.submit(
+                f"export {out_path.name}", partial(export_csv, entry.result, out_path)
             )
-        QMessageBox.information(
-            self, "Export complete",
-            f"Exported {len(self._entries)} CSV file(s) to {directory}",
+        self._export_destination = directory
+        self.status_label.setText(
+            f"Exporting {len(self._entries)} CSV file(s) to {directory}..."
         )
 
     def save_run_for_later(self, result: VmafRunResult, label: str) -> None:
@@ -953,7 +982,9 @@ class GraphPanel(QWidget):
         )
         if not path:
             return
-        save_run(result, Path(path), label=label)
+        self._file_writes.submit(
+            f"save {Path(path).name}", partial(save_run, result, Path(path), label=label)
+        )
 
     # ------------------------------------------------------------------ stats table
     def _refresh_stats_table(self) -> None:

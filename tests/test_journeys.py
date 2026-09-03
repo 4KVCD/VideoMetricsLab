@@ -442,6 +442,7 @@ def test_saving_two_runs_with_the_same_label_keeps_both_files(qapp, tmp_path, mo
         lambda *a, **k: str(tmp_path),
     )
     win._on_save_selected()
+    assert win._file_writes.wait_until_idle(10.0), "the save never finished"
 
     saved = sorted(p.name for p in tmp_path.glob("*.vmafrun.json"))
     assert saved == ["movie.vmafrun.json", "movie_2.vmafrun.json"], (

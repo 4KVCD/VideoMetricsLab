@@ -961,6 +961,7 @@ def test_exporting_two_series_with_the_same_label_keeps_both_files(qapp, tmp_pat
     monkeypatch.setattr(graph_panel_module.QMessageBox, "information", lambda *a, **k: None)
 
     panel._on_export_csv()
+    assert panel._file_writes.wait_until_idle(10.0), "the export never finished"
 
     written = sorted(p.name for p in tmp_path.glob("*.csv"))
     assert written == ["movie.csv", "movie_2.csv"]

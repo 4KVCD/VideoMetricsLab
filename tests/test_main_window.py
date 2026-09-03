@@ -561,6 +561,9 @@ def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):
     result.source = source
     result.distorted = distorted
     win._on_job_finished(0, result)
+    # The cache write runs on a background thread now, so the assertion has
+    # to wait for it rather than assuming it happened inline.
+    assert win._file_writes.wait_until_idle(10.0)
 
     assert result_cache.load_cached(source, distorted, win._rows[row].options) is not None
 
@@ -587,6 +590,7 @@ def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
     result.distorted = distorted
 
     win._on_job_finished(0, result)
+    assert win._file_writes.wait_until_idle(10.0)
 
     assert win._rows[row].completed_run is None
     assert result_cache.load_cached(old_source, distorted, win._rows[row].options) is not None

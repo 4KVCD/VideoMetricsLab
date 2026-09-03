@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -70,6 +71,7 @@ from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import VmafRunError, estimate_total_frames, validate_video_pair
+from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
@@ -139,6 +141,11 @@ class MainWindow(QMainWindow):
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
         self._settings = Settings.load()
+        # Serialising a feature-length result is seconds of work; done here
+        # it froze the window at the moment a run finished. See FileWriteQueue.
+        self._file_writes = FileWriteQueue(self)
+        self._file_writes.write_failed.connect(self._on_file_write_failed)
+        self._file_writes.became_idle.connect(self._on_file_writes_idle)
         # Only when one is actually configured. Calling this unconditionally
         # wrote to persistent QSettings on every launch, and each call clears
         # the tool-lookup cache -- which re-probes ffmpeg by spawning it.
@@ -192,6 +199,8 @@ class MainWindow(QMainWindow):
             if worker.isRunning():
                 worker.cancel()
                 worker.wait(5000)
+        # Closing mid-write would lose the result that was being cached.
+        self._file_writes.wait_until_idle()
         # Remember the window size, if asked to. The graph is a tab now, so
         # there is no second window to tear down.
         if self._settings.remember_window_size:
@@ -708,7 +717,7 @@ class MainWindow(QMainWindow):
 
         load_btn = QPushButton("Load saved run...")
         load_btn.clicked.connect(self._on_load_saved_run)
-        save_btn = QPushButton("Save selected...")
+        self.save_btn = save_btn = QPushButton("Save selected...")
         save_btn.clicked.connect(self._on_save_selected)
         compare_btn = QPushButton("Compare selected")
         compare_btn.clicked.connect(self._on_compare_selected)
@@ -1697,8 +1706,15 @@ class MainWindow(QMainWindow):
             self._job_cache_options[index]
             if index < len(self._job_cache_options) else row_data.options
         )
-        result_cache.store(
-            result.source, result.distorted, result, label, cache_options
+        # Off the UI thread: this is the ~9MB JSON write that used to
+        # stall the window every time a run finished. Every argument is
+        # plain data, so nothing the worker touches is a widget.
+        self._file_writes.submit(
+            f"cache {label}",
+            partial(
+                result_cache.store,
+                result.source, result.distorted, result, label, cache_options,
+            ),
         )
         if self._source_info is None or self._source_info.path != result.source:
             self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
@@ -1801,18 +1817,35 @@ class MainWindow(QMainWindow):
                 self, "Save VMAF run", f"{runs[0].label}.vmafrun.json", "VMAF run (*.vmafrun.json)"
             )
             if path:
-                save_run(runs[0].result, Path(path), label=runs[0].label)
+                self._submit_save(runs[0].result, Path(path), runs[0].label)
             return
         directory = QFileDialog.getExistingDirectory(self, "Choose folder to save runs into")
         if not directory:
             return
         reserved: set[Path] = set()
         for run in runs:
-            save_run(
+            self._submit_save(
                 run.result,
                 unique_output_path(Path(directory), run.label, ".vmafrun.json", reserved),
-                label=run.label,
+                run.label,
             )
+
+    def _submit_save(self, result, path: Path, label: str) -> None:
+        # Only the action doing the writing is disabled, so the rest of the
+        # window stays usable while a long save runs.
+        self.save_btn.setEnabled(False)
+        self._file_writes.submit(
+            f"save {path.name}", partial(save_run, result, path, label=label)
+        )
+
+    def _on_file_writes_idle(self) -> None:
+        self.save_btn.setEnabled(True)
+
+    def _on_file_write_failed(self, description: str, error: str) -> None:
+        # Reported in the status line rather than a modal: these finish in
+        # the background, and a dialog stealing focus minutes later is worse
+        # than the failure it announces.
+        self.status_label.setText(f"Could not {description}: {error}")
 
     def _on_compare_selected(self) -> None:
         runs = self._selected_runs()
