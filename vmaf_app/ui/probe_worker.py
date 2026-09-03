@@ -64,14 +64,14 @@ class ProbeWorker(QThread):
                     continue
                 # A miss is the normal case and must not be reported as a
                 # failure; the row simply stays unscored until it is run.
-                cached = result_cache.load_cached(
-                    self._source, path, self._cache_options[path]
-                )
+                options = self._cache_options[path]
+                # Capture identity before parsing the file. If either video
+                # is replaced during a long read, the UI will reject this
+                # token rather than accepting old scores under the new file.
+                key = result_cache.cache_key(self._source, path, options)
+                cached = result_cache.load_cached(self._source, path, options)
                 if cached is not None:
                     result, label = cached
-                    key = result_cache.cache_key(
-                        self._source, path, self._cache_options[path]
-                    )
                     self.cached_found.emit(path, result, label, key)
         finally:
             self.finished_all.emit()

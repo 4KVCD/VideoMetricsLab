@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QTableWidget
 
 from vmaf_app.ui.widgets import CheckableHeaderView
@@ -35,10 +35,7 @@ def header(qapp):
 
 
 def _press(view: CheckableHeaderView, point: QPoint) -> None:
-    view.mousePressEvent(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(point), Qt.LeftButton,
-        Qt.LeftButton, Qt.NoModifier,
-    ))
+    QTest.mouseClick(view.viewport(), Qt.LeftButton, Qt.NoModifier, point)
 
 
 def _toggles(view: CheckableHeaderView) -> list[tuple[int, bool]]:

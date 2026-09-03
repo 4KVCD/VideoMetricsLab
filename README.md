@@ -64,7 +64,7 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
-348 tests, all offscreen (no window appears) and none of which touch your
+373 tests, all offscreen (no window appears) and none of which touch your
 real settings file or results cache.
 
 `tests/smoke_run.py` is a manual end-to-end check (not part of the pytest
