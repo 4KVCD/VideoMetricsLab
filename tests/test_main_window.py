@@ -519,7 +519,7 @@ def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypa
 
 def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
-    monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
 
     source = tmp_path / "source.mp4"
     source.write_bytes(b"s" * 1000)
@@ -549,7 +549,7 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
 
 def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
-    monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
 
     source = tmp_path / "source.mp4"
     source.write_bytes(b"s" * 1000)
@@ -578,7 +578,7 @@ def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
 ):
     from vmaf_app.core import result_cache
 
-    monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
     old_source = tmp_path / "old" / "old-source.mp4"
     new_source = tmp_path / "new" / "new-source.mp4"
     distorted = tmp_path / "distorted.mp4"
@@ -604,7 +604,7 @@ def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
 
 def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
-    monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
 
     source = tmp_path / "source.mp4"
     source.write_bytes(b"s" * 1000)
@@ -1542,3 +1542,113 @@ def test_remove_all_can_be_declined(qapp, monkeypatch):
     win._add_table_row(Path("a.mp4"))
     win._on_remove_all_distorted()
     assert len(win._rows) == 1
+
+
+# ------------------------------- queued cache operations pin their directory
+
+def _two_cache_dirs(tmp_path):
+    a, b = tmp_path / "cache_a", tmp_path / "cache_b"
+    a.mkdir()
+    b.mkdir()
+    return a, b
+
+
+def _block_writes(win):
+    """Holds the write queue open so a setting can change mid-flight."""
+    import threading
+    release = threading.Event()
+    win._file_writes.submit("blocker", release.wait)
+    return release
+
+
+def test_a_queued_store_lands_in_the_folder_that_was_configured(qapp, tmp_path, monkeypatch):
+    # Queued writes run later, on another thread. Resolving the cache folder
+    # inside the task reads whatever the setting says by then, so a result
+    # computed while folder A was configured was written into folder B.
+    from vmaf_app.core import result_cache
+
+    folder_a, folder_b = _two_cache_dirs(tmp_path)
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "distorted.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    win._job_rows = [win._rows[row]]
+
+    result_cache.set_cache_dir_override(folder_a)
+    release = _block_writes(win)
+
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    win._on_job_finished(0, result)
+
+    # The user changes the cache folder before the queue drains.
+    result_cache.set_cache_dir_override(folder_b)
+    release.set()
+    assert win._file_writes.wait_until_idle(10.0)
+
+    assert list(folder_a.glob("*.vmafrun.json")), "the result was written to the wrong folder"
+    assert not list(folder_b.glob("*.vmafrun.json"))
+
+
+def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, monkeypatch):
+    # The confirmation dialog names a folder. Deleting a different one than
+    # the user was shown is not something to leave to timing.
+    from vmaf_app.core import result_cache
+
+    folder_a, folder_b = _two_cache_dirs(tmp_path)
+    (folder_a / "one.vmafrun.json").write_text("{}", encoding="utf-8")
+    (folder_b / "two.vmafrun.json").write_text("{}", encoding="utf-8")
+
+    win = MainWindow()
+    result_cache.set_cache_dir_override(folder_a)
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "question",
+        lambda *a, **k: main_window_module.QMessageBox.Yes,
+    )
+    release = _block_writes(win)
+
+    win._on_clear_cache()
+    result_cache.set_cache_dir_override(folder_b)
+    release.set()
+    assert win._file_writes.wait_until_idle(10.0)
+
+    assert not list(folder_a.glob("*.vmafrun.json")), "the named folder was not cleared"
+    assert list(folder_b.glob("*.vmafrun.json")), "an unnamed folder was cleared instead"
+
+
+def test_a_queued_recompute_deletes_from_the_folder_it_was_asked_about(qapp, tmp_path):
+    from vmaf_app.core import result_cache
+
+    folder_a, folder_b = _two_cache_dirs(tmp_path)
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "distorted.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    options = win._rows[row].options
+
+    result_cache.set_cache_dir_override(folder_a)
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    result_cache.store(source, distorted, result, "d", options, folder_a)
+    result_cache.store(source, distorted, result, "d", options, folder_b)
+
+    release = _block_writes(win)
+    win._recompute_rows([row])
+    result_cache.set_cache_dir_override(folder_b)
+    release.set()
+    assert win._file_writes.wait_until_idle(10.0)
+
+    assert result_cache.load_cached(source, distorted, options, folder_a) is None
+    assert result_cache.load_cached(source, distorted, options, folder_b) is not None

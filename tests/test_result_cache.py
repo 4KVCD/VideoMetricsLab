@@ -18,7 +18,7 @@ OPTIONS = VmafOptions()
 
 @pytest.fixture(autouse=True)
 def _isolated_cache_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
 
 
 def _make_file(path: Path, size: int) -> Path:

@@ -71,16 +71,19 @@ def cache_key(source: Path, distorted: Path, options: VmafOptions) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
-def _cache_path(source: Path, distorted: Path, options: VmafOptions) -> Path:
-    return _cache_dir() / f"{cache_key(source, distorted, options)}.vmafrun.json"
+def _cache_path(
+    source: Path, distorted: Path, options: VmafOptions, directory: Path | None = None
+) -> Path:
+    base = directory if directory is not None else _cache_dir()
+    return base / f"{cache_key(source, distorted, options)}.vmafrun.json"
 
 
 def load_cached(
-    source: Path, distorted: Path, options: VmafOptions
+    source: Path, distorted: Path, options: VmafOptions, directory: Path | None = None
 ) -> tuple[VmafRunResult, str] | None:
     """Returns (result, label) if a cached run exists for this exact
     source+distorted file identity, else None."""
-    path = _cache_path(source, distorted, options)
+    path = _cache_path(source, distorted, options, directory)
     if not path.exists():
         return None
     try:
@@ -91,19 +94,35 @@ def load_cached(
 
 def store(
     source: Path, distorted: Path, result: VmafRunResult, label: str,
-    options: VmafOptions,
+    options: VmafOptions, directory: Path | None = None,
 ) -> None:
-    save_run(result, _cache_path(source, distorted, options), label=label)
+    """`directory` pins where this write lands.
+
+    Cache writes are queued and run later, on another thread. Resolving the
+    folder inside the queued task reads whatever the setting says by then,
+    so a store submitted while folder A was configured would land in folder
+    B if the user changed the setting before it ran. Callers that queue must
+    capture the directory at submit time and pass it here.
+    """
+    save_run(result, _cache_path(source, distorted, options, directory), label=label)
 
 
-def clear(source: Path, distorted: Path, options: VmafOptions) -> None:
-    _cache_path(source, distorted, options).unlink(missing_ok=True)
+def clear(
+    source: Path, distorted: Path, options: VmafOptions, directory: Path | None = None
+) -> None:
+    _cache_path(source, distorted, options, directory).unlink(missing_ok=True)
 
 
-def clear_all() -> int:
-    """Removes only this app's cached result files and returns the count."""
+def clear_all(directory: Path | None = None) -> int:
+    """Removes only this app's cached result files and returns the count.
+
+    `directory` matters more here than anywhere else: the confirmation
+    dialog names a folder, and deleting a different one than the user was
+    shown is not a thing to leave to timing.
+    """
+    base = directory if directory is not None else _cache_dir()
     removed = 0
-    for path in _cache_dir().glob("*.vmafrun.json"):
+    for path in base.glob("*.vmafrun.json"):
         try:
             path.unlink()
             removed += 1

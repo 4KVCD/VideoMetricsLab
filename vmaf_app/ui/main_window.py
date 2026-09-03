@@ -485,9 +485,16 @@ class MainWindow(QMainWindow):
         # just finished, its pending store therefore lands before clear_all
         # rather than recreating an entry after the user cleared everything.
         self._cache_clear_result = []
+        # `directory` is the folder the confirmation dialog just named.
+        # Resolving it inside the queued task instead would delete whatever
+        # folder is configured by the time it runs -- so changing the cache
+        # setting between confirming and the queue draining would wipe a
+        # folder the user was never asked about.
         self._file_writes.submit(
             "clear saved results",
-            lambda: self._cache_clear_result.append(result_cache.clear_all()),
+            lambda: self._cache_clear_result.append(
+                result_cache.clear_all(directory)
+            ),
         )
         self.settings_status.setText("Clearing saved results...")
 
@@ -1346,6 +1353,9 @@ class MainWindow(QMainWindow):
             self._recompute_rows(rows)
 
     def _recompute_rows(self, rows: list[int]) -> None:
+        # Captured now, not when each queued deletion runs -- see
+        # result_cache.store's note on why the folder cannot be resolved late.
+        cache_directory = result_cache.cache_dir()
         # A cache read already in flight must not put back the exact result
         # the user just asked to ignore.
         if self._probe_worker is not None and self._probe_worker.isRunning():
@@ -1362,7 +1372,7 @@ class MainWindow(QMainWindow):
                     partial(
                         result_cache.clear,
                         self._source_info.path, row_data.path,
-                        clone_options(row_data.options),
+                        clone_options(row_data.options), cache_directory,
                     ),
                 )
             # Refreshes the resize-mismatch note (Info column) back to the
@@ -1850,6 +1860,7 @@ class MainWindow(QMainWindow):
             partial(
                 result_cache.store,
                 result.source, result.distorted, result, label, cache_options,
+                result_cache.cache_dir(),
             ),
         )
         if self._source_info is None or self._source_info.path != result.source:
