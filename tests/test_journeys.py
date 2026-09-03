@@ -263,3 +263,102 @@ def test_curves_appear_as_each_job_finishes_not_only_at_the_end(qapp):
             f"after {done + 1} of 3 jobs the plot should show {done + 1} curve(s)"
         )
         assert_graph_matches_rows(win)
+
+
+# ------------------------------------------------------------------ found by looking
+
+def test_the_delta_uses_each_metrics_own_precision(qapp):
+    # Every metric's delta was formatted to 2dp. SSIM's entire range is 0-1,
+    # so every real SSIM difference rendered as "+0.00" -- the number was
+    # there, and useless. Only visible by reading the output.
+    from vmaf_app.ui.graph_panel import METRICS
+
+    by_key = {m.key: m for m in METRICS}
+    assert by_key["vmaf"].format_delta(1.234) == "+1.23"
+    assert by_key["psnr"].format_delta(-0.5) == "-0.50"
+    assert by_key["ssim"].format_delta(0.0004) == "+0.0004", "SSIM needs its 4dp"
+    assert by_key["ssim"].format_delta(-0.0012) == "-0.0012"
+
+
+def test_re_adding_a_video_keeps_its_colour(qapp):
+    # add_run runs again for the same video on every tab switch and as each
+    # job finishes. Taking the next palette entry each time walked four
+    # videos out of blue/orange/green/red and into brown/pink/grey -- which
+    # only showed up by looking at the plot.
+    win = MainWindow()
+    source = _info("C:/vid/source.mkv")
+    win._source_info = source
+    row = win._add_table_row(Path("C:/vid/a.mkv"))
+    win._rows[row].video_info = _info("C:/vid/a.mkv", 1920, 1080)
+    _finish_run(win, [(row, _result(Path("C:/vid/a.mkv"), source))])
+
+    first_colour = next(iter(win.graph_panel._entries.values())).color
+    for _ in range(6):
+        win.tabs.setCurrentIndex(TAB_GRAPH)
+        win.tabs.setCurrentIndex(TAB_VIDEOS)
+    assert next(iter(win.graph_panel._entries.values())).color == first_colour
+
+
+def test_four_videos_get_the_first_four_palette_colours(qapp):
+    win = MainWindow()
+    source = _info("C:/vid/source.mkv")
+    win._source_info = source
+    rows = []
+    for name in ("a", "b", "c", "d"):
+        r = win._add_table_row(Path(f"C:/vid/{name}.mkv"))
+        win._rows[r].video_info = _info(f"C:/vid/{name}.mkv", 1920, 1080)
+        rows.append(r)
+    _finish_run(win, [(r, _result(Path(f"C:/vid/{n}.mkv"), source))
+                      for r, n in zip(rows, "abcd", strict=True)])
+    win.tabs.setCurrentIndex(TAB_GRAPH)
+
+    from vmaf_app.ui.graph_panel import _PALETTE
+
+    colours = [e.color for e in win.graph_panel._entries.values()]
+    assert colours == _PALETTE[:4], f"expected the first four palette colours, got {colours}"
+
+
+def test_a_probed_row_does_not_stay_greyed_out(qapp):
+    # Rows show a grey "Reading..." while the probe runs; the real media
+    # info must come back in normal text or a loaded row looks disabled.
+    from PySide6.QtGui import QColor
+
+    from vmaf_app.ui.main_window import COL_INFO
+
+    win = MainWindow()
+    row = win._add_table_row(Path("C:/vid/a.mkv"))
+    win._set_row_status(row, "Reading...")
+    greyed = win.distorted_table.item(row, COL_INFO).foreground().color()
+
+    win._set_row_info(row, _info("C:/vid/a.mkv", 1920, 1080))
+    after = win.distorted_table.item(row, COL_INFO).foreground().color()
+    assert after != greyed or greyed == QColor(), "media info still looks disabled after probing"
+
+
+def test_the_readout_fits_every_line_it_prints(qapp):
+    # The last series' line was cut off: the stylesheet padding comes out of
+    # the fixed height, and the allowance did not cover it.
+    from PySide6.QtGui import QFontMetrics
+
+    win = MainWindow()
+    source = _info("C:/vid/source.mkv")
+    win._source_info = source
+    rows = []
+    for name in ("a", "b", "c", "d"):
+        r = win._add_table_row(Path(f"C:/vid/{name}.mkv"))
+        win._rows[r].video_info = _info(f"C:/vid/{name}.mkv", 1920, 1080)
+        rows.append(r)
+    _finish_run(win, [(r, _result(Path(f"C:/vid/{n}.mkv"), source))
+                      for r, n in zip(rows, "abcd", strict=True)])
+    win.tabs.setCurrentIndex(TAB_GRAPH)
+
+    win.graph_panel.frame_spin.setValue(100)
+    page = win.graph_panel._pages["vmaf"]
+    fm = QFontMetrics(page.hover_label.font())
+    lines = page.hover_label.text().splitlines()
+    assert len(lines) == 5, "one header line plus four series"
+    needed = len(lines) * fm.lineSpacing()
+    assert needed <= page.hover_label.height(), (
+        f"{len(lines)} lines need {needed}px but the readout is "
+        f"{page.hover_label.height()}px -- the last line is cut off"
+    )

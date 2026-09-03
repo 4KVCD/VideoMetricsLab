@@ -67,6 +67,12 @@ class MetricSpec:
     def value(self, frame: FrameScore) -> float | None:
         return getattr(frame, self.key)
 
+    def format_delta(self, delta: float) -> str:
+        """A signed difference at this metric's own precision. SSIM's whole
+        range is 0-1, so the 2dp used for VMAF/PSNR rounds every real SSIM
+        difference to "0.00"."""
+        return self.value_format.replace("{:", "{:+").format(delta)
+
 
 METRICS: list[MetricSpec] = [
     MetricSpec("vmaf", "VMAF", "VMAF", "{:.2f}", fixed_y_max=100.0, thresholds=DEFAULT_THRESHOLDS),
@@ -229,7 +235,10 @@ class _MetricPage(QWidget):
         if not labels:
             lines = _HOVER_PLACEHOLDER.splitlines()
 
-        padding = 16  # the 6px stylesheet padding either side, plus a margin
+        # 6px of stylesheet padding top AND bottom come out of the fixed
+        # height, so the allowance has to cover both plus a little slack --
+        # too small and the last series' line is cut off.
+        padding = 28
         width = max(fm.horizontalAdvance(line) for line in lines) + padding
         height = len(lines) * fm.lineSpacing() + padding
 
@@ -368,7 +377,7 @@ class _MetricPage(QWidget):
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
-            lines.append(f"Δ ({label_a} − {label_b}) = {val_a - val_b:+.2f}")
+            lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(val_a - val_b)}")
 
         self.chart.set_cursor_time(float(picks[0][0].times[picks[0][1]]))
         self.hover_label.setText("\n".join(lines))
@@ -417,7 +426,7 @@ class _MetricPage(QWidget):
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
-            lines.append(f"Δ ({label_a} − {label_b}) = {val_a - val_b:+.2f}")
+            lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(val_a - val_b)}")
 
         if cursor_time is not None:
             self.chart.set_cursor_time(cursor_time)
@@ -643,12 +652,18 @@ class GraphPanel(QWidget):
         # Re-adding the same distorted file (e.g. re-selecting rows that are
         # already shown, or the window being reopened and repopulated)
         # replaces its existing series instead of stacking a duplicate.
+        # Replacing a series keeps its colour: add_run is called again for
+        # the same video on every tab switch and as each job finishes, and
+        # taking the next palette entry each time walked four videos from
+        # blue/orange/green/red into brown/pink/grey.
+        reuse_color: str | None = None
         for existing_id, entry in list(self._entries.items()):
             if Path(entry.result.distorted) == Path(result.distorted):
+                reuse_color = entry.color
                 self.remove_run(existing_id)
 
         label = label or Path(result.distorted).stem
-        color = _PALETTE[self._next_id % len(_PALETTE)]
+        color = reuse_color or _PALETTE[self._next_id % len(_PALETTE)]
         sid = self._next_id
         self._next_id += 1
 

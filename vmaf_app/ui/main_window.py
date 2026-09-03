@@ -508,6 +508,13 @@ class MainWindow(QMainWindow):
         # rather than squeezing everything down to fit the window.
         header = self.distorted_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
+        # File name and Media info grow with the window, so their headers are
+        # left-aligned to stay above their content instead of drifting into
+        # the middle of an empty column.
+        for col in (COL_PATH, COL_INFO):
+            head_item = self.distorted_table.horizontalHeaderItem(col)
+            if head_item is not None:
+                head_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header.setStretchLastSection(False)
         self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.distorted_table.setColumnWidth(COL_CHECK, 28)
@@ -926,6 +933,10 @@ class MainWindow(QMainWindow):
             scaling_item.setToolTip("")
         else:
             item.setText(media_info_string(info))
+            # Back to normal text: the placeholder shown while probing greys
+            # this cell out, and leaving it grey makes a probed row look
+            # disabled.
+            item.setForeground(self.distorted_table.palette().text())
             item.setToolTip(format_hms(info.duration, decimals=1))
             self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
             tag, explanation = self._resize_mismatch(row, info)
