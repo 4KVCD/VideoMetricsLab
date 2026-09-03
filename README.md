@@ -12,7 +12,8 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 - GPU-accelerated decoding of **both** the source and the distorted video,
   chosen independently (cuda / qsv / d3d11va, auto-detected). Either input
   falls back to software decode on its own -- by codec before ffmpeg is
-  launched, and by retry if the hardware path fails anyway.
+  launched, and through both single-input retry combinations if the
+  hardware path fails anyway.
 - Analysis at the inputs' own bit depth: 8-bit compares as `yuv420p`, 10-bit
   as `yuv420p10le`, 12-bit as `yuv420p12le`, taking the deeper of the two
   inputs so a 10-bit master is not truncated to match an 8-bit encode.

@@ -824,7 +824,7 @@ def test_a_ten_bit_distorted_input_downloads_through_p010():
     assert "hwdownload,format=p010le,format=yuv420p10le" in ref_chain
 
 
-def test_the_distorted_input_falls_back_to_cpu_before_the_source_does():
+def test_each_input_gets_an_independent_single_gpu_fallback():
     # The distorted file is the arbitrary one -- whatever encoder settings
     # are under test -- while the source is usually a known-good master, so
     # it is the first suspect when hardware decode fails.
@@ -833,6 +833,7 @@ def test_the_distorted_input_falls_back_to_cpu_before_the_source_does():
     assert ladder == [
         HwAccelPlan(source="cuda", distorted="cuda"),
         HwAccelPlan(source="cuda", distorted=None),
+        HwAccelPlan(source=None, distorted="cuda"),
         HwAccelPlan(),
     ]
 
@@ -879,7 +880,8 @@ def test_a_run_retries_down_the_ladder_until_one_succeeds(monkeypatch, tmp_path)
     # otherwise a silent per-input fallback looks like a run that never tried.
     assert "source cuda, distorted cuda" in statuses[0]
     assert "source cuda, distorted cpu" in statuses[1]
-    assert "off" in statuses[2]
+    assert "source cpu, distorted cuda" in statuses[2]
+    assert "off" in statuses[3]
 
 
 def test_a_failed_attempt_does_not_leave_a_log_for_the_retry_to_parse(monkeypatch, tmp_path):
@@ -907,4 +909,4 @@ def test_a_failed_attempt_does_not_leave_a_log_for_the_retry_to_parse(monkeypatc
             cancel_event=None, process_handle=None,
         )
 
-    assert seen_existing_log == [False, False, False]
+    assert seen_existing_log == [False, False, False, False]

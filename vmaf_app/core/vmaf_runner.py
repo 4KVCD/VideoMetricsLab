@@ -610,9 +610,13 @@ def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
     while the distorted side is whatever encoder settings are under test.
     """
     ladder = [plan]
-    if plan.distorted is not None:
+    if plan.source is not None and plan.distorted is not None:
+        # The first single-input retry keeps the usually-known-good source
+        # accelerated. If that is actually the failing side, the symmetric
+        # retry still preserves acceleration for the distorted input.
         ladder.append(HwAccelPlan(source=plan.source))
-    if plan.source is not None:
+        ladder.append(HwAccelPlan(distorted=plan.distorted))
+    if plan.uses_gpu:
         ladder.append(HwAccelPlan())
     return ladder
 
