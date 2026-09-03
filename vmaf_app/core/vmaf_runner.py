@@ -46,6 +46,45 @@ class Cancelled(RuntimeError):  # noqa: N818 - a cancellation, not an error cond
     outcome rather than a failure to report."""
 
 
+def validate_video_pair(
+    source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions
+) -> None:
+    """Rejects comparisons whose timelines/display geometry are ambiguous."""
+    if source_info.is_variable_frame_rate or distorted_info.is_variable_frame_rate:
+        raise VmafRunError(
+            "Variable-frame-rate video is not supported safely yet. Convert both videos "
+            "to the same constant frame rate before comparing them."
+        )
+    fps_tolerance = max(0.01, max(source_info.fps, distorted_info.fps) * 0.001)
+    if abs(source_info.fps - distorted_info.fps) > fps_tolerance:
+        raise VmafRunError(
+            f"Frame rates do not match ({source_info.fps:.3f} vs "
+            f"{distorted_info.fps:.3f} fps)."
+        )
+    source_sar = source_info.sar if source_info.sar not in {"", "N/A", "0:1"} else "1:1"
+    distorted_sar = (
+        distorted_info.sar if distorted_info.sar not in {"", "N/A", "0:1"} else "1:1"
+    )
+    if source_sar != distorted_sar:
+        raise VmafRunError(
+            f"Sample aspect ratios do not match ({source_sar} vs {distorted_sar})."
+        )
+    if source_info.duration > 0 and distorted_info.duration > 0:
+        compared_limit = options.duration_limit
+        if compared_limit <= 0:
+            frame_duration = 1.0 / max(source_info.fps, distorted_info.fps, 1.0)
+            if abs(source_info.duration - distorted_info.duration) > max(0.1, 2 * frame_duration):
+                raise VmafRunError(
+                    f"Durations do not match ({source_info.duration:.3f} vs "
+                    f"{distorted_info.duration:.3f} seconds). Set a duration limit within "
+                    "both files if comparing only their common opening segment."
+                )
+        elif min(source_info.duration, distorted_info.duration) + 0.1 < compared_limit:
+            raise VmafRunError(
+                "The duration limit extends beyond the end of one of the videos."
+            )
+
+
 def _resolve_crops(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     status_callback: Callable[[str], None] | None,
@@ -509,6 +548,7 @@ def run_vmaf(
     run a distinct identity instead of one colliding with/overwriting the
     other, the same way a resample test's synthetic path already does.
     """
+    validate_video_pair(source_info, distorted_info, options)
     source_crop, distorted_crop = _resolve_crops(
         source_info, distorted_info, options, on_status,
         cancel_event=cancel_event, process_handle=process_handle,

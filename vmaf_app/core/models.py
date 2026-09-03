@@ -62,12 +62,21 @@ class VideoInfo:
     sar: str = "1:1"
     pix_fmt: str = ""
     bit_rate: int = 0  # bits per second, 0 if unknown
+    # ffprobe's r_frame_rate. A meaningful difference from average fps is a
+    # practical warning that frame-number/fps timestamps are unsafe (VFR).
+    nominal_fps: float = 0.0
 
     @property
     def estimated_frame_count(self) -> int:
         if self.nb_frames > 0:
             return self.nb_frames
         return max(1, round(self.duration * self.fps))
+
+    @property
+    def is_variable_frame_rate(self) -> bool:
+        if self.nominal_fps <= 0 or self.fps <= 0:
+            return False
+        return abs(self.nominal_fps - self.fps) > max(0.01, self.fps * 0.001)
 
 
 @dataclass

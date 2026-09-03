@@ -27,6 +27,7 @@ def _info_to_dict(v: VideoInfo) -> dict:
         "path": str(v.path), "width": v.width, "height": v.height, "fps": v.fps,
         "duration": v.duration, "nb_frames": v.nb_frames, "codec_name": v.codec_name,
         "sar": v.sar, "pix_fmt": v.pix_fmt, "bit_rate": v.bit_rate,
+        "nominal_fps": v.nominal_fps,
     }
 
 
@@ -35,6 +36,7 @@ def _info_from_dict(d: dict) -> VideoInfo:
         path=Path(d["path"]), width=d["width"], height=d["height"], fps=d["fps"],
         duration=d["duration"], nb_frames=d["nb_frames"], codec_name=d["codec_name"],
         sar=d.get("sar", "1:1"), pix_fmt=d.get("pix_fmt", ""), bit_rate=d.get("bit_rate", 0),
+        nominal_fps=d.get("nominal_fps", 0.0),
     )
 
 

@@ -956,6 +956,8 @@ def test_failed_run_reports_failure_instead_of_done(qapp):
 def test_estimate_total_frames_used_when_building_jobs(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
+    win._source_info.duration = 10.0
+    win._source_info.nb_frames = 300
     row = win._add_table_row(Path("distorted.mp4"))
     win._rows[row].video_info = VideoInfo(
         path=Path("distorted.mp4"), width=1920, height=1080, fps=30.0, duration=10.0,

@@ -466,6 +466,33 @@ def test_crop_detection_receives_run_cancel_and_process_controls(monkeypatch):
     assert received == [(cancel, handle)]
 
 
+@pytest.mark.parametrize(
+    ("source_changes", "distorted_changes", "message"),
+    [
+        ({"fps": 24.0}, {"fps": 30.0}, "Frame rates"),
+        ({"duration": 10.0}, {"duration": 12.0}, "Durations"),
+        ({"sar": "1:1"}, {"sar": "4:3"}, "aspect ratios"),
+        ({"nominal_fps": 60.0}, {"nominal_fps": 30.0}, "Variable-frame-rate"),
+    ],
+)
+def test_incompatible_video_timelines_are_rejected(
+    source_changes, distorted_changes, message
+):
+    from dataclasses import replace
+
+    from vmaf_app.core.vmaf_runner import VmafRunError, validate_video_pair
+
+    base_source = VideoInfo(Path("s.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
+    base_distorted = VideoInfo(Path("d.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
+
+    with pytest.raises(VmafRunError, match=message):
+        validate_video_pair(
+            replace(base_source, **source_changes),
+            replace(base_distorted, **distorted_changes),
+            VmafOptions(),
+        )
+
+
 def test_parse_log_keeps_a_genuine_zero_psnr_or_ssim(tmp_path):
     # libvmaf reports a real 0.0 for badly degraded frames. Reading these
     # with `metrics.get("psnr_y") or metrics.get("psnr")` discarded the 0.0

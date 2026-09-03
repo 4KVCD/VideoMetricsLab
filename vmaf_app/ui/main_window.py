@@ -69,7 +69,7 @@ from vmaf_app.core.run_io import load_run, save_run
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.time_format import format_hms
-from vmaf_app.core.vmaf_runner import estimate_total_frames
+from vmaf_app.core.vmaf_runner import VmafRunError, estimate_total_frames, validate_video_pair
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
@@ -1554,8 +1554,10 @@ class MainWindow(QMainWindow):
                     self._set_row_info(row, None, error=str(e))
                     continue
             try:
+                if row_data.options.resample_test is None:
+                    validate_video_pair(self._source_info, dist_info, row_data.options)
                 model = resolve_model(row_data.options, dist_info)
-            except ValueError as e:
+            except (ValueError, VmafRunError) as e:
                 QMessageBox.warning(self, "Invalid options", f"{row_data.path.name}: {e}")
                 return
             job_options = replace(row_data.options, model=model)

@@ -61,6 +61,7 @@ def probe_video(path: Path) -> VideoInfo:
     fps = _parse_frame_rate(v.get("avg_frame_rate") or v.get("r_frame_rate") or "0/1")
     if fps <= 0:
         fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
+    nominal_fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
 
     duration = float(v.get("duration") or fmt.get("duration") or 0.0)
 
@@ -91,4 +92,5 @@ def probe_video(path: Path) -> VideoInfo:
         sar=v.get("sample_aspect_ratio", "1:1") or "1:1",
         pix_fmt=v.get("pix_fmt", ""),
         bit_rate=bit_rate,
+        nominal_fps=nominal_fps,
     )
