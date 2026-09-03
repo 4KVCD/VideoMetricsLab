@@ -828,3 +828,50 @@ def test_a_delta_is_only_taken_between_two_finite_values(qapp):
     assert "0.9900" in text
     assert "no SSIM" in text
     assert "Δ" not in text
+
+
+# --------------------------------------------------- hover readout sizing
+
+def test_the_readout_fits_the_placeholder_after_a_short_series_is_added(qapp):
+    # The label shows one of two texts and never resizes between them. Sizing
+    # it to a series named "a" left it too small for the placeholder that
+    # comes back the moment the pointer leaves the plot.
+    panel = GraphPanel()
+    panel.add_run(_fake_result("a.mkv"), "a")
+    page = panel._pages["vmaf"]
+
+    from PySide6.QtGui import QFontMetrics
+    fm = QFontMetrics(page.hover_label.font())
+    placeholder_lines = page.hover_label.text().splitlines() or []
+    page._on_pointer_left()
+
+    from vmaf_app.ui.graph_panel import _HOVER_PLACEHOLDER
+    needed = max(
+        fm.horizontalAdvance(line) for line in _HOVER_PLACEHOLDER.splitlines()
+    )
+    assert page.hover_label.maximumWidth() >= needed, "the placeholder is clipped"
+    assert page.hover_label.height() >= len(_HOVER_PLACEHOLDER.splitlines()) * fm.lineSpacing()
+    assert placeholder_lines is not None
+
+
+def test_the_readout_is_not_sized_to_both_states_stacked(qapp):
+    # Height must be the taller of the two states, not their sum -- they are
+    # never on screen together, and a box sized for both eats plot area.
+    #
+    # Comparing two panels rather than asserting an absolute height keeps the
+    # padding allowance out of it. Empty: a 1-line readout against the 2-line
+    # placeholder, so the placeholder wins. Two series: a 4-line readout
+    # (time, both series, delta) wins. The gap is therefore 2 lines. Summing
+    # the two states instead would give 3+6 and a gap of 3.
+    from PySide6.QtGui import QFontMetrics
+
+    empty = GraphPanel()
+    two = GraphPanel()
+    two.add_run(_fake_result("a.mkv"), "encode-a")
+    two.add_run(_fake_result("b.mkv"), "encode-b")
+
+    page = two._pages["vmaf"]
+    fm = QFontMetrics(page.hover_label.font())
+    gap = page.hover_label.height() - empty._pages["vmaf"].hover_label.height()
+
+    assert gap == 2 * fm.lineSpacing()

@@ -245,15 +245,21 @@ class _MetricPage(QWidget):
         if len(labels) == 2:
             lines.append(f"Δ ({labels[0]} − {labels[1]}) = -88.88")
 
-        if not labels:
-            lines = _HOVER_PLACEHOLDER.splitlines()
+        # The label shows one of TWO texts and never resizes between them:
+        # the readout while the cursor is over the plot, and the placeholder
+        # once it leaves. Sizing to only the readout meant a series named "a"
+        # produced a box too small for the placeholder that comes back the
+        # moment the pointer moves away, clipping it.
+        placeholder_lines = _HOVER_PLACEHOLDER.splitlines()
 
         # 6px of stylesheet padding top AND bottom come out of the fixed
         # height, so the allowance has to cover both plus a little slack --
         # too small and the last series' line is cut off.
         padding = 28
-        width = max(fm.horizontalAdvance(line) for line in lines) + padding
-        height = len(lines) * fm.lineSpacing() + padding
+        width = max(fm.horizontalAdvance(line) for line in lines + placeholder_lines) + padding
+        # The taller of the two states, not their sum: they are never shown
+        # at the same time.
+        height = max(len(lines), len(placeholder_lines)) * fm.lineSpacing() + padding
 
         # A maximum rather than a fixed width: the label never claims more
         # room than its text needs (hover repaint cost scales with the damaged
