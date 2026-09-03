@@ -205,6 +205,9 @@ class MainWindow(QMainWindow):
         self._current_job_index: int | None = None
         self._run_failed_count = 0
         self._run_was_cancelled = False
+        # Whether a run owns the window's settings right now. Read by
+        # every background handler that would otherwise re-enable them.
+        self._run_active = False
         self._cache_clear_result: list[int] | None = None
 
         # Per-video settings machinery: the Options panel is an inspector for
@@ -939,7 +942,8 @@ class MainWindow(QMainWindow):
         worker.deleteLater()
         if generation == self._source_probe_generation:
             self._source_probe_worker = None
-            self.status_label.setText("Ready.")
+            if not self._run_active:
+                self.status_label.setText("Ready.")
             self._on_table_selection_changed()
 
     # ------------------------------------------------------------------ distorted-file table
@@ -1318,7 +1322,10 @@ class MainWindow(QMainWindow):
             worker.deleteLater()
         if any(w.isRunning() for w in self._probe_workers):
             return  # another lane is still reading, so this is not done yet
-        self.status_label.setText("Ready.")
+        if not self._run_active:
+            # A run owns the status line while it lasts; overwriting it with
+            # "Ready." made a live job look finished.
+            self.status_label.setText("Ready.")
         self._on_table_selection_changed()
 
     def _row_index_of_path(self, path: Path) -> int | None:
@@ -1506,7 +1513,12 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self.options_box.setEnabled(True)
+        # A run owns these settings until it finishes. This is reached from
+        # background completions as well as from the user clicking a row --
+        # a probe finishing mid-run used to re-enable the whole panel, and
+        # anything changed there was then attached to a result computed with
+        # the previous settings.
+        self.options_box.setEnabled(not self._run_active)
         if len(rows) == 1:
             self.panel_target_label.setText(f"Settings for: {self._rows[rows[0]].path.name}")
         else:
@@ -1828,6 +1840,7 @@ class MainWindow(QMainWindow):
 
     def _set_run_ui_active(self, active: bool) -> None:
         """Freezes every input that can change the meaning of a live job."""
+        self._run_active = active
         self.files_box.setEnabled(not active)
         self.options_box.setEnabled(not active and bool(self._panel_target_rows))
         self.tabs.setTabEnabled(TAB_SETTINGS, not active)
@@ -1921,6 +1934,17 @@ class MainWindow(QMainWindow):
         )
         if self._source_info is None or self._source_info.path != result.source:
             self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
+            return
+        if cache_options != row_data.options:
+            # The row's settings changed after this job was launched, so the
+            # result does not describe what the row now says. It is still
+            # cached above under the options it really used -- returning to
+            # them brings it straight back -- but showing it here would
+            # label it with settings it was never computed with.
+            self._set_row_status(
+                row,
+                "Finished with the previous settings; change them back to see the result.",
+            )
             return
         run = CompletedRun(result, label)
         row_data.completed_run = run

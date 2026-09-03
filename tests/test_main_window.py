@@ -1926,3 +1926,150 @@ def test_recompute_cancels_the_cache_lane_but_not_media_probing(qapp, tmp_path, 
     assert _wait_for_probes(win)
     assert probed == [distorted], "the media probe was cancelled by a recompute"
     assert win._rows[row].video_info is not None
+
+
+
+# ---------------- background completions must not unlock a live run
+
+def _start_fake_run(win, row):
+    """Puts the window into the state a live VMAF job leaves it in."""
+    from vmaf_app.core.models import clone_options
+
+    win._job_rows = [win._rows[row]]
+    win._job_cache_options = [clone_options(win._rows[row].options)]
+    win._checked_rows_for_run = [win._rows[row]]
+    win._set_run_ui_active(True)
+    win.status_label.setText("Running ffmpeg...")
+
+
+def test_a_probe_finishing_mid_run_does_not_re_enable_the_options(qapp, tmp_path):
+    """The reported defect: _on_table_selection_changed enables the panel
+    from the selection alone, and background completions call it. A probe
+    landing during a run therefore unlocked every score-changing control,
+    and whatever was changed there was attached to a result computed under
+    the previous settings.
+    """
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "a.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    win.distorted_table.selectRow(row)
+    _start_fake_run(win, row)
+    assert not win.options_box.isEnabled()
+
+    win._on_probe_finished()
+
+    assert not win.options_box.isEnabled(), "a probe unlocked the options mid-run"
+    assert not win.files_box.isEnabled()
+    assert not win.run_btn.isEnabled()
+
+
+def test_a_probe_finishing_mid_run_does_not_report_ready(qapp, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(tmp_path / "a.mp4")
+    _start_fake_run(win, row)
+
+    win._on_probe_finished()
+
+    assert win.status_label.text() != "Ready.", "a live job was reported as finished"
+
+
+def test_a_source_probe_finishing_mid_run_does_not_report_ready(qapp, tmp_path):
+    win = MainWindow()
+    row = win._add_table_row(tmp_path / "a.mp4")
+    _start_fake_run(win, row)
+
+    class _Finished:
+        def deleteLater(self):
+            pass
+
+    win._on_source_probe_finished(win._source_probe_generation, _Finished())
+
+    assert win.status_label.text() != "Ready."
+
+
+def test_the_options_unlock_again_once_the_run_ends(qapp, tmp_path):
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "a.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    win.distorted_table.selectRow(row)
+    _start_fake_run(win, row)
+
+    win._set_run_ui_active(False)
+    win._on_probe_finished()
+
+    assert win.options_box.isEnabled()
+    assert win.status_label.text() == "Ready."
+
+
+def test_a_result_is_not_shown_under_options_it_was_not_computed_with(qapp, tmp_path):
+    """Defence in depth for the same bug. Even if something re-enables the
+    panel, a finished job must not be labelled with settings changed after
+    it was launched."""
+    from vmaf_app.core import result_cache
+    from vmaf_app.core.models import clone_options
+
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "a.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    _start_fake_run(win, row)
+    launched_with = clone_options(win._rows[row].options)
+
+    # The user changes a score-affecting setting while ffmpeg runs.
+    win._rows[row].options.n_subsample = 7
+
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    win._on_job_finished(0, result)
+    assert win._file_writes.wait_until_idle(10.0)
+
+    assert win._rows[row].completed_run is None, (
+        "a result was attached to a row whose settings had changed"
+    )
+    # It is still cached under the settings it really used, so going back to
+    # them brings it straight back rather than forcing a recomputation.
+    assert result_cache.load_cached(source, distorted, launched_with) is not None
+    assert result_cache.load_cached(source, distorted, win._rows[row].options) is None
+
+
+def test_an_unchanged_row_still_receives_its_result(qapp, tmp_path):
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "a.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    _start_fake_run(win, row)
+
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    win._on_job_finished(0, result)
+
+    assert win._rows[row].completed_run is not None
