@@ -967,3 +967,91 @@ def test_exporting_two_series_with_the_same_label_keeps_both_files(qapp, tmp_pat
     # And they hold different runs, rather than one being written twice.
     assert tmp_path.joinpath("movie.csv").read_text(encoding="utf-8") != \
         tmp_path.joinpath("movie_2.csv").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------- PNG export
+
+def test_the_exported_image_names_the_metric_and_every_curve(qapp, tmp_path):
+    # A bare chart pixmap is a set of unlabelled coloured lines: nothing in
+    # it says which metric it is or which encode each curve belongs to, so
+    # an exported PNG was unidentifiable the moment it left the app.
+    panel = GraphPanel()
+    panel.add_run(_values_result("a.mkv", [95.0] * 10), "encode-a")
+    panel.add_run(_values_result("b.mkv", [70.0] * 10), "encode-b")
+
+    headers, rows = panel._export_table()
+
+    assert headers[0] == "Series"
+    assert "Mean" in headers and "1% Low" in headers
+    assert [label for label, _color, _cells in rows] == ["encode-a", "encode-b"]
+    # The swatch colours have to be the curves' own, or the legend keys
+    # nothing.
+    assert [color for _label, color, _cells in rows] == [
+        e.color for e in panel._entries.values()
+    ]
+
+
+def test_the_exported_image_is_larger_than_the_bare_chart(qapp):
+    panel = GraphPanel()
+    panel.add_run(_values_result("a.mkv", [95.0] * 10), "encode-a")
+    page = panel._pages["vmaf"]
+
+    chart = page.chart.render_to_pixmap()
+    exported = panel.render_export_image()
+
+    assert exported.height() > chart.height(), "no room was left for title or legend"
+    assert exported.width() >= chart.width()
+    assert not exported.isNull()
+
+
+def test_the_exported_image_covers_only_the_series_on_the_plot(qapp):
+    # Unticking a series removes its curve, so it must not appear in the
+    # legend of an image that does not draw it.
+    panel = GraphPanel()
+    panel.add_run(_values_result("a.mkv", [95.0] * 10), "encode-a")
+    panel.add_run(_values_result("b.mkv", [70.0] * 10), "encode-b")
+    hidden = list(panel._entries)[1]
+    panel.set_series_visible(hidden, False)
+
+    _headers, rows = panel._export_table()
+
+    assert [label for label, _c, _cells in rows] == ["encode-a"]
+
+
+def test_the_exported_statistics_use_the_metric_precision(qapp):
+    panel = GraphPanel()
+    panel.add_run(_ssim_result("a.mkv", [0.9876] * 10), "a")
+    _page(panel, "ssim")
+
+    _headers, rows = panel._export_table()
+
+    assert "0.9876" in rows[0][2]
+
+
+def test_exporting_with_nothing_plotted_still_produces_an_image(qapp):
+    panel = GraphPanel()
+
+    headers, rows = panel._export_table()
+    exported = panel.render_export_image()
+
+    assert (headers, rows) == ([], [])
+    assert not exported.isNull()
+
+
+def test_the_exported_png_is_written_and_readable(qapp, tmp_path, monkeypatch):
+    from PySide6.QtGui import QPixmap
+
+    from vmaf_app.ui import graph_panel as graph_panel_module
+
+    panel = GraphPanel()
+    panel.add_run(_values_result("a.mkv", [95.0] * 10), "encode-a")
+    out = tmp_path / "graph.png"
+    monkeypatch.setattr(
+        graph_panel_module.QFileDialog, "getSaveFileName",
+        lambda *a, **k: (str(out), "PNG image (*.png)"),
+    )
+
+    panel._on_export_png()
+
+    assert out.exists() and out.stat().st_size > 0
+    assert not QPixmap(str(out)).isNull(), "the file is not a readable image"

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -53,6 +53,12 @@ _VISIBLE_SERIES_ROWS = 4
 # How many "x steps" to search either side of the cursor for a point to lock
 # onto -- see the step calculation in _MetricPage._on_mouse_moved.
 _HOVER_SEARCH_STEPS = 5
+
+# Layout of the exported PNG (see GraphPanel.render_export_image).
+_EXPORT_MARGIN = 16
+_EXPORT_GAP = 8
+_EXPORT_SWATCH = 12
+_EXPORT_ROW_PADDING = 6
 
 
 @dataclass
@@ -788,12 +794,140 @@ class GraphPanel(QWidget):
             result, label, identity=("saved-file", str(Path(path).resolve()))
         )
 
+    # ------------------------------------------------------------------ png export
+    def _export_table(self) -> tuple[list[str], list[tuple[str, str, list[str]]]]:
+        """(column headers, [(series label, colour, cells)]) for the exported
+        image, covering exactly the series currently drawn on the plot.
+
+        Split out from the drawing so what the image *says* can be asserted
+        without reading pixels back.
+        """
+        metric = self._current_metric()
+        page = self._pages[metric.key]
+        series = [
+            (self._entries[sid], curve)
+            for sid, curve in page._curves.items()
+            if curve.visible and sid in self._entries
+        ]
+        if not series:
+            return [], []
+
+        first = series[0][1].stats
+        headers = ["Series"] + [label for label, _ in first.values]
+        headers += [t.label for t in first.thresholds]
+
+        rows = []
+        for entry, curve in series:
+            cells = [v for _, v in curve.stats.summary(metric.value_format)]
+            cells += [f"{t.percentage:.1f}%" for t in curve.stats.thresholds]
+            rows.append((entry.label, entry.color, cells))
+        return headers, rows
+
+    def render_export_image(self) -> QPixmap:
+        """The chart plus enough context to identify it months later.
+
+        The bare chart pixmap is a set of unlabelled coloured lines: nothing
+        in it says which metric it is or which encode each curve belongs to,
+        which makes an exported PNG useless the moment it leaves the app. So
+        the title, a legend keyed by the curve colours, and the same summary
+        statistics shown in the app are composed around it -- rather than
+        screenshotting the panel, which would drag in the buttons too.
+        """
+        metric = self._current_metric()
+        chart = self._pages[metric.key].chart.render_to_pixmap()
+        headers, rows = self._export_table()
+
+        title_font = QFont(self.font())
+        title_font.setBold(True)
+        title_font.setPointSize(max(10, title_font.pointSize() + 3))
+        title_fm = QFontMetrics(title_font)
+        title = f"{metric.label} vs time"
+
+        cell_font = QFont("Consolas")
+        cell_font.setStyleHint(QFont.Monospace)
+        cell_fm = QFontMetrics(cell_font)
+        row_height = cell_fm.lineSpacing() + _EXPORT_ROW_PADDING
+
+        # Column 0 also carries the colour swatch that keys the legend to the
+        # curves, so it needs room for both.
+        widths = []
+        for col, header in enumerate(headers):
+            width = cell_fm.horizontalAdvance(header)
+            for label, _color, cells in rows:
+                text = label if col == 0 else cells[col - 1]
+                width = max(width, cell_fm.horizontalAdvance(text))
+            if col == 0:
+                width += _EXPORT_SWATCH + _EXPORT_GAP
+            widths.append(width + 2 * _EXPORT_GAP)
+
+        table_height = (len(rows) + 1) * row_height if rows else 0
+        content_width = max(chart.width(), sum(widths))
+        height = (
+            _EXPORT_MARGIN + title_fm.height() + _EXPORT_GAP
+            + chart.height() + (_EXPORT_GAP + table_height if rows else 0)
+            + _EXPORT_MARGIN
+        )
+
+        image = QPixmap(content_width + 2 * _EXPORT_MARGIN, height)
+        image.fill(QColor("white"))
+        painter = QPainter(image)
+        try:
+            painter.setPen(QColor("#111111"))
+            painter.setFont(title_font)
+            y = _EXPORT_MARGIN + title_fm.ascent()
+            painter.drawText(_EXPORT_MARGIN, y, title)
+
+            y = _EXPORT_MARGIN + title_fm.height() + _EXPORT_GAP
+            painter.drawPixmap(_EXPORT_MARGIN, y, chart)
+            y += chart.height() + _EXPORT_GAP
+
+            painter.setFont(cell_font)
+            self._paint_export_table(
+                painter, headers, rows, widths, y, row_height, cell_font, cell_fm
+            )
+        finally:
+            painter.end()
+        return image
+
+    def _paint_export_table(
+        self, painter, headers, rows, widths, top, row_height, cell_font, fm
+    ) -> None:
+        if not rows:
+            return
+        header_font = QFont(cell_font)
+        header_font.setBold(True)
+
+        baseline = top + fm.ascent() + _EXPORT_ROW_PADDING // 2
+        painter.setFont(header_font)
+        painter.setPen(QColor("#111111"))
+        x = _EXPORT_MARGIN
+        for header, width in zip(headers, widths, strict=True):
+            painter.drawText(x + _EXPORT_GAP, baseline, header)
+            x += width
+
+        # Back to the unbolded cell font -- reconstructing it from the
+        # painter's current font would carry the header's bold over.
+        painter.setFont(cell_font)
+        for index, (label, color, cells) in enumerate(rows, start=1):
+            baseline = top + index * row_height + fm.ascent() + _EXPORT_ROW_PADDING // 2
+            x = _EXPORT_MARGIN
+            # The swatch is what ties this row to a line on the plot above.
+            painter.fillRect(
+                x + _EXPORT_GAP, baseline - _EXPORT_SWATCH, _EXPORT_SWATCH, _EXPORT_SWATCH,
+                QColor(color),
+            )
+            painter.setPen(QColor("#111111"))
+            painter.drawText(x + _EXPORT_GAP + _EXPORT_SWATCH + _EXPORT_GAP, baseline, label)
+            x += widths[0]
+            for cell, width in zip(cells, widths[1:], strict=True):
+                painter.drawText(x + _EXPORT_GAP, baseline, cell)
+                x += width
+
     def _on_export_png(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export graph", "vmaf_graph.png", "PNG image (*.png)")
         if not path:
             return
-        page = self._pages[self._current_metric().key]
-        page.chart.render_to_pixmap().save(path)
+        self.render_export_image().save(path)
 
     def _on_export_csv(self) -> None:
         if not self._entries:
