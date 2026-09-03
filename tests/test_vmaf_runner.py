@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -611,3 +612,133 @@ def test_gpu_download_feeds_the_analysis_format_rather_than_replacing_it():
     )
     _, ref_chain, _ = graph.split(";")
     assert "hwdownload,format=p010le,format=yuv420p10le" in ref_chain
+
+
+# ------------------------------------------------- subprocess reaping
+
+class _FakePipe:
+    """A pipe whose iteration can be made to raise, and that records being
+    closed."""
+
+    def __init__(self, lines):
+        self._lines = list(lines)
+        self.closed = False
+
+    def __iter__(self):
+        yield from self._lines
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeProcess:
+    """Stands in for a Popen that ignores terminate() until killed, which is
+    what a wedged hardware decoder actually does."""
+
+    def __init__(self, stdout_lines, *, ignores_terminate=False):
+        self.pid = 4242
+        self.stdout = _FakePipe(stdout_lines)
+        self.stderr = _FakePipe(["ffmpeg stderr\n"])
+        self.terminated = False
+        self.killed = False
+        self.waited = False
+        self.returncode = None
+        self._ignores_terminate = ignores_terminate
+        self._alive = True
+
+    def poll(self):
+        return None if self._alive else self.returncode
+
+    def terminate(self):
+        self.terminated = True
+        if not self._ignores_terminate:
+            self._alive = False
+            self.returncode = -15
+
+    def kill(self):
+        self.killed = True
+        self._alive = False
+        self.returncode = -9
+
+    def wait(self, timeout=None):
+        self.waited = True
+        if self._alive:
+            if timeout is None:
+                self._alive = False
+                self.returncode = 0
+            else:
+                raise subprocess.TimeoutExpired("ffmpeg", timeout)
+        return self.returncode
+
+
+def _run_with_fake(monkeypatch, proc, tmp_path, on_progress=None):
+    from vmaf_app.core import vmaf_runner
+
+    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: proc)
+    return vmaf_runner._run_ffmpeg(
+        ["ffmpeg"], total_frames=100, on_progress=on_progress,
+        cancel_event=None, cwd=tmp_path,
+    )
+
+
+def test_a_raising_progress_callback_does_not_leave_ffmpeg_running(monkeypatch, tmp_path):
+    # The leak this guards: the exception escapes the stdout loop, and an
+    # ffmpeg left running holds the run's temp dir open, so on Windows the
+    # enclosing TemporaryDirectory silently fails to delete.
+    proc = _FakeProcess(["frame=1\n", "frame=2\n"])
+
+    def explode(current, total, fps):
+        raise RuntimeError("the UI went away")
+
+    with pytest.raises(RuntimeError, match="the UI went away"):
+        _run_with_fake(monkeypatch, proc, tmp_path, on_progress=explode)
+
+    assert proc.terminated, "ffmpeg was left running"
+    assert proc.waited, "the process was never reaped, so it stays a zombie"
+    assert proc.stdout.closed and proc.stderr.closed, "pipes were left open"
+
+
+def test_a_process_that_ignores_terminate_is_killed(monkeypatch, tmp_path):
+    proc = _FakeProcess(["frame=1\n"], ignores_terminate=True)
+
+    def explode(current, total, fps):
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        _run_with_fake(monkeypatch, proc, tmp_path, on_progress=explode)
+
+    assert proc.terminated and proc.killed
+
+
+def test_the_process_handle_is_detached_even_when_the_callback_raises(monkeypatch, tmp_path):
+    from vmaf_app.core import vmaf_runner
+    from vmaf_app.core.process_control import ProcessHandle
+
+    proc = _FakeProcess(["frame=1\n"])
+    handle = ProcessHandle()
+    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: proc)
+
+    def explode(current, total, fps):
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        vmaf_runner._run_ffmpeg(
+            ["ffmpeg"], total_frames=100, on_progress=explode,
+            cancel_event=None, cwd=tmp_path, process_handle=handle,
+        )
+
+    assert handle._pid is None, "a detached handle must not still address a dead pid"
+
+
+def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_path):
+    proc = _FakeProcess(["frame=1\n", "fps= 24.0\n", "frame=2\n"])
+    seen = []
+
+    result = _run_with_fake(
+        monkeypatch, proc, tmp_path,
+        on_progress=lambda c, t, f: seen.append((c, t, f)),
+    )
+
+    assert result.returncode == 0
+    assert "ffmpeg stderr" in result.stderr
+    assert seen == [(1, 100, 0.0), (2, 100, 24.0)]

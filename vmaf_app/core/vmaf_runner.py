@@ -3,6 +3,7 @@ parsing the resulting per-frame JSON log.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -388,6 +389,9 @@ def _run_ffmpeg(
     )
     if process_handle is not None:
         process_handle.attach(proc.pid)
+    # Bound before the try so the finally can always reach it, even if the
+    # thread never got as far as being created.
+    stderr_thread: threading.Thread | None = None
     try:
         stderr_lines: list[str] = []
 
@@ -428,8 +432,43 @@ def _run_ffmpeg(
             raise Cancelled("Cancelled by user")
         return subprocess.CompletedProcess(cmd, proc.returncode, "", "".join(stderr_lines))
     finally:
+        # Anything can leave the block above early -- a cancellation, or an
+        # on_progress callback raising from inside the stdout loop -- and an
+        # ffmpeg left running holds its pipes and the log files inside the
+        # run's temp dir open. On Windows that makes the enclosing
+        # TemporaryDirectory fail to delete, so the leak is a visible one:
+        # files pile up in %TEMP% for the rest of the session.
+        _reap(proc, stderr_thread)
         if process_handle is not None:
             process_handle.detach()
+
+
+def _reap(proc: subprocess.Popen, drain_thread: threading.Thread | None) -> None:
+    """Ends `proc` if it is still running, then joins its reader and closes
+    its pipes -- in that order, so the drain thread sees a clean EOF rather
+    than having the file object closed underneath it.
+
+    Deliberately swallows its own errors: this runs in a finally block, and
+    the exception that sent us there (a Cancelled, or whatever a progress
+    callback raised) is the one the caller needs to see -- a secondary
+    failure while tidying up must not replace it.
+    """
+    with contextlib.suppress(Exception):  # see the docstring
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # terminate() is a polite request that a wedged decoder can
+                # ignore; kill() is not refusable.
+                proc.kill()
+                proc.wait(timeout=5)
+    if drain_thread is not None:
+        drain_thread.join(timeout=5)
+    for pipe in (proc.stdout, proc.stderr):
+        if pipe is not None:
+            with contextlib.suppress(Exception):  # see the docstring
+                pipe.close()
 
 
 def estimate_total_frames(reference_info: VideoInfo, options: VmafOptions) -> int:
