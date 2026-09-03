@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from dataclasses import asdict
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
 
-from vmaf_app.core.models import VmafRunResult
+from vmaf_app.core.models import VmafOptions, VmafRunResult
 from vmaf_app.core.run_io import load_run, save_run
 
 _dir_override: Path | None = None
@@ -47,19 +49,32 @@ def _file_identity(path: Path) -> str:
     return f"{path}:{size}:{modified}"
 
 
-def cache_key(source: Path, distorted: Path) -> str:
-    raw = f"{_file_identity(source)}|{_file_identity(distorted)}"
+def _options_identity(options: VmafOptions) -> str:
+    values = asdict(options)
+    custom_model = options.custom_model_path
+    if custom_model:
+        values["custom_model_path"] = _file_identity(Path(custom_model))
+    return json.dumps(values, sort_keys=True, separators=(",", ":"))
+
+
+def cache_key(source: Path, distorted: Path, options: VmafOptions) -> str:
+    raw = (
+        f"{_file_identity(source)}|{_file_identity(distorted)}|"
+        f"{_options_identity(options)}"
+    )
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
-def _cache_path(source: Path, distorted: Path) -> Path:
-    return _cache_dir() / f"{cache_key(source, distorted)}.vmafrun.json"
+def _cache_path(source: Path, distorted: Path, options: VmafOptions) -> Path:
+    return _cache_dir() / f"{cache_key(source, distorted, options)}.vmafrun.json"
 
 
-def load_cached(source: Path, distorted: Path) -> tuple[VmafRunResult, str] | None:
+def load_cached(
+    source: Path, distorted: Path, options: VmafOptions
+) -> tuple[VmafRunResult, str] | None:
     """Returns (result, label) if a cached run exists for this exact
     source+distorted file identity, else None."""
-    path = _cache_path(source, distorted)
+    path = _cache_path(source, distorted, options)
     if not path.exists():
         return None
     try:
@@ -68,9 +83,12 @@ def load_cached(source: Path, distorted: Path) -> tuple[VmafRunResult, str] | No
         return None
 
 
-def store(source: Path, distorted: Path, result: VmafRunResult, label: str) -> None:
-    save_run(result, _cache_path(source, distorted), label=label)
+def store(
+    source: Path, distorted: Path, result: VmafRunResult, label: str,
+    options: VmafOptions,
+) -> None:
+    save_run(result, _cache_path(source, distorted, options), label=label)
 
 
-def clear(source: Path, distorted: Path) -> None:
-    _cache_path(source, distorted).unlink(missing_ok=True)
+def clear(source: Path, distorted: Path, options: VmafOptions) -> None:
+    _cache_path(source, distorted, options).unlink(missing_ok=True)

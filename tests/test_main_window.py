@@ -477,7 +477,10 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     cached_result = _fake_completed_run(str(distorted)).result
     cached_result.source = source
     cached_result.distorted = distorted
-    result_cache.store(source, distorted, cached_result, label="cached-label")
+    result_cache.store(
+        source, distorted, cached_result, label="cached-label",
+        options=win._rows[0].options if win._rows else win._default_options,
+    )
 
     row = win._add_table_row(distorted)
     win._set_row_info(row, win._rows[row].video_info or _fake_video_info(str(distorted)))
@@ -508,7 +511,7 @@ def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):
     result.distorted = distorted
     win._on_job_finished(0, result)
 
-    assert result_cache.load_cached(source, distorted) is not None
+    assert result_cache.load_cached(source, distorted, win._rows[row].options) is not None
 
 
 def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
@@ -535,8 +538,8 @@ def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
     win._on_job_finished(0, result)
 
     assert win._rows[row].completed_run is None
-    assert result_cache.load_cached(old_source, distorted) is not None
-    assert result_cache.load_cached(new_source, distorted) is None
+    assert result_cache.load_cached(old_source, distorted, win._rows[row].options) is not None
+    assert result_cache.load_cached(new_source, distorted, win._rows[row].options) is None
 
 
 def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatch):
@@ -553,12 +556,15 @@ def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatc
     win._source_info.path = source
     row = win._add_table_row(distorted)
     win._rows[row].completed_run = _fake_completed_run(str(distorted))
-    result_cache.store(source, distorted, win._rows[row].completed_run.result, label="x")
+    result_cache.store(
+        source, distorted, win._rows[row].completed_run.result, label="x",
+        options=win._rows[row].options,
+    )
 
     win._recompute_rows([row])
 
     assert win._rows[row].completed_run is None
-    assert result_cache.load_cached(source, distorted) is None
+    assert result_cache.load_cached(source, distorted, win._rows[row].options) is None
 
 
 # ------------------------------------------------------------------ resolution round-trip test row

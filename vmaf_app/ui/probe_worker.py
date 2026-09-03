@@ -14,7 +14,7 @@ from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffprobe import ProbeError, probe_video
-from vmaf_app.core.models import VideoInfo, VmafRunResult
+from vmaf_app.core.models import VideoInfo, VmafOptions, VmafRunResult
 
 
 class ProbeWorker(QThread):
@@ -27,11 +27,13 @@ class ProbeWorker(QThread):
     finished_all = Signal()
 
     def __init__(self, paths: list[Path], source: Path | None, use_cache: bool,
-                 probe_media: bool = True, parent=None):
+                 cache_options: dict[Path, VmafOptions], probe_media: bool = True,
+                 parent=None):
         super().__init__(parent)
         self._paths = list(paths)
         self._source = source
         self._use_cache = use_cache
+        self._cache_options = cache_options
         # False when only the source changed: the distorted files are the
         # same, so only their cached results need re-checking.
         self._probe_media = probe_media
@@ -56,7 +58,9 @@ class ProbeWorker(QThread):
                 continue
             # A miss is the normal case and must not be reported as a
             # failure; the row simply stays unscored until it is run.
-            cached = result_cache.load_cached(self._source, path)
+            cached = result_cache.load_cached(
+                self._source, path, self._cache_options[path]
+            )
             if cached is not None:
                 result, label = cached
                 self.cached_found.emit(path, result, label)

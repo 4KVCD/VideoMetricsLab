@@ -160,6 +160,7 @@ class MainWindow(QMainWindow):
         # or crash with IndexError when the shifted index ran off the end.
         self._job_rows: list[RowData] = []  # job index -> the row that job belongs to
         self._job_total_frames: list[int] = []  # job index -> estimated frame count, for queue ETA
+        self._job_cache_options: list[VmafOptions] = []
         self._checked_rows_for_run: list[RowData] = []  # rows checked when Run was clicked, incl. already-scored ones
         self._current_job_index: int | None = None
 
@@ -1051,7 +1052,9 @@ class MainWindow(QMainWindow):
             self._probe_worker.wait(2000)
         source = self._source_info.path if self._source_info else None
         self._probe_worker = ProbeWorker(
-            paths, source, self._settings.use_cache, probe_media=probe_again
+            paths, source, self._settings.use_cache,
+            {rd.path: clone_options(rd.options) for rd in self._rows if rd.path in paths},
+            probe_media=probe_again,
         )
         self._probe_worker.probed.connect(self._on_probed)
         self._probe_worker.cached_found.connect(self._on_cached_found)
@@ -1134,7 +1137,9 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         if row_data.completed_run is not None:
             return False
-        cached = result_cache.load_cached(self._source_info.path, row_data.path)
+        cached = result_cache.load_cached(
+            self._source_info.path, row_data.path, row_data.options
+        )
         if cached is None:
             return False
         result, label = cached
@@ -1170,7 +1175,9 @@ class MainWindow(QMainWindow):
             self._set_row_metrics(row)
             self.distorted_table.item(row, COL_VMAF).setToolTip("")
             if self._source_info is not None:
-                result_cache.clear(self._source_info.path, row_data.path)
+                result_cache.clear(
+                    self._source_info.path, row_data.path, row_data.options
+                )
             # Refreshes the resize-mismatch note (Info column) back to the
             # row's *current* settings -- without this it kept showing
             # whatever the just-cleared run had actually used until the next
@@ -1449,6 +1456,7 @@ class MainWindow(QMainWindow):
 
         self._job_rows = job_rows
         self._job_total_frames = job_total_frames
+        self._job_cache_options = [clone_options(rd.options) for rd in job_rows]
         # Held as RowData, not indices, so removing a row mid-run can't
         # silently repoint these at a different row.
         self._checked_rows_for_run = [self._rows[r] for r in checked_rows]
@@ -1539,7 +1547,13 @@ class MainWindow(QMainWindow):
         # The job owns the source/distorted identities it was launched with.
         # Never key a result from an old in-flight job using whatever source
         # happens to be selected by the time it finishes.
-        result_cache.store(result.source, result.distorted, result, label)
+        cache_options = (
+            self._job_cache_options[index]
+            if index < len(self._job_cache_options) else row_data.options
+        )
+        result_cache.store(
+            result.source, result.distorted, result, label, cache_options
+        )
         if self._source_info is None or self._source_info.path != result.source:
             self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
             return
