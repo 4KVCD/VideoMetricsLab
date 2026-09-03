@@ -25,6 +25,7 @@ from vmaf_app.ui.main_window import (
     COL_VMAF,
     COL_XPSNR,
     TAB_GRAPH,
+    TAB_SETTINGS,
     TAB_VIDEOS,
     CompletedRun,
     MainWindow,
@@ -901,6 +902,27 @@ def test_estimate_total_frames_used_when_building_jobs(qapp):
 
     win._worker.cancel()
     win._worker.wait(5000)
+
+
+def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win.distorted_table.selectRow(row)
+    win._on_table_selection_changed()
+
+    win._set_run_ui_active(True)
+
+    assert not win.files_box.isEnabled()
+    assert not win.options_box.isEnabled()
+    assert not win.tabs.isTabEnabled(TAB_SETTINGS)
+    assert not win.run_btn.isEnabled()
+    assert win.pause_btn.isEnabled()
+    assert win.cancel_btn.isEnabled()
+
+    win._set_run_ui_active(False)
+    assert win.files_box.isEnabled()
+    assert win.options_box.isEnabled()
+    assert win.tabs.isTabEnabled(TAB_SETTINGS)
 
 
 # ------------------------------------------------------------------ metric columns

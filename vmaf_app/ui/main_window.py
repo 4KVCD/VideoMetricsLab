@@ -457,6 +457,7 @@ class MainWindow(QMainWindow):
 
     def _build_files_panel(self) -> QWidget:
         files_box = QGroupBox("Videos")
+        self.files_box = files_box
         files_layout = QVBoxLayout(files_box)
 
         files_layout.addWidget(QLabel("Reference (source) video:"))
@@ -1420,6 +1421,8 @@ class MainWindow(QMainWindow):
         return rows
 
     def _on_run_clicked(self) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            return
         if self._source_info is None:
             QMessageBox.warning(self, "No source", "Please select a reference (source) video.")
             return
@@ -1488,8 +1491,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(
                 f"Skipping {len(already_scored_rows)} already-scored video(s); running {len(jobs)}..."
             )
-        self.run_btn.setEnabled(False)
-        self.pause_btn.setEnabled(True)
+        self._set_run_ui_active(True)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         self.cancel_btn.setEnabled(True)
@@ -1503,6 +1505,15 @@ class MainWindow(QMainWindow):
         self._worker.job_failed.connect(self._on_job_failed)
         self._worker.all_finished.connect(self._on_all_finished)
         self._worker.start()
+
+    def _set_run_ui_active(self, active: bool) -> None:
+        """Freezes every input that can change the meaning of a live job."""
+        self.files_box.setEnabled(not active)
+        self.options_box.setEnabled(not active and bool(self._panel_target_rows))
+        self.tabs.setTabEnabled(TAB_SETTINGS, not active)
+        self.run_btn.setEnabled(not active)
+        self.pause_btn.setEnabled(active)
+        self.cancel_btn.setEnabled(active)
 
     def _on_cancel_clicked(self) -> None:
         if self._worker is not None:
@@ -1602,11 +1613,9 @@ class MainWindow(QMainWindow):
         self.distorted_table.item(row, COL_VMAF).setToolTip(detail)
 
     def _on_all_finished(self) -> None:
-        self.run_btn.setEnabled(True)
-        self.pause_btn.setEnabled(False)
+        self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
-        self.cancel_btn.setEnabled(False)
         self._current_job_index = None
         self.status_label.setText("Done.")
         self.progress_bar.setValue(100)
