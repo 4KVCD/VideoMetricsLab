@@ -1129,13 +1129,10 @@ def test_score_option_change_rechecks_cache_for_the_new_combination(qapp, monkey
     win._on_table_selection_changed()
 
     lookups = []
-    monkeypatch.setattr(
-        win, "_start_probe",
-        lambda paths, **kwargs: lookups.append((paths, kwargs)),
-    )
+    monkeypatch.setattr(win, "_start_cache_lookup", lookups.append)
     win.subsample_spin.setValue(2)
 
-    assert lookups == [([Path("a.mp4")], {"probe_again": False})]
+    assert lookups == [[Path("a.mp4")]]
 
 
 def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, monkeypatch):
@@ -1181,14 +1178,13 @@ def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, 
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
 
-    win._start_probe([Path("a.mp4")])
+    win._source_info = _fake_video_info("source.mp4")
+    win._start_cache_lookup([Path("a.mp4")])
     old = FakeProbeWorker.instances[-1]
-    win._start_probe([Path("a.mp4")])
+    win._start_cache_lookup([Path("a.mp4")])
 
     assert old.cancelled
     assert old in win._probe_workers
-    stale_info = _fake_video_info("stale.mp4")
-    old.probed.emit(Path("a.mp4"), stale_info, "")
     assert win._rows[row].video_info is None
 
 
@@ -1202,12 +1198,12 @@ def test_finished_probe_is_not_reused_after_qt_deletes_it(qapp, monkeypatch):
 
     win = MainWindow()
     worker = FinishedWorker()
-    win._probe_worker = worker
+    win._cache_worker = worker
     win._probe_workers.append(worker)
 
-    win._on_probe_finished(win._probe_generation, worker)
+    win._on_cache_lookup_finished(win._cache_generation, worker)
 
-    assert win._probe_worker is None
+    assert win._cache_worker is None
     assert worker not in win._probe_workers
     assert worker.deleted
 
@@ -1267,7 +1263,7 @@ def test_cache_result_is_rejected_if_options_changed_while_it_loaded(qapp, tmp_p
     cached_result.source = source
     cached_result.distorted = distorted
     win._on_cached_if_current(
-        win._probe_generation, distorted, cached_result, "old settings", old_key
+        win._cache_generation, distorted, cached_result, "old settings", old_key
     )
 
     assert win._rows[row].completed_run is None
@@ -1762,3 +1758,171 @@ def test_a_stale_companion_result_is_not_loaded_after_the_file_changes(qapp, tmp
     distorted.write_bytes(b"REPLACED" * 200)
 
     assert not win._try_load_cached_result(1), "a stale score loaded for replaced content"
+
+
+
+# ------------------- media probing must survive unrelated background work
+
+def _blocking_probe(monkeypatch, release):
+    """Makes probe_video block until `release` is set, per path."""
+    from vmaf_app.core import ffprobe
+    from vmaf_app.ui import probe_worker as probe_worker_module
+
+    probed = []
+
+    def slow_probe(path):
+        probed.append(Path(path))
+        release.wait(10.0)
+        return _fake_video_info(str(path))
+
+    monkeypatch.setattr(probe_worker_module, "probe_video", slow_probe)
+    monkeypatch.setattr(ffprobe, "probe_video", slow_probe)
+    return probed
+
+
+def _pump_until(predicate, seconds=10.0):
+    """Pumps the event loop until `predicate` holds, or gives up.
+
+    Waiting for the worker threads to *exit* is not enough: probed/
+    cached_found cross thread boundaries, so Qt queues them and they are
+    only delivered by the event loop afterwards. Waiting on the effect
+    rather than on the thread is what makes this deterministic.
+    """
+    import time
+
+    from PySide6.QtWidgets import QApplication
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        QApplication.processEvents()
+        if predicate():
+            return True
+        time.sleep(0.01)
+    QApplication.processEvents()
+    return predicate()
+
+
+def _wait_for_probes(win, seconds=10.0):
+    """Every row has media info and no worker is left running."""
+    return _pump_until(
+        lambda: not any(w.isRunning() for w in win._probe_workers)
+        and all(rd.video_info is not None for rd in win._rows),
+        seconds,
+    )
+
+
+def test_a_cache_lookup_does_not_abandon_a_running_media_probe(qapp, tmp_path, monkeypatch):
+    """The reported stuck-row bug.
+
+    Media probing and cache lookups shared one worker slot and one
+    generation counter, so starting a lookup cancelled the probe AND
+    invalidated its results -- and the replacement never probed, because a
+    cache lookup does not read media info. Rows stayed on "Reading..."
+    forever with nothing outstanding to fill them.
+    """
+    import threading
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 100)
+    paths = []
+    for name in ("a.mp4", "b.mp4"):
+        path = tmp_path / name
+        path.write_bytes(b"d" * 100)
+        paths.append(path)
+
+    release = threading.Event()
+    probed = _blocking_probe(monkeypatch, release)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    for path in paths:
+        win._add_table_row(path)
+    win._start_media_probe(paths)
+
+    # Anything that triggers a cache lookup while the probe is still going:
+    # changing a score option, adding files, a source probe finishing.
+    win._start_cache_lookup(paths)
+    win._reload_cached_for_all_rows()
+
+    release.set()
+    assert _wait_for_probes(win), "workers never finished or a row was left unprobed"
+
+    assert probed == paths, "a media probe was abandoned part-way"
+    for row_data in win._rows:
+        assert row_data.video_info is not None, (
+            f"{row_data.path.name} was left stuck with no media info"
+        )
+
+
+def test_a_second_batch_of_files_does_not_strand_the_first(qapp, tmp_path, monkeypatch):
+    import threading
+
+    first = tmp_path / "first.mp4"
+    second = tmp_path / "second.mp4"
+    for path in (first, second):
+        path.write_bytes(b"d" * 100)
+
+    release = threading.Event()
+    probed = _blocking_probe(monkeypatch, release)
+
+    win = MainWindow()
+    win._add_table_row(first)
+    win._start_media_probe([first])
+    win._add_table_row(second)
+    win._start_media_probe([second])
+
+    release.set()
+    assert _wait_for_probes(win)
+
+    assert sorted(p.name for p in probed) == ["first.mp4", "second.mp4"]
+    assert all(rd.video_info is not None for rd in win._rows)
+
+
+def test_a_media_probe_result_is_applied_even_after_a_later_cache_lookup(qapp, tmp_path, monkeypatch):
+    # A probe describes the FILE, so its answer stays true no matter what
+    # else the window did meanwhile. It used to be discarded on generation
+    # mismatch, which is what made the row unrecoverable.
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted = tmp_path / "a.mp4"
+    distorted.write_bytes(b"d" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+
+    win._start_cache_lookup([distorted])  # bumps the cache generation
+    win._on_probed(distorted, _fake_video_info(str(distorted)), "")
+
+    assert win._rows[row].video_info is not None
+
+
+def test_recompute_cancels_the_cache_lane_but_not_media_probing(qapp, tmp_path, monkeypatch):
+    # Recompute must stop an in-flight cache read from restoring the very
+    # result being discarded -- without stranding a media probe.
+    import threading
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted = tmp_path / "a.mp4"
+    distorted.write_bytes(b"d" * 100)
+
+    release = threading.Event()
+    probed = _blocking_probe(monkeypatch, release)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    win._start_media_probe([distorted])
+    before = win._cache_generation
+
+    win._recompute_rows([row])
+
+    assert win._cache_generation > before, "an in-flight cache read stays valid"
+    release.set()
+    assert _wait_for_probes(win)
+    assert probed == [distorted], "the media probe was cancelled by a recompute"
+    assert win._rows[row].video_info is not None

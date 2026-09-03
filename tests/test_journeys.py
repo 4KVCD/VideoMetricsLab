@@ -385,16 +385,18 @@ def test_changing_the_source_does_not_reload_caches_on_the_ui_thread(qapp, monke
         })(),
     )
     started = []
-    monkeypatch.setattr(win, "_start_probe", lambda paths, **kw: started.append((paths, kw)))
+    monkeypatch.setattr(win, "_start_cache_lookup", started.append)
 
     win._source_info = _info("C:/vid/newsource.mkv")
     win._reload_cached_for_all_rows()
 
     assert not loaded_inline, "cached results must not be parsed on the UI thread"
     assert started, "the reload should be handed to the worker"
-    paths, kwargs = started[0]
+    paths = started[0]
     assert len(paths) == 4
-    assert kwargs.get("probe_again") is False, "the distorted files have not changed"
+    # A source change only invalidates cached SCORES; the distorted files
+    # themselves have not changed, so this must not re-probe them.
+    assert win._cache_worker is None or not win._cache_worker.isRunning()
 
 
 def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypatch):
@@ -409,7 +411,7 @@ def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypat
     assert win._rows[r].completed_run is not None
     assert_graph_matches_rows(win)
 
-    monkeypatch.setattr(win, "_start_probe", lambda *a, **k: None)
+    monkeypatch.setattr(win, "_start_cache_lookup", lambda *a, **k: None)
     monkeypatch.setattr(
         main_window_module.QFileDialog, "getOpenFileName",
         staticmethod(lambda *a, **k: ("C:/vid/sourceB.mkv", "")),

@@ -183,10 +183,16 @@ class MainWindow(QMainWindow):
         self._source_info: VideoInfo | None = None
         self._rows: list[RowData] = []
         self._worker: VmafWorker | None = None
-        self._probe_worker: ProbeWorker | None = None
+        # Media probing and cache lookups are separate lanes on purpose.
+        # They used to share one worker slot and one generation counter, so
+        # starting a cache lookup cancelled whatever media probe was running
+        # AND invalidated its results -- while the replacement never probed,
+        # because a cache lookup does not read media info. Rows were left
+        # permanently on "Reading..." with nothing outstanding to fill them.
+        self._cache_worker: ProbeWorker | None = None
+        self._cache_generation = 0
         self._source_probe_worker: ProbeWorker | None = None
         self._probe_workers: list[ProbeWorker] = []
-        self._probe_generation = 0
         self._source_probe_generation = 0
         # These track the active run by RowData *identity*, not by table row
         # index: removing a row mid-run shifts every later index down, which
@@ -1166,7 +1172,8 @@ class MainWindow(QMainWindow):
         for path in new_paths:
             row = self._add_table_row(path)
             self._set_row_status(row, "Reading...")
-        self._start_probe(new_paths)
+        self._start_media_probe(new_paths)
+        self._start_cache_lookup(new_paths)
 
     def _reload_cached_for_all_rows(self) -> None:
         """Re-checks every row against the current source, in the background.
@@ -1177,7 +1184,7 @@ class MainWindow(QMainWindow):
         """
         for row in range(len(self._rows)):
             self._set_row_metrics(row)
-        self._start_probe([r.path for r in self._rows], probe_again=False)
+        self._start_cache_lookup([r.path for r in self._rows])
 
     def _reload_cached_for_rows(self, rows: list[int]) -> None:
         """Checks newly-selected score settings without blocking the UI.
@@ -1191,7 +1198,7 @@ class MainWindow(QMainWindow):
             return
         paths = list(dict.fromkeys(self._rows[row].path for row in rows))
         if paths:
-            self._start_probe(paths, probe_again=False)
+            self._start_cache_lookup(paths)
 
     def _set_row_status(self, row: int, text: str) -> None:
         item = self.distorted_table.item(row, COL_INFO)
@@ -1199,54 +1206,71 @@ class MainWindow(QMainWindow):
             item.setText(text)
             item.setForeground(QColor("#999"))
 
-    def _start_probe(self, paths: list[Path], *, probe_again: bool = True) -> None:
-        """Probes `paths` in the background, filling their rows as results
-        arrive. A probe already running is cancelled first -- the newer
-        selection is the one the user is waiting on.
+    def _start_media_probe(self, paths: list[Path]) -> None:
+        """Reads media info for `paths` in the background.
 
-        `probe_again=False` skips re-reading the media info, for when only
-        the source changed and the distorted files themselves have not.
+        Deliberately cancels nothing. A probe answers a question about one
+        file -- its resolution, frame rate, codec -- and that answer stays
+        true whatever the user does next, so there is never a reason to throw
+        one away. Cancelling media probes to start some other piece of
+        background work is what stranded rows on "Reading..." forever.
         """
-        if self._probe_worker is not None and self._probe_worker.isRunning():
+        if not paths:
+            return
+        worker = ProbeWorker(paths, None, False, {}, probe_media=True)
+        self._probe_workers.append(worker)
+        # No generation guard: the result describes the file, not the state
+        # of the window when it was asked for. _on_probed drops it only if
+        # the row has since been removed.
+        worker.probed.connect(self._on_probed)
+        worker.finished_all.connect(lambda w=worker: self._on_probe_finished(worker=w))
+        self.status_label.setText(f"Reading {len(paths)} video(s)...")
+        worker.start()
+
+    def _start_cache_lookup(self, paths: list[Path]) -> None:
+        """Looks for cached results for `paths`, without disturbing probing.
+
+        This lane IS generation-guarded, and does cancel its predecessor:
+        which cached result applies depends on the current source and the
+        row's current options, so an answer computed against superseded
+        state must not be shown.
+        """
+        if not paths or self._source_info is None or not self._settings.use_cache:
+            return
+        if self._cache_worker is not None and self._cache_worker.isRunning():
             # Keep the old QThread alive until it exits. Replacing the only
-            # reference after a fixed two-second wait could destroy a still-
-            # running worker and crash Qt on a slow/network file.
-            self._probe_worker.cancel()
-        self._probe_generation += 1
-        generation = self._probe_generation
-        source = self._source_info.path if self._source_info else None
+            # reference could destroy a still-running worker and crash Qt.
+            self._cache_worker.cancel()
+        self._cache_generation += 1
+        generation = self._cache_generation
         worker = ProbeWorker(
-            paths, source, self._settings.use_cache,
+            paths, self._source_info.path, True,
             {rd.path: clone_options(rd.options) for rd in self._rows if rd.path in paths},
             cache_paths={
                 rd.path: rd.identity_path for rd in self._rows if rd.path in paths
             },
-            probe_media=probe_again,
+            probe_media=False,
         )
-        self._probe_worker = worker
+        self._cache_worker = worker
         self._probe_workers.append(worker)
-        worker.probed.connect(
-            lambda path, info, error, g=generation:
-            self._on_probed_if_current(g, path, info, error)
-        )
         worker.cached_found.connect(
             lambda path, result, label, key, g=generation:
             self._on_cached_if_current(g, path, result, label, key)
         )
         worker.finished_all.connect(
-            lambda g=generation, w=worker: self._on_probe_finished(g, w)
+            lambda g=generation, w=worker: self._on_cache_lookup_finished(g, w)
         )
-        self.status_label.setText(f"Reading {len(paths)} video(s)...")
         worker.start()
 
-    def _on_probed_if_current(self, generation: int, path: Path, info, error: str) -> None:
-        if generation == self._probe_generation:
-            self._on_probed(path, info, error)
+    def _on_cache_lookup_finished(self, generation: int, worker: ProbeWorker) -> None:
+        if worker is self._cache_worker:
+            self._cache_worker = None
+        self._on_probe_finished(worker=worker)
 
     def _on_cached_if_current(
         self, generation: int, path: Path, result, label: str, key: str
     ) -> None:
-        if generation != self._probe_generation or self._source_info is None:
+        if generation != self._cache_generation or self._source_info is None:
             return
         row = self._row_index_of_path(path)
         if row is None:
@@ -1291,12 +1315,11 @@ class MainWindow(QMainWindow):
         if worker is not None:
             if worker in self._probe_workers:
                 self._probe_workers.remove(worker)
-            if worker is self._probe_worker:
-                self._probe_worker = None
             worker.deleteLater()
-        if generation is None or generation == self._probe_generation:
-            self.status_label.setText("Ready.")
-            self._on_table_selection_changed()
+        if any(w.isRunning() for w in self._probe_workers):
+            return  # another lane is still reading, so this is not done yet
+        self.status_label.setText("Ready.")
+        self._on_table_selection_changed()
 
     def _row_index_of_path(self, path: Path) -> int | None:
         for i, row in enumerate(self._rows):
@@ -1384,9 +1407,9 @@ class MainWindow(QMainWindow):
         cache_directory = result_cache.cache_dir()
         # A cache read already in flight must not put back the exact result
         # the user just asked to ignore.
-        if self._probe_worker is not None and self._probe_worker.isRunning():
-            self._probe_worker.cancel()
-        self._probe_generation += 1
+        if self._cache_worker is not None and self._cache_worker.isRunning():
+            self._cache_worker.cancel()
+        self._cache_generation += 1
         for row in rows:
             row_data = self._rows[row]
             row_data.completed_run = None
