@@ -611,7 +611,7 @@ def test_add_resample_test_requires_a_source_selected_first(qapp, monkeypatch):
 
 def test_add_resample_test_creates_a_row_with_the_chosen_target(qapp, monkeypatch):
     win = MainWindow()
-    win._source_info = _fake_video_info("source.mp4")
+    win._source_info = _fake_video_info_res("source.mp4", 3840, 2160)
     monkeypatch.setattr(main_window_module.QInputDialog, "getItem", lambda *a, **kw: ("1080p", True))
 
     win._on_add_resample_test()
@@ -620,7 +620,25 @@ def test_add_resample_test_creates_a_row_with_the_chosen_target(qapp, monkeypatc
     row_data = win._rows[0]
     assert row_data.options.resample_test == ResampleTarget(width=1920, label="1080p")
     assert row_data.video_info is win._source_info
-    assert row_data.path == synthetic_resample_distorted_path(Path("source.mp4"), ResampleTarget(width=1920, label="1080p"))
+    assert row_data.path == synthetic_resample_distorted_path(
+        Path("source.mp4"), ResampleTarget(width=1920, label="1080p")
+    )
+
+
+def test_resolution_test_does_not_offer_targets_larger_than_the_source(qapp, monkeypatch):
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mp4", 1280, 720)
+    offered = []
+    monkeypatch.setattr(
+        main_window_module.QInputDialog, "getItem",
+        lambda _parent, _title, _prompt, labels, *_a, **_kw:
+        (offered.extend(labels) or ("480p", True)),
+    )
+
+    win._on_add_resample_test()
+
+    assert offered == ["480p"]
+    assert win._rows[0].options.resample_test.width == 854
 
 
 def test_add_resample_test_cancelled_dialog_adds_nothing(qapp, monkeypatch):
@@ -635,7 +653,7 @@ def test_add_resample_test_cancelled_dialog_adds_nothing(qapp, monkeypatch):
 
 def test_add_resample_test_same_target_twice_does_not_duplicate(qapp, monkeypatch):
     win = MainWindow()
-    win._source_info = _fake_video_info("source.mp4")
+    win._source_info = _fake_video_info_res("source.mp4", 3840, 2160)
     monkeypatch.setattr(main_window_module.QInputDialog, "getItem", lambda *a, **kw: ("1080p", True))
     # The second call hits the "already added" QMessageBox.information -- a
     # real modal dialog that blocks forever in a headless test run.

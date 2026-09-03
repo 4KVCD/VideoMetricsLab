@@ -1006,13 +1006,25 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No source", "Please select a reference (source) video first.")
             return
 
-        labels = [t.label for t in RESAMPLE_TARGET_CHOICES]
+        targets = [
+            target for target in RESAMPLE_TARGET_CHOICES
+            if target.width < self._source_info.width
+        ]
+        if not targets:
+            QMessageBox.information(
+                self, "No smaller resolution available",
+                f"The smallest resolution test is {RESAMPLE_TARGET_CHOICES[-1].width} pixels wide, "
+                f"which is not below this source's {self._source_info.width}-pixel width.",
+            )
+            return
+        labels = [t.label for t in targets]
         label, ok = QInputDialog.getItem(
-            self, "Add resolution test", "Downscale to (then scale back up):", labels, 1, editable=False,
+            self, "Add resolution test", "Downscale to (then scale back up):",
+            labels, min(1, len(labels) - 1), editable=False,
         )
         if not ok:
             return
-        target = next(t for t in RESAMPLE_TARGET_CHOICES if t.label == label)
+        target = next(t for t in targets if t.label == label)
 
         synthetic_path = synthetic_resample_distorted_path(self._source_info.path, target)
         if any(r.path == synthetic_path for r in self._rows):
