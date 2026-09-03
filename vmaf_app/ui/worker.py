@@ -30,6 +30,7 @@ class VmafWorker(QThread):
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, VmafRunResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
+    cancelled = Signal()
     all_finished = Signal()
 
     def __init__(self, jobs: list[VmafJob], parent=None):
@@ -56,6 +57,7 @@ class VmafWorker(QThread):
         return self._process_handle.is_pause_requested
 
     def run(self) -> None:
+        cancellation_reported = False
         for i, job in enumerate(self._jobs):
             if self._cancel_event.is_set():
                 break
@@ -82,6 +84,8 @@ class VmafWorker(QThread):
                         result_distorted_path=job.result_distorted_path,
                     )
             except Cancelled:
+                self.cancelled.emit()
+                cancellation_reported = True
                 break
             except VmafRunError as e:
                 self.job_failed.emit(i, str(e), e.stderr_tail)
@@ -90,4 +94,6 @@ class VmafWorker(QThread):
                 self.job_failed.emit(i, str(e), "")
                 continue
             self.job_finished.emit(i, result)
+        if self._cancel_event.is_set() and not cancellation_reported:
+            self.cancelled.emit()
         self.all_finished.emit()

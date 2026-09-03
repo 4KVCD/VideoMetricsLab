@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication
 from vmaf_app.core.models import FrameScore, ResampleTarget, VideoInfo, VmafOptions, VmafRunResult
 from vmaf_app.ui import worker as worker_module
 from vmaf_app.ui.worker import VmafJob, VmafWorker
+from vmaf_app.core.vmaf_runner import Cancelled
 
 
 @pytest.fixture(scope="module")
@@ -52,3 +53,18 @@ def test_worker_dispatches_to_run_resample_test_when_resample_target_is_set(qapp
     w.run()
 
     assert calls == ["run_resample_test"]
+
+
+def test_worker_reports_cancellation_as_a_distinct_terminal_state(qapp, monkeypatch):
+    def cancelled_run(*args, **kwargs):
+        raise Cancelled("cancelled")
+
+    monkeypatch.setattr(worker_module, "run_vmaf", cancelled_run)
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d")
+    worker = VmafWorker([job])
+    reported = []
+    worker.cancelled.connect(lambda: reported.append(True))
+
+    worker.run()
+
+    assert reported == [True]

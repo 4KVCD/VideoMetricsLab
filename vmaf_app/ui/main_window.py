@@ -163,6 +163,8 @@ class MainWindow(QMainWindow):
         self._job_cache_options: list[VmafOptions] = []
         self._checked_rows_for_run: list[RowData] = []  # rows checked when Run was clicked, incl. already-scored ones
         self._current_job_index: int | None = None
+        self._run_failed_count = 0
+        self._run_was_cancelled = False
 
         # Per-video settings machinery: the Options panel is an inspector for
         # whichever rows are selected, not one global setting.
@@ -1530,6 +1532,8 @@ class MainWindow(QMainWindow):
         # silently repoint these at a different row.
         self._checked_rows_for_run = [self._rows[r] for r in checked_rows]
         self._current_job_index = None
+        self._run_failed_count = 0
+        self._run_was_cancelled = False
         if already_scored_rows:
             self.status_label.setText(
                 f"Skipping {len(already_scored_rows)} already-scored video(s); running {len(jobs)}..."
@@ -1546,6 +1550,7 @@ class MainWindow(QMainWindow):
         self._worker.status.connect(self._on_job_status)
         self._worker.job_finished.connect(self._on_job_finished)
         self._worker.job_failed.connect(self._on_job_failed)
+        self._worker.cancelled.connect(self._on_run_cancelled)
         self._worker.all_finished.connect(self._on_all_finished)
         self._worker.start()
 
@@ -1648,6 +1653,7 @@ class MainWindow(QMainWindow):
         self.graph_panel.add_run(result, label)
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
+        self._run_failed_count += 1
         row = self._row_index_of(self._job_rows[index])
         if row is None:
             return  # the row was removed mid-run
@@ -1655,13 +1661,24 @@ class MainWindow(QMainWindow):
         detail = f"{message}\n\n{stderr_tail}" if stderr_tail else message
         self.distorted_table.item(row, COL_VMAF).setToolTip(detail)
 
+    def _on_run_cancelled(self) -> None:
+        self._run_was_cancelled = True
+
     def _on_all_finished(self) -> None:
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         self._current_job_index = None
-        self.status_label.setText("Done.")
-        self.progress_bar.setValue(100)
+        if self._run_was_cancelled:
+            self.status_label.setText("Cancelled.")
+        elif self._run_failed_count:
+            self.status_label.setText(
+                f"Finished with {self._run_failed_count} failed video(s)."
+            )
+            self.progress_bar.setValue(100)
+        else:
+            self.status_label.setText("Done.")
+            self.progress_bar.setValue(100)
         self.progress_detail_label.setText("")
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.

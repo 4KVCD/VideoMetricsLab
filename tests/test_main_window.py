@@ -912,6 +912,29 @@ def test_job_progress_with_zero_fps_shows_no_eta(qapp):
     assert "file 1 of 1" in win.progress_detail_label.text()
 
 
+def test_cancelled_run_does_not_claim_done_or_force_100_percent(qapp):
+    win = MainWindow()
+    win.progress_bar.setValue(37)
+    win._on_run_cancelled()
+
+    win._on_all_finished()
+
+    assert win.status_label.text() == "Cancelled."
+    assert win.progress_bar.value() == 37
+
+
+def test_failed_run_reports_failure_instead_of_done(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("bad.mp4"))
+    win._job_rows = [win._rows[row]]
+
+    win._on_job_failed(0, "ffmpeg failed", "details")
+    win._on_all_finished()
+
+    assert "1 failed" in win.status_label.text()
+    assert "Done" not in win.status_label.text()
+
+
 def test_estimate_total_frames_used_when_building_jobs(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
