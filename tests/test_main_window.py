@@ -511,6 +511,34 @@ def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):
     assert result_cache.load_cached(source, distorted) is not None
 
 
+def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
+    qapp, tmp_path, monkeypatch
+):
+    from vmaf_app.core import result_cache
+
+    monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)
+    old_source = tmp_path / "old" / "old-source.mp4"
+    new_source = tmp_path / "new" / "new-source.mp4"
+    distorted = tmp_path / "distorted.mp4"
+    for path, data in ((old_source, b"old"), (new_source, b"new"), (distorted, b"dist")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(new_source))
+    row = win._add_table_row(distorted)
+    win._job_rows = [win._rows[row]]
+    result = _fake_completed_run(str(distorted)).result
+    result.source = old_source
+    result.distorted = distorted
+
+    win._on_job_finished(0, result)
+
+    assert win._rows[row].completed_run is None
+    assert result_cache.load_cached(old_source, distorted) is not None
+    assert result_cache.load_cached(new_source, distorted) is None
+
+
 def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
     monkeypatch.setattr(result_cache, "_cache_dir", lambda: tmp_path)

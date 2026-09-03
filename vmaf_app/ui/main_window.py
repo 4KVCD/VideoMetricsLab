@@ -1536,6 +1536,13 @@ class MainWindow(QMainWindow):
         if row is None:
             return  # the row was removed mid-run; nothing to write the result to
         label = row_data.path.stem
+        # The job owns the source/distorted identities it was launched with.
+        # Never key a result from an old in-flight job using whatever source
+        # happens to be selected by the time it finishes.
+        result_cache.store(result.source, result.distorted, result, label)
+        if self._source_info is None or self._source_info.path != result.source:
+            self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
+            return
         run = CompletedRun(result, label)
         row_data.completed_run = run
         if row_data.options.resample_test is None:
@@ -1545,8 +1552,6 @@ class MainWindow(QMainWindow):
             f"mean {run.stats.mean:.2f}   min {run.stats.minimum:.2f}   max {run.stats.maximum:.2f}   "
             f"({run.stats.count} frames)"
         )
-        if self._source_info is not None:
-            result_cache.store(self._source_info.path, row_data.path, result, label)
         # Straight onto the graph: a run that has finished is a curve, and
         # waiting for a button press to see it serves nobody.
         self.graph_panel.add_run(result, label)
