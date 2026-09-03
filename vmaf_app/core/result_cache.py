@@ -17,12 +17,27 @@ from PySide6.QtCore import QStandardPaths
 from vmaf_app.core.models import VmafRunResult
 from vmaf_app.core.run_io import load_run, save_run
 
+_dir_override: Path | None = None
 
-def _cache_dir() -> Path:
-    base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-    d = Path(base) / "results_cache"
+
+def set_cache_dir_override(directory: Path | None) -> None:
+    """Points the cache somewhere else, per the Settings tab. None restores
+    the platform's app-data folder."""
+    global _dir_override
+    _dir_override = directory
+
+
+def cache_dir() -> Path:
+    d = _dir_override
+    if d is None:
+        base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+        d = Path(base) / "results_cache"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _cache_dir() -> Path:
+    return cache_dir()
 
 
 def _file_identity(path: Path) -> str:

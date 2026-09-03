@@ -7,12 +7,12 @@ from pathlib import Path
 
 CORE = Path(__file__).resolve().parent.parent / "vmaf_app" / "core"
 
-# ffmpeg_locate and result_cache use Qt purely as a platform abstraction --
-# QSettings for the remembered ffmpeg location, QStandardPaths for the
-# per-user cache directory. That is not a UI dependency, and reimplementing
-# per-platform config paths by hand would be worse. Anything else in core
-# importing Qt is a layering break.
-_QT_FOR_PLATFORM_PATHS = {"ffmpeg_locate.py", "result_cache.py"}
+# These use Qt purely as a platform abstraction -- QSettings for the
+# remembered ffmpeg location, QStandardPaths for the per-user cache and
+# config directories. That is not a UI dependency, and reimplementing
+# per-platform paths by hand would be worse. Anything else in core importing
+# Qt is a layering break.
+_QT_FOR_PLATFORM_PATHS = {"ffmpeg_locate.py", "result_cache.py", "settings.py"}
 
 
 def _imported_modules(path: Path) -> set[str]:

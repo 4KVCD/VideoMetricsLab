@@ -1,4 +1,4 @@
-"""Expanded VMAF/PSNR/SSIM/XPSNR-vs-time graph window.
+"""The VMAF/PSNR/SSIM/XPSNR-vs-time comparison graph.
 
 Supports overlaying multiple runs (e.g. several distorted encodes compared
 against the same or different sources) as separate colored curves, with a
@@ -7,6 +7,8 @@ Each metric (VMAF, PSNR, SSIM, XPSNR) gets its own tab/plot -- they're
 different scales (0-100, dB, 0-1, dB) that don't belong on one axis -- while
 the series list and stats table at the top are shared across all of them,
 since it's the same set of runs either way.
+
+This is a QWidget, not a window: it is one page of the main window's tabs.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFontMetrics, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -23,7 +25,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMainWindow,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -130,7 +131,15 @@ class _MetricPage(QWidget):
 
         self.hover_label = QLabel(_HOVER_PLACEHOLDER)
         self.hover_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.hover_label.setStyleSheet("font-family: Consolas, monospace; padding: 6px;")
+        # The font goes through setFont, not the stylesheet: _fit_hover_label
+        # measures with QFontMetrics(self.hover_label.font()), and a
+        # stylesheet font-family never reaches .font(). Measuring the
+        # proportional default while rendering in wider monospace made the
+        # readout too narrow, clipping the last few characters.
+        mono = QFont("Consolas")
+        mono.setStyleHint(QFont.Monospace)
+        self.hover_label.setFont(mono)
+        self.hover_label.setStyleSheet("padding: 6px;")
         # Explicit size + plain text + no wrap, all for the same reason: this
         # is rewritten on every mouse move, and anything that lets its size
         # hint change invalidates the layout of the whole tab (chart, stats
@@ -148,8 +157,8 @@ class _MetricPage(QWidget):
         layout.addLayout(hover_row)
 
         self.chart.left.connect(self._on_pointer_left)
-        # chart.hovered is connected by GraphWindow -- the handler needs the
-        # shared series map that only GraphWindow owns.
+        # chart.hovered is connected by GraphPanel -- the handler needs the
+        # shared series map that only the panel owns.
 
     # ------------------------------------------------------------------ curves
     def set_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
@@ -364,26 +373,22 @@ class _MetricPage(QWidget):
         self.hover_label.setText("\n".join(lines))
 
 
-class GraphWindow(QMainWindow):
+class GraphPanel(QWidget):
+    """The comparison graph, as a page of the main window's tab bar.
+
+    This used to be a separate top-level window. Living in a tab means the
+    series it holds survive switching away and back, there is no second
+    taskbar entry to manage, and the run that produced a curve is one click
+    from the curve itself.
+    """
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Explicitly a real top-level Window, not a Dialog/Tool implicitly
-        # inheriting owned-window semantics from having a `parent` -- an
-        # owned window doesn't get its own taskbar button on Windows, and
-        # minimizing it shrinks it to a small title bar near the corner of
-        # the screen instead of the taskbar. Being a real top-level window
-        # in the same process as the main window is what makes Windows group
-        # them together in the taskbar (same app), not this flag by itself.
-        self.setWindowFlags(Qt.Window)
-        self.setWindowTitle("VMAF Comparison Graph")
-        self.resize(1280, 800)
 
         self._entries: dict[int, SeriesEntry] = {}
         self._next_id = 0
 
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QVBoxLayout(central)
+        root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
 
         # --- top: one table that is BOTH the series list and the statistics,

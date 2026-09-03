@@ -47,10 +47,22 @@ def _get_setting(key: str) -> str | None:
         return None
 
 
-def set_ffmpeg_dir_override(dir_path: str) -> None:
+def set_ffmpeg_dir_override(dir_path: str | Path | None) -> None:
+    """Pins lookups to `dir_path`, or clears the override when it's empty so
+    lookup falls back to PATH and the known install locations.
+
+    This persists to QSettings, so it is a real side effect -- callers should
+    only invoke it when the user actually changed the setting.
+    """
     from PySide6.QtCore import QSettings
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
-    settings.setValue("ffmpeg_dir", dir_path)
+    value = str(dir_path).strip() if dir_path else ""
+    if value:
+        settings.setValue("ffmpeg_dir", value)
+    else:
+        # Storing None/"" leaves a key that later reads back as the useless
+        # string "None" on some platforms; removing it is unambiguous.
+        settings.remove("ffmpeg_dir")
     find_binary.cache_clear()
     check_tools.cache_clear()
 

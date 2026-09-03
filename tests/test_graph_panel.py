@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import FrameScore, VideoInfo, VmafRunResult
-from vmaf_app.ui.graph_window import GraphWindow
+from vmaf_app.ui.graph_panel import GraphPanel
 
 
 @pytest.fixture(scope="module")
@@ -74,11 +74,11 @@ def _long_result(name: str, n_frames: int, fps: float = 30.0) -> VmafRunResult:
     )
 
 
-def _hover(win: GraphWindow, metric: str, time: float, value: float) -> None:
+def _hover(win: GraphPanel, metric: str, time: float, value: float) -> None:
     win._pages[metric].on_hover(time, value, win._entries)
 
 
-def _hover_middle(win: GraphWindow, metric: str) -> None:
+def _hover_middle(win: GraphPanel, metric: str) -> None:
     """Hover the middle of the chart's current view, at mid-height."""
     chart = win._pages[metric].chart
     x0, x1 = chart.x_range()
@@ -88,30 +88,9 @@ def _hover_middle(win: GraphWindow, metric: str) -> None:
 
 # ------------------------------------------------------------------ window basics
 
-def test_closing_the_window_preserves_its_series(qapp):
-    win = GraphWindow()
-    win.add_run(_fake_result("a.mp4"))
-    win.show()
-
-    win.close()
-    assert len(win._entries) == 1
-
-    win.show()
-    assert len(win._entries) == 1
-    assert win.isVisible()
-
-
-def test_window_is_a_real_top_level_window_not_an_owned_dialog(qapp):
-    # Windows only gives a real taskbar button (and groups it with the main
-    # window) to genuine top-level windows -- a widget that inherits owned
-    # (Dialog/Tool-like) semantics from having a Qt `parent` doesn't get one,
-    # and minimizes into a small title bar near the screen corner instead.
-    win = GraphWindow(parent=None)
-    assert bool(win.windowFlags() & Qt.Window)
-
 
 def test_readding_the_same_file_replaces_its_series_instead_of_duplicating(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4", vmaf_value=80.0))
     win.add_run(_fake_result("b.mp4", vmaf_value=85.0))
     assert len(win._entries) == 2
@@ -126,25 +105,10 @@ def test_readding_the_same_file_replaces_its_series_instead_of_duplicating(qapp)
     assert a_entries[0].result.frames[0].vmaf == 99.0
 
 
-def test_readding_all_series_after_reopen_does_not_duplicate(qapp):
-    win = GraphWindow()
-    win.add_run(_fake_result("a.mp4"))
-    win.add_run(_fake_result("b.mp4"))
-    win.close()
-
-    # Simulates MainWindow's "Compare selected" reusing the same (now hidden)
-    # window and re-adding the same runs the user re-selected.
-    win.add_run(_fake_result("a.mp4"))
-    win.add_run(_fake_result("b.mp4"))
-    win.show()
-
-    assert len(win._entries) == 2
-
-
 # ------------------------------------------------------------------ multi-series color + visibility
 
 def test_each_series_gets_a_distinct_color(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
     win.add_run(_fake_result("b.mp4"))
     win.add_run(_fake_result("c.mp4"))
@@ -154,7 +118,7 @@ def test_each_series_gets_a_distinct_color(qapp):
 
 
 def test_unchecking_a_series_hides_its_curve_on_every_page_and_drops_it_from_stats(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
     win.add_run(_fake_result("b.mp4"))
     entry_a = next((sid, e) for sid, e in win._entries.items() if Path(e.result.distorted) == Path("a.mp4"))
@@ -178,7 +142,7 @@ def test_unchecking_a_series_hides_its_curve_on_every_page_and_drops_it_from_sta
 # ------------------------------------------------------------------ per-metric tabs
 
 def test_graph_has_one_tab_per_metric(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
     assert labels == ["VMAF", "PSNR", "SSIM", "XPSNR"]
 
@@ -188,7 +152,7 @@ def test_non_default_tabs_are_not_built_until_first_visited(qapp):
     # 1700x900 window, measured), so building all 4 up front meant paying
     # real memory for tabs the user may never look at. Only the default
     # (VMAF) tab should exist right away.
-    win = GraphWindow()
+    win = GraphPanel()
     assert "vmaf" in win._pages
     assert "psnr" not in win._pages
     assert "ssim" not in win._pages
@@ -200,7 +164,7 @@ def test_non_default_tabs_are_not_built_until_first_visited(qapp):
 
 
 def test_run_without_extra_metrics_only_gets_a_vmaf_curve(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.show()  # a widget inside an inactive QTabWidget page never reports isVisible()==True
     win.add_run(_fake_result("a.mp4", with_other_metrics=False))
     sid = next(iter(win._entries))
@@ -216,7 +180,7 @@ def test_run_without_extra_metrics_only_gets_a_vmaf_curve(qapp):
 
 
 def test_run_with_extra_metrics_gets_a_curve_on_every_tab(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True))
     sid = next(iter(win._entries))
     for i in range(win.tabs.count()):  # visit every tab so its (lazily-built) page exists
@@ -231,7 +195,7 @@ def test_run_with_extra_metrics_gets_a_curve_on_every_tab(qapp):
 
 
 def test_removing_a_run_removes_its_curve_from_every_page(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True))
     sid = next(iter(win._entries))
     for i in range(win.tabs.count()):
@@ -244,7 +208,7 @@ def test_removing_a_run_removes_its_curve_from_every_page(qapp):
 
 
 def test_stats_table_reflects_the_currently_active_tab(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True))
 
     win.tabs.setCurrentIndex(0)  # VMAF
@@ -260,7 +224,7 @@ def test_stats_table_reflects_the_currently_active_tab(qapp):
 
 
 def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True), "a")
     win.add_run(_fake_result("b.mp4", with_other_metrics=False), "b")
 
@@ -282,7 +246,7 @@ def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
 # ------------------------------------------------------------------ stats table columns (extensible)
 
 def test_stats_table_includes_01_percent_low_column(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     headers = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
     assert "1% Low" in headers
     assert "0.1% Low" in headers
@@ -291,7 +255,7 @@ def test_stats_table_includes_01_percent_low_column(qapp):
 # ------------------------------------------------------------------ Y-aware hover snapping
 
 def test_hover_locks_onto_a_dip_below_cursor_y_even_if_not_exactly_under_cursor(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_dip_result("a.mp4"))
     entry = next(iter(win._entries.values()))
     page = win._pages["vmaf"]
@@ -304,7 +268,7 @@ def test_hover_locks_onto_a_dip_below_cursor_y_even_if_not_exactly_under_cursor(
 
 
 def test_hover_falls_back_to_local_minimum_when_nothing_is_below_cursor_y(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_dip_result("a.mp4"))
     entry = next(iter(win._entries.values()))
     page = win._pages["vmaf"]
@@ -318,7 +282,7 @@ def test_hover_falls_back_to_local_minimum_when_nothing_is_below_cursor_y(qapp):
 
 
 def test_hover_diff_shown_for_exactly_two_visible_series(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.show()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
     win.add_run(_fake_result("b.mp4", vmaf_value=80.0))
@@ -331,7 +295,7 @@ def test_hover_diff_shown_for_exactly_two_visible_series(qapp):
 
 
 def test_hover_diff_not_shown_for_a_single_series(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.show()
     win.add_run(_fake_result("a.mp4"))
 
@@ -342,7 +306,7 @@ def test_hover_diff_not_shown_for_a_single_series(qapp):
 
 
 def test_hover_on_psnr_tab_reports_psnr_not_vmaf(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.show()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0, with_other_metrics=True))
     win.tabs.setCurrentIndex(1)  # PSNR -- lazily builds its page
@@ -357,7 +321,7 @@ def test_hover_on_psnr_tab_reports_psnr_not_vmaf(qapp):
 # ------------------------------------------------------------------ step-based hover radius
 
 def test_series_step_matches_the_time_between_consecutive_frames(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_long_result("a.mp4", n_frames=7200, fps=30.0))  # a 4-minute 30fps run
     entry = next(iter(win._entries.values()))
 
@@ -383,7 +347,7 @@ def test_hover_finds_a_narrow_dip_even_when_zoomed_out_over_a_long_run(qapp):
         source_info=info, distorted_info=info,
     )
 
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1000, 700)
     win.add_run(result, "a")
     win.show()
@@ -399,7 +363,7 @@ def test_hover_finds_a_narrow_dip_even_when_zoomed_out_over_a_long_run(qapp):
 # ------------------------------------------------------------------ H:M:S time formatting
 
 def test_hover_text_uses_hms_format(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.show()
     win.add_run(_long_result("a.mp4", n_frames=7200, fps=30.0))  # runs to 0:04:00
 
@@ -413,7 +377,7 @@ def test_hover_text_uses_hms_format(qapp):
 
 
 def test_graph_x_axis_renders_hms_ticks(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_long_result("a.mp4", n_frames=30 * 3725, fps=30.0))  # just over an hour
     labels = win._pages["vmaf"].chart.time_tick_labels()
     assert labels, "expected some time ticks"
@@ -424,14 +388,11 @@ def test_graph_x_axis_renders_hms_ticks(qapp):
 # ------------------------------------------------------------------ Y-axis auto-scaling
 
 
-
-
-
 def test_hiding_a_series_reaches_the_charts_y_range(qapp):
     # The y-range rules themselves are covered directly in test_chart.py;
     # what this checks is that the window's visibility toggle actually
     # reaches the chart that computes them.
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0))
     win.add_run(_fake_result("b.mp4", vmaf_value=40.0))
 
@@ -449,7 +410,7 @@ def test_multi_series_hover_reports_the_same_frame_for_every_series(qapp):
     # (8). Independently dip-snapping each series (the single-series
     # behavior) would report frame 5 for a and frame 8 for b -- not a real
     # comparison. Both must report the same frame.
-    win = GraphWindow()
+    win = GraphPanel()
     win.show()
     values_a = [95, 95, 95, 95, 95, 30, 95, 95, 95, 95]
     values_b = [95, 95, 95, 95, 95, 95, 95, 95, 40, 95]
@@ -472,7 +433,7 @@ def test_single_series_hover_still_uses_independent_dip_snap(qapp):
     # With only one series visible, the original per-series dip-snap
     # behavior (not the shared-time logic, which only matters for
     # comparing 2+ series) still applies.
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_dip_result("a.mp4"))
     entry = next(iter(win._entries.values()))
     page = win._pages["vmaf"]
@@ -485,7 +446,7 @@ def test_single_series_hover_still_uses_independent_dip_snap(qapp):
 # ------------------------------------------------------------------ view fitting
 
 def test_adding_a_longer_run_expands_the_view_to_show_it(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1000, 700)
     win.show()
     win.add_run(_values_result("a.mp4", [90.0] * 100))  # ~3.3s at 30fps
@@ -502,7 +463,7 @@ def test_adding_a_longer_run_expands_the_view_to_show_it(qapp):
 
 def test_hovering_does_not_change_the_view(qapp):
     # Hovering must never re-fit or shift the axes -- only move the crosshair.
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1000, 700)
     win.show()
     win.add_run(_dip_result("a.mp4"))
@@ -518,9 +479,9 @@ def test_hovering_does_not_change_the_view(qapp):
 # ------------------------------------------------------------------ top panel sizing
 
 def test_the_table_is_capped_at_four_rows(qapp):
-    from vmaf_app.ui.graph_window import _VISIBLE_SERIES_ROWS
+    from vmaf_app.ui.graph_panel import _VISIBLE_SERIES_ROWS
 
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1400, 900)
     win.show()
     for i in range(7):  # more series than the panel shows at once
@@ -541,7 +502,7 @@ def test_the_stats_table_is_also_the_series_list(qapp):
     # There used to be a separate series list beside the stats table, which
     # repeated the same list of videos twice. One row per series now carries
     # its swatch, checkbox and name alongside its statistics.
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
     win.add_run(_fake_result("b.mp4"))
 
@@ -553,7 +514,7 @@ def test_the_stats_table_is_also_the_series_list(qapp):
 
 
 def test_ticking_the_row_checkbox_toggles_the_curve(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
     sid = next(iter(win._entries))
 
@@ -568,7 +529,7 @@ def test_a_series_with_no_data_for_this_metric_keeps_its_row(qapp):
     # Only VMAF is computed here, so on the PSNR tab this series has no
     # curve. Its row must still be present (blank stats) or there would be
     # no way to see or remove it from that tab.
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
     win.tabs.setCurrentIndex(1)  # PSNR
 
@@ -578,7 +539,7 @@ def test_a_series_with_no_data_for_this_metric_keeps_its_row(qapp):
 
 
 def test_clicking_a_rows_remove_cell_removes_the_series(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
     win.add_run(_fake_result("b.mp4"))
 
@@ -591,8 +552,6 @@ def test_clicking_a_rows_remove_cell_removes_the_series(qapp):
     assert win.stats_table.rowCount() == 1
     assert len(win._entries) == 1
     assert _row_for(win, "b").text() == "b"
-
-
 
 
 # ------------------------------------------------------- hover readout sizing
@@ -613,7 +572,7 @@ def test_hover_readout_is_not_clipped_by_long_series_names(qapp):
     # longest of the lot -- lost its value entirely.
     long_a = "Top Gun Maverick 1080p QP 24 fast 1 sub"
     long_b = "Top Gun Maverick 1080p QP 24 faster 1 sub"
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1700, 950)
     win.show()
     win.add_run(_fake_result("a.mp4", vmaf_value=91.0), long_a)
@@ -631,7 +590,7 @@ def test_hover_readout_is_not_clipped_by_long_series_names(qapp):
 
 
 def test_hover_readout_fits_every_series_when_many_are_shown(qapp):
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1700, 950)
     win.show()
     for i in range(6):
@@ -650,7 +609,7 @@ def test_hover_readout_size_does_not_change_while_hovering(qapp):
     # The size is derived from the series set, never from the text under the
     # cursor: letting it change per mouse move re-laid out the whole tab
     # (chart and table included), which measured as ~76% of a hover's cost.
-    win = GraphWindow()
+    win = GraphPanel()
     win.resize(1700, 950)
     win.show()
     win.add_run(_fake_result("a.mp4", vmaf_value=91.0), "an-encode-with-a-long-name")
@@ -666,3 +625,16 @@ def test_hover_readout_size_does_not_change_while_hovering(qapp):
     for frac in (0.3, 0.5, 0.7, 0.9):
         _hover(win, "vmaf", x0 + (x1 - x0) * frac, (y0 + y1) / 2)
         assert page.hover_label.size() == before, f"readout resized at {frac}"
+
+
+def test_the_hover_readout_is_measured_in_the_font_it_renders_in(qapp):
+    # The font was set via stylesheet, which never reaches widget.font(), so
+    # the width was measured in the proportional default while rendering in
+    # wider monospace -- clipping the last characters of every line.
+    from PySide6.QtGui import QFontMetrics
+
+    win = GraphPanel()
+    page = win._pages["vmaf"]
+    fm = QFontMetrics(page.hover_label.font())
+    widest = max(fm.horizontalAdvance(line) for line in page.hover_label.text().splitlines())
+    assert widest <= page.hover_label.maximumWidth(), "the placeholder is clipped"

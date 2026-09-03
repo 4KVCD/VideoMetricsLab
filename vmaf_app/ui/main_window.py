@@ -20,8 +20,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTime
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtCore import Qt, QTime, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTableWidgetItem,
+    QTabWidget,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
@@ -65,11 +66,12 @@ from vmaf_app.core.models import (
     synthetic_scale_direction_variant_path,
 )
 from vmaf_app.core.run_io import load_run, save_run
+from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import estimate_total_frames
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
-from vmaf_app.ui.graph_window import GraphWindow
+from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
 from vmaf_app.ui.worker import VmafJob, VmafWorker
 
@@ -87,6 +89,10 @@ _GPU_VENDOR_BY_INDEX = {0: GpuVendor.AUTO, 1: GpuVendor.NVIDIA, 2: GpuVendor.INT
 _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
 
 COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR = range(9)
+
+# Tab order. A frame-comparison tab is planned between Graph and Settings;
+# adding it means inserting here and in _build_ui.
+TAB_VIDEOS, TAB_GRAPH, TAB_SETTINGS = range(3)
 
 # The metric columns, in table order: (column, label, the VmafOptions field or
 # libvmaf feature it maps to). VMAF has no toggle -- it's what the app exists
@@ -127,13 +133,25 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("VMAF Calculator")
-        self.resize(1280, 800)
+        # Settings first: the ffmpeg location and what new rows default to
+        # both come from them, so they must be applied before the startup
+        # tool check or any row is added.
+        self._settings = Settings.load()
+        # Only when one is actually configured. Calling this unconditionally
+        # wrote to persistent QSettings on every launch, and each call clears
+        # the tool-lookup cache -- which re-probes ffmpeg by spawning it.
+        if self._settings.ffmpeg_dir_path() is not None:
+            self._apply_ffmpeg_setting()
+        result_cache.set_cache_dir_override(self._settings.cache_dir_path())
+        if self._settings.remember_window_size:
+            self.resize(self._settings.window_width, self._settings.window_height)
+        else:
+            self.resize(1280, 800)
         self.setMinimumSize(1050, 650)
 
         self._source_info: VideoInfo | None = None
         self._rows: list[RowData] = []
         self._worker: VmafWorker | None = None
-        self._graph_window: GraphWindow | None = None
         # These track the active run by RowData *identity*, not by table row
         # index: removing a row mid-run shifts every later index down, which
         # used to make a finishing job write its result to the wrong row --
@@ -145,7 +163,7 @@ class MainWindow(QMainWindow):
 
         # Per-video settings machinery: the Options panel is an inspector for
         # whichever rows are selected, not one global setting.
-        self._default_options = VmafOptions()  # what a newly-added row starts with
+        self._default_options = self._options_from_settings()  # what a newly-added row starts with
         self._panel_target_rows: list[int] = []  # rows the panel currently edits
         self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
         self._syncing_panel = False  # guards against write-back while populating the panel programmatically
@@ -162,13 +180,12 @@ class MainWindow(QMainWindow):
         if self._worker is not None and self._worker.isRunning():
             self._worker.cancel()
             self._worker.wait(5000)
-        # The graph window is a real independent top-level window now (not a
-        # Qt child of this one -- see _open_or_update_graph for why), so it
-        # no longer gets destroyed automatically when this window closes.
-        # Close it explicitly so the app doesn't leave an orphaned window
-        # (and process) running in the background.
-        if self._graph_window is not None:
-            self._graph_window.close()
+        # Remember the window size, if asked to. The graph is a tab now, so
+        # there is no second window to tear down.
+        if self._settings.remember_window_size:
+            self._settings.window_width = self.width()
+            self._settings.window_height = self.height()
+            self._settings.save()
         super().closeEvent(event)
 
     # ------------------------------------------------------------------ UI construction
@@ -193,9 +210,18 @@ class MainWindow(QMainWindow):
         banner_row.addWidget(self._locate_ffmpeg_btn)
         root.addLayout(banner_row)
 
-        splitter = QSplitter(Qt.Vertical)
-        root.addWidget(splitter, stretch=1)
+        # Tabs, not separate windows: the graph lives beside the run that
+        # produced it, its series survive switching away and back, and there
+        # is no second taskbar entry to manage. A frame-comparison tab is
+        # planned and slots in between Graph and Settings.
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, stretch=1)
 
+        videos_page = QWidget()
+        videos_layout = QVBoxLayout(videos_page)
+        videos_layout.setContentsMargins(0, 0, 0, 0)
+        splitter = QSplitter(Qt.Vertical)
+        videos_layout.addWidget(splitter, stretch=1)
         # Videos on top, options underneath it (not beside it), so the file
         # table gets the full window width -- it's the part that grows with
         # the number of encodes being compared.
@@ -203,6 +229,224 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._build_options_panel())
         splitter.addWidget(self._build_run_panel())
         splitter.setSizes([420, 260, 120])
+        self.tabs.addTab(videos_page, "Videos")
+
+        self.graph_panel = GraphPanel()
+        self.tabs.addTab(self.graph_panel, "Graph")
+
+        self.tabs.addTab(self._build_settings_panel(), "Settings")
+
+    # ------------------------------------------------------------------ settings tab
+    def _options_from_settings(self) -> VmafOptions:
+        """The options a newly added video starts from. Only a starting
+        point: each row's own settings are edited in the Options panel."""
+        return VmafOptions(
+            gpu_decode_source=self._settings.default_gpu_decode,
+            extra_features=self._settings.default_extra_features(),
+            compute_xpsnr=self._settings.default_compute_xpsnr,
+        )
+
+    def _apply_ffmpeg_setting(self) -> None:
+        """Points the finder at the configured folder, or clears the override
+        so it goes back to searching PATH and the known install locations.
+
+        set_ffmpeg_dir_override writes to persistent QSettings, so this is
+        only called when the setting actually changes -- not on every launch.
+        """
+        configured = self._settings.ffmpeg_dir_path()
+        set_ffmpeg_dir_override(str(configured) if configured else "")
+
+    def _build_settings_panel(self) -> QWidget:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+
+        tools_box = QGroupBox("ffmpeg")
+        tools_form = QFormLayout(tools_box)
+        self.settings_ffmpeg_edit = QLineEdit(self._settings.ffmpeg_dir)
+        self.settings_ffmpeg_edit.setPlaceholderText("blank = search PATH")
+        self.settings_ffmpeg_edit.editingFinished.connect(self._on_settings_edited)
+        browse_ffmpeg = QPushButton("Browse...")
+        browse_ffmpeg.clicked.connect(self._on_pick_ffmpeg_dir)
+        ffmpeg_row = QHBoxLayout()
+        ffmpeg_row.addWidget(self.settings_ffmpeg_edit, stretch=1)
+        ffmpeg_row.addWidget(browse_ffmpeg)
+        tools_form.addRow("ffmpeg folder:", ffmpeg_row)
+        self.settings_ffmpeg_status = QLabel()
+        tools_form.addRow("", self.settings_ffmpeg_status)
+        outer.addWidget(tools_box)
+
+        storage_box = QGroupBox("Storage")
+        storage_form = QFormLayout(storage_box)
+        self.settings_cache_edit = QLineEdit(self._settings.cache_dir)
+        self.settings_cache_edit.setPlaceholderText("blank = default app data folder")
+        self.settings_cache_edit.editingFinished.connect(self._on_settings_edited)
+        browse_cache = QPushButton("Browse...")
+        browse_cache.clicked.connect(self._on_pick_cache_dir)
+        open_cache = QPushButton("Open")
+        open_cache.clicked.connect(self._on_open_cache_dir)
+        cache_row = QHBoxLayout()
+        cache_row.addWidget(self.settings_cache_edit, stretch=1)
+        cache_row.addWidget(browse_cache)
+        cache_row.addWidget(open_cache)
+        storage_form.addRow("Saved results:", cache_row)
+
+        self.settings_cache_summary = QLabel()
+        clear_cache = QPushButton("Clear saved results")
+        clear_cache.clicked.connect(self._on_clear_cache)
+        summary_row = QHBoxLayout()
+        summary_row.addWidget(self.settings_cache_summary, stretch=1)
+        summary_row.addWidget(clear_cache)
+        storage_form.addRow("", summary_row)
+
+        self.settings_export_edit = QLineEdit(self._settings.export_dir)
+        self.settings_export_edit.setPlaceholderText("blank = ask each time")
+        self.settings_export_edit.editingFinished.connect(self._on_settings_edited)
+        browse_export = QPushButton("Browse...")
+        browse_export.clicked.connect(self._on_pick_export_dir)
+        export_row = QHBoxLayout()
+        export_row.addWidget(self.settings_export_edit, stretch=1)
+        export_row.addWidget(browse_export)
+        storage_form.addRow("Export folder:", export_row)
+
+        self.settings_use_cache = QCheckBox("Reuse a saved result when a video is added again")
+        self.settings_use_cache.setChecked(self._settings.use_cache)
+        self.settings_use_cache.toggled.connect(self._on_settings_edited)
+        storage_form.addRow("", self.settings_use_cache)
+        outer.addWidget(storage_box)
+
+        defaults_box = QGroupBox("Defaults for newly added videos")
+        defaults_layout = QVBoxLayout(defaults_box)
+        hint = QLabel(
+            "These are only a starting point -- each video's own settings are "
+            "edited in the Videos tab."
+        )
+        hint.setStyleSheet("color: #666; font-style: italic;")
+        defaults_layout.addWidget(hint)
+        self.settings_default_gpu = QCheckBox("Use GPU decoding for the source video")
+        self.settings_default_gpu.setChecked(self._settings.default_gpu_decode)
+        self.settings_default_gpu.toggled.connect(self._on_settings_edited)
+        defaults_layout.addWidget(self.settings_default_gpu)
+
+        metrics_row = QHBoxLayout()
+        metrics_row.addWidget(QLabel("Also compute:"))
+        self.settings_default_psnr = QCheckBox("PSNR")
+        self.settings_default_ssim = QCheckBox("SSIM")
+        self.settings_default_xpsnr = QCheckBox("XPSNR")
+        for box, value in (
+            (self.settings_default_psnr, self._settings.default_compute_psnr),
+            (self.settings_default_ssim, self._settings.default_compute_ssim),
+            (self.settings_default_xpsnr, self._settings.default_compute_xpsnr),
+        ):
+            box.setChecked(value)
+            box.toggled.connect(self._on_settings_edited)
+            metrics_row.addWidget(box)
+        metrics_row.addStretch(1)
+        defaults_layout.addLayout(metrics_row)
+        outer.addWidget(defaults_box)
+
+        window_box = QGroupBox("Window")
+        window_layout = QVBoxLayout(window_box)
+        self.settings_remember_size = QCheckBox("Reopen at the size the window was last closed at")
+        self.settings_remember_size.setChecked(self._settings.remember_window_size)
+        self.settings_remember_size.toggled.connect(self._on_settings_edited)
+        window_layout.addWidget(self.settings_remember_size)
+        outer.addWidget(window_box)
+
+        outer.addStretch(1)
+        self.settings_status = QLabel()
+        self.settings_status.setStyleSheet("color: #666;")
+        outer.addWidget(self.settings_status)
+
+        self._refresh_settings_status()
+        return page
+
+    def _refresh_settings_status(self) -> None:
+        """Re-reads the tools and the cache so the Settings tab reports what
+        is actually there, not what was there at startup."""
+        tools = check_tools()
+        problems = tools.problems
+        ok = not problems
+        self.settings_ffmpeg_status.setText(
+            f"ffmpeg {format_version(tools.ffmpeg.version)} and ffprobe found."
+            if ok else " ".join(problems)
+        )
+        self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
+
+        directory = result_cache.cache_dir()
+        entries = list(directory.glob("*.json"))
+        total = sum(f.stat().st_size for f in entries) / 1_048_576
+        self.settings_cache_summary.setText(
+            f"{len(entries)} saved result(s), {total:.1f} MB in {directory}"
+        )
+
+    def _on_settings_edited(self, *_args) -> None:
+        before_ffmpeg = self._settings.ffmpeg_dir
+        before_cache = self._settings.cache_dir
+        self._settings.ffmpeg_dir = self.settings_ffmpeg_edit.text()
+        self._settings.cache_dir = self.settings_cache_edit.text()
+        self._settings.export_dir = self.settings_export_edit.text()
+        self._settings.use_cache = self.settings_use_cache.isChecked()
+        self._settings.default_gpu_decode = self.settings_default_gpu.isChecked()
+        self._settings.default_compute_psnr = self.settings_default_psnr.isChecked()
+        self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
+        self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
+        self._settings.remember_window_size = self.settings_remember_size.isChecked()
+
+        if self._settings.ffmpeg_dir != before_ffmpeg:
+            self._apply_ffmpeg_setting()
+            self._check_ffmpeg(prompt=False)
+        if self._settings.cache_dir != before_cache:
+            result_cache.set_cache_dir_override(self._settings.cache_dir_path())
+
+        # Only the starting point for new rows; existing rows keep whatever
+        # they were given.
+        self._default_options = self._options_from_settings()
+        error = self._settings.save()
+        self.settings_status.setText(error or "Settings saved.")
+        self._refresh_settings_status()
+
+    def _pick_directory(self, title: str, edit: QLineEdit) -> None:
+        directory = QFileDialog.getExistingDirectory(self, title, edit.text())
+        if directory:
+            edit.setText(directory)
+            self._on_settings_edited()
+
+    def _on_pick_ffmpeg_dir(self) -> None:
+        self._pick_directory("Select the folder containing ffmpeg.exe", self.settings_ffmpeg_edit)
+
+    def _on_pick_cache_dir(self) -> None:
+        self._pick_directory("Where should saved results be kept?", self.settings_cache_edit)
+
+    def _on_pick_export_dir(self) -> None:
+        self._pick_directory("Where should exports be written?", self.settings_export_edit)
+
+    def _on_open_cache_dir(self) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(result_cache.cache_dir())))
+
+    def _on_clear_cache(self) -> None:
+        directory = result_cache.cache_dir()
+        entries = list(directory.glob("*.json"))
+        if not entries:
+            self.settings_status.setText("There are no saved results to clear.")
+            return
+        confirm = QMessageBox.question(
+            self, "Clear saved results",
+            f"Delete {len(entries)} saved result(s) from {directory}?\n\n"
+            "Videos already scored will have to be recomputed.",
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        # Only this app's own entries, by extension -- never the folder
+        # itself, which may be somewhere the user also keeps other things.
+        removed = 0
+        for entry in entries:
+            try:
+                entry.unlink()
+                removed += 1
+            except OSError:
+                pass
+        self.settings_status.setText(f"Removed {removed} saved result(s).")
+        self._refresh_settings_status()
 
     def _build_files_panel(self) -> QWidget:
         files_box = QGroupBox("Videos")
@@ -420,9 +664,9 @@ class MainWindow(QMainWindow):
         load_btn.clicked.connect(self._on_load_saved_run)
         save_btn = QPushButton("Save selected...")
         save_btn.clicked.connect(self._on_save_selected)
-        compare_btn = QPushButton("Compare selected in graph")
+        compare_btn = QPushButton("Compare selected")
         compare_btn.clicked.connect(self._on_compare_selected)
-        self.show_graph_btn = QPushButton("Show graph window")
+        self.show_graph_btn = QPushButton("Show graph")
         self.show_graph_btn.setToolTip("Reopens the comparison graph as you last left it (e.g. after closing it).")
         self.show_graph_btn.clicked.connect(self._on_show_graph_clicked)
         run_row.addWidget(load_btn)
@@ -1260,14 +1504,9 @@ class MainWindow(QMainWindow):
         # Syncs in every currently-completed row every time -- not just
         # whatever was completed the first time this was clicked -- so
         # checking back mid-run (e.g. 4 of 8 done) shows all 4, not just
-        # however many were done the first time the window was opened.
+        # however many were done the first time it was opened.
         all_runs = [r.completed_run for r in self._rows if r.completed_run]
-        if not all_runs:
-            if self._graph_window is not None:
-                self._graph_window.show()
-                self._graph_window.raise_()
-                self._graph_window.activateWindow()
-                return
+        if not all_runs and not self.graph_panel._entries:
             QMessageBox.information(
                 self, "No results yet", "Run or load at least one VMAF result before opening the graph."
             )
@@ -1275,18 +1514,7 @@ class MainWindow(QMainWindow):
         self._open_or_update_graph(all_runs)
 
     def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
-        if self._graph_window is None:
-            # No Qt parent, deliberately: passing one makes Qt set this
-            # window's native Win32 *owner* to the main window's HWND, and
-            # an owned window never gets its own taskbar button (or groups
-            # with the app) regardless of window-type flags -- it also
-            # minimizes to a small floating title bar instead of the
-            # taskbar. closeEvent() below closes this window explicitly when
-            # the main window closes, since it's no longer a Qt child that
-            # would get destroyed automatically.
-            self._graph_window = GraphWindow()
+        """Adds runs to the graph tab and brings it to the front."""
         for run in runs:
-            self._graph_window.add_run(run.result, run.label)
-        self._graph_window.show()
-        self._graph_window.raise_()
-        self._graph_window.activateWindow()
+            self.graph_panel.add_run(run.result, run.label)
+        self.tabs.setCurrentIndex(TAB_GRAPH)

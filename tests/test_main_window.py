@@ -24,6 +24,8 @@ from vmaf_app.ui.main_window import (
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
+    TAB_GRAPH,
+    TAB_VIDEOS,
     CompletedRun,
     MainWindow,
 )
@@ -66,8 +68,8 @@ def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
 
     assert win._worker is None  # nothing needed running, so no worker was ever started
     assert "already have a VMAF score" in win.status_label.text()
-    assert win._graph_window is not None
-    assert len(win._graph_window._entries) == 2
+    assert win.graph_panel is not None
+    assert len(win.graph_panel._entries) == 2
 
 
 def test_run_clicked_only_queues_unscored_rows(qapp):
@@ -92,9 +94,6 @@ def test_run_clicked_only_queues_unscored_rows(qapp):
 
 
 # ------------------------------------------------------------------ resolve_model / clone_options
-
-
-
 
 
 # ------------------------------------------------------------------ per-video settings panel
@@ -192,67 +191,36 @@ def test_panel_disabled_when_nothing_selected(qapp):
 
 # ------------------------------------------------------------------ reopening the graph window
 
-def test_graph_window_has_no_qt_parent_so_it_gets_its_own_taskbar_button(qapp):
-    # Passing a Qt parent makes Qt set this window's native Win32 *owner* to
-    # the main window's HWND -- an owned window never gets its own taskbar
-    # button (or groups with the app there) regardless of window-type flags,
-    # and minimizes to a small floating title bar instead of the taskbar.
+
+def test_switching_away_from_the_graph_tab_and_back_keeps_its_series(qapp):
+    # The graph used to be a separate window that could be closed and
+    # reopened; as a tab its contents simply persist.
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._rows[row].completed_run = _fake_completed_run("a.mp4")
 
     win.distorted_table.selectRow(row)
     win._on_compare_selected()
+    assert win.tabs.currentIndex() == TAB_GRAPH
+    assert len(win.graph_panel._entries) == 1
 
-    assert win._graph_window.parent() is None
-
-
-def test_closing_main_window_also_closes_the_now_independent_graph_window(qapp):
-    win = MainWindow()
-    row = win._add_table_row(Path("a.mp4"))
-    win._rows[row].completed_run = _fake_completed_run("a.mp4")
-    win.distorted_table.selectRow(row)
-    win._on_compare_selected()
-    graph = win._graph_window
-    graph.show()
-    assert graph.isVisible()
-
-    win.close()
-
-    assert not graph.isVisible()
-
-
-def test_show_graph_reopens_existing_window_without_touching_its_contents(qapp):
-    win = MainWindow()
-    row = win._add_table_row(Path("a.mp4"))
-    win._rows[row].completed_run = _fake_completed_run("a.mp4")
-
-    win.distorted_table.selectRow(row)
-    win._on_compare_selected()
-    graph = win._graph_window
-    assert graph is not None
-    assert len(graph._entries) == 1
-
-    graph.close()
-    assert not graph.isVisible()
-
+    win.tabs.setCurrentIndex(TAB_VIDEOS)
     win._on_show_graph_clicked()
-    assert win._graph_window is graph  # same instance, not recreated
-    assert len(graph._entries) == 1  # untouched, no duplicate/re-add
-    assert graph.isVisible()
+    assert win.tabs.currentIndex() == TAB_GRAPH
+    assert len(win.graph_panel._entries) == 1  # untouched, no duplicate/re-add
 
 
-def test_show_graph_with_no_window_yet_opens_all_scored_rows(qapp):
+def test_show_graph_adds_every_scored_row_and_switches_to_the_tab(qapp):
     win = MainWindow()
     for name in ("a.mp4", "b.mp4"):
         row = win._add_table_row(Path(name))
         win._rows[row].completed_run = _fake_completed_run(name)
 
-    assert win._graph_window is None
+    assert len(win.graph_panel._entries) == 0
     win._on_show_graph_clicked()
 
-    assert win._graph_window is not None
-    assert len(win._graph_window._entries) == 2
+    assert win.tabs.currentIndex() == TAB_GRAPH
+    assert len(win.graph_panel._entries) == 2
 
 
 def test_show_graph_clicked_again_after_more_rows_finish_shows_all_of_them(qapp):
@@ -266,14 +234,14 @@ def test_show_graph_clicked_again_after_more_rows_finish_shows_all_of_them(qapp)
         win._rows[row].completed_run = _fake_completed_run(name)
 
     win._on_show_graph_clicked()
-    assert len(win._graph_window._entries) == 2
+    assert len(win.graph_panel._entries) == 2
 
     more_rows = [win._add_table_row(Path(f"{c}.mp4")) for c in "cd"]
     for row, name in zip(more_rows, "cd", strict=True):
         win._rows[row].completed_run = _fake_completed_run(name)
 
     win._on_show_graph_clicked()
-    assert len(win._graph_window._entries) == 4
+    assert len(win.graph_panel._entries) == 4
 
 
 # ------------------------------------------------------------------ column resizing
@@ -287,7 +255,6 @@ def test_distorted_table_columns_are_user_resizable(qapp):
     for col in (COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR):
         assert header.sectionResizeMode(col) == QHeaderView.Interactive
     assert header.stretchLastSection() is False
-
 
 
 def test_path_column_itself_can_be_manually_resized(qapp):
@@ -1023,3 +990,73 @@ def test_healthy_tools_leave_the_banner_hidden(qapp, monkeypatch):
 
     assert win._check_ffmpeg() is True
     assert win._ffmpeg_banner.isVisible() is False
+
+
+# ------------------------------------------------------------------ tabs
+
+def test_the_window_has_videos_graph_and_settings_tabs(qapp):
+    win = MainWindow()
+    titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
+    assert titles == ["Videos", "Graph", "Settings"]
+
+
+def test_the_graph_is_a_tab_not_a_separate_window(qapp):
+    # It used to be a top-level window with its own taskbar button.
+    win = MainWindow()
+    assert win.tabs.widget(TAB_GRAPH) is win.graph_panel
+    assert not win.graph_panel.isWindow()
+
+
+def test_compare_selected_switches_to_the_graph_tab(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")
+    win.distorted_table.selectRow(row)
+
+    assert win.tabs.currentIndex() == TAB_VIDEOS
+    win._on_compare_selected()
+    assert win.tabs.currentIndex() == TAB_GRAPH
+
+
+def test_show_graph_with_nothing_scored_stays_on_the_videos_tab(qapp, monkeypatch):
+    shown = []
+    monkeypatch.setattr(
+        main_window_module.QMessageBox, "information",
+        lambda *a, **k: shown.append(a),
+    )
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))  # added but never run
+
+    win._on_show_graph_clicked()
+    assert win.tabs.currentIndex() == TAB_VIDEOS
+    assert shown, "should say why there is nothing to show"
+
+
+# ------------------------------------------------------------------ settings
+
+def test_settings_defaults_seed_newly_added_rows(qapp):
+    # The Settings tab sets the starting point only; each row's own options
+    # are edited in the Videos tab afterwards.
+    win = MainWindow()
+    win.settings_default_psnr.setChecked(True)
+    win.settings_default_xpsnr.setChecked(True)
+
+    row = win._add_table_row(Path("a.mp4"))
+    options = win._rows[row].options
+    assert "name=psnr" in options.extra_features
+    assert options.compute_xpsnr is True
+
+
+def test_editing_settings_does_not_retarget_existing_rows(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    before = list(win._rows[row].options.extra_features)
+
+    win.settings_default_ssim.setChecked(True)
+    assert win._rows[row].options.extra_features == before, "existing rows keep their own settings"
+
+
+def test_the_settings_tab_reports_the_tools_it_found(qapp):
+    win = MainWindow()
+    assert win.settings_ffmpeg_status.text(), "the ffmpeg status should say something"
+    assert "saved result" in win.settings_cache_summary.text()
