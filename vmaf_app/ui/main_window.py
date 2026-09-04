@@ -78,6 +78,7 @@ from vmaf_app.core.vmaf_runner import (
     resample_analysis_dimensions,
     validate_video_pair,
 )
+from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
@@ -114,7 +115,7 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
 
 # Tab order. Frame Compare and Graph are both views of completed results;
 # Settings remains the final application-level page.
-TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_SETTINGS = range(4)
+TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
 # The metric columns, in table order: (column, label, the VmafOptions field or
 # libvmaf feature it maps to). VMAF has no toggle -- it's what the app exists
@@ -255,6 +256,7 @@ class MainWindow(QMainWindow):
         if self._worker is not None and self._worker.isRunning():
             workers.append(self._worker)
         workers.extend(self.frame_compare_panel.live_workers())
+        workers.extend(self.bitrate_panel.live_workers())
         return workers
 
     def closeEvent(self, event) -> None:
@@ -267,6 +269,7 @@ class MainWindow(QMainWindow):
         if not self._closing:
             self._closing = True
             self.frame_compare_panel.cancel()
+            self.bitrate_panel.cancel()
             for worker in self._live_workers():
                 worker.cancel()
 
@@ -351,6 +354,9 @@ class MainWindow(QMainWindow):
             self._on_frame_color_mode_changed
         )
         self.tabs.addTab(self.frame_compare_panel, "Frame Compare")
+
+        self.bitrate_panel = BitratePanel()
+        self.tabs.addTab(self.bitrate_panel, "Bitrate Viewer")
 
         self.tabs.addTab(self._build_settings_panel(), "Settings")
 
@@ -2187,6 +2193,15 @@ class MainWindow(QMainWindow):
                 result_cache.cache_dir(),
             ),
         )
+        # Packet bitrate is useful alongside quality metrics and is much
+        # cheaper than decoding VMAF. Add both physical streams to the
+        # independent viewer; its queue deduplicates the source when several
+        # distorted jobs finish together. A resolution round trip has no
+        # second file, so only its source is scanned.
+        bitrate_infos = [result.source_info]
+        if result.resample_target is None:
+            bitrate_infos.append(result.distorted_info)
+        self.bitrate_panel.add_and_analyze(bitrate_infos)
         if self._source_info is None or self._source_info.path != result.source:
             self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
             return

@@ -23,7 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from vmaf_app.core.ffprobe import probe_video
-from vmaf_app.core.frame_extract import extract_frame_png
+from vmaf_app.core.frame_extract import FrameComparison, extract_frame_png
 from vmaf_app.core.models import CropMode, GpuVendor, VmafOptions
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.vmaf_runner import VmafRunError, analysis_pix_fmt, run_vmaf
@@ -95,8 +95,9 @@ def main(argv: list[str] | None = None) -> int:
     # Exercise the same real decode path used by the Frame Compare tab. PNG's
     # IHDR stores width/height at bytes 16..24 in network byte order.
     preview_frame = len(result.frames) // 2
-    source_png = extract_frame_png(result, "source", preview_frame)
-    distorted_png = extract_frame_png(result, "distorted", preview_frame)
+    comparison = FrameComparison.from_result(result)
+    source_png = extract_frame_png(comparison, "source", preview_frame)
+    distorted_png = extract_frame_png(comparison, "distorted", preview_frame)
     source_size = struct.unpack(">II", source_png[16:24])
     distorted_size = struct.unpack(">II", distorted_png[16:24])
     assert source_size == distorted_size

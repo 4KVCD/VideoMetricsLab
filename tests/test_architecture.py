@@ -152,3 +152,6 @@ def test_the_documented_smoke_command_is_runnable():
     assert "def on_progress(current, total, fps)" in source, (
         "the progress callback no longer matches ProgressCallback"
     )
+    assert "FrameComparison.from_result(result)" in source, (
+        "the frame-preview smoke test no longer matches extract_frame_png"
+    )

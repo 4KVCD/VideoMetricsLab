@@ -30,6 +30,7 @@ from vmaf_app.ui.main_window import (
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
+    TAB_BITRATE,
     TAB_FRAME_COMPARE,
     TAB_GRAPH,
     TAB_SETTINGS,
@@ -1521,13 +1522,70 @@ def test_healthy_tools_leave_the_banner_hidden(qapp, monkeypatch):
 def test_the_window_has_videos_graph_frame_compare_and_settings_tabs(qapp):
     win = MainWindow()
     titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert titles == ["Videos", "Graph", "Frame Compare", "Settings"]
+    assert titles == ["Videos", "Graph", "Frame Compare", "Bitrate Viewer", "Settings"]
 
 
 def test_frame_compare_is_a_tab_between_graph_and_settings(qapp):
     win = MainWindow()
 
     assert win.tabs.widget(TAB_FRAME_COMPARE) is win.frame_compare_panel
+
+
+def test_bitrate_viewer_is_an_independent_tab(qapp):
+    win = MainWindow()
+
+    assert win.tabs.widget(TAB_BITRATE) is win.bitrate_panel
+
+
+def test_finishing_metrics_automatically_analyzes_both_physical_videos(
+    qapp, monkeypatch
+):
+    source = Path("source.mp4")
+    distorted = Path("distorted.mp4")
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    row = win._add_table_row(distorted)
+    win._job_rows = [win._rows[row]]
+    monkeypatch.setattr(win._file_writes, "submit", lambda *args: None)
+    captured = []
+    monkeypatch.setattr(
+        win.bitrate_panel, "add_and_analyze", lambda infos: captured.append(infos)
+    )
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    result.source_info = _fake_video_info(str(source))
+    result.distorted_info = _fake_video_info(str(distorted))
+
+    win._on_job_finished(0, result)
+
+    assert [[info.path for info in infos] for infos in captured] == [
+        [source, distorted]
+    ]
+
+
+def test_resolution_metric_run_only_analyzes_its_one_physical_video(qapp, monkeypatch):
+    source = Path("source.mp4")
+    target = ResampleTarget(width=1920, label="1080p")
+    synthetic = synthetic_resample_distorted_path(source, target)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    row = win._add_table_row(synthetic)
+    win._job_rows = [win._rows[row]]
+    monkeypatch.setattr(win._file_writes, "submit", lambda *args: None)
+    captured = []
+    monkeypatch.setattr(
+        win.bitrate_panel, "add_and_analyze", lambda infos: captured.append(infos)
+    )
+    result = _fake_completed_run(str(synthetic)).result
+    result.source = source
+    result.distorted = synthetic
+    result.source_info = _fake_video_info(str(source))
+    result.resample_target = target
+
+    win._on_job_finished(0, result)
+
+    assert [[info.path for info in infos] for infos in captured] == [[source]]
 
 
 def test_frame_preview_color_mode_is_remembered(qapp):

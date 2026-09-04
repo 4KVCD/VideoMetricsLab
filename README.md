@@ -16,6 +16,12 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   HLG frames can be tone-mapped automatically for the monitor showing the
   app (including its Windows HDR/SDR-white setting), forced to a fixed
   100-nit HDR-to-SDR preview, or shown unmanaged for diagnosis.
+- An independent **Bitrate Viewer** tab that can scan videos without running
+  any quality metric. Its frame view plots each encoded video packet's size,
+  its second view plots video bitrate in one-second intervals, and its GOP
+  view groups bitrate from one keyframe to the next. Multiple files can be
+  overlaid, inspected, zoomed, and exported. Fresh metric runs automatically
+  add both inputs to the viewer; audio and container overhead are excluded.
 - GPU-accelerated decoding of **both** the source and the distorted video,
   chosen independently (cuda / qsv / d3d11va, auto-detected). Either input
   falls back to software decode on its own -- by codec before ffmpeg is
@@ -72,7 +78,7 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
-483 tests, all offscreen (no window appears) and none of which touch your
+519 tests, all offscreen (no window appears) and none of which touch your
 real settings file or results cache.
 
 `tests/smoke_run.py` is a manual end-to-end check (not part of the pytest
@@ -108,6 +114,7 @@ vmaf_app/
     vmaf_runner.py   builds the ffmpeg filtergraph, runs it, parses the logs
     ffprobe.py       media probing        crop_detect.py  black-bar detection
     stats.py         summary statistics   model_select.py VMAF model choice
+    bitrate.py       video-packet scan + frame/second/GOP aggregation
     run_io.py        save/load/CSV        result_cache.py cached run lookup
     frame_extract.py exact still-frame decode using a run's crop/scale recipe
     display_hdr.py   Windows monitor HDR state and configured SDR white level
@@ -119,6 +126,8 @@ vmaf_app/
     main_window.py   the file table, per-row options, run orchestration
     graph_panel.py   the comparison graph tab (one sub-tab per metric)
     frame_compare_panel.py synchronized source/distorted still-frame viewer
+    bitrate_panel.py independent multi-file bitrate viewer tab
+    bitrate_worker.py non-blocking ffprobe packet scans
     chart.py         the plotting widget   widgets.py  reusable Qt widgets
     formatting.py    display formatting    worker.py   the run QThread
     probe_worker.py  probing + cache lookup off the UI thread
