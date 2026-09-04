@@ -12,10 +12,15 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 - A **Frame Compare** tab for inspecting the exact cropped/scaled pictures
   used by a completed VMAF run. Choose a frame or timestamp, hold **S** to
   reveal the source, and use the left/right arrow keys to cycle through
-  distorted videos without losing the current position, zoom, or pan. PQ and
-  HLG frames can be tone-mapped automatically for the monitor showing the
-  app (including its Windows HDR/SDR-white setting), forced to a fixed
-  100-nit HDR-to-SDR preview, or shown unmanaged for diagnosis.
+  distorted videos without losing the current position, zoom, or pan. Video
+  playback keeps source and distorted decoders running together, using GPU
+  acceleration when available,
+  so holding **S** can reveal the matching presented source frame without
+  reopening or re-seeking the file. Still mode remains available for exact
+  frame seeking and the exact metric crop/scale pipeline. PQ and HLG stills
+  can be tone-mapped automatically for the monitor showing the app (including
+  its Windows HDR/SDR-white setting), forced to a fixed 100-nit HDR-to-SDR
+  preview, or shown unmanaged for diagnosis.
 - An independent **Bitrate Viewer** tab that can scan videos without running
   any quality metric. Its frame view plots each encoded video packet's size,
   its second view plots video bitrate in one-second intervals, and its GOP
@@ -78,7 +83,7 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
-519 tests, all offscreen (no window appears) and none of which touch your
+524 tests, all offscreen (no window appears) and none of which touch your
 real settings file or results cache.
 
 `tests/smoke_run.py` is a manual end-to-end check (not part of the pytest
@@ -126,6 +131,7 @@ vmaf_app/
     main_window.py   the file table, per-row options, run orchestration
     graph_panel.py   the comparison graph tab (one sub-tab per metric)
     frame_compare_panel.py synchronized source/distorted still-frame viewer
+    video_compare_view.py synchronized dual-decoder video playback surface
     bitrate_panel.py independent multi-file bitrate viewer tab
     bitrate_worker.py non-blocking ffprobe packet scans
     chart.py         the plotting widget   widgets.py  reusable Qt widgets

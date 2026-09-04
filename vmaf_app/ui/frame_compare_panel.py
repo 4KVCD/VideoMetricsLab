@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -35,6 +36,7 @@ from vmaf_app.core.frame_extract import (
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
+from vmaf_app.ui.video_compare_view import VideoCompareView
 
 
 @dataclass(frozen=True)
@@ -164,6 +166,7 @@ class FrameComparePanel(QWidget):
         self._current_index = 0
         self._frame = 0
         self._showing_source = False
+        self._syncing_video_position = False
         self._generation = 0
         self._workers: set[FrameExtractWorker] = set()
         self._window_filters_installed = False
@@ -172,6 +175,7 @@ class FrameComparePanel(QWidget):
         except ValueError:
             self._color_mode = PreviewColorMode.DISPLAY_AWARE
         self._display_hdr = DisplayHdrInfo()
+        self._video_status = "Paused"
         self._cache: OrderedDict[tuple, QImage] = OrderedDict()
         self._errors: dict[tuple, str] = {}
 
@@ -189,10 +193,17 @@ class FrameComparePanel(QWidget):
         self.next_video_btn.clicked.connect(lambda: self.cycle_distorted(1))
         self.fit_checkbox = QCheckBox("Fit to window")
         self.fit_checkbox.setChecked(True)
+        self.view_mode_combo = QComboBox()
+        self.view_mode_combo.addItem("Still frame", "still")
+        self.view_mode_combo.addItem("Video playback", "video")
+        self.view_mode_combo.currentIndexChanged.connect(self._on_view_mode_changed)
         top.addWidget(QLabel("Distorted video:"))
         top.addWidget(self.previous_video_btn)
         top.addWidget(self.video_combo, stretch=1)
         top.addWidget(self.next_video_btn)
+        top.addSpacing(12)
+        top.addWidget(QLabel("View:"))
+        top.addWidget(self.view_mode_combo)
         top.addWidget(self.fit_checkbox)
         root.addLayout(top)
 
@@ -232,9 +243,20 @@ class FrameComparePanel(QWidget):
 
         self.viewer = FrameView()
         self.fit_checkbox.toggled.connect(self.viewer.set_fit)
-        root.addWidget(self.viewer, stretch=1)
+        self.content_stack = QStackedWidget()
+        self.content_stack.addWidget(self.viewer)
+        self._video_placeholder = QWidget()
+        self._video_placeholder.setStyleSheet("background: #171717;")
+        self.content_stack.addWidget(self._video_placeholder)
+        self.video_view: VideoCompareView | None = None
+        root.addWidget(self.content_stack, stretch=1)
 
         seek = QHBoxLayout()
+        self.play_btn = QPushButton("▶ Play")
+        self.play_btn.clicked.connect(self._on_play_clicked)
+        self.audio_checkbox = QCheckBox("Audio")
+        self.audio_checkbox.setChecked(True)
+        self.audio_checkbox.toggled.connect(self._on_audio_toggled)
         self.previous_frame_btn = QPushButton("− Frame")
         self.previous_frame_btn.clicked.connect(lambda: self.set_frame(self._frame - 1))
         self.frame_spin = QSpinBox()
@@ -247,6 +269,9 @@ class FrameComparePanel(QWidget):
         self.timestamp_edit.editingFinished.connect(self._on_timestamp_committed)
         self.next_frame_btn = QPushButton("+ Frame")
         self.next_frame_btn.clicked.connect(lambda: self.set_frame(self._frame + 1))
+        seek.addWidget(self.play_btn)
+        seek.addWidget(self.audio_checkbox)
+        seek.addSpacing(12)
         seek.addWidget(self.previous_frame_btn)
         seek.addWidget(QLabel("Frame:"))
         seek.addWidget(self.frame_spin)
@@ -263,14 +288,14 @@ class FrameComparePanel(QWidget):
         self.detail_label = QLabel("No frame selected.")
         self.detail_label.setAlignment(Qt.AlignCenter)
         root.addWidget(self.detail_label)
-        guide = QLabel(
+        self.guide_label = QLabel(
             "Hold S: show source   ·   ←/→: switch distorted video   ·   "
-            "Click the image first if a frame/timestamp field has focus"
+            "Space: play/pause   ·   Still frame: frame-exact seeking"
         )
-        guide.setAlignment(Qt.AlignCenter)
-        guide.setStyleSheet("color: #666;")
-        guide.setWordWrap(True)
-        root.addWidget(guide)
+        self.guide_label.setAlignment(Qt.AlignCenter)
+        self.guide_label.setStyleSheet("color: #666;")
+        self.guide_label.setWordWrap(True)
+        root.addWidget(self.guide_label)
 
         self._seek_timer = QTimer(self)
         self._seek_timer.setSingleShot(True)
@@ -322,14 +347,23 @@ class FrameComparePanel(QWidget):
         self._update_labels()
         if not self._entries:
             self.viewer.set_message(_NOTHING_TO_COMPARE)
+            if self.video_view is not None:
+                self.video_view.clear()
         elif self.isVisible():
-            self._seek_timer.start()
+            if self.is_video_mode:
+                self._load_current_video()
+            else:
+                self._seek_timer.start()
 
     @property
     def current_entry(self) -> FrameComparisonEntry | None:
         if not self._entries:
             return None
         return self._entries[self._current_index]
+
+    @property
+    def is_video_mode(self) -> bool:
+        return self.view_mode_combo.currentData() == "video"
 
     def set_frame(self, frame: int) -> None:
         if not self._entries:
@@ -339,7 +373,13 @@ class FrameComparePanel(QWidget):
         self._frame = bounded
         self._sync_seek_widgets()
         self._update_labels()
-        if changed or self._current_image() is None:
+        if self.is_video_mode:
+            if not self._syncing_video_position and self.video_view is not None:
+                entry = self.current_entry
+                fps = entry.comparison.fps if entry is not None else 0.0
+                if fps > 0:
+                    self.video_view.set_position(round(self._frame / fps * 1000))
+        elif changed or self._current_image() is None:
             self._generation += 1
             self._seek_timer.start()
 
@@ -352,7 +392,10 @@ class FrameComparePanel(QWidget):
         self.video_combo.blockSignals(blocked)
         self._generation += 1
         self._update_labels()
-        self._show_or_request()
+        if self.is_video_mode:
+            self._load_current_video()
+        else:
+            self._show_or_request()
 
     def live_workers(self) -> list[FrameExtractWorker]:
         return [worker for worker in self._workers if worker.isRunning()]
@@ -362,6 +405,8 @@ class FrameComparePanel(QWidget):
         self._seek_timer.stop()
         self._generation += 1
         self._cancel_workers()
+        if self.video_view is not None:
+            self.video_view.clear()
 
     # -------------------------------------------------------------- lifecycle
     def showEvent(self, event) -> None:
@@ -374,13 +419,18 @@ class FrameComparePanel(QWidget):
             self._window_filters_installed = True
         self._refresh_display_hdr()
         if self._entries:
-            self._show_or_request()
+            if self.is_video_mode:
+                self._load_current_video()
+            else:
+                self._show_or_request()
 
     def hideEvent(self, event) -> None:
         self._seek_timer.stop()
         self._display_timer.stop()
         self._generation += 1
         self._cancel_workers()
+        if self.video_view is not None:
+            self.video_view.set_playing(False)
         self._showing_source = False
         self._update_labels()
         super().hideEvent(event)
@@ -406,6 +456,16 @@ class FrameComparePanel(QWidget):
                 self._update_labels()
                 self._show_or_request()
             return True
+        if (
+            event_type == QEvent.KeyPress
+            and key == Qt.Key_Space
+            and event.modifiers() == Qt.NoModifier
+        ):
+            focus = QApplication.focusWidget()
+            if not isinstance(focus, (QLineEdit, QAbstractSpinBox, QComboBox)):
+                if not event.isAutoRepeat():
+                    self._on_play_clicked()
+                return True
         if event_type == QEvent.KeyPress and key in (Qt.Key_Left, Qt.Key_Right):
             focus = QApplication.focusWidget()
             if isinstance(focus, (QLineEdit, QAbstractSpinBox, QSlider, QComboBox)):
@@ -420,13 +480,112 @@ class FrameComparePanel(QWidget):
         return super().eventFilter(watched, event)
 
     # --------------------------------------------------------------- controls
+    def _ensure_video_view(self) -> VideoCompareView:
+        if self.video_view is not None:
+            return self.video_view
+        view = VideoCompareView(self)
+        view.position_changed.connect(self._on_video_position_changed)
+        view.playing_changed.connect(self._on_video_playing_changed)
+        view.status_changed.connect(self._on_video_status_changed)
+        view.set_audio_enabled(self.audio_checkbox.isChecked())
+        index = self.content_stack.indexOf(self._video_placeholder)
+        self.content_stack.removeWidget(self._video_placeholder)
+        self._video_placeholder.deleteLater()
+        self.content_stack.insertWidget(max(1, index), view)
+        view.installEventFilter(self)
+        for child in view.findChildren(QWidget):
+            child.installEventFilter(self)
+        self.video_view = view
+        return view
+
+    def _on_view_mode_changed(self, _index: int) -> None:
+        self._update_enabled_state()
+        self._update_labels()
+        if self.is_video_mode:
+            self._seek_timer.stop()
+            self._generation += 1
+            self._cancel_workers()
+            view = self._ensure_video_view()
+            self.content_stack.setCurrentWidget(view)
+            self._load_current_video(playing=False)
+        else:
+            if self.video_view is not None:
+                self.video_view.set_playing(False)
+            self.content_stack.setCurrentWidget(self.viewer)
+            self._generation += 1
+            self._show_or_request()
+
+    def _load_current_video(self, playing: bool | None = None) -> None:
+        entry = self.current_entry
+        if entry is None:
+            if self.video_view is not None:
+                self.video_view.clear()
+            return
+        view = self._ensure_video_view()
+        if playing is None:
+            playing = view.is_playing or view.playback_requested
+        fps = entry.comparison.fps
+        position_ms = round(self._frame / fps * 1000) if fps > 0 else 0
+        if not view.load(entry.comparison, position_ms, playing=playing):
+            self.play_btn.setText("▶ Play")
+        view.show_source(self._showing_source)
+        self._update_enabled_state()
+
+    def _on_play_clicked(self) -> None:
+        entry = self.current_entry
+        if entry is None:
+            return
+        if not self.is_video_mode:
+            index = self.view_mode_combo.findData("video")
+            self.view_mode_combo.setCurrentIndex(index)
+        view = self._ensure_video_view()
+        available, reason = view.can_play(entry.comparison)
+        if not available:
+            self._on_video_status_changed(reason)
+            return
+        view.set_playing(not view.playback_requested)
+
+    def _on_audio_toggled(self, enabled: bool) -> None:
+        if self.video_view is not None:
+            self.video_view.set_audio_enabled(enabled)
+
+    def _on_video_position_changed(self, position_ms: int) -> None:
+        entry = self.current_entry
+        if entry is None or not self.is_video_mode or entry.comparison.fps <= 0:
+            return
+        frame = round(position_ms / 1000 * entry.comparison.fps)
+        bounded = max(0, min(frame, self.frame_spin.maximum()))
+        if bounded == self._frame:
+            return
+        self._syncing_video_position = True
+        try:
+            self._frame = bounded
+            self._sync_seek_widgets()
+            self._update_labels()
+        finally:
+            self._syncing_video_position = False
+
+    def _on_video_playing_changed(self, playing: bool) -> None:
+        self.play_btn.setText("❚❚ Pause" if playing else "▶ Play")
+        self._video_status = "Playing" if playing else "Paused"
+        if self.is_video_mode:
+            self._update_color_status()
+
+    def _on_video_status_changed(self, message: str) -> None:
+        self._video_status = message
+        if self.is_video_mode:
+            self._update_color_status()
+
     def _on_video_selected(self, index: int) -> None:
         if not 0 <= index < len(self._entries) or index == self._current_index:
             return
         self._current_index = index
         self._generation += 1
         self._update_labels()
-        self._show_or_request()
+        if self.is_video_mode:
+            self._load_current_video()
+        else:
+            self._show_or_request()
 
     def _on_slider_changed(self, value: int) -> None:
         self.set_frame(value)
@@ -444,7 +603,8 @@ class FrameComparePanel(QWidget):
         self._cancel_workers()
         self._update_labels()
         self.color_mode_changed.emit(mode.value)
-        self._show_or_request()
+        if not self.is_video_mode:
+            self._show_or_request()
 
     def _on_timestamp_committed(self) -> None:
         entry = self.current_entry
@@ -491,6 +651,13 @@ class FrameComparePanel(QWidget):
         several = len(self._entries) > 1
         self.previous_video_btn.setEnabled(several)
         self.next_video_btn.setEnabled(several)
+        playable = False
+        if self.current_entry is not None:
+            playable = VideoCompareView.can_play(self.current_entry.comparison)[0]
+        self.play_btn.setEnabled(available and playable)
+        self.audio_checkbox.setEnabled(available and self.is_video_mode and playable)
+        self.fit_checkbox.setEnabled(not self.is_video_mode)
+        self.color_mode_combo.setEnabled(not self.is_video_mode)
 
     def _update_labels(self) -> None:
         entry = self.current_entry
@@ -506,6 +673,8 @@ class FrameComparePanel(QWidget):
         self.showing_label.setText(f"{side}{suffix} — {name}")
         seconds = self._frame / comparison.fps if comparison.fps > 0 else 0
         parts = [f"Frame {self._frame:,}", format_hms(seconds, decimals=3), self._score_text(entry)]
+        if self.is_video_mode:
+            parts.append(self._video_status)
         if comparison.auto_crop_pending:
             # Say so rather than showing cropped-looking frames that are not:
             # auto-crop is measured during a run, so until one happens these
@@ -554,6 +723,12 @@ class FrameComparePanel(QWidget):
         entry = self.current_entry
         if entry is None:
             return
+        if self.is_video_mode:
+            self.color_status_label.setText(
+                f"Video playback · {self._video_status} · GPU decode automatic · "
+                "system display colour handling"
+            )
+            return
         side = "source" if self._showing_source else "distorted"
         kind = hdr_kind(frame_video_info(entry.comparison, side))
         if self._color_mode == PreviewColorMode.UNMANAGED:
@@ -599,6 +774,10 @@ class FrameComparePanel(QWidget):
         return None if key is None else self._cache.get(key)
 
     def _show_or_request(self) -> None:
+        if self.is_video_mode:
+            if self.video_view is not None:
+                self.video_view.show_source(self._showing_source)
+            return
         image = self._current_image()
         if image is not None:
             self.viewer.set_image(image)
@@ -616,7 +795,7 @@ class FrameComparePanel(QWidget):
 
     def _request_current_frames(self) -> None:
         entry = self.current_entry
-        if entry is None or not self.isVisible():
+        if entry is None or not self.isVisible() or self.is_video_mode:
             return
         self._refresh_display_hdr()
         generation = self._generation

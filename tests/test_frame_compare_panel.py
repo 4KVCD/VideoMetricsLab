@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.display_hdr import DisplayHdrInfo
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorMode
-from vmaf_app.core.models import FrameScores, VideoInfo, VmafRunResult
+from vmaf_app.core.models import FrameScores, ResampleTarget, VideoInfo, VmafRunResult
 from vmaf_app.ui.frame_compare_panel import (
     FrameComparePanel,
     FrameComparisonEntry,
@@ -275,4 +275,115 @@ def test_the_empty_message_does_not_demand_a_vmaf_run(qapp):
     message = panel.viewer._label.text()
     assert "VMAF" not in message
     assert "source" in message.lower()
+    panel.close()
+
+
+# ------------------------------------------------------------ video playback
+
+def _physical_entry(tmp_path, name="encode") -> FrameComparisonEntry:
+    entry = _unscored_entry(name)
+    source_path = tmp_path / "source.mkv"
+    distorted_path = tmp_path / f"{name}.mkv"
+    source_path.write_bytes(b"source")
+    distorted_path.write_bytes(b"distorted")
+    comparison = replace(
+        entry.comparison,
+        source_info=replace(entry.comparison.source_info, path=source_path),
+        distorted_info=replace(entry.comparison.distorted_info, path=distorted_path),
+    )
+    return replace(entry, comparison=comparison)
+
+
+def test_video_mode_keeps_two_surfaces_ready_for_instant_s_switch(qapp, tmp_path):
+    panel = FrameComparePanel()
+    panel.set_runs([_physical_entry(tmp_path)])
+    panel.show()
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    assert panel.video_view is not None
+    panel.video_view._source_frame_us = 1_000_000
+    panel.video_view._distorted_frame_us = 1_000_000
+
+    QTest.keyPress(panel.video_view.distorted_video, Qt.Key_S)
+    assert panel._showing_source is True
+    assert panel.video_view._stack.currentWidget() is panel.video_view.source_video
+
+    QTest.keyRelease(panel.video_view.source_video, Qt.Key_S)
+    assert panel._showing_source is False
+    assert panel.video_view._stack.currentWidget() is panel.video_view.distorted_video
+    panel.close()
+
+
+def test_switching_video_reuses_source_decoder_and_preserves_seek(qapp, tmp_path):
+    panel = FrameComparePanel()
+    panel.set_runs([
+        _physical_entry(tmp_path, "first"),
+        _physical_entry(tmp_path, "second"),
+    ])
+    panel.set_frame(24)
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    assert panel.video_view is not None
+    source_player = panel.video_view.source_player
+    distorted_player = panel.video_view.distorted_player
+
+    panel.cycle_distorted(1)
+
+    assert panel.video_view.source_player is source_player
+    assert panel.video_view.distorted_player is not distorted_player
+    assert panel.video_view._pending_position == 1000
+    panel.close()
+
+
+def test_frame_controls_seek_both_video_players(qapp, tmp_path, monkeypatch):
+    panel = FrameComparePanel()
+    panel.set_runs([_physical_entry(tmp_path)])
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    assert panel.video_view is not None
+    positions = []
+    monkeypatch.setattr(panel.video_view, "set_position", positions.append)
+
+    panel.set_frame(24)
+
+    assert positions == [1000]
+    panel.close()
+
+
+def test_s_waits_for_the_matching_presented_source_frame(qapp, tmp_path):
+    panel = FrameComparePanel()
+    panel.set_runs([_physical_entry(tmp_path)])
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    assert panel.video_view is not None
+    view = panel.video_view
+    view._distorted_frame_us = 1_000_000
+    view._source_frame_us = 900_000
+
+    view.show_source(True)
+
+    assert view._stack.currentWidget() is view.distorted_video
+    assert view._pending_source_us == 1_000_000
+
+    class MatchingFrame:
+        @staticmethod
+        def startTime():
+            return 1_000_000
+
+    view._on_source_frame(MatchingFrame())
+    assert view._stack.currentWidget() is view.source_video
+    panel.close()
+
+
+def test_synthetic_resolution_test_stays_still_frame_only(qapp):
+    entry = _entry("resolution")
+    entry = replace(
+        entry,
+        comparison=replace(
+            entry.comparison,
+            resample_target=ResampleTarget(width=1280, label="720p"),
+        ),
+    )
+    panel = FrameComparePanel()
+    panel.set_runs([entry])
+
+    assert not panel.play_btn.isEnabled()
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    assert "synthetic resolution tests" in panel.color_status_label.text()
     panel.close()
