@@ -2610,3 +2610,168 @@ def test_the_same_source_written_two_ways_is_recognised(qapp, tmp_path):
     assert win._same_source(source, tmp_path / "." / "sourceA.mp4")
     assert not win._same_source(source, tmp_path / "other.mp4")
     assert not win._same_source(None, source)
+
+
+
+# --------------- Frame Compare works before any metric has been calculated
+
+def test_frame_compare_offers_a_probed_row_with_no_scores(qapp, tmp_path):
+    """A source and a distorted video that have merely been read are enough
+    to compare frames; requiring a finished run first made the tab useless
+    for deciding whether a comparison is worth running at all."""
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mkv", 3840, 2160)
+    row = win._add_table_row(Path("encode.mkv"))
+    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
+
+    win._sync_frame_compare()
+
+    entries = win.frame_compare_panel._entries
+    assert len(entries) == 1
+    assert entries[0].scores is None, "a row with no run must not claim scores"
+    assert entries[0].comparison.source_info.width == 3840
+    assert entries[0].comparison.distorted_info.width == 1920
+
+
+def test_a_row_without_a_source_cannot_be_compared(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("encode.mkv"))
+    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
+
+    win._sync_frame_compare()
+
+    assert win.frame_compare_panel._entries == []
+
+
+def test_a_row_still_being_read_is_not_offered(qapp):
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mkv", 3840, 2160)
+    win._add_table_row(Path("encode.mkv"))  # video_info still None
+
+    win._sync_frame_compare()
+
+    assert win.frame_compare_panel._entries == []
+
+
+def test_an_unscored_row_uses_the_rows_own_scaling_settings(qapp):
+    from vmaf_app.core.models import ScaleDirection
+
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mkv", 3840, 2160)
+    row = win._add_table_row(Path("encode.mkv"))
+    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
+    win._rows[row].options.scale_direction = ScaleDirection.DISTORTED_TO_SOURCE
+    win._rows[row].options.scale_algorithm = "lanczos"
+
+    win._sync_frame_compare()
+    comparison = win.frame_compare_panel._entries[0].comparison
+
+    assert comparison.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE
+    assert comparison.scale_algorithm == "lanczos"
+    # Upscaling the distorted side means both are compared at the source's
+    # size, exactly as a run would.
+    from vmaf_app.core.frame_extract import comparison_dimensions
+    assert comparison_dimensions(comparison) == (3840, 2160)
+
+
+def test_an_unscored_rows_timeline_stops_at_the_shorter_input(qapp):
+    # The same bound a run uses, so the slider cannot offer frames that no
+    # comparison would ever produce.
+    win = MainWindow()
+    source = _fake_video_info_res("source.mkv", 1920, 1080)
+    source.nb_frames = 300
+    win._source_info = source
+    row = win._add_table_row(Path("encode.mkv"))
+    distorted = _fake_video_info_res("encode.mkv", 1920, 1080)
+    distorted.nb_frames = 250
+    win._rows[row].video_info = distorted
+
+    win._sync_frame_compare()
+
+    assert win.frame_compare_panel._entries[0].comparison.frame_count == 250
+
+
+@pytest.mark.parametrize(
+    ("crop_mode", "pending"),
+    [(CropMode.AUTO, True), (CropMode.NONE, False), (CropMode.MANUAL, False)],
+)
+def test_only_auto_crop_is_reported_as_pending(qapp, crop_mode, pending):
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mkv", 1920, 1080)
+    row = win._add_table_row(Path("encode.mkv"))
+    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
+    win._rows[row].options.crop_mode = crop_mode
+
+    win._sync_frame_compare()
+
+    assert win.frame_compare_panel._entries[0].comparison.auto_crop_pending is pending
+
+
+def test_a_manual_crop_is_applied_to_an_unscored_preview(qapp):
+    from vmaf_app.core.models import CropBox
+
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mkv", 1920, 1080)
+    row = win._add_table_row(Path("encode.mkv"))
+    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
+    win._rows[row].options.crop_mode = CropMode.MANUAL
+    win._rows[row].options.manual_source_crop = CropBox(w=1920, h=816, x=0, y=132)
+    win._rows[row].options.manual_distorted_crop = CropBox(w=1920, h=816, x=0, y=132)
+
+    win._sync_frame_compare()
+    comparison = win.frame_compare_panel._entries[0].comparison
+
+    # Manual crops are known without running anything, so they are exact.
+    assert comparison.source_crop.h == 816
+    assert comparison.distorted_crop.h == 816
+
+
+def test_a_resolution_test_row_can_be_previewed_before_it_runs(qapp, tmp_path, monkeypatch):
+    source = tmp_path / "master.mkv"
+    source.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._apply_source_info(source, _fake_video_info_res(str(source), 3840, 2160))
+    monkeypatch.setattr(
+        main_window_module.QInputDialog, "getItem", lambda *a, **k: ("1080p", True)
+    )
+    win._on_add_resample_test()
+
+    win._sync_frame_compare()
+    entries = win.frame_compare_panel._entries
+
+    assert len(entries) == 1
+    # Both sides decode the source; the "distorted" one is synthesised.
+    assert entries[0].comparison.resample_target.width == 1920
+    assert entries[0].comparison.distorted_info.path == source
+
+
+def test_running_a_row_upgrades_its_entry_to_the_real_geometry(qapp, tmp_path):
+    from vmaf_app.core.frame_extract import FrameComparison
+    from vmaf_app.core.models import CropBox
+
+    source = tmp_path / "source.mp4"
+    distorted = tmp_path / "encode.mp4"
+    for path in (source, distorted):
+        path.write_bytes(b"x" * 100)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    win._rows[row].video_info = _fake_video_info(str(distorted))
+    win._sync_frame_compare()
+    assert win.frame_compare_panel._entries[0].scores is None
+
+    result = _fake_completed_run(str(distorted)).result
+    result.source = source
+    result.distorted = distorted
+    result.source_crop = CropBox(w=1920, h=816, x=0, y=132)
+    win._rows[row].completed_run = CompletedRun(result, "encode")
+    win._sync_frame_compare()
+
+    entry = win.frame_compare_panel._entries[0]
+    assert entry.scores is not None
+    # The detected crop now comes from the run rather than being pending.
+    assert entry.comparison == FrameComparison.from_result(result)
+    assert entry.comparison.auto_crop_pending is False

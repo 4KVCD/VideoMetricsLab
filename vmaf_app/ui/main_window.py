@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
+from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
@@ -160,6 +161,11 @@ class RowData:
     # the panel's default happened to be when the row was added, and a
     # cached/loaded result's own recorded direction is more trustworthy.
     scale_direction_pinned: bool = False
+    # A stable, hashable token for this row in the Frame Compare tab, used
+    # before it has a result to be identified by. RowData itself cannot
+    # serve: it is a mutable dataclass, so it is unhashable, and the frame
+    # cache keys on this.
+    frame_identity: object = field(default_factory=object)
 
     @property
     def identity_path(self) -> Path:
@@ -2436,16 +2442,71 @@ class MainWindow(QMainWindow):
                 )
 
     def _sync_frame_compare(self) -> None:
-        """Makes Frame Compare mirror every completed Videos-table row."""
-        self.frame_compare_panel.set_runs([
-            FrameComparisonEntry(
+        """Makes Frame Compare mirror every Videos-table row it can render.
+
+        Deliberately not limited to scored rows. Looking at a source and an
+        encode side by side is useful in its own right -- to check framing,
+        to find a scene worth measuring, to see whether an encode is even
+        the same content -- and requiring a finished run first made the tab
+        unavailable exactly when it is most useful: before committing to a
+        feature-length calculation.
+        """
+        entries = []
+        for row in self._rows:
+            entry = self._frame_comparison_entry(row)
+            if entry is not None:
+                entries.append(entry)
+        self.frame_compare_panel.set_runs(entries)
+
+    def _frame_comparison_entry(self, row: RowData) -> FrameComparisonEntry | None:
+        """One Frame Compare entry for a row, scored or not."""
+        if row.completed_run is not None:
+            # A finished run knows the geometry it really used, including
+            # crops that were detected at run time.
+            return FrameComparisonEntry(
                 identity=row.completed_run.graph_identity,
                 label=row.completed_run.label,
-                result=row.completed_run.result,
+                comparison=FrameComparison.from_result(row.completed_run.result),
+                scores=row.completed_run.result.frames,
             )
-            for row in self._rows
-            if row.completed_run is not None
-        ])
+
+        if self._source_info is None:
+            return None  # nothing to compare against yet
+        options = row.options
+        resample = options.resample_test
+        if resample is None and row.video_info is None:
+            return None  # the distorted file has not been read yet
+
+        # Crops that a run would apply are only known once it has run:
+        # auto-detection measures the video. Manual and "none" are known
+        # now, so those are exact; auto is previewed uncropped and says so.
+        auto_crop_pending = options.crop_mode == CropMode.AUTO
+        source_crop = distorted_crop = None
+        if options.crop_mode == CropMode.MANUAL:
+            source_crop = options.manual_source_crop
+            distorted_crop = options.manual_distorted_crop
+
+        distorted_info = self._source_info if resample is not None else row.video_info
+        reference = self._source_info if resample is not None else distorted_info
+        other = None if resample is not None else self._source_info
+        return FrameComparisonEntry(
+            identity=row.frame_identity,
+            label=row.path.stem,
+            comparison=FrameComparison(
+                source_info=self._source_info,
+                distorted_info=distorted_info,
+                source_crop=source_crop,
+                distorted_crop=distorted_crop,
+                scale_direction=options.scale_direction,
+                scale_algorithm=options.scale_algorithm,
+                resample_target=resample,
+                fps=reference.fps,
+                # The same bound a run would use, so the timeline cannot
+                # offer frames past the end of the shorter input.
+                frame_count=estimate_total_frames(reference, options, other),
+                auto_crop_pending=auto_crop_pending,
+            ),
+        )
 
     def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
         """Adds runs to the graph tab and brings it to the front."""

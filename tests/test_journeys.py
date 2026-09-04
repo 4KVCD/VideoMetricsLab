@@ -106,11 +106,20 @@ def assert_graph_matches_rows(win: MainWindow) -> None:
 
 
 def assert_frame_compare_matches_rows(win: MainWindow) -> None:
-    expected = [
-        row.completed_run.graph_identity
-        for row in win._rows
-        if row.completed_run is not None
-    ]
+    """Frame Compare shows every row it can render -- scored or not.
+
+    Frames are comparable without metrics, so a row that has merely been
+    probed still gets an entry; it is identified by the row itself, while a
+    scored row keeps the identity its result already carries.
+    """
+    expected = []
+    for row in win._rows:
+        if row.completed_run is not None:
+            expected.append(row.completed_run.graph_identity)
+        elif win._source_info is not None and (
+            row.options.resample_test is not None or row.video_info is not None
+        ):
+            expected.append(row.frame_identity)
     actual = [entry.identity for entry in win.frame_compare_panel._entries]
     assert actual == expected
 
@@ -244,7 +253,12 @@ def test_frame_compare_tracks_completed_removed_and_invalidated_rows(qapp):
 
     win._invalidate_completed_result(0)
     assert_frame_compare_matches_rows(win)
-    assert win.frame_compare_panel._entries == []
+    # Losing a score does not make the frames incomparable: the row stays,
+    # now identified by itself and carrying no scores.
+    assert len(win.frame_compare_panel._entries) == 1
+    entry = win.frame_compare_panel._entries[0]
+    assert entry.scores is None
+    assert entry.identity is win._rows[0].frame_identity
 
 
 def test_the_buttons_are_wired_to_something(qapp, confirm_yes):

@@ -1,9 +1,11 @@
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from vmaf_app.core.frame_extract import (
+    FrameComparison,
     PreviewColorMode,
     PreviewColorSettings,
     build_frame_command,
@@ -28,7 +30,16 @@ def _info(path: str, width: int, height: int) -> VideoInfo:
     )
 
 
-def _result(*, direction=ScaleDirection.SOURCE_TO_DISTORTED) -> VmafRunResult:
+def _result(*, direction=ScaleDirection.SOURCE_TO_DISTORTED) -> FrameComparison:
+    """A finished run's geometry, as the extractor now consumes it.
+
+    Extraction takes the preprocessing recipe rather than a whole run, so
+    the same code path serves a pair that has never been measured.
+    """
+    return FrameComparison.from_result(_run_result(direction=direction))
+
+
+def _run_result(*, direction=ScaleDirection.SOURCE_TO_DISTORTED) -> VmafRunResult:
     source = _info("source.mkv", 3840, 2160)
     distorted = _info("distorted.mkv", 1920, 1080)
     return VmafRunResult(
@@ -68,9 +79,11 @@ def test_distorted_to_source_previews_share_source_dimensions():
 
 
 def test_each_side_gets_its_own_crop_before_scaling():
-    result = _result()
-    result.source_crop = CropBox(3840, 1608, 0, 276)
-    result.distorted_crop = CropBox(1920, 804, 0, 138)
+    result = replace(
+        _result(),
+        source_crop=CropBox(3840, 1608, 0, 276),
+        distorted_crop=CropBox(1920, 804, 0, 138),
+    )
 
     assert "crop=3840:1608:0:276,scale=1920:804" in frame_filter(result, "source")
     assert frame_filter(result, "distorted").startswith("crop=1920:804:0:138")
@@ -78,9 +91,12 @@ def test_each_side_gets_its_own_crop_before_scaling():
 
 
 def test_resolution_test_recreates_the_downscale_upscale_distortion():
-    result = _result()
-    result.distorted_info = result.source_info
-    result.resample_target = ResampleTarget(width=1920, label="1080p")
+    base = _result()
+    result = replace(
+        base,
+        distorted_info=base.source_info,
+        resample_target=ResampleTarget(width=1920, label="1080p"),
+    )
 
     distorted_filter = frame_filter(result, "distorted")
 
@@ -160,3 +176,60 @@ def test_auto_uses_standard_hdr_defaults_when_a_remux_lost_partial_tags():
 
     assert "pin=bt2020:tin=smpte2084:min=bt2020nc:rin=tv" in chain
     assert "tonemap=mobius" in chain
+
+
+# ------------- previews whose crops have not been measured yet must not lie
+
+def _pending_pair(source_wh, distorted_wh) -> FrameComparison:
+    """A probed-but-unrun pair, so auto-crop has not been measured."""
+    return FrameComparison(
+        source_info=_info("source.mkv", *source_wh),
+        distorted_info=_info("distorted.mkv", *distorted_wh),
+        scale_algorithm="lanczos", fps=24.0, frame_count=240,
+        auto_crop_pending=True,
+    )
+
+
+def test_a_pending_crop_fits_rather_than_stretching_a_letterboxed_source():
+    """A letterboxed source is still 16:9 until its bars come off. Scaling
+    it straight onto the shape of an already-cropped 2.35:1 encode squashes
+    the picture -- and a run would never compare the two as they are, since
+    validation refuses a pair of different shapes. The preview must not
+    imply otherwise."""
+    comparison = _pending_pair((1920, 1080), (960, 408))
+
+    source_filter = frame_filter(comparison, "source")
+
+    assert "force_original_aspect_ratio=decrease" in source_filter
+    assert "pad=960:408:(ow-iw)/2:(oh-ih)/2" in source_filter
+
+
+def test_a_pending_crop_still_scales_normally_when_the_shapes_agree():
+    # The everyday case: same aspect, lower resolution. Fitting here would
+    # only add pointless padding.
+    comparison = _pending_pair((3840, 2160), (1920, 1080))
+
+    source_filter = frame_filter(comparison, "source")
+
+    assert "scale=1920:1080:flags=lanczos" in source_filter
+    assert "force_original_aspect_ratio" not in source_filter
+    assert "pad=" not in source_filter
+
+
+def test_a_measured_run_scales_directly_even_if_the_shapes_disagree():
+    # Once crops are settled the two sides agree by construction, so the
+    # fitting path must not fire and silently pad a scored comparison.
+    comparison = replace(
+        _pending_pair((1920, 1080), (960, 408)), auto_crop_pending=False
+    )
+
+    assert "pad=" not in frame_filter(comparison, "source")
+
+
+def test_the_fitted_preview_keeps_both_sides_on_one_canvas():
+    # Flipping between source and distorted must not resize the view.
+    comparison = _pending_pair((1920, 1080), (960, 408))
+
+    assert comparison_dimensions(comparison) == (960, 408)
+    for side in ("source", "distorted"):
+        assert "setsar=1" in frame_filter(comparison, side)

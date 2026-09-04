@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -7,7 +8,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.display_hdr import DisplayHdrInfo
-from vmaf_app.core.frame_extract import PreviewColorMode
+from vmaf_app.core.frame_extract import FrameComparison, PreviewColorMode
 from vmaf_app.core.models import FrameScores, VideoInfo, VmafRunResult
 from vmaf_app.ui.frame_compare_panel import (
     FrameComparePanel,
@@ -42,7 +43,30 @@ def _entry(name: str, score: float = 90.0, count: int = 120) -> FrameComparisonE
         source_info=source, distorted_info=distorted,
         compared_frame_count=count,
     )
-    return FrameComparisonEntry(identity=object(), label=name, result=result)
+    return FrameComparisonEntry(
+        identity=object(), label=name,
+        comparison=FrameComparison.from_result(result),
+        scores=result.frames,
+    )
+
+
+def _unscored_entry(name: str, count: int = 120) -> FrameComparisonEntry:
+    """A pair that has only been probed -- no run, no scores."""
+    source = VideoInfo(
+        path=Path("source.mkv"), width=1920, height=1080, fps=24.0,
+        duration=5.0, nb_frames=count, codec_name="h264",
+    )
+    distorted = VideoInfo(
+        path=Path(f"{name}.mkv"), width=1280, height=720, fps=24.0,
+        duration=5.0, nb_frames=count, codec_name="h264",
+    )
+    return FrameComparisonEntry(
+        identity=object(), label=name,
+        comparison=FrameComparison(
+            source_info=source, distorted_info=distorted,
+            fps=24.0, frame_count=count,
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -130,7 +154,7 @@ def test_holding_s_temporarily_shows_source(qapp, monkeypatch):
 
 def test_missing_subsampled_frame_is_not_given_a_neighbouring_score(qapp):
     entry = _entry("subsampled")
-    entry.result.frames = entry.result.frames[::2]
+    entry = replace(entry, scores=entry.scores[::2])
     panel = FrameComparePanel()
     panel.set_runs([entry])
 
@@ -141,7 +165,7 @@ def test_missing_subsampled_frame_is_not_given_a_neighbouring_score(qapp):
 
 def test_hdr_preview_control_explains_the_effective_display_aware_conversion(qapp):
     entry = _entry("hdr")
-    entry.result.distorted_info.color_transfer = "smpte2084"
+    entry.comparison.distorted_info.color_transfer = "smpte2084"
     panel = FrameComparePanel()
     panel._display_hdr = DisplayHdrInfo(
         device_name=r"\\.\DISPLAY1",
@@ -170,3 +194,85 @@ def test_fixed_hdr_to_sdr_option_is_explicit_about_untagged_input(qapp):
     assert "assuming HDR10 / PQ" in panel.color_status_label.text()
     assert "100 nit" in panel.color_status_label.text()
     assert panel._cache_key("distorted") != automatic_key
+
+
+
+# ----------------------------- comparing frames with no metrics calculated
+
+def test_an_unscored_pair_is_shown_and_says_it_has_no_score(qapp):
+    """The tab used to require a finished VMAF run before it would show
+    anything, which made it unavailable exactly when it is most useful --
+    before committing to a feature-length calculation."""
+    panel = FrameComparePanel()
+    panel.set_runs([_unscored_entry("encode")])
+
+    assert panel.video_combo.count() == 1
+    assert panel.frame_spin.isEnabled()
+    assert panel.frame_spin.maximum() == 119
+    assert "not scored" in panel.detail_label.text()
+    assert "preview only" in panel.detail_label.text()
+    panel.close()
+
+
+def test_an_unscored_pair_seeks_like_a_scored_one(qapp):
+    panel = FrameComparePanel()
+    panel.set_runs([_unscored_entry("encode")])
+
+    panel.set_frame(48)
+
+    assert panel.frame_spin.value() == 48
+    assert panel.timeline.value() == 48
+    assert panel.timestamp_edit.text() == "0:00:02.000"  # 48 / 24fps
+    panel.close()
+
+
+def test_scored_and_unscored_pairs_coexist(qapp):
+    # Adding one encode to a table that already has a measured one must not
+    # hide either of them.
+    panel = FrameComparePanel()
+    panel.set_runs([_entry("measured", count=120), _unscored_entry("fresh", count=90)])
+
+    assert panel.video_combo.count() == 2
+    # The timeline is bounded by the shorter of the two, as before.
+    assert panel.frame_spin.maximum() == 89
+
+    panel.set_frame(10)
+    assert "VMAF 90.00" in panel.detail_label.text()
+    panel.cycle_distorted(1)
+    assert "not scored" in panel.detail_label.text()
+    panel.close()
+
+
+def test_pending_auto_crop_is_disclosed_rather_than_implied(qapp):
+    """Auto-crop is measured during a run, so before one the frames are
+    uncropped and a scored comparison would differ. Saying nothing would
+    make the preview quietly misleading."""
+    from dataclasses import replace as dc_replace
+
+    entry = _unscored_entry("encode")
+    entry = dc_replace(
+        entry, comparison=dc_replace(entry.comparison, auto_crop_pending=True)
+    )
+    panel = FrameComparePanel()
+    panel.set_runs([entry])
+
+    assert "black bars not detected yet" in panel.detail_label.text()
+    panel.close()
+
+
+def test_a_scored_entry_never_claims_a_pending_crop(qapp):
+    panel = FrameComparePanel()
+    panel.set_runs([_entry("measured")])
+
+    assert "black bars" not in panel.detail_label.text()
+    panel.close()
+
+
+def test_the_empty_message_does_not_demand_a_vmaf_run(qapp):
+    panel = FrameComparePanel()
+    panel.set_runs([])
+
+    message = panel.viewer._label.text()
+    assert "VMAF" not in message
+    assert "source" in message.lower()
+    panel.close()

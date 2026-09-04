@@ -4,11 +4,11 @@ from __future__ import annotations
 from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core.frame_extract import (
+    FrameComparison,
     FrameExtractCancelledError,
     PreviewColorSettings,
     extract_frame_png,
 )
-from vmaf_app.core.models import VmafRunResult
 from vmaf_app.core.process_control import ProcessHandle
 
 
@@ -21,7 +21,7 @@ class FrameExtractWorker(QThread):
     def __init__(
         self,
         generation: int,
-        result: VmafRunResult,
+        comparison: FrameComparison,
         frame: int,
         sides: list[str],
         color_settings: PreviewColorSettings | None = None,
@@ -29,7 +29,7 @@ class FrameExtractWorker(QThread):
     ) -> None:
         super().__init__(parent)
         self.generation = generation
-        self._result = result
+        self._comparison = comparison
         self._frame = frame
         self._sides = list(sides)
         self._color_settings = color_settings or PreviewColorSettings()
@@ -46,7 +46,7 @@ class FrameExtractWorker(QThread):
                 return
             try:
                 png = extract_frame_png(
-                    self._result, side, self._frame,
+                    self._comparison, side, self._frame,
                     process_handle=self._process,
                     color_settings=self._color_settings,
                 )

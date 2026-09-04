@@ -26,21 +26,30 @@ from PySide6.QtWidgets import (
 
 from vmaf_app.core.display_hdr import DisplayHdrInfo, query_display_hdr
 from vmaf_app.core.frame_extract import (
+    FrameComparison,
     PreviewColorMode,
     PreviewColorSettings,
     frame_video_info,
     hdr_kind,
 )
-from vmaf_app.core.models import VmafRunResult
+from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 
 
 @dataclass(frozen=True)
 class FrameComparisonEntry:
+    """One selectable video pair in the tab.
+
+    `scores` is optional on purpose: the frames of a pair are comparable
+    whether or not anyone has measured them, and the readout simply says so
+    when there is nothing to report.
+    """
+
     identity: object
     label: str
-    result: VmafRunResult
+    comparison: FrameComparison
+    scores: FrameScores | None = None
 
 
 def parse_timestamp(value: str) -> float:
@@ -69,6 +78,13 @@ def parse_timestamp(value: str) -> float:
     return numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
 
 
+#: Shown whenever there is no pair to look at. Deliberately does not ask for
+#: a VMAF run: frames are comparable before anything has been measured.
+_NOTHING_TO_COMPARE = (
+    "Select a source video and add a distorted video to compare their frames."
+)
+
+
 class FrameView(QScrollArea):
     """Fit-to-window or pixel-for-pixel image view with retained scroll."""
 
@@ -77,7 +93,7 @@ class FrameView(QScrollArea):
         self.setAlignment(Qt.AlignCenter)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("QScrollArea { background: #171717; border: 1px solid #444; }")
-        self._label = QLabel("Run or load a VMAF result to compare its frames.")
+        self._label = QLabel(_NOTHING_TO_COMPARE)
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setStyleSheet("color: #ddd; background: #171717;")
         self._image: QImage | None = None
@@ -297,7 +313,7 @@ class FrameComparePanel(QWidget):
         self.video_combo.blockSignals(blocked)
 
         maximum = min(
-            (max(1, entry.result.compared_frame_count) for entry in self._entries),
+            (max(1, entry.comparison.frame_count) for entry in self._entries),
             default=1,
         ) - 1
         self._frame = min(self._frame, maximum)
@@ -305,7 +321,7 @@ class FrameComparePanel(QWidget):
         self._update_enabled_state()
         self._update_labels()
         if not self._entries:
-            self.viewer.set_message("Run or load a VMAF result to compare its frames.")
+            self.viewer.set_message(_NOTHING_TO_COMPARE)
         elif self.isVisible():
             self._seek_timer.start()
 
@@ -442,7 +458,7 @@ class FrameComparePanel(QWidget):
             return
         self.timestamp_edit.setStyleSheet("")
         self.timestamp_edit.setToolTip("Enter seconds, M:SS, or H:MM:SS.sss")
-        self.set_frame(round(seconds * entry.result.fps))
+        self.set_frame(round(seconds * entry.comparison.fps))
 
     def _set_ranges(self, maximum: int) -> None:
         for widget in (self.frame_spin, self.timeline):
@@ -457,7 +473,10 @@ class FrameComparePanel(QWidget):
             widget.setValue(self._frame)
             widget.blockSignals(blocked)
         entry = self.current_entry
-        seconds = self._frame / entry.result.fps if entry and entry.result.fps > 0 else 0
+        seconds = (
+            self._frame / entry.comparison.fps
+            if entry and entry.comparison.fps > 0 else 0
+        )
         blocked = self.timestamp_edit.blockSignals(True)
         self.timestamp_edit.setText(format_hms(seconds, decimals=3))
         self.timestamp_edit.blockSignals(blocked)
@@ -476,25 +495,35 @@ class FrameComparePanel(QWidget):
     def _update_labels(self) -> None:
         entry = self.current_entry
         if entry is None:
-            self.showing_label.setText("No completed results")
+            self.showing_label.setText("No videos to compare")
             self.detail_label.setText("No frame selected.")
             self.color_status_label.setText("No video selected.")
             return
+        comparison = entry.comparison
         side = "SOURCE" if self._showing_source else "DISTORTED"
-        name = entry.result.source_info.path.name if self._showing_source else entry.label
+        name = comparison.source_info.path.name if self._showing_source else entry.label
         suffix = "" if self._showing_source else f" {self._current_index + 1} of {len(self._entries)}"
         self.showing_label.setText(f"{side}{suffix} — {name}")
-        seconds = self._frame / entry.result.fps if entry.result.fps > 0 else 0
-        idx = int(np.searchsorted(entry.result.frames.frame, self._frame))
-        score = None
-        if idx < len(entry.result.frames) and int(entry.result.frames.frame[idx]) == self._frame:
-            candidate = float(entry.result.frames.vmaf[idx])
-            score = candidate if math.isfinite(candidate) else None
-        score_text = f"VMAF {score:.2f}" if score is not None else "VMAF not scored for this frame"
-        self.detail_label.setText(
-            f"Frame {self._frame:,}   ·   {format_hms(seconds, decimals=3)}   ·   {score_text}"
-        )
+        seconds = self._frame / comparison.fps if comparison.fps > 0 else 0
+        parts = [f"Frame {self._frame:,}", format_hms(seconds, decimals=3), self._score_text(entry)]
+        if comparison.auto_crop_pending:
+            # Say so rather than showing cropped-looking frames that are not:
+            # auto-crop is measured during a run, so until one happens these
+            # are the raw frames and a scored comparison would differ.
+            parts.append("black bars not detected yet — shown uncropped")
+        self.detail_label.setText("   ·   ".join(parts))
         self._update_color_status()
+
+    def _score_text(self, entry: FrameComparisonEntry) -> str:
+        """What this frame scored, or why there is no number to show."""
+        if entry.scores is None:
+            return "not scored — preview only"
+        idx = int(np.searchsorted(entry.scores.frame, self._frame))
+        if idx < len(entry.scores) and int(entry.scores.frame[idx]) == self._frame:
+            candidate = float(entry.scores.vmaf[idx])
+            if math.isfinite(candidate):
+                return f"VMAF {candidate:.2f}"
+        return "VMAF not scored for this frame"
 
     def _color_settings(self) -> PreviewColorSettings:
         return PreviewColorSettings(
@@ -526,7 +555,7 @@ class FrameComparePanel(QWidget):
         if entry is None:
             return
         side = "source" if self._showing_source else "distorted"
-        kind = hdr_kind(frame_video_info(entry.result, side))
+        kind = hdr_kind(frame_video_info(entry.comparison, side))
         if self._color_mode == PreviewColorMode.UNMANAGED:
             self.color_status_label.setText(
                 f"{kind or 'SDR / untagged'} input · tone mapping off"
@@ -602,7 +631,7 @@ class FrameComparePanel(QWidget):
             return
         self._cancel_workers()
         worker = FrameExtractWorker(
-            generation, entry.result, self._frame, sides,
+            generation, entry.comparison, self._frame, sides,
             color_settings=self._color_settings(), parent=self,
         )
         worker.frame_ready.connect(self._on_frame_ready)
