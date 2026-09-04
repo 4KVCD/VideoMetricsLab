@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Literal
 
@@ -12,6 +14,42 @@ from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import analysis_pix_fmt
 
 FrameSide = Literal["source", "distorted"]
+
+
+class PreviewColorMode(str, Enum):
+    """How HDR video is converted for the SDR QWidget preview surface."""
+
+    DISPLAY_AWARE = "display_aware"
+    HDR_TO_SDR = "hdr_to_sdr"
+    UNMANAGED = "unmanaged"
+
+
+@dataclass(frozen=True, slots=True)
+class PreviewColorSettings:
+    mode: PreviewColorMode = PreviewColorMode.DISPLAY_AWARE
+    display_hdr_enabled: bool | None = None
+    display_sdr_white_nits: float | None = None
+
+    @property
+    def target_nits(self) -> float:
+        """The SDR diffuse-white target used by zscale.
+
+        Windows' SDR-content brightness only applies while HDR is enabled.
+        Reject implausible driver values instead of feeding them to ffmpeg.
+        """
+        value = self.display_sdr_white_nits
+        if (
+            self.mode == PreviewColorMode.DISPLAY_AWARE
+            and self.display_hdr_enabled is True
+            and value is not None
+            and 40 <= value <= 1000
+        ):
+            return float(value)
+        return 100.0
+
+    @property
+    def cache_token(self) -> tuple[str, bool | None, float]:
+        return (self.mode.value, self.display_hdr_enabled, round(self.target_nits, 3))
 
 
 class FrameExtractError(RuntimeError):
@@ -46,7 +84,76 @@ def frame_input_path(result: VmafRunResult, side: FrameSide) -> Path:
     return result.distorted_info.path
 
 
-def frame_filter(result: VmafRunResult, side: FrameSide) -> str:
+def frame_video_info(result: VmafRunResult, side: FrameSide) -> VideoInfo:
+    if side == "source" or result.resample_target is not None:
+        return result.source_info
+    return result.distorted_info
+
+
+def hdr_kind(info: VideoInfo) -> str | None:
+    """Return the declared HDR transfer family, without guessing from depth."""
+    transfer = info.color_transfer.strip().casefold()
+    if transfer in {"smpte2084", "smpte-st-2084"}:
+        return "HDR10 / PQ"
+    if transfer in {"arib-std-b67", "hlg"}:
+        return "HLG"
+    return None
+
+
+def _tone_map_filter(info: VideoInfo, settings: PreviewColorSettings) -> list[str]:
+    kind = hdr_kind(info)
+    if settings.mode == PreviewColorMode.UNMANAGED:
+        return ["format=rgb24"]
+    if settings.mode == PreviewColorMode.DISPLAY_AWARE and kind is None:
+        return ["format=rgb24"]
+
+    # The explicit mode doubles as a recovery path for HDR files whose
+    # container lost its colour tags.  Its UI label says that it assumes PQ;
+    # Auto never guesses based on bit depth because 10-bit SDR is common.
+    input_options: list[str] = []
+    if kind is None:
+        input_options = ["pin=bt2020", "tin=smpte2084", "min=bt2020nc", "rin=tv"]
+    else:
+        # Broken remuxes sometimes retain the PQ/HLG transfer tag but lose
+        # primaries, matrix, or range.  zscale refuses an unspecified
+        # conversion path, so use the standard BT.2020 YUV HDR defaults for
+        # only those missing pieces while preserving every declared value.
+        missing = {"", "unknown", "unspecified", "reserved"}
+        primaries = (
+            "bt2020" if info.color_primaries.casefold() in missing
+            else info.color_primaries
+        )
+        matrix = (
+            "bt2020nc" if info.color_space.casefold() in missing
+            else info.color_space
+        )
+        color_range = (
+            info.color_range if info.color_range in {"tv", "pc", "limited", "full"}
+            else "tv"
+        )
+        input_options = [
+            f"pin={primaries}", f"tin={info.color_transfer}",
+            f"min={matrix}", f"rin={color_range}",
+        ]
+
+    linear = [*input_options, "t=linear", f"npl={settings.target_nits:g}"]
+    return [
+        f"zscale={':'.join(linear)}",
+        "format=gbrpf32le",
+        "tonemap=mobius:desat=2",
+        (
+            "zscale=p=bt709:t=bt709:m=bt709:r=tv:"
+            "dither=error_diffusion"
+        ),
+        "format=rgb24",
+    ]
+
+
+def frame_filter(
+    result: VmafRunResult,
+    side: FrameSide,
+    color_settings: PreviewColorSettings | None = None,
+) -> str:
     """The crop/scale chain for one side of a completed comparison."""
     if side not in {"source", "distorted"}:
         raise ValueError(f"unknown frame side: {side}")
@@ -95,12 +202,16 @@ def frame_filter(result: VmafRunResult, side: FrameSide) -> str:
     # PNG has square pixels and no useful video SAR. Resetting it after the
     # geometry operations ensures source/distorted previews occupy the exact
     # same canvas when the input used anamorphic storage.
-    ops.extend(["setsar=1", "format=rgb24"])
+    ops.append("setsar=1")
+    ops.extend(_tone_map_filter(frame_video_info(result, side), color_settings or PreviewColorSettings()))
     return ",".join(ops)
 
 
 def build_frame_command(
-    result: VmafRunResult, side: FrameSide, frame: int
+    result: VmafRunResult,
+    side: FrameSide,
+    frame: int,
+    color_settings: PreviewColorSettings | None = None,
 ) -> list[str]:
     if frame < 0:
         raise ValueError("frame number must be non-negative")
@@ -121,7 +232,7 @@ def build_frame_command(
         "-i", str(frame_input_path(result, side).resolve()),
         "-map", "0:v:0",
         "-an", "-sn", "-dn",
-        "-vf", frame_filter(result, side),
+        "-vf", frame_filter(result, side, color_settings),
         "-frames:v", "1",
         "-f", "image2pipe",
         "-c:v", "png",
@@ -134,6 +245,7 @@ def extract_frame_png(
     side: FrameSide,
     frame: int,
     process_handle: ProcessHandle | None = None,
+    color_settings: PreviewColorSettings | None = None,
 ) -> bytes:
     path = frame_input_path(result, side)
     if not path.is_file():
@@ -141,7 +253,7 @@ def extract_frame_png(
 
     handle = process_handle or ProcessHandle()
     process = proc_util.popen(
-        build_frame_command(result, side, frame),
+        build_frame_command(result, side, frame, color_settings),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )

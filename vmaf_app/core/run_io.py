@@ -75,6 +75,9 @@ def _info_to_dict(v: VideoInfo) -> dict:
         "duration": v.duration, "nb_frames": v.nb_frames, "codec_name": v.codec_name,
         "sar": v.sar, "pix_fmt": v.pix_fmt, "bit_rate": v.bit_rate,
         "nominal_fps": v.nominal_fps,
+        "color_range": v.color_range, "color_space": v.color_space,
+        "color_transfer": v.color_transfer,
+        "color_primaries": v.color_primaries,
     }
 
 
@@ -84,6 +87,10 @@ def _info_from_dict(d: dict) -> VideoInfo:
         duration=d["duration"], nb_frames=d["nb_frames"], codec_name=d["codec_name"],
         sar=d.get("sar", "1:1"), pix_fmt=d.get("pix_fmt", ""), bit_rate=d.get("bit_rate", 0),
         nominal_fps=d.get("nominal_fps", 0.0),
+        color_range=d.get("color_range", ""),
+        color_space=d.get("color_space", ""),
+        color_transfer=d.get("color_transfer", ""),
+        color_primaries=d.get("color_primaries", ""),
     )
 
 

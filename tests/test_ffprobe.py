@@ -90,3 +90,24 @@ def test_the_handle_is_detached_once_the_probe_returns(monkeypatch):
         ffprobe.probe_video(Path("broken.mp4"), process_handle=handle)
 
     assert handle._pid is None, "a detached handle must not still address a dead pid"
+
+
+def test_probe_preserves_hdr_colour_tags(monkeypatch):
+    payload = """{
+      "streams": [{
+        "codec_type": "video", "width": 3840, "height": 2160,
+        "avg_frame_rate": "24/1", "duration": "1", "nb_frames": "24",
+        "codec_name": "hevc", "pix_fmt": "yuv420p10le",
+        "color_range": "tv", "color_space": "bt2020nc",
+        "color_transfer": "smpte2084", "color_primaries": "bt2020"
+      }],
+      "format": {"duration": "1"}
+    }"""
+    _fake_popen(monkeypatch, FakeFfprobe(stdout=payload))
+
+    info = ffprobe.probe_video(Path("hdr.mkv"))
+
+    assert info.color_range == "tv"
+    assert info.color_space == "bt2020nc"
+    assert info.color_transfer == "smpte2084"
+    assert info.color_primaries == "bt2020"

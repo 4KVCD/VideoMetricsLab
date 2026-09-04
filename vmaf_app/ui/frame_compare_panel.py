@@ -6,7 +6,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 import numpy as np
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -24,6 +24,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from vmaf_app.core.display_hdr import DisplayHdrInfo, query_display_hdr
+from vmaf_app.core.frame_extract import (
+    PreviewColorMode,
+    PreviewColorSettings,
+    frame_video_info,
+    hdr_kind,
+)
 from vmaf_app.core.models import VmafRunResult
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
@@ -126,10 +133,16 @@ class FrameView(QScrollArea):
 class FrameComparePanel(QWidget):
     """One synchronized frame, switched between source and distortions."""
 
+    color_mode_changed = Signal(str)
+
     _CACHE_LIMIT = 12
     _CACHE_BYTE_LIMIT = 192 * 1024 * 1024
 
-    def __init__(self, parent=None) -> None:
+    def __init__(
+        self,
+        parent=None,
+        color_mode: str | PreviewColorMode = PreviewColorMode.DISPLAY_AWARE,
+    ) -> None:
         super().__init__(parent)
         self._entries: list[FrameComparisonEntry] = []
         self._current_index = 0
@@ -138,8 +151,13 @@ class FrameComparePanel(QWidget):
         self._generation = 0
         self._workers: set[FrameExtractWorker] = set()
         self._window_filters_installed = False
-        self._cache: OrderedDict[tuple[object, int, str], QImage] = OrderedDict()
-        self._errors: dict[tuple[object, int, str], str] = {}
+        try:
+            self._color_mode = PreviewColorMode(color_mode)
+        except ValueError:
+            self._color_mode = PreviewColorMode.DISPLAY_AWARE
+        self._display_hdr = DisplayHdrInfo()
+        self._cache: OrderedDict[tuple, QImage] = OrderedDict()
+        self._errors: dict[tuple, str] = {}
 
         root = QVBoxLayout(self)
 
@@ -161,6 +179,32 @@ class FrameComparePanel(QWidget):
         top.addWidget(self.next_video_btn)
         top.addWidget(self.fit_checkbox)
         root.addLayout(top)
+
+        color_row = QHBoxLayout()
+        self.color_mode_combo = QComboBox()
+        self.color_mode_combo.addItem(
+            "Display-aware (recommended)", PreviewColorMode.DISPLAY_AWARE.value
+        )
+        self.color_mode_combo.addItem(
+            "HDR → SDR (100 nit; assume PQ if untagged)",
+            PreviewColorMode.HDR_TO_SDR.value,
+        )
+        self.color_mode_combo.addItem(
+            "Unmanaged (diagnostic)", PreviewColorMode.UNMANAGED.value
+        )
+        mode_index = self.color_mode_combo.findData(self._color_mode.value)
+        self.color_mode_combo.setCurrentIndex(max(0, mode_index))
+        self.color_mode_combo.setToolTip(
+            "Display-aware detects PQ/HLG tags and uses the Windows monitor's "
+            "SDR-white setting. The fixed mode can recover an untagged PQ file."
+        )
+        self.color_mode_combo.currentIndexChanged.connect(self._on_color_mode_changed)
+        self.color_status_label = QLabel()
+        self.color_status_label.setStyleSheet("color: #666;")
+        color_row.addWidget(QLabel("HDR preview:"))
+        color_row.addWidget(self.color_mode_combo)
+        color_row.addWidget(self.color_status_label, stretch=1)
+        root.addLayout(color_row)
 
         self.showing_label = QLabel("No completed results")
         font = self.showing_label.font()
@@ -216,6 +260,10 @@ class FrameComparePanel(QWidget):
         self._seek_timer.setSingleShot(True)
         self._seek_timer.setInterval(120)
         self._seek_timer.timeout.connect(self._request_current_frames)
+        self._display_timer = QTimer(self)
+        self._display_timer.setSingleShot(True)
+        self._display_timer.setInterval(200)
+        self._display_timer.timeout.connect(self._on_display_maybe_changed)
 
         # Filter this panel's own widgets rather than QApplication globally.
         # A global filter keeps every discarded MainWindow alive and makes
@@ -308,11 +356,13 @@ class FrameComparePanel(QWidget):
             for child in top.findChildren(QWidget):
                 child.installEventFilter(self)
             self._window_filters_installed = True
+        self._refresh_display_hdr()
         if self._entries:
             self._show_or_request()
 
     def hideEvent(self, event) -> None:
         self._seek_timer.stop()
+        self._display_timer.stop()
         self._generation += 1
         self._cancel_workers()
         self._showing_source = False
@@ -323,6 +373,12 @@ class FrameComparePanel(QWidget):
         if not self.isVisible():
             return super().eventFilter(watched, event)
         event_type = event.type()
+        if (
+            watched is self.window()
+            and event_type in (QEvent.Move, QEvent.ScreenChangeInternal)
+        ):
+            # MonitorFromWindow must run after Windows has committed the move.
+            self._display_timer.start()
         key = event.key() if event_type in (QEvent.KeyPress, QEvent.KeyRelease) else None
         if key == Qt.Key_S and event.modifiers() == Qt.NoModifier:
             if event_type == QEvent.KeyPress and not event.isAutoRepeat():
@@ -358,6 +414,21 @@ class FrameComparePanel(QWidget):
 
     def _on_slider_changed(self, value: int) -> None:
         self.set_frame(value)
+
+    def _on_color_mode_changed(self, index: int) -> None:
+        value = self.color_mode_combo.itemData(index)
+        try:
+            mode = PreviewColorMode(value)
+        except ValueError:
+            return
+        if mode == self._color_mode:
+            return
+        self._color_mode = mode
+        self._generation += 1
+        self._cancel_workers()
+        self._update_labels()
+        self.color_mode_changed.emit(mode.value)
+        self._show_or_request()
 
     def _on_timestamp_committed(self) -> None:
         entry = self.current_entry
@@ -407,6 +478,7 @@ class FrameComparePanel(QWidget):
         if entry is None:
             self.showing_label.setText("No completed results")
             self.detail_label.setText("No frame selected.")
+            self.color_status_label.setText("No video selected.")
             return
         side = "SOURCE" if self._showing_source else "DISTORTED"
         name = entry.result.source_info.path.name if self._showing_source else entry.label
@@ -422,11 +494,75 @@ class FrameComparePanel(QWidget):
         self.detail_label.setText(
             f"Frame {self._frame:,}   ·   {format_hms(seconds, decimals=3)}   ·   {score_text}"
         )
+        self._update_color_status()
+
+    def _color_settings(self) -> PreviewColorSettings:
+        return PreviewColorSettings(
+            mode=self._color_mode,
+            display_hdr_enabled=self._display_hdr.hdr_enabled,
+            display_sdr_white_nits=self._display_hdr.sdr_white_nits,
+        )
+
+    def _refresh_display_hdr(self) -> bool:
+        try:
+            window_handle = int(self.window().winId())
+        except (RuntimeError, TypeError):
+            window_handle = None
+        current = query_display_hdr(window_handle)
+        if current != self._display_hdr:
+            self._display_hdr = current
+            self._generation += 1
+            self._cancel_workers()
+            self._update_labels()
+            return True
+        return False
+
+    def _on_display_maybe_changed(self) -> None:
+        if self.isVisible() and self._refresh_display_hdr():
+            self._show_or_request()
+
+    def _update_color_status(self) -> None:
+        entry = self.current_entry
+        if entry is None:
+            return
+        side = "source" if self._showing_source else "distorted"
+        kind = hdr_kind(frame_video_info(entry.result, side))
+        if self._color_mode == PreviewColorMode.UNMANAGED:
+            self.color_status_label.setText(
+                f"{kind or 'SDR / untagged'} input · tone mapping off"
+            )
+            return
+        settings = self._color_settings()
+        if self._color_mode == PreviewColorMode.HDR_TO_SDR:
+            source = kind or "Untagged input (assuming HDR10 / PQ)"
+            self.color_status_label.setText(
+                f"{source} · fixed HDR → SDR at {settings.target_nits:g} nit"
+            )
+            return
+        if kind is None:
+            self.color_status_label.setText("SDR / untagged input · no tone mapping")
+            return
+        if self._display_hdr.hdr_enabled is True:
+            self.color_status_label.setText(
+                f"{kind} · display-aware HDR → SDR · Windows HDR on · "
+                f"SDR white {settings.target_nits:g} nit"
+            )
+        elif self._display_hdr.hdr_enabled is False:
+            self.color_status_label.setText(
+                f"{kind} · HDR → SDR at 100 nit · Windows HDR off"
+            )
+        else:
+            self.color_status_label.setText(
+                f"{kind} · HDR → SDR at 100 nit · display HDR state unavailable"
+            )
 
     # --------------------------------------------------------------- decoding
-    def _cache_key(self, side: str) -> tuple[object, int, str] | None:
+    def _cache_key(self, side: str) -> tuple | None:
         entry = self.current_entry
-        return None if entry is None else (entry.identity, self._frame, side)
+        return (
+            None if entry is None else
+            (entry.identity, self._frame, side, self._color_settings().cache_token)
+        )
 
     def _current_image(self) -> QImage | None:
         side = "source" if self._showing_source else "distorted"
@@ -453,6 +589,7 @@ class FrameComparePanel(QWidget):
         entry = self.current_entry
         if entry is None or not self.isVisible():
             return
+        self._refresh_display_hdr()
         generation = self._generation
         sides = []
         preferred = "source" if self._showing_source else "distorted"
@@ -465,7 +602,8 @@ class FrameComparePanel(QWidget):
             return
         self._cancel_workers()
         worker = FrameExtractWorker(
-            generation, entry.result, self._frame, sides, parent=self
+            generation, entry.result, self._frame, sides,
+            color_settings=self._color_settings(), parent=self,
         )
         worker.frame_ready.connect(self._on_frame_ready)
         worker.frame_failed.connect(self._on_frame_failed)

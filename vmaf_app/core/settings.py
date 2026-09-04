@@ -37,6 +37,10 @@ class Settings:
     window_width: int = 1280
     window_height: int = 800
 
+    # Frame Compare is an SDR QWidget surface. This controls how HDR frames
+    # are converted for preview and is independent of the VMAF recipe.
+    frame_preview_color_mode: str = "display_aware"
+
     @staticmethod
     def path() -> Path:
         base = Path(QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation))

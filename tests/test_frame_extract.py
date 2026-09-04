@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 
 from vmaf_app.core.frame_extract import (
+    PreviewColorMode,
+    PreviewColorSettings,
     build_frame_command,
     comparison_dimensions,
     frame_filter,
@@ -98,3 +100,63 @@ def test_command_seeks_just_before_the_requested_frame_timestamp():
     assert command[command.index("-i") + 1].endswith("distorted.mkv")
     assert command[-4:] == ["-f", "image2pipe", "-c:v", "png", "pipe:1"][-4:]
     assert any("setsar=1,format=rgb24" in argument for argument in command)
+
+
+def test_display_aware_mode_tone_maps_tagged_pq_to_the_monitor_white_level():
+    result = _result()
+    result.distorted_info.color_transfer = "smpte2084"
+    result.distorted_info.color_primaries = "bt2020"
+    result.distorted_info.color_space = "bt2020nc"
+    result.distorted_info.color_range = "tv"
+    settings = PreviewColorSettings(
+        mode=PreviewColorMode.DISPLAY_AWARE,
+        display_hdr_enabled=True,
+        display_sdr_white_nits=203.0,
+    )
+
+    chain = frame_filter(result, "distorted", settings)
+
+    assert "tin=smpte2084" in chain
+    assert "npl=203" in chain
+    assert "tonemap=mobius" in chain
+    assert "p=bt709:t=bt709:m=bt709" in chain
+
+
+def test_display_aware_mode_does_not_mistake_10_bit_sdr_for_hdr():
+    result = _result()
+    result.distorted_info.pix_fmt = "yuv420p10le"
+
+    chain = frame_filter(result, "distorted", PreviewColorSettings())
+
+    assert "tonemap=" not in chain
+    assert chain.endswith("setsar=1,format=rgb24")
+
+
+def test_fixed_hdr_to_sdr_mode_can_recover_an_untagged_pq_file():
+    result = _result()
+    settings = PreviewColorSettings(mode=PreviewColorMode.HDR_TO_SDR)
+
+    chain = frame_filter(result, "distorted", settings)
+
+    assert "pin=bt2020:tin=smpte2084:min=bt2020nc:rin=tv" in chain
+    assert "npl=100" in chain
+    assert "tonemap=mobius" in chain
+
+
+def test_unmanaged_mode_never_tone_maps_tagged_hdr():
+    result = _result()
+    result.distorted_info.color_transfer = "arib-std-b67"
+    settings = PreviewColorSettings(mode=PreviewColorMode.UNMANAGED)
+
+    assert "tonemap=" not in frame_filter(result, "distorted", settings)
+
+
+def test_auto_uses_standard_hdr_defaults_when_a_remux_lost_partial_tags():
+    result = _result()
+    result.distorted_info.color_transfer = "smpte2084"
+    result.distorted_info.color_primaries = "unknown"
+
+    chain = frame_filter(result, "distorted", PreviewColorSettings())
+
+    assert "pin=bt2020:tin=smpte2084:min=bt2020nc:rin=tv" in chain
+    assert "tonemap=mobius" in chain

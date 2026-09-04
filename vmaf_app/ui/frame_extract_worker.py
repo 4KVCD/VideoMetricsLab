@@ -5,6 +5,7 @@ from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core.frame_extract import (
     FrameExtractCancelledError,
+    PreviewColorSettings,
     extract_frame_png,
 )
 from vmaf_app.core.models import VmafRunResult
@@ -23,6 +24,7 @@ class FrameExtractWorker(QThread):
         result: VmafRunResult,
         frame: int,
         sides: list[str],
+        color_settings: PreviewColorSettings | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -30,6 +32,7 @@ class FrameExtractWorker(QThread):
         self._result = result
         self._frame = frame
         self._sides = list(sides)
+        self._color_settings = color_settings or PreviewColorSettings()
         self._cancelled = False
         self._process = ProcessHandle()
 
@@ -45,6 +48,7 @@ class FrameExtractWorker(QThread):
                 png = extract_frame_png(
                     self._result, side, self._frame,
                     process_handle=self._process,
+                    color_settings=self._color_settings,
                 )
             except FrameExtractCancelledError:
                 return

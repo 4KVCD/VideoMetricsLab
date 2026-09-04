@@ -65,6 +65,12 @@ class VideoInfo:
     # ffprobe's r_frame_rate. A meaningful difference from average fps is a
     # practical warning that frame-number/fps timestamps are unsafe (VFR).
     nominal_fps: float = 0.0
+    # Stream colour tags are needed to distinguish a 10-bit SDR encode from
+    # PQ/HLG HDR.  Empty means the container did not declare the value.
+    color_range: str = ""
+    color_space: str = ""
+    color_transfer: str = ""
+    color_primaries: str = ""
 
     @property
     def estimated_frame_count(self) -> int:

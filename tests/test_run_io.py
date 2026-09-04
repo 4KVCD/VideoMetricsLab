@@ -35,6 +35,10 @@ def _sample_result() -> VmafRunResult:
 
 def test_save_and_load_round_trips_frames(tmp_path):
     result = _sample_result()
+    result.distorted_info.color_range = "tv"
+    result.distorted_info.color_space = "bt2020nc"
+    result.distorted_info.color_transfer = "smpte2084"
+    result.distorted_info.color_primaries = "bt2020"
     result.scale_algorithm = "lanczos"
     result.resample_target = ResampleTarget(width=1920, label="1080p")
     result.compared_frame_count = 321
@@ -52,6 +56,10 @@ def test_save_and_load_round_trips_frames(tmp_path):
     assert loaded.scale_algorithm == "lanczos"
     assert loaded.resample_target == ResampleTarget(width=1920, label="1080p")
     assert loaded.compared_frame_count == 321
+    assert loaded.distorted_info.color_range == "tv"
+    assert loaded.distorted_info.color_space == "bt2020nc"
+    assert loaded.distorted_info.color_transfer == "smpte2084"
+    assert loaded.distorted_info.color_primaries == "bt2020"
 
 
 def test_save_and_load_preserves_scores_bit_for_bit(tmp_path):

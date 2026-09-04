@@ -12,7 +12,10 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 - A **Frame Compare** tab for inspecting the exact cropped/scaled pictures
   used by a completed VMAF run. Choose a frame or timestamp, hold **S** to
   reveal the source, and use the left/right arrow keys to cycle through
-  distorted videos without losing the current position, zoom, or pan.
+  distorted videos without losing the current position, zoom, or pan. PQ and
+  HLG frames can be tone-mapped automatically for the monitor showing the
+  app (including its Windows HDR/SDR-white setting), forced to a fixed
+  100-nit HDR-to-SDR preview, or shown unmanaged for diagnosis.
 - GPU-accelerated decoding of **both** the source and the distorted video,
   chosen independently (cuda / qsv / d3d11va, auto-detected). Either input
   falls back to software decode on its own -- by codec before ffmpeg is
@@ -69,7 +72,7 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
-373 tests, all offscreen (no window appears) and none of which touch your
+483 tests, all offscreen (no window appears) and none of which touch your
 real settings file or results cache.
 
 `tests/smoke_run.py` is a manual end-to-end check (not part of the pytest
@@ -107,6 +110,7 @@ vmaf_app/
     stats.py         summary statistics   model_select.py VMAF model choice
     run_io.py        save/load/CSV        result_cache.py cached run lookup
     frame_extract.py exact still-frame decode using a run's crop/scale recipe
+    display_hdr.py   Windows monitor HDR state and configured SDR white level
     ffmpeg_locate.py tool discovery + version check
     gpu.py           hwaccel selection    process_control.py pause/resume/kill
     proc.py          subprocess launching settings.py     persisted settings

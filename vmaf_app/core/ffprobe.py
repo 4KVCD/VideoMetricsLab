@@ -120,4 +120,8 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         pix_fmt=v.get("pix_fmt", ""),
         bit_rate=bit_rate,
         nominal_fps=nominal_fps,
+        color_range=v.get("color_range", "") or "",
+        color_space=v.get("color_space", "") or "",
+        color_transfer=v.get("color_transfer", "") or "",
+        color_primaries=v.get("color_primaries", "") or "",
     )

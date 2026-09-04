@@ -338,7 +338,12 @@ class MainWindow(QMainWindow):
         # opened explicitly.
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
-        self.frame_compare_panel = FrameComparePanel()
+        self.frame_compare_panel = FrameComparePanel(
+            color_mode=self._settings.frame_preview_color_mode
+        )
+        self.frame_compare_panel.color_mode_changed.connect(
+            self._on_frame_color_mode_changed
+        )
         self.tabs.addTab(self.frame_compare_panel, "Frame Compare")
 
         self.tabs.addTab(self._build_settings_panel(), "Settings")
@@ -511,6 +516,12 @@ class MainWindow(QMainWindow):
         error = self._settings.save()
         self.settings_status.setText(error or "Settings saved.")
         self._refresh_settings_status()
+
+    def _on_frame_color_mode_changed(self, mode: str) -> None:
+        self._settings.frame_preview_color_mode = mode
+        error = self._settings.save()
+        if error:
+            self.status_label.setText(error)
 
     def _pick_directory(self, title: str, edit: QLineEdit) -> None:
         directory = QFileDialog.getExistingDirectory(self, title, edit.text())

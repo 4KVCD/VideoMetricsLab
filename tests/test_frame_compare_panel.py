@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from vmaf_app.core.display_hdr import DisplayHdrInfo
+from vmaf_app.core.frame_extract import PreviewColorMode
 from vmaf_app.core.models import FrameScores, VideoInfo, VmafRunResult
 from vmaf_app.ui.frame_compare_panel import (
     FrameComparePanel,
@@ -135,3 +137,36 @@ def test_missing_subsampled_frame_is_not_given_a_neighbouring_score(qapp):
     panel.set_frame(3)
 
     assert "not scored for this frame" in panel.detail_label.text()
+
+
+def test_hdr_preview_control_explains_the_effective_display_aware_conversion(qapp):
+    entry = _entry("hdr")
+    entry.result.distorted_info.color_transfer = "smpte2084"
+    panel = FrameComparePanel()
+    panel._display_hdr = DisplayHdrInfo(
+        device_name=r"\\.\DISPLAY1",
+        hdr_supported=True,
+        hdr_enabled=True,
+        bits_per_color_channel=10,
+        sdr_white_nits=203.0,
+    )
+
+    panel.set_runs([entry])
+
+    assert panel.color_mode_combo.currentData() == PreviewColorMode.DISPLAY_AWARE.value
+    assert "HDR10 / PQ" in panel.color_status_label.text()
+    assert "Windows HDR on" in panel.color_status_label.text()
+    assert "203 nit" in panel.color_status_label.text()
+
+
+def test_fixed_hdr_to_sdr_option_is_explicit_about_untagged_input(qapp):
+    panel = FrameComparePanel()
+    panel.set_runs([_entry("untagged")])
+    automatic_key = panel._cache_key("distorted")
+    fixed = panel.color_mode_combo.findData(PreviewColorMode.HDR_TO_SDR.value)
+
+    panel.color_mode_combo.setCurrentIndex(fixed)
+
+    assert "assuming HDR10 / PQ" in panel.color_status_label.text()
+    assert "100 nit" in panel.color_status_label.text()
+    assert panel._cache_key("distorted") != automatic_key

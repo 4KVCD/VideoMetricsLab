@@ -1528,6 +1528,17 @@ def test_frame_compare_is_a_tab_between_graph_and_settings(qapp):
     win = MainWindow()
 
     assert win.tabs.widget(TAB_FRAME_COMPARE) is win.frame_compare_panel
+
+
+def test_frame_preview_color_mode_is_remembered(qapp):
+    from vmaf_app.core.frame_extract import PreviewColorMode
+    from vmaf_app.core.settings import Settings
+
+    win = MainWindow()
+    combo = win.frame_compare_panel.color_mode_combo
+    combo.setCurrentIndex(combo.findData(PreviewColorMode.UNMANAGED.value))
+
+    assert Settings.load().frame_preview_color_mode == PreviewColorMode.UNMANAGED.value
     assert win.tabs.tabText(TAB_FRAME_COMPARE) == "Frame Compare"
 
 
