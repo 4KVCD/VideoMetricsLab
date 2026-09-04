@@ -9,9 +9,25 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core.models import CropBox, FrameScores, ScaleDirection, VideoInfo, VmafRunResult
+from vmaf_app.core.models import (
+    RESAMPLE_TARGET_CHOICES,
+    CropBox,
+    FrameScores,
+    ResampleTarget,
+    ScaleDirection,
+    VideoInfo,
+    VmafRunResult,
+)
 
 FORMAT_VERSION = 1
+
+
+def _legacy_resample_target(distorted_path: str) -> ResampleTarget | None:
+    """Recover the recipe encoded in pre-Frame-Compare synthetic names."""
+    for target in RESAMPLE_TARGET_CHOICES:
+        if f"[downscale-{target.label}-upscale]" in Path(distorted_path).stem:
+            return ResampleTarget(width=target.width, label=target.label)
+    return None
 
 
 def safe_filename_stem(label: str) -> str:
@@ -136,6 +152,14 @@ def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> Non
         "source_info": _info_to_dict(result.source_info),
         "distorted_info": _info_to_dict(result.distorted_info),
         "scale_direction": result.scale_direction.value,
+        "scale_algorithm": result.scale_algorithm,
+        "resample_target": (
+            None if result.resample_target is None else {
+                "width": result.resample_target.width,
+                "label": result.resample_target.label,
+            }
+        ),
+        "compared_frame_count": result.compared_frame_count,
         "frames": _frames_to_rows(result.frames),
     }
     path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
@@ -158,6 +182,13 @@ def load_run(path: Path) -> tuple[VmafRunResult, str]:
         # SOURCE_TO_DISTORTED was the only behavior then, so it's the correct
         # default for those older files, not just an arbitrary fallback.
         scale_direction=ScaleDirection(data.get("scale_direction", ScaleDirection.SOURCE_TO_DISTORTED.value)),
+        scale_algorithm=data.get("scale_algorithm", "bicubic"),
+        resample_target=(
+            ResampleTarget(**data["resample_target"])
+            if data.get("resample_target") is not None
+            else _legacy_resample_target(data["distorted"])
+        ),
+        compared_frame_count=data.get("compared_frame_count", 0),
     )
     label = data.get("label") or result.distorted.stem
     return result, label

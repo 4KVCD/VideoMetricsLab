@@ -79,6 +79,7 @@ from vmaf_app.core.vmaf_runner import (
 )
 from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
+from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
@@ -110,9 +111,9 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_XPSNR,
 ) = range(10)
 
-# Tab order. A frame-comparison tab is planned between Graph and Settings;
-# adding it means inserting here and in _build_ui.
-TAB_VIDEOS, TAB_GRAPH, TAB_SETTINGS = range(3)
+# Tab order. Frame Compare and Graph are both views of completed results;
+# Settings remains the final application-level page.
+TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_SETTINGS = range(4)
 
 # The metric columns, in table order: (column, label, the VmafOptions field or
 # libvmaf feature it maps to). VMAF has no toggle -- it's what the app exists
@@ -247,6 +248,7 @@ class MainWindow(QMainWindow):
         workers = [w for w in self._probe_workers if w.isRunning()]
         if self._worker is not None and self._worker.isRunning():
             workers.append(self._worker)
+        workers.extend(self.frame_compare_panel.live_workers())
         return workers
 
     def closeEvent(self, event) -> None:
@@ -258,6 +260,7 @@ class MainWindow(QMainWindow):
         # an orphaned subprocess rather than a slow exit.
         if not self._closing:
             self._closing = True
+            self.frame_compare_panel.cancel()
             for worker in self._live_workers():
                 worker.cancel()
 
@@ -334,6 +337,9 @@ class MainWindow(QMainWindow):
         # a leftover from when it was a separate window that had to be
         # opened explicitly.
         self.tabs.currentChanged.connect(self._on_tab_changed)
+
+        self.frame_compare_panel = FrameComparePanel()
+        self.tabs.addTab(self.frame_compare_panel, "Frame Compare")
 
         self.tabs.addTab(self._build_settings_panel(), "Settings")
 
@@ -1029,6 +1035,7 @@ class MainWindow(QMainWindow):
             removed.append(row_data.path.name)
         if removed:
             self._on_table_selection_changed()
+            self._sync_frame_compare()
         return list(reversed(removed))
 
     def _on_source_probe_finished(self, generation: int, worker: ProbeWorker) -> None:
@@ -1519,6 +1526,11 @@ class MainWindow(QMainWindow):
             return
         run = CompletedRun(result, label)
         row_data.completed_run = run
+        # Old cache files predate the persisted frame-preview recipe. The
+        # cache key still identifies these exact row options, so restore the
+        # missing pieces from the row that found the cache entry.
+        result.scale_algorithm = row_data.options.scale_algorithm
+        result.resample_target = row_data.options.resample_test
         row_data.video_info = result.distorted_info
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
@@ -1527,6 +1539,7 @@ class MainWindow(QMainWindow):
         self.graph_panel.add_run(
             result, label, identity=run.graph_identity
         )
+        self._sync_frame_compare()
 
     def _on_probe_finished(
         self, generation: int | None = None, worker: ProbeWorker | None = None
@@ -1560,6 +1573,7 @@ class MainWindow(QMainWindow):
             self.distorted_table.removeRow(row)
             del self._rows[row]
         self._on_table_selection_changed()
+        self._sync_frame_compare()
 
     # ------------------------------------------------------------------ persistent result cache
     def _on_remove_all_distorted(self) -> None:
@@ -1582,6 +1596,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setRowCount(0)
         self._rows.clear()
         self._on_table_selection_changed()
+        self._sync_frame_compare()
 
     def _try_load_cached_result(self, row: int) -> bool:
         """If a previous run for this exact (source, distorted) file name+size
@@ -1598,6 +1613,8 @@ class MainWindow(QMainWindow):
         if cached is None:
             return False
         result, label = cached
+        result.scale_algorithm = row_data.options.scale_algorithm
+        result.resample_target = row_data.options.resample_test
         run = CompletedRun(result, label)
         row_data.completed_run = run
         row_data.video_info = result.distorted_info
@@ -1611,6 +1628,7 @@ class MainWindow(QMainWindow):
             f"({run.stats.count} frames)\nLoaded from a previous run (same filename+size) -- "
             f"right-click to recompute."
         )
+        self._sync_frame_compare()
         return True
 
     def _on_table_context_menu(self, pos) -> None:
@@ -1655,6 +1673,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText(
             f"Cleared {len(rows)} result(s) -- make sure they're checked, then click Run VMAF to recompute."
         )
+        self._sync_frame_compare()
 
     def _add_opposite_scale_direction_rows(self, rows: list[int]) -> None:
         """For each selected row with a mismatched resolution, adds a second
@@ -1858,6 +1877,7 @@ class MainWindow(QMainWindow):
             self.graph_panel.remove_by_path(row_data.path)
         self._set_row_metrics(row)
         self.distorted_table.item(row, COL_VMAF).setToolTip("")
+        self._sync_frame_compare()
 
     def _on_panel_edited(self, *_args) -> None:
         """Replace all options (kept for programmatic callers/tests).
@@ -2178,6 +2198,7 @@ class MainWindow(QMainWindow):
         self.graph_panel.add_run(
             result, label, identity=run.graph_identity
         )
+        self._sync_frame_compare()
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
         self._run_failed_count += 1
@@ -2274,10 +2295,15 @@ class MainWindow(QMainWindow):
         row_data.options.compute_xpsnr = result.frames.has("xpsnr")
         row_data.options.model = result.model
         row_data.options.scale_direction = result.scale_direction
+        row_data.options.scale_algorithm = result.scale_algorithm
+        row_data.options.resample_test = result.resample_target
+        if result.resample_target is not None:
+            row_data.media_path = result.source_info.path
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
         self.distorted_table.item(row, COL_VMAF).setToolTip("Loaded from saved run")
+        self._sync_frame_compare()
 
     def _adopt_source_from_run(self, result) -> None:
         """Points the window at the reference a loaded run was measured
@@ -2381,6 +2407,8 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, index: int) -> None:
         if index == TAB_GRAPH:
             self._sync_graph()
+        elif index == TAB_FRAME_COMPARE:
+            self._sync_frame_compare()
 
     def _sync_graph(self) -> None:
         """Makes the graph show every completed row.
@@ -2395,6 +2423,18 @@ class MainWindow(QMainWindow):
                     row.completed_run.result, row.completed_run.label,
                     identity=row.completed_run.graph_identity, restore=False,
                 )
+
+    def _sync_frame_compare(self) -> None:
+        """Makes Frame Compare mirror every completed Videos-table row."""
+        self.frame_compare_panel.set_runs([
+            FrameComparisonEntry(
+                identity=row.completed_run.graph_identity,
+                label=row.completed_run.label,
+                result=row.completed_run.result,
+            )
+            for row in self._rows
+            if row.completed_run is not None
+        ])
 
     def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
         """Adds runs to the graph tab and brings it to the front."""

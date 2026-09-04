@@ -2,7 +2,15 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core.models import CropBox, FrameScore, FrameScores, VideoInfo, VmafRunResult
+from vmaf_app.core.models import (
+    CropBox,
+    FrameScore,
+    FrameScores,
+    ResampleTarget,
+    VideoInfo,
+    VmafRunResult,
+    synthetic_resample_distorted_path,
+)
 from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
 
 
@@ -27,6 +35,9 @@ def _sample_result() -> VmafRunResult:
 
 def test_save_and_load_round_trips_frames(tmp_path):
     result = _sample_result()
+    result.scale_algorithm = "lanczos"
+    result.resample_target = ResampleTarget(width=1920, label="1080p")
+    result.compared_frame_count = 321
     out_path = tmp_path / "run.vmafrun.json"
     save_run(result, out_path, label="my-encode")
 
@@ -38,6 +49,9 @@ def test_save_and_load_round_trips_frames(tmp_path):
     assert loaded.distorted_crop == result.distorted_crop
     assert loaded.source_info.width == result.source_info.width
     assert loaded.model == result.model
+    assert loaded.scale_algorithm == "lanczos"
+    assert loaded.resample_target == ResampleTarget(width=1920, label="1080p")
+    assert loaded.compared_frame_count == 321
 
 
 def test_save_and_load_preserves_scores_bit_for_bit(tmp_path):
@@ -146,6 +160,28 @@ def test_loading_a_run_saved_before_xpsnr_existed_does_not_raise(tmp_path):
 
     loaded, _ = load_run(out_path)
     assert loaded.frames[0].xpsnr is None
+
+
+def test_old_resolution_run_recovers_recipe_from_its_synthetic_name(tmp_path):
+    import json
+
+    result = _sample_result()
+    target = ResampleTarget(width=1920, label="1080p")
+    result.distorted = synthetic_resample_distorted_path(result.source, target)
+    result.distorted_info = result.source_info
+    out_path = tmp_path / "old_resolution.vmafrun.json"
+    save_run(result, out_path)
+    data = json.loads(out_path.read_text(encoding="utf-8"))
+    data.pop("resample_target")
+    data.pop("scale_algorithm")
+    data.pop("compared_frame_count")
+    out_path.write_text(json.dumps(data), encoding="utf-8")
+
+    loaded, _ = load_run(out_path)
+
+    assert loaded.resample_target == target
+    assert loaded.scale_algorithm == "bicubic"
+    assert loaded.compared_frame_count == int(loaded.frames.frame[-1]) + 1
 
 
 # ------------------------------------------------------ unique output paths

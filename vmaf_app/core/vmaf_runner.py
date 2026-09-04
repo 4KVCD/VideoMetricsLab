@@ -875,12 +875,13 @@ def run_vmaf(
             distorted_info.path, source_info.path, filtergraph, plan, options.duration_limit,
         )
 
+    total_frames = estimate_total_frames(distorted_info, options, source_info)
     frames = _execute_run(
         build_command,
         options=options,
         model=effective_model,
         fps=distorted_info.fps,
-        total_frames=estimate_total_frames(distorted_info, options, source_info),
+        total_frames=total_frames,
         hwaccel=hwaccel,
         tmp_prefix="vmaf_run_",
         on_progress=on_progress,
@@ -900,6 +901,8 @@ def run_vmaf(
         source_info=source_info,
         distorted_info=distorted_info,
         scale_direction=options.scale_direction,
+        scale_algorithm=options.scale_algorithm,
+        compared_frame_count=total_frames,
     )
 
 
@@ -948,12 +951,13 @@ def run_resample_test(
         )
         return _build_resample_cmd(source_info.path, filtergraph, plan.source, options.duration_limit)
 
+    total_frames = estimate_total_frames(source_info, options)
     frames = _execute_run(
         build_command,
         options=options,
         model=effective_model,
         fps=source_info.fps,
-        total_frames=estimate_total_frames(source_info, options),
+        total_frames=total_frames,
         hwaccel=hwaccel,
         tmp_prefix="vmaf_resample_",
         on_progress=on_progress,
@@ -973,4 +977,7 @@ def run_resample_test(
         distorted_crop=source_crop,  # same crop applies to both branches, since both come from the same source
         source_info=source_info,
         distorted_info=source_info,  # after the round trip it's back at the source's own resolution
+        scale_algorithm=options.scale_algorithm,
+        resample_target=options.resample_test,
+        compared_frame_count=total_frames,
     )

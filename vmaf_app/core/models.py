@@ -345,6 +345,11 @@ class VmafRunResult:
     # reloaded/cached result always reflects what actually produced these
     # scores, even if the row's own settings were changed since.
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
+    # Frame Compare needs the exact preprocessing recipe that produced the
+    # scored pictures. These defaults keep older saved runs/loaders valid.
+    scale_algorithm: str = "bicubic"
+    resample_target: ResampleTarget | None = None
+    compared_frame_count: int = 0
 
     def __post_init__(self) -> None:
         # Accept a plain list of FrameScore and pack it. Callers that build a
@@ -353,3 +358,5 @@ class VmafRunResult:
         # reason about downstream.
         if not isinstance(self.frames, FrameScores):
             self.frames = FrameScores.from_frames(self.frames)
+        if self.compared_frame_count <= 0 and len(self.frames):
+            self.compared_frame_count = int(self.frames.frame[-1]) + 1

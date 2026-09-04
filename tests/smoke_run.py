@@ -14,6 +14,7 @@ ModuleNotFoundError.
 from __future__ import annotations
 
 import argparse
+import struct
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from vmaf_app.core.ffprobe import probe_video
+from vmaf_app.core.frame_extract import extract_frame_png
 from vmaf_app.core.models import CropMode, GpuVendor, VmafOptions
 from vmaf_app.core.stats import stats_for_run
 from vmaf_app.core.vmaf_runner import VmafRunError, analysis_pix_fmt, run_vmaf
@@ -43,9 +45,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     source_name = "source_10bit.mp4" if args.ten_bit else "source.mp4"
+    distorted_name = source_name if args.ten_bit else "distorted.mp4"
 
     source_info = probe_video(FIXTURES / source_name)
-    distorted_info = probe_video(FIXTURES / "distorted.mp4")
+    # The ordinary distorted fixture is cropped 2.35:1 content, while the
+    # dedicated 10-bit fixture is full-frame 16:9. Pairing those two is a
+    # geometry error, not a useful bit-depth smoke test, so the 10-bit path
+    # round-trips its own fixture instead.
+    distorted_info = probe_video(FIXTURES / distorted_name)
     print("source:", source_info)
     print("distorted:", distorted_info)
     print("analysis format:", analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt))
@@ -84,6 +91,19 @@ def main(argv: list[str] | None = None) -> int:
     print("mean:", stats.mean, "min:", stats.minimum, "max:", stats.maximum)
     for t in stats.thresholds:
         print(f"  {t.label}: {t.percentage:.1f}% ({t.count} frames)")
+
+    # Exercise the same real decode path used by the Frame Compare tab. PNG's
+    # IHDR stores width/height at bytes 16..24 in network byte order.
+    preview_frame = len(result.frames) // 2
+    source_png = extract_frame_png(result, "source", preview_frame)
+    distorted_png = extract_frame_png(result, "distorted", preview_frame)
+    source_size = struct.unpack(">II", source_png[16:24])
+    distorted_size = struct.unpack(">II", distorted_png[16:24])
+    assert source_size == distorted_size
+    print(
+        f"frame preview: frame {preview_frame}, {source_size[0]}x{source_size[1]}, "
+        f"source {len(source_png):,} bytes, distorted {len(distorted_png):,} bytes"
+    )
     return 0
 
 

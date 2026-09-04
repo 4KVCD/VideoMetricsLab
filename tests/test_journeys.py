@@ -31,7 +31,13 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.ui import main_window as main_window_module
-from vmaf_app.ui.main_window import COL_VMAF, TAB_GRAPH, TAB_VIDEOS, MainWindow
+from vmaf_app.ui.main_window import (
+    COL_VMAF,
+    TAB_FRAME_COMPARE,
+    TAB_GRAPH,
+    TAB_VIDEOS,
+    MainWindow,
+)
 
 
 @pytest.fixture(scope="module")
@@ -97,6 +103,16 @@ def assert_graph_matches_rows(win: MainWindow) -> None:
         f"  on the plot but not a scored row: {actual - expected}\n"
         f"  scored row but not on the plot  : {expected - actual}"
     )
+
+
+def assert_frame_compare_matches_rows(win: MainWindow) -> None:
+    expected = [
+        row.completed_run.graph_identity
+        for row in win._rows
+        if row.completed_run is not None
+    ]
+    actual = [entry.identity for entry in win.frame_compare_panel._entries]
+    assert actual == expected
 
 
 # ------------------------------------------------------------------ journeys
@@ -195,6 +211,40 @@ def test_switching_tabs_repeatedly_never_duplicates_a_series(qapp):
         win.tabs.setCurrentIndex(TAB_VIDEOS)
         assert_graph_matches_rows(win)
     assert len(win.graph_panel._entries) == 1
+
+
+def test_frame_compare_tracks_completed_removed_and_invalidated_rows(qapp):
+    win = MainWindow()
+    source = _info("C:/vid/source.mkv")
+    win._source_info = source
+    rows = []
+    for name in ("a", "b"):
+        row = win._add_table_row(Path(f"C:/vid/{name}.mkv"))
+        win._rows[row].video_info = _info(f"C:/vid/{name}.mkv", 1920, 1080)
+        rows.append(row)
+
+    _finish_run(win, [
+        (rows[0], _result(Path("C:/vid/a.mkv"), source, 95.0)),
+        (rows[1], _result(Path("C:/vid/b.mkv"), source, 85.0)),
+    ])
+    assert_frame_compare_matches_rows(win)
+
+    # Opening the tab synchronizes it without creating duplicates. Avoid
+    # showing the test's deliberately nonexistent media by replacing only
+    # the decode-triggering hook; the real tab and currentChanged signal run.
+    win.frame_compare_panel._show_or_request = lambda: None
+    win.tabs.setCurrentIndex(TAB_FRAME_COMPARE)
+    assert_frame_compare_matches_rows(win)
+
+    win.tabs.setCurrentIndex(TAB_VIDEOS)
+    win.distorted_table.selectRow(0)
+    win._on_remove_distorted()
+    assert_frame_compare_matches_rows(win)
+    assert len(win.frame_compare_panel._entries) == 1
+
+    win._invalidate_completed_result(0)
+    assert_frame_compare_matches_rows(win)
+    assert win.frame_compare_panel._entries == []
 
 
 def test_the_buttons_are_wired_to_something(qapp, confirm_yes):

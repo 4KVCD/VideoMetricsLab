@@ -30,6 +30,7 @@ from vmaf_app.ui.main_window import (
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
+    TAB_FRAME_COMPARE,
     TAB_GRAPH,
     TAB_SETTINGS,
     TAB_VIDEOS,
@@ -1517,10 +1518,17 @@ def test_healthy_tools_leave_the_banner_hidden(qapp, monkeypatch):
 
 # ------------------------------------------------------------------ tabs
 
-def test_the_window_has_videos_graph_and_settings_tabs(qapp):
+def test_the_window_has_videos_graph_frame_compare_and_settings_tabs(qapp):
     win = MainWindow()
     titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert titles == ["Videos", "Graph", "Settings"]
+    assert titles == ["Videos", "Graph", "Frame Compare", "Settings"]
+
+
+def test_frame_compare_is_a_tab_between_graph_and_settings(qapp):
+    win = MainWindow()
+
+    assert win.tabs.widget(TAB_FRAME_COMPARE) is win.frame_compare_panel
+    assert win.tabs.tabText(TAB_FRAME_COMPARE) == "Frame Compare"
 
 
 def test_the_graph_is_a_tab_not_a_separate_window(qapp):

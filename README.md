@@ -9,6 +9,10 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   sub-tab per metric, with a hover readout (frame/time/score per series), a
   jump-to-frame control and a PNG export that carries its own title, legend
   and statistics.
+- A **Frame Compare** tab for inspecting the exact cropped/scaled pictures
+  used by a completed VMAF run. Choose a frame or timestamp, hold **S** to
+  reveal the source, and use the left/right arrow keys to cycle through
+  distorted videos without losing the current position, zoom, or pan.
 - GPU-accelerated decoding of **both** the source and the distorted video,
   chosen independently (cuda / qsv / d3d11va, auto-detected). Either input
   falls back to software decode on its own -- by codec before ffmpeg is
@@ -102,6 +106,7 @@ vmaf_app/
     ffprobe.py       media probing        crop_detect.py  black-bar detection
     stats.py         summary statistics   model_select.py VMAF model choice
     run_io.py        save/load/CSV        result_cache.py cached run lookup
+    frame_extract.py exact still-frame decode using a run's crop/scale recipe
     ffmpeg_locate.py tool discovery + version check
     gpu.py           hwaccel selection    process_control.py pause/resume/kill
     proc.py          subprocess launching settings.py     persisted settings
@@ -109,9 +114,11 @@ vmaf_app/
   ui/
     main_window.py   the file table, per-row options, run orchestration
     graph_panel.py   the comparison graph tab (one sub-tab per metric)
+    frame_compare_panel.py synchronized source/distorted still-frame viewer
     chart.py         the plotting widget   widgets.py  reusable Qt widgets
     formatting.py    display formatting    worker.py   the run QThread
     probe_worker.py  probing + cache lookup off the UI thread
+    frame_extract_worker.py non-blocking preview-frame decoding
     file_worker.py   result/export writing off the UI thread
 ```
 
