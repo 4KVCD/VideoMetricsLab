@@ -7,6 +7,7 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
 from vmaf_app.core.models import (
+    CropBox,
     CropMode,
     FrameScore,
     ResampleTarget,
@@ -20,6 +21,7 @@ from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.main_window import (
     COL_BITRATE,
+    COL_BLACK_BARS,
     COL_CHECK,
     COL_INFO,
     COL_PATH,
@@ -282,7 +284,10 @@ def test_distorted_table_columns_are_user_resizable(qapp):
     # All columns, including PATH, are Interactive -- PATH additionally
     # auto-fills leftover space via FillColumnTable (see tests below), but
     # unlike Qt's built-in Stretch mode that doesn't disable manual dragging.
-    for col in (COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR):
+    for col in (
+        COL_CHECK, COL_PATH, COL_INFO, COL_BLACK_BARS, COL_SCALING,
+        COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR,
+    ):
         assert header.sectionResizeMode(col) == QHeaderView.Interactive
     assert header.stretchLastSection() is False
 
@@ -307,7 +312,10 @@ def test_path_column_fills_leftover_space_by_default(qapp):
 
     other_columns_width = sum(
         win.distorted_table.columnWidth(c)
-        for c in (COL_CHECK, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR)
+        for c in (
+            COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
+            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR,
+        )
     )
     viewport = win.distorted_table.viewport().width()
     assert win.distorted_table.columnWidth(COL_PATH) >= viewport - other_columns_width - 2
@@ -376,6 +384,121 @@ def test_file_name_column_header_and_shows_just_the_name(qapp):
     item = win.distorted_table.item(row, COL_PATH)
     assert item.text() == "some_encode.mp4"
     assert item.toolTip() == str(Path("C:/videos/some_encode.mp4"))
+
+
+def test_black_bars_column_distinguishes_pending_from_disabled(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+
+    assert win.distorted_table.horizontalHeaderItem(COL_BLACK_BARS).text() == "Black bars"
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Pending"
+    assert "detected when this row is run" in win.distorted_table.item(
+        row, COL_BLACK_BARS
+    ).toolTip()
+
+    win.distorted_table.selectRow(row)
+    win.crop_combo.setCurrentIndex(1)
+
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Disabled"
+    assert "full frames" in win.distorted_table.item(row, COL_BLACK_BARS).toolTip()
+
+
+def test_black_bars_column_shows_each_detected_side_and_full_details(qapp):
+    win = MainWindow()
+    source = _fake_video_info_res("source.mp4", 3840, 2160)
+    distorted = _fake_video_info_res("encode.mp4", 1920, 804)
+    win._source_info = source
+    row = win._add_table_row(distorted.path)
+    result = VmafRunResult(
+        source=source.path,
+        distorted=distorted.path,
+        frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
+        fps=30.0,
+        model="version=vmaf_4k_v0.6.1",
+        source_crop=CropBox(w=3840, h=1608, x=0, y=276),
+        distorted_crop=CropBox(w=1920, h=804, x=0, y=0),
+        source_info=source,
+        distorted_info=distorted,
+    )
+    win._rows[row].completed_run = CompletedRun(result, "encode")
+
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_BLACK_BARS)
+    assert item.text() == "S TB276 · D none"
+    assert "Source: black bars detected and cropped." in item.toolTip()
+    assert "Top: 276 px" in item.toolTip()
+    assert "Bottom: 276 px" in item.toolTip()
+    assert "Content: 3840x1608" in item.toolTip()
+    assert "Original: 3840x2160" in item.toolTip()
+    assert "Distorted: no black bars detected." in item.toolTip()
+
+    win._rows[row].options.crop_mode = CropMode.NONE
+    win._invalidate_completed_result(row)
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Disabled"
+
+
+def test_black_bars_column_reports_none_detected_for_two_full_frames(qapp):
+    win = MainWindow()
+    source = _fake_video_info_res("source.mp4", 1920, 1080)
+    distorted = _fake_video_info_res("encode.mp4", 1920, 1080)
+    row = win._add_table_row(distorted.path)
+    result = VmafRunResult(
+        source=source.path,
+        distorted=distorted.path,
+        frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
+        fps=30.0,
+        model="version=vmaf_v0.6.1",
+        source_crop=CropBox(w=1920, h=1080, x=0, y=0),
+        distorted_crop=CropBox(w=1920, h=1080, x=0, y=0),
+        source_info=source,
+        distorted_info=distorted,
+    )
+    win._rows[row].completed_run = CompletedRun(result, "encode")
+
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_BLACK_BARS)
+    assert item.text() == "None detected"
+    assert "Source: no black bars detected." in item.toolTip()
+    assert "Distorted: no black bars detected." in item.toolTip()
+
+
+def test_black_bars_column_for_resolution_test_only_lists_source(qapp):
+    win = MainWindow()
+    source = _fake_video_info_res("source.mp4", 3840, 2160)
+    row = win._add_table_row(Path("source [downscale-1080p-upscale].mp4"))
+    win._rows[row].options.resample_test = ResampleTarget(width=1920, label="1080p")
+    result = VmafRunResult(
+        source=source.path,
+        distorted=win._rows[row].path,
+        frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
+        fps=30.0,
+        model="version=vmaf_4k_v0.6.1",
+        source_crop=CropBox(w=3840, h=1608, x=0, y=276),
+        distorted_crop=CropBox(w=3840, h=1608, x=0, y=276),
+        source_info=source,
+        distorted_info=source,
+    )
+    win._rows[row].completed_run = CompletedRun(result, "1080p")
+
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_BLACK_BARS)
+    assert item.text() == "S TB276"
+    assert "Source:" in item.toolTip()
+    assert "Distorted:" not in item.toolTip()
+
+
+def test_black_bars_column_is_unknown_when_media_probe_fails(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("broken.mp4"))
+
+    win._set_row_info(row, None, error="could not read video")
+
+    item = win.distorted_table.item(row, COL_BLACK_BARS)
+    assert item.text() == "Unknown"
+    assert "could not be read" in item.toolTip()
 
 
 def test_resize_mismatch_note_reflects_the_actual_scale_direction_used(qapp):
@@ -464,7 +587,10 @@ def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):
 
     total_width = sum(
         win.distorted_table.columnWidth(c)
-        for c in (COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR)
+        for c in (
+            COL_CHECK, COL_PATH, COL_INFO, COL_BLACK_BARS, COL_SCALING,
+            COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR,
+        )
     )
     assert total_width <= win.distorted_table.viewport().width()
 
@@ -480,8 +606,10 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
             FrameScore(0, 0.0, 90.0, psnr=42.0, ssim=0.9876, xpsnr=39.0),
             FrameScore(1, 1 / 30, 92.0, psnr=44.0, ssim=0.9890, xpsnr=41.0),
         ],
-        fps=30.0, model="version=vmaf_v0.6.1", source_crop=None,
-        distorted_crop=None, source_info=info, distorted_info=info,
+        fps=30.0, model="version=vmaf_v0.6.1",
+        source_crop=CropBox(w=1920, h=1080, x=0, y=0),
+        distorted_crop=CropBox(w=1920, h=1080, x=0, y=0),
+        source_info=info, distorted_info=info,
     )
     monkeypatch.setattr(
         main_window_module.QFileDialog, "getOpenFileName",
@@ -494,6 +622,7 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
     assert win.distorted_table.item(0, COL_PSNR).text() == "43.00"
     assert win.distorted_table.item(0, COL_SSIM).text() == "0.9883"
     assert win.distorted_table.item(0, COL_XPSNR).text() == "40.00"
+    assert win.distorted_table.item(0, COL_BLACK_BARS).text() == "None detected"
 
 
 def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypatch):
@@ -533,6 +662,8 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     cached_result = _fake_completed_run(str(distorted)).result
     cached_result.source = source
     cached_result.distorted = distorted
+    cached_result.source_crop = CropBox(w=1920, h=1080, x=0, y=0)
+    cached_result.distorted_crop = CropBox(w=1920, h=1080, x=0, y=0)
     result_cache.store(
         source, distorted, cached_result, label="cached-label",
         options=win._rows[0].options if win._rows else win._default_options,
@@ -545,6 +676,7 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     assert applied is True
     assert win._rows[row].completed_run is not None
     assert win._rows[row].completed_run.label == "cached-label"
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "None detected"
 
 
 def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):

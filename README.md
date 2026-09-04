@@ -24,7 +24,8 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   distorted video's resolution).
 - Automatic black-bar (letterbox/pillarbox) detection and cropping on both
   the source and distorted video independently, so masked black bars don't
-  inflate the score.
+  inflate the score. The Videos table shows whether bars were found on each
+  input, with exact crop dimensions and per-side pixel counts in its tooltip.
 - Automatic VMAF model selection (the 4K model is used when the distorted
   video is UHD or higher; otherwise the standard model), overridable in the UI.
 - A Settings tab for the ffmpeg location, where results and exports are kept,

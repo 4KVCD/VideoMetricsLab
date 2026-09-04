@@ -55,6 +55,7 @@ from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
     RESAMPLE_TARGET_CHOICES,
+    CropBox,
     CropMode,
     GpuVendor,
     ResampleTarget,
@@ -96,7 +97,18 @@ _SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
 _GPU_VENDOR_BY_INDEX = {0: GpuVendor.AUTO, 1: GpuVendor.NVIDIA, 2: GpuVendor.INTEL, 3: GpuVendor.AMD}
 _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
 
-COL_CHECK, COL_PATH, COL_INFO, COL_SCALING, COL_BITRATE, COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR = range(9)
+(
+    COL_CHECK,
+    COL_PATH,
+    COL_INFO,
+    COL_BLACK_BARS,
+    COL_SCALING,
+    COL_BITRATE,
+    COL_PSNR,
+    COL_SSIM,
+    COL_VMAF,
+    COL_XPSNR,
+) = range(10)
 
 # Tab order. A frame-comparison tab is planned between Graph and Settings;
 # adding it means inserting here and in _build_ui.
@@ -570,8 +582,11 @@ class MainWindow(QMainWindow):
         ))
         metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
-            0, 9, fill_column=COL_PATH,
-            other_columns=[COL_CHECK, COL_INFO, COL_SCALING, COL_BITRATE, *metric_cols],
+            0, 10, fill_column=COL_PATH,
+            other_columns=[
+                COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
+                *metric_cols,
+            ],
         )
         self.metric_header = CheckableHeaderView(
             # VMAF has no checkbox: it's what the app computes, always.
@@ -581,7 +596,10 @@ class MainWindow(QMainWindow):
         self.distorted_table.setHorizontalHeader(self.metric_header)
         self.metric_header.sectionToggled.connect(self._on_metric_column_toggled)
         self.distorted_table.setHorizontalHeaderLabels(
-            ["", "File name", "Media info", "Scaling", "Bitrate", "   PSNR", "   SSIM", "VMAF", "   XPSNR"]
+            [
+                "", "File name", "Media info", "Black bars", "Scaling", "Bitrate",
+                "   PSNR", "   SSIM", "VMAF", "   XPSNR",
+            ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
         self.distorted_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -611,6 +629,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.distorted_table.setColumnWidth(COL_CHECK, 28)
         self.distorted_table.setColumnWidth(COL_INFO, 150)
+        self.distorted_table.setColumnWidth(COL_BLACK_BARS, 155)
         self.distorted_table.setColumnWidth(COL_SCALING, 90)
         self.distorted_table.setColumnWidth(COL_BITRATE, 65)
         for col, _, _ in _METRIC_COLUMNS:
@@ -1036,6 +1055,9 @@ class MainWindow(QMainWindow):
         path_item.setToolTip(str(path))  # full path still available on hover
         self.distorted_table.setItem(row, COL_PATH, path_item)
         self.distorted_table.setItem(row, COL_INFO, QTableWidgetItem("Probing..."))
+        bars_item = QTableWidgetItem()
+        bars_item.setTextAlignment(Qt.AlignCenter)
+        self.distorted_table.setItem(row, COL_BLACK_BARS, bars_item)
         self.distorted_table.setItem(row, COL_SCALING, QTableWidgetItem(""))
         self.distorted_table.setItem(row, COL_BITRATE, QTableWidgetItem(""))
         for col, _, _ in _METRIC_COLUMNS:
@@ -1088,6 +1110,7 @@ class MainWindow(QMainWindow):
             # Only VMAF has a universally meaningful "good/bad" scale to
             # colour against (0-100); dB and SSIM don't.
             item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+        self._set_row_black_bars(row)
         self.distorted_table.resizeColumnToContents(COL_VMAF)
 
     @staticmethod
@@ -1100,6 +1123,119 @@ class MainWindow(QMainWindow):
             return None
         mean = float(np.nanmean(values))
         return None if math.isnan(mean) else mean
+
+    @staticmethod
+    def _crop_display(
+        short_label: str, long_label: str, info: VideoInfo, crop: CropBox | None,
+    ) -> tuple[str, str, bool]:
+        """Compact table text, detailed tooltip, and whether bars were found."""
+        if crop is None:
+            return (
+                f"{short_label} unchecked",
+                f"{long_label}: no crop was applied; black bars were not checked.",
+                False,
+            )
+        if crop.is_noop(info.width, info.height):
+            return (
+                f"{short_label} none",
+                f"{long_label}: no black bars detected.\n"
+                f"Content: {info.width}x{info.height}\n"
+                f"Original: {info.width}x{info.height}",
+                False,
+            )
+
+        left = max(0, crop.x)
+        top = max(0, crop.y)
+        right = max(0, info.width - crop.x - crop.w)
+        bottom = max(0, info.height - crop.y - crop.h)
+        compact_parts = []
+        if top and top == bottom:
+            compact_parts.append(f"TB{top}")
+        else:
+            compact_parts.extend(
+                f"{name}{value}" for name, value in (("T", top), ("B", bottom)) if value
+            )
+        if left and left == right:
+            compact_parts.append(f"LR{left}")
+        else:
+            compact_parts.extend(
+                f"{name}{value}" for name, value in (("L", left), ("R", right)) if value
+            )
+        compact = "/".join(compact_parts)
+        return (
+            f"{short_label} {compact}",
+            f"{long_label}: black bars detected and cropped.\n"
+            f"Top: {top} px\n"
+            f"Bottom: {bottom} px\n"
+            f"Left: {left} px\n"
+            f"Right: {right} px\n"
+            f"Content: {crop.w}x{crop.h}\n"
+            f"Original: {info.width}x{info.height}",
+            True,
+        )
+
+    def _set_row_black_bars(self, row: int, *, probe_failed: bool = False) -> None:
+        """Shows the crop state for the exact source/distorted pair in a row.
+
+        Auto crop is resolved during a run rather than media probing, and can
+        differ between rows because duration limits are per-row. The table
+        therefore shows a pending state until a result (including a cached or
+        loaded result) supplies the crop boxes that were actually used.
+        """
+        item = self.distorted_table.item(row, COL_BLACK_BARS)
+        if item is None:
+            return
+
+        if probe_failed:
+            item.setText("Unknown")
+            item.setToolTip("Black bars could not be checked because the video could not be read.")
+            item.setForeground(QColor("#999"))
+            return
+
+        row_data = self._rows[row]
+        completed = row_data.completed_run
+        if completed is None:
+            if row_data.options.crop_mode == CropMode.NONE:
+                item.setText("Disabled")
+                item.setToolTip(
+                    "Black-bar detection is disabled for this row; the full frames will be compared."
+                )
+            elif row_data.options.crop_mode == CropMode.MANUAL:
+                item.setText("Manual")
+                item.setToolTip("A manual crop is configured; exact applied sides will appear after the run.")
+            else:
+                item.setText("Pending")
+                item.setToolTip("Black bars will be detected when this row is run.")
+            item.setForeground(QColor("#777"))
+            return
+
+        result = completed.result
+        sides = [
+            self._crop_display("S", "Source", result.source_info, result.source_crop)
+        ]
+        if row_data.options.resample_test is None:
+            sides.append(
+                self._crop_display(
+                    "D", "Distorted", result.distorted_info, result.distorted_crop
+                )
+            )
+
+        if all(crop is None for crop in (
+            [result.source_crop]
+            if row_data.options.resample_test is not None
+            else [result.source_crop, result.distorted_crop]
+        )):
+            item.setText("Disabled")
+            item.setToolTip("Black-bar detection was disabled for this run; no crop was applied.")
+        elif not any(found for _, _, found in sides) and all(
+            "unchecked" not in short for short, _, _ in sides
+        ):
+            item.setText("None detected")
+            item.setToolTip("\n\n".join(detail for _, detail, _ in sides))
+        else:
+            item.setText(" · ".join(short for short, _, _ in sides))
+            item.setToolTip("\n\n".join(detail for _, detail, _ in sides))
+        item.setForeground(self.distorted_table.palette().text())
 
     def _resize_mismatch(self, row: int, distorted_info: VideoInfo) -> tuple[str, str]:
         """(short tag, full explanation) for which of the two resolutions got
@@ -1154,6 +1290,7 @@ class MainWindow(QMainWindow):
             self.distorted_table.item(row, COL_BITRATE).setText("")
             scaling_item.setText("")
             scaling_item.setToolTip("")
+            self._set_row_black_bars(row, probe_failed=True)
         else:
             item.setText(media_info_string(info))
             # Back to normal text: the placeholder shown while probing greys
@@ -1166,6 +1303,7 @@ class MainWindow(QMainWindow):
             scaling_item.setText(tag)
             scaling_item.setToolTip(explanation)
             self._rows[row].video_info = info
+            self._set_row_black_bars(row)
         # Keeps these snug to whatever's actually in them (never wider than
         # needed) while staying user-draggable in between updates.
         self.distorted_table.resizeColumnToContents(COL_INFO)
@@ -1190,6 +1328,7 @@ class MainWindow(QMainWindow):
         item.setText(f"Downscale to {target.width}x{down_h}, upscale back to {info.width}x{info.height}")
         item.setToolTip(format_hms(info.duration, decimals=1))
         self.distorted_table.item(row, COL_BITRATE).setText("N/A")
+        self._set_row_black_bars(row)
         self.distorted_table.resizeColumnToContents(COL_INFO)
         self.distorted_table.resizeColumnToContents(COL_BITRATE)
 
@@ -1737,6 +1876,7 @@ class MainWindow(QMainWindow):
                 self._invalidate_completed_result(row)
                 changed_rows.append(row)
             self._rows[row].options = clone_options(new_options)
+            self._set_row_black_bars(row)
         self._reload_cached_for_rows(changed_rows)
 
     def _on_panel_field_edited(self, field_name: str) -> None:
@@ -1761,9 +1901,11 @@ class MainWindow(QMainWindow):
         execution_only = field_name in {"gpu", "n_threads"}
         changed_rows = []
         for row in self._panel_target_rows:
-            if apply(self._rows[row].options) and not execution_only:
-                self._invalidate_completed_result(row)
-                changed_rows.append(row)
+            if apply(self._rows[row].options):
+                if not execution_only:
+                    self._invalidate_completed_result(row)
+                    changed_rows.append(row)
+                self._set_row_black_bars(row)
         self._reload_cached_for_rows(changed_rows)
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:
