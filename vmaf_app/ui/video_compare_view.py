@@ -1,25 +1,200 @@
-"""Two synchronized video surfaces for instant source/distorted switching."""
+"""Frame-locked source/distorted playback decoded entirely by ffmpeg."""
 from __future__ import annotations
 
-from pathlib import Path
+import subprocess
+import threading
+from collections import deque
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
-from PySide6.QtWidgets import QStackedLayout, QWidget
+from PySide6.QtCore import QRectF, Qt, QThread, Signal
+from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtWidgets import QWidget
 
-from vmaf_app.core.frame_extract import FrameComparison, frame_input_path
+from vmaf_app.core import proc as proc_util
+from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings, frame_input_path
+from vmaf_app.core.gpu import GpuVendor, HwAccelPlan, plan_hwaccel
+from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.video_playback import (
+    build_audio_command,
+    build_video_pair_command,
+    playback_dimensions,
+)
+
+
+def _read_exact(stream, size: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining:
+        chunk = stream.read(remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+class _PairDecodeWorker(QThread):
+    frame_ready = Signal(int, int, bytes, int, int)
+    decode_started = Signal(int, str)
+    decode_failed = Signal(int, str)
+    playback_ended = Signal(int)
+
+    def __init__(
+        self,
+        generation: int,
+        comparison: FrameComparison,
+        start_frame: int,
+        color_settings: PreviewColorSettings,
+        output_size: tuple[int, int],
+        hwaccel: HwAccelPlan,
+        *,
+        realtime: bool,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.generation = generation
+        self._comparison = comparison
+        self._start_frame = start_frame
+        self._color_settings = color_settings
+        self._output_size = output_size
+        self._preferred_hwaccel = hwaccel
+        self._realtime = realtime
+        self._cancelled = threading.Event()
+        self._process = ProcessHandle()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        self._process.terminate()
+
+    def pause(self) -> None:
+        self._process.pause()
+
+    def resume(self) -> None:
+        self._process.resume()
+
+    @staticmethod
+    def _plans(preferred: HwAccelPlan) -> list[HwAccelPlan]:
+        return [preferred, HwAccelPlan()] if preferred.uses_gpu else [preferred]
+
+    def run(self) -> None:
+        width, height = self._output_size
+        frame_bytes = width * 2 * height * 3
+        last_error = "ffmpeg returned no video frame."
+        for plan in self._plans(self._preferred_hwaccel):
+            if self._cancelled.is_set():
+                return
+            command = build_video_pair_command(
+                self._comparison,
+                self._start_frame,
+                self._color_settings,
+                plan,
+                self._output_size,
+                realtime=self._realtime,
+            )
+            process = proc_util.popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+            assert process.stdout is not None
+            assert process.stderr is not None
+            self._process.attach(process.pid)
+            stderr_tail: deque[bytes] = deque(maxlen=80)
+
+            def drain_stderr(pipe=process.stderr, tail=stderr_tail) -> None:
+                for line in iter(pipe.readline, b""):
+                    tail.append(line)
+
+            stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
+            stderr_reader.start()
+            frame_number = self._start_frame
+            first = True
+            try:
+                while not self._cancelled.is_set():
+                    payload = _read_exact(process.stdout, frame_bytes)
+                    if len(payload) != frame_bytes:
+                        break
+                    if first:
+                        first = False
+                        self.decode_started.emit(
+                            self.generation, f"GPU decode: {plan.describe()}"
+                        )
+                    self.frame_ready.emit(
+                        self.generation, frame_number, payload, width, height
+                    )
+                    frame_number += 1
+                    if not self._realtime:
+                        break
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                process.wait()
+                self._process.detach()
+                process.stdout.close()
+                stderr_reader.join(timeout=2)
+                process.stderr.close()
+
+            if self._cancelled.is_set():
+                return
+            if not first:
+                if self._realtime:
+                    self.playback_ended.emit(self.generation)
+                return
+            detail = b"".join(stderr_tail).decode("utf-8", errors="replace").strip()
+            if detail:
+                last_error = detail[-2000:]
+        self.decode_failed.emit(self.generation, last_error)
+
+
+class _PairedFrameWidget(QWidget):
+    """Paint one half of the latest indivisible source/distorted frame pair."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self._payload: bytes | None = None
+        self._image = QImage()
+        self._side_width = 0
+        self._height = 0
+        self._show_source = False
+
+    def set_pair(self, payload: bytes, side_width: int, height: int) -> None:
+        self._payload = payload
+        self._side_width = side_width
+        self._height = height
+        self._image = QImage(
+            payload, side_width * 2, height, side_width * 2 * 3,
+            QImage.Format_RGB888,
+        )
+        self.update()
+
+    def show_source(self, showing: bool) -> None:
+        self._show_source = bool(showing)
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#171717"))
+        if self._image.isNull() or self._side_width <= 0 or self._height <= 0:
+            return
+        scale = min(self.width() / self._side_width, self.height() / self._height)
+        target_w = self._side_width * scale
+        target_h = self._height * scale
+        target = QRectF(
+            (self.width() - target_w) / 2,
+            (self.height() - target_h) / 2,
+            target_w,
+            target_h,
+        )
+        source_x = 0 if self._show_source else self._side_width
+        source = QRectF(source_x, 0, self._side_width, self._height)
+        painter.drawImage(target, self._image, source)
 
 
 class VideoCompareView(QWidget):
-    """Play both physical inputs and raise either surface without reopening it.
+    """Play a paired ffmpeg stream with instant, frame-exact A/B switching."""
 
-    The distorted player is the clock and audio master. The source is muted
-    and periodically nudged back to the distorted position if the independent
-    media clocks drift far enough to become visually meaningful.
-    """
-
-    position_changed = Signal(int)       # milliseconds
+    position_changed = Signal(int)
     playing_changed = Signal(bool)
     status_changed = Signal(str)
 
@@ -27,87 +202,27 @@ class VideoCompareView(QWidget):
         super().__init__(parent)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("background: #171717;")
-
-        self.source_video = QVideoWidget(self)
-        self.distorted_video = QVideoWidget(self)
-        for video in (self.source_video, self.distorted_video):
-            video.setAspectRatioMode(Qt.KeepAspectRatio)
-            video.setFocusPolicy(Qt.StrongFocus)
-
-        # StackAll leaves both native video surfaces visible and decoding;
-        # setCurrentWidget only raises one. A conventional stacked widget
-        # hides the other surface, which can leave it without a current frame
-        # when S is pressed.
-        layout = QStackedLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setStackingMode(QStackedLayout.StackAll)
-        layout.addWidget(self.source_video)
-        layout.addWidget(self.distorted_video)
-        layout.setCurrentWidget(self.distorted_video)
-        self._stack = layout
-
-        self.audio_output = QAudioOutput(self)
-        self.source_player = self._new_source_player()
-        self.distorted_player = self._new_distorted_player()
-
-        self._source_path: Path | None = None
-        self._distorted_path: Path | None = None
+        self.video = _PairedFrameWidget(self)
+        # There is now one paired ffmpeg surface; retain these focus aliases
+        # for code that treated the old Qt surfaces as keyboard targets.
+        self.source_video = self.video
+        self.distorted_video = self.video
+        self._comparison: FrameComparison | None = None
+        self._color_settings = PreviewColorSettings()
+        self._worker: _PairDecodeWorker | None = None
+        self._retired_workers: set[_PairDecodeWorker] = set()
+        self._generation = 0
+        self._frame = 0
         self._wanted_playing = False
+        self._is_playing = False
         self._showing_source = False
-        self._max_drift_ms = 20
-        self._pending_position = 0
-        self._starting_pair = False
-        self._pair_started = False
-        self._source_frame_us = -1
-        self._distorted_frame_us = -1
-        self._pending_source_us: int | None = None
-        self._resume_after_pending_source = False
-        self._temporary_sync_pause = False
-        self._source_load_pending = False
-        self._distorted_load_pending = False
+        self._audio_enabled = True
+        self._audio_process: subprocess.Popen | None = None
+        self._audio_handle: ProcessHandle | None = None
 
-        self.source_video.videoSink().videoFrameChanged.connect(
-            self._on_source_frame
-        )
-        self.distorted_video.videoSink().videoFrameChanged.connect(
-            self._on_distorted_frame
-        )
-        self._sync_timer = QTimer(self)
-        self._sync_timer.setInterval(20)
-        self._sync_timer.timeout.connect(self._synchronize)
-
-    def _new_source_player(self) -> QMediaPlayer:
-        player = QMediaPlayer(self)
-        player.setVideoOutput(self.source_video)
-        player.mediaStatusChanged.connect(
-            lambda status: self._on_media_status("source", status)
-        )
-        player.errorOccurred.connect(
-            lambda _error, text: self._on_error("source", text)
-        )
-        return player
-
-    def _new_distorted_player(self) -> QMediaPlayer:
-        player = QMediaPlayer(self)
-        player.setVideoOutput(self.distorted_video)
-        player.setAudioOutput(self.audio_output)
-        player.positionChanged.connect(self._on_master_position)
-        player.playbackStateChanged.connect(self._on_playback_state)
-        player.mediaStatusChanged.connect(
-            lambda status: self._on_media_status("distorted", status)
-        )
-        player.errorOccurred.connect(
-            lambda _error, text: self._on_error("distorted", text)
-        )
-        return player
-
-    @staticmethod
-    def _retire_player(player: QMediaPlayer) -> None:
-        player.blockSignals(True)
-        player.stop()
-        player.setVideoOutput(None)
-        player.setAudioOutput(None)
-        player.deleteLater()
+    def resizeEvent(self, event) -> None:
+        self.video.setGeometry(self.rect())
+        super().resizeEvent(event)
 
     @staticmethod
     def can_play(comparison: FrameComparison) -> tuple[bool, str]:
@@ -126,7 +241,7 @@ class VideoCompareView(QWidget):
 
     @property
     def is_playing(self) -> bool:
-        return self.distorted_player.playbackState() == QMediaPlayer.PlayingState
+        return self._is_playing
 
     @property
     def playback_requested(self) -> bool:
@@ -134,7 +249,15 @@ class VideoCompareView(QWidget):
 
     @property
     def position(self) -> int:
-        return self.distorted_player.position()
+        if self._comparison is None or self._comparison.fps <= 0:
+            return 0
+        return round(self._frame / self._comparison.fps * 1000)
+
+    def live_workers(self) -> list[QThread]:
+        workers = list(self._retired_workers)
+        if self._worker is not None:
+            workers.append(self._worker)
+        return [worker for worker in workers if worker.isRunning()]
 
     def load(
         self,
@@ -142,284 +265,184 @@ class VideoCompareView(QWidget):
         position_ms: int,
         *,
         playing: bool = False,
+        color_settings: PreviewColorSettings | None = None,
     ) -> bool:
         available, reason = self.can_play(comparison)
         if not available:
             self.set_playing(False)
             self.status_changed.emit(reason)
             return False
-
-        source = frame_input_path(comparison, "source").resolve()
-        distorted = frame_input_path(comparison, "distorted").resolve()
-        self._wanted_playing = playing
-        position_ms = max(0, int(position_ms))
-        self._pending_position = position_ms
-        if comparison.fps > 0:
-            # Correct once the clocks differ by roughly half a displayed
-            # frame. Faster material is checked more often, without polling
-            # faster than 8 ms or wasting work on low-frame-rate video.
-            half_frame_ms = 500 / comparison.fps
-            self._max_drift_ms = max(5, min(45, round(half_frame_ms)))
-            self._sync_timer.setInterval(max(8, min(50, round(half_frame_ms))))
-
-        # Most comparisons share a source. Preserve its live decoder while
-        # left/right replaces only the distorted player, avoiding a visible
-        # source interruption if S is held during the switch.
-        source_changed = source != self._source_path
-        distorted_changed = distorted != self._distorted_path
-        if source_changed or distorted_changed:
-            self._pair_started = False
-        if (source_changed or distorted_changed) and playing:
-            # Do not let the already-loaded side run ahead while its partner
-            # opens. Both restart from the same clock once both report ready.
-            self.source_player.pause()
-            self.distorted_player.pause()
-        if source_changed:
-            self._source_frame_us = -1
-            self._source_load_pending = True
-            self._retire_player(self.source_player)
-            self.source_player = self._new_source_player()
-            self.source_player.setSource(QUrl.fromLocalFile(str(source)))
-            self._source_path = source
-        if distorted_changed:
-            self._distorted_frame_us = -1
-            self._distorted_load_pending = True
-            self._retire_player(self.distorted_player)
-            self.distorted_player = self._new_distorted_player()
-            self.distorted_player.setSource(QUrl.fromLocalFile(str(distorted)))
-            self._distorted_path = distorted
-
-        self.source_player.setPosition(position_ms)
-        self.distorted_player.setPosition(position_ms)
-        self.show_source(self._showing_source)
-        if playing:
-            # Preserve position_ms even if the backend has not delivered its
-            # LoadingMedia transition yet and still exposes the old status.
-            self._wanted_playing = True
-            self._start_pair_if_ready()
-            self.playing_changed.emit(True)
-        else:
-            self.set_playing(False)
-        self.status_changed.emit(f"Loaded {distorted.name}")
+        self._comparison = comparison
+        self._color_settings = color_settings or PreviewColorSettings()
+        self._frame = max(0, round(position_ms / 1000 * comparison.fps))
+        self._wanted_playing = bool(playing)
+        self._restart_decoder(realtime=bool(playing))
         return True
 
     def clear(self) -> None:
         self._wanted_playing = False
-        self._pending_position = 0
-        self._sync_timer.stop()
-        for player in (self.source_player, self.distorted_player):
-            player.stop()
-            player.setSource(QUrl())
-        self._source_path = None
-        self._distorted_path = None
-        self._source_frame_us = -1
-        self._distorted_frame_us = -1
-        self._pending_source_us = None
-        self._resume_after_pending_source = False
-        self._temporary_sync_pause = False
-        self._pair_started = False
-        self._source_load_pending = False
-        self._distorted_load_pending = False
+        self._is_playing = False
+        self._comparison = None
+        self._stop_decoder()
+        self._stop_audio()
         self.playing_changed.emit(False)
 
     def set_position(self, position_ms: int) -> None:
-        position_ms = max(0, int(position_ms))
-        self._pending_position = position_ms
-        self.distorted_player.setPosition(position_ms)
-        self.source_player.setPosition(position_ms)
+        comparison = self._comparison
+        if comparison is None or comparison.fps <= 0:
+            return
+        self._frame = max(0, round(position_ms / 1000 * comparison.fps))
+        self._restart_decoder(realtime=self._wanted_playing)
 
     def set_playing(self, playing: bool) -> None:
-        self._wanted_playing = bool(playing)
-        if playing and self._distorted_path is not None:
-            # A newly assigned source reports position 0 while LoadingMedia.
-            # Keep load()'s requested comparison position until it is ready;
-            # otherwise left/right jumps a playing comparison back to frame 0.
-            if self._ready(self.distorted_player):
-                self._pending_position = self.distorted_player.position()
-            self._start_pair_if_ready()
+        playing = bool(playing)
+        self._wanted_playing = playing
+        worker = self._worker
+        if playing:
+            if worker is not None and worker.isRunning() and not self._is_playing:
+                worker.resume()
+                if self._audio_handle is not None:
+                    self._audio_handle.resume()
+                self._is_playing = True
+                self.playing_changed.emit(True)
+            elif not self._is_playing and self._comparison is not None:
+                self._restart_decoder(realtime=True)
         else:
-            self.distorted_player.pause()
-            self.source_player.pause()
-            self._sync_timer.stop()
-            self._pair_started = False
-        self.playing_changed.emit(bool(playing))
+            if worker is not None and worker.isRunning():
+                worker.pause()
+            if self._audio_handle is not None:
+                self._audio_handle.pause()
+            self._is_playing = False
+            self.playing_changed.emit(False)
 
     def show_source(self, showing: bool) -> None:
         self._showing_source = bool(showing)
-        if not showing:
-            if self._resume_after_pending_source:
-                self._resume_synchronized_pair()
-            self._pending_source_us = None
-            self._stack.setCurrentWidget(self.distorted_video)
-            return
-        if self._presented_frames_aligned():
-            self._pending_source_us = None
-            self._stack.setCurrentWidget(self.source_video)
-            return
-
-        # Do not flash a wrong source frame. Ask the hidden source decoder for
-        # the frame currently on the distorted surface, then raise it as soon
-        # as its sink reports that timestamp. No pixel download is involved.
-        self._pending_source_us = self._distorted_frame_us
-        if self._distorted_frame_us >= 0:
-            if self.is_playing:
-                # Freeze the visible distorted frame for the fraction of a
-                # frame needed by source to catch it. That is preferable to
-                # flashing an adjacent source frame, and both resume from the
-                # exact same timestamp as soon as the sink confirms it.
-                self._temporary_sync_pause = True
-                self._resume_after_pending_source = True
-                self.source_player.pause()
-                self.distorted_player.pause()
-                self._sync_timer.stop()
-            self.source_player.setPlaybackRate(1.0)
-            self.source_player.setPosition(round(self._distorted_frame_us / 1000))
-        else:
-            self.source_player.setPosition(self.distorted_player.position())
-        self._stack.setCurrentWidget(self.distorted_video)
+        self.video.show_source(showing)
 
     def set_audio_enabled(self, enabled: bool) -> None:
-        self.audio_output.setMuted(not enabled)
+        self._audio_enabled = bool(enabled)
+        if not enabled:
+            self._stop_audio()
+        elif self._is_playing:
+            self._start_audio(self._frame)
 
-    def _synchronize(self) -> None:
-        if not self.is_playing:
+    def set_color_settings(self, settings: PreviewColorSettings) -> None:
+        if settings == self._color_settings:
             return
-        if self._source_frame_us >= 0 and self._distorted_frame_us >= 0:
-            drift_ms = (self._source_frame_us - self._distorted_frame_us) / 1000
-        else:
-            drift_ms = self.source_player.position() - self.distorted_player.position()
-        if abs(drift_ms) <= self._max_drift_ms:
-            if self.source_player.playbackRate() != 1.0:
-                self.source_player.setPlaybackRate(1.0)
-            return
-        if abs(drift_ms) <= self._max_drift_ms * 3:
-            # A small speed nudge avoids an expensive keyframe seek for a
-            # one-frame scheduling difference. Source has no audio, so this
-            # correction is inaudible and normally lasts only a few frames.
-            self.source_player.setPlaybackRate(1.12 if drift_ms < 0 else 0.88)
-            return
-        self.source_player.setPlaybackRate(1.0)
-        self.source_player.setPosition(self.distorted_player.position())
+        self._color_settings = settings
+        if self._comparison is not None:
+            self._restart_decoder(realtime=self._wanted_playing)
 
-    def _presented_frames_aligned(self) -> bool:
-        if self._source_frame_us < 0 or self._distorted_frame_us < 0:
-            return False
-        return abs(self._source_frame_us - self._distorted_frame_us) <= (
-            self._max_drift_ms * 1000
+    def _restart_decoder(self, *, realtime: bool) -> None:
+        comparison = self._comparison
+        if comparison is None:
+            return
+        self._stop_decoder()
+        self._stop_audio()
+        self._generation += 1
+        generation = self._generation
+        output_size = playback_dimensions(comparison)
+        plan = plan_hwaccel(
+            GpuVendor.AUTO,
+            comparison.source_info.codec_name,
+            comparison.distorted_info.codec_name,
         )
+        worker = _PairDecodeWorker(
+            generation,
+            comparison,
+            self._frame,
+            self._color_settings,
+            output_size,
+            plan,
+            realtime=realtime,
+            parent=self,
+        )
+        worker.frame_ready.connect(self._on_frame_ready)
+        worker.decode_started.connect(self._on_decode_started)
+        worker.decode_failed.connect(self._on_decode_failed)
+        worker.playback_ended.connect(self._on_playback_ended)
+        worker.finished.connect(lambda w=worker: self._on_worker_finished(w))
+        self._worker = worker
+        self._is_playing = realtime
+        self.status_changed.emit("Opening with ffmpeg…")
+        self.playing_changed.emit(realtime)
+        worker.start()
 
-    def _on_source_frame(self, frame) -> None:
-        timestamp = int(frame.startTime())
-        if timestamp >= 0:
-            self._source_frame_us = timestamp
-        target = self._pending_source_us
-        if not self._showing_source or target is None or timestamp < 0:
+    def _stop_decoder(self) -> None:
+        worker = self._worker
+        self._worker = None
+        if worker is not None:
+            worker.cancel()
+            self._retired_workers.add(worker)
+
+    def _on_worker_finished(self, worker: _PairDecodeWorker) -> None:
+        self._retired_workers.discard(worker)
+        if self._worker is worker:
+            self._worker = None
+        worker.deleteLater()
+
+    def _on_frame_ready(
+        self, generation: int, frame: int, payload: bytes, width: int, height: int
+    ) -> None:
+        if generation != self._generation:
             return
-        if abs(timestamp - target) <= self._max_drift_ms * 1000:
-            self._pending_source_us = None
-            self._stack.setCurrentWidget(self.source_video)
-            if self._resume_after_pending_source:
-                self._resume_synchronized_pair()
+        self._frame = frame
+        self.video.set_pair(payload, width, height)
+        comparison = self._comparison
+        if comparison is not None and comparison.fps > 0:
+            self.position_changed.emit(round(frame / comparison.fps * 1000))
 
-    def _on_distorted_frame(self, frame) -> None:
-        timestamp = int(frame.startTime())
-        if timestamp >= 0:
-            self._distorted_frame_us = timestamp
-
-    @staticmethod
-    def _ready(player: QMediaPlayer) -> bool:
-        return player.mediaStatus() in {
-            QMediaPlayer.LoadedMedia,
-            QMediaPlayer.BufferingMedia,
-            QMediaPlayer.BufferedMedia,
-            QMediaPlayer.StalledMedia,
-        }
-
-    def _start_pair_if_ready(self) -> None:
-        if (
-            not self._wanted_playing
-            or self._starting_pair
-            or self._source_load_pending
-            or self._distorted_load_pending
-            or not self._ready(self.source_player)
-            or not self._ready(self.distorted_player)
-        ):
+    def _on_decode_started(self, generation: int, detail: str) -> None:
+        if generation != self._generation:
             return
-        if (
-            self._pair_started
-            and self.source_player.isPlaying()
-            and self.distorted_player.isPlaying()
-        ):
-            self._sync_timer.start()
+        state = "Playing" if self._wanted_playing else "Paused"
+        self.status_changed.emit(f"{state} · ffmpeg · {detail}")
+        if self._wanted_playing:
+            self._start_audio(self._frame)
+
+    def _on_decode_failed(self, generation: int, error: str) -> None:
+        if generation != self._generation:
             return
-        self._starting_pair = True
-        try:
-            position = self._pending_position
-            # Some backends retain PlayingState briefly across setSource().
-            # Force a real state transition once the replacement media is
-            # loaded; otherwise play() can be treated as a no-op at position
-            # zero even though the old decoder has already been discarded.
-            if not self._pair_started:
-                self.source_player.stop()
-                self.distorted_player.stop()
-            self.source_player.setPosition(position)
-            self.distorted_player.setPosition(position)
-            self.source_player.play()
-            self.distorted_player.play()
-            self._pair_started = True
-            self._sync_timer.start()
-        finally:
-            self._starting_pair = False
+        self._wanted_playing = False
+        self._is_playing = False
+        self._stop_audio()
+        self.playing_changed.emit(False)
+        self.status_changed.emit(f"Could not decode comparison with ffmpeg: {error}")
 
-    def _on_playback_state(self, state: QMediaPlayer.PlaybackState) -> None:
-        playing = state == QMediaPlayer.PlayingState
-        if not playing:
-            self._sync_timer.stop()
-        if self._temporary_sync_pause:
+    def _on_playback_ended(self, generation: int) -> None:
+        if generation != self._generation:
             return
-        self.playing_changed.emit(playing)
+        self._wanted_playing = False
+        self._is_playing = False
+        self._stop_audio()
+        self.playing_changed.emit(False)
+        self.status_changed.emit("Playback ended")
 
-    def _resume_synchronized_pair(self) -> None:
-        position = max(0, round(self._distorted_frame_us / 1000))
-        self._pending_position = position
-        self.source_player.setPosition(position)
-        self.distorted_player.setPosition(position)
-        self.source_player.play()
-        self.distorted_player.play()
-        self._sync_timer.start()
-        self._resume_after_pending_source = False
-        self._temporary_sync_pause = False
+    def _start_audio(self, frame: int) -> None:
+        if not self._audio_enabled or self._comparison is None:
+            return
+        self._stop_audio()
+        command = build_audio_command(self._comparison, frame)
+        if command is None:
+            return
+        process = proc_util.popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        handle = ProcessHandle()
+        handle.attach(process.pid)
+        self._audio_process = process
+        self._audio_handle = handle
 
-    def _on_master_position(self, position: int) -> None:
-        if not self._distorted_load_pending:
-            self.position_changed.emit(int(position))
-
-    def _on_media_status(self, side: str, status: QMediaPlayer.MediaStatus) -> None:
-        if status in {
-            QMediaPlayer.LoadedMedia,
-            QMediaPlayer.BufferingMedia,
-            QMediaPlayer.BufferedMedia,
-            QMediaPlayer.StalledMedia,
-        }:
-            if side == "source":
-                self._source_load_pending = False
-            else:
-                self._distorted_load_pending = False
-        self._start_pair_if_ready()
-        if status == QMediaPlayer.EndOfMedia:
-            self._wanted_playing = False
-            self._pair_started = False
-            self.source_player.pause()
-            self.distorted_player.pause()
-            self._sync_timer.stop()
-            self.playing_changed.emit(False)
-        elif status == QMediaPlayer.InvalidMedia:
-            self.set_playing(False)
-            player = self.source_player if side == "source" else self.distorted_player
-            self.status_changed.emit(
-                player.errorString() or f"Could not play {side} video."
-            )
-
-    def _on_error(self, side: str, text: str) -> None:
-        self.set_playing(False)
-        self.status_changed.emit(f"Could not play {side} video: {text or 'unknown error'}")
+    def _stop_audio(self) -> None:
+        process = self._audio_process
+        handle = self._audio_handle
+        self._audio_process = None
+        self._audio_handle = None
+        if handle is not None:
+            handle.terminate()
+            handle.detach()
+        if process is not None and process.poll() is None:
+            process.terminate()

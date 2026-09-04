@@ -300,20 +300,17 @@ def test_video_mode_keeps_two_surfaces_ready_for_instant_s_switch(qapp, tmp_path
     panel.show()
     panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
     assert panel.video_view is not None
-    panel.video_view._source_frame_us = 1_000_000
-    panel.video_view._distorted_frame_us = 1_000_000
-
     QTest.keyPress(panel.video_view.distorted_video, Qt.Key_S)
     assert panel._showing_source is True
-    assert panel.video_view._stack.currentWidget() is panel.video_view.source_video
+    assert panel.video_view.video._show_source is True
 
     QTest.keyRelease(panel.video_view.source_video, Qt.Key_S)
     assert panel._showing_source is False
-    assert panel.video_view._stack.currentWidget() is panel.video_view.distorted_video
+    assert panel.video_view.video._show_source is False
     panel.close()
 
 
-def test_switching_video_reuses_source_decoder_and_preserves_seek(qapp, tmp_path):
+def test_switching_video_restarts_one_paired_decoder_and_preserves_seek(qapp, tmp_path):
     panel = FrameComparePanel()
     panel.set_runs([
         _physical_entry(tmp_path, "first"),
@@ -322,14 +319,44 @@ def test_switching_video_reuses_source_decoder_and_preserves_seek(qapp, tmp_path
     panel.set_frame(24)
     panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
     assert panel.video_view is not None
-    source_player = panel.video_view.source_player
-    distorted_player = panel.video_view.distorted_player
+    previous_generation = panel.video_view._generation
 
     panel.cycle_distorted(1)
 
-    assert panel.video_view.source_player is source_player
-    assert panel.video_view.distorted_player is not distorted_player
-    assert panel.video_view._pending_position == 1000
+    assert panel.video_view._generation > previous_generation
+    assert panel.video_view._comparison.distorted_info.path.name == "second.mkv"
+    assert panel.video_view.position == 1000
+    panel.close()
+
+
+def test_top_arrow_button_switches_while_playback_is_requested(
+    qapp, tmp_path, monkeypatch
+):
+    panel = FrameComparePanel()
+    panel.set_runs([
+        _physical_entry(tmp_path, "first"),
+        _physical_entry(tmp_path, "second"),
+    ])
+    panel.set_frame(24)
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    view = panel.video_view
+    assert view is not None
+    view._wanted_playing = True
+    view._is_playing = True
+    loads = []
+    monkeypatch.setattr(
+        view, "load",
+        lambda comparison, position, **kwargs: loads.append(
+            (comparison, position, kwargs)
+        ) or True,
+    )
+
+    panel.next_video_btn.click()
+
+    assert panel.video_combo.currentText() == "second"
+    assert loads[-1][1] == 1000
+    assert loads[-1][2]["playing"] is True
+    panel.cancel()
     panel.close()
 
 
@@ -347,27 +374,22 @@ def test_frame_controls_seek_both_video_players(qapp, tmp_path, monkeypatch):
     panel.close()
 
 
-def test_s_waits_for_the_matching_presented_source_frame(qapp, tmp_path):
+def test_s_switches_halves_of_the_same_decoded_frame_pair(qapp, tmp_path):
     panel = FrameComparePanel()
     panel.set_runs([_physical_entry(tmp_path)])
     panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
     assert panel.video_view is not None
     view = panel.video_view
-    view._distorted_frame_us = 1_000_000
-    view._source_frame_us = 900_000
+    payload = bytes(range(12))
+    view.video.set_pair(payload, 2, 1)
 
     view.show_source(True)
 
-    assert view._stack.currentWidget() is view.distorted_video
-    assert view._pending_source_us == 1_000_000
-
-    class MatchingFrame:
-        @staticmethod
-        def startTime():
-            return 1_000_000
-
-    view._on_source_frame(MatchingFrame())
-    assert view._stack.currentWidget() is view.source_video
+    assert view.video._show_source is True
+    assert view.video._payload is payload
+    view.show_source(False)
+    assert view.video._show_source is False
+    assert view.video._payload is payload
     panel.close()
 
 

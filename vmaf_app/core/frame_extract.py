@@ -223,6 +223,7 @@ def frame_filter(
     comparison: FrameComparison,
     side: FrameSide,
     color_settings: PreviewColorSettings | None = None,
+    output_size: tuple[int, int] | None = None,
 ) -> str:
     """The crop/scale chain for one side of a comparison."""
     if side not in {"source", "distorted"}:
@@ -230,7 +231,7 @@ def frame_filter(
 
     info = comparison.source_info if side == "source" else comparison.distorted_info
     crop = comparison.source_crop if side == "source" else comparison.distorted_crop
-    output_w, output_h = comparison_dimensions(comparison)
+    output_w, output_h = output_size or comparison_dimensions(comparison)
     ops: list[str] = []
 
     crop_filter = (

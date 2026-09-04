@@ -13,11 +13,12 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   used by a completed VMAF run. Choose a frame or timestamp, hold **S** to
   reveal the source, and use the left/right arrow keys to cycle through
   distorted videos without losing the current position, zoom, or pan. Video
-  playback keeps source and distorted decoders running together, using GPU
-  acceleration when available,
-  so holding **S** can reveal the matching presented source frame without
-  reopening or re-seeking the file. Still mode remains available for exact
-  frame seeking and the exact metric crop/scale pipeline. PQ and HLG stills
+  playback uses one ffmpeg filtergraph to crop, scale and tone-map both inputs,
+  then emits each source/distorted pair on one clock. Holding **S** therefore
+  flips between two halves of the same decoded frame rather than independent
+  players that can drift. Hardware decoding is selected independently per
+  input and unsupported codecs fall back to ffmpeg's software decoder. Still
+  mode remains available for direct frame seeking. PQ and HLG video or stills
   can be tone-mapped automatically for the monitor showing the app (including
   its Windows HDR/SDR-white setting), forced to a fixed 100-nit HDR-to-SDR
   preview, or shown unmanaged for diagnosis.
@@ -122,6 +123,7 @@ vmaf_app/
     bitrate.py       video-packet scan + frame/second/GOP aggregation
     run_io.py        save/load/CSV        result_cache.py cached run lookup
     frame_extract.py exact still-frame decode using a run's crop/scale recipe
+    video_playback.py paired ffmpeg playback command construction
     display_hdr.py   Windows monitor HDR state and configured SDR white level
     ffmpeg_locate.py tool discovery + version check
     gpu.py           hwaccel selection    process_control.py pause/resume/kill
@@ -131,7 +133,7 @@ vmaf_app/
     main_window.py   the file table, per-row options, run orchestration
     graph_panel.py   the comparison graph tab (one sub-tab per metric)
     frame_compare_panel.py synchronized source/distorted still-frame viewer
-    video_compare_view.py synchronized dual-decoder video playback surface
+    video_compare_view.py frame-locked paired ffmpeg playback surface
     bitrate_panel.py independent multi-file bitrate viewer tab
     bitrate_worker.py non-blocking ffprobe packet scans
     chart.py         the plotting widget   widgets.py  reusable Qt widgets

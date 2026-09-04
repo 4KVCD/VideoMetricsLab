@@ -290,7 +290,7 @@ class FrameComparePanel(QWidget):
         root.addWidget(self.detail_label)
         self.guide_label = QLabel(
             "Hold S: show source   ·   ←/→: switch distorted video   ·   "
-            "Space: play/pause   ·   Still frame: frame-exact seeking"
+            "Space: play/pause   ·   ffmpeg playback: frame-locked A/B"
         )
         self.guide_label.setAlignment(Qt.AlignCenter)
         self.guide_label.setStyleSheet("color: #666;")
@@ -397,8 +397,11 @@ class FrameComparePanel(QWidget):
         else:
             self._show_or_request()
 
-    def live_workers(self) -> list[FrameExtractWorker]:
-        return [worker for worker in self._workers if worker.isRunning()]
+    def live_workers(self) -> list:
+        workers = [worker for worker in self._workers if worker.isRunning()]
+        if self.video_view is not None:
+            workers.extend(self.video_view.live_workers())
+        return workers
 
     def cancel(self) -> None:
         """Stop pending and active extraction during application shutdown."""
@@ -526,7 +529,12 @@ class FrameComparePanel(QWidget):
             playing = view.is_playing or view.playback_requested
         fps = entry.comparison.fps
         position_ms = round(self._frame / fps * 1000) if fps > 0 else 0
-        if not view.load(entry.comparison, position_ms, playing=playing):
+        if not view.load(
+            entry.comparison,
+            position_ms,
+            playing=playing,
+            color_settings=self._color_settings(),
+        ):
             self.play_btn.setText("▶ Play")
         view.show_source(self._showing_source)
         self._update_enabled_state()
@@ -603,7 +611,9 @@ class FrameComparePanel(QWidget):
         self._cancel_workers()
         self._update_labels()
         self.color_mode_changed.emit(mode.value)
-        if not self.is_video_mode:
+        if self.is_video_mode and self.video_view is not None:
+            self.video_view.set_color_settings(self._color_settings())
+        else:
             self._show_or_request()
 
     def _on_timestamp_committed(self) -> None:
@@ -657,7 +667,7 @@ class FrameComparePanel(QWidget):
         self.play_btn.setEnabled(available and playable)
         self.audio_checkbox.setEnabled(available and self.is_video_mode and playable)
         self.fit_checkbox.setEnabled(not self.is_video_mode)
-        self.color_mode_combo.setEnabled(not self.is_video_mode)
+        self.color_mode_combo.setEnabled(available)
 
     def _update_labels(self) -> None:
         entry = self.current_entry
@@ -724,40 +734,43 @@ class FrameComparePanel(QWidget):
         if entry is None:
             return
         if self.is_video_mode:
-            self.color_status_label.setText(
-                f"Video playback · {self._video_status} · GPU decode automatic · "
-                "system display colour handling"
-            )
-            return
+            playable, reason = VideoCompareView.can_play(entry.comparison)
+            if not playable:
+                self.color_status_label.setText(f"Video playback · {reason}")
+                return
         side = "source" if self._showing_source else "distorted"
         kind = hdr_kind(frame_video_info(entry.comparison, side))
+        prefix = "Video playback · ffmpeg crop/colour pipeline · " if self.is_video_mode else ""
         if self._color_mode == PreviewColorMode.UNMANAGED:
             self.color_status_label.setText(
-                f"{kind or 'SDR / untagged'} input · tone mapping off"
+                f"{prefix}{kind or 'SDR / untagged'} input · tone mapping off"
             )
             return
         settings = self._color_settings()
         if self._color_mode == PreviewColorMode.HDR_TO_SDR:
             source = kind or "Untagged input (assuming HDR10 / PQ)"
             self.color_status_label.setText(
-                f"{source} · fixed HDR → SDR at {settings.target_nits:g} nit"
+                f"{prefix}{source} · fixed HDR → SDR at {settings.target_nits:g} nit"
             )
             return
         if kind is None:
-            self.color_status_label.setText("SDR / untagged input · no tone mapping")
+            self.color_status_label.setText(
+                f"{prefix}SDR / untagged input · no tone mapping"
+            )
             return
         if self._display_hdr.hdr_enabled is True:
             self.color_status_label.setText(
-                f"{kind} · display-aware HDR → SDR · Windows HDR on · "
+                f"{prefix}{kind} · display-aware HDR → SDR · Windows HDR on · "
                 f"SDR white {settings.target_nits:g} nit"
             )
         elif self._display_hdr.hdr_enabled is False:
             self.color_status_label.setText(
-                f"{kind} · HDR → SDR at 100 nit · Windows HDR off"
+                f"{prefix}{kind} · HDR → SDR at 100 nit · Windows HDR off"
             )
         else:
             self.color_status_label.setText(
-                f"{kind} · HDR → SDR at 100 nit · display HDR state unavailable"
+                f"{prefix}{kind} · HDR → SDR at 100 nit · "
+                "display HDR state unavailable"
             )
 
     # --------------------------------------------------------------- decoding
@@ -776,6 +789,7 @@ class FrameComparePanel(QWidget):
     def _show_or_request(self) -> None:
         if self.is_video_mode:
             if self.video_view is not None:
+                self.video_view.set_color_settings(self._color_settings())
                 self.video_view.show_source(self._showing_source)
             return
         image = self._current_image()
