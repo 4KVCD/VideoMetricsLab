@@ -18,8 +18,6 @@ import pytest
 # rather than failing it.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QStandardPaths
-
 from vmaf_app.core import result_cache
 from vmaf_app.core.settings import Settings
 
@@ -27,8 +25,7 @@ from vmaf_app.core.settings import Settings
 def _real_user_cache_dir() -> Path:
     """Where the installed app keeps results. Nothing in the suite may touch
     it, so it is resolved once here to be recognised and refused."""
-    base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-    return Path(base) / "results_cache"
+    return result_cache.default_cache_dir()
 
 
 @pytest.fixture(autouse=True)

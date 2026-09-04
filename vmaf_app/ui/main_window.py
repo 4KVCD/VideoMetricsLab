@@ -402,7 +402,7 @@ class MainWindow(QMainWindow):
         storage_box = QGroupBox("Storage")
         storage_form = QFormLayout(storage_box)
         self.settings_cache_edit = QLineEdit(self._settings.cache_dir)
-        self.settings_cache_edit.setPlaceholderText("blank = default app data folder")
+        self.settings_cache_edit.setPlaceholderText("blank = shared user-profile folder")
         self.settings_cache_edit.editingFinished.connect(self._on_settings_edited)
         browse_cache = QPushButton("Browse...")
         browse_cache.clicked.connect(self._on_pick_cache_dir)

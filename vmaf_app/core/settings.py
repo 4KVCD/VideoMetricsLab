@@ -10,14 +10,14 @@ import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
+from vmaf_app.core.app_paths import settings_file
 
 
 @dataclass
 class Settings:
     # Folder holding ffmpeg.exe/ffprobe.exe. Empty means "search PATH".
     ffmpeg_dir: str = ""
-    # Where completed runs are cached. Empty means the platform default.
+    # Where completed runs are cached. Empty means the shared per-user default.
     cache_dir: str = ""
     # Pre-selected folder for CSV/PNG exports. Empty means "ask each time".
     export_dir: str = ""
@@ -43,9 +43,9 @@ class Settings:
 
     @staticmethod
     def path() -> Path:
-        base = Path(QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation))
-        base.mkdir(parents=True, exist_ok=True)
-        return base / "settings.json"
+        path = settings_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
 
     @classmethod
     def load(cls) -> Settings:

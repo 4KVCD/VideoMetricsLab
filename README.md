@@ -154,9 +154,13 @@ Two things are worth knowing before changing the internals:
 - **A cached result is keyed on more than the filenames.** The key covers each
   file's resolved absolute path, size and modification time, plus the
   calculation options -- so replacing a file in place, or changing what the
-  run computes, is a miss rather than a stale hit. Results and exports are
-  written on a background thread (`file_worker.py`): a feature-length run is
-  ~9MB of JSON, and writing it inline froze the window.
+  run computes, is a miss rather than a stale hit. By default, cached results
+  live in the launcher-independent per-user folder
+  `~/.vmaf-calculator/results_cache`; the Settings tab can override it. The
+  preferences file lives alongside it, so different launchers share that
+  override. Results and exports are written on a background thread
+  (`file_worker.py`): a feature-length run is ~9MB of JSON, and writing it
+  inline froze the window.
 - **Nothing in `core` may spawn a subprocess directly.** They all go through
   `proc.py`, which hides the console window Windows would otherwise flash up
   for every child process. `tests/test_architecture.py` enforces this, along

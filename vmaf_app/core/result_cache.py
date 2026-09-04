@@ -6,12 +6,22 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
-
+from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.models import VmafOptions, VmafRunResult
 from vmaf_app.core.run_io import load_run, save_run
 
 _dir_override: Path | None = None
+
+
+def default_cache_dir() -> Path:
+    """Return the cache shared by every launcher for this OS user.
+
+    QStandardPaths.AppDataLocation depends on the process' application/package
+    identity.  During development that made the same app use one cache when
+    launched from a packaged editor and another when launched from a terminal.
+    The user's home directory is stable across those host processes.
+    """
+    return user_data_dir() / "results_cache"
 
 
 def set_cache_dir_override(directory: Path | None) -> None:
@@ -24,8 +34,7 @@ def set_cache_dir_override(directory: Path | None) -> None:
 def cache_dir() -> Path:
     d = _dir_override
     if d is None:
-        base = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-        d = Path(base) / "results_cache"
+        d = default_cache_dir()
     d.mkdir(parents=True, exist_ok=True)
     return d
 

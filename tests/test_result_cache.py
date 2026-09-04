@@ -21,6 +21,23 @@ def _isolated_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
 
 
+def test_default_cache_is_stable_under_the_user_profile(monkeypatch, tmp_path):
+    """The default must not depend on Qt's launcher/package identity."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+    assert result_cache.default_cache_dir() == (
+        tmp_path / ".vmaf-calculator" / "results_cache"
+    )
+
+
+def test_settings_and_cache_share_the_same_stable_data_root(monkeypatch, tmp_path):
+    from vmaf_app.core.app_paths import settings_file
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+    assert settings_file().parent == result_cache.default_cache_dir().parent
+
+
 def _make_file(path: Path, size: int) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"x" * size)

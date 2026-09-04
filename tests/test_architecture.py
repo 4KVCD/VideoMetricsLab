@@ -9,12 +9,10 @@ import pytest
 
 CORE = Path(__file__).resolve().parent.parent / "vmaf_app" / "core"
 
-# These use Qt purely as a platform abstraction -- QSettings for the
-# remembered ffmpeg location, QStandardPaths for the per-user cache and
-# config directories. That is not a UI dependency, and reimplementing
-# per-platform paths by hand would be worse. Anything else in core importing
-# Qt is a layering break.
-_QT_FOR_PLATFORM_PATHS = {"ffmpeg_locate.py", "result_cache.py", "settings.py"}
+# This uses Qt purely as a platform abstraction for the remembered ffmpeg
+# location. That is not a UI dependency. Anything else in core importing Qt
+# is a layering break.
+_QT_FOR_PLATFORM_PATHS = {"ffmpeg_locate.py"}
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -118,11 +116,9 @@ def test_building_a_window_does_not_repoint_the_cache_at_the_user(tmp_path):
 
 def test_the_isolation_guard_refuses_the_users_real_cache_directory():
     """The fixture's backstop has to actually fire, or it is decoration."""
-    from PySide6.QtCore import QStandardPaths
-
     from vmaf_app.core import result_cache
 
-    real = Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)) / "results_cache"
+    real = result_cache.default_cache_dir()
     with pytest.raises(AssertionError, match="real folder"):
         result_cache.set_cache_dir_override(real)
 
