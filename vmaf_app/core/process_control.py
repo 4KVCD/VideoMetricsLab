@@ -32,11 +32,13 @@ class ProcessHandle:
         """Called when a new ffmpeg process starts; re-applies a pause
         request made before this process existed (e.g. right at a job
         boundary, or during the GPU-decode-failure CPU retry)."""
+        # Suspended under the lock, not after releasing it: a resume landing
+        # in that gap would run first and this stale suspend afterwards,
+        # leaving the process paused for good with nothing left to resume it.
         with self._lock:
             self._pid = pid
-            want_paused = self._want_paused
-        if want_paused:
-            self._try(pid, "suspend")
+            if self._want_paused:
+                self._try(pid, "suspend")
 
     def detach(self) -> None:
         with self._lock:

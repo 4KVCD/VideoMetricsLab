@@ -1,4 +1,5 @@
 import contextlib
+import time
 from pathlib import Path
 
 import pytest
@@ -271,3 +272,139 @@ def test_a_failing_job_does_not_take_the_other_lane_with_it(qapp, monkeypatch):
 
     assert failed == [0]
     assert sorted(finished) == [1, 2]
+
+
+
+# ------------------------------- races between the controls and a new lane
+
+def test_resume_cannot_be_overtaken_by_a_lane_starting_paused(qapp):
+    """The reported race: _claim_handle recorded "we are paused", released
+    the lock, and only then paused the handle. A Resume landing in that gap
+    ran first and the stale pause ran after it, leaving that lane suspended
+    for good while the UI reported the run as resumed.
+
+    Recording and pausing now happen under the one lock that resume() also
+    takes, so the two cannot interleave.
+    """
+    import threading
+
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker.pause()
+
+    claimed = []
+    inside = threading.Event()
+    proceed = threading.Event()
+    real_pause = worker_module.ProcessHandle.pause
+
+    def slow_pause(self):
+        inside.set()
+        proceed.wait(5)
+        real_pause(self)
+
+    # Widen the window the race needs, then try to resume through it.
+    monkey = threading.Thread(target=lambda: claimed.append(worker._claim_handle(0)))
+    worker_module.ProcessHandle.pause = slow_pause
+    try:
+        monkey.start()
+        assert inside.wait(5)
+        resumed = threading.Thread(target=worker.resume)
+        resumed.start()
+        proceed.set()
+        monkey.join(timeout=5)
+        resumed.join(timeout=5)
+    finally:
+        worker_module.ProcessHandle.pause = real_pause
+
+    assert not worker.is_paused
+    assert claimed and claimed[0] is not None
+    assert not claimed[0].is_pause_requested, "a lane was left paused after Resume"
+
+
+def test_a_lane_cannot_start_a_job_after_cancel(qapp):
+    """The second reported race: a lane checked the cancel flag, then cancel
+    ran and found no handle to terminate, then the lane registered one and
+    launched ffmpeg anyway. Claiming is now refused once cancel has been
+    seen, under the same lock cancel collects handles with."""
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker.cancel()
+
+    assert worker._claim_handle(0) is None
+
+
+def test_cancel_terminates_handles_claimed_before_it(qapp):
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    handle = worker._claim_handle(0)
+    terminated = []
+    handle.terminate = lambda: terminated.append(True)
+
+    worker.cancel()
+
+    assert terminated == [True]
+
+
+def test_a_lane_blocked_on_a_slot_is_released_by_cancel(qapp):
+    # Lanes wait for room to run. Cancel has to wake them, or the worker
+    # thread never joins and the window cannot close.
+    import threading
+
+    worker = VmafWorker(_jobs(4), parallel_jobs=1)
+    worker._active = 1  # pretend the single slot is taken
+    outcome = []
+    waiter = threading.Thread(target=lambda: outcome.append(worker._acquire_slot()))
+    waiter.start()
+    try:
+        worker.cancel()
+        waiter.join(timeout=5)
+    finally:
+        assert not waiter.is_alive(), "a lane stayed blocked after cancel"
+    assert outcome == [False]
+
+
+def test_the_lane_count_can_be_raised_while_running(qapp):
+    # The whole reason the control sits next to Run: a long queue is when
+    # someone notices the CPU is idle.
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+    live = {"count": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def blocking(source, distorted, *a, **kw):
+        with lock:
+            live["count"] += 1
+            live["peak"] = max(live["peak"], live["count"])
+        started.set()
+        release.wait(10)
+        with lock:
+            live["count"] -= 1
+        return _fake_result(distorted.path.name)
+
+    monkeypatch_target = worker_module.run_vmaf
+    worker_module.run_vmaf = blocking
+    try:
+        worker = VmafWorker(_jobs(4), parallel_jobs=1)
+        runner = threading.Thread(target=worker.run)
+        runner.start()
+        assert started.wait(5)
+        time.sleep(0.3)
+        assert live["peak"] == 1, "more than one ran before the count was raised"
+
+        worker.set_parallel_jobs(2)
+        time.sleep(0.5)
+        assert live["peak"] == 2, "raising the count did not start another video"
+    finally:
+        release.set()
+        worker_module.run_vmaf = monkeypatch_target
+        runner.join(timeout=10)
+
+
+def test_lowering_the_lane_count_does_not_interrupt_a_running_job(qapp):
+    worker = VmafWorker(_jobs(4), parallel_jobs=2)
+    worker._active = 2
+
+    worker.set_parallel_jobs(1)
+
+    # Nothing was cancelled; there is simply no room for another to start.
+    assert worker.parallel_jobs == 1
+    assert not worker._cancel_event.is_set()

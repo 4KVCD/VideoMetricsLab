@@ -2905,3 +2905,159 @@ def test_running_a_row_upgrades_its_entry_to_the_real_geometry(qapp, tmp_path):
     # The detected crop now comes from the run rather than being pending.
     assert entry.comparison == FrameComparison.from_result(result)
     assert entry.comparison.auto_crop_pending is False
+
+
+
+# ------------------------------ progress and status with two videos running
+
+def test_each_running_video_gets_its_own_progress_line(qapp):
+    """Two videos at once need two readable lines, not one bar flickering
+    between them."""
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+
+    assert win.job_progress_bars[0].isVisibleTo(win)
+    assert win.job_progress_bars[1].isVisibleTo(win)
+
+    win._on_job_progress(0, current=250, total=1000, fps=25.0)
+    win._on_job_progress(1, current=750, total=1000, fps=50.0)
+
+    assert win.job_progress_bars[0].value() == 25
+    assert win.job_progress_bars[1].value() == 75
+    assert "a" in win.job_progress_bars[0].format()
+    assert "b" in win.job_progress_bars[1].format()
+
+
+def test_a_finished_video_frees_its_progress_line_for_the_next(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100, 100]
+
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+    slot_of_a = win._job_bar_slot[0]
+    win._mark_job_over(0)
+    win._on_job_started(2, "c")
+
+    assert win._job_bar_slot[2] == slot_of_a, "the freed line was not reused"
+    assert 0 not in win._job_bar_slot
+
+
+def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
+    """With two running, whichever lane spoke last used to own the single
+    status line -- so "Detecting black bars..." appeared with no way to tell
+    which file it referred to, and it erased the line naming what was
+    running."""
+    win = MainWindow()
+    for name in ("encode-a.mp4", "encode-b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100]
+    win._on_job_started(0, "encode-a")
+    win._on_job_started(1, "encode-b")
+
+    win._on_job_status(1, "Detecting black bars in source...")
+
+    assert "Detecting black bars" in win.job_progress_bars[1].format()
+    assert "encode-b" in win.job_progress_bars[1].format()
+    # The overall line still says what is running, rather than being taken
+    # over by one lane's phase message.
+    assert "encode-a" in win.status_label.text()
+    assert "encode-b" in win.status_label.text()
+
+
+def test_a_single_job_still_shows_its_phase_in_the_status_line(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+
+    win._on_job_status(0, "Running ffmpeg (GPU decode: off)...")
+
+    assert "GPU decode" in win.status_label.text()
+
+
+# ------------------------------------------------- queue ETA is a makespan
+
+def test_queue_eta_is_bounded_by_the_slowest_remaining_video(qapp):
+    """Dividing remaining frames by the summed frame rate assumes every lane
+    stays busy to the same instant. With 10 seconds left on one video and
+    1000 on the other it claimed about 505s, when the queue plainly cannot
+    end before the 1000-second one does."""
+    win = MainWindow()
+    for name in ("quick.mp4", "slow.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win.parallel_jobs_spin.setValue(2)
+    win._job_total_frames = [10, 1000]
+
+    # Both running at 1 fps: 10s left on one, 1000s on the other.
+    win._on_job_progress(0, current=0, total=10, fps=1.0)
+    win._on_job_progress(1, current=0, total=1000, fps=1.0)
+
+    assert win._queue_eta_seconds() == pytest.approx(1000.0)
+
+
+def test_queue_eta_schedules_waiting_videos_onto_free_lanes(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win.parallel_jobs_spin.setValue(2)
+    win._job_total_frames = [100, 100, 100, 100]
+
+    # Two running at 1 fps with 100s each; two more queued at the same rate.
+    win._on_job_progress(0, current=0, total=100, fps=1.0)
+    win._on_job_progress(1, current=0, total=100, fps=1.0)
+
+    # Each lane takes one of the queued videos: 100s now + 100s after.
+    assert win._queue_eta_seconds() == pytest.approx(200.0)
+
+
+def test_queue_eta_is_unknown_until_something_reports_a_rate(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+
+    assert win._queue_eta_seconds() is None
+
+
+def test_the_parallel_control_stays_usable_during_a_run(qapp):
+    # The Settings tab is locked during a run, which is why this lives on the
+    # Videos tab -- being unable to reach it mid-run was the whole complaint.
+    win = MainWindow()
+    win._set_run_ui_active(True)
+
+    assert win.parallel_jobs_spin.isEnabled()
+    assert not win.run_btn.isEnabled()
+    assert not win.options_box.isEnabled()
+
+
+def test_changing_the_control_reaches_a_running_worker(qapp):
+    class FakeWorker:
+        def __init__(self):
+            self.applied = []
+
+        def isRunning(self):
+            return True
+
+        def set_parallel_jobs(self, count):
+            self.applied.append(count)
+
+    win = MainWindow()
+    win._worker = FakeWorker()
+
+    win.parallel_jobs_spin.setValue(2)
+
+    assert win._worker.applied == [2]
+    assert win._settings.parallel_jobs == 2

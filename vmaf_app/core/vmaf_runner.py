@@ -515,6 +515,11 @@ def _run_ffmpeg(
     on_progress: ProgressCallback | None, cancel_event: threading.Event | None,
     cwd: Path, process_handle: ProcessHandle | None = None,
 ) -> subprocess.CompletedProcess:
+    # Checked before spawning, not only inside the read loop: cancelling
+    # during crop detection or between the fallback attempts would otherwise
+    # start one more ffmpeg that then had to be hunted down and killed.
+    if cancel_event is not None and cancel_event.is_set():
+        raise Cancelled("Cancelled by user")
     proc = proc_util.popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, cwd=str(cwd),
     )
