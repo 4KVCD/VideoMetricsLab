@@ -1,10 +1,12 @@
+import contextlib
+import time
 from pathlib import Path
 
 import pytest
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import FrameScore, ResampleTarget, VideoInfo, VmafOptions, VmafRunResult
-from vmaf_app.core.vmaf_runner import Cancelled
+from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError
 from vmaf_app.ui import worker as worker_module
 from vmaf_app.ui.worker import VmafJob, VmafWorker
 
@@ -68,3 +70,341 @@ def test_worker_reports_cancellation_as_a_distinct_terminal_state(qapp, monkeypa
     worker.run()
 
     assert reported == [True]
+
+
+# --------------------------------------------------- scoring several at once
+
+def _drain(qapp) -> None:
+    """Delivers queued signals.
+
+    Lanes run on their own threads, so Qt queues their signals to the main
+    thread rather than calling straight through -- which is exactly what
+    keeps the real handlers on the GUI thread. Without an event loop running
+    in the test, nothing arrives until the queue is pumped by hand.
+    """
+    for _ in range(5):
+        qapp.processEvents()
+
+
+def _jobs(count: int) -> list[VmafJob]:
+    return [
+        VmafJob(_info("s.mp4"), _info(f"d{n}.mp4"), VmafOptions(), label=f"d{n}")
+        for n in range(count)
+    ]
+
+
+def _concurrency_probe(monkeypatch):
+    """Records how many jobs were ever inside run_vmaf simultaneously."""
+    import threading
+
+    state = {"live": 0, "peak": 0, "order": [], "entered": 0}
+    lock = threading.Lock()
+    # Only the first two callers gate on each other: that is enough to prove
+    # they overlap, and making every job wait would cost a barrier timeout
+    # per job on the single-lane runs.
+    gate = threading.Barrier(2, timeout=2)
+
+    def counted(source, distorted, *a, **kw):
+        with lock:
+            state["live"] += 1
+            state["entered"] += 1
+            state["peak"] = max(state["peak"], state["live"])
+            state["order"].append(distorted.path.name)
+            gating = state["entered"] <= 2
+        if gating:
+            with contextlib.suppress(threading.BrokenBarrierError):
+                gate.wait()
+        with lock:
+            state["live"] -= 1
+        return _fake_result(distorted.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", counted)
+    return state
+
+
+def test_two_jobs_really_run_at_the_same_time(qapp, monkeypatch):
+    """libvmaf leaves much of a many-core CPU idle, so a second video fills
+    the gap rather than competing for it -- but only if they genuinely
+    overlap."""
+    state = _concurrency_probe(monkeypatch)
+    worker = VmafWorker(_jobs(4), parallel_jobs=2)
+
+    worker.run()
+
+    assert state["peak"] == 2
+    assert state["live"] == 0
+
+
+def test_one_at_a_time_stays_one_at_a_time(qapp, monkeypatch):
+    state = _concurrency_probe(monkeypatch)
+    worker = VmafWorker(_jobs(2), parallel_jobs=1)
+
+    worker.run()
+
+    assert state["peak"] == 1
+
+
+def test_every_job_runs_exactly_once_across_the_lanes(qapp, monkeypatch):
+    # Lanes pull from one shared iterator; handing each lane a fixed slice
+    # would leave one idle while the other still had a queue.
+    state = _concurrency_probe(monkeypatch)
+    finished = []
+    worker = VmafWorker(_jobs(7), parallel_jobs=2)
+    worker.job_finished.connect(lambda index, result: finished.append(index))
+
+    worker.run()
+    _drain(qapp)
+
+    assert sorted(state["order"]) == [f"d{n}.mp4" for n in range(7)]
+    assert sorted(finished) == list(range(7))
+
+
+def test_more_lanes_than_jobs_does_not_start_empty_lanes(qapp, monkeypatch):
+    state = _concurrency_probe(monkeypatch)
+    worker = VmafWorker(_jobs(1), parallel_jobs=4)
+
+    worker.run()
+
+    assert state["order"] == ["d0.mp4"]
+
+
+def test_the_parallel_count_is_clamped_to_something_sane(qapp):
+    assert VmafWorker(_jobs(1), parallel_jobs=0)._parallel_jobs == 1
+    assert VmafWorker(_jobs(1), parallel_jobs=-3)._parallel_jobs == 1
+    assert VmafWorker(_jobs(1), parallel_jobs=99)._parallel_jobs == worker_module.MAX_PARALLEL_JOBS
+
+
+def test_pausing_reaches_every_running_job(qapp, monkeypatch):
+    """One handle can only ever address one pid, so with several ffmpegs up
+    a single shared handle would leave all but one running."""
+    import threading
+
+    handles = []
+    started = threading.Barrier(3, timeout=10)
+    release = threading.Event()
+
+    def capture(source, distorted, *a, **kw):
+        handles.append(kw["process_handle"])
+        started.wait()
+        release.wait(10)
+        return _fake_result(distorted.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", capture)
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    try:
+        started.wait(timeout=10)
+        worker.pause()
+        assert worker.is_paused
+        assert len(handles) == 2
+        assert all(h.is_pause_requested for h in handles), "a running job was left unpaused"
+
+        worker.resume()
+        assert not worker.is_paused
+        assert not any(h.is_pause_requested for h in handles)
+    finally:
+        release.set()
+        runner.join(timeout=10)
+
+
+def test_a_job_that_starts_while_paused_comes_up_paused(qapp, monkeypatch):
+    # Otherwise pressing Pause and waiting would quietly let the next video
+    # start at full speed.
+    worker = VmafWorker(_jobs(1), parallel_jobs=1)
+    worker.pause()
+
+    handle = worker._claim_handle(0)
+
+    assert handle.is_pause_requested
+
+
+def test_cancelling_terminates_every_running_job(qapp, monkeypatch):
+    import threading
+
+    terminated = []
+    started = threading.Barrier(3, timeout=10)
+    # The jobs have to still be running when cancel() is called; without
+    # this they would raise and release their handles first, and cancel
+    # would find nothing to terminate whether or not it worked.
+    release = threading.Event()
+
+    def capture(source, distorted, *a, **kw):
+        handle = kw["process_handle"]
+        handle.terminate = lambda h=handle: terminated.append(h)
+        started.wait()
+        release.wait(10)
+        raise Cancelled("cancelled")
+
+    monkeypatch.setattr(worker_module, "run_vmaf", capture)
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    reported = []
+    worker.cancelled.connect(lambda: reported.append(True))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    try:
+        started.wait(timeout=10)
+        worker.cancel()
+        assert len(terminated) == 2, "cancel did not reach every running ffmpeg"
+    finally:
+        release.set()
+        runner.join(timeout=10)
+    _drain(qapp)
+
+    # Both lanes raise Cancelled, but the run stopped once.
+    assert reported == [True]
+
+
+def test_a_failing_job_does_not_take_the_other_lane_with_it(qapp, monkeypatch):
+    def sometimes_fails(source, distorted, *a, **kw):
+        if distorted.path.name == "d0.mp4":
+            raise VmafRunError("boom", "stderr tail")
+        return _fake_result(distorted.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", sometimes_fails)
+    worker = VmafWorker(_jobs(3), parallel_jobs=2)
+    failed, finished = [], []
+    worker.job_failed.connect(lambda i, m, t: failed.append(i))
+    worker.job_finished.connect(lambda i, r: finished.append(i))
+
+    worker.run()
+    _drain(qapp)
+
+    assert failed == [0]
+    assert sorted(finished) == [1, 2]
+
+
+
+# ------------------------------- races between the controls and a new lane
+
+def test_resume_cannot_be_overtaken_by_a_lane_starting_paused(qapp):
+    """The reported race: _claim_handle recorded "we are paused", released
+    the lock, and only then paused the handle. A Resume landing in that gap
+    ran first and the stale pause ran after it, leaving that lane suspended
+    for good while the UI reported the run as resumed.
+
+    Recording and pausing now happen under the one lock that resume() also
+    takes, so the two cannot interleave.
+    """
+    import threading
+
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker.pause()
+
+    claimed = []
+    inside = threading.Event()
+    proceed = threading.Event()
+    real_pause = worker_module.ProcessHandle.pause
+
+    def slow_pause(self):
+        inside.set()
+        proceed.wait(5)
+        real_pause(self)
+
+    # Widen the window the race needs, then try to resume through it.
+    monkey = threading.Thread(target=lambda: claimed.append(worker._claim_handle(0)))
+    worker_module.ProcessHandle.pause = slow_pause
+    try:
+        monkey.start()
+        assert inside.wait(5)
+        resumed = threading.Thread(target=worker.resume)
+        resumed.start()
+        proceed.set()
+        monkey.join(timeout=5)
+        resumed.join(timeout=5)
+    finally:
+        worker_module.ProcessHandle.pause = real_pause
+
+    assert not worker.is_paused
+    assert claimed and claimed[0] is not None
+    assert not claimed[0].is_pause_requested, "a lane was left paused after Resume"
+
+
+def test_a_lane_cannot_start_a_job_after_cancel(qapp):
+    """The second reported race: a lane checked the cancel flag, then cancel
+    ran and found no handle to terminate, then the lane registered one and
+    launched ffmpeg anyway. Claiming is now refused once cancel has been
+    seen, under the same lock cancel collects handles with."""
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker.cancel()
+
+    assert worker._claim_handle(0) is None
+
+
+def test_cancel_terminates_handles_claimed_before_it(qapp):
+    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    handle = worker._claim_handle(0)
+    terminated = []
+    handle.terminate = lambda: terminated.append(True)
+
+    worker.cancel()
+
+    assert terminated == [True]
+
+
+def test_a_lane_blocked_on_a_slot_is_released_by_cancel(qapp):
+    # Lanes wait for room to run. Cancel has to wake them, or the worker
+    # thread never joins and the window cannot close.
+    import threading
+
+    worker = VmafWorker(_jobs(4), parallel_jobs=1)
+    worker._active = 1  # pretend the single slot is taken
+    outcome = []
+    waiter = threading.Thread(target=lambda: outcome.append(worker._acquire_slot()))
+    waiter.start()
+    try:
+        worker.cancel()
+        waiter.join(timeout=5)
+    finally:
+        assert not waiter.is_alive(), "a lane stayed blocked after cancel"
+    assert outcome == [False]
+
+
+def test_the_lane_count_can_be_raised_while_running(qapp):
+    # The whole reason the control sits next to Run: a long queue is when
+    # someone notices the CPU is idle.
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+    live = {"count": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def blocking(source, distorted, *a, **kw):
+        with lock:
+            live["count"] += 1
+            live["peak"] = max(live["peak"], live["count"])
+        started.set()
+        release.wait(10)
+        with lock:
+            live["count"] -= 1
+        return _fake_result(distorted.path.name)
+
+    monkeypatch_target = worker_module.run_vmaf
+    worker_module.run_vmaf = blocking
+    try:
+        worker = VmafWorker(_jobs(4), parallel_jobs=1)
+        runner = threading.Thread(target=worker.run)
+        runner.start()
+        assert started.wait(5)
+        time.sleep(0.3)
+        assert live["peak"] == 1, "more than one ran before the count was raised"
+
+        worker.set_parallel_jobs(2)
+        time.sleep(0.5)
+        assert live["peak"] == 2, "raising the count did not start another video"
+    finally:
+        release.set()
+        worker_module.run_vmaf = monkeypatch_target
+        runner.join(timeout=10)
+
+
+def test_lowering_the_lane_count_does_not_interrupt_a_running_job(qapp):
+    worker = VmafWorker(_jobs(4), parallel_jobs=2)
+    worker._active = 2
+
+    worker.set_parallel_jobs(1)
+
+    # Nothing was cancelled; there is simply no room for another to start.
+    assert worker.parallel_jobs == 1
+    assert not worker._cancel_event.is_set()

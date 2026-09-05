@@ -99,3 +99,49 @@ def test_pause_and_terminate_are_no_ops_before_any_process_attached(patched_psut
     handle.pause()
     handle.terminate()  # no pid attached -- must not raise
     handle.resume()
+
+
+
+def test_a_pause_requested_before_the_process_existed_survives_a_resume_race():
+    """attach() recorded the pid, released the lock and only then suspended.
+    A resume arriving in that gap ran first and the stale suspend afterwards,
+    leaving the process stopped with nothing left to start it again.
+
+    The window is forced open here rather than hoped for: the suspend call
+    itself blocks until resume has been attempted.
+    """
+    import threading
+
+    handle = ProcessHandle()
+    calls = []
+    suspending = threading.Event()
+    let_suspend_finish = threading.Event()
+
+    def blocking_try(pid, action):
+        if action == "suspend":
+            suspending.set()
+            let_suspend_finish.wait(5)
+        # Recorded on COMPLETION, not on entry: what matters is which call
+        # last touched the process, and the whole bug is that the suspend
+        # finishes after the resume.
+        calls.append(action)
+
+    handle._try = blocking_try
+    handle.pause()
+
+    attaching = threading.Thread(target=lambda: handle.attach(4242))
+    attaching.start()
+    assert suspending.wait(5), "attach never tried to suspend"
+
+    # Resume arrives while the suspend is still in flight.
+    resuming = threading.Thread(target=handle.resume)
+    resuming.start()
+    resuming.join(timeout=1)
+    let_suspend_finish.set()
+    attaching.join(timeout=5)
+    resuming.join(timeout=5)
+
+    assert not handle.is_pause_requested
+    assert calls[-1] == "resume", (
+        f"the last thing done to the process was {calls[-1]!r}, so it stayed paused"
+    )

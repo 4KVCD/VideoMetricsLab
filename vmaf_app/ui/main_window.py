@@ -38,7 +38,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -85,7 +84,7 @@ from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEn
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
-from vmaf_app.ui.worker import VmafJob, VmafWorker
+from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, VmafJob, VmafWorker
 
 _MODEL_CHOICES = [
     ("Auto (recommended: picks 4K model for UHD distorted video)", AUTO_MODEL_CHOICE),
@@ -222,7 +221,17 @@ class MainWindow(QMainWindow):
         self._job_total_frames: list[int] = []  # job index -> estimated frame count, for queue ETA
         self._job_cache_options: list[VmafOptions] = []
         self._checked_rows_for_run: list[RowData] = []  # rows checked when Run was clicked, incl. already-scored ones
-        self._current_job_index: int | None = None
+        # Live per-job figures, keyed by job index. With several videos in
+        # flight the bar can no longer track "the" running job -- there is
+        # more than one -- so it tracks the whole queue instead, which is
+        # also the number a user actually wants while waiting.
+        self._job_frames_done: dict[int, int] = {}
+        self._job_fps: dict[int, float] = {}
+        self._running_jobs: list[int] = []
+        self._finished_jobs: set[int] = set()
+        # job index -> which of the per-video lines it owns. Held for the
+        # life of the job so a line never jumps to a different video.
+        self._job_line_slot: dict[int, int] = {}
         self._run_failed_count = 0
         self._run_was_cancelled = False
         # Whether a run owns the window's settings right now. Read by
@@ -833,6 +842,32 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.run_btn)
         run_row.addWidget(self.pause_btn)
         run_row.addWidget(self.cancel_btn)
+        # Here rather than in Settings, and deliberately still editable while
+        # a run is going: a long queue is exactly when someone notices their
+        # CPU is half idle, and the Settings tab is locked during a run.
+        cores = os.cpu_count() or 1
+        run_row.addSpacing(16)
+        # A checkbox rather than a number: the choice is only ever one or
+        # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
+        # what it was counting.
+        self.parallel_jobs_check = QCheckBox(
+            "Run 2 metric calculations in parallel (better multi-core utilization)"
+        )
+        self.parallel_jobs_check.setChecked(
+            self._settings.parallel_jobs >= MAX_PARALLEL_JOBS
+        )
+        self.parallel_jobs_check.setToolTip(
+            f"Scores two videos simultaneously on this {cores}-core "
+            "machine. libvmaf does not keep a many-core CPU busy on its "
+            "own, so a second video largely fills the idle capacity "
+            "rather than competing for it.\n\nCan be changed while a run "
+            "is in progress: ticking it starts another video straight "
+            "away, unticking it lets the running ones finish first."
+            "\n\nOnly affects how fast results arrive, never what they "
+            "are."
+        )
+        self.parallel_jobs_check.toggled.connect(self._on_parallel_jobs_changed)
+        run_row.addWidget(self.parallel_jobs_check)
         run_row.addStretch(1)
 
         load_btn = QPushButton("Load saved run...")
@@ -852,12 +887,27 @@ class MainWindow(QMainWindow):
 
         self.status_label = QLabel("")
         layout.addWidget(self.status_label)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        layout.addWidget(self.progress_bar)
-        self.progress_detail_label = QLabel("")
-        self.progress_detail_label.setStyleSheet("color: #666;")
-        layout.addWidget(self.progress_detail_label)
+        # One bar per video that is actually running, so two at once are two
+        # readable lines rather than a single bar flickering between them.
+        # Built once and hidden, because rows appearing and disappearing
+        # mid-run would shift everything below them on every job boundary.
+        # One line of text per running video. No bar: the percentage is the
+        # only thing a bar was conveying, it says it exactly rather than
+        # approximately, and two bars stacked above a third read as a block
+        # of chrome rather than as a status.
+        self.job_progress_labels: list[QLabel] = []
+        for _ in range(MAX_PARALLEL_JOBS):
+            line = QLabel()
+            line.setStyleSheet("color: #444;")
+            line.setVisible(False)
+            layout.addWidget(line)
+            self.job_progress_labels.append(line)
+
+        # No overall bar: each running video already has one, and a third
+        # bar summarising them was just more to read. The last line is the
+        # one thing those bars cannot say -- when the whole queue ends.
+        # No separate queue line: the ETA rides on the status line above,
+        # which otherwise only said how many videos were running.
         layout.addStretch(1)
 
         return panel
@@ -2076,7 +2126,14 @@ class MainWindow(QMainWindow):
         # Held as RowData, not indices, so removing a row mid-run can't
         # silently repoint these at a different row.
         self._checked_rows_for_run = [self._rows[r] for r in checked_rows]
-        self._current_job_index = None
+        self._job_frames_done = {}
+        self._job_fps = {}
+        self._running_jobs = []
+        self._finished_jobs = set()
+        self._job_line_slot = {}
+        for line in self.job_progress_labels:
+            line.setVisible(False)
+            line.clear()
         self._run_failed_count = 0
         self._run_was_cancelled = False
         if already_scored_rows:
@@ -2087,9 +2144,8 @@ class MainWindow(QMainWindow):
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         self.cancel_btn.setEnabled(True)
-        self.progress_bar.setValue(0)
 
-        self._worker = VmafWorker(jobs, self)
+        self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
         self._worker.job_started.connect(self._on_job_started)
         self._worker.progress.connect(self._on_job_progress)
         self._worker.status.connect(self._on_job_status)
@@ -2108,6 +2164,27 @@ class MainWindow(QMainWindow):
         self.run_btn.setEnabled(not active)
         self.pause_btn.setEnabled(active)
         self.cancel_btn.setEnabled(active)
+        # Deliberately left enabled: it changes how fast the queue drains,
+        # never what any result means, and it is during a run that someone
+        # wants it.
+        self.parallel_jobs_check.setEnabled(True)
+
+    def _parallel_jobs(self) -> int:
+        """How many videos may be scored at once, as a count."""
+        return MAX_PARALLEL_JOBS if self.parallel_jobs_check.isChecked() else 1
+
+    def _on_parallel_jobs_changed(self, _checked: bool) -> None:
+        """Applies the choice now, and remembers it for next time.
+
+        A run already in progress picks it up: ticking lets a waiting lane
+        start the next video immediately, and unticking stops another from
+        starting without interrupting anything already going.
+        """
+        count = self._parallel_jobs()
+        self._settings.parallel_jobs = count
+        self._settings.save()
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.set_parallel_jobs(count)
 
     def _on_cancel_clicked(self) -> None:
         if self._worker is not None:
@@ -2127,34 +2204,144 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Resumed.")
 
     def _on_job_started(self, index: int, label: str) -> None:
-        self._current_job_index = index
-        self.status_label.setText(f"Running: {label}  (file {index + 1} of {len(self._job_rows)})")
-        self.progress_bar.setValue(0)
-        self.progress_detail_label.setText("")
+        if index not in self._running_jobs:
+            self._running_jobs.append(index)
+        self._job_frames_done.setdefault(index, 0)
+        self._assign_progress_line(index, label)
+        self._update_run_status()
+
+    def _assign_progress_line(self, index: int, label: str) -> None:
+        """Gives this job a line of its own, reusing one a finished job left."""
+        if index in self._job_line_slot:
+            return
+        taken = set(self._job_line_slot.values())
+        for slot, line in enumerate(self.job_progress_labels):
+            if slot in taken:
+                continue
+            self._job_line_slot[index] = slot
+            line.setText(f"{label} — starting…")
+            line.setVisible(True)
+            return
+
+    def _mark_job_over(self, index: int) -> None:
+        """Retires a job from the live figures.
+
+        Its frame count is pinned to the job's estimate so queue progress
+        does not stall on whatever the last progress line happened to say,
+        and its rate is dropped so a finished job stops inflating the
+        combined fps the queue ETA is computed from.
+        """
+        self._finished_jobs.add(index)
+        self._job_fps.pop(index, None)
+        slot = self._job_line_slot.pop(index, None)
+        if slot is not None:
+            self.job_progress_labels[slot].setVisible(False)
+        if 0 <= index < len(self._job_total_frames):
+            self._job_frames_done[index] = self._job_total_frames[index]
+        self._update_run_status()
+
+    def _job_label(self, index: int) -> str:
+        if 0 <= index < len(self._job_rows):
+            return self._job_rows[index].path.stem
+        return f"video {index + 1}"
+
+    def _update_run_status(self) -> None:
+        """How much is running, and when the queue ends.
+
+        Deliberately nameless: every running video has its own line directly
+        below carrying its name, percentage, rate and time left, so listing
+        the names here said the same thing twice -- and with two long file
+        names it was the longest line on screen for no information.
+        """
+        running = [i for i in self._running_jobs if i not in self._finished_jobs]
+        total = len(self._job_rows)
+        if not running:
+            return
+        if len(running) == 1:
+            summary = f"Running {running[0] + 1} of {total}"
+        else:
+            summary = f"Running {len(running)} of {total} together"
+        seconds = self._queue_eta_seconds()
+        eta = "calculating..." if seconds is None else format_hms(seconds)
+        self.status_label.setText(f"{summary}   ·   Queue ETA: {eta}")
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs in the
         # status bar above -- it already shows the running file, fps and ETA
         # -- not the VMAF column, which is for the final score.
-        pct = int(100 * current / total) if total > 0 else 0
-        self.progress_bar.setValue(min(pct, 100))
+        self._job_frames_done[index] = current
+        self._job_fps[index] = fps
 
-        file_count = len(self._job_rows)
-        if fps > 0:
-            file_eta = format_hms(max(0, total - current) / fps)
-            frames_done_before_this_job = sum(self._job_total_frames[:index])
-            queue_total = sum(self._job_total_frames)
-            queue_remaining = max(0, queue_total - (frames_done_before_this_job + current))
-            queue_eta = format_hms(queue_remaining / fps)
-            self.progress_detail_label.setText(
-                f"{fps:.1f} fps   |   File ETA: {file_eta}   |   Queue ETA: {queue_eta}"
-                f"   (file {index + 1} of {file_count})"
-            )
-        else:
-            self.progress_detail_label.setText(f"file {index + 1} of {file_count}")
+        slot = self._job_line_slot.get(index)
+        if slot is not None:
+            pct = min(100, int(100 * current / total)) if total > 0 else 0
+            parts = [f"{self._job_label(index)} — {pct}%"]
+            if fps > 0:
+                parts.append(f"{fps:.1f} fps")
+                parts.append(f"{format_hms(max(0, total - current) / fps)} left")
+            self.job_progress_labels[slot].setText("   ·   ".join(parts))
+
+        self._update_run_status()
+
+    def _queue_eta_seconds(self) -> float | None:
+        """When the LAST video will finish, not when the work would be done
+        if it divided evenly.
+
+        Dividing the remaining frames by the summed frame rate assumes every
+        lane stays busy until the same instant. Two jobs with 10 and 1000
+        seconds left would be reported as about 505 seconds, when the queue
+        plainly cannot end before the 1000-second one does. So this schedules
+        the remaining work over the lanes and takes the longest lane.
+
+        None while nothing has reported a rate yet -- there is no basis for a
+        guess, and a wrong number is worse than none.
+        """
+        observed = [rate for rate in self._job_fps.values() if rate > 0]
+        if not observed:
+            return None
+        # Queued videos have no rate of their own yet; the videos already
+        # running are the only evidence available for how fast this machine
+        # is getting through this material.
+        reference_fps = sum(observed) / len(observed)
+
+        running_seconds: list[float] = []
+        queued_seconds: list[float] = []
+        for job, job_total in enumerate(self._job_total_frames):
+            if job in self._finished_jobs:
+                continue
+            remaining = max(0, job_total - self._job_frames_done.get(job, 0))
+            rate = self._job_fps.get(job, 0.0)
+            if rate > 0:
+                running_seconds.append(remaining / rate)
+            else:
+                queued_seconds.append(remaining / reference_fps)
+
+        # A lane per video already running (there can be more than the
+        # current setting, if it was lowered mid-run), plus any idle lanes.
+        lanes = list(running_seconds)
+        lanes += [0.0] * max(0, self._parallel_jobs() - len(lanes))
+        if not lanes:
+            return 0.0
+        # Longest first onto the earliest-free lane: the usual greedy
+        # schedule, and it avoids the optimism of assuming a perfect split.
+        for seconds in sorted(queued_seconds, reverse=True):
+            lanes.sort()
+            lanes[0] += seconds
+        return max(lanes)
 
     def _on_job_status(self, index: int, message: str) -> None:
-        self.status_label.setText(message)
+        """Phase messages belong to the video they came from.
+
+        Putting them all in the one status line meant that with two videos
+        running, whichever lane spoke last owned the label -- so "Detecting
+        black bars..." or a GPU-decode fallback notice appeared with no way
+        to tell which file it was about, and it erased the line naming what
+        was running.
+        """
+        slot = self._job_line_slot.get(index)
+        if slot is not None:
+            self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message}")
+        self._update_run_status()
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was
@@ -2167,6 +2354,7 @@ class MainWindow(QMainWindow):
         return None
 
     def _on_job_finished(self, index: int, result) -> None:
+        self._mark_job_over(index)
         row_data = self._job_rows[index]
         row = self._row_index_of(row_data)
         if row is None:
@@ -2233,6 +2421,7 @@ class MainWindow(QMainWindow):
         self._sync_frame_compare()
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
+        self._mark_job_over(index)
         self._run_failed_count += 1
         row = self._row_index_of(self._job_rows[index])
         if row is None:
@@ -2248,18 +2437,16 @@ class MainWindow(QMainWindow):
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
-        self._current_job_index = None
+        for line in self.job_progress_labels:
+            line.setVisible(False)
         if self._run_was_cancelled:
             self.status_label.setText("Cancelled.")
         elif self._run_failed_count:
             self.status_label.setText(
                 f"Finished with {self._run_failed_count} failed video(s)."
             )
-            self.progress_bar.setValue(100)
         else:
             self.status_label.setText("Done.")
-            self.progress_bar.setValue(100)
-        self.progress_detail_label.setText("")
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
         # Rows removed mid-run are skipped rather than indexed into.

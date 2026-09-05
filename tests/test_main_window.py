@@ -1079,55 +1079,137 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
     win._job_total_frames = [3000]  # a single 3000-frame job
+    win._on_job_started(0, "a")
 
     win._on_job_progress(0, current=1000, total=3000, fps=100.0)
 
+    # A file's own rate and remaining time belong on that file's line.
     # 2000 frames remaining at 100fps -> 20s
-    assert "100.0 fps" in win.progress_detail_label.text()
-    assert "File ETA: 0:00:20" in win.progress_detail_label.text()
+    assert "100.0 fps" in win.job_progress_labels[0].text()
+    assert "0:00:20 left" in win.job_progress_labels[0].text()
     # Live progress belongs in the status bar above, not the VMAF column --
     # that's reserved for the final score (or "Failed").
     assert win.distorted_table.item(row, COL_VMAF).text() == ""
 
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
+    """The ETA counts what jobs have actually reported.
+
+    It used to assume every earlier job was finished, which was only true
+    while jobs ran strictly one after another. With several in flight an
+    earlier index says nothing about whether that job is done.
+    """
     win = MainWindow()
     row_a = win._add_table_row(Path("a.mp4"))
     row_b = win._add_table_row(Path("b.mp4"))
     win._job_rows = [win._rows[row_a], win._rows[row_b]]
-    win._job_total_frames = [1000, 4000]  # job 0 already fully done (1000 frames), job 1 in progress
+    win._job_total_frames = [1000, 4000]
+    win._on_job_started(1, "b")
 
-    # Now on job index 1 (the second job), 2000/4000 frames in, at 50fps.
+    win._mark_job_over(0)  # job 0 really has finished: all 1000 frames
     win._on_job_progress(1, current=2000, total=4000, fps=50.0)
 
-    # queue_total = 5000, queue_done = 1000 (job 0, all of it) + 2000 (job 1 so far) = 3000
-    # queue_remaining = 2000 frames at 50fps = 40s
-    assert "Queue ETA: 0:00:40" in win.progress_detail_label.text()
-    # File ETA: 2000 frames remaining in job 1 at 50fps = 40s (coincidentally also 40s here)
-    assert "File ETA: 0:00:40" in win.progress_detail_label.text()
-    assert "(file 2 of 2)" in win.progress_detail_label.text()
+    # Only job 1's remaining 2000 frames are left, at 50fps -> 40s.
+    assert "Queue ETA: 0:00:40" in win.status_label.text()
 
 
-def test_job_progress_with_zero_fps_shows_no_eta(qapp):
+def test_queue_progress_does_not_assume_earlier_jobs_have_finished(qapp):
+    # The parallel case: job 1 is running while job 0 still is too, so job
+    # 0's frames must not be counted as done.
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 4000]
+    win._on_job_started(1, "b")
+
+    win._on_job_progress(1, current=2000, total=4000, fps=50.0)
+
+    # 2000 frames still to do on job 1 and 1000 untouched on job 0, at 50fps.
+    assert "Queue ETA: 0:01:00" in win.status_label.text()
+
+
+def test_two_running_jobs_drain_the_queue_at_their_combined_rate(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+
+    win._on_job_progress(0, current=500, total=1000, fps=25.0)
+    win._on_job_progress(1, current=500, total=1000, fps=25.0)
+
+    # Each has 500 frames left at 25fps, and they run side by side, so the
+    # queue ends in 20s rather than the 40s one after another would take.
+    assert win.status_label.text() == "Running 2 of 2 together   ·   Queue ETA: 0:00:20"
+
+
+def test_a_finished_job_stops_counting_towards_the_combined_rate(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+
+    win._on_job_progress(0, current=1000, total=1000, fps=25.0)
+    win._mark_job_over(0)
+    win._on_job_progress(1, current=0, total=1000, fps=25.0)
+
+    # 1000 frames left at 25fps = 40s. Leaving the finished job's rate in
+    # would have claimed 20s and the estimate would never be met.
+    assert "Queue ETA: 0:00:40" in win.status_label.text()
+
+
+def test_the_status_line_does_not_repeat_the_names_below_it(qapp):
+    """Every running video has its own line directly underneath carrying its
+    name, so listing the names here said the same thing twice -- and with two
+    long file names it was the longest line on screen for no information."""
+    win = MainWindow()
+    for name in ("encode-a.mp4", "encode-b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+
+    win._on_job_started(0, "encode-a")
+    assert win.status_label.text().startswith("Running 1 of 2")
+
+    win._on_job_started(1, "encode-b")
+    text = win.status_label.text()
+    assert text.startswith("Running 2 of 2 together")
+    assert "encode-a" not in text and "encode-b" not in text
+    # The names are on the lines below, where they are not duplicated.
+    assert "encode-a" in win.job_progress_labels[0].text()
+    assert "encode-b" in win.job_progress_labels[1].text()
+
+    win._mark_job_over(0)
+    assert win.status_label.text().startswith("Running 2 of 2")
+
+
+def test_job_progress_with_zero_fps_promises_no_time(qapp):
+    # No rate yet means no basis for an estimate, and a made-up one is worse
+    # than none.
     win = MainWindow()
     win._job_rows = [win._rows[win._add_table_row(Path("a.mp4"))]]
     win._job_total_frames = [3000]
+    win._on_job_started(0, "a")
 
     win._on_job_progress(0, current=5, total=3000, fps=0.0)
 
-    assert "ETA" not in win.progress_detail_label.text()
-    assert "file 1 of 1" in win.progress_detail_label.text()
+    assert "left" not in win.job_progress_labels[0].text()
+    assert win.status_label.text() == "Running 1 of 1   ·   Queue ETA: calculating..."
 
 
-def test_cancelled_run_does_not_claim_done_or_force_100_percent(qapp):
+def test_cancelled_run_does_not_claim_done(qapp):
     win = MainWindow()
-    win.progress_bar.setValue(37)
     win._on_run_cancelled()
 
     win._on_all_finished()
 
     assert win.status_label.text() == "Cancelled."
-    assert win.progress_bar.value() == 37
 
 
 def test_failed_run_reports_failure_instead_of_done(qapp):
@@ -2833,3 +2915,236 @@ def test_running_a_row_upgrades_its_entry_to_the_real_geometry(qapp, tmp_path):
     # The detected crop now comes from the run rather than being pending.
     assert entry.comparison == FrameComparison.from_result(result)
     assert entry.comparison.auto_crop_pending is False
+
+
+
+# ------------------------------ progress and status with two videos running
+
+def test_each_running_video_gets_its_own_progress_line(qapp):
+    """Two videos at once need two readable lines, not one bar flickering
+    between them."""
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+
+    assert win.job_progress_labels[0].isVisibleTo(win)
+    assert win.job_progress_labels[1].isVisibleTo(win)
+
+    win._on_job_progress(0, current=250, total=1000, fps=25.0)
+    win._on_job_progress(1, current=750, total=1000, fps=50.0)
+
+    # The percentage is stated, not drawn.
+    assert "a — 25%" in win.job_progress_labels[0].text()
+    assert "b — 75%" in win.job_progress_labels[1].text()
+    assert "25.0 fps" in win.job_progress_labels[0].text()
+
+
+def test_a_finished_video_frees_its_progress_line_for_the_next(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100, 100]
+
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+    slot_of_a = win._job_line_slot[0]
+    win._mark_job_over(0)
+    win._on_job_started(2, "c")
+
+    assert win._job_line_slot[2] == slot_of_a, "the freed line was not reused"
+    assert 0 not in win._job_line_slot
+
+
+def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
+    """With two running, whichever lane spoke last used to own the single
+    status line -- so "Detecting black bars..." appeared with no way to tell
+    which file it referred to, and it erased what the line was for."""
+    win = MainWindow()
+    for name in ("encode-a.mp4", "encode-b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100]
+    win._on_job_started(0, "encode-a")
+    win._on_job_started(1, "encode-b")
+
+    win._on_job_status(1, "Detecting black bars in source...")
+
+    assert "Detecting black bars" in win.job_progress_labels[1].text()
+    assert "encode-b" in win.job_progress_labels[1].text()
+    # And it does not take over the shared line.
+    assert win.status_label.text().startswith("Running 2 of 2 together")
+
+
+def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
+    # Even alone, the phase belongs to the video rather than to the run: the
+    # shared line is what says when the queue ends.
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+
+    win._on_job_status(0, "Running ffmpeg (GPU decode: off)...")
+
+    assert "GPU decode" in win.job_progress_labels[0].text()
+    assert win.status_label.text().startswith("Running 1 of 1")
+
+
+# ------------------------------------------------- queue ETA is a makespan
+
+def test_queue_eta_is_bounded_by_the_slowest_remaining_video(qapp):
+    """Dividing remaining frames by the summed frame rate assumes every lane
+    stays busy to the same instant. With 10 seconds left on one video and
+    1000 on the other it claimed about 505s, when the queue plainly cannot
+    end before the 1000-second one does."""
+    win = MainWindow()
+    for name in ("quick.mp4", "slow.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win.parallel_jobs_check.setChecked(True)
+    win._job_total_frames = [10, 1000]
+
+    # Both running at 1 fps: 10s left on one, 1000s on the other.
+    win._on_job_progress(0, current=0, total=10, fps=1.0)
+    win._on_job_progress(1, current=0, total=1000, fps=1.0)
+
+    assert win._queue_eta_seconds() == pytest.approx(1000.0)
+
+
+def test_queue_eta_schedules_waiting_videos_onto_free_lanes(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win.parallel_jobs_check.setChecked(True)
+    win._job_total_frames = [100, 100, 100, 100]
+
+    # Two running at 1 fps with 100s each; two more queued at the same rate.
+    win._on_job_progress(0, current=0, total=100, fps=1.0)
+    win._on_job_progress(1, current=0, total=100, fps=1.0)
+
+    # Each lane takes one of the queued videos: 100s now + 100s after.
+    assert win._queue_eta_seconds() == pytest.approx(200.0)
+
+
+def test_queue_eta_is_unknown_until_something_reports_a_rate(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+
+    assert win._queue_eta_seconds() is None
+
+
+def test_the_parallel_control_stays_usable_during_a_run(qapp):
+    # The Settings tab is locked during a run, which is why this lives on the
+    # Videos tab -- being unable to reach it mid-run was the whole complaint.
+    win = MainWindow()
+    win._set_run_ui_active(True)
+
+    assert win.parallel_jobs_check.isEnabled()
+    assert not win.run_btn.isEnabled()
+    assert not win.options_box.isEnabled()
+
+
+def test_changing_the_control_reaches_a_running_worker(qapp):
+    class FakeWorker:
+        def __init__(self):
+            self.applied = []
+
+        def isRunning(self):
+            return True
+
+        def set_parallel_jobs(self, count):
+            self.applied.append(count)
+
+    win = MainWindow()
+    win._worker = FakeWorker()
+
+    win.parallel_jobs_check.setChecked(True)
+
+    assert win._worker.applied == [2]
+    assert win._settings.parallel_jobs == 2
+
+
+
+def test_the_queue_eta_rides_on_the_status_line(qapp):
+    """There is one shared line, not two. It says how much is running and
+    when the queue ends, and nothing that changes several times a second."""
+    win = MainWindow()
+    for name in ("encode-a.mp4", "encode-b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    win._on_job_started(0, "encode-a")
+    win._on_job_started(1, "encode-b")
+
+    win._on_job_progress(0, current=500, total=1000, fps=25.0)
+    first = win.status_label.text()
+    win._on_job_progress(1, current=500, total=1000, fps=25.0)
+    second = win.status_label.text()
+
+    for text in (first, second):
+        assert text.startswith("Running 2 of 2 together")
+        assert "Queue ETA:" in text
+        assert "fps" not in text
+        assert "encode-a" not in text and "encode-b" not in text
+    assert second == "Running 2 of 2 together   ·   Queue ETA: 0:00:20"
+    assert not hasattr(win, "progress_detail_label")
+
+
+def test_there_are_no_progress_bars_at_all(qapp):
+    # Each running video states its own percentage, and the queue line states
+    # the ETA. Nothing is left for a bar to add.
+    win = MainWindow()
+    assert not hasattr(win, "progress_bar")
+    assert not hasattr(win, "job_progress_bars")
+
+
+
+def test_a_running_video_states_its_percentage_in_words(qapp):
+    """A bar shows roughly how far along a video is; the number says exactly,
+    in the same line that already carries the name, rate and time left."""
+    win = MainWindow()
+    win._add_table_row(Path("encode.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "encode")
+
+    win._on_job_progress(0, current=333, total=1000, fps=20.0)
+
+    text = win.job_progress_labels[0].text()
+    assert text == "encode — 33%   ·   20.0 fps   ·   0:00:33 left"
+
+
+def test_a_video_with_no_rate_yet_shows_only_its_percentage(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("encode.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "encode")
+
+    win._on_job_progress(0, current=5, total=1000, fps=0.0)
+
+    assert win.job_progress_labels[0].text() == "encode — 0%"
+
+
+def test_a_finished_video_leaves_its_line(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100, 100]
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+
+    win._mark_job_over(0)
+
+    assert not win.job_progress_labels[0].isVisible()
+    assert 0 not in win._job_line_slot
