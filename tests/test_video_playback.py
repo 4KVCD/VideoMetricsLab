@@ -48,7 +48,11 @@ def _comparison() -> FrameComparison:
 
 
 def test_playback_size_preserves_cropped_content_shape():
-    assert playback_dimensions(_comparison()) == (1920, 804)
+    assert playback_dimensions(_comparison()) == (3840, 1608)
+
+
+def test_ffmpeg_fallback_is_limited_by_the_real_display_not_1080p():
+    assert playback_dimensions(_comparison(), (2560, 1440)) == (2560, 1072)
 
 
 def test_pair_command_crops_tone_maps_and_packs_one_frame_clock():

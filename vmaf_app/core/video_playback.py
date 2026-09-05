@@ -17,13 +17,20 @@ from vmaf_app.core.vmaf_runner import _hw_native_format
 
 def playback_dimensions(
     comparison: FrameComparison,
-    maximum: tuple[int, int] = (1920, 1080),
+    maximum: tuple[int, int] | None = None,
 ) -> tuple[int, int]:
-    """Largest even preview size that fits the comparison and render budget."""
+    """Largest even preview size that fits the physical display, if supplied.
+
+    There is deliberately no built-in 1920-pixel budget.  Native GPU playback
+    does not materialize this image in Python at all, and the FFmpeg fallback
+    is limited by the actual monitor rather than an arbitrary resolution.
+    """
     width, height = comparison_dimensions(comparison)
-    max_width, max_height = maximum
     if width <= 0 or height <= 0:
         raise ValueError("comparison has no usable display dimensions")
+    if maximum is None:
+        return max(2, width // 2 * 2), max(2, height // 2 * 2)
+    max_width, max_height = maximum
     scale = min(1.0, max_width / width, max_height / height)
     out_w = max(2, int(width * scale) // 2 * 2)
     out_h = max(2, int(height * scale) // 2 * 2)
