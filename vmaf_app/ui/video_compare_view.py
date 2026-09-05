@@ -1,17 +1,22 @@
-"""Frame-locked source/distorted playback decoded entirely by ffmpeg."""
+"""Frame-locked source/distorted playback with native GPU presentation."""
 from __future__ import annotations
 
 import subprocess
 import threading
 from collections import deque
 
-from PySide6.QtCore import QRectF, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtCore import QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings, frame_input_path
 from vmaf_app.core.gpu import GpuVendor, HwAccelPlan, plan_hwaccel
+from vmaf_app.core.gstreamer_playback import (
+    GstComparePipeline,
+    GStreamerPlaybackError,
+    uses_native_gstreamer,
+)
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.video_playback import (
     build_audio_command,
@@ -178,16 +183,26 @@ class _PairDecodeWorker(QThread):
 
 
 class _PairedFrameWidget(QWidget):
-    """Paint one half of the latest indivisible source/distorted frame pair."""
+    """Native D3D11 target, with a QImage surface for FFmpeg fallback."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setAttribute(Qt.WA_NativeWindow)
+        self.setAttribute(Qt.WA_DontCreateNativeAncestors)
         self._payload: bytes | None = None
         self._image = QImage()
         self._side_width = 0
         self._height = 0
         self._show_source = False
+        self._native_playback = False
+
+    def set_native_playback(self, enabled: bool) -> None:
+        self._native_playback = bool(enabled)
+        if enabled:
+            self._payload = None
+            self._image = QImage()
+        self.update()
 
     def set_pair(self, payload: bytes, side_width: int, height: int) -> None:
         self._payload = payload
@@ -204,6 +219,10 @@ class _PairedFrameWidget(QWidget):
         self.update()
 
     def paintEvent(self, _event) -> None:
+        # d3d11videosink owns this child HWND while native playback is active.
+        # Painting it from Qt would erase or flash over the swapchain.
+        if self._native_playback:
+            return
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#171717"))
         if self._image.isNull() or self._side_width <= 0 or self._height <= 0:
@@ -223,7 +242,7 @@ class _PairedFrameWidget(QWidget):
 
 
 class VideoCompareView(QWidget):
-    """Play a paired ffmpeg stream with instant, frame-exact A/B switching."""
+    """Play one synchronized source/distorted stream with instant A/B switching."""
 
     position_changed = Signal(int)
     playing_changed = Signal(bool)
@@ -233,11 +252,14 @@ class VideoCompareView(QWidget):
         super().__init__(parent)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("background: #171717;")
-        self.video = _PairedFrameWidget(self)
-        # There is now one paired ffmpeg surface; retain these focus aliases
-        # for code that treated the old Qt surfaces as keyboard targets.
-        self.source_video = self.video
-        self.distorted_video = self.video
+        self.source_video = _PairedFrameWidget(self)
+        self.source_video.show_source(True)
+        self.distorted_video = _PairedFrameWidget(self)
+        self.distorted_video.show_source(False)
+        # FFmpeg fallback still paints its packed pair on this surface.  Keep
+        # the public alias used by the panel and older tests.
+        self.video = self.distorted_video
+        self.source_video.hide()
         self._comparison: FrameComparison | None = None
         self._color_settings = PreviewColorSettings()
         self._worker: _PairDecodeWorker | None = None
@@ -250,9 +272,14 @@ class VideoCompareView(QWidget):
         self._audio_enabled = True
         self._audio_process: subprocess.Popen | None = None
         self._audio_handle: ProcessHandle | None = None
+        self._gst: GstComparePipeline | None = None
+        self._gst_timer = QTimer(self)
+        self._gst_timer.setInterval(40)
+        self._gst_timer.timeout.connect(self._poll_gstreamer)
 
     def resizeEvent(self, event) -> None:
-        self.video.setGeometry(self.rect())
+        self.source_video.setGeometry(self.rect())
+        self.distorted_video.setGeometry(self.rect())
         super().resizeEvent(event)
 
     @staticmethod
@@ -323,11 +350,25 @@ class VideoCompareView(QWidget):
         if comparison is None or comparison.fps <= 0:
             return
         self._frame = max(0, round(position_ms / 1000 * comparison.fps))
+        if self._gst is not None:
+            try:
+                self._gst.seek(position_ms)
+            except Exception as exc:
+                self._fall_back_from_gstreamer(str(exc))
+            return
         self._restart_decoder(realtime=self._wanted_playing)
 
     def set_playing(self, playing: bool) -> None:
         playing = bool(playing)
         self._wanted_playing = playing
+        if self._gst is not None:
+            self._gst.set_playing(playing)
+            self._is_playing = playing
+            self.playing_changed.emit(playing)
+            self.status_changed.emit(
+                ("Playing" if playing else "Paused") + " · GStreamer · D3D11"
+            )
+            return
         worker = self._worker
         if playing:
             if worker is not None and worker.isRunning() and not self._is_playing:
@@ -349,9 +390,18 @@ class VideoCompareView(QWidget):
     def show_source(self, showing: bool) -> None:
         self._showing_source = bool(showing)
         self.video.show_source(showing)
+        if self._gst is not None:
+            self._gst.set_show_source(showing)
+            if showing:
+                self.source_video.raise_()
+            else:
+                self.distorted_video.raise_()
 
     def set_audio_enabled(self, enabled: bool) -> None:
         self._audio_enabled = bool(enabled)
+        if self._gst is not None:
+            self._gst.set_audio_enabled(enabled)
+            return
         if not enabled:
             self._stop_audio()
         elif self._is_playing:
@@ -371,8 +421,75 @@ class VideoCompareView(QWidget):
         self._stop_decoder()
         self._stop_audio()
         self._generation += 1
+        native, reason = uses_native_gstreamer(comparison, self._color_settings)
+        if native:
+            try:
+                self._start_gstreamer(realtime)
+                return
+            except Exception as exc:
+                reason = str(exc)
+                self._stop_decoder()
+        self._start_ffmpeg(realtime, reason)
+
+    def _start_gstreamer(self, realtime: bool) -> None:
+        comparison = self._comparison
+        if comparison is None:
+            return
+        self.source_video.show()
+        self.distorted_video.show()
+        # winId() forces two real child HWNDs. Both GPU swapchains remain live
+        # on one GStreamer clock; S only changes their Z-order.
+        pipeline = GstComparePipeline(
+            comparison,
+            int(self.source_video.winId()),
+            int(self.distorted_video.winId()),
+            self._color_settings,
+            show_source=self._showing_source,
+            audio_enabled=self._audio_enabled,
+        )
+        self._gst = pipeline
+        self.source_video.set_native_playback(True)
+        self.distorted_video.set_native_playback(True)
+        if self._showing_source:
+            self.source_video.raise_()
+        else:
+            self.distorted_video.raise_()
+        try:
+            pipeline.start(self.position, realtime)
+        except Exception as exc:
+            # Construction can succeed while the asynchronous D3D11 state
+            # change or initial seek cannot.  Never leave a half-started
+            # swapchain owning the child HWND before FFmpeg takes it back.
+            self._gst = None
+            pipeline.stop()
+            self.source_video.set_native_playback(False)
+            self.distorted_video.set_native_playback(False)
+            self.source_video.hide()
+            if isinstance(exc, GStreamerPlaybackError):
+                raise
+            raise GStreamerPlaybackError(
+                f"GStreamer could not start native playback: {exc}"
+            ) from exc
+        self._is_playing = realtime
+        self.status_changed.emit("Opening with GStreamer/D3D11…")
+        self.playing_changed.emit(realtime)
+        self._gst_timer.start()
+
+    def _display_pixel_size(self) -> tuple[int, int] | None:
+        handle = self.window().windowHandle()
+        screen = handle.screen() if handle is not None else QGuiApplication.primaryScreen()
+        if screen is None:
+            return None
+        geometry = screen.geometry()
+        ratio = screen.devicePixelRatio()
+        return round(geometry.width() * ratio), round(geometry.height() * ratio)
+
+    def _start_ffmpeg(self, realtime: bool, reason: str = "") -> None:
+        comparison = self._comparison
+        if comparison is None:
+            return
         generation = self._generation
-        output_size = playback_dimensions(comparison)
+        output_size = playback_dimensions(comparison, self._display_pixel_size())
         plan = plan_hwaccel(
             GpuVendor.AUTO,
             comparison.source_info.codec_name,
@@ -395,16 +512,70 @@ class VideoCompareView(QWidget):
         worker.finished.connect(lambda w=worker: self._on_worker_finished(w))
         self._worker = worker
         self._is_playing = realtime
-        self.status_changed.emit("Opening with ffmpeg…")
+        suffix = f" ({reason})" if reason else ""
+        self.status_changed.emit(f"Opening with FFmpeg tone-map fallback…{suffix}")
         self.playing_changed.emit(realtime)
         worker.start()
 
     def _stop_decoder(self) -> None:
+        self._gst_timer.stop()
+        pipeline = self._gst
+        self._gst = None
+        if pipeline is not None:
+            pipeline.stop()
+        self.source_video.set_native_playback(False)
+        self.distorted_video.set_native_playback(False)
+        self.source_video.hide()
+        self.distorted_video.show()
+        self.distorted_video.raise_()
+        self.distorted_video.show_source(self._showing_source)
         worker = self._worker
         self._worker = None
         if worker is not None:
             worker.cancel()
             self._retired_workers.add(worker)
+
+    def _poll_gstreamer(self) -> None:
+        pipeline = self._gst
+        comparison = self._comparison
+        if pipeline is None or comparison is None:
+            return
+        try:
+            update = pipeline.poll()
+        except Exception as exc:
+            self._fall_back_from_gstreamer(str(exc))
+            return
+        if update.position_ms is not None and comparison.fps > 0:
+            self._frame = max(0, round(update.position_ms / 1000 * comparison.fps))
+            self.position_changed.emit(update.position_ms)
+        if update.status:
+            state = "Playing" if self._wanted_playing else "Paused"
+            self.status_changed.emit(f"{state} · GStreamer · {update.status}")
+        if update.error:
+            self._fall_back_from_gstreamer(update.error)
+            return
+        if update.ended:
+            self._wanted_playing = False
+            self._is_playing = False
+            self.playing_changed.emit(False)
+            self.status_changed.emit("Playback ended")
+
+    def _fall_back_from_gstreamer(self, error: str) -> None:
+        pipeline = self._gst
+        self._gst = None
+        self._gst_timer.stop()
+        if pipeline is not None:
+            pipeline.stop()
+        self.source_video.set_native_playback(False)
+        self.distorted_video.set_native_playback(False)
+        self.source_video.hide()
+        self.distorted_video.show()
+        self.distorted_video.raise_()
+        self.distorted_video.show_source(self._showing_source)
+        self.status_changed.emit(
+            f"GStreamer playback failed; trying FFmpeg fallback: {error}"
+        )
+        self._start_ffmpeg(self._wanted_playing, error)
 
     def _on_worker_finished(self, worker: _PairDecodeWorker) -> None:
         self._retired_workers.discard(worker)

@@ -290,7 +290,7 @@ class FrameComparePanel(QWidget):
         root.addWidget(self.detail_label)
         self.guide_label = QLabel(
             "Hold S: show source   ·   ←/→: switch distorted video   ·   "
-            "Space: play/pause   ·   ffmpeg playback: frame-locked A/B"
+            "Space: play/pause   ·   GPU playback: synchronized A/B"
         )
         self.guide_label.setAlignment(Qt.AlignCenter)
         self.guide_label.setStyleSheet("color: #666;")
@@ -739,8 +739,9 @@ class FrameComparePanel(QWidget):
                 self.color_status_label.setText(f"Video playback · {reason}")
                 return
         side = "source" if self._showing_source else "distorted"
-        kind = hdr_kind(frame_video_info(entry.comparison, side))
-        prefix = "Video playback · ffmpeg crop/colour pipeline · " if self.is_video_mode else ""
+        info = frame_video_info(entry.comparison, side)
+        kind = hdr_kind(info)
+        prefix = "Video playback · native crop/colour pipeline · " if self.is_video_mode else ""
         if self._color_mode == PreviewColorMode.UNMANAGED:
             self.color_status_label.setText(
                 f"{prefix}{kind or 'SDR / untagged'} input · tone mapping off"
@@ -753,12 +754,29 @@ class FrameComparePanel(QWidget):
                 f"{prefix}{source} · fixed HDR → SDR at {settings.target_nits:g} nit"
             )
             return
+        wide_gamut = info.color_primaries.casefold() in {"bt2020", "bt.2020"}
         if kind is None:
+            if (
+                self.is_video_mode
+                and wide_gamut
+                and self._display_hdr.hdr_enabled is True
+            ):
+                self.color_status_label.setText(
+                    f"{prefix}BT.2020 wide-gamut input · Windows HDR on · "
+                    "native 10-bit D3D11 presentation"
+                )
+                return
             self.color_status_label.setText(
                 f"{prefix}SDR / untagged input · no tone mapping"
             )
             return
         if self._display_hdr.hdr_enabled is True:
+            if self.is_video_mode:
+                self.color_status_label.setText(
+                    f"{prefix}{kind} · Windows HDR on · "
+                    "native 10-bit D3D11 presentation · tone mapping off"
+                )
+                return
             self.color_status_label.setText(
                 f"{prefix}{kind} · display-aware HDR → SDR · Windows HDR on · "
                 f"SDR white {settings.target_nits:g} nit"

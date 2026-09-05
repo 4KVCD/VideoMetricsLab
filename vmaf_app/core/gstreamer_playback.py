@@ -1,0 +1,463 @@
+"""GStreamer/D3D11 playback for synchronized source/distorted comparison.
+
+The UI deliberately never receives decoded pixels.  GStreamer owns demuxing,
+decoding, clocks and presentation, while D3D11 textures remain on the GPU from
+a hardware decoder through crop/scale and into the swapchain.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from typing import Any
+
+from vmaf_app.core.frame_extract import (
+    FrameComparison,
+    PreviewColorMode,
+    PreviewColorSettings,
+    comparison_dimensions,
+    frame_input_path,
+    frame_video_info,
+    hdr_kind,
+)
+from vmaf_app.core.models import CropBox, VideoInfo
+from vmaf_app.core.vmaf_runner import analysis_pix_fmt
+
+
+class GStreamerPlaybackError(RuntimeError):
+    """The native GStreamer playback pipeline could not be used."""
+
+
+@dataclass(frozen=True, slots=True)
+class PlaybackUpdate:
+    position_ms: int | None = None
+    status: str | None = None
+    error: str | None = None
+    ended: bool = False
+
+
+_GST: tuple[Any, Any] | None = None
+_GST_ERROR: str | None = None
+
+
+def _load_gstreamer() -> tuple[Any, Any]:
+    """Import lazily so metric-only use does not pay GStreamer's start cost."""
+    global _GST, _GST_ERROR
+    if _GST is not None:
+        return _GST
+    if _GST_ERROR is not None:
+        raise GStreamerPlaybackError(_GST_ERROR)
+    try:
+        import gi
+
+        gi.require_version("Gst", "1.0")
+        gi.require_version("GstVideo", "1.0")
+        from gi.repository import Gst, GstVideo
+
+        Gst.init(None)
+        required = (
+            "uridecodebin3", "d3d11upload",
+            "d3d11convert", "d3d11videosink", "videocrop",
+        )
+        missing = [name for name in required if Gst.ElementFactory.find(name) is None]
+        if missing:
+            raise RuntimeError("missing elements: " + ", ".join(missing))
+        _GST = Gst, GstVideo
+        return _GST
+    except Exception as exc:
+        _GST_ERROR = f"GStreamer is unavailable: {exc}"
+        raise GStreamerPlaybackError(_GST_ERROR) from exc
+
+
+def gstreamer_available() -> tuple[bool, str]:
+    """Whether the D3D11 pipeline can be built in this process."""
+    # Offscreen Qt tests have no real HWND for GstVideoOverlay.  Keeping this
+    # explicit also prevents native graphics drivers from being initialized by
+    # otherwise headless unit tests.
+    if os.environ.get("QT_QPA_PLATFORM", "").casefold() == "offscreen":
+        return False, "native video output is disabled by the offscreen Qt platform"
+    try:
+        _load_gstreamer()
+    except GStreamerPlaybackError as exc:
+        return False, str(exc)
+    return True, ""
+
+
+def uses_native_gstreamer(
+    comparison: FrameComparison, settings: PreviewColorSettings
+) -> tuple[bool, str]:
+    """Whether GStreamer can preserve the requested colour presentation.
+
+    GStreamer's D3D11 sink presents PQ/HLG through a 10-bit HDR swapchain, but
+    it is not a high-quality HDR-to-SDR tone mapper.  Those two explicit SDR
+    cases continue through the existing FFmpeg/zscale/tonemap path until a
+    libplacebo render element is added.
+    """
+    available, reason = gstreamer_available()
+    if not available:
+        return False, reason
+    inputs_are_hdr = any(
+        hdr_kind(info) is not None
+        for info in (comparison.source_info, comparison.distorted_info)
+    )
+    if settings.mode == PreviewColorMode.HDR_TO_SDR:
+        return False, "explicit HDR-to-SDR preview uses the FFmpeg tone mapper"
+    if (
+        settings.mode == PreviewColorMode.DISPLAY_AWARE
+        and inputs_are_hdr
+        and settings.display_hdr_enabled is not True
+    ):
+        return False, "the display is not in HDR mode, so HDR is tone-mapped to SDR"
+    return True, ""
+
+
+def _crop_edges(info: VideoInfo, crop: CropBox | None) -> tuple[int, int, int, int]:
+    if crop is None:
+        return 0, 0, 0, 0
+    return (
+        max(0, crop.x),
+        max(0, crop.y),
+        max(0, info.width - crop.x - crop.w),
+        max(0, info.height - crop.y - crop.h),
+    )
+
+
+def _output_format(info: VideoInfo) -> str:
+    fmt = analysis_pix_fmt(info.pix_fmt, info.pix_fmt)
+    if "12" in fmt:
+        return "P012_LE"
+    if "10" in fmt:
+        return "P010_10LE"
+    return "NV12"
+
+
+def _native_colorimetry(info: VideoInfo) -> str | None:
+    kind = hdr_kind(info)
+    if kind == "HDR10 / PQ":
+        return "bt2100-pq"
+    if kind == "HLG":
+        return "bt2100-hlg"
+    if info.color_primaries.casefold() in {"bt2020", "bt.2020"}:
+        return "bt2020-10"
+    return None
+
+
+def output_caps_string(
+    comparison: FrameComparison, settings: PreviewColorSettings, side: str
+) -> str:
+    """GPU surface caps for one side, preserving that input's colour signal."""
+    width, height = comparison_dimensions(comparison)
+    info = frame_video_info(comparison, side)
+    fields = [
+        "video/x-raw(memory:D3D11Memory)",
+        f"format={_output_format(info)}",
+        f"width={width}",
+        f"height={height}",
+        "pixel-aspect-ratio=1/1",
+    ]
+    colorimetry = _native_colorimetry(info)
+    if colorimetry is not None and settings.display_hdr_enabled is True:
+        fields.append(f"colorimetry={colorimetry}")
+    return ",".join(fields)
+
+
+class GstComparePipeline:
+    """One clocked pipeline rendering two synchronized native child windows."""
+
+    def __init__(
+        self,
+        comparison: FrameComparison,
+        source_window_handle: int,
+        distorted_window_handle: int,
+        settings: PreviewColorSettings,
+        *,
+        show_source: bool = False,
+        audio_enabled: bool = True,
+    ) -> None:
+        gst, gst_video = _load_gstreamer()
+        self.Gst = gst
+        self._comparison = comparison
+        self._pipeline = gst.Pipeline.new("comparison")
+        if self._pipeline is None:
+            raise GStreamerPlaybackError("Could not create the GStreamer pipeline.")
+        self._audio_enabled = bool(audio_enabled)
+        self._audio_volume = None
+        self._video_linked = {"source": False, "distorted": False}
+        self._decoder_status_reported = False
+        self._wanted_playing = False
+        self._ready = False
+        self._pending_initial_seek_ms: int | None = None
+        self._initial_seek_sent = False
+
+        self._decoders: dict[str, Any] = {}
+        self._sinks: dict[str, Any] = {}
+        handles = {
+            "source": int(source_window_handle),
+            "distorted": int(distorted_window_handle),
+        }
+        for side, handle in handles.items():
+            self._build_video_branch(side, handle, settings, gst_video)
+        # Window stacking controls visibility; both sinks remain clocked and
+        # presenting so switching never changes either branch's playback state.
+        self.set_show_source(show_source)
+        self._bus = self._pipeline.get_bus()
+
+    def _make(self, factory: str, name: str):
+        element = self.Gst.ElementFactory.make(factory, name)
+        if element is None:
+            raise GStreamerPlaybackError(f"Could not create GStreamer element {factory}.")
+        return element
+
+    def _add(self, *elements) -> None:
+        for element in elements:
+            self._pipeline.add(element)
+
+    def _build_video_branch(
+        self, side: str, window_handle: int, settings, gst_video
+    ) -> None:
+        info = (
+            self._comparison.source_info
+            if side == "source" else self._comparison.distorted_info
+        )
+        crop_box = (
+            self._comparison.source_crop
+            if side == "source" else self._comparison.distorted_crop
+        )
+        decoder = self._make("uridecodebin3", f"{side}-decoder")
+        decoder.set_property("uri", frame_input_path(self._comparison, side).resolve().as_uri())
+        decoder.connect("select-stream", self._select_stream, side)
+        decoder.connect("pad-added", self._pad_added, side)
+        queue = self._make("queue", f"{side}-video-queue")
+        queue.set_property("max-size-buffers", 8)
+        queue.set_property("max-size-bytes", 0)
+        queue.set_property("max-size-time", 0)
+        crop = self._make("videocrop", f"{side}-crop")
+        left, top, right, bottom = _crop_edges(info, crop_box)
+        crop.set_property("left", left)
+        crop.set_property("top", top)
+        crop.set_property("right", right)
+        crop.set_property("bottom", bottom)
+        upload = self._make("d3d11upload", f"{side}-upload")
+        convert = self._make("d3d11convert", f"{side}-convert")
+        capsfilter = self._make("capsfilter", f"{side}-output-caps")
+        caps = self.Gst.Caps.from_string(
+            output_caps_string(self._comparison, settings, side)
+        )
+        capsfilter.set_property("caps", caps)
+        sink = self._make("d3d11videosink", f"{side}-video-sink")
+        sink.set_property("force-aspect-ratio", True)
+        # HDR and wide-gamut content needs a 10-bit DXGI swapchain.  The sink
+        # chooses the matching Windows colour space from the negotiated caps.
+        if (
+            settings.display_hdr_enabled is True
+            and _native_colorimetry(info) is not None
+        ):
+            sink.set_property("display-format", 24)  # R10G10B10A2_UNORM
+        gst_video.VideoOverlay.set_window_handle(sink, window_handle)
+        self._add(decoder, queue, crop, upload, convert, capsfilter, sink)
+        for first, second in zip(
+            (queue, crop, upload, convert, capsfilter),
+            (crop, upload, convert, capsfilter, sink),
+            strict=True,
+        ):
+            if not first.link(second):
+                raise GStreamerPlaybackError(
+                    f"Could not connect the {side} GPU video branch."
+                )
+        self._decoders[side] = decoder
+        self._sinks[side] = sink
+
+    @staticmethod
+    def _stream_caps_name(stream) -> str:
+        caps = stream.get_caps()
+        if caps is None or caps.get_size() == 0:
+            return ""
+        return caps.get_structure(0).get_name()
+
+    def _select_stream(self, _decoder, _collection, stream, side: str) -> int:
+        name = self._stream_caps_name(stream)
+        if name.startswith("video/"):
+            return 1
+        if side == "distorted" and name.startswith("audio/"):
+            return 1
+        return 0
+
+    def _pad_added(self, _decoder, pad, side: str) -> None:
+        name = pad.get_name()
+        if name.startswith("video_") and not self._video_linked[side]:
+            queue = self._pipeline.get_by_name(f"{side}-video-queue")
+            sink_pad = queue.get_static_pad("sink")
+            if pad.link(sink_pad) == self.Gst.PadLinkReturn.OK:
+                self._video_linked[side] = True
+            return
+        if side == "distorted" and name.startswith("audio_") and self._audio_volume is None:
+            self._build_audio_branch(pad)
+
+    def _build_audio_branch(self, source_pad) -> None:
+        """Add audio only if the distorted file actually exposes a track."""
+        queue = self._make("queue", "distorted-audio-queue")
+        convert = self._make("audioconvert", "distorted-audio-convert")
+        resample = self._make("audioresample", "distorted-audio-resample")
+        volume = self._make("volume", "distorted-audio-volume")
+        sink = self._make("autoaudiosink", "distorted-audio-sink")
+        volume.set_property("mute", not self._audio_enabled)
+        self._add(queue, convert, resample, volume, sink)
+        if not (
+            queue.link(convert)
+            and convert.link(resample)
+            and resample.link(volume)
+            and volume.link(sink)
+        ):
+            return
+        if source_pad.link(queue.get_static_pad("sink")) != self.Gst.PadLinkReturn.OK:
+            return
+        self._audio_volume = volume
+        for element in (queue, convert, resample, volume, sink):
+            element.sync_state_with_parent()
+
+    def start(self, position_ms: int, playing: bool) -> None:
+        # Preroll both sinks before seeking or playing.  uridecodebin3 cannot
+        # accept a reliable seek while still in READY, and starting PLAYING
+        # would briefly display frame zero when opening at a later timestamp.
+        self._wanted_playing = bool(playing)
+        self._pending_initial_seek_ms = max(0, int(position_ms))
+        result = self._pipeline.set_state(self.Gst.State.PAUSED)
+        if result == self.Gst.StateChangeReturn.FAILURE:
+            raise GStreamerPlaybackError("GStreamer could not open the comparison.")
+
+    def stop(self) -> None:
+        self._pipeline.set_state(self.Gst.State.NULL)
+
+    def set_playing(self, playing: bool) -> None:
+        self._wanted_playing = bool(playing)
+        if not self._ready:
+            return
+        state = self.Gst.State.PLAYING if playing else self.Gst.State.PAUSED
+        self._pipeline.set_state(state)
+
+    def seek(self, position_ms: int) -> None:
+        if not self._ready:
+            self._pending_initial_seek_ms = max(0, int(position_ms))
+            return
+        flags = self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.ACCURATE
+        if not self._pipeline.seek_simple(
+            self.Gst.Format.TIME, flags, max(0, int(position_ms)) * self.Gst.MSECOND
+        ):
+            raise GStreamerPlaybackError("GStreamer could not seek to that frame.")
+
+    def set_show_source(self, showing: bool) -> None:
+        # The UI raises the matching HWND.  Keeping this method makes source
+        # selection an intentional no-op at the pipeline layer: both branches
+        # must continue presenting against the same clock.
+        del showing
+
+    def set_audio_enabled(self, enabled: bool) -> None:
+        self._audio_enabled = bool(enabled)
+        if self._audio_volume is not None:
+            self._audio_volume.set_property("mute", not self._audio_enabled)
+
+    def _decoder_factories(self, decoder) -> list[str]:
+        factories: list[str] = []
+        iterator = decoder.iterate_recurse()
+        while True:
+            result, element = iterator.next()
+            if result == self.Gst.IteratorResult.DONE:
+                break
+            if result == self.Gst.IteratorResult.RESYNC:
+                iterator.resync()
+                continue
+            if result != self.Gst.IteratorResult.OK:
+                break
+            if element is None:
+                continue
+            factory = element.get_factory()
+            if factory is None:
+                continue
+            klass = factory.get_metadata(self.Gst.ELEMENT_METADATA_KLASS) or ""
+            if "Decoder/Video" in klass:
+                factories.append(factory.get_name())
+        return sorted(set(factories))
+
+    def _decoder_description(self) -> str:
+        descriptions: list[str] = []
+        for side, decoder in self._decoders.items():
+            factories = self._decoder_factories(decoder)
+            if not factories:
+                descriptions.append(f"{side} decoder starting")
+                continue
+            hardware = [
+                name for name in factories if name.startswith(("d3d11", "d3d12"))
+            ]
+            mode = "GPU" if hardware else "software"
+            selected = hardware or factories
+            descriptions.append(f"{side} {mode}: {', '.join(selected)}")
+        return " · ".join(descriptions)
+
+    def _negotiated_description(self) -> str:
+        caps_by_side = {
+            side: sink.get_static_pad("sink").get_current_caps()
+            for side, sink in self._sinks.items()
+        }
+        if any(caps is None or caps.get_size() == 0 for caps in caps_by_side.values()):
+            return self._decoder_description()
+        caps = caps_by_side["distorted"]
+        assert caps is not None
+        structure = caps.get_structure(0)
+        width = structure.get_value("width")
+        height = structure.get_value("height")
+        fmt = structure.get_value("format")
+        color = structure.get_value("colorimetry")
+        memory = caps.get_features(0).to_string()
+        details = [f"{width}×{height} {fmt}", memory, self._decoder_description()]
+        if color:
+            details.insert(1, str(color))
+        return " · ".join(details)
+
+    def poll(self) -> PlaybackUpdate:
+        error = None
+        ended = False
+        while True:
+            message = self._bus.pop_filtered(
+                self.Gst.MessageType.ERROR
+                | self.Gst.MessageType.EOS
+                | self.Gst.MessageType.ASYNC_DONE
+            )
+            if message is None:
+                break
+            if message.type == self.Gst.MessageType.ERROR:
+                gst_error, debug = message.parse_error()
+                detail = gst_error.message
+                if debug:
+                    detail += f" ({debug[-1000:]})"
+                error = detail
+            elif message.type == self.Gst.MessageType.EOS:
+                ended = True
+            elif message.type == self.Gst.MessageType.ASYNC_DONE and not self._ready:
+                target = self._pending_initial_seek_ms or 0
+                self._pending_initial_seek_ms = None
+                if target > 0 and not self._initial_seek_sent:
+                    flags = self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.ACCURATE
+                    if not self._pipeline.seek_simple(
+                        self.Gst.Format.TIME, flags, target * self.Gst.MSECOND
+                    ):
+                        error = "GStreamer could not seek to the requested start frame."
+                    else:
+                        self._initial_seek_sent = True
+                    continue
+                self._ready = True
+                target_state = (
+                    self.Gst.State.PLAYING
+                    if self._wanted_playing else self.Gst.State.PAUSED
+                )
+                self._pipeline.set_state(target_state)
+        ok, position = self._pipeline.query_position(self.Gst.Format.TIME)
+        position_ms = round(position / self.Gst.MSECOND) if ok else None
+        status = None
+        if not self._decoder_status_reported:
+            caps = [
+                sink.get_static_pad("sink").get_current_caps()
+                for sink in self._sinks.values()
+            ]
+            if all(item is not None for item in caps):
+                self._decoder_status_reported = True
+                status = self._negotiated_description()
+        return PlaybackUpdate(position_ms, status, error, ended)

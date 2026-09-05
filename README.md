@@ -65,7 +65,10 @@ longer describes what was actually measured.
 Requires Python 3.11+ and [ffmpeg](https://www.gyan.dev/ffmpeg/builds/) **9 or
 newer** with `libvmaf` support (a "full build" includes it). Both `ffmpeg` and
 `ffprobe` are checked at startup; if either is missing, too old, or not on
-PATH, the app prompts for its location and remembers the choice.
+PATH, the app prompts for its location and remembers the choice. On Windows,
+the Python requirements also install GStreamer 1.28 for hardware-decoded,
+D3D11-presented video comparison. HDR displays use native 10-bit PQ/HLG
+presentation; explicit HDR-to-SDR preview keeps the ffmpeg tone-map path.
 
 ```bash
 py -3 -m venv .venv
@@ -84,7 +87,7 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
-524 tests, all offscreen (no window appears) and none of which touch your
+543 tests, all offscreen (no window appears) and none of which touch your
 real settings file or results cache.
 
 `tests/smoke_run.py` is a manual end-to-end check (not part of the pytest
@@ -123,7 +126,8 @@ vmaf_app/
     bitrate.py       video-packet scan + frame/second/GOP aggregation
     run_io.py        save/load/CSV        result_cache.py cached run lookup
     frame_extract.py exact still-frame decode using a run's crop/scale recipe
-    video_playback.py paired ffmpeg playback command construction
+    video_playback.py display-sized ffmpeg tone-map fallback construction
+    gstreamer_playback.py synchronized GPU decode and native D3D11 presentation
     display_hdr.py   Windows monitor HDR state and configured SDR white level
     ffmpeg_locate.py tool discovery + version check
     gpu.py           hwaccel selection    process_control.py pause/resume/kill
@@ -133,7 +137,7 @@ vmaf_app/
     main_window.py   the file table, per-row options, run orchestration
     graph_panel.py   the comparison graph tab (one sub-tab per metric)
     frame_compare_panel.py synchronized source/distorted still-frame viewer
-    video_compare_view.py frame-locked paired ffmpeg playback surface
+    video_compare_view.py native, synchronized source/distorted playback surfaces
     bitrate_panel.py independent multi-file bitrate viewer tab
     bitrate_worker.py non-blocking ffprobe packet scans
     chart.py         the plotting widget   widgets.py  reusable Qt widgets

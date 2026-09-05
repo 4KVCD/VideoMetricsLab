@@ -409,3 +409,26 @@ def test_synthetic_resolution_test_stays_still_frame_only(qapp):
     panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
     assert "synthetic resolution tests" in panel.color_status_label.text()
     panel.close()
+
+
+def test_video_mode_discloses_native_hdr_presentation(qapp, tmp_path):
+    entry = _physical_entry(tmp_path, "hdr")
+    entry.comparison.distorted_info.color_transfer = "smpte2084"
+    entry.comparison.distorted_info.color_primaries = "bt2020"
+    panel = FrameComparePanel()
+    panel._display_hdr = DisplayHdrInfo(
+        device_name=r"\\.\DISPLAY1",
+        hdr_supported=True,
+        hdr_enabled=True,
+        bits_per_color_channel=10,
+        sdr_white_nits=203.0,
+    )
+    panel.set_runs([entry])
+
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+
+    status = panel.color_status_label.text()
+    assert "native 10-bit D3D11 presentation" in status
+    assert "tone mapping off" in status
+    assert "HDR → SDR" not in status
+    panel.close()
