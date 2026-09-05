@@ -906,9 +906,8 @@ class MainWindow(QMainWindow):
         # No overall bar: each running video already has one, and a third
         # bar summarising them was just more to read. The last line is the
         # one thing those bars cannot say -- when the whole queue ends.
-        self.progress_detail_label = QLabel("")
-        self.progress_detail_label.setStyleSheet("color: #666;")
-        layout.addWidget(self.progress_detail_label)
+        # No separate queue line: the ETA rides on the status line above,
+        # which otherwise only said how many videos were running.
         layout.addStretch(1)
 
         return panel
@@ -2247,19 +2246,24 @@ class MainWindow(QMainWindow):
         return f"video {index + 1}"
 
     def _update_run_status(self) -> None:
-        """Names what is running now, however many that is."""
+        """How much is running, and when the queue ends.
+
+        Deliberately nameless: every running video has its own line directly
+        below carrying its name, percentage, rate and time left, so listing
+        the names here said the same thing twice -- and with two long file
+        names it was the longest line on screen for no information.
+        """
         running = [i for i in self._running_jobs if i not in self._finished_jobs]
         total = len(self._job_rows)
         if not running:
             return
         if len(running) == 1:
-            index = running[0]
-            self.status_label.setText(
-                f"Running: {self._job_label(index)}  (file {index + 1} of {total})"
-            )
+            summary = f"Running {running[0] + 1} of {total}"
         else:
-            names = ", ".join(self._job_label(i) for i in running)
-            self.status_label.setText(f"Running {len(running)} of {total} together: {names}")
+            summary = f"Running {len(running)} of {total} together"
+        seconds = self._queue_eta_seconds()
+        eta = "calculating..." if seconds is None else format_hms(seconds)
+        self.status_label.setText(f"{summary}   ·   Queue ETA: {eta}")
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs in the
@@ -2277,22 +2281,7 @@ class MainWindow(QMainWindow):
                 parts.append(f"{format_hms(max(0, total - current) / fps)} left")
             self.job_progress_labels[slot].setText("   ·   ".join(parts))
 
-        self._update_queue_eta()
-
-    def _update_queue_eta(self) -> None:
-        """The one line under the per-video bars, and only ever this.
-
-        It used to carry whichever video reported last -- its name, its rate,
-        its own ETA -- so with two running it flickered between them several
-        times a second and could not be read at all. Everything per-video
-        already has a line of its own; what is left for this one is the thing
-        those lines cannot say, which is when the queue as a whole ends.
-        """
-        seconds = self._queue_eta_seconds()
-        self.progress_detail_label.setText(
-            "Queue ETA: calculating..." if seconds is None
-            else f"Queue ETA: {format_hms(seconds)}"
-        )
+        self._update_run_status()
 
     def _queue_eta_seconds(self) -> float | None:
         """When the LAST video will finish, not when the work would be done
@@ -2352,10 +2341,7 @@ class MainWindow(QMainWindow):
         slot = self._job_line_slot.get(index)
         if slot is not None:
             self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message}")
-        if len(self._running_jobs) - len(self._finished_jobs) <= 1:
-            self.status_label.setText(message)
-        else:
-            self._update_run_status()
+        self._update_run_status()
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was
@@ -2461,7 +2447,6 @@ class MainWindow(QMainWindow):
             )
         else:
             self.status_label.setText("Done.")
-        self.progress_detail_label.setText("")
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
         # Rows removed mid-run are skipped rather than indexed into.
