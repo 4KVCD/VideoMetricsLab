@@ -48,7 +48,14 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 - Automatic VMAF model selection (the 4K model is used when the distorted
   video is UHD or higher; otherwise the standard model), overridable in the UI.
 - A Settings tab for the ffmpeg location, where results and exports are kept,
-  and what new rows default to.
+  what new rows default to, and how many videos are scored at once.
+- Optional parallel scoring. libvmaf does not keep a many-core CPU busy on its
+  own, so a second video largely fills the idle capacity rather than competing
+  for it. Measured on a 24-core machine over four 1080p comparisons with the
+  app's defaults (auto-crop, GPU decode): 22.6s at one at a time, 14.4s at two
+  (1.57x), and no further gain at three. Scores are identical either way -- it
+  changes how fast results arrive, never what they are, so it takes no part in
+  cache identity.
 
 Comparisons whose timelines or geometry are ambiguous are refused rather than
 scored: mismatched frame rates, mismatched durations (unless a duration limit

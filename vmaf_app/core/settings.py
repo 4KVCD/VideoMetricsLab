@@ -29,6 +29,14 @@ class Settings:
     default_compute_ssim: bool = False
     default_compute_xpsnr: bool = False
 
+    # How many videos to score at once. libvmaf does not saturate a modern
+    # many-core CPU on its own -- a single run leaves roughly half of a
+    # 24-core machine idle -- so a second job largely fills the gap rather
+    # than competing for it. Kept out of VmafOptions on purpose: it changes
+    # how fast results arrive, never what they are, so it must not take part
+    # in cache identity.
+    parallel_jobs: int = 1
+
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True
 

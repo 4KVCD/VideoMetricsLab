@@ -1091,21 +1091,93 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
 
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
+    """Queue progress counts what jobs have actually reported.
+
+    It used to assume every earlier job was finished, which was only true
+    while jobs ran strictly one after another. With several in flight an
+    earlier index says nothing about whether that job is done.
+    """
     win = MainWindow()
     row_a = win._add_table_row(Path("a.mp4"))
     row_b = win._add_table_row(Path("b.mp4"))
     win._job_rows = [win._rows[row_a], win._rows[row_b]]
-    win._job_total_frames = [1000, 4000]  # job 0 already fully done (1000 frames), job 1 in progress
+    win._job_total_frames = [1000, 4000]
 
-    # Now on job index 1 (the second job), 2000/4000 frames in, at 50fps.
+    win._mark_job_over(0)  # job 0 really has finished: all 1000 frames
     win._on_job_progress(1, current=2000, total=4000, fps=50.0)
 
-    # queue_total = 5000, queue_done = 1000 (job 0, all of it) + 2000 (job 1 so far) = 3000
+    # queue_total = 5000, queue_done = 1000 + 2000 = 3000
     # queue_remaining = 2000 frames at 50fps = 40s
     assert "Queue ETA: 0:00:40" in win.progress_detail_label.text()
-    # File ETA: 2000 frames remaining in job 1 at 50fps = 40s (coincidentally also 40s here)
     assert "File ETA: 0:00:40" in win.progress_detail_label.text()
-    assert "(file 2 of 2)" in win.progress_detail_label.text()
+    assert "file 2 of 2" in win.progress_detail_label.text()
+
+
+def test_queue_progress_does_not_assume_earlier_jobs_have_finished(qapp):
+    # The parallel case: job 1 is running while job 0 still is too, so job
+    # 0's frames must not be counted as done.
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 4000]
+
+    win._on_job_progress(1, current=2000, total=4000, fps=50.0)
+
+    # queue_done is 2000 of 5000, not 3000: nothing has said job 0 is over.
+    assert win.progress_bar.value() == 40
+    assert "Queue ETA: 0:01:00" in win.progress_detail_label.text()
+
+
+def test_two_running_jobs_drain_the_queue_at_their_combined_rate(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+
+    win._on_job_progress(0, current=500, total=1000, fps=25.0)
+    win._on_job_progress(1, current=500, total=1000, fps=25.0)
+
+    # 1000 frames left, and they are being consumed at 50fps between them,
+    # not 25 -- the whole point of running two at once.
+    assert "Queue ETA: 0:00:20" in win.progress_detail_label.text()
+    assert "50.0 fps total" in win.progress_detail_label.text()
+
+
+def test_a_finished_job_stops_counting_towards_the_combined_rate(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+
+    win._on_job_progress(0, current=1000, total=1000, fps=25.0)
+    win._mark_job_over(0)
+    win._on_job_progress(1, current=0, total=1000, fps=25.0)
+
+    # 1000 frames left at 25fps = 40s. Leaving the finished job's rate in
+    # would have claimed 20s and the estimate would never be met.
+    assert "Queue ETA: 0:00:40" in win.progress_detail_label.text()
+
+
+def test_the_status_line_names_every_video_running_at_once(qapp):
+    win = MainWindow()
+    for name in ("encode-a.mp4", "encode-b.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+
+    win._on_job_started(0, "encode-a")
+    assert "Running: encode-a" in win.status_label.text()
+
+    win._on_job_started(1, "encode-b")
+    text = win.status_label.text()
+    assert "Running 2 of 2 together" in text
+    assert "encode-a" in text and "encode-b" in text
+
+    win._mark_job_over(0)
+    assert "Running: encode-b" in win.status_label.text()
 
 
 def test_job_progress_with_zero_fps_shows_no_eta(qapp):
