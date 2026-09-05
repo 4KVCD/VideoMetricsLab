@@ -2998,7 +2998,7 @@ def test_queue_eta_is_bounded_by_the_slowest_remaining_video(qapp):
     for name in ("quick.mp4", "slow.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win.parallel_jobs_spin.setValue(2)
+    win.parallel_jobs_check.setChecked(True)
     win._job_total_frames = [10, 1000]
 
     # Both running at 1 fps: 10s left on one, 1000s on the other.
@@ -3013,7 +3013,7 @@ def test_queue_eta_schedules_waiting_videos_onto_free_lanes(qapp):
     for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win.parallel_jobs_spin.setValue(2)
+    win.parallel_jobs_check.setChecked(True)
     win._job_total_frames = [100, 100, 100, 100]
 
     # Two running at 1 fps with 100s each; two more queued at the same rate.
@@ -3039,7 +3039,7 @@ def test_the_parallel_control_stays_usable_during_a_run(qapp):
     win = MainWindow()
     win._set_run_ui_active(True)
 
-    assert win.parallel_jobs_spin.isEnabled()
+    assert win.parallel_jobs_check.isEnabled()
     assert not win.run_btn.isEnabled()
     assert not win.options_box.isEnabled()
 
@@ -3058,7 +3058,7 @@ def test_changing_the_control_reaches_a_running_worker(qapp):
     win = MainWindow()
     win._worker = FakeWorker()
 
-    win.parallel_jobs_spin.setValue(2)
+    win.parallel_jobs_check.setChecked(True)
 
     assert win._worker.applied == [2]
     assert win._settings.parallel_jobs == 2

@@ -49,8 +49,8 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   video is UHD or higher; otherwise the standard model), overridable in the UI.
 - A Settings tab for the ffmpeg location, where results and exports are kept,
   and what new rows default to.
-- Optional parallel scoring, set next to the Run button and adjustable while a
-  run is in progress. libvmaf does not keep a many-core CPU busy on its own, so
+- Optional parallel scoring -- one tick box beside the Run button, adjustable
+  while a run is in progress. libvmaf does not keep a many-core CPU busy on its own, so
   a second video largely fills the idle capacity rather than competing for it.
   Measured on a 24-core machine over four 1080p comparisons with the app's
   defaults (auto-crop, GPU decode): 22.6s one at a time against 14.4s at two,

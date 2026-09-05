@@ -848,22 +848,27 @@ class MainWindow(QMainWindow):
         # CPU is half idle, and the Settings tab is locked during a run.
         cores = os.cpu_count() or 1
         run_row.addSpacing(16)
-        run_row.addWidget(QLabel("Score at once:"))
-        self.parallel_jobs_spin = QSpinBox()
-        self.parallel_jobs_spin.setRange(1, MAX_PARALLEL_JOBS)
-        self.parallel_jobs_spin.setValue(self._settings.parallel_jobs)
-        self.parallel_jobs_spin.setMinimumWidth(74)
-        self.parallel_jobs_spin.setToolTip(
-            f"How many videos are scored simultaneously on this {cores}-core "
-            "machine. libvmaf does not keep a many-core CPU busy on its own, "
-            "so a second video largely fills the idle capacity rather than "
-            "competing for it.\n\nCan be changed while a run is in progress: "
-            "raising it starts another video straight away, lowering it lets "
-            "the running ones finish first.\n\nOnly affects how fast results "
-            "arrive, never what they are."
+        # A checkbox rather than a number: the choice is only ever one or
+        # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
+        # what it was counting.
+        self.parallel_jobs_check = QCheckBox(
+            "Run 2 metric calculations in parallel (better multi-core utilization)"
         )
-        self.parallel_jobs_spin.valueChanged.connect(self._on_parallel_jobs_changed)
-        run_row.addWidget(self.parallel_jobs_spin)
+        self.parallel_jobs_check.setChecked(
+            self._settings.parallel_jobs >= MAX_PARALLEL_JOBS
+        )
+        self.parallel_jobs_check.setToolTip(
+            f"Scores two videos simultaneously on this {cores}-core "
+            "machine. libvmaf does not keep a many-core CPU busy on its "
+            "own, so a second video largely fills the idle capacity "
+            "rather than competing for it.\n\nCan be changed while a run "
+            "is in progress: ticking it starts another video straight "
+            "away, unticking it lets the running ones finish first."
+            "\n\nOnly affects how fast results arrive, never what they "
+            "are."
+        )
+        self.parallel_jobs_check.toggled.connect(self._on_parallel_jobs_changed)
+        run_row.addWidget(self.parallel_jobs_check)
         run_row.addStretch(1)
 
         load_btn = QPushButton("Load saved run...")
@@ -2161,7 +2166,7 @@ class MainWindow(QMainWindow):
         self.cancel_btn.setEnabled(True)
         self.progress_bar.setValue(0)
 
-        self._worker = VmafWorker(jobs, self._settings.parallel_jobs, self)
+        self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
         self._worker.job_started.connect(self._on_job_started)
         self._worker.progress.connect(self._on_job_progress)
         self._worker.status.connect(self._on_job_status)
@@ -2183,15 +2188,20 @@ class MainWindow(QMainWindow):
         # Deliberately left enabled: it changes how fast the queue drains,
         # never what any result means, and it is during a run that someone
         # wants it.
-        self.parallel_jobs_spin.setEnabled(True)
+        self.parallel_jobs_check.setEnabled(True)
 
-    def _on_parallel_jobs_changed(self, count: int) -> None:
-        """Applies the new count now, and remembers it for next time.
+    def _parallel_jobs(self) -> int:
+        """How many videos may be scored at once, as a count."""
+        return MAX_PARALLEL_JOBS if self.parallel_jobs_check.isChecked() else 1
 
-        A run already in progress picks it up: raising the count lets a
-        waiting lane start the next video immediately, and lowering it stops
-        another from starting without interrupting anything already going.
+    def _on_parallel_jobs_changed(self, _checked: bool) -> None:
+        """Applies the choice now, and remembers it for next time.
+
+        A run already in progress picks it up: ticking lets a waiting lane
+        start the next video immediately, and unticking stops another from
+        starting without interrupting anything already going.
         """
+        count = self._parallel_jobs()
         self._settings.parallel_jobs = count
         self._settings.save()
         if self._worker is not None and self._worker.isRunning():
@@ -2352,7 +2362,7 @@ class MainWindow(QMainWindow):
         # A lane per video already running (there can be more than the
         # current setting, if it was lowered mid-run), plus any idle lanes.
         lanes = list(running_seconds)
-        lanes += [0.0] * max(0, self.parallel_jobs_spin.value() - len(lanes))
+        lanes += [0.0] * max(0, self._parallel_jobs() - len(lanes))
         if not lanes:
             return 0.0
         # Longest first onto the earliest-free lane: the usual greedy
