@@ -33,7 +33,7 @@ def _read_exact(stream, size: int) -> bytes:
 
 
 class _PairDecodeWorker(QThread):
-    frame_ready = Signal(int, int, bytes, int, int)
+    frame_available = Signal(int)
     decode_started = Signal(int, str)
     decode_failed = Signal(int, str)
     playback_ended = Signal(int)
@@ -60,6 +60,35 @@ class _PairDecodeWorker(QThread):
         self._realtime = realtime
         self._cancelled = threading.Event()
         self._process = ProcessHandle()
+        self._frame_lock = threading.Lock()
+        self._latest_frame: tuple[int, bytes, int, int] | None = None
+        self._notification_pending = False
+
+    def take_latest_frame(self) -> tuple[int, bytes, int, int] | None:
+        """Return the newest decoded frame without copying it through a Qt signal.
+
+        PySide converts a ``bytes`` signal argument to and from ``QByteArray``.
+        For a UHD comparison preview that made the GUI thread copy roughly 9 MB
+        per frame, while also allowing an unbounded queue of stale frames.  The
+        worker now owns one replaceable slot and signals only that data is ready.
+        """
+        with self._frame_lock:
+            frame = self._latest_frame
+            self._latest_frame = None
+            self._notification_pending = False
+            return frame
+
+    def _publish_frame(
+        self, frame_number: int, payload: bytes, width: int, height: int
+    ) -> None:
+        notify = False
+        with self._frame_lock:
+            self._latest_frame = (frame_number, payload, width, height)
+            if not self._notification_pending:
+                self._notification_pending = True
+                notify = True
+        if notify:
+            self.frame_available.emit(self.generation)
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -94,7 +123,11 @@ class _PairDecodeWorker(QThread):
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                bufsize=0,
+                # Let BufferedReader assemble each raw frame in C.  An
+                # unbuffered Windows pipe often returns only a few KiB per
+                # read, which made Python loop thousands of times per UHD
+                # preview frame and starved the GUI thread of the GIL.
+                bufsize=frame_bytes,
             )
             assert process.stdout is not None
             assert process.stderr is not None
@@ -119,9 +152,7 @@ class _PairDecodeWorker(QThread):
                         self.decode_started.emit(
                             self.generation, f"GPU decode: {plan.describe()}"
                         )
-                    self.frame_ready.emit(
-                        self.generation, frame_number, payload, width, height
-                    )
+                    self._publish_frame(frame_number, payload, width, height)
                     frame_number += 1
                     if not self._realtime:
                         break
@@ -357,7 +388,7 @@ class VideoCompareView(QWidget):
             realtime=realtime,
             parent=self,
         )
-        worker.frame_ready.connect(self._on_frame_ready)
+        worker.frame_available.connect(self._on_frame_available)
         worker.decode_started.connect(self._on_decode_started)
         worker.decode_failed.connect(self._on_decode_failed)
         worker.playback_ended.connect(self._on_playback_ended)
@@ -381,11 +412,16 @@ class VideoCompareView(QWidget):
             self._worker = None
         worker.deleteLater()
 
-    def _on_frame_ready(
-        self, generation: int, frame: int, payload: bytes, width: int, height: int
-    ) -> None:
+    def _on_frame_available(self, generation: int) -> None:
         if generation != self._generation:
             return
+        worker = self._worker
+        if worker is None:
+            return
+        latest = worker.take_latest_frame()
+        if latest is None:
+            return
+        frame, payload, width, height = latest
         self._frame = frame
         self.video.set_pair(payload, width, height)
         comparison = self._comparison

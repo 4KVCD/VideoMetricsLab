@@ -14,6 +14,7 @@ from vmaf_app.core.video_playback import (
     build_video_pair_command,
     playback_dimensions,
 )
+from vmaf_app.ui.video_compare_view import _PairDecodeWorker
 
 
 def _info(path: str, codec: str = "hevc") -> VideoInfo:
@@ -113,3 +114,36 @@ def test_frame_compare_playback_has_no_qt_multimedia_dependency():
     ).read_text(encoding="utf-8")
 
     assert "QtMultimedia" not in module
+
+
+def test_pair_worker_coalesces_frames_without_copying_payload_through_qt():
+    worker = _PairDecodeWorker(
+        7,
+        _comparison(),
+        0,
+        PreviewColorSettings(),
+        (2, 2),
+        HwAccelPlan(),
+        realtime=True,
+    )
+    notifications: list[int] = []
+    worker.frame_available.connect(notifications.append)
+
+    worker._publish_frame(10, b"old", 2, 2)
+    worker._publish_frame(11, b"new", 2, 2)
+
+    assert notifications == [7]
+    assert worker.take_latest_frame() == (11, b"new", 2, 2)
+
+    worker._publish_frame(12, b"next", 2, 2)
+    assert notifications == [7, 7]
+
+
+def test_pair_worker_uses_a_full_frame_pipe_buffer():
+    module = (
+        Path(__file__).resolve().parent.parent
+        / "vmaf_app" / "ui" / "video_compare_view.py"
+    ).read_text(encoding="utf-8")
+
+    assert "bufsize=frame_bytes" in module
+    assert "bufsize=0" not in module
