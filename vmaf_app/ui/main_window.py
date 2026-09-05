@@ -38,7 +38,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -230,9 +229,9 @@ class MainWindow(QMainWindow):
         self._job_fps: dict[int, float] = {}
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
-        # job index -> which of the per-video progress bars it owns. Held for
-        # the life of the job so a bar never jumps to a different video.
-        self._job_bar_slot: dict[int, int] = {}
+        # job index -> which of the per-video lines it owns. Held for the
+        # life of the job so a line never jumps to a different video.
+        self._job_line_slot: dict[int, int] = {}
         self._run_failed_count = 0
         self._run_was_cancelled = False
         # Whether a run owns the window's settings right now. Read by
@@ -892,33 +891,17 @@ class MainWindow(QMainWindow):
         # readable lines rather than a single bar flickering between them.
         # Built once and hidden, because rows appearing and disappearing
         # mid-run would shift everything below them on every job boundary.
-        self.job_progress_bars: list[QProgressBar] = []
+        # One line of text per running video. No bar: the percentage is the
+        # only thing a bar was conveying, it says it exactly rather than
+        # approximately, and two bars stacked above a third read as a block
+        # of chrome rather than as a status.
         self.job_progress_labels: list[QLabel] = []
         for _ in range(MAX_PARALLEL_JOBS):
-            # The caption is a label beside the bar rather than the bar's own
-            # text: the Windows style ignores QProgressBar.setAlignment and
-            # pins it to the right edge, where a file name reads as belonging
-            # to whatever sits next to the bar instead of to the bar.
-            caption = QLabel()
-            caption.setMinimumWidth(320)
-            caption.setStyleSheet("color: #444;")
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setTextVisible(True)
-            bar.setFormat("%p%")
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 0, 0, 0)
-            row.addWidget(caption)
-            row.addWidget(bar, stretch=1)
-            container = QWidget()
-            container.setLayout(row)
-            container.setVisible(False)
-            layout.addWidget(container)
-            self.job_progress_bars.append(bar)
-            self.job_progress_labels.append(caption)
-            # The row is what gets shown and hidden; the bar is what tests and
-            # updates address, so it keeps a reference back to its row.
-            bar.setProperty("progress_row", container)
+            line = QLabel()
+            line.setStyleSheet("color: #444;")
+            line.setVisible(False)
+            layout.addWidget(line)
+            self.job_progress_labels.append(line)
 
         # No overall bar: each running video already has one, and a third
         # bar summarising them was just more to read. The last line is the
@@ -2148,10 +2131,10 @@ class MainWindow(QMainWindow):
         self._job_fps = {}
         self._running_jobs = []
         self._finished_jobs = set()
-        self._job_bar_slot = {}
-        for bar in self.job_progress_bars:
-            bar.property("progress_row").setVisible(False)
-            bar.setValue(0)
+        self._job_line_slot = {}
+        for line in self.job_progress_labels:
+            line.setVisible(False)
+            line.clear()
         self._run_failed_count = 0
         self._run_was_cancelled = False
         if already_scored_rows:
@@ -2225,26 +2208,21 @@ class MainWindow(QMainWindow):
         if index not in self._running_jobs:
             self._running_jobs.append(index)
         self._job_frames_done.setdefault(index, 0)
-        self._assign_progress_bar(index, label)
+        self._assign_progress_line(index, label)
         self._update_run_status()
 
-    def _assign_progress_bar(self, index: int, label: str) -> None:
-        """Gives this job a bar of its own, reusing one a finished job left."""
-        if index in self._job_bar_slot:
+    def _assign_progress_line(self, index: int, label: str) -> None:
+        """Gives this job a line of its own, reusing one a finished job left."""
+        if index in self._job_line_slot:
             return
-        taken = set(self._job_bar_slot.values())
-        for slot, bar in enumerate(self.job_progress_bars):
+        taken = set(self._job_line_slot.values())
+        for slot, line in enumerate(self.job_progress_labels):
             if slot in taken:
                 continue
-            self._job_bar_slot[index] = slot
-            bar.setValue(0)
-            self.job_progress_labels[slot].setText(f"{label} — starting…")
-            bar.property("progress_row").setVisible(True)
+            self._job_line_slot[index] = slot
+            line.setText(f"{label} — starting…")
+            line.setVisible(True)
             return
-
-    def _job_bar(self, index: int) -> QProgressBar | None:
-        slot = self._job_bar_slot.get(index)
-        return None if slot is None else self.job_progress_bars[slot]
 
     def _mark_job_over(self, index: int) -> None:
         """Retires a job from the live figures.
@@ -2256,9 +2234,9 @@ class MainWindow(QMainWindow):
         """
         self._finished_jobs.add(index)
         self._job_fps.pop(index, None)
-        slot = self._job_bar_slot.pop(index, None)
+        slot = self._job_line_slot.pop(index, None)
         if slot is not None:
-            self.job_progress_bars[slot].property("progress_row").setVisible(False)
+            self.job_progress_labels[slot].setVisible(False)
         if 0 <= index < len(self._job_total_frames):
             self._job_frames_done[index] = self._job_total_frames[index]
         self._update_run_status()
@@ -2290,15 +2268,14 @@ class MainWindow(QMainWindow):
         self._job_frames_done[index] = current
         self._job_fps[index] = fps
 
-        slot = self._job_bar_slot.get(index)
+        slot = self._job_line_slot.get(index)
         if slot is not None:
-            pct = int(100 * current / total) if total > 0 else 0
-            self.job_progress_bars[slot].setValue(min(pct, 100))
-            detail = (
-                f"{fps:.1f} fps · {format_hms(max(0, total - current) / fps)} left"
-                if fps > 0 else "starting…"
-            )
-            self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {detail}")
+            pct = min(100, int(100 * current / total)) if total > 0 else 0
+            parts = [f"{self._job_label(index)} — {pct}%"]
+            if fps > 0:
+                parts.append(f"{fps:.1f} fps")
+                parts.append(f"{format_hms(max(0, total - current) / fps)} left")
+            self.job_progress_labels[slot].setText("   ·   ".join(parts))
 
         self._update_queue_eta()
 
@@ -2372,7 +2349,7 @@ class MainWindow(QMainWindow):
         to tell which file it was about, and it erased the line naming what
         was running.
         """
-        slot = self._job_bar_slot.get(index)
+        slot = self._job_line_slot.get(index)
         if slot is not None:
             self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message}")
         if len(self._running_jobs) - len(self._finished_jobs) <= 1:
@@ -2474,8 +2451,8 @@ class MainWindow(QMainWindow):
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
-        for bar in self.job_progress_bars:
-            bar.property("progress_row").setVisible(False)
+        for line in self.job_progress_labels:
+            line.setVisible(False)
         if self._run_was_cancelled:
             self.status_label.setText("Cancelled.")
         elif self._run_failed_count:

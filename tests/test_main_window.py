@@ -2922,16 +2922,15 @@ def test_each_running_video_gets_its_own_progress_line(qapp):
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
 
-    assert win.job_progress_bars[0].property("progress_row").isVisibleTo(win)
-    assert win.job_progress_bars[1].property("progress_row").isVisibleTo(win)
+    assert win.job_progress_labels[0].isVisibleTo(win)
+    assert win.job_progress_labels[1].isVisibleTo(win)
 
     win._on_job_progress(0, current=250, total=1000, fps=25.0)
     win._on_job_progress(1, current=750, total=1000, fps=50.0)
 
-    assert win.job_progress_bars[0].value() == 25
-    assert win.job_progress_bars[1].value() == 75
-    assert "a" in win.job_progress_labels[0].text()
-    assert "b" in win.job_progress_labels[1].text()
+    # The percentage is stated, not drawn.
+    assert "a — 25%" in win.job_progress_labels[0].text()
+    assert "b — 75%" in win.job_progress_labels[1].text()
     assert "25.0 fps" in win.job_progress_labels[0].text()
 
 
@@ -2944,12 +2943,12 @@ def test_a_finished_video_frees_its_progress_line_for_the_next(qapp):
 
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
-    slot_of_a = win._job_bar_slot[0]
+    slot_of_a = win._job_line_slot[0]
     win._mark_job_over(0)
     win._on_job_started(2, "c")
 
-    assert win._job_bar_slot[2] == slot_of_a, "the freed line was not reused"
-    assert 0 not in win._job_bar_slot
+    assert win._job_line_slot[2] == slot_of_a, "the freed line was not reused"
+    assert 0 not in win._job_line_slot
 
 
 def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
@@ -3093,8 +3092,52 @@ def test_the_last_line_says_only_the_queue_eta(qapp):
     assert second == "Queue ETA: 0:00:20"
 
 
-def test_there_is_no_overall_queue_progress_bar(qapp):
-    # Each running video has a bar; a third summarising them was only more
-    # to read.
+def test_there_are_no_progress_bars_at_all(qapp):
+    # Each running video states its own percentage, and the queue line states
+    # the ETA. Nothing is left for a bar to add.
     win = MainWindow()
     assert not hasattr(win, "progress_bar")
+    assert not hasattr(win, "job_progress_bars")
+
+
+
+def test_a_running_video_states_its_percentage_in_words(qapp):
+    """A bar shows roughly how far along a video is; the number says exactly,
+    in the same line that already carries the name, rate and time left."""
+    win = MainWindow()
+    win._add_table_row(Path("encode.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "encode")
+
+    win._on_job_progress(0, current=333, total=1000, fps=20.0)
+
+    text = win.job_progress_labels[0].text()
+    assert text == "encode — 33%   ·   20.0 fps   ·   0:00:33 left"
+
+
+def test_a_video_with_no_rate_yet_shows_only_its_percentage(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("encode.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "encode")
+
+    win._on_job_progress(0, current=5, total=1000, fps=0.0)
+
+    assert win.job_progress_labels[0].text() == "encode — 0%"
+
+
+def test_a_finished_video_leaves_its_line(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100, 100]
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+
+    win._mark_job_over(0)
+
+    assert not win.job_progress_labels[0].isVisible()
+    assert 0 not in win._job_line_slot
