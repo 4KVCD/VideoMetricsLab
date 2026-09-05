@@ -920,11 +920,9 @@ class MainWindow(QMainWindow):
             # updates address, so it keeps a reference back to its row.
             bar.setProperty("progress_row", container)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setFormat("Queue: %p%")
-        self.progress_bar.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.progress_bar)
+        # No overall bar: each running video already has one, and a third
+        # bar summarising them was just more to read. The last line is the
+        # one thing those bars cannot say -- when the whole queue ends.
         self.progress_detail_label = QLabel("")
         self.progress_detail_label.setStyleSheet("color: #666;")
         layout.addWidget(self.progress_detail_label)
@@ -2164,7 +2162,6 @@ class MainWindow(QMainWindow):
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         self.cancel_btn.setEnabled(True)
-        self.progress_bar.setValue(0)
 
         self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
         self._worker.job_started.connect(self._on_job_started)
@@ -2303,28 +2300,22 @@ class MainWindow(QMainWindow):
             )
             self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {detail}")
 
-        # The bar is the whole queue's progress, not one file's. With several
-        # videos running at once a per-file bar would jump backwards every
-        # time a different one reported, and even alone the queue is the
-        # figure worth watching.
-        queue_total = sum(self._job_total_frames) or 0
-        queue_done = sum(self._job_frames_done.values())
-        pct = int(100 * queue_done / queue_total) if queue_total > 0 else 0
-        self.progress_bar.setValue(min(pct, 100))
+        self._update_queue_eta()
 
-        file_count = len(self._job_rows)
-        combined_fps = sum(rate for rate in self._job_fps.values() if rate > 0)
-        parts = []
-        if fps > 0:
-            parts.append(f"{self._job_label(index)}: {fps:.1f} fps")
-            parts.append(f"File ETA: {format_hms(max(0, total - current) / fps)}")
-        queue_eta = self._queue_eta_seconds()
-        if queue_eta is not None:
-            parts.append(f"Queue ETA: {format_hms(queue_eta)}")
-            if len([r for r in self._job_fps.values() if r > 0]) > 1:
-                parts.append(f"{combined_fps:.1f} fps total")
-        parts.append(f"file {index + 1} of {file_count}")
-        self.progress_detail_label.setText("   |   ".join(parts))
+    def _update_queue_eta(self) -> None:
+        """The one line under the per-video bars, and only ever this.
+
+        It used to carry whichever video reported last -- its name, its rate,
+        its own ETA -- so with two running it flickered between them several
+        times a second and could not be read at all. Everything per-video
+        already has a line of its own; what is left for this one is the thing
+        those lines cannot say, which is when the queue as a whole ends.
+        """
+        seconds = self._queue_eta_seconds()
+        self.progress_detail_label.setText(
+            "Queue ETA: calculating..." if seconds is None
+            else f"Queue ETA: {format_hms(seconds)}"
+        )
 
     def _queue_eta_seconds(self) -> float | None:
         """When the LAST video will finish, not when the work would be done
@@ -2491,10 +2482,8 @@ class MainWindow(QMainWindow):
             self.status_label.setText(
                 f"Finished with {self._run_failed_count} failed video(s)."
             )
-            self.progress_bar.setValue(100)
         else:
             self.status_label.setText("Done.")
-            self.progress_bar.setValue(100)
         self.progress_detail_label.setText("")
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
