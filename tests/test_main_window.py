@@ -2922,16 +2922,17 @@ def test_each_running_video_gets_its_own_progress_line(qapp):
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
 
-    assert win.job_progress_bars[0].isVisibleTo(win)
-    assert win.job_progress_bars[1].isVisibleTo(win)
+    assert win.job_progress_bars[0].property("progress_row").isVisibleTo(win)
+    assert win.job_progress_bars[1].property("progress_row").isVisibleTo(win)
 
     win._on_job_progress(0, current=250, total=1000, fps=25.0)
     win._on_job_progress(1, current=750, total=1000, fps=50.0)
 
     assert win.job_progress_bars[0].value() == 25
     assert win.job_progress_bars[1].value() == 75
-    assert "a" in win.job_progress_bars[0].format()
-    assert "b" in win.job_progress_bars[1].format()
+    assert "a" in win.job_progress_labels[0].text()
+    assert "b" in win.job_progress_labels[1].text()
+    assert "25.0 fps" in win.job_progress_labels[0].text()
 
 
 def test_a_finished_video_frees_its_progress_line_for_the_next(qapp):
@@ -2966,8 +2967,8 @@ def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
 
     win._on_job_status(1, "Detecting black bars in source...")
 
-    assert "Detecting black bars" in win.job_progress_bars[1].format()
-    assert "encode-b" in win.job_progress_bars[1].format()
+    assert "Detecting black bars" in win.job_progress_labels[1].text()
+    assert "encode-b" in win.job_progress_labels[1].text()
     # The overall line still says what is running, rather than being taken
     # over by one lane's phase message.
     assert "encode-a" in win.status_label.text()
