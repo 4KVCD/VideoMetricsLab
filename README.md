@@ -50,8 +50,9 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 - A Settings tab for the ffmpeg location, where results and exports are kept,
   and what new rows default to.
 - Optional parallel scoring -- one tick box beside the Run button, adjustable
-  while a run is in progress. libvmaf does not keep a many-core CPU busy on its own, so
-  a second video largely fills the idle capacity rather than competing for it.
+  while a run is in progress. libvmaf does not keep a many-core CPU busy on
+  its own, so a second video largely fills the idle capacity rather than
+  competing for it.
   Measured on a 24-core machine over four 1080p comparisons with the app's
   defaults (auto-crop, GPU decode): 22.6s one at a time against 14.4s at two,
   1.57x. A third gained nothing (14.5s), which is why two is the maximum.
@@ -95,7 +96,7 @@ py -3 -m venv .venv
 .venv\Scripts\python.exe -m pytest
 ```
 
-543 tests, all offscreen (no window appears) and none of which touch your
+577 tests, all offscreen (no window appears) and none of which touch your
 real settings file or results cache.
 
 `tests/smoke_run.py` is a manual end-to-end check (not part of the pytest
