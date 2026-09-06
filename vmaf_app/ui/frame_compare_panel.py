@@ -230,6 +230,18 @@ class FrameComparePanel(QWidget):
         self.color_status_label.setStyleSheet("color: #666;")
         color_row.addWidget(QLabel("HDR preview:"))
         color_row.addWidget(self.color_mode_combo)
+        self.source_resolution_combo = QComboBox()
+        self.source_resolution_combo.addItem("Native resolution", True)
+        self.source_resolution_combo.addItem("Downscale to encoded resolution", False)
+        self.source_resolution_combo.setToolTip(
+            "Playback only. Keep the cropped source at native resolution, or downscale "
+            "it to fit the selected encode's cropped resolution. Both fit the window. "
+            "Changing this may briefly buffer. Metric calculations are unaffected."
+        )
+        self.source_resolution_combo.setEnabled(False)
+        self.source_resolution_combo.currentIndexChanged.connect(self._on_source_resolution_changed)
+        color_row.addWidget(QLabel("Source playback:"))
+        color_row.addWidget(self.source_resolution_combo)
         color_row.addWidget(self.color_status_label, stretch=1)
         root.addLayout(color_row)
 
@@ -256,8 +268,9 @@ class FrameComparePanel(QWidget):
         self.play_btn.clicked.connect(self._on_play_clicked)
         self.audio_checkbox = QCheckBox("Audio")
         self.audio_checkbox.setToolTip(
-            "Only one soundtrack plays. GPU SDR preview keeps the first encode's audio "
-            "continuous while switching pictures; native HDR follows the selected encode."
+            "GStreamer plays one source soundtrack continuously across S and encode switches. "
+            "Missing/unsupported source audio stays silent. The FFmpeg fallback uses the "
+            "first encode's soundtrack. Video buffering also pauses audio."
         )
         self.audio_checkbox.setChecked(True)
         self.audio_checkbox.toggled.connect(self._on_audio_toggled)
@@ -517,6 +530,7 @@ class FrameComparePanel(QWidget):
         return view
 
     def _on_view_mode_changed(self, _index: int) -> None:
+        self.source_resolution_combo.setEnabled(self.is_video_mode)
         self._update_enabled_state()
         self._update_labels()
         if self.is_video_mode:
@@ -532,6 +546,10 @@ class FrameComparePanel(QWidget):
             self.content_stack.setCurrentWidget(self.viewer)
             self._generation += 1
             self._show_or_request()
+
+    def _on_source_resolution_changed(self, _index: int) -> None:
+        if self.is_video_mode:
+            self._load_current_video()
 
     def _load_current_video(self, playing: bool | None = None) -> None:
         entry = self.current_entry
@@ -549,6 +567,7 @@ class FrameComparePanel(QWidget):
             position_ms,
             playing=playing,
             color_settings=self._color_settings(),
+            source_native=bool(self.source_resolution_combo.currentData()),
             series=[item.comparison for item in self._entries
                     if view.can_play(item.comparison)[0]],
         ):
@@ -915,5 +934,9 @@ class FrameComparePanel(QWidget):
         worker.deleteLater()
 
     def _cancel_workers(self) -> None:
-        for worker in self.live_workers():
-            worker.cancel()
+        # live_workers also includes playback and native teardown threads for
+        # close-event lifetime protection. Only extraction belongs to this
+        # cancellation scope; video_view.clear() owns playback shutdown.
+        for worker in tuple(self._workers):
+            if worker.isRunning():
+                worker.cancel()

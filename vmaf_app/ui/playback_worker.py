@@ -72,17 +72,19 @@ class StreamDecodeWorker(QThread):
         accel = self.plan.source if self.side == "source" else self.plan.distorted
         modes = ("vulkan", "transfer", "software", "cpu") if accel else ("software", "cpu")
         errors = self.attempt_errors
+        next_frame = self.start_frame
         for mode in modes:
             if self._cancelled:
                 return
             command = build_video_series_command(
-                [self.comparison], self.start_frame, self.settings, [self.plan], self.maximum,
+                [self.comparison], next_frame, self.settings, [self.plan], self.maximum,
                 realtime=True, processing=mode, side=self.side, paced=False,
             )
             process = None
             reader = None
             tail = deque(maxlen=30)
             first = True
+            attempt_error = ""
             try:
                 process = proc.popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes)
                 self._handle.attach(process.pid)
@@ -96,12 +98,13 @@ class StreamDecodeWorker(QThread):
 
                 reader = threading.Thread(target=drain, daemon=True)
                 reader.start()
-                frame = self.start_frame
                 while not self._cancelled:
                     # BufferedReader assembles this in C, avoiding thousands
                     # of tiny Python reads and their GIL overhead on Windows.
                     payload = process.stdout.read(frame_bytes)
                     if len(payload) != frame_bytes:
+                        if payload:
+                            attempt_error = "Decoder returned a truncated frame."
                         break
                     if first:
                         first = False
@@ -114,13 +117,13 @@ class StreamDecodeWorker(QThread):
                         if errors:
                             detail += " · retry: " + errors[-1].splitlines()[0][:180]
                         self.ready.emit(detail)
-                    if not self._put(frame, payload):
+                    if not self._put(next_frame, payload):
                         return
-                    frame += 1
+                    next_frame += 1
                 if not self._cancelled:
                     process.wait()
             except Exception as exc:
-                errors.append(str(exc))
+                attempt_error = str(exc)
             finally:
                 if process is not None:
                     if process.poll() is None:
@@ -136,12 +139,12 @@ class StreamDecodeWorker(QThread):
             if self._cancelled:
                 return
             detail = b"".join(tail).decode("utf-8", errors="replace").strip()
-            if not first:
+            if not first and not attempt_error and process is not None and process.returncode == 0:
                 self.ended = True
-                if process is not None and process.returncode:
-                    self.error = detail or "Video decoding stopped unexpectedly."
-                    self.failed.emit(self.error[-1500:])
                 return
-            errors.append(detail or "Decoder produced no frames.")
+            # Retain already queued complete frames and resume at the first
+            # missing frame. This also handles device loss after startup,
+            # without replaying old frames or creating unbounded retry loops.
+            errors.append(detail or attempt_error or "Decoder produced no frames.")
         self.error = errors[-1] if errors else "Decoder produced no frames."
         self.failed.emit(self.error[-1500:])

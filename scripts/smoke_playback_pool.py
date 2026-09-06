@@ -33,7 +33,14 @@ def main():
     parser.add_argument("--require-gstreamer", action="store_true")
     parser.add_argument("--exercise-seek", action="store_true")
     parser.add_argument("--audio", action="store_true")
+    parser.add_argument("--locked", action="store_true")
+    parser.add_argument("--stall", action="store_true")
     args = parser.parse_args()
+    if args.locked:
+        from vmaf_app.ui import native_playback_pool
+        from vmaf_app.ui.locked_native_pool import LockedNativePool
+
+        native_playback_pool.NativePlaybackPool = LockedNativePool
     app = QApplication.instance() or QApplication([])
     source = probe_video(args.source)
 
@@ -62,6 +69,8 @@ def main():
     start = time.monotonic()
     view.load(series[0], round(args.start * 1000), playing=True, color_settings=settings, series=series)
     maximum = 0
+    stall_installed = False
+    av_errors = []
     process = psutil.Process()
     cpu_start = None
     measured_start = None
@@ -73,9 +82,25 @@ def main():
         while time.monotonic() - start < args.seconds:
             app.processEvents()
             count = len(view._pool) if view._native_pool is None else len(view._native_pool.entries)
-            count += sum(w.isRunning() for w in view._retired_workers)
+            count += sum(w.isRunning() and getattr(w, "counts_as_decoder", True) for w in view._retired_workers)
             maximum = max(maximum, count)
             elapsed = time.monotonic() - start
+            pool = view._native_pool
+            if args.locked and pool is not None:
+                if args.stall and not stall_installed:
+                    original_pull = pool._pull_sample
+
+                    def stalled_pull(key, sink, original=original_pull):
+                        if key[0] == "distorted" and 4 < time.monotonic() - start < 6:
+                            return None
+                        return original(key, sink)
+
+                    pool._pull_sample = stalled_pull
+                    stall_installed = True
+                if pool.audio_running:
+                    audio_ms = pool.audio.poll()
+                    if audio_ms is not None:
+                        av_errors.append(abs(audio_ms - pool.position))
             peak_rss = max(peak_rss, process.memory_info().rss)
             if elapsed > 3 and cpu_start is None:
                 cpu_start = sum(process.cpu_times()[:2])
@@ -119,6 +144,7 @@ def main():
                   "status": statuses[-8:], "positions": len(samples), "details": {str(k): v for k, v in view._details.items()},
                   "first_frame_seconds": samples[0][0] - start if samples else None}
         result["peak_rss_mib"] = peak_rss / 1024**2
+        result["max_running_av_difference_ms"] = max(av_errors, default=None)
         if cpu_start is not None:
             result["steady_cpu_cores"] = (sum(process.cpu_times()[:2]) - cpu_start) / (time.monotonic() - measured_start)
         result["native_streams"] = {}
@@ -138,8 +164,6 @@ def main():
                     time.sleep(.1)
                     view.screen().grabWindow(int(view.winId())).save(str(
                         args.snapshot_dir / ("source.png" if source_side else "distorted.png")))
-                    view.screen().grabWindow(0).save(str(
-                        args.snapshot_dir / ("source-screen.png" if source_side else "distorted-screen.png")))
         result["attempt_errors"] = {str(k): w.attempt_errors for k, w in view._pool.items() if w.attempt_errors}
         if len(samples) > 1 and not args.exercise_seek:
             wall = samples[-1][0] - samples[0][0]

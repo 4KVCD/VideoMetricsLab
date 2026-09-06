@@ -15,6 +15,10 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   distorted videos without losing the current position, zoom, or pan. Video
   playback keeps a rolling pool of **at most four videos**: source, current
   encode, and the current encode's left/right neighbours (wrapping at the ends).
+  The **Source playback** selector keeps the cropped source at native resolution
+  (default), or downsizes it to fit the selected encode's cropped resolution.
+  Both modes preserve aspect ratio and fit the window; metric settings and
+  saved results are unchanged. Changing this selector may briefly buffer.
   Switching retains the already-playing neighbour; only the new outer neighbour
   is prepared in the background. Very rapid navigation or software decoding
   can still require buffering. Windows playback now prefers GStreamer/D3D11:
@@ -27,9 +31,18 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   one GPU upload. Decoder support is build-specific: the installed GStreamer
   build also software-decodes High-10 H.264. Those decoders can still consume
   substantial CPU and RAM. Native HDR retains the original HDR signal for a
-  10-bit swapchain. The pool shares a clock, but does not guarantee frame-locked
-  presentation across independent sinks under load. Still mode is the
-  frame-exact comparison option.
+  10-bit swapchain. Matching-rate playback now pairs source/encode GPU samples
+  by timeline frame before submitting either side to one native renderer.
+  Holding S selects the other sample from that pair; it does not switch clocks
+  or independent rendering windows. Queues remain bounded to three samples per
+  stream plus the appsink queues. Frame matching assumes aligned, constant-rate
+  inputs; different frame rates use the labelled FFmpeg fallback.
+  One audio-only GStreamer pipeline plays the source's default audio track
+  continuously across visual switches. Its media position paces paired video;
+  a decoder stall pauses/repositions audio rather than accumulating drift.
+  Unsupported or absent source audio leaves video playback silent. This is
+  software timeline synchronization, not a guarantee of calibrated speaker/
+  monitor hardware latency. Still mode remains available for exact inspection.
   If the native path is unavailable, the existing FFmpeg/Vulkan/libplacebo
   preview remains available with bounded Python RGBA queues and progressively
   more compatible GPU/CPU fallbacks. Unmanaged preview uses that fallback.

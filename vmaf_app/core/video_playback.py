@@ -1,6 +1,7 @@
 """ffmpeg commands for frame-locked source/distorted video playback."""
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
@@ -15,7 +16,27 @@ from vmaf_app.core.frame_extract import (
     hdr_kind,
 )
 from vmaf_app.core.gpu import HwAccelPlan
+from vmaf_app.core.models import ScaleDirection
 from vmaf_app.core.vmaf_runner import _hw_native_format
+
+
+def source_playback_comparison(comparison, native=True):
+    """Independent source-only geometry; never mutate metric recipes.
+
+    Matching an encode only downsizes the source, preserving its aspect ratio.
+    Crops are applied before comparing sizes. Smaller sources are not enlarged.
+    """
+    source, crop = comparison.source_info, comparison.source_crop
+    width, height = (crop.w, crop.h) if crop else (source.width, source.height)
+    if not native:
+        encoded, encoded_crop = comparison.distorted_info, comparison.distorted_crop
+        ew, eh = (encoded_crop.w, encoded_crop.h) if encoded_crop else (encoded.width, encoded.height)
+        factor = min(1.0, ew / width, eh / height)
+        if factor < 1:
+            width, height = max(2, int(width * factor) // 2 * 2), max(2, int(height * factor) // 2 * 2)
+    return replace(comparison, distorted_info=replace(source, width=width, height=height),
+                   distorted_crop=None, scale_direction=ScaleDirection.SOURCE_TO_DISTORTED,
+                   resample_target=None)
 
 
 def neighbour_indices(count: int, selected: int) -> tuple[int, ...]:

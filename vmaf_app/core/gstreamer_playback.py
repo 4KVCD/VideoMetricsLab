@@ -190,10 +190,13 @@ class GstComparePipeline:
         show_source: bool = False,
         audio_enabled: bool = True,
         single_side: str | None = None,
+        sample_output: bool = False,
+        device=None,
     ) -> None:
         gst, gst_video = _load_gstreamer()
         self.Gst = gst
         self._comparison = comparison
+        self._sample_output = sample_output
         self._pipeline = gst.Pipeline.new("comparison")
         if self._pipeline is None:
             raise GStreamerPlaybackError("Could not create the GStreamer pipeline.")
@@ -207,16 +210,16 @@ class GstComparePipeline:
         self._initial_seek_sent = False
         self._tone_mappers = []
         self._tone_error = None
-        self._device = None
-        if needs_sdr_tonemap(settings) and any(
+        self._device = device
+        if device is not None or (needs_sdr_tonemap(settings) and any(
             hdr_kind(i) for i in (comparison.source_info, comparison.distorted_info)
-        ):
+        )):
             import gi
 
             gi.require_version("GstD3D11", "1.0")
             from gi.repository import GstD3D11
 
-            self._device = GstD3D11.D3D11Device.new(0, 0)
+            self._device = device or GstD3D11.D3D11Device.new(0, 0)
             if self._device is None:
                 raise GStreamerPlaybackError("Could not create the D3D11 processing device")
             self._pipeline.set_context(GstD3D11.d3d11_context_new(self._device))
@@ -316,19 +319,27 @@ class GstComparePipeline:
                 self._tone_probe, (mapper, retag),
             )
         capsfilter.set_property("caps", caps)
-        sink = self._make("d3d11videosink", f"{side}-video-sink")
-        sink.set_property("force-aspect-ratio", True)
+        sink = self._make("appsink" if self._sample_output else "d3d11videosink", f"{side}-video-sink")
+        if self._sample_output:
+            # Retain references to GPU textures, not CPU-mapped pixel arrays.
+            sink.set_property("sync", False)
+            sink.set_property("max-buffers", 3)
+            sink.set_property("drop", False)
+            sink.set_property("wait-on-eos", False)
+        else:
+            sink.set_property("force-aspect-ratio", True)
         sink.set_property("enable-last-sample", False)
         # HDR and wide-gamut content needs a 10-bit DXGI swapchain.  The sink
         # chooses the matching Windows colour space from the negotiated caps.
         if (
-            not tone_map and settings.display_hdr_enabled is True
+            not self._sample_output and not tone_map and settings.display_hdr_enabled is True
             and _native_colorimetry(info) is not None
         ):
             sink.set_property("display-format", 24)  # R10G10B10A2_UNORM
-        if tone_map:
+        if tone_map and not self._sample_output:
             sink.set_property("display-format", 28)  # R8G8B8A8_UNORM SDR
-        gst_video.VideoOverlay.set_window_handle(sink, window_handle)
+        if not self._sample_output:
+            gst_video.VideoOverlay.set_window_handle(sink, window_handle)
         # CPU-only decoders (including H.266) upload once, before GPU cropping.
         chain = [queue, upload, gpu_memory, crop, convert, capsfilter]
         if retag is not None:
@@ -378,7 +389,7 @@ class GstComparePipeline:
         name = self._stream_caps_name(stream)
         if name.startswith("video/"):
             return 1
-        if side == "distorted" and name.startswith("audio/"):
+        if not self._sample_output and side == "distorted" and name.startswith("audio/"):
             return 1
         return 0
 

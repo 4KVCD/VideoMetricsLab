@@ -345,6 +345,25 @@ def test_new_gpu_surfaces_receive_source_and_navigation_keys(qapp, tmp_path):
     panel.close()
 
 
+def test_source_resolution_option_preserves_seek_and_metric_recipe(qapp, tmp_path):
+    panel = FrameComparePanel()
+    entry = _physical_entry(tmp_path, "resolution")
+    original = entry.comparison
+    panel.set_runs([entry])
+    assert not panel.source_resolution_combo.isEnabled()
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.set_frame(24)
+    assert panel.video_view._source_native
+    panel.source_resolution_combo.setCurrentIndex(1)
+    assert not panel.video_view._source_native
+    assert panel.video_view.position == 1000
+    assert panel.current_entry.comparison is original
+    panel.source_resolution_combo.setCurrentIndex(0)
+    assert panel.video_view._source_native
+    assert panel.video_view.position == 1000
+    panel.close()
+
+
 def test_top_arrow_button_switches_while_playback_is_requested(
     qapp, tmp_path, monkeypatch
 ):

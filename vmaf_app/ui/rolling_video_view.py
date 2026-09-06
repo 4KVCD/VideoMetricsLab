@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QImage, QPainter
 
 from vmaf_app.core.frame_extract import PreviewColorSettings
 from vmaf_app.core.gpu import GpuVendor, plan_hwaccel
-from vmaf_app.core.video_playback import neighbour_indices, playback_dimensions
+from vmaf_app.core.video_playback import neighbour_indices, playback_dimensions, source_playback_comparison
 from vmaf_app.ui.playback_worker import StreamDecodeWorker
 from vmaf_app.ui.video_compare_view import VideoCompareView, _PairedFrameWidget
 
@@ -50,6 +50,7 @@ class RollingVideoCompareView(VideoCompareView):
         super().__init__(parent)
         self._series = []
         self._selected = 0
+        self._source_native = True
         self._pool = {}
         self._history = {}
         self._details = {}
@@ -90,7 +91,7 @@ class RollingVideoCompareView(VideoCompareView):
     def live_workers(self):
         return list(dict.fromkeys([*super().live_workers(), *self._pool.values()]))
 
-    def load(self, comparison, position_ms, *, playing=False, color_settings=None, series=None):
+    def load(self, comparison, position_ms, *, playing=False, color_settings=None, series=None, source_native=True):
         available, reason = self.can_play(comparison)
         if not available:
             self.clear()
@@ -99,7 +100,7 @@ class RollingVideoCompareView(VideoCompareView):
         series = list(series or [comparison])
         settings = color_settings or PreviewColorSettings()
         selected = series.index(comparison)
-        if self._series == series and self._color_settings == settings and self._comparison is not None:
+        if self._series == series and self._color_settings == settings and self._comparison is not None and self._source_native == source_native:
             timestamp = self.position
             changed = self._selected != selected
             self._selected = selected
@@ -128,6 +129,7 @@ class RollingVideoCompareView(VideoCompareView):
                 self._restart_decoder(realtime=playing)
             return True
         self._series = series
+        self._source_native = source_native
         self._selected = selected
         self._comparison = comparison
         self._color_settings = settings
@@ -147,13 +149,14 @@ class RollingVideoCompareView(VideoCompareView):
 
         native, reason = uses_native_gstreamer(self._comparison, self._color_settings)
         if native:
-            from vmaf_app.ui.native_playback_pool import NativePlaybackPool
+            from vmaf_app.ui.locked_native_pool import LockedNativePool as NativePlaybackPool
 
             self._stop_decoder()
             self._stop_audio()
             try:
                 self._native_pool = NativePlaybackPool(self, self._series, self._selected,
-                                                       self.position, self._color_settings, realtime)
+                                                        self.position, self._color_settings, realtime,
+                                                        source_native=self._source_native)
                 self.source_video.hide()
                 self.distorted_video.hide()
                 self._is_playing = self._wanted_playing = bool(realtime)
@@ -197,19 +200,15 @@ class RollingVideoCompareView(VideoCompareView):
             self.status_changed.emit(text)
 
     def _source_recipe(self):
-        # Source processing must not depend on which encode is currently
-        # selected. Decode it at its own crop resolution; the surface fits it
-        # into the window. Never launch a second source decoder.
-        item = self._comparison
-        return replace(item, distorted_info=item.source_info,
-                       distorted_crop=item.source_crop, fps=self._series[0].fps)
+        return replace(source_playback_comparison(self._comparison, self._source_native),
+                       fps=self._series[0].fps)
 
     def _sync_pool(self):
         if not self._pool_active:
             return
         source = self._source_recipe()
         crop = source.source_crop
-        source_key = ("source", str(source.source_info.path), None if crop is None else (crop.w, crop.h, crop.x, crop.y))
+        source_key = ("source", str(source.source_info.path), None if crop is None else (crop.w, crop.h, crop.x, crop.y), playback_dimensions(source, self._pool_maximum))
         desired = {source_key: (source, "source")}
         for index in neighbour_indices(len(self._series), self._selected):
             desired[("distorted", index)] = (replace(self._series[index], fps=self._series[0].fps), "distorted")
