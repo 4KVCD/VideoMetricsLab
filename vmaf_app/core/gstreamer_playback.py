@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any
 
 from vmaf_app.core.frame_extract import (
@@ -54,6 +55,13 @@ def _load_gstreamer() -> tuple[Any, Any]:
         from gi.repository import Gst, GstVideo
 
         Gst.init(None)
+        # Keep hardware decode in the same graphics API as processing/output.
+        # D3D12 currently outranks D3D11 by default and can introduce a bridge
+        # (or download/upload) before this application's D3D11 renderer.
+        for name in ("d3d11h264dec", "d3d11h265dec", "d3d11av1dec", "d3d11vp9dec"):
+            factory = Gst.ElementFactory.find(name)
+            if factory is not None:
+                factory.set_rank(max(factory.get_rank(), int(Gst.Rank.PRIMARY) + 16))
         required = (
             "uridecodebin3", "d3d11upload",
             "d3d11convert", "d3d11videosink", "videocrop",
@@ -85,29 +93,38 @@ def gstreamer_available() -> tuple[bool, str]:
 def uses_native_gstreamer(
     comparison: FrameComparison, settings: PreviewColorSettings
 ) -> tuple[bool, str]:
-    """Whether GStreamer can preserve the requested colour presentation.
-
-    GStreamer's D3D11 sink presents PQ/HLG through a 10-bit HDR swapchain, but
-    it is not a high-quality HDR-to-SDR tone mapper.  Those two explicit SDR
-    cases continue through the existing FFmpeg/zscale/tonemap path until a
-    libplacebo render element is added.
-    """
+    """Require the explicit GPU shader for HDR content on an SDR output."""
     available, reason = gstreamer_available()
     if not available:
         return False, reason
+    if settings.mode == PreviewColorMode.UNMANAGED:
+        return False, "unmanaged preview uses FFmpeg to bypass automatic sink color handling"
+    if settings.mode == PreviewColorMode.HDR_TO_SDR and any(
+        not info.color_transfer or info.color_transfer in {"unknown", "unspecified"}
+        for info in (comparison.source_info, comparison.distorted_info)
+    ):
+        return False, "forced HDR interpretation of untagged video uses FFmpeg"
     inputs_are_hdr = any(
         hdr_kind(info) is not None
         for info in (comparison.source_info, comparison.distorted_info)
     )
-    if settings.mode == PreviewColorMode.HDR_TO_SDR:
-        return False, "explicit HDR-to-SDR preview uses the FFmpeg tone mapper"
-    if (
-        settings.mode == PreviewColorMode.DISPLAY_AWARE
-        and inputs_are_hdr
-        and settings.display_hdr_enabled is not True
-    ):
-        return False, "the display is not in HDR mode, so HDR is tone-mapped to SDR"
+    if inputs_are_hdr and needs_sdr_tonemap(settings):
+        from vmaf_app.core.d3d11_tonemap import available
+
+        if not available():
+            return False, "native HDR-to-SDR helper is not built; using FFmpeg tone mapping"
+        if any(hdr_kind(info) and info.color_primaries.casefold() not in {
+            "bt2020", "bt.2020", "", "unknown", "unspecified"
+        } for info in (comparison.source_info, comparison.distorted_info)):
+            return False, "non-BT.2020 HDR primaries use the FFmpeg color converter"
     return True, ""
+
+
+def needs_sdr_tonemap(settings: PreviewColorSettings) -> bool:
+    return settings.mode == PreviewColorMode.HDR_TO_SDR or (
+        settings.mode == PreviewColorMode.DISPLAY_AWARE
+        and settings.display_hdr_enabled is not True
+    )
 
 
 def _crop_edges(info: VideoInfo, crop: CropBox | None) -> tuple[int, int, int, int]:
@@ -172,6 +189,7 @@ class GstComparePipeline:
         *,
         show_source: bool = False,
         audio_enabled: bool = True,
+        single_side: str | None = None,
     ) -> None:
         gst, gst_video = _load_gstreamer()
         self.Gst = gst
@@ -187,6 +205,21 @@ class GstComparePipeline:
         self._ready = False
         self._pending_initial_seek_ms: int | None = None
         self._initial_seek_sent = False
+        self._tone_mappers = []
+        self._tone_error = None
+        self._device = None
+        if needs_sdr_tonemap(settings) and any(
+            hdr_kind(i) for i in (comparison.source_info, comparison.distorted_info)
+        ):
+            import gi
+
+            gi.require_version("GstD3D11", "1.0")
+            from gi.repository import GstD3D11
+
+            self._device = GstD3D11.D3D11Device.new(0, 0)
+            if self._device is None:
+                raise GStreamerPlaybackError("Could not create the D3D11 processing device")
+            self._pipeline.set_context(GstD3D11.d3d11_context_new(self._device))
 
         self._decoders: dict[str, Any] = {}
         self._sinks: dict[str, Any] = {}
@@ -194,8 +227,16 @@ class GstComparePipeline:
             "source": int(source_window_handle),
             "distorted": int(distorted_window_handle),
         }
-        for side, handle in handles.items():
-            self._build_video_branch(side, handle, settings, gst_video)
+        if single_side is not None:
+            if single_side not in handles:
+                raise ValueError("invalid video side")
+            handles = {single_side: handles[single_side]}
+        try:
+            for side, handle in handles.items():
+                self._build_video_branch(side, handle, settings, gst_video)
+        except Exception:
+            self.stop()
+            raise
         # Window stacking controls visibility; both sinks remain clocked and
         # presenting so switching never changes either branch's playback state.
         self.set_show_source(show_source)
@@ -227,7 +268,7 @@ class GstComparePipeline:
         decoder.connect("select-stream", self._select_stream, side)
         decoder.connect("pad-added", self._pad_added, side)
         queue = self._make("queue", f"{side}-video-queue")
-        queue.set_property("max-size-buffers", 8)
+        queue.set_property("max-size-buffers", 2)
         queue.set_property("max-size-bytes", 0)
         queue.set_property("max-size-time", 0)
         crop = self._make("videocrop", f"{side}-crop")
@@ -237,34 +278,94 @@ class GstComparePipeline:
         crop.set_property("right", right)
         crop.set_property("bottom", bottom)
         upload = self._make("d3d11upload", f"{side}-upload")
+        gpu_memory = self._make("capsfilter", f"{side}-gpu-memory")
+        gpu_memory.set_property("caps", self.Gst.Caps.from_string("video/x-raw(memory:D3D11Memory)"))
         convert = self._make("d3d11convert", f"{side}-convert")
         capsfilter = self._make("capsfilter", f"{side}-output-caps")
         caps = self.Gst.Caps.from_string(
             output_caps_string(self._comparison, settings, side)
         )
+        tone_map = hdr_kind(info) is not None and needs_sdr_tonemap(settings)
+        retag = None
+        if tone_map:
+            from vmaf_app.core.d3d11_tonemap import D3D11ToneMapper
+
+            # Force a private, high-precision converter output, not an 8-bit
+            # intermediate or the decoder's reference surface. Keep PQ/HLG
+            # encoded values until our explicit highlight mapping stage.
+            width, height = comparison_dimensions(self._comparison)
+            caps = self.Gst.Caps.from_string(
+                "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
+                f"width={width},height={height},pixel-aspect-ratio=1/1,"
+                # Gst colour enum tuple: full range, RGB matrix, PQ/HLG,
+                # BT.2020 primaries. A YUV bt2100-pq shorthand would leave
+                # limited-range RGB values for the shader to misinterpret.
+                f"colorimetry=1:1:{14 if hdr_kind(info) == 'HDR10 / PQ' else 15}:7"
+            )
+            mapper = D3D11ToneMapper(self._device, hdr_kind(info))
+            self._tone_mappers.append(mapper)
+            retag = self._make("capssetter", f"{side}-sdr-caps")
+            retag.set_property("replace", True)
+            retag.set_property("caps", self.Gst.Caps.from_string(
+                "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
+                f"width={width},height={height},pixel-aspect-ratio=1/1,"
+                "colorimetry=sRGB"
+            ))
+            capsfilter.get_static_pad("src").add_probe(
+                self.Gst.PadProbeType.BUFFER | self.Gst.PadProbeType.EVENT_DOWNSTREAM,
+                self._tone_probe, (mapper, retag),
+            )
         capsfilter.set_property("caps", caps)
         sink = self._make("d3d11videosink", f"{side}-video-sink")
         sink.set_property("force-aspect-ratio", True)
+        sink.set_property("enable-last-sample", False)
         # HDR and wide-gamut content needs a 10-bit DXGI swapchain.  The sink
         # chooses the matching Windows colour space from the negotiated caps.
         if (
-            settings.display_hdr_enabled is True
+            not tone_map and settings.display_hdr_enabled is True
             and _native_colorimetry(info) is not None
         ):
             sink.set_property("display-format", 24)  # R10G10B10A2_UNORM
+        if tone_map:
+            sink.set_property("display-format", 28)  # R8G8B8A8_UNORM SDR
         gst_video.VideoOverlay.set_window_handle(sink, window_handle)
-        self._add(decoder, queue, crop, upload, convert, capsfilter, sink)
-        for first, second in zip(
-            (queue, crop, upload, convert, capsfilter),
-            (crop, upload, convert, capsfilter, sink),
-            strict=True,
-        ):
+        # CPU-only decoders (including H.266) upload once, before GPU cropping.
+        chain = [queue, upload, gpu_memory, crop, convert, capsfilter]
+        if retag is not None:
+            chain.append(retag)
+        chain.append(sink)
+        self._add(decoder, *chain)
+        for first, second in pairwise(chain):
             if not first.link(second):
                 raise GStreamerPlaybackError(
                     f"Could not connect the {side} GPU video branch."
                 )
         self._decoders[side] = decoder
         self._sinks[side] = sink
+
+    def _tone_probe(self, _pad, probe, processing):
+        mapper, retag = processing
+        if probe.type & self.Gst.PadProbeType.EVENT_DOWNSTREAM:
+            event = probe.get_event()
+            if event.type == self.Gst.EventType.CAPS:
+                caps = event.parse_caps().copy()
+                caps.set_value("colorimetry", "sRGB")
+                # remove_field on a GI structure wrapper edits a copy, so use
+                # writable caps via their serialized structure here (once per
+                # negotiation, never per frame).
+                structure = caps.get_structure(0).copy()
+                for field in ("mastering-display-info", "content-light-level"):
+                    structure.remove_field(field)
+                output = self.Gst.Caps.new_empty()
+                output.append_structure_full(structure, caps.get_features(0).copy())
+                retag.set_property("caps", output)
+            return self.Gst.PadProbeReturn.OK
+        try:
+            mapper.render(probe.get_buffer())
+        except Exception as exc:
+            self._tone_error = str(exc)
+            return self.Gst.PadProbeReturn.DROP
+        return self.Gst.PadProbeReturn.OK
 
     @staticmethod
     def _stream_caps_name(stream) -> str:
@@ -326,6 +427,8 @@ class GstComparePipeline:
 
     def stop(self) -> None:
         self._pipeline.set_state(self.Gst.State.NULL)
+        for mapper in self._tone_mappers:
+            mapper.close()
 
     def set_playing(self, playing: bool) -> None:
         self._wanted_playing = bool(playing)
@@ -354,6 +457,24 @@ class GstComparePipeline:
         self._audio_enabled = bool(enabled)
         if self._audio_volume is not None:
             self._audio_volume.set_property("mute", not self._audio_enabled)
+
+    def align_clock(self, clock, base_time: int, media_offset_ms: int) -> None:
+        """Join a rolling pool's clock without resetting the retained streams.
+
+        A seek makes this stream's segment running-time start at zero. Sink
+        offsets place it back on the pool timeline; explicit base time keeps
+        independently prerolled pipelines synchronized, including after pause.
+        """
+        self._pipeline.use_clock(clock)
+        self._pipeline.set_start_time(self.Gst.CLOCK_TIME_NONE)
+        self._pipeline.set_base_time(base_time)
+        offset = int(media_offset_ms) * self.Gst.MSECOND
+        for sink in self._sinks.values():
+            sink.set_property("ts-offset", offset)
+        audio_sink = self._pipeline.get_by_name("distorted-audio-sink")
+        # autoaudiosink forwards ts-offset to its chosen audio sink.
+        if audio_sink is not None and audio_sink.find_property("ts-offset") is not None:
+            audio_sink.set_property("ts-offset", offset)
 
     def _decoder_factories(self, decoder) -> list[str]:
         factories: list[str] = []
@@ -399,7 +520,7 @@ class GstComparePipeline:
         }
         if any(caps is None or caps.get_size() == 0 for caps in caps_by_side.values()):
             return self._decoder_description()
-        caps = caps_by_side["distorted"]
+        caps = caps_by_side.get("distorted", next(iter(caps_by_side.values())))
         assert caps is not None
         structure = caps.get_structure(0)
         width = structure.get_value("width")
@@ -410,10 +531,12 @@ class GstComparePipeline:
         details = [f"{width}×{height} {fmt}", memory, self._decoder_description()]
         if color:
             details.insert(1, str(color))
+        if self._tone_mappers:
+            details.append("GPU HDR→SDR · fixed Reinhard 1000→100 nit")
         return " · ".join(details)
 
     def poll(self) -> PlaybackUpdate:
-        error = None
+        error = self._tone_error
         ended = False
         while True:
             message = self._bus.pop_filtered(

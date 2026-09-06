@@ -13,15 +13,33 @@ A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
   used by a completed VMAF run. Choose a frame or timestamp, hold **S** to
   reveal the source, and use the left/right arrow keys to cycle through
   distorted videos without losing the current position, zoom, or pan. Video
-  playback uses one ffmpeg filtergraph to crop, scale and tone-map both inputs,
-  then emits each source/distorted pair on one clock. Holding **S** therefore
-  flips between two halves of the same decoded frame rather than independent
-  players that can drift. Hardware decoding is selected independently per
-  input and unsupported codecs fall back to ffmpeg's software decoder. Still
+  playback keeps a rolling pool of **at most four videos**: source, current
+  encode, and the current encode's left/right neighbours (wrapping at the ends).
+  Switching retains the already-playing neighbour; only the new outer neighbour
+  is prepared in the background. Very rapid navigation or software decoding
+  can still require buffering. Windows playback now prefers GStreamer/D3D11:
+  GPU decode where supported, GPU crop/scale, and direct native-window output.
+  PQ/HLG HDR→SDR uses a native GPU shader with a 16-bit RGB intermediate,
+  fixed extended-Reinhard luminance mapping (1000→100 nit), and BT.2020→BT.709
+  conversion. Both sides use the same curve; this is not dynamic scene-based
+  tone mapping or Dolby Vision processing. Decoded pixels never pass through
+  Python on this path. H.266 uses `avdec_h266` software decoding followed by
+  one GPU upload. Decoder support is build-specific: the installed GStreamer
+  build also software-decodes High-10 H.264. Those decoders can still consume
+  substantial CPU and RAM. Native HDR retains the original HDR signal for a
+  10-bit swapchain. The pool shares a clock, but does not guarantee frame-locked
+  presentation across independent sinks under load. Still mode is the
+  frame-exact comparison option.
+  If the native path is unavailable, the existing FFmpeg/Vulkan/libplacebo
+  preview remains available with bounded Python RGBA queues and progressively
+  more compatible GPU/CPU fallbacks. Unmanaged preview uses that fallback.
+  Still
   mode remains available for direct frame seeking. PQ and HLG video or stills
   can be tone-mapped automatically for the monitor showing the app (including
-  its Windows HDR/SDR-white setting), forced to a fixed 100-nit HDR-to-SDR
-  preview, or shown unmanaged for diagnosis.
+  its Windows HDR/SDR-white setting), forced to an HDR-to-SDR preview, or
+  shown unmanaged for diagnosis. Still-frame tone mapping uses a 100-nit
+  target. Still-frame, native GPU and fallback playback tone operators differ,
+  so their appearances should not be assumed identical.
 - An independent **Bitrate Viewer** tab that can scan videos without running
   any quality metric. Its frame view plots each encoded video packet's size,
   its second view plots video bitrate in one-second intervals, and its GOP
@@ -75,9 +93,19 @@ Requires Python 3.11+ and [ffmpeg](https://www.gyan.dev/ffmpeg/builds/) **9 or
 newer** with `libvmaf` support (a "full build" includes it). Both `ffmpeg` and
 `ffprobe` are checked at startup; if either is missing, too old, or not on
 PATH, the app prompts for its location and remembers the choice. On Windows,
-the Python requirements also install GStreamer 1.28 for hardware-decoded,
+the Python requirements also install GStreamer 1.28.6 for hardware-decoded,
 D3D11-presented video comparison. HDR displays use native 10-bit PQ/HLG
-presentation; explicit HDR-to-SDR preview keeps the ffmpeg tone-map path.
+presentation. Build the small GPU HDR→SDR helper once using MinGW-w64 `g++`
+on PATH (the app safely falls back to FFmpeg if the helper is absent):
+
+```powershell
+./scripts/build_d3d11_tonemap.ps1
+```
+
+The generated `vmaf_app/native/d3d11_tonemap.dll` is ignored by Git; its source
+is `native/d3d11_tonemap.cpp`. No compiler is invoked during playback. Shader
+initialization happens on a streaming thread, not the Qt UI thread. The
+helper uses the Windows D3D11/D3DCompiler runtime and contains its C++ runtime.
 
 ```bash
 py -3 -m venv .venv
@@ -135,7 +163,7 @@ vmaf_app/
     bitrate.py       video-packet scan + frame/second/GOP aggregation
     run_io.py        save/load/CSV        result_cache.py cached run lookup
     frame_extract.py exact still-frame decode using a run's crop/scale recipe
-    video_playback.py display-sized ffmpeg tone-map fallback construction
+    video_playback.py display-sized GPU/CPU ffmpeg preview command construction
     gstreamer_playback.py synchronized GPU decode and native D3D11 presentation
     display_hdr.py   Windows monitor HDR state and configured SDR white level
     ffmpeg_locate.py tool discovery + version check
@@ -147,6 +175,9 @@ vmaf_app/
     graph_panel.py   the comparison graph tab (one sub-tab per metric)
     frame_compare_panel.py synchronized source/distorted still-frame viewer
     video_compare_view.py native, synchronized source/distorted playback surfaces
+    rolling_video_view.py four-stream pool and matching-frame presentation
+    playback_worker.py bounded FFmpeg RGBA frame queues and GPU fallback
+    native_playback_pool.py shared-clock native GPU stream lifecycle
     bitrate_panel.py independent multi-file bitrate viewer tab
     bitrate_worker.py non-blocking ffprobe packet scans
     chart.py         the plotting widget   widgets.py  reusable Qt widgets

@@ -9,3 +9,4 @@ tests_scratch/
 # stdout/stderr captured from launching the GUI
 gui_stdout.log
 gui_stderr.log
+vmaf_app/native/*.dll

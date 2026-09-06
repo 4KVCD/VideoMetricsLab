@@ -63,6 +63,28 @@ def _fake_completed_run(name: str) -> CompletedRun:
     return CompletedRun(result, name)
 
 
+def test_cached_scores_do_not_replace_fresh_hdr_preview_metadata(qapp):
+    from dataclasses import replace
+
+    from vmaf_app.core.frame_extract import hdr_kind
+
+    win = MainWindow()
+    win._source_info = replace(_fake_video_info("source.mp4"), color_transfer="smpte2084")
+    row = win._add_table_row(Path("encode.mp4"))
+    fresh = replace(_fake_video_info("encode.mp4"), color_transfer="smpte2084", color_primaries="bt2020")
+    win._rows[row].video_info = fresh
+    old = _fake_completed_run("encode.mp4").result
+    old_frames = old.frames
+    win._on_cached_found(Path("encode.mp4"), old, "encode")
+    preview = win._frame_comparison_entry(win._rows[row]).comparison
+    assert win._rows[row].video_info is fresh
+    assert hdr_kind(preview.source_info) == "HDR10 / PQ"
+    assert hdr_kind(preview.distorted_info) == "HDR10 / PQ"
+    assert win._rows[row].completed_run.result.frames is old_frames
+    assert old.distorted_info.color_transfer == ""  # cached score artifact unchanged
+    win.close()
+
+
 def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
@@ -2913,7 +2935,11 @@ def test_running_a_row_upgrades_its_entry_to_the_real_geometry(qapp, tmp_path):
     entry = win.frame_compare_panel._entries[0]
     assert entry.scores is not None
     # The detected crop now comes from the run rather than being pending.
-    assert entry.comparison == FrameComparison.from_result(result)
+    from dataclasses import replace
+    assert entry.comparison == replace(
+        FrameComparison.from_result(result), source_info=win._source_info,
+        distorted_info=win._rows[row].video_info,
+    )
     assert entry.comparison.auto_crop_pending is False
 
 

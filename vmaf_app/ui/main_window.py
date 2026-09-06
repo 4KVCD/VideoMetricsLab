@@ -1604,8 +1604,10 @@ class MainWindow(QMainWindow):
         # missing pieces from the row that found the cache entry.
         result.scale_algorithm = row_data.options.scale_algorithm
         result.resample_target = row_data.options.resample_test
-        row_data.video_info = result.distorted_info
-        self._set_row_info(row, result.distorted_info)
+        # Scores/crops come from the cache, current media descriptors do not.
+        # Older runs omitted HDR tags; replacing a fresh probe with that
+        # snapshot silently disabled tone mapping in Frame Compare.
+        self._set_row_info(row, row_data.video_info or result.distorted_info)
         self._set_row_metrics(row)
         # Keep the graph in step as results land, so opening the tab shows
         # everything without any further action.
@@ -2668,7 +2670,11 @@ class MainWindow(QMainWindow):
             return FrameComparisonEntry(
                 identity=row.completed_run.graph_identity,
                 label=row.completed_run.label,
-                comparison=FrameComparison.from_result(row.completed_run.result),
+                comparison=replace(
+                    FrameComparison.from_result(row.completed_run.result),
+                    source_info=self._source_info or row.completed_run.result.source_info,
+                    distorted_info=row.video_info or row.completed_run.result.distorted_info,
+                ),
                 scores=row.completed_run.result.frames,
             )
 

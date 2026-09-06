@@ -310,7 +310,7 @@ def test_video_mode_keeps_two_surfaces_ready_for_instant_s_switch(qapp, tmp_path
     panel.close()
 
 
-def test_switching_video_restarts_one_paired_decoder_and_preserves_seek(qapp, tmp_path):
+def test_switching_video_keeps_decoder_generation_and_preserves_seek(qapp, tmp_path):
     panel = FrameComparePanel()
     panel.set_runs([
         _physical_entry(tmp_path, "first"),
@@ -323,9 +323,25 @@ def test_switching_video_restarts_one_paired_decoder_and_preserves_seek(qapp, tm
 
     panel.cycle_distorted(1)
 
-    assert panel.video_view._generation > previous_generation
+    assert panel.video_view._generation == previous_generation
     assert panel.video_view._comparison.distorted_info.path.name == "second.mkv"
     assert panel.video_view.position == 1000
+    panel.close()
+
+
+def test_new_gpu_surfaces_receive_source_and_navigation_keys(qapp, tmp_path):
+    panel = FrameComparePanel()
+    panel.set_runs([_physical_entry(tmp_path, "a"), _physical_entry(tmp_path, "b")])
+    panel.show()
+    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    view = panel.video_view
+    view._distorted_surface.setFocus()
+    QTest.keyPress(view._distorted_surface, Qt.Key_S)
+    assert panel._showing_source
+    QTest.keyRelease(view._source_surface, Qt.Key_S)
+    assert not panel._showing_source
+    QTest.keyClick(view._distorted_surface, Qt.Key_Right)
+    assert panel._current_index == 1
     panel.close()
 
 
@@ -411,7 +427,7 @@ def test_synthetic_resolution_test_stays_still_frame_only(qapp):
     panel.close()
 
 
-def test_video_mode_discloses_native_hdr_presentation(qapp, tmp_path):
+def test_video_mode_discloses_native_hdr_or_actual_sdr_fallback(qapp, tmp_path):
     entry = _physical_entry(tmp_path, "hdr")
     entry.comparison.distorted_info.color_transfer = "smpte2084"
     entry.comparison.distorted_info.color_primaries = "bt2020"
@@ -427,6 +443,11 @@ def test_video_mode_discloses_native_hdr_presentation(qapp, tmp_path):
 
     panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
 
+    # Offscreen cannot create the native swapchain, so do not claim HDR
+    # presentation simply because the monitor metadata says HDR is enabled.
+    assert "SDR preview (native HDR unavailable)" in panel.color_status_label.text()
+    panel.video_view._pool_active = False
+    panel._update_color_status()
     status = panel.color_status_label.text()
     assert "native 10-bit D3D11 presentation" in status
     assert "tone mapping off" in status

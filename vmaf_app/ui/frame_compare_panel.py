@@ -36,7 +36,7 @@ from vmaf_app.core.frame_extract import (
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
-from vmaf_app.ui.video_compare_view import VideoCompareView
+from vmaf_app.ui.rolling_video_view import RollingVideoCompareView as VideoCompareView
 
 
 @dataclass(frozen=True)
@@ -255,6 +255,10 @@ class FrameComparePanel(QWidget):
         self.play_btn = QPushButton("▶ Play")
         self.play_btn.clicked.connect(self._on_play_clicked)
         self.audio_checkbox = QCheckBox("Audio")
+        self.audio_checkbox.setToolTip(
+            "Only one soundtrack plays. GPU SDR preview keeps the first encode's audio "
+            "continuous while switching pictures; native HDR follows the selected encode."
+        )
         self.audio_checkbox.setChecked(True)
         self.audio_checkbox.toggled.connect(self._on_audio_toggled)
         self.previous_frame_btn = QPushButton("− Frame")
@@ -412,6 +416,17 @@ class FrameComparePanel(QWidget):
             self.video_view.clear()
 
     # -------------------------------------------------------------- lifecycle
+    def closeEvent(self, event) -> None:
+        self.cancel()
+        if self.live_workers():
+            # Keep the QObject parent alive until decoder threads are reaped.
+            # This also covers a standalone panel closed before it was shown
+            # (which does not necessarily receive hideEvent).
+            event.ignore()
+            QTimer.singleShot(20, self.close)
+            return
+        super().closeEvent(event)
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if not self._window_filters_installed:
@@ -534,6 +549,8 @@ class FrameComparePanel(QWidget):
             position_ms,
             playing=playing,
             color_settings=self._color_settings(),
+            series=[item.comparison for item in self._entries
+                    if view.can_play(item.comparison)[0]],
         ):
             self.play_btn.setText("▶ Play")
         view.show_source(self._showing_source)
@@ -741,7 +758,7 @@ class FrameComparePanel(QWidget):
         side = "source" if self._showing_source else "distorted"
         info = frame_video_info(entry.comparison, side)
         kind = hdr_kind(info)
-        prefix = "Video playback · native crop/colour pipeline · " if self.is_video_mode else ""
+        prefix = "Video playback · " if self.is_video_mode else ""
         if self._color_mode == PreviewColorMode.UNMANAGED:
             self.color_status_label.setText(
                 f"{prefix}{kind or 'SDR / untagged'} input · tone mapping off"
@@ -750,6 +767,11 @@ class FrameComparePanel(QWidget):
         settings = self._color_settings()
         if self._color_mode == PreviewColorMode.HDR_TO_SDR:
             source = kind or "Untagged input (assuming HDR10 / PQ)"
+            if self.is_video_mode:
+                if kind is None and info.color_transfer not in {"", "unknown", "unspecified"}:
+                    source = "SDR input"
+                self.color_status_label.setText(f"{prefix}{source} · SDR preview")
+                return
             self.color_status_label.setText(
                 f"{prefix}{source} · fixed HDR → SDR at {settings.target_nits:g} nit"
             )
@@ -772,6 +794,9 @@ class FrameComparePanel(QWidget):
             return
         if self._display_hdr.hdr_enabled is True:
             if self.is_video_mode:
+                if self.video_view is not None and self.video_view._pool_active:
+                    self.color_status_label.setText(f"{prefix}{kind} · SDR preview (native HDR unavailable)")
+                    return
                 self.color_status_label.setText(
                     f"{prefix}{kind} · Windows HDR on · "
                     "native 10-bit D3D11 presentation · tone mapping off"
@@ -782,12 +807,14 @@ class FrameComparePanel(QWidget):
                 f"SDR white {settings.target_nits:g} nit"
             )
         elif self._display_hdr.hdr_enabled is False:
+            target = "SDR preview" if self.is_video_mode else "SDR at 100 nit"
             self.color_status_label.setText(
-                f"{prefix}{kind} · HDR → SDR at 100 nit · Windows HDR off"
+                f"{prefix}{kind} · HDR → {target} · Windows HDR off"
             )
         else:
+            target = "SDR preview" if self.is_video_mode else "SDR at 100 nit"
             self.color_status_label.setText(
-                f"{prefix}{kind} · HDR → SDR at 100 nit · "
+                f"{prefix}{kind} · HDR → {target} · "
                 "display HDR state unavailable"
             )
 
