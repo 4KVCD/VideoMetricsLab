@@ -20,7 +20,9 @@ from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VmafOpti
 from vmaf_app.core.run_io import export_csv, load_run, save_run
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.vmaf_runner import VmafRunError, run_resample_test, run_vmaf
-from vmaf_app.ui.main_window import COL_PSNR, COL_SSIM, COL_STATUS, COL_VMAF, MainWindow
+from vmaf_app.ui.main_window import (
+    COL_PSNR, COL_SSIM, COL_STATUS, COL_VMAF, COL_XPSNR, MainWindow,
+)
 
 
 def click_metric(win, row, column):
@@ -140,8 +142,9 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     row = win._add_table_row(test.path)
     win._set_row_info(row, test)
     win.distorted_table.selectRow(row)
-    click_metric(win, row, COL_VMAF)
-    click_metric(win, row, COL_PSNR)
+    # Narrow the default (all four) down to PSNR alone.
+    for column in (COL_VMAF, COL_SSIM, COL_XPSNR):
+        click_metric(win, row, column)
     assert win._rows[row].options.requested_metrics() == ("psnr",)
     assert not win.model_combo.isEnabled()
     win._rows[row].options = options_for(("psnr",))
@@ -197,14 +200,14 @@ def test_metric_scope_mixed_selection_and_graph_preference(qapp, monkeypatch):
         win._add_table_row(Path(name))
     win.distorted_table.selectRow(0)
     click_metric(win, 0, COL_PSNR)
-    assert win._rows[0].options.requested_metrics() == ("vmaf", "psnr")
-    assert win._rows[1].options.requested_metrics() == ("vmaf",)
-    # A row added later does not inherit a tick made on one existing row.
-    assert "psnr" not in win._default_options.requested_metrics()
-    # Ticking the still-unticked row while both are selected applies to both.
+    assert "psnr" not in win._rows[0].options.requested_metrics()
+    assert "psnr" in win._rows[1].options.requested_metrics()
+    # A row added later does not inherit an untick made on one existing row.
+    assert "psnr" in win._default_options.requested_metrics()
+    # Unticking the still-ticked row while both are selected applies to both.
     win.distorted_table.selectAll()
     click_metric(win, 1, COL_PSNR)
-    assert all("psnr" in rd.options.requested_metrics() for rd in win._rows)
+    assert all("psnr" not in rd.options.requested_metrics() for rd in win._rows)
     win.graph_panel.tabs.setCurrentIndex(2)
     assert Settings.load().graph_metric == "ssim"
     assert "not calculated" in win.graph_panel.metric_hint.text()

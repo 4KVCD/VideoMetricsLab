@@ -633,8 +633,14 @@ class MainWindow(QMainWindow):
                 *metric_cols, COL_STATUS,
             ],
         )
+        # Seeded from the same defaults a new row gets, rather than a fixed
+        # set: hardcoded here, the headers contradicted the Settings tab the
+        # moment either was changed.
         self.metric_header = CheckableHeaderView(
-            {COL_PSNR: False, COL_SSIM: False, COL_VMAF: True, COL_XPSNR: False},
+            {
+                col: self._metric_enabled(self._default_options, col)
+                for col, _, _ in _METRIC_COLUMNS
+            },
             self.distorted_table,
         )
         self.distorted_table.setHorizontalHeader(self.metric_header)

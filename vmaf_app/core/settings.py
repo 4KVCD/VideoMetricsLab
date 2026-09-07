@@ -12,6 +12,10 @@ from pathlib import Path
 
 from vmaf_app.core.app_paths import settings_file
 
+#: Bumped whenever a saved settings file needs upgrading in place. 1 turned
+#: the metric defaults on for files written before all four were the default.
+SETTINGS_VERSION = 1
+
 
 @dataclass
 class Settings:
@@ -24,12 +28,24 @@ class Settings:
 
     # What a newly added video starts with. Per-row settings are edited in
     # the Options panel; these are only the starting point.
+    #
+    # All four metrics, because they share one decode pass: PSNR and SSIM are
+    # libvmaf features computed from the frame pair VMAF already holds, and
+    # XPSNR is chained into the same graph. Measured on a 10s 1080p pair,
+    # adding PSNR and SSIM to VMAF cost 0.01s of 2.81s, and XPSNR another
+    # 0.8s -- against 2.2s for a second pass to fetch it separately. Leaving
+    # them off saved almost nothing and meant re-running the whole video to
+    # answer a question the first run could have answered.
     default_gpu_decode: bool = True
-    default_compute_psnr: bool = False
-    default_compute_ssim: bool = False
-    default_compute_xpsnr: bool = False
+    default_compute_psnr: bool = True
+    default_compute_ssim: bool = True
+    default_compute_xpsnr: bool = True
     default_compute_vmaf: bool = True
     graph_metric: str = "vmaf"
+
+    # Which upgrades have already been applied to the saved file. See
+    # SETTINGS_VERSION and _migrate.
+    settings_version: int = SETTINGS_VERSION
 
     # How many videos to score at once (1 or 2 -- see MAX_PARALLEL_JOBS).
     # libvmaf does not saturate a modern many-core CPU on its own, so a
@@ -65,9 +81,35 @@ class Settings:
         try:
             data = json.loads(cls.path().read_text(encoding="utf-8"))
         except Exception:
-            return cls()
+            return cls()  # no file: the dataclass defaults are already current
         known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        settings = cls(**{k: v for k, v in data.items() if k in known})
+        if settings._migrate(int(data.get("settings_version", 0))):
+            # Persisted straight away, so an upgrade happens exactly once. If
+            # it only lived in memory, a user who turned a metric back off
+            # would find it on again at every launch.
+            settings.save()
+        return settings
+
+    def _migrate(self, from_version: int) -> bool:
+        """Brings a settings file written by an older build up to date.
+
+        Returns whether anything changed. Each step is written against the
+        version it upgrades from, so a file several versions behind is
+        carried forward through all of them in order.
+        """
+        if from_version >= SETTINGS_VERSION:
+            return False
+        if from_version < 1:
+            # All four metrics come from one decode pass, so computing only
+            # VMAF saved almost no time while making PSNR/SSIM/XPSNR cost a
+            # whole second run of the video to obtain later.
+            self.default_compute_psnr = True
+            self.default_compute_ssim = True
+            self.default_compute_xpsnr = True
+            self.default_compute_vmaf = True
+        self.settings_version = SETTINGS_VERSION
+        return True
 
     def save(self) -> str | None:
         """Returns None on success, or a message to show the user."""

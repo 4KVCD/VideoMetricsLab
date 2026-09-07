@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
+from vmaf_app.core.settings import Settings
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.main_window import (
@@ -65,6 +67,21 @@ def _fake_completed_run(name: str) -> CompletedRun:
     return CompletedRun(result, name)
 
 
+def _ask_for_vmaf_only(win, row: int) -> None:
+    """Narrows a row to VMAF, matching what _fake_completed_run provides.
+
+    New rows request all four metrics, so a row holding a VMAF-only fixture
+    result is genuinely still incomplete and will be queued again. Tests
+    about *scored vs unscored* rows have to ask for what the fixture
+    actually contains, or they are testing the fixture's gaps instead.
+    """
+    options = win._rows[row].options
+    options.extra_features = []
+    options.compute_xpsnr = False
+    options.compute_vmaf = True
+    win._set_row_metrics(row)
+
+
 def test_cached_scores_do_not_replace_fresh_hdr_preview_metadata(qapp):
     from dataclasses import replace
 
@@ -87,6 +104,55 @@ def test_cached_scores_do_not_replace_fresh_hdr_preview_metadata(qapp):
     win.close()
 
 
+# ------------------------------------------------------------------ defaults
+
+
+def test_a_new_video_asks_for_all_four_metrics(qapp):
+    """All four share one decode pass, so asking for one is not cheaper.
+
+    Measured on a 10s 1080p pair: VMAF alone 2.81s, VMAF+PSNR+SSIM 2.80s,
+    all four 3.58s -- against 2.2s to fetch XPSNR in a second run later.
+    """
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+
+    assert win._rows[row].options.requested_metrics() == ("vmaf", "psnr", "ssim", "xpsnr")
+
+
+def test_an_older_settings_file_is_upgraded_to_all_four_once(tmp_path, monkeypatch):
+    """The new default has to reach installs that already have a settings file.
+
+    Those files record the previous default explicitly, so without an upgrade
+    step the change would apply to nobody who has already run the app.
+    """
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(Settings, "path", staticmethod(lambda: settings_file))
+    settings_file.write_text(
+        json.dumps({
+            "default_compute_psnr": False,
+            "default_compute_ssim": False,
+            "default_compute_xpsnr": False,
+            "parallel_jobs": 2,
+        }),
+        encoding="utf-8",
+    )
+
+    upgraded = Settings.load()
+    assert upgraded.default_compute_psnr
+    assert upgraded.default_compute_ssim
+    assert upgraded.default_compute_xpsnr
+    assert upgraded.default_compute_vmaf
+    assert upgraded.parallel_jobs == 2  # untouched settings survive
+
+    # Written back, so it happens once rather than at every launch...
+    assert json.loads(settings_file.read_text(encoding="utf-8"))["settings_version"] == 1
+
+    # ...and a later choice to turn one off is then respected, not undone.
+    upgraded.default_compute_xpsnr = False
+    upgraded.save()
+    assert not Settings.load().default_compute_xpsnr
+
+
 def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
@@ -95,6 +161,7 @@ def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
         row = win._add_table_row(Path(name))
         win._rows[row].video_info = _fake_video_info(name)
         win._rows[row].completed_run = _fake_completed_run(name)
+        _ask_for_vmaf_only(win, row)
         win._set_row_vmaf_text(row, "90.00", bold=True)
 
     win._on_run_clicked()
@@ -112,6 +179,7 @@ def test_run_clicked_only_queues_unscored_rows(qapp):
     scored_row = win._add_table_row(Path("scored.mp4"))
     win._rows[scored_row].video_info = _fake_video_info("scored.mp4")
     win._rows[scored_row].completed_run = _fake_completed_run("scored.mp4")
+    _ask_for_vmaf_only(win, scored_row)
 
     unscored_row = win._add_table_row(Path("tests/fixtures/distorted.mp4"))
     win._rows[unscored_row].video_info = _fake_video_info("tests/fixtures/distorted.mp4")
@@ -1409,13 +1477,21 @@ def test_metric_columns_are_tick_boxes_until_a_score_exists(qapp):
     win._source_info = _fake_video_info("source.mp4")
     row = win._add_table_row(Path("a.mp4"))
 
-    # PSNR/SSIM/XPSNR are off by default; VMAF is on.
-    for col in (COL_PSNR, COL_SSIM, COL_XPSNR):
+    # All four are requested by default -- they share one decode pass.
+    for col in (COL_PSNR, COL_SSIM, COL_XPSNR, COL_VMAF):
         item = win.distorted_table.item(row, col)
         assert item.text() == ""
-        assert item.checkState() == Qt.Unchecked
+        assert item.checkState() == Qt.Checked
         assert item.flags() & Qt.ItemIsUserCheckable
-    assert win.distorted_table.item(row, COL_VMAF).checkState() == Qt.Checked
+    # And the column headers agree with the rows rather than stating their own
+    # fixed set.
+    for col in (COL_PSNR, COL_SSIM, COL_XPSNR, COL_VMAF):
+        assert win.metric_header.is_checked(col)
+
+    # Unticking one leaves it unticked and empty, not "N/A".
+    win.distorted_table.item(row, COL_SSIM).setCheckState(Qt.Unchecked)
+    assert "ssim" not in win._rows[row].options.requested_metrics()
+    assert win.distorted_table.item(row, COL_SSIM).text() == ""
 
 
 def test_clicking_a_metric_tick_box_selects_that_metric_for_the_row(qapp):
@@ -1424,16 +1500,16 @@ def test_clicking_a_metric_tick_box_selects_that_metric_for_the_row(qapp):
         win._add_table_row(Path(name))
 
     # Clicking a row that is not selected applies to that row alone.
-    win.distorted_table.item(0, COL_PSNR).setCheckState(Qt.Checked)
-    assert "psnr" in win._rows[0].options.requested_metrics()
-    assert "psnr" not in win._rows[1].options.requested_metrics()
+    win.distorted_table.item(0, COL_PSNR).setCheckState(Qt.Unchecked)
+    assert "psnr" not in win._rows[0].options.requested_metrics()
+    assert "psnr" in win._rows[1].options.requested_metrics()
     # ...and does not become the default for files added later.
-    assert "psnr" not in win._default_options.requested_metrics()
+    assert "psnr" in win._default_options.requested_metrics()
 
     # Clicking one of several selected rows applies to all of them.
     win.distorted_table.selectAll()
-    win.distorted_table.item(1, COL_XPSNR).setCheckState(Qt.Checked)
-    assert all("xpsnr" in r.options.requested_metrics() for r in win._rows)
+    win.distorted_table.item(1, COL_XPSNR).setCheckState(Qt.Unchecked)
+    assert all("xpsnr" not in r.options.requested_metrics() for r in win._rows)
 
 
 def test_a_measured_metric_shows_its_score_with_no_tick_box(qapp):
@@ -1453,18 +1529,18 @@ def test_ticking_a_metric_column_header_enables_it_for_every_row(qapp):
     for name in ("a.mp4", "b.mp4"):
         win._add_table_row(Path(name))
 
-    win._on_metric_column_toggled(COL_PSNR, True)
+    win._on_metric_column_toggled(COL_PSNR, False)
 
-    assert all("name=psnr" in r.options.extra_features for r in win._rows)
+    assert all("name=psnr" not in r.options.extra_features for r in win._rows)
     assert all(
-        win.distorted_table.item(r, COL_PSNR).checkState() == Qt.Checked for r in range(2)
+        win.distorted_table.item(r, COL_PSNR).checkState() == Qt.Unchecked for r in range(2)
     )
     # The header is a statement about the table, so new files inherit it.
-    assert "psnr" in win._default_options.requested_metrics()
+    assert "psnr" not in win._default_options.requested_metrics()
 
-    win._on_metric_column_toggled(COL_PSNR, False)
-    assert all("name=psnr" not in r.options.extra_features for r in win._rows)
-    assert win.distorted_table.item(0, COL_PSNR).checkState() == Qt.Unchecked
+    win._on_metric_column_toggled(COL_PSNR, True)
+    assert all("name=psnr" in r.options.extra_features for r in win._rows)
+    assert win.distorted_table.item(0, COL_PSNR).checkState() == Qt.Checked
 
 
 def test_adding_a_metric_retains_scores_and_marks_result_partial(qapp):
