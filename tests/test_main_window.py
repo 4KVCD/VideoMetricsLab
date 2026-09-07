@@ -31,7 +31,6 @@ from vmaf_app.ui.main_window import (
     COL_PSNR,
     COL_SCALING,
     COL_SSIM,
-    COL_STATUS,
     COL_VMAF,
     COL_XPSNR,
     TAB_BITRATE,
@@ -151,6 +150,70 @@ def test_an_older_settings_file_is_upgraded_to_all_four_once(tmp_path, monkeypat
     upgraded.default_compute_xpsnr = False
     upgraded.save()
     assert not Settings.load().default_compute_xpsnr
+
+
+# ------------------------------------------------------------------ row state
+
+
+def test_the_table_has_no_status_column(qapp):
+    """The metric cells already answer it.
+
+    An unticked box means the metric was not asked for, a ticked empty one
+    means it has not been measured, and a number means it has -- so a Status
+    column reading "Not calculated" / "Partially calculated" / "Complete"
+    restated what the same row showed a few columns to its left.
+    """
+    win = MainWindow()
+    headers = [
+        win.distorted_table.horizontalHeaderItem(c).text()
+        for c in range(win.distorted_table.columnCount())
+    ]
+    assert "Status" not in headers
+    assert win.distorted_table.columnCount() == 10
+
+
+def test_a_failed_row_is_marked_on_its_name_with_the_error_on_hover(qapp):
+    # Failure is the one state the metric cells cannot fully carry: they can
+    # say "Failed", but not why.
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+
+    win._on_job_failed(0, "ffmpeg exited with 1", "Invalid data found")
+
+    name = win.distorted_table.item(row, COL_PATH)
+    assert "Failed" in name.toolTip()
+    assert "Invalid data found" in name.toolTip()
+    assert str(Path("a.mp4")) in name.toolTip()  # the path is still there
+    assert name.foreground().color().name() == "#a03030"
+
+
+def test_a_result_finished_for_other_settings_is_marked_rather_than_silent(qapp):
+    # It completed and is cached, but is deliberately not displayed, so
+    # without a mark the row would look as though nothing had happened.
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+
+    win._set_row_status(
+        row, "Finished with the previous settings; change them back to see the result."
+    )
+
+    name = win.distorted_table.item(row, COL_PATH)
+    assert "Finished with the previous settings" in name.toolTip()
+    assert name.foreground().color().name() == "#8a6d00"
+
+
+def test_a_row_returning_to_normal_loses_its_mark(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._set_row_status(row, "Failed", "some error")
+    assert win.distorted_table.item(row, COL_PATH).foreground().color().name() == "#a03030"
+
+    win._set_row_status(row, "")
+
+    name = win.distorted_table.item(row, COL_PATH)
+    assert name.foreground().color() == win.distorted_table.palette().text().color()
+    assert "some error" not in name.toolTip()
 
 
 def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
@@ -408,7 +471,7 @@ def test_path_column_fills_leftover_space_by_default(qapp):
         win.distorted_table.columnWidth(c)
         for c in (
             COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
-            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR, COL_STATUS,
+            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR,
         )
     )
     viewport = win.distorted_table.viewport().width()
@@ -477,7 +540,10 @@ def test_file_name_column_header_and_shows_just_the_name(qapp):
     row = win._add_table_row(Path("C:/videos/some_encode.mp4"))
     item = win.distorted_table.item(row, COL_PATH)
     assert item.text() == "some_encode.mp4"
-    assert item.toolTip() == str(Path("C:/videos/some_encode.mp4"))
+    # The tooltip leads with the full path, then the row's state -- which is
+    # where the Status column's information went when it was removed.
+    assert item.toolTip().startswith(str(Path("C:/videos/some_encode.mp4")))
+    assert "Not calculated" in item.toolTip()
 
 
 def test_black_bars_column_distinguishes_pending_from_disabled(qapp):
@@ -1610,7 +1676,7 @@ def test_adding_a_metric_retains_scores_and_marks_result_partial(qapp):
 
     assert win._rows[row].completed_run is not None
     assert not win._has_requested_results(win._rows[row])
-    assert win.distorted_table.item(row, COL_STATUS).text() == "Partially calculated"
+    assert win._row_state(win._rows[row]) == "Partially calculated"
     assert win.distorted_table.item(row, COL_VMAF).text() == "90.00"
     assert win.graph_panel._entries
 

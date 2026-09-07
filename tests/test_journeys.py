@@ -385,17 +385,17 @@ def test_four_videos_get_the_first_four_palette_colours(qapp):
 def test_a_probed_row_does_not_stay_greyed_out(qapp):
     # Rows show a grey "Reading..." while the probe runs; the real media
     # info must come back in normal text or a loaded row looks disabled.
-    from vmaf_app.ui.main_window import COL_INFO, COL_STATUS
+    from vmaf_app.ui.main_window import COL_INFO
 
     win = MainWindow()
     row = win._add_table_row(Path("C:/vid/a.mkv"))
     win._set_row_status(row, "Reading...")
-    assert win.distorted_table.item(row, COL_STATUS).text() == "Reading..."
+    assert win._row_state(win._rows[row]) == "Reading..."
 
     win._set_row_info(row, _info("C:/vid/a.mkv", 1920, 1080))
     after = win.distorted_table.item(row, COL_INFO).foreground().color()
     assert after == win.distorted_table.palette().text().color()
-    assert win.distorted_table.item(row, COL_STATUS).text() == "Not calculated"
+    assert win._row_state(win._rows[row]) == "Not calculated"
 
 
 def test_the_readout_fits_every_line_it_prints(qapp):

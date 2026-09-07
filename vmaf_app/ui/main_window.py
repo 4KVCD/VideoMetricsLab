@@ -110,8 +110,17 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
-    COL_STATUS,
-) = range(11)
+) = range(10)
+
+#: Row states worth colouring the file name for. Everything else the old
+#: Status column reported is now visible in the metric columns themselves --
+#: an unticked box is "not selected", a ticked empty one is "not calculated
+#: yet", a score is "done" -- so only these two, which nothing else shows,
+#: need a mark of their own.
+_STATE_COLOURS = {
+    "failed": "#a03030",
+    "stale": "#8a6d00",
+}
 
 # Metric Graphs displays results; Video Compare and Bitrate Viewer also work
 # independently of calculation. Settings remains the final page.
@@ -155,6 +164,11 @@ class RowData:
     completed_run: CompletedRun | None = None
     options: VmafOptions = field(default_factory=VmafOptions)
     analysis_status: str = ""
+    # What the old Status column's tooltip carried: an ffmpeg error, or how
+    # many frames a loaded result holds. Now shown on the file name, which
+    # is the only cell that is always present and always about the row as a
+    # whole.
+    status_detail: str = ""
     # True only for a "Test both" companion row (see
     # _add_opposite_scale_direction_rows), where options.scale_direction is
     # set explicitly and unambiguously to whichever direction this row
@@ -627,10 +641,10 @@ class MainWindow(QMainWindow):
         ))
         metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
-            0, 11, fill_column=COL_PATH,
+            0, 10, fill_column=COL_PATH,
             other_columns=[
                 COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
-                *metric_cols, COL_STATUS,
+                *metric_cols,
             ],
         )
         # Seeded from the same defaults a new row gets, rather than a fixed
@@ -648,7 +662,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setHorizontalHeaderLabels(
             [
                 "", "File name", "Media info", "Black bars", "Scaling", "Video bitrate",
-                "   PSNR (dB)", "   SSIM", "   VMAF", "   XPSNR (dB)", "Status",
+                "   PSNR (dB)", "   SSIM", "   VMAF", "   XPSNR (dB)",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -679,7 +693,6 @@ class MainWindow(QMainWindow):
         header.setStretchLastSection(False)
         self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.distorted_table.setColumnWidth(COL_CHECK, 28)
-        self.distorted_table.setColumnWidth(COL_STATUS, 125)
         self.distorted_table.setColumnWidth(COL_INFO, 150)
         self.distorted_table.setColumnWidth(COL_BLACK_BARS, 78)
         self.distorted_table.setColumnWidth(COL_SCALING, 90)
@@ -1179,7 +1192,6 @@ class MainWindow(QMainWindow):
         self.distorted_table.setItem(row, COL_BLACK_BARS, bars_item)
         self.distorted_table.setItem(row, COL_SCALING, QTableWidgetItem(""))
         self.distorted_table.setItem(row, COL_BITRATE, QTableWidgetItem(""))
-        self.distorted_table.setItem(row, COL_STATUS, QTableWidgetItem("Not calculated"))
         for col, _, _ in _METRIC_COLUMNS:
             item = QTableWidgetItem("")
             item.setTextAlignment(Qt.AlignCenter)
@@ -1255,18 +1267,51 @@ class MainWindow(QMainWindow):
                 item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
         finally:
             self._syncing_table = False
-        status = row_data.analysis_status or (
-            "No metrics selected" if not opts.requested_metrics() else
-            "Complete" if self._has_requested_results(row_data) else
-            "Partially calculated" if run is not None else "Not calculated"
-        )
-        self.distorted_table.item(row, COL_STATUS).setText(status)
-        self.distorted_table.item(row, COL_STATUS).setForeground(
-            QColor("#a03030") if status == "Failed" else self.distorted_table.palette().text().color()
-        )
+        self._refresh_row_state(row)
         self._set_row_black_bars(row)
         self._set_row_scaling(row)
-        self.distorted_table.resizeColumnToContents(COL_STATUS)
+
+    def _row_state(self, row_data: RowData) -> str:
+        """How this row's analysis stands, in one phrase.
+
+        No longer a column of its own: the metric cells already answer it.
+        An unticked box means the metric was not asked for, a ticked empty
+        one means it has not been measured yet, and a number means it has --
+        so "Not calculated", "Partially calculated" and "Complete" were
+        restating what the same row showed three columns to the left. What
+        survives here is what those cells cannot say: which stage a live job
+        is at, and why a finished job is not being shown.
+        """
+        return row_data.analysis_status or (
+            "No metrics selected" if not row_data.options.requested_metrics() else
+            "Complete" if self._has_requested_results(row_data) else
+            "Partially calculated" if row_data.completed_run is not None
+            else "Not calculated"
+        )
+
+    def _refresh_row_state(self, row: int) -> None:
+        """Puts the row's state on its file name: the full path, then the
+        state and any detail, with a colour for the two cases nothing else
+        on the row reveals."""
+        item = self.distorted_table.item(row, COL_PATH)
+        if item is None:
+            return
+        row_data = self._rows[row]
+        state = self._row_state(row_data)
+        lines = [str(row_data.path), state]
+        if row_data.status_detail:
+            lines.append(row_data.status_detail)
+        item.setToolTip("\n\n".join(lines))
+        if state == "Failed":
+            colour = _STATE_COLOURS["failed"]
+        elif state.startswith("Finished"):
+            # Done, cached, and deliberately not displayed -- see
+            # _on_job_finished. Without a mark the row would look untouched.
+            colour = _STATE_COLOURS["stale"]
+        else:
+            item.setForeground(self.distorted_table.palette().text())
+            return
+        item.setForeground(QColor(colour))
 
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
@@ -1461,8 +1506,7 @@ class MainWindow(QMainWindow):
         item = self.distorted_table.item(row, COL_INFO)
         scaling_item = self.distorted_table.item(row, COL_SCALING)
         if error:
-            self._set_row_status(row, "Failed")
-            self.distorted_table.item(row, COL_STATUS).setToolTip(error)
+            self._set_row_status(row, "Failed", error)
             item.setText("Probe failed")
             item.setToolTip(error)
             item.setForeground(Qt.red)
@@ -1604,12 +1648,10 @@ class MainWindow(QMainWindow):
         if paths:
             self._start_cache_lookup(paths)
 
-    def _set_row_status(self, row: int, text: str) -> None:
+    def _set_row_status(self, row: int, text: str, detail: str = "") -> None:
         self._rows[row].analysis_status = text
-        item = self.distorted_table.item(row, COL_STATUS)
-        if item is not None:
-            item.setText(text)
-            item.setForeground(QColor("#999"))
+        self._rows[row].status_detail = detail
+        self._refresh_row_state(row)
 
     def _start_media_probe(self, paths: list[Path]) -> None:
         """Reads media info for `paths` in the background.
@@ -1811,11 +1853,13 @@ class MainWindow(QMainWindow):
             self._set_resample_row_info(row, row_data.options.resample_test)
         else:
             self._set_row_info(row, result.distorted_info)
-        self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_STATUS).setToolTip(
-            f"{len(result.frames)} scored frames; metrics: {', '.join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))}\nLoaded from a previous run (matching files and calculation settings) -- "
-            f"right-click to recompute."
+        row_data.status_detail = (
+            f"{len(result.frames)} scored frames; metrics: "
+            + ", ".join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))
+            + "\nLoaded from a previous run (matching files and calculation settings) -- "
+            "right-click to recompute."
         )
+        self._set_row_metrics(row)
         self._sync_frame_compare()
         return True
 
@@ -1847,7 +1891,7 @@ class MainWindow(QMainWindow):
             row_data.completed_run = None
             row_data.analysis_status = ""
             self._set_row_metrics(row)
-            self.distorted_table.item(row, COL_STATUS).setToolTip("")
+            row_data.status_detail = ""
             if self._source_info is not None:
                 self._file_writes.submit(
                     f"clear cached result for {row_data.path.name}",
@@ -2131,7 +2175,7 @@ class MainWindow(QMainWindow):
             # path before row-scoped graph identities existed.
             self.graph_panel.remove_by_path(row_data.path)
         self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_STATUS).setToolTip("")
+        row_data.status_detail = ""
         self._sync_frame_compare()
 
     def _on_panel_edited(self, *_args) -> None:
@@ -2614,10 +2658,11 @@ class MainWindow(QMainWindow):
         row_data.analysis_status = ""
         if row_data.options.resample_test is None:
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
-        self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_STATUS).setToolTip(
-            f"{len(result.frames)} scored frames; metrics: {', '.join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))}"
+        row_data.status_detail = (
+            f"{len(result.frames)} scored frames; metrics: "
+            + ", ".join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))
         )
+        self._set_row_metrics(row)
         # Straight onto the graph: a run that has finished is a curve, and
         # waiting for a button press to see it serves nobody.
         self.graph_panel.add_run(
@@ -2631,10 +2676,10 @@ class MainWindow(QMainWindow):
         row = self._row_index_of(self._job_rows[index])
         if row is None:
             return  # the row was removed mid-run
-        self._set_row_status(row, "Failed")
+        self._set_row_status(
+            row, "Failed", f"{message}\n\n{stderr_tail}" if stderr_tail else message
+        )
         self._set_row_metrics(row)
-        detail = f"{message}\n\n{stderr_tail}" if stderr_tail else message
-        self.distorted_table.item(row, COL_STATUS).setToolTip(detail)
 
     def _on_run_cancelled(self) -> None:
         self._run_was_cancelled = True
@@ -2734,7 +2779,8 @@ class MainWindow(QMainWindow):
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_STATUS).setToolTip("Loaded from saved run")
+        self._rows[row].status_detail = "Loaded from saved run"
+        self._refresh_row_state(row)
         self._sync_frame_compare()
 
     def _adopt_source_from_run(self, result) -> None:

@@ -21,7 +21,7 @@ from vmaf_app.core.run_io import export_csv, load_run, save_run
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.vmaf_runner import VmafRunError, run_resample_test, run_vmaf
 from vmaf_app.ui.main_window import (
-    COL_PSNR, COL_SSIM, COL_STATUS, COL_VMAF, COL_XPSNR, MainWindow,
+    COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR, MainWindow,
 )
 
 
@@ -151,16 +151,16 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     result = run_vmaf(source, test, win._rows[row].options)
     win._job_rows = [win._rows[row]]
     win._on_job_started(0, "test")
-    assert win.distorted_table.item(row, COL_STATUS).text() == "Calculating"
+    assert win._row_state(win._rows[row]) == "Calculating"
     win._on_job_finished(0, result)
-    assert win.distorted_table.item(row, COL_STATUS).text() == "Complete"
+    assert win._row_state(win._rows[row]) == "Complete"
     assert win._has_requested_results(win._rows[row])
     assert win.graph_panel._current_metric().key == "psnr"
     assert "PSNR" in win.frame_compare_panel.detail_label.text()
     assert "VMAF" not in win.frame_compare_panel.detail_label.text()
     # Adding a requested metric preserves the measured score, not a stale blank.
     click_metric(win, row, COL_SSIM)
-    assert win.distorted_table.item(row, COL_STATUS).text() == "Partially calculated"
+    assert win._row_state(win._rows[row]) == "Partially calculated"
     assert not win._has_requested_results(win._rows[row])
     assert win._rows[row].completed_run.result.frames.has("psnr")
     assert len(win.graph_panel._entries) == 1
@@ -179,7 +179,7 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     monkeypatch.setattr("vmaf_app.ui.main_window.QFileDialog.getOpenFileName", lambda *_: (str(path), ""))
     win._on_load_saved_run()
     assert win._rows[-1].options.requested_metrics() == ("psnr",)
-    assert win.distorted_table.item(len(win._rows)-1, COL_STATUS).text() == "Complete"
+    assert win._row_state(win._rows[-1]) == "Complete"
     win.close()
 
 
