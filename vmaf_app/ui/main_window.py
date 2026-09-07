@@ -1247,6 +1247,7 @@ class MainWindow(QMainWindow):
             QColor("#a03030") if status == "Failed" else self.distorted_table.palette().text().color()
         )
         self._set_row_black_bars(row)
+        self._set_row_scaling(row)
         self.distorted_table.resizeColumnToContents(COL_STATUS)
 
     @staticmethod
@@ -1340,48 +1341,103 @@ class MainWindow(QMainWindow):
         else:
             show("Yes" if has_bars else "No", tooltip)
 
-    def _resize_mismatch(self, row: int, distorted_info: VideoInfo) -> tuple[str, str]:
-        """(short tag, full explanation) for which of the two resolutions got
+    @staticmethod
+    def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
+        """The picture that actually reaches the comparison, bars removed.
+        Mirrors vmaf_runner's own _content_size, which decides the same thing
+        for the filtergraph."""
+        return (crop.w, crop.h) if crop else (info.width, info.height)
+
+    def _resize_mismatch(self, row: int) -> tuple[str, str]:
+        """(short tag, full explanation) for which of the two videos gets
         resized to match the other, when they differ -- important now that a
         row can exist for either direction (see "Test both"), so it's not
         ambiguous which one a given row/result represents.
+
+        Compares the two videos *after* black bars come off, because that is
+        what the run itself compares. A 1920x1080 letterboxed reference and a
+        1920x804 encode of the same film are not a resize at all: they are
+        the same picture, one of them still carrying its bars. Reading the
+        stored heights literally, this column used to announce a downscale
+        that never happens.
 
         The short tag goes in its own narrow Scaling column and the full
         sentence is the tooltip: spelled out inline it made Media info far
         too wide to scan.
 
-        Uses the *actual* direction a completed run used (what really
-        produced its scores, and still right even if the row's settings were
-        edited afterward), falling back to the row's current setting before
-        it's been run -- UNLESS the row is a "Test both" companion, whose
-        direction is fixed and known for certain by construction (see
-        RowData.scale_direction_pinned): a result cached before that field
-        existed loads as SOURCE_TO_TEST regardless of what actually
-        produced it, which is simply wrong for a row that exists only to
-        represent DISTORTED_TO_SOURCE.
+        Uses the *actual* crops and direction a completed run used (what
+        really produced its scores, and still right even if the row's
+        settings were edited afterward), falling back to the row's current
+        setting before it's been run -- UNLESS the row is a "Test both"
+        companion, whose direction is fixed and known for certain by
+        construction (see RowData.scale_direction_pinned): a result cached
+        before that field existed loads as SOURCE_TO_TEST regardless of what
+        actually produced it, which is simply wrong for a row that exists
+        only to represent DISTORTED_TO_SOURCE.
         """
-        source_info = self._source_info
-        if source_info is None:
-            return "", ""
-        if (source_info.width, source_info.height) == (distorted_info.width, distorted_info.height):
-            return "", "Reference and test video are the same resolution -- no scaling needed."
         row_data = self._rows[row]
+        run = row_data.completed_run
+        if run is not None:
+            source_info, distorted_info = run.result.source_info, run.result.distorted_info
+            ref = self._content_size(source_info, run.result.source_crop)
+            dist = self._content_size(distorted_info, run.result.distorted_crop)
+        else:
+            source_info, distorted_info = self._source_info, row_data.video_info
+            if source_info is None or distorted_info is None:
+                return "", ""
+            ref = (source_info.width, source_info.height)
+            dist = (distorted_info.width, distorted_info.height)
+
+        if ref == dist:
+            return "", (
+                f"Reference and test video are compared at the same "
+                f"{ref[0]}x{ref[1]} -- no scaling needed."
+            )
+
+        if run is None and row_data.options.crop_mode != CropMode.NONE and (
+            ref[0] == dist[0] or ref[1] == dist[1]
+        ):
+            # One dimension already matches and only the other differs, which
+            # is exactly what a letterbox or pillarbox looks like. Black bars
+            # are detected when the row runs, and removing them may well
+            # leave the two the same size, so there is nothing to claim yet.
+            return "Pending", (
+                f"The reference is {source_info.width}x{source_info.height} and the test "
+                f"video {distorted_info.width}x{distorted_info.height}, a difference in one "
+                "dimension only -- the shape of black bars on one of them.\n\n"
+                "Bars are detected when this row runs, and are removed before the two are "
+                "compared, so whether any scaling is needed is known then."
+            )
+
         if row_data.scale_direction_pinned:
             direction = row_data.options.scale_direction
         else:
             direction = (
-                row_data.completed_run.result.scale_direction if row_data.completed_run is not None
+                run.result.scale_direction if run is not None
                 else row_data.options.scale_direction
             )
+        cropped = " (after black bars)" if (
+            ref != (source_info.width, source_info.height)
+            or dist != (distorted_info.width, distorted_info.height)
+        ) else ""
         if direction == ScaleDirection.DISTORTED_TO_SOURCE:
-            return "↑ distorted", (
-                f"Test video upscaled {distorted_info.width}x{distorted_info.height} -> "
-                f"{source_info.width}x{source_info.height} to match the reference."
+            return "\u2191 distorted", (
+                f"Test video upscaled {dist[0]}x{dist[1]} -> "
+                f"{ref[0]}x{ref[1]}{cropped} to match the reference."
             )
-        return "↓ source", (
-            f"Reference downscaled {source_info.width}x{source_info.height} -> "
-            f"{distorted_info.width}x{distorted_info.height} to match the test video."
+        return "\u2193 source", (
+            f"Reference downscaled {ref[0]}x{ref[1]} -> "
+            f"{dist[0]}x{dist[1]}{cropped} to match the test video."
         )
+
+    def _set_row_scaling(self, row: int) -> None:
+        item = self.distorted_table.item(row, COL_SCALING)
+        if item is None:
+            return
+        tag, explanation = self._resize_mismatch(row)
+        item.setText(tag)
+        item.setToolTip(explanation)
+        self.distorted_table.resizeColumnToContents(COL_SCALING)
 
     def _set_row_info(self, row: int, info: VideoInfo | None, error: str | None = None) -> None:
         item = self.distorted_table.item(row, COL_INFO)
@@ -1404,10 +1460,8 @@ class MainWindow(QMainWindow):
             item.setForeground(self.distorted_table.palette().text())
             item.setToolTip(format_hms(info.duration, decimals=1))
             self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
-            tag, explanation = self._resize_mismatch(row, info)
-            scaling_item.setText(tag)
-            scaling_item.setToolTip(explanation)
             self._rows[row].video_info = info
+            self._set_row_scaling(row)
             if self._rows[row].analysis_status == "Reading...":
                 self._rows[row].analysis_status = ""
                 self._set_row_metrics(row)

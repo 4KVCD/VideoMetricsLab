@@ -589,6 +589,85 @@ def test_resize_mismatch_note_absent_when_resolutions_match(qapp):
     assert win.distorted_table.item(row, COL_SCALING).text() == ""
 
 
+def test_letterboxed_reference_of_the_same_width_is_not_called_a_downscale(qapp):
+    """1920x1080 with bars against a 1920x804 encode is not a resize.
+
+    The two carry the same picture; one of them still has its bars on. This
+    column read the stored heights literally and announced a downscale that
+    the run never performs -- the bars come off first, and then the two are
+    the same size.
+    """
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mp4", 1920, 1080)
+    row = win._add_table_row(Path("a.mp4"))
+
+    win._set_row_info(row, _fake_video_info_res("a.mp4", 1920, 804))
+
+    item = win.distorted_table.item(row, COL_SCALING)
+    assert item.text() == "Pending"
+    assert "black bars" in item.toolTip()
+    assert "downscaled" not in item.toolTip()
+
+    # Once the run has actually cropped them, they are the same size and the
+    # column says so rather than staying on the fence.
+    source = _fake_video_info_res("source.mp4", 1920, 1080)
+    distorted = _fake_video_info_res("a.mp4", 1920, 804)
+    win._rows[row].completed_run = CompletedRun(
+        VmafRunResult(
+            source=source.path, distorted=distorted.path,
+            frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)], fps=30.0, model="m",
+            source_crop=CropBox(w=1920, h=804, x=0, y=138),
+            distorted_crop=CropBox(w=1920, h=804, x=0, y=0),
+            source_info=source, distorted_info=distorted,
+        ),
+        "a",
+    )
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_SCALING)
+    assert item.text() == ""
+    assert "1920x804" in item.toolTip()
+
+
+def test_a_genuine_resolution_difference_still_names_the_direction(qapp):
+    # Both dimensions differ, so no amount of black-bar cropping makes these
+    # the same picture: this really is a downscale and must be reported.
+    win = MainWindow()
+    win._source_info = _fake_video_info_res("source.mp4", 3840, 2160)
+    row = win._add_table_row(Path("a.mp4"))
+
+    win._set_row_info(row, _fake_video_info_res("a.mp4", 1920, 1080))
+
+    assert win.distorted_table.item(row, COL_SCALING).text() == "\u2193 source"
+
+
+def test_scaling_note_is_measured_after_the_crops_a_run_applied(qapp):
+    # A 4K letterboxed master against a 1080p letterboxed encode is still a
+    # downscale, but of the cropped pictures -- the tooltip must not quote
+    # heights that include bars neither side was compared with.
+    win = MainWindow()
+    source = _fake_video_info_res("source.mp4", 3840, 2160)
+    distorted = _fake_video_info_res("a.mp4", 1920, 1080)
+    win._source_info = source
+    row = win._add_table_row(distorted.path)
+    win._rows[row].completed_run = CompletedRun(
+        VmafRunResult(
+            source=source.path, distorted=distorted.path,
+            frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)], fps=30.0, model="m",
+            source_crop=CropBox(w=3840, h=1608, x=0, y=276),
+            distorted_crop=CropBox(w=1920, h=804, x=0, y=138),
+            source_info=source, distorted_info=distorted,
+        ),
+        "a",
+    )
+
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_SCALING)
+    assert item.text() == "\u2193 source"
+    assert "3840x1608 -> 1920x804 (after black bars)" in item.toolTip()
+
+
 def test_resize_mismatch_note_for_test_both_row_ignores_a_stale_cached_direction(qapp):
     # Regression test: a "Test both" companion row whose cached result was
     # written before scale_direction was persisted (or any other reason its
