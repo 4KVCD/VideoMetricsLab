@@ -623,7 +623,7 @@ class GraphPanel(QWidget):
     def _update_metric_hint(self) -> None:
         metric = self._current_metric()
         available = any(e.result.frames.has(metric.key) for e in self._entries.values())
-        self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Select it under Metrics to calculate in Videos, or load results containing it.")
+        self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Tick it in the {metric.label} column in Videos, or load results containing it.")
         for i, spec in enumerate(METRICS):
             self.tabs.setTabToolTip(i, "" if any(e.result.frames.has(spec.key) for e in self._entries.values()) else "Not calculated")
 

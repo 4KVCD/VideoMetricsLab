@@ -3,10 +3,12 @@
 A video metrics calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 
 - Four independently selectable quality metrics: VMAF, PSNR, SSIM and XPSNR.
-  VMAF is the default, not a requirement. Select rows to edit their **Metrics
-  to calculate**; column-header shortcuts apply to all rows. Check rows to
-  include them when pressing **Calculate metrics**. A separate Status column
-  distinguishes incomplete analyses from completed scores.
+  VMAF is the default, not a requirement. Each metric is ticked in its own
+  column, on the row it applies to; a metric that has been measured shows its
+  score there instead. Ticking one cell applies to every selected row;
+  column-header shortcuts apply to all rows. Check rows to include them when
+  pressing **Calculate metrics**. A separate Status column distinguishes
+  incomplete analyses from completed scores.
 - A comparison graph, as a tab of the main window rather than a separate
   window: score-vs-time curves for multiple distorted files overlaid, one
   sub-tab per metric, with a hover readout (frame/time/score per series), a
