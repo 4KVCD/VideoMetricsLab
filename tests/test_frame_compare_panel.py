@@ -93,7 +93,7 @@ def test_runs_populate_selector_and_common_frame_range(qapp):
     assert panel.video_combo.currentText() == "first"
     assert panel.frame_spin.maximum() == 89
     assert panel.timeline.maximum() == 89
-    assert "DISTORTED 1 of 2" in panel.showing_label.text()
+    assert "TEST 1 of 2" in panel.showing_label.text()
 
 
 def test_frame_and_timestamp_stay_synchronized(qapp):
@@ -118,7 +118,7 @@ def test_switching_distortions_preserves_frame_and_wraps(qapp):
 
     assert panel.video_combo.currentText() == "second"
     assert panel.frame_spin.value() == 48
-    assert "DISTORTED 2 of 2" in panel.showing_label.text()
+    assert "TEST 2 of 2" in panel.showing_label.text()
 
 
 def test_left_and_right_switch_when_the_viewer_has_focus(qapp, monkeypatch):
@@ -144,11 +144,11 @@ def test_holding_s_temporarily_shows_source(qapp, monkeypatch):
 
     QTest.keyPress(panel.viewer, Qt.Key_S)
     assert panel._showing_source is True
-    assert panel.showing_label.text().startswith("SOURCE")
+    assert panel.showing_label.text().startswith("REFERENCE")
 
     QTest.keyRelease(panel.viewer, Qt.Key_S)
     assert panel._showing_source is False
-    assert panel.showing_label.text().startswith("DISTORTED")
+    assert panel.showing_label.text().startswith("TEST")
     panel.close()
 
 
@@ -160,7 +160,7 @@ def test_missing_subsampled_frame_is_not_given_a_neighbouring_score(qapp):
 
     panel.set_frame(3)
 
-    assert "not scored for this frame" in panel.detail_label.text()
+    assert "not calculated for this frame" in panel.detail_label.text()
 
 
 def test_hdr_preview_control_explains_the_effective_display_aware_conversion(qapp):
@@ -209,8 +209,8 @@ def test_an_unscored_pair_is_shown_and_says_it_has_no_score(qapp):
     assert panel.video_combo.count() == 1
     assert panel.frame_spin.isEnabled()
     assert panel.frame_spin.maximum() == 119
-    assert "not scored" in panel.detail_label.text()
-    assert "preview only" in panel.detail_label.text()
+    assert "No metric results loaded" in panel.detail_label.text()
+    assert "VMAF" not in panel.detail_label.text()
     panel.close()
 
 
@@ -239,7 +239,7 @@ def test_scored_and_unscored_pairs_coexist(qapp):
     panel.set_frame(10)
     assert "VMAF 90.00" in panel.detail_label.text()
     panel.cycle_distorted(1)
-    assert "not scored" in panel.detail_label.text()
+    assert "No metric results loaded" in panel.detail_label.text()
     panel.close()
 
 

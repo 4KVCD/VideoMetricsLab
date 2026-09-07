@@ -28,6 +28,7 @@ from vmaf_app.ui.main_window import (
     COL_PSNR,
     COL_SCALING,
     COL_SSIM,
+    COL_STATUS,
     COL_VMAF,
     COL_XPSNR,
     TAB_BITRATE,
@@ -98,7 +99,7 @@ def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
     win._on_run_clicked()
 
     assert win._worker is None  # nothing needed running, so no worker was ever started
-    assert "already have a VMAF score" in win.status_label.text()
+    assert "already have all requested metrics" in win.status_label.text()
     assert win.graph_panel is not None
     assert len(win.graph_panel._entries) == 2
 
@@ -338,7 +339,7 @@ def test_path_column_fills_leftover_space_by_default(qapp):
         win.distorted_table.columnWidth(c)
         for c in (
             COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
-            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR,
+            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR, COL_STATUS,
         )
     )
     viewport = win.distorted_table.viewport().width()
@@ -450,12 +451,12 @@ def test_black_bars_column_shows_each_detected_side_and_full_details(qapp):
 
     item = win.distorted_table.item(row, COL_BLACK_BARS)
     assert item.text() == "S TB276 · D none"
-    assert "Source: black bars detected and cropped." in item.toolTip()
+    assert "Reference: black bars detected and cropped." in item.toolTip()
     assert "Top: 276 px" in item.toolTip()
     assert "Bottom: 276 px" in item.toolTip()
     assert "Content: 3840x1608" in item.toolTip()
     assert "Original: 3840x2160" in item.toolTip()
-    assert "Distorted: no black bars detected." in item.toolTip()
+    assert "Test video: no black bars detected." in item.toolTip()
 
     win._rows[row].options.crop_mode = CropMode.NONE
     win._invalidate_completed_result(row)
@@ -484,8 +485,8 @@ def test_black_bars_column_reports_none_detected_for_two_full_frames(qapp):
 
     item = win.distorted_table.item(row, COL_BLACK_BARS)
     assert item.text() == "None detected"
-    assert "Source: no black bars detected." in item.toolTip()
-    assert "Distorted: no black bars detected." in item.toolTip()
+    assert "Reference: no black bars detected." in item.toolTip()
+    assert "Test video: no black bars detected." in item.toolTip()
 
 
 def test_black_bars_column_for_resolution_test_only_lists_source(qapp):
@@ -510,8 +511,8 @@ def test_black_bars_column_for_resolution_test_only_lists_source(qapp):
 
     item = win.distorted_table.item(row, COL_BLACK_BARS)
     assert item.text() == "S TB276"
-    assert "Source:" in item.toolTip()
-    assert "Distorted:" not in item.toolTip()
+    assert "Reference:" in item.toolTip()
+    assert "Test video:" not in item.toolTip()
 
 
 def test_black_bars_column_is_unknown_when_media_probe_fails(qapp):
@@ -533,7 +534,7 @@ def test_resize_mismatch_note_reflects_the_actual_scale_direction_used(qapp):
     tag = win.distorted_table.item(row, COL_SCALING).text()
     tip = win.distorted_table.item(row, COL_SCALING).toolTip()
     assert tag == "↓ source"
-    assert "Source downscaled" in tip
+    assert "Reference downscaled" in tip
     assert "3840x2160" in tip and "1920x1080" in tip
     # and it must NOT bloat the Media info column any more
     assert "downscaled" not in win.distorted_table.item(row, COL_INFO).text()
@@ -1111,7 +1112,7 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
     assert "0:00:20 left" in win.job_progress_labels[0].text()
     # Live progress belongs in the status bar above, not the VMAF column --
     # that's reserved for the final score (or "Failed").
-    assert win.distorted_table.item(row, COL_VMAF).text() == ""
+    assert win.distorted_table.item(row, COL_VMAF).text() == "Pending"
 
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
@@ -1297,7 +1298,7 @@ def test_metric_columns_show_na_until_enabled_and_computed(qapp):
     assert win.distorted_table.item(row, COL_PSNR).text() == "N/A"
     assert win.distorted_table.item(row, COL_SSIM).text() == "N/A"
     assert win.distorted_table.item(row, COL_XPSNR).text() == "N/A"
-    assert win.distorted_table.item(row, COL_VMAF).text() == ""  # enabled, just not run yet
+    assert win.distorted_table.item(row, COL_VMAF).text() == "Pending"  # enabled, just not run yet
 
 
 def test_ticking_a_metric_column_header_enables_it_for_every_row(qapp):
@@ -1315,7 +1316,7 @@ def test_ticking_a_metric_column_header_enables_it_for_every_row(qapp):
     assert win.distorted_table.item(0, COL_PSNR).text() == "N/A"
 
 
-def test_changing_a_metric_marks_an_existing_result_stale_and_runnable(qapp):
+def test_adding_a_metric_retains_scores_and_marks_result_partial(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
     row = win._add_table_row(Path("a.mp4"))
@@ -1324,9 +1325,11 @@ def test_changing_a_metric_marks_an_existing_result_stale_and_runnable(qapp):
 
     win._on_metric_column_toggled(COL_PSNR, True)
 
-    assert win._rows[row].completed_run is None
-    assert win.distorted_table.item(row, COL_VMAF).text() == ""
-    assert not win.graph_panel._entries
+    assert win._rows[row].completed_run is not None
+    assert not win._has_requested_results(win._rows[row])
+    assert win.distorted_table.item(row, COL_STATUS).text() == "Partially calculated"
+    assert win.distorted_table.item(row, COL_VMAF).text() == "90.00"
+    assert win.graph_panel._entries
 
 
 def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
@@ -1626,7 +1629,7 @@ def test_healthy_tools_leave_the_banner_hidden(qapp, monkeypatch):
 def test_the_window_has_videos_graph_frame_compare_and_settings_tabs(qapp):
     win = MainWindow()
     titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert titles == ["Videos", "Graph", "Frame Compare", "Bitrate Viewer", "Settings"]
+    assert titles == ["Videos", "Metric Graphs", "Video Compare", "Bitrate Viewer", "Settings"]
 
 
 def test_frame_compare_is_a_tab_between_graph_and_settings(qapp):
@@ -1701,7 +1704,7 @@ def test_frame_preview_color_mode_is_remembered(qapp):
     combo.setCurrentIndex(combo.findData(PreviewColorMode.UNMANAGED.value))
 
     assert Settings.load().frame_preview_color_mode == PreviewColorMode.UNMANAGED.value
-    assert win.tabs.tabText(TAB_FRAME_COMPARE) == "Frame Compare"
+    assert win.tabs.tabText(TAB_FRAME_COMPARE) == "Video Compare"
 
 
 def test_the_graph_is_a_tab_not_a_separate_window(qapp):

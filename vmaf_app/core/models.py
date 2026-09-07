@@ -146,6 +146,7 @@ class VmafOptions:
     scale_algorithm: str = "bicubic"
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
     compute_xpsnr: bool = False
+    compute_vmaf: bool = True
 
     duration_limit: float = 0.0  # seconds; 0 = no limit, process the full video
 
@@ -161,6 +162,14 @@ class VmafOptions:
     # When set, this row is a resolution round-trip test (see ResampleTarget)
     # instead of a normal comparison against a second, already-encoded file.
     resample_test: ResampleTarget | None = None
+
+    def requested_metrics(self) -> tuple[str, ...]:
+        return tuple(name for name, enabled in (
+            ("vmaf", self.compute_vmaf),
+            ("psnr", "name=psnr" in self.extra_features),
+            ("ssim", "name=float_ssim" in self.extra_features),
+            ("xpsnr", self.compute_xpsnr),
+        ) if enabled)
 
 
 def clone_options(opts: VmafOptions) -> VmafOptions:
@@ -188,14 +197,13 @@ class FrameScore:
     """
     frame: int
     time: float
-    vmaf: float
+    vmaf: float | None
     psnr: float | None = None
     ssim: float | None = None
     xpsnr: float | None = None
 
 
-# Metric name -> whether it's optional (PSNR/SSIM/XPSNR are only computed on
-# request; VMAF always is). Ordered as they're presented to the user.
+# All metrics are optional. Missing columns are represented by None.
 METRIC_NAMES = ("vmaf", "psnr", "ssim", "xpsnr")
 
 
@@ -220,7 +228,7 @@ class FrameScores:
         self,
         frame: np.ndarray,
         time: np.ndarray,
-        vmaf: np.ndarray,
+        vmaf: np.ndarray | None,
         psnr: np.ndarray | None = None,
         ssim: np.ndarray | None = None,
         xpsnr: np.ndarray | None = None,
@@ -229,7 +237,7 @@ class FrameScores:
         # float64 for time: bisect during hover needs to stay exact across a
         # multi-hour run, where float32 only has ~0.001s of resolution.
         self.time = np.asarray(time, dtype=np.float64)
-        self.vmaf = np.asarray(vmaf, dtype=np.float32)
+        self.vmaf = None if vmaf is None else np.asarray(vmaf, dtype=np.float32)
         self.psnr = None if psnr is None else np.asarray(psnr, dtype=np.float32)
         self.ssim = None if ssim is None else np.asarray(ssim, dtype=np.float32)
         self.xpsnr = None if xpsnr is None else np.asarray(xpsnr, dtype=np.float32)
@@ -255,7 +263,7 @@ class FrameScores:
         return cls(
             frame=np.array([f.frame for f in frames], dtype=np.int32),
             time=np.array([f.time for f in frames], dtype=np.float64),
-            vmaf=np.array([f.vmaf for f in frames], dtype=np.float32),
+            vmaf=column("vmaf"),
             psnr=column("psnr"), ssim=column("ssim"), xpsnr=column("xpsnr"),
         )
 
@@ -278,7 +286,7 @@ class FrameScores:
                 return None if arr is None else arr[index]
 
             return FrameScores(
-                frame=self.frame[index], time=self.time[index], vmaf=self.vmaf[index],
+                frame=self.frame[index], time=self.time[index], vmaf=sliced(self.vmaf),
                 psnr=sliced(self.psnr), ssim=sliced(self.ssim), xpsnr=sliced(self.xpsnr),
             )
 
@@ -293,7 +301,7 @@ class FrameScores:
         return FrameScore(
             frame=int(self.frame[index]),
             time=float(self.time[index]),
-            vmaf=float(self.vmaf[index]),
+            vmaf=optional(self.vmaf),
             psnr=optional(self.psnr), ssim=optional(self.ssim), xpsnr=optional(self.xpsnr),
         )
 
@@ -315,10 +323,9 @@ class FrameScores:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FrameScores):
             return NotImplemented
-        if not (np.array_equal(self.frame, other.frame) and np.array_equal(self.time, other.time)
-                and np.array_equal(self.vmaf, other.vmaf)):
+        if not (np.array_equal(self.frame, other.frame) and np.array_equal(self.time, other.time)):
             return False
-        for metric in ("psnr", "ssim", "xpsnr"):
+        for metric in METRIC_NAMES:
             a, b = self.values(metric), other.values(metric)
             if (a is None) != (b is None):
                 return False
@@ -327,8 +334,8 @@ class FrameScores:
         return True
 
     def nbytes(self) -> int:
-        total = self.frame.nbytes + self.time.nbytes + self.vmaf.nbytes
-        for metric in ("psnr", "ssim", "xpsnr"):
+        total = self.frame.nbytes + self.time.nbytes
+        for metric in METRIC_NAMES:
             arr = self.values(metric)
             if arr is not None:
                 total += arr.nbytes

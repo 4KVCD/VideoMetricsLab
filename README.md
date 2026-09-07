@@ -1,16 +1,20 @@
-# VMAF Calculator
+# Video Metrics Calculator
 
-A VMAF calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
+A video metrics calculation app (Python + PySide6/Qt), inspired by FFMetrics, with:
 
-- Four quality metrics per run: VMAF, PSNR, SSIM and XPSNR, each toggled from
-  the checkbox in its own column header and scored in that column.
+- Four independently selectable quality metrics: VMAF, PSNR, SSIM and XPSNR.
+  VMAF is the default, not a requirement. Select rows to edit their **Metrics
+  to calculate**; column-header shortcuts apply to all rows. Check rows to
+  include them when pressing **Calculate metrics**. A separate Status column
+  distinguishes incomplete analyses from completed scores.
 - A comparison graph, as a tab of the main window rather than a separate
   window: score-vs-time curves for multiple distorted files overlaid, one
   sub-tab per metric, with a hover readout (frame/time/score per series), a
   jump-to-frame control and a PNG export that carries its own title, legend
   and statistics.
-- A **Frame Compare** tab for inspecting the exact cropped/scaled pictures
-  used by a completed VMAF run. Choose a frame or timestamp, hold **S** to
+- A standalone **Video Compare** tab for inspecting reference and test videos,
+  with or without metric results. Completed analyses supply their cropped/scaled
+  pictures and available per-frame metric readouts. Choose a frame or timestamp, hold **S** to
   reveal the source, and use the left/right arrow keys to cycle through
   distorted videos without losing the current position, zoom, or pan. Video
   playback keeps a rolling pool of **at most four videos**: source, current
@@ -95,6 +99,25 @@ scored: mismatched frame rates, mismatched durations (unless a duration limit
 inside both files is set), mismatched sample aspect ratios, and
 variable-frame-rate input. A wrong number here looks exactly like a right one,
 so the run does not start.
+
+### Metric selection and compatibility
+
+**Metric Graphs** selects an available metric and remembers your chosen metric.
+Each metric keeps its own units, precision and graph scale; PNG exports are named
+for the active metric. Missing frame scores are never replaced with neighbouring
+scores. PSNR and SSIM use the same libvmaf feature extractors with or without
+VMAF enabled, keeping the score definitions consistent. XPSNR-only runs use
+FFmpeg's XPSNR filter directly without loading libvmaf or a VMAF model.
+
+The libvmaf thread and frame-subsample settings apply to VMAF/PSNR/SSIM, not
+XPSNR. XPSNR-only runs score every frame; in combined runs XPSNR values are
+retained at the libvmaf sample positions. Video preparation settings affect
+calculations; Video Compare's display tone mapping and playback resolution do not.
+
+Existing `.vmafrun.json` files, cache keys for VMAF-enabled runs, and the shared
+user-data location are preserved. The application rebrand does not relocate or
+delete previous results. Internal Python package and saved-file names remain
+unchanged for compatibility.
 
 While a run is in progress the source, the per-row options and the settings
 are locked, because changing them mid-run would mean the finished result no

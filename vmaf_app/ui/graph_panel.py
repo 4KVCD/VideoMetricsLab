@@ -17,7 +17,7 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -143,7 +143,7 @@ class _MetricCurve:
 class _MetricPage(QWidget):
     """One metric's own plot + crosshair + hover readout. Curves for a given
     series only exist here if that run actually has this metric's data (e.g.
-    a run without "Also compute PSNR" checked has no curve on the PSNR page).
+    a run without PSNR selected has no curve on the PSNR page).
     """
 
     def __init__(self, metric: MetricSpec, parent: QWidget | None = None) -> None:
@@ -515,12 +515,16 @@ class GraphPanel(QWidget):
     from the curve itself.
     """
 
+    metric_changed = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self._entries: dict[int, SeriesEntry] = {}
         self._suppressed_identities: set[object] = set()
         self._next_id = 0
+        self._preferred_metric = "vmaf"
+        self._selecting_available_metric = False
         # Exports of a feature-length run are seconds of serialisation each;
         # done inline they froze the window. See FileWriteQueue.
         self._file_writes = FileWriteQueue(self)
@@ -558,7 +562,7 @@ class GraphPanel(QWidget):
         # the plot area, so a hover repaints the crosshair rather than the
         # whole series. That pixmap is the tab's main cost (~3.4MB each at a
         # 1700x900 window, measured), so tabs are built lazily: only VMAF (the
-        # default, always-visible tab) is built eagerly, and PSNR/SSIM/XPSNR
+        # initial fallback tab) is built eagerly, and PSNR/SSIM/XPSNR
         # the first time they're actually selected. Tabs the user never opens
         # then cost nothing.
         self.tabs = QTabWidget()
@@ -578,6 +582,8 @@ class GraphPanel(QWidget):
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color: #666;")
         root.addWidget(self.status_label)
+        self.metric_hint = QLabel("Calculate metrics or load analysis results to view graphs.")
+        root.addWidget(self.metric_hint)
 
         self._setup_stats_table()
         self._cap_panel_heights()
@@ -589,25 +595,54 @@ class GraphPanel(QWidget):
         return page
 
     def _on_tab_changed(self, index: int) -> None:
+        if index < 0:
+            return
         metric = METRICS[index]
         if metric.key not in self._pages:
             page = self._build_page(metric)
+            blocked = self.tabs.blockSignals(True)
             self.tabs.removeTab(index)
             self.tabs.insertTab(index, page, metric.label)
             self.tabs.setCurrentIndex(index)
+            self.tabs.blockSignals(blocked)
             # Backfill whatever's already loaded -- add_run() only pushed
             # curves into pages that existed at the time.
             for sid, entry in self._entries.items():
                 page.set_curve(sid, entry, entry.color)
+        if not self._selecting_available_metric:
+            self._preferred_metric = metric.key
+            self.metric_changed.emit(metric.key)
+        self._update_metric_hint()
         self._refresh_stats_table()
         self._refresh_frame_range()
+
+    def set_preferred_metric(self, key: str) -> None:
+        self._preferred_metric = key if any(m.key == key for m in METRICS) else "vmaf"
+        self._select_available_metric()
+
+    def _update_metric_hint(self) -> None:
+        metric = self._current_metric()
+        available = any(e.result.frames.has(metric.key) for e in self._entries.values())
+        self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Select it under Metrics to calculate in Videos, or load results containing it.")
+        for i, spec in enumerate(METRICS):
+            self.tabs.setTabToolTip(i, "" if any(e.result.frames.has(spec.key) for e in self._entries.values()) else "Not calculated")
+
+    def _select_available_metric(self) -> None:
+        available = [m.key for m in METRICS if any(e.result.frames.has(m.key) for e in self._entries.values())]
+        key = self._preferred_metric if self._preferred_metric in available else next(iter(available), self._preferred_metric)
+        self._selecting_available_metric = True
+        try:
+            self.tabs.setCurrentIndex(next(i for i, m in enumerate(METRICS) if m.key == key))
+        finally:
+            self._selecting_available_metric = False
+        self._update_metric_hint()
 
     # ------------------------------------------------------------------ UI setup
     def _build_action_bar(self) -> QWidget:
         bar = QWidget()
         layout = QHBoxLayout(bar)
 
-        add_btn = QPushButton("Add saved run...")
+        add_btn = QPushButton("Add analysis results...")
         add_btn.clicked.connect(self._on_add_saved_run)
         layout.addWidget(add_btn)
 
@@ -743,6 +778,7 @@ class GraphPanel(QWidget):
                 existing.step = step
                 for page in self._pages.values():
                     page.set_curve(sid, existing, existing.color)
+                self._select_available_metric()
                 self._refresh_stats_table()
                 self._refresh_frame_range()
                 return
@@ -760,6 +796,7 @@ class GraphPanel(QWidget):
         for page in self._pages.values():
             page.set_curve(sid, entry, color)
 
+        self._select_available_metric()
         self._refresh_stats_table()
         self._refresh_frame_range()
 
@@ -791,6 +828,7 @@ class GraphPanel(QWidget):
             self._suppressed_identities.add(entry.identity)
         for page in self._pages.values():
             page.remove_curve(series_id)
+        self._select_available_metric()
         self._refresh_stats_table()
         self._refresh_frame_range()
 
@@ -812,7 +850,7 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ actions
     def _on_add_saved_run(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open saved VMAF run", "", "VMAF run (*.vmafrun.json *.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open analysis results", "", "Analysis results (*.vmafrun.json *.json)")
         if not path:
             return
         try:
@@ -967,7 +1005,7 @@ class GraphPanel(QWidget):
         return self._file_writes.wait_until_idle(timeout_seconds)
 
     def _on_export_png(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Export graph", "vmaf_graph.png", "PNG image (*.png)")
+        path, _ = QFileDialog.getSaveFileName(self, "Export graph", f"{self._current_metric().key}_comparison.png", "PNG image (*.png)")
         if not path:
             return
         self.render_export_image().save(path)
@@ -997,7 +1035,7 @@ class GraphPanel(QWidget):
 
     def save_run_for_later(self, result: VmafRunResult, label: str) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save VMAF run", f"{label}.vmafrun.json", "VMAF run (*.vmafrun.json)"
+            self, "Save analysis results", f"{label}.vmafrun.json", "Analysis results (*.vmafrun.json)"
         )
         if not path:
             return

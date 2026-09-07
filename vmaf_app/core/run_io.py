@@ -119,9 +119,9 @@ def _frames_to_rows(frames: FrameScores) -> list[list]:
                 values.append(float(value))
         return values
 
-    psnr, ssim, xpsnr = column("psnr"), column("ssim"), column("xpsnr")
+    vmaf, psnr, ssim, xpsnr = (column(m) for m in ("vmaf", "psnr", "ssim", "xpsnr"))
     return [
-        [int(frames.frame[i]), round(float(frames.time[i]), 6), float(frames.vmaf[i]),
+        [int(frames.frame[i]), round(float(frames.time[i]), 6), vmaf[i],
          psnr[i], ssim[i], xpsnr[i]]
         for i in range(len(frames))
     ]
@@ -141,7 +141,7 @@ def _rows_to_frames(rows: list[list]) -> FrameScores:
     return FrameScores(
         frame=np.array([r[0] for r in rows], dtype=np.int32),
         time=np.array([r[1] for r in rows], dtype=np.float64),
-        vmaf=np.array([r[2] for r in rows], dtype=np.float32),
+        vmaf=column(2),
         psnr=column(3), ssim=column(4), xpsnr=column(5),
     )
 

@@ -87,7 +87,7 @@ from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
 from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, VmafJob, VmafWorker
 
 _MODEL_CHOICES = [
-    ("Auto (recommended: picks 4K model for UHD distorted video)", AUTO_MODEL_CHOICE),
+    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
     ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
     ("VMAF v0.6.1neg (no enhancement gain)", "version=vmaf_v0.6.1neg"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
@@ -110,15 +110,14 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
-) = range(10)
+    COL_STATUS,
+) = range(11)
 
-# Tab order. Frame Compare and Graph are both views of completed results;
-# Settings remains the final application-level page.
+# Metric Graphs displays results; Video Compare and Bitrate Viewer also work
+# independently of calculation. Settings remains the final page.
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
-# The metric columns, in table order: (column, label, the VmafOptions field or
-# libvmaf feature it maps to). VMAF has no toggle -- it's what the app exists
-# to compute, and the whole pipeline is built on libvmaf.
+# Metric headers are shortcuts for the explicit selection in the inspector.
 _METRIC_COLUMNS = [
     (COL_PSNR, "PSNR", "name=psnr"),
     (COL_SSIM, "SSIM", "name=float_ssim"),
@@ -154,6 +153,7 @@ class RowData:
     video_info: VideoInfo | None = None
     completed_run: CompletedRun | None = None
     options: VmafOptions = field(default_factory=VmafOptions)
+    analysis_status: str = ""
     # True only for a "Test both" companion row (see
     # _add_opposite_scale_direction_rows), where options.scale_direction is
     # set explicitly and unambiguously to whichever direction this row
@@ -177,7 +177,7 @@ class RowData:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VMAF Calculator")
+        self.setWindowTitle("Video Metrics Calculator")
         # Settings first: the ffmpeg location and what new rows default to
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
@@ -346,11 +346,13 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._build_files_panel())
         splitter.addWidget(self._build_options_panel())
         splitter.addWidget(self._build_run_panel())
-        splitter.setSizes([420, 260, 120])
+        splitter.setSizes([380, 300, 120])
         self.tabs.addTab(videos_page, "Videos")
 
         self.graph_panel = GraphPanel()
-        self.tabs.addTab(self.graph_panel, "Graph")
+        self.graph_panel.set_preferred_metric(self._settings.graph_metric)
+        self.graph_panel.metric_changed.connect(self._on_graph_metric_changed)
+        self.tabs.addTab(self.graph_panel, "Metric Graphs")
         # Opening the tab is enough; pressing a button to populate it was
         # a leftover from when it was a separate window that had to be
         # opened explicitly.
@@ -362,7 +364,7 @@ class MainWindow(QMainWindow):
         self.frame_compare_panel.color_mode_changed.connect(
             self._on_frame_color_mode_changed
         )
-        self.tabs.addTab(self.frame_compare_panel, "Frame Compare")
+        self.tabs.addTab(self.frame_compare_panel, "Video Compare")
 
         self.bitrate_panel = BitratePanel()
         self.tabs.addTab(self.bitrate_panel, "Bitrate Viewer")
@@ -377,6 +379,7 @@ class MainWindow(QMainWindow):
             gpu_decode=self._settings.default_gpu_decode,
             extra_features=self._settings.default_extra_features(),
             compute_xpsnr=self._settings.default_compute_xpsnr,
+            compute_vmaf=self._settings.default_compute_vmaf,
         )
 
     def _apply_ffmpeg_setting(self) -> None:
@@ -461,11 +464,13 @@ class MainWindow(QMainWindow):
         defaults_layout.addWidget(self.settings_default_gpu)
 
         metrics_row = QHBoxLayout()
-        metrics_row.addWidget(QLabel("Also compute:"))
+        metrics_row.addWidget(QLabel("Default metrics:"))
         self.settings_default_psnr = QCheckBox("PSNR")
+        self.settings_default_vmaf = QCheckBox("VMAF")
         self.settings_default_ssim = QCheckBox("SSIM")
         self.settings_default_xpsnr = QCheckBox("XPSNR")
         for box, value in (
+            (self.settings_default_vmaf, self._settings.default_compute_vmaf),
             (self.settings_default_psnr, self._settings.default_compute_psnr),
             (self.settings_default_ssim, self._settings.default_compute_ssim),
             (self.settings_default_xpsnr, self._settings.default_compute_xpsnr),
@@ -521,6 +526,7 @@ class MainWindow(QMainWindow):
         self._settings.use_cache = self.settings_use_cache.isChecked()
         self._settings.default_gpu_decode = self.settings_default_gpu.isChecked()
         self._settings.default_compute_psnr = self.settings_default_psnr.isChecked()
+        self._settings.default_compute_vmaf = self.settings_default_vmaf.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
@@ -600,7 +606,7 @@ class MainWindow(QMainWindow):
         self.files_box = files_box
         files_layout = QVBoxLayout(files_box)
 
-        files_layout.addWidget(QLabel("Reference (source) video:"))
+        files_layout.addWidget(QLabel("Reference video:"))
         src_row = QHBoxLayout()
         self.source_edit = QLineEdit()
         self.source_edit.setReadOnly(True)
@@ -609,34 +615,32 @@ class MainWindow(QMainWindow):
         src_row.addWidget(self.source_edit, stretch=1)
         src_row.addWidget(src_browse)
         files_layout.addLayout(src_row)
-        self.source_info_label = QLabel("No source selected.")
+        self.source_info_label = QLabel("No reference selected.")
         self.source_info_label.setStyleSheet("color: #666;")
         files_layout.addWidget(self.source_info_label)
 
         files_layout.addWidget(QLabel(
-            "Distorted video(s) to compare against the source "
-            "(select one or more below to edit their settings underneath; "
-            "tick a metric's column header to compute it):"
+            "Test videos to compare against the reference. Check rows to calculate; "
+            "select rows to edit their settings below. Metric header shortcuts apply to all rows."
         ))
         metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
-            0, 10, fill_column=COL_PATH,
+            0, 11, fill_column=COL_PATH,
             other_columns=[
                 COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
-                *metric_cols,
+                *metric_cols, COL_STATUS,
             ],
         )
         self.metric_header = CheckableHeaderView(
-            # VMAF has no checkbox: it's what the app computes, always.
-            {COL_PSNR: False, COL_SSIM: False, COL_XPSNR: False},
+            {COL_PSNR: False, COL_SSIM: False, COL_VMAF: True, COL_XPSNR: False},
             self.distorted_table,
         )
         self.distorted_table.setHorizontalHeader(self.metric_header)
         self.metric_header.sectionToggled.connect(self._on_metric_column_toggled)
         self.distorted_table.setHorizontalHeaderLabels(
             [
-                "", "File name", "Media info", "Black bars", "Scaling", "Bitrate",
-                "   PSNR", "   SSIM", "VMAF", "   XPSNR",
+                "", "File name", "Media info", "Black bars", "Scaling", "Video bitrate",
+                "   PSNR (dB)", "   SSIM", "   VMAF", "   XPSNR (dB)", "Status",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -666,12 +670,13 @@ class MainWindow(QMainWindow):
         header.setStretchLastSection(False)
         self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.distorted_table.setColumnWidth(COL_CHECK, 28)
+        self.distorted_table.setColumnWidth(COL_STATUS, 125)
         self.distorted_table.setColumnWidth(COL_INFO, 150)
         self.distorted_table.setColumnWidth(COL_BLACK_BARS, 155)
         self.distorted_table.setColumnWidth(COL_SCALING, 90)
         self.distorted_table.setColumnWidth(COL_BITRATE, 65)
         for col, _, _ in _METRIC_COLUMNS:
-            self.distorted_table.setColumnWidth(col, 78)
+            self.distorted_table.setColumnWidth(col, 105 if col in (COL_PSNR, COL_XPSNR) else 78)
         files_layout.addWidget(self.distorted_table, stretch=1)
 
         dist_btn_row = QHBoxLayout()
@@ -679,8 +684,8 @@ class MainWindow(QMainWindow):
         add_dist_btn.clicked.connect(self._on_add_distorted)
         add_resample_btn = QPushButton("Add resolution test...")
         add_resample_btn.setToolTip(
-            "Tests VMAF for downscaling the source to a lower resolution and "
-            "scaling it back up -- no separate distorted file needed."
+            "Calculates selected metrics for downscaling the reference to a lower resolution and "
+            "scaling it back up -- no separate test file needed."
         )
         add_resample_btn.clicked.connect(self._on_add_resample_test)
         remove_dist_btn = QPushButton("Remove selected")
@@ -707,16 +712,33 @@ class MainWindow(QMainWindow):
         self.panel_target_label.setWordWrap(True)
         options_layout.addWidget(self.panel_target_label)
 
+        metrics_box = QGroupBox("Metrics to calculate — selected rows")
+        metrics_layout = QHBoxLayout(metrics_box)
+        self.metric_checkboxes = {}
+        for col, name, _feature in sorted(_METRIC_COLUMNS, key=lambda entry: entry[0] != COL_VMAF):
+            box = QCheckBox(name)
+            box.setToolTip("Applies only to selected rows. A dash means the selection has mixed settings.")
+            box.checkStateChanged.connect(lambda state, c=col: self._on_metric_selection_edited(c, state))
+            self.metric_checkboxes[col] = box
+            metrics_layout.addWidget(box)
+        metrics_layout.addStretch(1)
+        options_layout.addWidget(metrics_box)
+
         form = QFormLayout()
+        performance_box = QGroupBox("Performance")
+        performance_form = QFormLayout(performance_box)
+        metric_options_box = QGroupBox("Metric-specific settings")
+        metric_options_form = QFormLayout(metric_options_box)
         self.model_combo = QComboBox()
         for name, _ in _MODEL_CHOICES:
             self.model_combo.addItem(name)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
-        form.addRow("VMAF model:", self.model_combo)
+        self.model_combo.setToolTip("VMAF only. Auto selects the model using the resolution after calculation cropping and scaling.")
+        metric_options_form.addRow("VMAF model:", self.model_combo)
 
         self.gpu_checkbox = QCheckBox("Use GPU decoding")
         self.gpu_checkbox.setToolTip(
-            "Hardware-decodes the source and the distorted video. Each is "
+            "Hardware-decodes the reference and the test video. Each is "
             "decided separately, and either one falls back to the CPU on its "
             "own if this GPU can't decode its format."
         )
@@ -735,16 +757,16 @@ class MainWindow(QMainWindow):
         gpu_row = QHBoxLayout()
         gpu_row.addWidget(self.gpu_checkbox)
         gpu_row.addWidget(self.gpu_vendor_combo)
-        form.addRow("GPU decode:", gpu_row)
+        performance_form.addRow("GPU decode:", gpu_row)
 
         detected = detected_gpu_vendors()
         if detected:
             names = ", ".join(v.value.upper() for v in detected)
-            form.addRow("", QLabel(f"Detected GPU(s): {names}"))
+            performance_form.addRow("", QLabel(f"Detected GPU(s): {names}"))
 
         self.crop_combo = QComboBox()
         self.crop_combo.addItems([
-            "Auto-detect black bars (recommended)",
+            "Auto-detect (recommended)",
             "None (use full frame)",
         ])
         self.crop_combo.currentIndexChanged.connect(
@@ -756,14 +778,12 @@ class MainWindow(QMainWindow):
         # full window width now, so stacking them left a lot of empty space
         # to the right and pushed the file table up.
         columns = QHBoxLayout()
-        basic_column = QWidget()
+        basic_column = QGroupBox("Video preparation (calculation only)")
         basic_column.setLayout(form)
         columns.addWidget(basic_column, stretch=1)
         options_layout.addLayout(columns)
 
-        adv_box = QGroupBox("Advanced")
-        adv_box.setCheckable(False)
-        adv_form = QFormLayout(adv_box)
+        adv_form = form
 
         self.threads_spin = QSpinBox()
         self.threads_spin.setRange(0, 128)
@@ -772,7 +792,8 @@ class MainWindow(QMainWindow):
         self.threads_spin.valueChanged.connect(
             lambda _value: self._on_panel_field_edited("n_threads")
         )
-        adv_form.addRow("libvmaf threads:", self.threads_spin)
+        performance_form.addRow("libvmaf threads:", self.threads_spin)
+        self.threads_spin.setToolTip("Controls VMAF, PSNR and SSIM extraction in libvmaf, not XPSNR or video decoding.")
 
         self.subsample_spin = QSpinBox()
         self.subsample_spin.setRange(1, 60)
@@ -780,7 +801,8 @@ class MainWindow(QMainWindow):
         self.subsample_spin.valueChanged.connect(
             lambda _value: self._on_panel_field_edited("n_subsample")
         )
-        adv_form.addRow("Frame subsample (1 = every frame):", self.subsample_spin)
+        metric_options_form.addRow("libvmaf frame subsample:", self.subsample_spin)
+        self.subsample_spin.setToolTip("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain values at libvmaf's sampled frames.")
 
         self.duration_edit = QTimeEdit()
         self.duration_edit.setDisplayFormat("HH:mm:ss.zzz")
@@ -788,7 +810,7 @@ class MainWindow(QMainWindow):
         self.duration_edit.timeChanged.connect(
             lambda _value: self._on_panel_field_edited("duration_limit")
         )
-        adv_form.addRow("Duration limit (00:00:00.000 = full video):", self.duration_edit)
+        adv_form.addRow("Duration limit (0 = full):", self.duration_edit)
 
         self.scale_algo_combo = QComboBox()
         self.scale_algo_combo.addItems(_SCALE_ALGORITHMS)
@@ -799,14 +821,14 @@ class MainWindow(QMainWindow):
 
         self.scale_direction_combo = QComboBox()
         self.scale_direction_combo.addItems([
-            "Scale source down to match distorted (default)",
-            "Scale distorted up to match source",
+            "Reference → test (default)",
+            "Test → reference",
             "Test both (adds a comparison row)",
         ])
         self.scale_direction_combo.setToolTip(
             "When the two resolutions differ: either evaluate quality at the resolution actually\n"
-            "delivered (source scaled to match distorted -- the default), or as if the distorted\n"
-            "video were upscaled back to the source's native resolution for playback.\n"
+            "delivered (source scaled to match distorted -- the default), or as if the test\n"
+            "video were upscaled back to the reference's native resolution for playback.\n"
             "\"Test both\" doesn't change this row -- it adds a second row for the same distorted\n"
             "file using the other direction, so you can run and compare both."
         )
@@ -814,13 +836,15 @@ class MainWindow(QMainWindow):
         adv_form.addRow("Resolution mismatch:", self.scale_direction_combo)
 
         metrics_hint = QLabel(
-            "PSNR / SSIM / XPSNR are toggled from their column headers in the table above."
+            "Cropping and scaling here affect scores. Video Compare's tone mapping and "
+            "playback resolution are display-only settings and do not change calculated metrics."
         )
         metrics_hint.setStyleSheet("color: #666; font-style: italic;")
         metrics_hint.setWordWrap(True)
-        adv_form.addRow(metrics_hint)
+        options_layout.addWidget(metrics_hint)
 
-        columns.addWidget(adv_box, stretch=1)
+        columns.addWidget(metric_options_box, stretch=1)
+        columns.addWidget(performance_box, stretch=1)
         options_layout.addStretch(1)
 
         return options_box
@@ -830,7 +854,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(panel)
 
         run_row = QHBoxLayout()
-        self.run_btn = QPushButton("Run VMAF")
+        self.run_btn = QPushButton("Calculate metrics")
         self.run_btn.clicked.connect(self._on_run_clicked)
         self.pause_btn = QPushButton("Pause")
         self.pause_btn.setEnabled(False)
@@ -851,7 +875,7 @@ class MainWindow(QMainWindow):
         # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
         # what it was counting.
         self.parallel_jobs_check = QCheckBox(
-            "Run 2 metric calculations in parallel (better multi-core utilization)"
+            "Calculate 2 videos in parallel"
         )
         self.parallel_jobs_check.setChecked(
             self._settings.parallel_jobs >= MAX_PARALLEL_JOBS
@@ -870,14 +894,14 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.parallel_jobs_check)
         run_row.addStretch(1)
 
-        load_btn = QPushButton("Load saved run...")
+        load_btn = QPushButton("Load analysis results...")
         load_btn.clicked.connect(self._on_load_saved_run)
-        self.save_btn = save_btn = QPushButton("Save selected...")
+        self.save_btn = save_btn = QPushButton("Save selected results...")
         save_btn.clicked.connect(self._on_save_selected)
-        compare_btn = QPushButton("Compare selected")
+        compare_btn = QPushButton("Plot selected results")
         compare_btn.clicked.connect(self._on_compare_selected)
-        self.show_graph_btn = QPushButton("Show graph")
-        self.show_graph_btn.setToolTip("Reopens the comparison graph as you last left it (e.g. after closing it).")
+        self.show_graph_btn = QPushButton("Open metric graphs")
+        self.show_graph_btn.setToolTip("Opens Metric Graphs with the current results and graph settings.")
         self.show_graph_btn.clicked.connect(self._on_show_graph_clicked)
         run_row.addWidget(load_btn)
         run_row.addWidget(save_btn)
@@ -990,11 +1014,11 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ source selection
     def _on_browse_source(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select reference (source) video")
+        path, _ = QFileDialog.getOpenFileName(self, "Select reference video")
         if not path:
             return
         self.source_info_label.setText(f"Reading {Path(path).name}...")
-        self.status_label.setText("Reading source video...")
+        self.status_label.setText("Reading reference video...")
         self._start_source_probe(Path(path))
 
     def _start_source_probe(self, path: Path) -> None:
@@ -1027,7 +1051,7 @@ class MainWindow(QMainWindow):
                     f"{media_info_string(previous)}, {bitrate_string(previous)}  "
                     f"({format_hms(previous.duration, decimals=1)})"
                 )
-                if previous is not None else "No source selected."
+                if previous is not None else "No reference selected."
             )
             QMessageBox.critical(self, "Could not read video", error)
             return
@@ -1044,9 +1068,9 @@ class MainWindow(QMainWindow):
         # Each of those is a multi-MB JSON parse, so with a few long videos
         # loaded this froze the window for seconds; it goes to the worker,
         # which already knows how to load a cached result and report it.
-        # A resolution test is derived from the source, unlike a distorted
+        # A resolution test is derived from the reference, unlike a distorted
         # file, which merely gets compared against it -- so it cannot survive
-        # the source changing underneath it.
+        # the reference changing underneath it.
         dropped = self._remove_rows_owned_by_the_previous_source()
 
         if self._rows:
@@ -1084,8 +1108,8 @@ class MainWindow(QMainWindow):
 
         Such a row has no distorted file of its own: it downscales and
         re-upscales THE SOURCE, so its synthetic path, its media info, its
-        description and its identity all come from the source that was
-        selected when it was added. Leaving it in place after the source
+        description and its identity all come from the reference that was
+        selected when it was added. Leaving it in place after the reference
         changed left a row describing one video while the job would have run
         against another -- and a target width chosen as a downscale of a
         3840-wide master is an UPSCALE of a 1280-wide one, which the test was
@@ -1140,6 +1164,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setItem(row, COL_BLACK_BARS, bars_item)
         self.distorted_table.setItem(row, COL_SCALING, QTableWidgetItem(""))
         self.distorted_table.setItem(row, COL_BITRATE, QTableWidgetItem(""))
+        self.distorted_table.setItem(row, COL_STATUS, QTableWidgetItem("Not calculated"))
         for col, _, _ in _METRIC_COLUMNS:
             item = QTableWidgetItem("")
             item.setTextAlignment(Qt.AlignCenter)
@@ -1154,16 +1179,18 @@ class MainWindow(QMainWindow):
         return row
 
     def _set_row_metrics(self, row: int) -> None:
-        """Fills the PSNR/SSIM/VMAF/XPSNR cells for a row: the mean score if
-        it's been computed, "N/A" if that metric isn't switched on for this
-        row, and blank while it's enabled but not computed yet."""
+        """Show metric values independently of the row's analysis status.
+
+        N/A means not selected (explained on hover); Pending means requested
+        but not calculated. Previously calculated metrics survive selection edits.
+        """
         row_data = self._rows[row]
         run = row_data.completed_run
         opts = row_data.options
         enabled = {
             COL_PSNR: "name=psnr" in opts.extra_features,
             COL_SSIM: "name=float_ssim" in opts.extra_features,
-            COL_VMAF: True,
+            COL_VMAF: opts.compute_vmaf,
             COL_XPSNR: opts.compute_xpsnr,
         }
         for col, _, _ in _METRIC_COLUMNS:
@@ -1172,32 +1199,41 @@ class MainWindow(QMainWindow):
                 continue
             if not enabled[col]:
                 item.setText(NOT_COMPUTED)
+                item.setToolTip("Not selected for calculation.")
                 item.setForeground(QColor("#999"))
                 item.setFont(QFont())
                 item.setBackground(QColor(0, 0, 0, 0))
                 continue
             value = self._metric_mean(run, col) if run is not None else None
             if value is None:
-                item.setText("")
+                item.setText("Failed" if row_data.analysis_status == "Failed" else "Pending")
+                item.setToolTip("No result for this requested metric.")
                 item.setBackground(QColor(0, 0, 0, 0))
                 item.setFont(QFont())
                 continue
             item.setText(f"{value:.4f}" if col == COL_SSIM else f"{value:.2f}")
+            item.setToolTip("Mean of calculated frame scores." + (" VMAF colour bands are heuristic, not a universal quality rating." if col == COL_VMAF else ""))
             font = QFont()
             font.setBold(True)
             item.setFont(font)
             item.setForeground(QColor("#000"))
-            # Only VMAF has a universally meaningful "good/bad" scale to
-            # colour against (0-100); dB and SSIM don't.
+            # These heuristic VMAF bands must never be reused for other metrics.
             item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+        status = row_data.analysis_status or (
+            "No metrics selected" if not opts.requested_metrics() else
+            "Complete" if self._has_requested_results(row_data) else
+            "Partially calculated" if run is not None else "Not calculated"
+        )
+        self.distorted_table.item(row, COL_STATUS).setText(status)
+        self.distorted_table.item(row, COL_STATUS).setForeground(
+            QColor("#a03030") if status == "Failed" else self.distorted_table.palette().text().color()
+        )
         self._set_row_black_bars(row)
-        self.distorted_table.resizeColumnToContents(COL_VMAF)
+        self.distorted_table.resizeColumnToContents(COL_STATUS)
 
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
-        if column == COL_VMAF:
-            return run.stats.mean
-        metric = {COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        metric = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
         values = run.result.frames.values(metric)
         if values is None or len(values) == 0:
             return None
@@ -1291,12 +1327,12 @@ class MainWindow(QMainWindow):
 
         result = completed.result
         sides = [
-            self._crop_display("S", "Source", result.source_info, result.source_crop)
+            self._crop_display("S", "Reference", result.source_info, result.source_crop)
         ]
         if row_data.options.resample_test is None:
             sides.append(
                 self._crop_display(
-                    "D", "Distorted", result.distorted_info, result.distorted_crop
+                    "D", "Test video", result.distorted_info, result.distorted_crop
                 )
             )
 
@@ -1333,7 +1369,7 @@ class MainWindow(QMainWindow):
         it's been run -- UNLESS the row is a "Test both" companion, whose
         direction is fixed and known for certain by construction (see
         RowData.scale_direction_pinned): a result cached before that field
-        existed loads as SOURCE_TO_DISTORTED regardless of what actually
+        existed loads as SOURCE_TO_TEST regardless of what actually
         produced it, which is simply wrong for a row that exists only to
         represent DISTORTED_TO_SOURCE.
         """
@@ -1341,7 +1377,7 @@ class MainWindow(QMainWindow):
         if source_info is None:
             return "", ""
         if (source_info.width, source_info.height) == (distorted_info.width, distorted_info.height):
-            return "", "Source and distorted are the same resolution -- no scaling needed."
+            return "", "Reference and test video are the same resolution -- no scaling needed."
         row_data = self._rows[row]
         if row_data.scale_direction_pinned:
             direction = row_data.options.scale_direction
@@ -1352,18 +1388,20 @@ class MainWindow(QMainWindow):
             )
         if direction == ScaleDirection.DISTORTED_TO_SOURCE:
             return "↑ distorted", (
-                f"Distorted upscaled {distorted_info.width}x{distorted_info.height} -> "
-                f"{source_info.width}x{source_info.height} to match the source."
+                f"Test video upscaled {distorted_info.width}x{distorted_info.height} -> "
+                f"{source_info.width}x{source_info.height} to match the reference."
             )
         return "↓ source", (
-            f"Source downscaled {source_info.width}x{source_info.height} -> "
-            f"{distorted_info.width}x{distorted_info.height} to match the distorted video."
+            f"Reference downscaled {source_info.width}x{source_info.height} -> "
+            f"{distorted_info.width}x{distorted_info.height} to match the test video."
         )
 
     def _set_row_info(self, row: int, info: VideoInfo | None, error: str | None = None) -> None:
         item = self.distorted_table.item(row, COL_INFO)
         scaling_item = self.distorted_table.item(row, COL_SCALING)
         if error:
+            self._set_row_status(row, "Failed")
+            self.distorted_table.item(row, COL_STATUS).setToolTip(error)
             item.setText("Probe failed")
             item.setToolTip(error)
             item.setForeground(Qt.red)
@@ -1383,6 +1421,9 @@ class MainWindow(QMainWindow):
             scaling_item.setText(tag)
             scaling_item.setToolTip(explanation)
             self._rows[row].video_info = info
+            if self._rows[row].analysis_status == "Reading...":
+                self._rows[row].analysis_status = ""
+                self._set_row_metrics(row)
             self._set_row_black_bars(row)
         # Keeps these snug to whatever's actually in them (never wider than
         # needed) while staying user-draggable in between updates.
@@ -1414,7 +1455,7 @@ class MainWindow(QMainWindow):
 
     def _on_add_resample_test(self) -> None:
         if self._source_info is None:
-            QMessageBox.warning(self, "No source", "Please select a reference (source) video first.")
+            QMessageBox.warning(self, "No reference", "Please select a reference video first.")
             return
 
         targets = [
@@ -1425,7 +1466,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, "No smaller resolution available",
                 f"The smallest resolution test is {RESAMPLE_TARGET_CHOICES[-1].width} pixels wide, "
-                f"which is not below this source's {self._source_info.width}-pixel width.",
+                f"which is not below this reference's {self._source_info.width}-pixel width.",
             )
             return
         labels = [t.label for t in targets]
@@ -1440,13 +1481,13 @@ class MainWindow(QMainWindow):
         synthetic_path = synthetic_resample_distorted_path(self._source_info.path, target)
         if any(r.path == synthetic_path for r in self._rows):
             QMessageBox.information(
-                self, "Already added", f"A {label} resolution test for this source is already in the list."
+                self, "Already added", f"A {label} resolution test for this reference is already in the list."
             )
             return
 
         row = self._add_table_row(synthetic_path)
-        # A round-trip test decodes only the source; the "distorted" side is
-        # synthesised in the filtergraph. The source is therefore the file
+        # A round-trip test decodes only the reference; the "distorted" side is
+        # synthesised in the filtergraph. The reference is therefore the file
         # whose identity the cache must follow, and the target resolution is
         # already part of the options.
         self._rows[row].media_path = self._source_info.path
@@ -1456,7 +1497,7 @@ class MainWindow(QMainWindow):
         self._try_load_cached_result(row)
 
     def _on_add_distorted(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Select distorted video(s)")
+        paths, _ = QFileDialog.getOpenFileNames(self, "Select test videos")
         if not paths:
             return
         existing = {r.path for r in self._rows}
@@ -1477,7 +1518,7 @@ class MainWindow(QMainWindow):
     def _reload_cached_for_all_rows(self) -> None:
         """Re-checks every row against the current source, in the background.
 
-        Called when the source changes: which cached result applies depends
+        Called when the reference changes: which cached result applies depends
         on the (source, distorted) pair, so every row's score may now be
         different -- or gone.
         """
@@ -1500,7 +1541,8 @@ class MainWindow(QMainWindow):
             self._start_cache_lookup(paths)
 
     def _set_row_status(self, row: int, text: str) -> None:
-        item = self.distorted_table.item(row, COL_INFO)
+        self._rows[row].analysis_status = text
+        item = self.distorted_table.item(row, COL_STATUS)
         if item is not None:
             item.setText(text)
             item.setForeground(QColor("#999"))
@@ -1596,9 +1638,16 @@ class MainWindow(QMainWindow):
             return
         row_data = self._rows[row]
         if row_data.completed_run is not None:
-            return
+            existing = row_data.completed_run.result.frames
+            if all(existing.has(m) for m in row_data.options.requested_metrics()):
+                return
+            if not all(result.frames.has(m) for m in row_data.options.requested_metrics()):
+                return
+            self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
         run = CompletedRun(result, label)
         row_data.completed_run = run
+        row_data.analysis_status = ""
+        row_data.analysis_status = "Complete (cached)" if self._has_requested_results(row_data) else ""
         # Old cache files predate the persisted frame-preview recipe. The
         # cache key still identifies these exact row options, so restore the
         # missing pieces from the row that found the cache entry.
@@ -1692,15 +1741,15 @@ class MainWindow(QMainWindow):
         result.resample_target = row_data.options.resample_test
         run = CompletedRun(result, label)
         row_data.completed_run = run
+        row_data.analysis_status = ""
         row_data.video_info = result.distorted_info
         if row_data.options.resample_test is not None:
             self._set_resample_row_info(row, row_data.options.resample_test)
         else:
             self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_VMAF).setToolTip(
-            f"mean {run.stats.mean:.2f}   min {run.stats.minimum:.2f}   max {run.stats.maximum:.2f}   "
-            f"({run.stats.count} frames)\nLoaded from a previous run (same filename+size) -- "
+        self.distorted_table.item(row, COL_STATUS).setToolTip(
+            f"{len(result.frames)} scored frames; metrics: {', '.join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))}\nLoaded from a previous run (matching files and calculation settings) -- "
             f"right-click to recompute."
         )
         self._sync_frame_compare()
@@ -1711,7 +1760,7 @@ class MainWindow(QMainWindow):
         if not rows:
             return
         menu = QMenu(self)
-        recompute_action = menu.addAction("Recompute VMAF (ignore cached/previous result)")
+        recompute_action = menu.addAction("Recalculate selected metrics (ignore cached/previous results)")
         chosen = menu.exec(self.distorted_table.viewport().mapToGlobal(pos))
         if chosen == recompute_action:
             self._recompute_rows(rows)
@@ -1728,8 +1777,9 @@ class MainWindow(QMainWindow):
         for row in rows:
             row_data = self._rows[row]
             row_data.completed_run = None
+            row_data.analysis_status = ""
             self._set_row_metrics(row)
-            self.distorted_table.item(row, COL_VMAF).setToolTip("")
+            self.distorted_table.item(row, COL_STATUS).setToolTip("")
             if self._source_info is not None:
                 self._file_writes.submit(
                     f"clear cached result for {row_data.path.name}",
@@ -1746,7 +1796,7 @@ class MainWindow(QMainWindow):
             if row_data.video_info is not None and row_data.options.resample_test is None:
                 self._set_row_info(row, row_data.video_info)
         self.status_label.setText(
-            f"Cleared {len(rows)} result(s) -- make sure they're checked, then click Run VMAF to recompute."
+            f"Cleared {len(rows)} result(s) -- make sure they're checked, then click Calculate metrics to recompute."
         )
         self._sync_frame_compare()
 
@@ -1758,7 +1808,7 @@ class MainWindow(QMainWindow):
         see the other.
         """
         if self._source_info is None:
-            QMessageBox.warning(self, "No source", "Please select a reference (source) video first.")
+            QMessageBox.warning(self, "No reference", "Please select a reference video first.")
             return
 
         added = 0
@@ -1803,11 +1853,11 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, "Nothing to add",
                 "Selected row(s) either already have a matching-opposite row, don't have a resolution "
-                "mismatch against the source, or aren't a normal comparison (e.g. a resolution test)."
+                "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test)."
             )
         else:
             self.status_label.setText(
-                f"Added {added} row(s) testing the opposite scaling direction -- check them and click Run VMAF."
+                f"Added {added} row(s) testing the opposite scaling direction -- check them and click Calculate metrics."
             )
 
     # ------------------------------------------------------------------ per-video settings panel
@@ -1829,10 +1879,10 @@ class MainWindow(QMainWindow):
         # the previous settings.
         self.options_box.setEnabled(not self._run_active)
         if len(rows) == 1:
-            self.panel_target_label.setText(f"Settings for: {self._rows[rows[0]].path.name}")
+            self.panel_target_label.setText(f"Editing settings for: {self._rows[rows[0]].path.name}")
         else:
             self.panel_target_label.setText(
-                f"Settings for {len(rows)} selected videos -- editing anything below applies to all of them."
+                f"Editing settings for {len(rows)} selected videos -- editing anything below applies to all of them."
             )
         self._write_panel_options(self._rows[rows[0]].options)
 
@@ -1864,11 +1914,22 @@ class MainWindow(QMainWindow):
             ms = round(opts.duration_limit * 1000)
             self.duration_edit.setTime(QTime(0, 0, 0, 0).addMSecs(ms))
 
-            # Which metrics to compute lives in the table's column headers
-            # now, so reflect this row's options back onto them.
+            # Keep the global header shortcuts and selected-row inspector
+            # consistent without firing their write-back signals.
             self.metric_header.set_checked(COL_PSNR, "name=psnr" in opts.extra_features)
             self.metric_header.set_checked(COL_SSIM, "name=float_ssim" in opts.extra_features)
             self.metric_header.set_checked(COL_XPSNR, opts.compute_xpsnr)
+            self.metric_header.set_checked(COL_VMAF, opts.compute_vmaf)
+            selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
+            for col, box in self.metric_checkboxes.items():
+                values = {self._metric_enabled(o, col) for o in selected_options}
+                box.setTristate(len(values) > 1)
+                box.setCheckState(Qt.PartiallyChecked if len(values) > 1 else
+                                  Qt.Checked if True in values else Qt.Unchecked)
+            self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
+            uses_libvmaf = any(o.compute_vmaf or o.extra_features for o in selected_options)
+            self.threads_spin.setEnabled(uses_libvmaf)
+            self.subsample_spin.setEnabled(uses_libvmaf)
         finally:
             self._syncing_panel = False
 
@@ -1898,51 +1959,68 @@ class MainWindow(QMainWindow):
             scale_algorithm=self.scale_algo_combo.currentText(),
             scale_direction=scale_direction,
             compute_xpsnr=self.metric_header.is_checked(COL_XPSNR),
+            compute_vmaf=self.metric_header.is_checked(COL_VMAF),
             duration_limit=duration_limit,
             gpu_decode=self.gpu_checkbox.isChecked(),
             gpu_vendor=vendor,
             crop_mode=crop_mode,
         )
 
-    def _on_metric_column_toggled(self, column: int, checked: bool) -> None:
-        """A metric's column header is a global switch: it applies to every
-        row (and becomes the default for rows added later), matching how
-        FFMetrics treats its metric columns. Rows that already have a score
-        keep it -- unticking just means "don't compute this next run"."""
-        if self._syncing_panel:
+    @staticmethod
+    def _metric_enabled(options: VmafOptions, column: int) -> bool:
+        key = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        return key in options.requested_metrics()
+
+    @staticmethod
+    def _set_metric_option(options: VmafOptions, column: int, checked: bool) -> None:
+        if column == COL_VMAF:
+            options.compute_vmaf = checked
+        elif column == COL_XPSNR:
+            options.compute_xpsnr = checked
+        else:
+            feature = {COL_PSNR: "name=psnr", COL_SSIM: "name=float_ssim"}[column]
+            if checked and feature not in options.extra_features:
+                options.extra_features.append(feature)
+            elif not checked and feature in options.extra_features:
+                options.extra_features.remove(feature)
+
+    def _apply_metric_selection(self, rows: list[int], column: int, checked: bool) -> None:
+        if self._syncing_panel or self._run_active:
             return
-        feature = next(f for c, _, f in _METRIC_COLUMNS if c == column)
-        # Every existing row, plus the template new rows are cloned from --
-        # only the metric flag is touched, so each row keeps its own model,
-        # crop, GPU and scaling settings.
-        changed_rows = []
-        for row, rd in enumerate(self._rows):
-            opts = rd.options
-            before = clone_options(opts)
-            if column == COL_XPSNR:
-                opts.compute_xpsnr = checked
-            elif checked and feature not in opts.extra_features:
-                opts.extra_features.append(feature)
-            elif not checked and feature in opts.extra_features:
-                opts.extra_features.remove(feature)
-            if opts != before:
-                self._invalidate_completed_result(row)
-                changed_rows.append(row)
-        opts = self._default_options
-        if column == COL_XPSNR:
-            opts.compute_xpsnr = checked
-        elif checked and feature not in opts.extra_features:
-            opts.extra_features.append(feature)
-        elif not checked and feature in opts.extra_features:
-            opts.extra_features.remove(feature)
-        for row in range(len(self._rows)):
+        for row in rows:
+            rd = self._rows[row]
+            self._set_metric_option(rd.options, column, checked)
+            rd.analysis_status = ""
+            # The existing scores remain valid: selecting another metric
+            # changes the requested output, not the measured pictures.
             self._set_row_metrics(row)
-        self._reload_cached_for_rows(changed_rows)
+        self._set_metric_option(self._default_options, column, checked)
+        self._reload_cached_for_rows(rows)
+        if self._panel_target_rows:
+            self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
+
+    def _on_metric_selection_edited(self, column: int, state: Qt.CheckState) -> None:
+        if state != Qt.PartiallyChecked:
+            self._apply_metric_selection(self._panel_target_rows, column, state == Qt.Checked)
+
+    def _on_metric_column_toggled(self, column: int, checked: bool) -> None:
+        """Header shortcuts explicitly apply to all rows; inspector to selection."""
+        self._apply_metric_selection(list(range(len(self._rows))), column, checked)
+
+    @staticmethod
+    def _has_requested_results(row_data: RowData) -> bool:
+        requested = row_data.options.requested_metrics()
+        return bool(requested and row_data.completed_run is not None and all(
+            row_data.completed_run.result.frames.has(m)
+            and np.any(~np.isnan(row_data.completed_run.result.frames.values(m))) for m in requested
+        ))
 
     def _invalidate_completed_result(self, row: int) -> None:
         """Marks a row stale after an option that affects its run changes."""
         row_data = self._rows[row]
+        row_data.analysis_status = ""
         if row_data.completed_run is None:
+            self._set_row_metrics(row)
             return
         graph_identity = row_data.completed_run.graph_identity
         row_data.completed_run = None
@@ -1951,7 +2029,7 @@ class MainWindow(QMainWindow):
             # path before row-scoped graph identities existed.
             self.graph_panel.remove_by_path(row_data.path)
         self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_VMAF).setToolTip("")
+        self.distorted_table.item(row, COL_STATUS).setToolTip("")
         self._sync_frame_compare()
 
     def _on_panel_edited(self, *_args) -> None:
@@ -2042,27 +2120,31 @@ class MainWindow(QMainWindow):
             return
         if self._source_probe_worker is not None and self._source_probe_worker.isRunning():
             QMessageBox.information(
-                self, "Still reading source", "Wait for the source video to finish loading."
+                self, "Still reading reference", "Wait for the reference video to finish loading."
             )
             return
         if self._source_info is None:
-            QMessageBox.warning(self, "No source", "Please select a reference (source) video.")
+            QMessageBox.warning(self, "No reference", "Please select a reference video.")
             return
         checked_rows = self._checked_rows()
         if not checked_rows:
-            QMessageBox.warning(self, "No distorted videos", "Check at least one distorted video to run.")
+            QMessageBox.warning(self, "No test videos", "Check at least one test video to calculate metrics.")
+            return
+
+        if any(not self._rows[r].options.requested_metrics() for r in checked_rows):
+            QMessageBox.warning(self, "No metrics selected", "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.")
             return
 
         # Checking a row you already have a score for (e.g. it was checked
         # before you added more files) shouldn't silently recompute it --
-        # skip anything already scored. To force a redo, remove and re-add
-        # the row (or uncheck/recheck won't do it -- that's intentional).
-        already_scored_rows = [r for r in checked_rows if self._rows[r].completed_run is not None]
-        rows_to_run = [r for r in checked_rows if self._rows[r].completed_run is None]
+        # skip rows with every requested metric. Right-click to explicitly
+        # recalculate; merely rechecking a row never forces a redo.
+        already_scored_rows = [r for r in checked_rows if self._has_requested_results(self._rows[r])]
+        rows_to_run = [r for r in checked_rows if not self._has_requested_results(self._rows[r])]
 
         if not rows_to_run:
             self.status_label.setText(
-                f"All {len(already_scored_rows)} checked video(s) already have a VMAF score -- nothing to run."
+                f"All {len(already_scored_rows)} checked video(s) already have all requested metrics -- nothing to run."
             )
             already_done_runs = [self._rows[r].completed_run for r in already_scored_rows]
             if already_done_runs:
@@ -2081,7 +2163,7 @@ class MainWindow(QMainWindow):
                     self,
                     "Still reading videos" if still_reading else "Unreadable video",
                     (
-                        "Wait for every checked distorted video to finish loading before running."
+                        "Wait for every checked test video to finish loading before running."
                         if still_reading else
                         f"{row_data.path.name} could not be read. Remove it or add the file again to retry."
                     ),
@@ -2104,7 +2186,7 @@ class MainWindow(QMainWindow):
                         row_data.options.manual_source_crop,
                         row_data.options.manual_distorted_crop,
                     )
-                model = resolve_model(row_data.options, *analysis_size)
+                model = resolve_model(row_data.options, *analysis_size) if row_data.options.compute_vmaf else ""
             except (ValueError, VmafRunError) as e:
                 QMessageBox.warning(self, "Invalid options", f"{row_data.path.name}: {e}")
                 return
@@ -2114,7 +2196,7 @@ class MainWindow(QMainWindow):
                 result_distorted_path=row_data.path,
             ))
             job_rows.append(row_data)
-            # A resample test's output timeline is driven by the source (see
+            # A resample test's output timeline is driven by the reference (see
             # run_resample_test), not this row's (synthetic) "distorted" info.
             reference_for_frames = self._source_info if job_options.resample_test is not None else dist_info
             job_total_frames.append(estimate_total_frames(reference_for_frames, job_options))
@@ -2123,6 +2205,8 @@ class MainWindow(QMainWindow):
             return
 
         self._job_rows = job_rows
+        for rd in job_rows:
+            self._set_row_status(self._row_index_of(rd), "Queued")
         self._job_total_frames = job_total_frames
         self._job_cache_options = [clone_options(rd.options) for rd in job_rows]
         # Held as RowData, not indices, so removing a row mid-run can't
@@ -2175,6 +2259,10 @@ class MainWindow(QMainWindow):
         """How many videos may be scored at once, as a count."""
         return MAX_PARALLEL_JOBS if self.parallel_jobs_check.isChecked() else 1
 
+    def _on_graph_metric_changed(self, metric: str) -> None:
+        self._settings.graph_metric = metric
+        self._settings.save()
+
     def _on_parallel_jobs_changed(self, _checked: bool) -> None:
         """Applies the choice now, and remembers it for next time.
 
@@ -2206,6 +2294,9 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Resumed.")
 
     def _on_job_started(self, index: int, label: str) -> None:
+        row = self._row_index_of(self._job_rows[index])
+        if row is not None:
+            self._set_row_status(row, "Calculating")
         if index not in self._running_jobs:
             self._running_jobs.append(index)
         self._job_frames_done.setdefault(index, 0)
@@ -2362,7 +2453,7 @@ class MainWindow(QMainWindow):
         if row is None:
             return  # the row was removed mid-run; nothing to write the result to
         label = row_data.path.stem
-        # The job owns the source/distorted identities it was launched with.
+        # The job owns the reference/distorted identities it was launched with.
         # Never key a result from an old in-flight job using whatever source
         # happens to be selected by the time it finishes.
         cache_options = (
@@ -2385,7 +2476,7 @@ class MainWindow(QMainWindow):
         )
         # Packet bitrate is useful alongside quality metrics and is much
         # cheaper than decoding VMAF. Add both physical streams to the
-        # independent viewer; its queue deduplicates the source when several
+        # independent viewer; its queue deduplicates the reference when several
         # distorted jobs finish together. A resolution round trip has no
         # second file, so only its source is scanned.
         bitrate_infos = [result.source_info]
@@ -2406,14 +2497,18 @@ class MainWindow(QMainWindow):
                 "Finished with the previous settings; change them back to see the result.",
             )
             return
+        if row_data.completed_run is not None:
+            previous = row_data.completed_run
+            if not self.graph_panel.remove_by_identity(previous.graph_identity):
+                self.graph_panel.remove_by_path(row_data.path)
         run = CompletedRun(result, label)
         row_data.completed_run = run
+        row_data.analysis_status = ""
         if row_data.options.resample_test is None:
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_VMAF).setToolTip(
-            f"mean {run.stats.mean:.2f}   min {run.stats.minimum:.2f}   max {run.stats.maximum:.2f}   "
-            f"({run.stats.count} frames)"
+        self.distorted_table.item(row, COL_STATUS).setToolTip(
+            f"{len(result.frames)} scored frames; metrics: {', '.join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))}"
         )
         # Straight onto the graph: a run that has finished is a curve, and
         # waiting for a button press to see it serves nobody.
@@ -2428,14 +2523,20 @@ class MainWindow(QMainWindow):
         row = self._row_index_of(self._job_rows[index])
         if row is None:
             return  # the row was removed mid-run
-        self._set_row_vmaf_text(row, "Failed", color=Qt.red)
+        self._set_row_status(row, "Failed")
+        self._set_row_metrics(row)
         detail = f"{message}\n\n{stderr_tail}" if stderr_tail else message
-        self.distorted_table.item(row, COL_VMAF).setToolTip(detail)
+        self.distorted_table.item(row, COL_STATUS).setToolTip(detail)
 
     def _on_run_cancelled(self) -> None:
         self._run_was_cancelled = True
 
     def _on_all_finished(self) -> None:
+        for rd in self._job_rows:
+            row = self._row_index_of(rd)
+            if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
+                rd.analysis_status = "Cancelled" if self._run_was_cancelled else ""
+                self._set_row_metrics(row)
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
@@ -2481,7 +2582,7 @@ class MainWindow(QMainWindow):
             return Path(a) == Path(b)
 
     def _on_load_saved_run(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Load saved VMAF run", "", "VMAF run (*.vmafrun.json *.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Load analysis results", "", "Analysis results (*.vmafrun.json *.json)")
         if not path:
             return
         try:
@@ -2505,6 +2606,7 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         row_data.video_info = result.distorted_info
         row_data.completed_run = run
+        row_data.analysis_status = ""
         # The optional-metric columns are driven by row options. Seed those
         # flags from the data that is actually present in the saved result,
         # otherwise valid PSNR/SSIM/XPSNR arrays render as "N/A".
@@ -2514,6 +2616,7 @@ class MainWindow(QMainWindow):
         if result.frames.has("ssim"):
             row_data.options.extra_features.append("name=float_ssim")
         row_data.options.compute_xpsnr = result.frames.has("xpsnr")
+        row_data.options.compute_vmaf = result.frames.has("vmaf")
         row_data.options.model = result.model
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm
@@ -2523,7 +2626,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
-        self.distorted_table.item(row, COL_VMAF).setToolTip("Loaded from saved run")
+        self.distorted_table.item(row, COL_STATUS).setToolTip("Loaded from saved run")
         self._sync_frame_compare()
 
     def _adopt_source_from_run(self, result) -> None:
@@ -2545,11 +2648,11 @@ class MainWindow(QMainWindow):
         table and the result mean the same thing.
         """
         answer = QMessageBox.question(
-            self, "Different source video",
+            self, "Different reference video",
             f"This saved run was measured against:\n    {result.source}\n\n"
-            f"but the selected source is:\n    {self._source_info.path}\n\n"
+            f"but the selected reference is:\n    {self._source_info.path}\n\n"
             "Scores from two different references cannot be compared. "
-            "Switch the source to the one this run used?",
+            "Switch the reference to the one this run used?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
@@ -2567,7 +2670,7 @@ class MainWindow(QMainWindow):
             return
         if len(runs) == 1:
             path, _ = QFileDialog.getSaveFileName(
-                self, "Save VMAF run", f"{runs[0].label}.vmafrun.json", "VMAF run (*.vmafrun.json)"
+                self, "Save analysis results", f"{runs[0].label}.vmafrun.json", "Analysis results (*.vmafrun.json)"
             )
             if path:
                 self._submit_save(runs[0].result, Path(path), runs[0].label)
@@ -2620,7 +2723,7 @@ class MainWindow(QMainWindow):
         all_runs = [r.completed_run for r in self._rows if r.completed_run]
         if not all_runs and not self.graph_panel._entries:
             QMessageBox.information(
-                self, "No results yet", "Run or load at least one VMAF result before opening the graph."
+                self, "No results yet", "Calculate metrics or load analysis results to view metric graphs."
             )
             return
         self._open_or_update_graph(all_runs)
@@ -2683,7 +2786,7 @@ class MainWindow(QMainWindow):
         options = row.options
         resample = options.resample_test
         if resample is None and row.video_info is None:
-            return None  # the distorted file has not been read yet
+            return None  # the test file has not been read yet
 
         # Crops that a run would apply are only known once it has run:
         # auto-detection measures the video. Manual and "none" are known

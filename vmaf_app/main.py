@@ -9,7 +9,7 @@ from vmaf_app.ui.main_window import MainWindow
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("VMAF Calculator")
+    app.setApplicationName("Video Metrics Calculator")
     window = MainWindow()
     window.show()
     return app.exec()

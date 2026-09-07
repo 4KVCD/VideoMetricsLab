@@ -60,6 +60,13 @@ def _file_identity(path: Path) -> str:
 
 def _options_identity(options: VmafOptions) -> str:
     values = asdict(options)
+    # Preserve the exact legacy key for every existing VMAF-enabled run.
+    if options.compute_vmaf:
+        values.pop("compute_vmaf")
+    else:
+        # A disabled model cannot affect feature-only results.
+        for name in ("model", "model_choice", "custom_model_path"):
+            values.pop(name, None)
     # These only control how the same decoded frames are produced or how
     # libvmaf schedules its work. They do not change which frames/metrics
     # belong in the result, so changing performance hardware or thread count
@@ -67,7 +74,7 @@ def _options_identity(options: VmafOptions) -> str:
     for execution_only in ("gpu_decode", "gpu_vendor", "n_threads"):
         values.pop(execution_only, None)
     custom_model = options.custom_model_path
-    if custom_model:
+    if custom_model and options.compute_vmaf:
         values["custom_model_path"] = _file_identity(Path(custom_model))
     return json.dumps(values, sort_keys=True, separators=(",", ":"))
 

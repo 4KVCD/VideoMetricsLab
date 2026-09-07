@@ -28,6 +28,8 @@ class Settings:
     default_compute_psnr: bool = False
     default_compute_ssim: bool = False
     default_compute_xpsnr: bool = False
+    default_compute_vmaf: bool = True
+    graph_metric: str = "vmaf"
 
     # How many videos to score at once (1 or 2 -- see MAX_PARALLEL_JOBS).
     # libvmaf does not saturate a modern many-core CPU on its own, so a

@@ -197,7 +197,7 @@ class FrameComparePanel(QWidget):
         self.view_mode_combo.addItem("Still frame", "still")
         self.view_mode_combo.addItem("Video playback", "video")
         self.view_mode_combo.currentIndexChanged.connect(self._on_view_mode_changed)
-        top.addWidget(QLabel("Distorted video:"))
+        top.addWidget(QLabel("Test video:"))
         top.addWidget(self.previous_video_btn)
         top.addWidget(self.video_combo, stretch=1)
         top.addWidget(self.next_video_btn)
@@ -232,7 +232,7 @@ class FrameComparePanel(QWidget):
         color_row.addWidget(self.color_mode_combo)
         self.source_resolution_combo = QComboBox()
         self.source_resolution_combo.addItem("Native resolution", True)
-        self.source_resolution_combo.addItem("Downscale to encoded resolution", False)
+        self.source_resolution_combo.addItem("Downscale to test resolution", False)
         self.source_resolution_combo.setToolTip(
             "Playback only. Keep the cropped source at native resolution, or downscale "
             "it to fit the selected encode's cropped resolution. Both fit the window. "
@@ -240,12 +240,12 @@ class FrameComparePanel(QWidget):
         )
         self.source_resolution_combo.setEnabled(False)
         self.source_resolution_combo.currentIndexChanged.connect(self._on_source_resolution_changed)
-        color_row.addWidget(QLabel("Source playback:"))
+        color_row.addWidget(QLabel("Reference playback:"))
         color_row.addWidget(self.source_resolution_combo)
         color_row.addWidget(self.color_status_label, stretch=1)
         root.addLayout(color_row)
 
-        self.showing_label = QLabel("No completed results")
+        self.showing_label = QLabel("No videos loaded")
         font = self.showing_label.font()
         font.setBold(True)
         font.setPointSize(font.pointSize() + 1)
@@ -306,7 +306,7 @@ class FrameComparePanel(QWidget):
         self.detail_label.setAlignment(Qt.AlignCenter)
         root.addWidget(self.detail_label)
         self.guide_label = QLabel(
-            "Hold S: show source   ·   ←/→: switch distorted video   ·   "
+            "Hold S: show reference   ·   ←/→: switch test video   ·   "
             "Space: play/pause   ·   GPU playback: synchronized A/B"
         )
         self.guide_label.setAlignment(Qt.AlignCenter)
@@ -713,7 +713,7 @@ class FrameComparePanel(QWidget):
             self.color_status_label.setText("No video selected.")
             return
         comparison = entry.comparison
-        side = "SOURCE" if self._showing_source else "DISTORTED"
+        side = "REFERENCE" if self._showing_source else "TEST"
         name = comparison.source_info.path.name if self._showing_source else entry.label
         suffix = "" if self._showing_source else f" {self._current_index + 1} of {len(self._entries)}"
         self.showing_label.setText(f"{side}{suffix} — {name}")
@@ -732,13 +732,23 @@ class FrameComparePanel(QWidget):
     def _score_text(self, entry: FrameComparisonEntry) -> str:
         """What this frame scored, or why there is no number to show."""
         if entry.scores is None:
-            return "not scored — preview only"
+            return "No metric results loaded"
         idx = int(np.searchsorted(entry.scores.frame, self._frame))
         if idx < len(entry.scores) and int(entry.scores.frame[idx]) == self._frame:
-            candidate = float(entry.scores.vmaf[idx])
-            if math.isfinite(candidate):
-                return f"VMAF {candidate:.2f}"
-        return "VMAF not scored for this frame"
+            values = []
+            for metric, label, precision, unit in (
+                ("vmaf", "VMAF", 2, ""), ("ssim", "SSIM", 4, ""),
+                ("psnr", "PSNR", 2, " dB"), ("xpsnr", "XPSNR", 2, " dB"),
+            ):
+                column = entry.scores.values(metric)
+                if column is None or math.isnan(float(column[idx])):
+                    continue
+                candidate = float(column[idx])
+                value = ("∞" if candidate > 0 else "−∞") if math.isinf(candidate) else f"{candidate:.{precision}f}"
+                values.append(f"{label} {value}{unit}")
+            if values:
+                return " · ".join(values)
+        return "Metrics not calculated for this frame"
 
     def _color_settings(self) -> PreviewColorSettings:
         return PreviewColorSettings(

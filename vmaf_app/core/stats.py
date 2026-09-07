@@ -168,4 +168,4 @@ def compute_stats(
 
 
 def stats_for_run(result: VmafRunResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
-    return compute_stats(result.frames.vmaf, thresholds)
+    return compute_stats(result.frames.vmaf if result.frames.vmaf is not None else [], thresholds)

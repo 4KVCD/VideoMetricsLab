@@ -261,7 +261,7 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
     opts = [
         f"log_path={log_path.name}",
         "log_fmt=json",
-        f"model={model if model is not None else options.model}",
+        f"model={model if model is not None else options.model}" if options.compute_vmaf else "model=''",
     ]
     # libvmaf 2.0+ defaults to single-threaded (n_threads=1) unless told
     # otherwise -- omitting this option here does NOT mean "use all cores",
@@ -297,6 +297,12 @@ def _build_libvmaf_stage(
     filter with its own stats file -- so when requested it sits between
     decode and libvmaf, passing [main] through under a new label.
     """
+    if not options.requested_metrics():
+        raise VmafRunError("Select at least one metric to calculate.")
+    # XPSNR-only needs no libvmaf filter or model at all.
+    if not options.compute_vmaf and not options.extra_features:
+        assert xpsnr_log_path is not None
+        return f"[main][ref]xpsnr=stats_file={xpsnr_log_path.name}:" + ":".join(_FRAMESYNC_OPTS)
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
     chains = []
     main_label = "main"
@@ -656,7 +662,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
     # of thousands of frames, and those objects would be built only to be
     # thrown away here.
     frame_nums: list[int] = []
-    vmafs: list[float] = []
+    vmafs: list[float | None] = []
     psnrs: list[float | None] = []
     ssims: list[float | None] = []
     xpsnrs: list[float | None] = []
@@ -665,7 +671,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         metrics = fr.get("metrics", {})
         frame_num = int(fr.get("frameNum", len(frame_nums)))
         vmaf = metrics.get("vmaf")
-        if vmaf is None:
+        if not any(k in metrics for k in ("vmaf", "psnr_y", "psnr", "float_ssim", "ssim")):
             continue
         # `a if a is not None else b`, not `a or b`: libvmaf reports a real
         # 0.0 for badly degraded frames, and `or` would discard it and fall
@@ -677,7 +683,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         if ssim is None:
             ssim = metrics.get("ssim")
         frame_nums.append(frame_num)
-        vmafs.append(float(vmaf))
+        vmafs.append(None if vmaf is None else float(vmaf))
         psnrs.append(psnr)
         ssims.append(ssim)
         xpsnrs.append(xpsnr_by_frame.get(frame_num))
@@ -696,7 +702,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
     return FrameScores(
         frame=frame_arr,
         time=time_arr,
-        vmaf=np.array(vmafs, dtype=np.float32),
+        vmaf=column(vmafs),
         psnr=column(psnrs), ssim=column(ssims), xpsnr=column(xpsnrs),
     )
 
@@ -756,6 +762,8 @@ def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
 def _auto_model_or(options: VmafOptions, dimensions: tuple[int, int]) -> str:
     """The model to actually run with. Only Auto is re-decided here; an
     explicit or custom choice is the user's and is left alone."""
+    if not options.compute_vmaf:
+        return ""
     if options.model_choice != AUTO_MODEL_CHOICE:
         return options.model
     return model_for_resolution(*dimensions)
@@ -782,12 +790,14 @@ def _execute_run(
     exit-code/missing-log checks and the log parsing -- four places a fix had
     to be remembered in, and one of them would eventually be missed.
     """
+    if not options.requested_metrics():
+        raise VmafRunError("Select at least one metric to calculate.")
     with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir_str:
         tmpdir = Path(tmpdir_str)
         log_path = tmpdir / "vmaf_log.json"
         xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
         resolved_model = _resolve_model_for_cwd(
-            model if model is not None else options.model, tmpdir
+            (model if model is not None else options.model) if options.compute_vmaf else "", tmpdir
         )
 
         def run_with(plan: HwAccelPlan):
@@ -822,10 +832,19 @@ def _execute_run(
             tail = "\n".join(result.stderr.splitlines()[-25:])
             raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
 
-        if not log_path.exists():
-            raise VmafRunError("ffmpeg finished but no VMAF log was produced.", stderr_tail=result.stderr[-2000:])
-
-        return _parse_log(log_path, fps, xpsnr_log_path)
+        if not options.compute_vmaf and not options.extra_features:
+            values = _parse_xpsnr_log(xpsnr_log_path)
+            numbers = np.array(sorted(values), dtype=np.int32)
+            frames = FrameScores(numbers, numbers / fps, None,
+                                 xpsnr=np.array([values[n] for n in numbers], dtype=np.float32))
+        else:
+            if not log_path.exists():
+                raise VmafRunError("ffmpeg finished but no metric log was produced.", stderr_tail=result.stderr[-2000:])
+            frames = _parse_log(log_path, fps, xpsnr_log_path)
+        missing = [m for m in options.requested_metrics() if not frames.has(m)]
+        if not frames or missing:
+            raise VmafRunError("No results for requested metrics: " + ", ".join(missing or options.requested_metrics()))
+        return frames
 
 
 def run_vmaf(

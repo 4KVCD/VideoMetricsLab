@@ -868,7 +868,7 @@ def test_a_run_retries_down_the_ladder_until_one_succeeds(monkeypatch, tmp_path)
         # Only all-software decode works on this imaginary machine.
         code = 0 if not plan.uses_gpu else 1
         if code == 0:
-            (Path(cwd) / "vmaf_log.json").write_text('{"frames": []}', encoding="utf-8")
+            (Path(cwd) / "vmaf_log.json").write_text('{"frames": [{"frameNum": 0, "metrics": {"vmaf": 90}}]}', encoding="utf-8")
         return subprocess.CompletedProcess(cmd, code, "", "decoder error")
 
     monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
