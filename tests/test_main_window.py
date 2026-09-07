@@ -425,11 +425,11 @@ def test_black_bars_column_distinguishes_pending_from_disabled(qapp):
     win.distorted_table.selectRow(row)
     win.crop_combo.setCurrentIndex(1)
 
-    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Disabled"
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Off"
     assert "full frames" in win.distorted_table.item(row, COL_BLACK_BARS).toolTip()
 
 
-def test_black_bars_column_shows_each_detected_side_and_full_details(qapp):
+def test_black_bars_column_answers_yes_or_no_about_the_test_video(qapp):
     win = MainWindow()
     source = _fake_video_info_res("source.mp4", 3840, 2160)
     distorted = _fake_video_info_res("encode.mp4", 1920, 804)
@@ -450,21 +450,20 @@ def test_black_bars_column_shows_each_detected_side_and_full_details(qapp):
 
     win._set_row_metrics(row)
 
+    # The cell answers only for the test video, which here is already cropped.
     item = win.distorted_table.item(row, COL_BLACK_BARS)
-    assert item.text() == "S TB276 · D none"
-    assert "Reference: black bars detected and cropped." in item.toolTip()
-    assert "Top: 276 px" in item.toolTip()
-    assert "Bottom: 276 px" in item.toolTip()
-    assert "Content: 3840x1608" in item.toolTip()
-    assert "Original: 3840x2160" in item.toolTip()
-    assert "Test video: no black bars detected." in item.toolTip()
+    assert item.text() == "No"
+    # The reference's bars, and every pixel count, are on hover.
+    assert "Reference: black bars cropped off -- top 276 px, bottom 276 px." in item.toolTip()
+    assert "Compared at 3840x1608 instead of 3840x2160." in item.toolTip()
+    assert "Test video: no black bars. Compared in full at 1920x804." in item.toolTip()
 
     win._rows[row].options.crop_mode = CropMode.NONE
     win._invalidate_completed_result(row)
-    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Disabled"
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Off"
 
 
-def test_black_bars_column_reports_none_detected_for_two_full_frames(qapp):
+def test_black_bars_column_says_yes_when_the_test_video_is_letterboxed(qapp):
     win = MainWindow()
     source = _fake_video_info_res("source.mp4", 1920, 1080)
     distorted = _fake_video_info_res("encode.mp4", 1920, 1080)
@@ -485,12 +484,38 @@ def test_black_bars_column_reports_none_detected_for_two_full_frames(qapp):
     win._set_row_metrics(row)
 
     item = win.distorted_table.item(row, COL_BLACK_BARS)
-    assert item.text() == "None detected"
-    assert "Reference: no black bars detected." in item.toolTip()
-    assert "Test video: no black bars detected." in item.toolTip()
+    assert item.text() == "No"
+    assert "Reference: no black bars." in item.toolTip()
+    assert "Test video: no black bars." in item.toolTip()
 
 
-def test_black_bars_column_for_resolution_test_only_lists_source(qapp):
+def test_black_bars_column_says_yes_for_a_letterboxed_test_video(qapp):
+    win = MainWindow()
+    source = _fake_video_info_res("source.mp4", 1920, 1080)
+    distorted = _fake_video_info_res("encode.mp4", 1920, 1080)
+    row = win._add_table_row(distorted.path)
+    result = VmafRunResult(
+        source=source.path,
+        distorted=distorted.path,
+        frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
+        fps=30.0,
+        model="version=vmaf_v0.6.1",
+        source_crop=CropBox(w=1920, h=1080, x=0, y=0),
+        distorted_crop=CropBox(w=1920, h=804, x=0, y=138),
+        source_info=source,
+        distorted_info=distorted,
+    )
+    win._rows[row].completed_run = CompletedRun(result, "encode")
+
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_BLACK_BARS)
+    assert item.text() == "Yes"
+    assert "Test video: black bars cropped off -- top 138 px, bottom 138 px." in item.toolTip()
+    assert "Compared at 1920x804 instead of 1920x1080." in item.toolTip()
+
+
+def test_black_bars_column_for_a_resolution_test_answers_for_the_reference(qapp):
     win = MainWindow()
     source = _fake_video_info_res("source.mp4", 3840, 2160)
     row = win._add_table_row(Path("source [downscale-1080p-upscale].mp4"))
@@ -510,8 +535,10 @@ def test_black_bars_column_for_resolution_test_only_lists_source(qapp):
 
     win._set_row_metrics(row)
 
+    # A resolution test has no separate file, so the reference's own bars
+    # are the only answer there is to give.
     item = win.distorted_table.item(row, COL_BLACK_BARS)
-    assert item.text() == "S TB276"
+    assert item.text() == "Yes"
     assert "Reference:" in item.toolTip()
     assert "Test video:" not in item.toolTip()
 
@@ -648,7 +675,7 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
     assert win.distorted_table.item(0, COL_PSNR).text() == "43.00"
     assert win.distorted_table.item(0, COL_SSIM).text() == "0.9883"
     assert win.distorted_table.item(0, COL_XPSNR).text() == "40.00"
-    assert win.distorted_table.item(0, COL_BLACK_BARS).text() == "None detected"
+    assert win.distorted_table.item(0, COL_BLACK_BARS).text() == "No"
 
 
 def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypatch):
@@ -702,7 +729,7 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     assert applied is True
     assert win._rows[row].completed_run is not None
     assert win._rows[row].completed_run.label == "cached-label"
-    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "None detected"
+    assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "No"
 
 
 def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):

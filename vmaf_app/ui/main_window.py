@@ -675,7 +675,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setColumnWidth(COL_CHECK, 28)
         self.distorted_table.setColumnWidth(COL_STATUS, 125)
         self.distorted_table.setColumnWidth(COL_INFO, 150)
-        self.distorted_table.setColumnWidth(COL_BLACK_BARS, 155)
+        self.distorted_table.setColumnWidth(COL_BLACK_BARS, 78)
         self.distorted_table.setColumnWidth(COL_SCALING, 90)
         self.distorted_table.setColumnWidth(COL_BITRATE, 65)
         for col, _, _ in _METRIC_COLUMNS:
@@ -1259,57 +1259,38 @@ class MainWindow(QMainWindow):
         return None if math.isnan(mean) else mean
 
     @staticmethod
-    def _crop_display(
-        short_label: str, long_label: str, info: VideoInfo, crop: CropBox | None,
-    ) -> tuple[str, str, bool]:
-        """Compact table text, detailed tooltip, and whether bars were found."""
+    def _crop_detail(label: str, info: VideoInfo, crop: CropBox | None) -> str:
+        """One video's crop, spelled out for the tooltip."""
         if crop is None:
-            return (
-                f"{short_label} unchecked",
-                f"{long_label}: no crop was applied; black bars were not checked.",
-                False,
-            )
+            return f"{label}: not checked for black bars; no crop was applied."
         if crop.is_noop(info.width, info.height):
-            return (
-                f"{short_label} none",
-                f"{long_label}: no black bars detected.\n"
-                f"Content: {info.width}x{info.height}\n"
-                f"Original: {info.width}x{info.height}",
-                False,
-            )
-
-        left = max(0, crop.x)
-        top = max(0, crop.y)
-        right = max(0, info.width - crop.x - crop.w)
-        bottom = max(0, info.height - crop.y - crop.h)
-        compact_parts = []
-        if top and top == bottom:
-            compact_parts.append(f"TB{top}")
-        else:
-            compact_parts.extend(
-                f"{name}{value}" for name, value in (("T", top), ("B", bottom)) if value
-            )
-        if left and left == right:
-            compact_parts.append(f"LR{left}")
-        else:
-            compact_parts.extend(
-                f"{name}{value}" for name, value in (("L", left), ("R", right)) if value
-            )
-        compact = "/".join(compact_parts)
+            return f"{label}: no black bars. Compared in full at {info.width}x{info.height}."
+        sides = (
+            ("top", max(0, crop.y)),
+            ("bottom", max(0, info.height - crop.y - crop.h)),
+            ("left", max(0, crop.x)),
+            ("right", max(0, info.width - crop.x - crop.w)),
+        )
+        cut = ", ".join(f"{name} {value} px" for name, value in sides if value)
         return (
-            f"{short_label} {compact}",
-            f"{long_label}: black bars detected and cropped.\n"
-            f"Top: {top} px\n"
-            f"Bottom: {bottom} px\n"
-            f"Left: {left} px\n"
-            f"Right: {right} px\n"
-            f"Content: {crop.w}x{crop.h}\n"
-            f"Original: {info.width}x{info.height}",
-            True,
+            f"{label}: black bars cropped off -- {cut}.\n"
+            f"Compared at {crop.w}x{crop.h} instead of {info.width}x{info.height}."
         )
 
+    @staticmethod
+    def _has_black_bars(info: VideoInfo, crop: CropBox | None) -> bool | None:
+        """True/False, or None when nothing was cropped off so nothing is known."""
+        return None if crop is None else not crop.is_noop(info.width, info.height)
+
     def _set_row_black_bars(self, row: int, *, probe_failed: bool = False) -> None:
-        """Shows the crop state for the exact source/distorted pair in a row.
+        """Whether the test video has black bars -- and nothing more.
+
+        The cell used to read like "S TB276 . D none": a per-side pixel
+        breakdown of both videos, in a column barely wide enough for the
+        heading. The question actually being asked of it has two answers,
+        so the cell gives one of those and the pixel counts (and what was
+        cropped off the reference) wait on hover for when the answer is
+        surprising.
 
         Auto crop is resolved during a run rather than media probing, and can
         differ between rows because duration limits are per-row. The table
@@ -1320,56 +1301,44 @@ class MainWindow(QMainWindow):
         if item is None:
             return
 
+        def show(text: str, tooltip: str, *, muted: bool = False) -> None:
+            item.setText(text)
+            item.setToolTip(tooltip)
+            item.setForeground(
+                QColor("#999") if muted else self.distorted_table.palette().text()
+            )
+
         if probe_failed:
-            item.setText("Unknown")
-            item.setToolTip("Black bars could not be checked because the video could not be read.")
-            item.setForeground(QColor("#999"))
+            show("Unknown", "Black bars could not be checked because the video could not be read.", muted=True)
             return
 
         row_data = self._rows[row]
         completed = row_data.completed_run
         if completed is None:
             if row_data.options.crop_mode == CropMode.NONE:
-                item.setText("Disabled")
-                item.setToolTip(
-                    "Black-bar detection is disabled for this row; the full frames will be compared."
-                )
+                show("Off", "Black-bar detection is disabled for this row; the full frames will be compared.", muted=True)
             elif row_data.options.crop_mode == CropMode.MANUAL:
-                item.setText("Manual")
-                item.setToolTip("A manual crop is configured; exact applied sides will appear after the run.")
+                show("Manual", "A manual crop is configured; the detected sides appear after the run.", muted=True)
             else:
-                item.setText("Pending")
-                item.setToolTip("Black bars will be detected when this row is run.")
-            item.setForeground(QColor("#777"))
+                show("Pending", "Black bars will be detected when this row is run.", muted=True)
             return
 
         result = completed.result
-        sides = [
-            self._crop_display("S", "Reference", result.source_info, result.source_crop)
-        ]
-        if row_data.options.resample_test is None:
-            sides.append(
-                self._crop_display(
-                    "D", "Test video", result.distorted_info, result.distorted_crop
-                )
-            )
+        # A resolution test has no separate test file: both branches come
+        # from the reference, so the reference's own bars are the answer.
+        resample = row_data.options.resample_test is not None
+        subject_crop = result.source_crop if resample else result.distorted_crop
+        subject_info = result.source_info if resample else result.distorted_info
 
-        if all(crop is None for crop in (
-            [result.source_crop]
-            if row_data.options.resample_test is not None
-            else [result.source_crop, result.distorted_crop]
-        )):
-            item.setText("Disabled")
-            item.setToolTip("Black-bar detection was disabled for this run; no crop was applied.")
-        elif not any(found for _, _, found in sides) and all(
-            "unchecked" not in short for short, _, _ in sides
-        ):
-            item.setText("None detected")
-            item.setToolTip("\n\n".join(detail for _, detail, _ in sides))
+        details = [self._crop_detail("Test video", subject_info, subject_crop)] if not resample else []
+        details.append(self._crop_detail("Reference", result.source_info, result.source_crop))
+        tooltip = "\n\n".join(details)
+
+        has_bars = self._has_black_bars(subject_info, subject_crop)
+        if has_bars is None:
+            show("Off", "Black-bar detection was disabled for this run; no crop was applied.", muted=True)
         else:
-            item.setText(" · ".join(short for short, _, _ in sides))
-            item.setToolTip("\n\n".join(detail for _, detail, _ in sides))
-        item.setForeground(self.distorted_table.palette().text())
+            show("Yes" if has_bars else "No", tooltip)
 
     def _resize_mismatch(self, row: int, distorted_info: VideoInfo) -> tuple[str, str]:
         """(short tag, full explanation) for which of the two resolutions got
