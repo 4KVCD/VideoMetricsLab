@@ -258,7 +258,7 @@ def test_switching_away_from_the_graph_tab_and_back_keeps_its_series(qapp):
     win._rows[row].completed_run = _fake_completed_run("a.mp4")
 
     win.distorted_table.selectRow(row)
-    win._on_compare_selected()
+    win._on_show_graph_clicked()
     assert win.tabs.currentIndex() == TAB_GRAPH
     assert len(win.graph_panel._entries) == 1
 
@@ -1872,7 +1872,7 @@ def test_compare_selected_switches_to_the_graph_tab(qapp):
     win.distorted_table.selectRow(row)
 
     assert win.tabs.currentIndex() == TAB_VIDEOS
-    win._on_compare_selected()
+    win._on_show_graph_clicked()
     assert win.tabs.currentIndex() == TAB_GRAPH
 
 

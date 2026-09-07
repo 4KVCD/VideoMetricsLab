@@ -895,14 +895,16 @@ class MainWindow(QMainWindow):
         load_btn.clicked.connect(self._on_load_saved_run)
         self.save_btn = save_btn = QPushButton("Save selected results...")
         save_btn.clicked.connect(self._on_save_selected)
-        compare_btn = QPushButton("Plot selected results")
-        compare_btn.clicked.connect(self._on_compare_selected)
+        # One button, not two. "Plot selected results" claimed to plot a
+        # subset, but opening the tab syncs every completed row into it
+        # (see _sync_graph), so both buttons left exactly the same graph on
+        # screen -- the selection one merely refused to open when nothing
+        # selected had a result.
         self.show_graph_btn = QPushButton("Open metric graphs")
         self.show_graph_btn.setToolTip("Opens Metric Graphs with the current results and graph settings.")
         self.show_graph_btn.clicked.connect(self._on_show_graph_clicked)
         run_row.addWidget(load_btn)
         run_row.addWidget(save_btn)
-        run_row.addWidget(compare_btn)
         run_row.addWidget(self.show_graph_btn)
         layout.addLayout(run_row)
 
@@ -2787,13 +2789,6 @@ class MainWindow(QMainWindow):
         # the background, and a dialog stealing focus minutes later is worse
         # than the failure it announces.
         self.status_label.setText(f"Could not {description}: {error}")
-
-    def _on_compare_selected(self) -> None:
-        runs = self._selected_runs()
-        if not runs:
-            QMessageBox.information(self, "Nothing selected", "Select one or more completed rows to compare.")
-            return
-        self._open_or_update_graph(runs)
 
     def _on_show_graph_clicked(self) -> None:
         # Syncs in every currently-completed row every time -- not just
