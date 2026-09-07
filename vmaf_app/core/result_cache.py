@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from vmaf_app.core.app_paths import user_data_dir
-from vmaf_app.core.models import VmafOptions, VmafRunResult
+from vmaf_app.core.models import VmafOptions, VmafRunResult, clone_options
 from vmaf_app.core.run_io import load_run, save_run
 
 _dir_override: Path | None = None
@@ -94,18 +94,98 @@ def _cache_path(
     return base / f"{cache_key(source, distorted, options)}.vmafrun.json"
 
 
+#: Every metric, and the options that request it. The identity of a cached
+#: run includes which metrics it holds, so a run is only found by asking for
+#: exactly the set it was computed with -- see _candidate_options.
+_ALL_METRICS = ("vmaf", "psnr", "ssim", "xpsnr")
+_FEATURE_BY_METRIC = {"psnr": "name=psnr", "ssim": "name=float_ssim"}
+
+
+def _options_for_metrics(options: VmafOptions, metrics: frozenset[str]) -> VmafOptions:
+    """`options` as they would have been for exactly this set of metrics.
+
+    Everything that decides which pictures get compared -- crop, scaling,
+    duration, subsampling, model -- is carried over untouched. Only the
+    choice of metrics differs, which is the whole point: a run measured the
+    same frames whether or not it also recorded SSIM.
+    """
+    candidate = clone_options(options)
+    candidate.compute_vmaf = "vmaf" in metrics
+    candidate.compute_xpsnr = "xpsnr" in metrics
+    # Rebuilt in a fixed order rather than filtered in place: extra_features
+    # is a list, so its ORDER is part of the identity, and it is appended to
+    # in whatever order the metrics were ticked.
+    features = [_FEATURE_BY_METRIC[m] for m in ("psnr", "ssim") if m in metrics]
+    features += [f for f in options.extra_features
+                 if f not in _FEATURE_BY_METRIC.values() and f not in features]
+    candidate.extra_features = features
+    return candidate
+
+
+def _candidate_options(options: VmafOptions) -> list[VmafOptions]:
+    """Every cached run that could answer for `options`, best first.
+
+    The caller's own options come first, so an exact hit costs one stat call
+    and nothing changes for a run computed with the metrics being asked for.
+
+    After that: a run holding a SUPERSET of the requested metrics is a
+    complete answer -- it measured everything wanted and more. A run holding
+    a SUBSET is a partial one worth having, because the alternative is
+    discarding a finished measurement of a feature-length video and
+    recomputing it from nothing. The UI already distinguishes the two: a
+    partial load shows as "Partially calculated" and is re-run to fill the
+    gaps, rather than being reported as done.
+    """
+    wanted = frozenset(options.requested_metrics())
+    candidates = [options]
+    if not wanted:
+        return candidates
+    others = []
+    for mask in range(1, 1 << len(_ALL_METRICS)):
+        metrics = frozenset(
+            m for i, m in enumerate(_ALL_METRICS) if mask & (1 << i)
+        )
+        # The wanted set is NOT skipped even though the caller's own options
+        # are already first: those carry extra_features in whatever order the
+        # metrics were ticked, and that order is part of the identity. The
+        # canonical rebuild of the same set finds a run stored under the
+        # other order.
+        covered = len(metrics & wanted)
+        others.append((
+            wanted <= metrics,  # complete answers before partial ones
+            covered,            # then whichever supplies the most of them
+            -len(metrics - wanted),  # then the least unrelated extra work
+            sorted(metrics),    # stable, so the choice does not vary by run
+            metrics,
+        ))
+    others.sort(key=lambda entry: (entry[0], entry[1], entry[2], entry[3]), reverse=True)
+    candidates += [
+        _options_for_metrics(options, metrics)
+        for complete, covered, _, _, metrics in others
+        if complete or covered
+    ]
+    return candidates
+
+
 def load_cached(
     source: Path, distorted: Path, options: VmafOptions, directory: Path | None = None
 ) -> tuple[VmafRunResult, str] | None:
-    """Returns (result, label) if a cached run exists for this exact
-    source+distorted file identity, else None."""
-    path = _cache_path(source, distorted, options, directory)
-    if not path.exists():
-        return None
-    try:
-        return load_run(path)
-    except Exception:
-        return None
+    """Returns (result, label) for this source+distorted pair, else None.
+
+    Matches on file identity and on every option that changes what is
+    measured. The set of metrics is the one exception: a run that recorded
+    a different set of them looked at the same frames in the same way, so it
+    is reused rather than thrown away -- see _candidate_options.
+    """
+    for candidate in _candidate_options(options):
+        path = _cache_path(source, distorted, candidate, directory)
+        if not path.exists():
+            continue
+        try:
+            return load_run(path)
+        except Exception:
+            continue
+    return None
 
 
 def store(

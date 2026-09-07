@@ -165,8 +165,6 @@ def test_cache_hit_survives_execution_only_option_changes(tmp_path, changed):
         VmafOptions(crop_mode=CropMode.NONE),
         VmafOptions(scale_algorithm="lanczos"),
         VmafOptions(scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
-        VmafOptions(extra_features=["name=psnr"]),
-        VmafOptions(compute_xpsnr=True),
         VmafOptions(duration_limit=2.0),
         VmafOptions(n_subsample=5),
     ],
@@ -180,3 +178,102 @@ def test_cache_miss_survives_score_or_output_option_changes(tmp_path, changed):
     )
 
     assert result_cache.load_cached(source, distorted, changed) is None
+
+
+# ------------------------------------------------------- reuse across metrics
+
+
+@pytest.mark.parametrize(
+    "asked_for",
+    [
+        VmafOptions(extra_features=["name=psnr"]),
+        VmafOptions(compute_xpsnr=True),
+        VmafOptions(extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True),
+    ],
+)
+def test_asking_for_more_metrics_still_finds_an_earlier_run(tmp_path, asked_for):
+    """A finished measurement must not be discarded for wanting more from it.
+
+    Which metrics a run recorded is part of its cache identity, so when the
+    default changed from VMAF alone to all four, every previously scored
+    video became a cache miss and offered to recompute itself from nothing.
+    The frames compared were identical; only the set of numbers written down
+    differed.
+    """
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="original", options=VmafOptions(),  # VMAF only
+    )
+
+    found = result_cache.load_cached(source, distorted, asked_for)
+    assert found is not None
+    assert found[1] == "original"
+
+
+def test_asking_for_fewer_metrics_finds_the_fuller_run(tmp_path):
+    # A run holding everything asked for and more is a complete answer.
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted), label="all four",
+        options=VmafOptions(
+            extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True
+        ),
+    )
+
+    assert result_cache.load_cached(source, distorted, VmafOptions()) is not None
+
+
+def test_a_fuller_run_is_preferred_over_a_thinner_one(tmp_path):
+    # Both could answer; the one carrying more of what was asked for wins,
+    # so a second run fills in fewer gaps.
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="vmaf only", options=VmafOptions(),
+    )
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted), label="vmaf and psnr",
+        options=VmafOptions(extra_features=["name=psnr"]),
+    )
+
+    found = result_cache.load_cached(
+        source, distorted,
+        VmafOptions(extra_features=["name=psnr", "name=float_ssim"]),
+    )
+    assert found is not None and found[1] == "vmaf and psnr"
+
+
+def test_reuse_across_metrics_still_respects_how_frames_were_compared(tmp_path):
+    # The relaxation is ONLY about which metrics were recorded. A run that
+    # cropped differently, or sampled different frames, measured different
+    # pictures and must never be offered for a different setting.
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="original", options=VmafOptions(n_subsample=1),
+    )
+
+    asked = VmafOptions(
+        n_subsample=5, extra_features=["name=psnr"], compute_xpsnr=True
+    )
+    assert result_cache.load_cached(source, distorted, asked) is None
+
+
+def test_metric_order_does_not_hide_a_cached_run(tmp_path):
+    """extra_features is a list, so its order is part of the identity, and it
+    is appended to in whatever order the metrics were ticked. Ticking SSIM
+    before PSNR must not lose the run that ticking PSNR first produced."""
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted), label="original",
+        options=VmafOptions(extra_features=["name=psnr", "name=float_ssim"]),
+    )
+
+    reversed_order = VmafOptions(extra_features=["name=float_ssim", "name=psnr"])
+    assert result_cache.load_cached(source, distorted, reversed_order) is not None
