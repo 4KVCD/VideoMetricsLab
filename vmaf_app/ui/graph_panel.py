@@ -43,6 +43,16 @@ from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
 
+#: Statistic cells. A monospaced family so digits share a width; the
+#: fallback is whatever Qt substitutes, which is still better aligned than a
+#: proportional face because the cells are right-aligned regardless.
+_NUMBER_FONT_FAMILY = "Consolas"
+
+_MEAN_TINT = (244, 246, 250)
+_SELECTED_MEAN_TINT = (207, 224, 250)
+_CLICKABLE_HEADER = "#2a5db0"
+_SELECTED_HEADER = "#12327a"
+
 _PALETTE = [
     "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
     "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD",
@@ -70,7 +80,7 @@ class MetricSpec:
     axis_label: str  # plot Y-axis label
     value_format: str  # format spec for hover-text values, e.g. "{:.2f}"
     fixed_y_max: float | None  # VMAF's natural ceiling (100); None = autoscale to the data
-    thresholds: list[tuple[str, float]] = field(default_factory=list)  # only meaningful on VMAF's fixed 0-100 scale
+    thresholds: list[tuple[str, float]] = field(default_factory=list)  # per-metric bands; see PSNR/SSIM/XPSNR_THRESHOLDS
 
     def value(self, frame: FrameScore) -> float | None:
         return getattr(frame, self.key)
@@ -93,12 +103,41 @@ class MetricSpec:
         return self.value_format.format(value)
 
 
+#: Where each metric reads when VMAF is at its own band edges, so ">90" means
+#: roughly the same thing on all four. Calibrated over 2,520 paired frames --
+#: three synthetic sources (fine detail, smooth gradient, flat regions) at
+#: seven CRFs each, spanning VMAF 13 to 99.6 -- by taking the median value of
+#: each metric on the frames where VMAF sat at 95/90/85/80/70:
+#:
+#:   VMAF  95    90    85    80    70
+#:   PSNR  40.8  38.2  35.3  33.7  32.1
+#:   SSIM  .988  .983  .973  .958  .947
+#:   XPSNR 37.8  35.5  33.3  29.1  27.1
+#:
+#: PSNR's low end is genuinely compressed -- VMAF 85 to 70 spans only 3 dB --
+#: so its bottom three bands sit close together and tend to move as one. The
+#: calibration used synthetic sources, real content will shift these, and
+#: they are defaults rather than constants.
+PSNR_THRESHOLDS: list[tuple[str, float]] = [
+    (">", 41.0), (">", 38.0), (">", 35.0), ("<", 35.0), ("<", 34.0), ("<", 32.0),
+]
+SSIM_THRESHOLDS: list[tuple[str, float]] = [
+    (">", 0.99), (">", 0.98), (">", 0.97), ("<", 0.97), ("<", 0.96), ("<", 0.95),
+]
+XPSNR_THRESHOLDS: list[tuple[str, float]] = [
+    (">", 38.0), (">", 35.0), (">", 33.0), ("<", 33.0), ("<", 30.0), ("<", 27.0),
+]
+
 METRICS: list[MetricSpec] = [
     MetricSpec("vmaf", "VMAF", "VMAF", "{:.2f}", fixed_y_max=100.0, thresholds=DEFAULT_THRESHOLDS),
-    MetricSpec("psnr", "PSNR", "PSNR (dB)", "{:.2f}", fixed_y_max=None),
-    MetricSpec("ssim", "SSIM", "SSIM", "{:.4f}", fixed_y_max=None),
-    MetricSpec("xpsnr", "XPSNR", "XPSNR (dB)", "{:.2f}", fixed_y_max=None),
+    MetricSpec("psnr", "PSNR", "PSNR (dB)", "{:.2f}", fixed_y_max=None, thresholds=PSNR_THRESHOLDS),
+    MetricSpec("ssim", "SSIM", "SSIM", "{:.4f}", fixed_y_max=None, thresholds=SSIM_THRESHOLDS),
+    MetricSpec("xpsnr", "XPSNR", "XPSNR (dB)", "{:.2f}", fixed_y_max=None, thresholds=XPSNR_THRESHOLDS),
 ]
+
+#: Column 0 is the series; then one mean per metric; then the selected
+#: metric's detail; then the remove button.
+_MEAN_COLUMNS = range(1, 1 + len(METRICS))
 
 
 def _is_reportable(value: float | None) -> bool:
@@ -121,6 +160,27 @@ class SeriesEntry:
     step: float  # typical time delta between consecutive points in this series
     visible: bool = True
     identity: object | None = None
+    #: Mean of every metric this run has, by key; None where it has none.
+    #: Held here rather than read from the metric pages because the stats
+    #: table shows all four at once while pages are built lazily -- three of
+    #: them may not exist yet, and building them just to read a mean would
+    #: undo that.
+    means: dict[str, float | None] = field(default_factory=dict)
+
+
+def _metric_means(result: VmafRunResult) -> dict[str, float | None]:
+    means: dict[str, float | None] = {}
+    for metric in METRICS:
+        values = result.frames.values(metric.key)
+        if values is None or len(values) == 0:
+            means[metric.key] = None
+            continue
+        # A metric can be present but NaN on every frame; nanmean would warn
+        # and hand back NaN, which is not a mean and must not be shown as one.
+        finite = np.asarray(values, dtype=np.float64)
+        finite = finite[~np.isnan(finite)]
+        means[metric.key] = float(finite.mean()) if finite.size else None
+    return means
 
 
 _HOVER_PLACEHOLDER = (
@@ -543,12 +603,20 @@ class GraphPanel(QWidget):
         # of height, scrolling beyond that, so a long list can't crowd out
         # the plot below.
         top = QGroupBox("Series and statistics")
-        top_layout = QHBoxLayout(top)
+        top_layout = QVBoxLayout(top)
+        # Without this, nothing said the metric columns could be clicked, or
+        # that the detail to their right belonged to whichever one was.
+        self.stats_hint = QLabel()
+        self.stats_hint.setStyleSheet("color: #666;")
+        top_layout.addWidget(self.stats_hint)
 
         self.stats_table = QTableWidget()
         self.stats_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.stats_table.itemChanged.connect(self._on_stats_item_changed)
         self.stats_table.cellClicked.connect(self._on_stats_cell_clicked)
+        stats_header = self.stats_table.horizontalHeader()
+        stats_header.setSectionsClickable(True)
+        stats_header.sectionClicked.connect(self._on_stats_header_clicked)
         # Guards the itemChanged handler while _refresh_stats_table is
         # populating cells: setting a checkstate there would otherwise
         # re-enter and rebuild the table from inside its own rebuild.
@@ -705,15 +773,50 @@ class GraphPanel(QWidget):
     def _current_metric(self) -> MetricSpec:
         return METRICS[self.tabs.currentIndex()] if self.tabs.currentIndex() >= 0 else METRICS[0]
 
+    #: The statistics shown for the selected metric. "Mean" is deliberately
+    #: absent: every metric's mean already has a column of its own.
+    _DETAIL_LABELS = ["Median", "StDev", "Min", "Max", "10% Low", "5% Low", "1% Low", "0.1% Low"]
+
     def _setup_stats_table(self) -> None:
+        """Columns: the series, every metric's mean, then the selected
+        metric's full statistics.
+
+        The four means are always present because that is the comparison
+        actually being made -- which encode is better -- and it used to
+        require visiting four tabs and remembering numbers. The detail
+        follows one metric because there is no room for four of everything,
+        and because the deeper statistics are only asked about one at a time.
+        """
         metric = self._current_metric()
-        headers = ["Series", "Mean", "Median", "StDev", "Min", "Max", "10% Low", "5% Low", "1% Low", "0.1% Low"]
+        headers = ["Series"] + [m.label for m in METRICS] + list(self._DETAIL_LABELS)
         headers += [f"{cmp_op} {thresh:g}" for cmp_op, thresh in metric.thresholds]
         headers.append("")  # the per-row remove button
         self.stats_table.setColumnCount(len(headers))
         self.stats_table.setHorizontalHeaderLabels(headers)
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.stats_table.verticalHeader().setVisible(False)
+
+        for column, spec in zip(_MEAN_COLUMNS, METRICS):
+            head = self.stats_table.horizontalHeaderItem(column)
+            if head is None:
+                continue
+            selected = spec.key == metric.key
+            # axis_label rather than label: it carries the unit ("PSNR (dB)"),
+            # which the heading itself leaves off to keep the column narrow.
+            head.setToolTip(
+                f"Mean {spec.axis_label} over all scored frames.\n"
+                + ("Showing its detailed statistics." if selected
+                   else f"Click this column to show detailed {spec.label} statistics.")
+            )
+            # Link-coloured, so the four that can be clicked look different
+            # from the fourteen that cannot.
+            head.setForeground(QColor(_CLICKABLE_HEADER) if not selected else QColor(_SELECTED_HEADER))
+            font = QFont()
+            font.setBold(selected)
+            head.setFont(font)
+        self.stats_hint.setText(
+            f"Click a metric column for its full statistics \u2014 showing {metric.label}."
+        )
 
     def _series_name_item(self, entry: SeriesEntry) -> QTableWidgetItem:
         """The first cell: colour swatch, visibility checkbox and label in
@@ -732,18 +835,52 @@ class GraphPanel(QWidget):
         item.setForeground(QColor(entry.color))
         return item
 
+    @staticmethod
+    def _number_item(text: str) -> QTableWidgetItem:
+        """A statistic cell: right-aligned, in tabular figures.
+
+        Left-aligned in a proportional font, a column of near-identical
+        numbers (SSIM's 0.9938 against 0.9699, say) hid its own differences --
+        the digits that differ never landed in the same place twice. Aligned
+        right in a monospaced font they line up, and the column can be
+        scanned rather than read.
+        """
+        item = QTableWidgetItem(text)
+        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        item.setFont(QFont(_NUMBER_FONT_FAMILY, QFont().pointSize()))
+        return item
+
     def _series_id_at_row(self, row: int) -> int | None:
         item = self.stats_table.item(row, 0)
         sid = None if item is None else item.data(Qt.UserRole)
         return None if sid is None else int(sid)
 
     def _on_stats_cell_clicked(self, row: int, column: int) -> None:
-        """Clicking the last column's ✕ drops that series from the graph."""
+        """Clicking the last column's ✕ drops that series from the graph;
+        clicking a metric's mean switches the detail to that metric."""
+        if column in _MEAN_COLUMNS:
+            self._show_metric_detail(column - _MEAN_COLUMNS.start)
+            return
         if column != self.stats_table.columnCount() - 1:
             return
         series_id = self._series_id_at_row(row)
         if series_id is not None:
             self.remove_run(series_id)
+
+    def _on_stats_header_clicked(self, column: int) -> None:
+        if column in _MEAN_COLUMNS:
+            self._show_metric_detail(column - _MEAN_COLUMNS.start)
+
+    def _show_metric_detail(self, index: int) -> None:
+        """Selects the metric whose statistics the table details.
+
+        Deliberately the same selection the graph below uses, rather than a
+        second one of its own: the table and the plot are two views of one
+        metric, and letting them disagree would mean reading a VMAF plot
+        under an SSIM table.
+        """
+        if 0 <= index < len(METRICS) and index != self.tabs.currentIndex():
+            self.tabs.setCurrentIndex(index)
 
     def _on_stats_item_changed(self, item: QTableWidgetItem) -> None:
         if self._populating_stats or item.column() != 0:
@@ -776,6 +913,7 @@ class GraphPanel(QWidget):
                 existing.label = label
                 existing.times = times
                 existing.step = step
+                existing.means = _metric_means(result)
                 for page in self._pages.values():
                     page.set_curve(sid, existing, existing.color)
                 self._select_available_metric()
@@ -789,7 +927,7 @@ class GraphPanel(QWidget):
 
         entry = SeriesEntry(
             result=result, label=label, color=color, times=times, step=step,
-            visible=True, identity=identity,
+            visible=True, identity=identity, means=_metric_means(result),
         )
         self._entries[sid] = entry
 
@@ -1060,18 +1198,41 @@ class GraphPanel(QWidget):
                 self.stats_table.setItem(row, 0, self._series_name_item(entry))
                 self.stats_table.item(row, 0).setData(Qt.UserRole, sid)
 
+                # Every metric's mean, whether or not its page has been
+                # built -- the table is the comparison, and a lazily-built
+                # page must not decide what it can say.
+                for col, spec in zip(_MEAN_COLUMNS, METRICS):
+                    mean = entry.means.get(spec.key)
+                    item = self._number_item(
+                        "\u2014" if mean is None else spec.format_value(mean)
+                    )
+                    selected = spec.key == metric.key
+                    item.setBackground(QColor(*(
+                        _SELECTED_MEAN_TINT if selected else _MEAN_TINT)))
+                    if selected:
+                        font = QFont(item.font())
+                        font.setBold(True)
+                        item.setFont(font)
+                    else:
+                        item.setToolTip(
+                            f"Click this column to show detailed {spec.label} statistics."
+                        )
+                    self.stats_table.setItem(row, col, item)
+
+                detail_start = 1 + len(METRICS)
                 curve = page._curves.get(sid)
                 if curve is None:
-                    cells = [""] * (self.stats_table.columnCount() - 2)
+                    cells = [""] * (self.stats_table.columnCount() - detail_start - 1)
                 else:
                     s = curve.stats
                     # At the metric's own precision: SSIM's whole range is
                     # 0-1, so VMAF's 2dp collapses most real differences
                     # between encodes into an identical-looking row.
-                    cells = [v for _, v in s.summary(metric.value_format)]
+                    # [1:] drops Mean -- it has its own column above.
+                    cells = [v for _, v in s.summary(metric.value_format)[1:]]
                     cells += [f"{t.percentage:.1f}%" for t in s.thresholds]
-                for col, val in enumerate(cells, start=1):
-                    self.stats_table.setItem(row, col, QTableWidgetItem(val))
+                for col, val in enumerate(cells, start=detail_start):
+                    self.stats_table.setItem(row, col, self._number_item(val))
 
                 # The remove control is a plain item handled by cellClicked,
                 # not a QPushButton in a cell widget: cell widgets are

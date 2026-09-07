@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import FrameScore, VideoInfo, VmafRunResult
-from vmaf_app.ui.graph_panel import GraphPanel
+from vmaf_app.ui.graph_panel import METRICS, GraphPanel
 
 
 @pytest.fixture(scope="module")
@@ -228,13 +228,20 @@ def test_stats_table_reflects_the_currently_active_tab(qapp):
     win.tabs.setCurrentIndex(0)  # VMAF
     assert win.stats_table.rowCount() == 1
     headers_vmaf = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
-    assert "> 95" in headers_vmaf  # VMAF-specific threshold columns
+    assert "> 95" in headers_vmaf  # VMAF's own bands
+    # Every metric's mean is present whichever tab is showing, because the
+    # comparison being made is between encodes, not between tabs.
+    assert [m.label for m in METRICS] == headers_vmaf[1:1 + len(METRICS)]
 
     win.tabs.setCurrentIndex(1)  # PSNR
     assert win.stats_table.rowCount() == 1
     headers_psnr = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
-    assert "> 95" not in headers_psnr  # thresholds are VMAF-only, don't make sense on a dB scale
-    assert "Mean" in headers_psnr
+    assert "> 95" not in headers_psnr  # each metric brings its own bands
+    assert "> 41" in headers_psnr
+    assert [m.label for m in METRICS] == headers_psnr[1:1 + len(METRICS)]
+    # "Mean" is not a column any more: each metric's mean is its own column.
+    assert "Mean" not in headers_psnr
+    assert "Median" in headers_psnr
 
 
 def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
@@ -253,8 +260,81 @@ def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
     assert _row_for(win, "a").text() == "a"
     a_row = win.stats_table.row(_row_for(win, "a"))
     b_row = win.stats_table.row(_row_for(win, "b"))
-    assert win.stats_table.item(a_row, 1).text() != ""
-    assert win.stats_table.item(b_row, 1).text() == ""
+    detail = 1 + len(METRICS)  # first of the selected metric's own columns
+    assert win.stats_table.item(a_row, detail).text() != ""
+    assert win.stats_table.item(b_row, detail).text() == ""
+    # "b" has no PSNR at all, so its PSNR mean is a dash rather than a blank
+    # that could be mistaken for a value still being calculated.
+    psnr_mean = 1 + [m.key for m in METRICS].index("psnr")
+    assert win.stats_table.item(b_row, psnr_mean).text() == "\u2014"
+    # ...but it does have VMAF, and that column keeps showing it.
+    vmaf_mean = 1 + [m.key for m in METRICS].index("vmaf")
+    assert win.stats_table.item(b_row, vmaf_mean).text() not in ("", "\u2014")
+
+
+def test_clicking_a_metric_column_shows_that_metrics_detail(qapp):
+    """The four mean columns are the metric selector.
+
+    Nothing else in the table says which metric the Median/Min/Max columns
+    belong to, so the columns that pick it have to be the ones carrying its
+    name.
+    """
+    win = GraphPanel()
+    win.add_run(_fake_result("a.mp4", with_other_metrics=True))
+    assert win.tabs.currentIndex() == 0  # VMAF
+
+    ssim_column = 1 + [m.key for m in METRICS].index("ssim")
+    win.stats_table.horizontalHeader().sectionClicked.emit(ssim_column)
+
+    # The detail columns follow, and so does the graph below -- one metric,
+    # not two selections that can disagree.
+    assert win.tabs.currentIndex() == [m.key for m in METRICS].index("ssim")
+    headers = [win.stats_table.horizontalHeaderItem(c).text()
+               for c in range(win.stats_table.columnCount())]
+    assert "> 0.99" in headers and "> 95" not in headers
+    assert "SSIM" in win.stats_hint.text()
+
+    # A cell in that column does the same thing as its header.
+    vmaf_column = 1 + [m.key for m in METRICS].index("vmaf")
+    win.stats_table.cellClicked.emit(0, vmaf_column)
+    assert win.tabs.currentIndex() == [m.key for m in METRICS].index("vmaf")
+
+
+def test_clicking_a_detail_column_does_not_change_the_metric(qapp):
+    # Only the metric columns select; clicking Median must not silently
+    # switch what is being looked at.
+    win = GraphPanel()
+    win.add_run(_fake_result("a.mp4", with_other_metrics=True))
+    win.tabs.setCurrentIndex(1)  # PSNR
+
+    win.stats_table.horizontalHeader().sectionClicked.emit(1 + len(METRICS))
+    win.stats_table.cellClicked.emit(0, 1 + len(METRICS))
+
+    assert win.tabs.currentIndex() == 1
+
+
+def test_metric_bands_are_calibrated_for_every_metric(qapp):
+    """Each metric carries bands meaning roughly what VMAF's mean, so a row
+    that is 90% good under one is not 100% good under another."""
+    for metric in METRICS:
+        assert len(metric.thresholds) == 6, metric.key
+        ops = [op for op, _ in metric.thresholds]
+        assert ops == [">", ">", ">", "<", "<", "<"], metric.key
+        # The middle value is shared, so the ">" and "<" halves split the run.
+        assert metric.thresholds[2][1] == metric.thresholds[3][1], metric.key
+        greater = [v for op, v in metric.thresholds if op == ">"]
+        assert greater == sorted(greater, reverse=True), metric.key
+
+
+def test_statistic_cells_are_right_aligned(qapp):
+    # A column of near-identical numbers (SSIM's 0.9938 against 0.9699) only
+    # reads as different if the digits line up.
+    win = GraphPanel()
+    win.add_run(_fake_result("a.mp4", with_other_metrics=True))
+    for column in range(1, win.stats_table.columnCount() - 1):
+        item = win.stats_table.item(0, column)
+        assert item is not None
+        assert item.textAlignment() & Qt.AlignRight, column
 
 
 # ------------------------------------------------------------------ stats table columns (extensible)
@@ -549,7 +629,7 @@ def test_a_series_with_no_data_for_this_metric_keeps_its_row(qapp):
 
     assert win.stats_table.rowCount() == 1
     assert _row_for(win, "a").text() == "a"
-    assert win.stats_table.item(0, 1).text() == ""
+    assert win.stats_table.item(0, 1 + len(METRICS)).text() == ""
 
 
 def test_clicking_a_rows_remove_cell_removes_the_series(qapp):
