@@ -23,6 +23,12 @@ from vmaf_app.core.vmaf_runner import VmafRunError, run_resample_test, run_vmaf
 from vmaf_app.ui.main_window import COL_PSNR, COL_SSIM, COL_STATUS, COL_VMAF, MainWindow
 
 
+def click_metric(win, row, column):
+    """Ticks/unticks a metric in the table, the way a click on the cell does."""
+    item = win.distorted_table.item(row, column)
+    item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
+
+
 @pytest.fixture(scope="module")
 def qapp():
     return QApplication.instance() or QApplication([])
@@ -134,8 +140,8 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     row = win._add_table_row(test.path)
     win._set_row_info(row, test)
     win.distorted_table.selectRow(row)
-    win.metric_checkboxes[COL_VMAF].click()
-    win.metric_checkboxes[COL_PSNR].click()
+    click_metric(win, row, COL_VMAF)
+    click_metric(win, row, COL_PSNR)
     assert win._rows[row].options.requested_metrics() == ("psnr",)
     assert not win.model_combo.isEnabled()
     win._rows[row].options = options_for(("psnr",))
@@ -150,7 +156,7 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     assert "PSNR" in win.frame_compare_panel.detail_label.text()
     assert "VMAF" not in win.frame_compare_panel.detail_label.text()
     # Adding a requested metric preserves the measured score, not a stale blank.
-    win.metric_checkboxes[COL_SSIM].click()
+    click_metric(win, row, COL_SSIM)
     assert win.distorted_table.item(row, COL_STATUS).text() == "Partially calculated"
     assert not win._has_requested_results(win._rows[row])
     assert win._rows[row].completed_run.result.frames.has("psnr")
@@ -190,12 +196,14 @@ def test_metric_scope_mixed_selection_and_graph_preference(qapp, monkeypatch):
     for name in ("a.mkv", "b.mkv"):
         win._add_table_row(Path(name))
     win.distorted_table.selectRow(0)
-    win.metric_checkboxes[COL_PSNR].click()
+    click_metric(win, 0, COL_PSNR)
     assert win._rows[0].options.requested_metrics() == ("vmaf", "psnr")
     assert win._rows[1].options.requested_metrics() == ("vmaf",)
+    # A row added later does not inherit a tick made on one existing row.
+    assert "psnr" not in win._default_options.requested_metrics()
+    # Ticking the still-unticked row while both are selected applies to both.
     win.distorted_table.selectAll()
-    assert win.metric_checkboxes[COL_PSNR].checkState() == Qt.PartiallyChecked
-    win.metric_checkboxes[COL_PSNR].click()
+    click_metric(win, 1, COL_PSNR)
     assert all("psnr" in rd.options.requested_metrics() for rd in win._rows)
     win.graph_panel.tabs.setCurrentIndex(2)
     assert Settings.load().graph_metric == "ssim"

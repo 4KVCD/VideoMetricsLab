@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
@@ -1112,7 +1113,9 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
     assert "0:00:20 left" in win.job_progress_labels[0].text()
     # Live progress belongs in the status bar above, not the VMAF column --
     # that's reserved for the final score (or "Failed").
-    assert win.distorted_table.item(row, COL_VMAF).text() == "Pending"
+    cell = win.distorted_table.item(row, COL_VMAF)
+    assert cell.text() == ""
+    assert cell.checkState() == Qt.Checked  # still just "will be calculated"
 
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
@@ -1289,16 +1292,54 @@ def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
 
 # ------------------------------------------------------------------ metric columns
 
-def test_metric_columns_show_na_until_enabled_and_computed(qapp):
+def test_metric_columns_are_tick_boxes_until_a_score_exists(qapp):
+    """An unmeasured metric offers the choice; a measured one gives the answer.
+
+    "N/A" and "Pending" said the same two things in words, in a cell that
+    could not be acted on -- turning the metric on meant finding a separate
+    panel and matching it up with the right row.
+    """
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")
     row = win._add_table_row(Path("a.mp4"))
 
-    # PSNR/SSIM/XPSNR are off by default -> "N/A"; VMAF is always computed.
-    assert win.distorted_table.item(row, COL_PSNR).text() == "N/A"
-    assert win.distorted_table.item(row, COL_SSIM).text() == "N/A"
-    assert win.distorted_table.item(row, COL_XPSNR).text() == "N/A"
-    assert win.distorted_table.item(row, COL_VMAF).text() == "Pending"  # enabled, just not run yet
+    # PSNR/SSIM/XPSNR are off by default; VMAF is on.
+    for col in (COL_PSNR, COL_SSIM, COL_XPSNR):
+        item = win.distorted_table.item(row, col)
+        assert item.text() == ""
+        assert item.checkState() == Qt.Unchecked
+        assert item.flags() & Qt.ItemIsUserCheckable
+    assert win.distorted_table.item(row, COL_VMAF).checkState() == Qt.Checked
+
+
+def test_clicking_a_metric_tick_box_selects_that_metric_for_the_row(qapp):
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+
+    # Clicking a row that is not selected applies to that row alone.
+    win.distorted_table.item(0, COL_PSNR).setCheckState(Qt.Checked)
+    assert "psnr" in win._rows[0].options.requested_metrics()
+    assert "psnr" not in win._rows[1].options.requested_metrics()
+    # ...and does not become the default for files added later.
+    assert "psnr" not in win._default_options.requested_metrics()
+
+    # Clicking one of several selected rows applies to all of them.
+    win.distorted_table.selectAll()
+    win.distorted_table.item(1, COL_XPSNR).setCheckState(Qt.Checked)
+    assert all("xpsnr" in r.options.requested_metrics() for r in win._rows)
+
+
+def test_a_measured_metric_shows_its_score_with_no_tick_box(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")
+    win._set_row_metrics(row)
+
+    item = win.distorted_table.item(row, COL_VMAF)
+    assert item.text() not in ("", "Pending")
+    assert not item.flags() & Qt.ItemIsUserCheckable
+    assert item.data(Qt.CheckStateRole) is None  # no indicator drawn at all
 
 
 def test_ticking_a_metric_column_header_enables_it_for_every_row(qapp):
@@ -1309,11 +1350,15 @@ def test_ticking_a_metric_column_header_enables_it_for_every_row(qapp):
     win._on_metric_column_toggled(COL_PSNR, True)
 
     assert all("name=psnr" in r.options.extra_features for r in win._rows)
-    assert all(win.distorted_table.item(r, COL_PSNR).text() != "N/A" for r in range(2))
+    assert all(
+        win.distorted_table.item(r, COL_PSNR).checkState() == Qt.Checked for r in range(2)
+    )
+    # The header is a statement about the table, so new files inherit it.
+    assert "psnr" in win._default_options.requested_metrics()
 
     win._on_metric_column_toggled(COL_PSNR, False)
     assert all("name=psnr" not in r.options.extra_features for r in win._rows)
-    assert win.distorted_table.item(0, COL_PSNR).text() == "N/A"
+    assert win.distorted_table.item(0, COL_PSNR).checkState() == Qt.Unchecked
 
 
 def test_adding_a_metric_retains_scores_and_marks_result_partial(qapp):

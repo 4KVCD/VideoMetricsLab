@@ -79,7 +79,7 @@ from vmaf_app.core.vmaf_runner import (
 )
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.formatting import NOT_COMPUTED, bitrate_string, media_info_string, vmaf_band_colour
+from vmaf_app.ui.formatting import bitrate_string, media_info_string, vmaf_band_colour
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
@@ -124,6 +124,7 @@ _METRIC_COLUMNS = [
     (COL_VMAF, "VMAF", None),
     (COL_XPSNR, "XPSNR", "xpsnr"),
 ]
+_METRIC_COLUMN_SET = frozenset(col for col, _, _ in _METRIC_COLUMNS)
 
 class CompletedRun:
     """A finished run plus the label it's shown under and its summary stats,
@@ -248,6 +249,7 @@ class MainWindow(QMainWindow):
         self._panel_target_rows: list[int] = []  # rows the panel currently edits
         self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
         self._syncing_panel = False  # guards against write-back while populating the panel programmatically
+        self._syncing_table = False  # ditto for the table's own metric tick boxes
 
         self._build_ui()
         self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
@@ -648,6 +650,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.distorted_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.distorted_table.itemSelectionChanged.connect(self._on_table_selection_changed)
+        self.distorted_table.itemChanged.connect(self._on_table_item_changed)
         self.distorted_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.distorted_table.customContextMenuRequested.connect(self._on_table_context_menu)
         # All columns are Interactive (drag-resizable), including PATH --
@@ -712,17 +715,11 @@ class MainWindow(QMainWindow):
         self.panel_target_label.setWordWrap(True)
         options_layout.addWidget(self.panel_target_label)
 
-        metrics_box = QGroupBox("Metrics to calculate — selected rows")
-        metrics_layout = QHBoxLayout(metrics_box)
-        self.metric_checkboxes = {}
-        for col, name, _feature in sorted(_METRIC_COLUMNS, key=lambda entry: entry[0] != COL_VMAF):
-            box = QCheckBox(name)
-            box.setToolTip("Applies only to selected rows. A dash means the selection has mixed settings.")
-            box.checkStateChanged.connect(lambda state, c=col: self._on_metric_selection_edited(c, state))
-            self.metric_checkboxes[col] = box
-            metrics_layout.addWidget(box)
-        metrics_layout.addStretch(1)
-        options_layout.addWidget(metrics_box)
+        # No "Metrics to calculate" box here any more: each metric is now
+        # ticked in its own column of the table, on the row it applies to.
+        # A separate panel meant the choice was made in one place and read
+        # back in another, and it could only ever describe the current
+        # selection -- so seeing what four rows were set to took four clicks.
 
         form = QFormLayout()
         performance_box = QGroupBox("Performance")
@@ -1179,46 +1176,67 @@ class MainWindow(QMainWindow):
         return row
 
     def _set_row_metrics(self, row: int) -> None:
-        """Show metric values independently of the row's analysis status.
+        """Each metric cell shows its score, or a tick box for calculating it.
 
-        N/A means not selected (explained on hover); Pending means requested
-        but not calculated. Previously calculated metrics survive selection edits.
+        A metric that has been measured shows only the number: there is no
+        decision left to make about it, and a tick box beside a finished
+        score invited un-ticking it as though that would undo the
+        measurement. A metric without a score shows a check box instead, in
+        the very column its result will land in, so choosing what to
+        calculate is one click on the row it applies to.
+
+        Previously calculated metrics survive selection edits -- ticking
+        another metric changes what is requested, not what was measured.
         """
         row_data = self._rows[row]
         run = row_data.completed_run
         opts = row_data.options
-        enabled = {
-            COL_PSNR: "name=psnr" in opts.extra_features,
-            COL_SSIM: "name=float_ssim" in opts.extra_features,
-            COL_VMAF: opts.compute_vmaf,
-            COL_XPSNR: opts.compute_xpsnr,
-        }
-        for col, _, _ in _METRIC_COLUMNS:
-            item = self.distorted_table.item(row, col)
-            if item is None:
-                continue
-            if not enabled[col]:
-                item.setText(NOT_COMPUTED)
-                item.setToolTip("Not selected for calculation.")
-                item.setForeground(QColor("#999"))
-                item.setFont(QFont())
-                item.setBackground(QColor(0, 0, 0, 0))
-                continue
-            value = self._metric_mean(run, col) if run is not None else None
-            if value is None:
-                item.setText("Failed" if row_data.analysis_status == "Failed" else "Pending")
-                item.setToolTip("No result for this requested metric.")
-                item.setBackground(QColor(0, 0, 0, 0))
-                item.setFont(QFont())
-                continue
-            item.setText(f"{value:.4f}" if col == COL_SSIM else f"{value:.2f}")
-            item.setToolTip("Mean of calculated frame scores." + (" VMAF colour bands are heuristic, not a universal quality rating." if col == COL_VMAF else ""))
-            font = QFont()
-            font.setBold(True)
-            item.setFont(font)
-            item.setForeground(QColor("#000"))
-            # These heuristic VMAF bands must never be reused for other metrics.
-            item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+        # setCheckState/setData below emit itemChanged, which is also how a
+        # real click reaches _on_table_item_changed. Without this the window
+        # would read its own repaint back as the user asking for a change.
+        self._syncing_table = True
+        try:
+            for col, _, _ in _METRIC_COLUMNS:
+                item = self.distorted_table.item(row, col)
+                if item is None:
+                    continue
+                enabled = self._metric_enabled(opts, col)
+                value = self._metric_mean(run, col) if run is not None else None
+                if value is None:
+                    item.setFlags(
+                        Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
+                    )
+                    item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
+                    failed = enabled and row_data.analysis_status == "Failed"
+                    item.setText("Failed" if failed else "")
+                    item.setToolTip(
+                        "This metric failed on the last run. Untick to skip it."
+                        if failed else
+                        "Ticked: calculated on the next run. Untick to skip it."
+                        if enabled else
+                        "Not selected. Tick to calculate this metric."
+                    )
+                    item.setForeground(
+                        QColor("#a03030") if failed else self.distorted_table.palette().text()
+                    )
+                    item.setBackground(QColor(0, 0, 0, 0))
+                    item.setFont(QFont())
+                    continue
+                # Measured: the score replaces the tick box entirely. Passing
+                # no value for CheckStateRole is what removes the indicator --
+                # Qt draws one for any item that merely *has* the role set.
+                item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                item.setData(Qt.CheckStateRole, None)
+                item.setText(f"{value:.4f}" if col == COL_SSIM else f"{value:.2f}")
+                item.setToolTip("Mean of calculated frame scores." + (" VMAF colour bands are heuristic, not a universal quality rating." if col == COL_VMAF else ""))
+                font = QFont()
+                font.setBold(True)
+                item.setFont(font)
+                item.setForeground(QColor("#000"))
+                # These heuristic VMAF bands must never be reused for other metrics.
+                item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+        finally:
+            self._syncing_table = False
         status = row_data.analysis_status or (
             "No metrics selected" if not opts.requested_metrics() else
             "Complete" if self._has_requested_results(row_data) else
@@ -1433,6 +1451,11 @@ class MainWindow(QMainWindow):
 
     def _set_row_vmaf_text(self, row: int, text: str, *, bold: bool = False, color=None) -> None:
         item = self.distorted_table.item(row, COL_VMAF)
+        # Text in this cell replaces the tick box, the same way a score does:
+        # a check indicator beside "Frame 900/1200" reads as something to
+        # click, and it is not.
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        item.setData(Qt.CheckStateRole, None)
         item.setText(text)
         font = QFont()
         font.setBold(bold)
@@ -1921,11 +1944,6 @@ class MainWindow(QMainWindow):
             self.metric_header.set_checked(COL_XPSNR, opts.compute_xpsnr)
             self.metric_header.set_checked(COL_VMAF, opts.compute_vmaf)
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
-            for col, box in self.metric_checkboxes.items():
-                values = {self._metric_enabled(o, col) for o in selected_options}
-                box.setTristate(len(values) > 1)
-                box.setCheckState(Qt.PartiallyChecked if len(values) > 1 else
-                                  Qt.Checked if True in values else Qt.Unchecked)
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
             uses_libvmaf = any(o.compute_vmaf or o.extra_features for o in selected_options)
             self.threads_spin.setEnabled(uses_libvmaf)
@@ -1984,7 +2002,16 @@ class MainWindow(QMainWindow):
             elif not checked and feature in options.extra_features:
                 options.extra_features.remove(feature)
 
-    def _apply_metric_selection(self, rows: list[int], column: int, checked: bool) -> None:
+    def _apply_metric_selection(
+        self, rows: list[int], column: int, checked: bool, *, set_default: bool = True,
+    ) -> None:
+        """Turns one metric on or off for `rows`.
+
+        `set_default` carries the choice to rows added later. True for the
+        header shortcut, which is a statement about the whole table; False
+        for a tick in one row's own cell, which says nothing about files
+        that are not there yet.
+        """
         if self._syncing_panel or self._run_active:
             return
         for row in rows:
@@ -1994,14 +2021,44 @@ class MainWindow(QMainWindow):
             # The existing scores remain valid: selecting another metric
             # changes the requested output, not the measured pictures.
             self._set_row_metrics(row)
-        self._set_metric_option(self._default_options, column, checked)
+        if set_default:
+            self._set_metric_option(self._default_options, column, checked)
         self._reload_cached_for_rows(rows)
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
 
-    def _on_metric_selection_edited(self, column: int, state: Qt.CheckState) -> None:
-        if state != Qt.PartiallyChecked:
-            self._apply_metric_selection(self._panel_target_rows, column, state == Qt.Checked)
+    def _on_table_item_changed(self, item) -> None:
+        """A metric tick box in the table was clicked.
+
+        Applies to every selected row when the clicked row is one of them,
+        so ticking PSNR across a selection is still a single click -- and to
+        that row alone otherwise, which is what clicking a row you had not
+        selected plainly means.
+        """
+        if self._syncing_table:
+            return
+        column = item.column()
+        if column not in _METRIC_COLUMN_SET:
+            return
+        row = item.row()
+        if row >= len(self._rows):
+            # A row still being built: setItem fires this before the RowData
+            # it describes exists. _set_row_metrics fills its boxes in after.
+            return
+        if not item.flags() & Qt.ItemIsUserCheckable:
+            return  # a cell showing a score or live progress, not a tick box
+        checked = item.checkState() == Qt.Checked
+        if checked == self._metric_enabled(self._rows[row].options, column):
+            # itemChanged also fires for text, colour and font edits. Only a
+            # box that now disagrees with the row it stands for is a click.
+            return
+        if self._run_active:
+            # Nothing may change mid-run; put the box back the way it was.
+            self._set_row_metrics(row)
+            return
+        selected = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
+        rows = selected if row in selected else [row]
+        self._apply_metric_selection(rows, column, checked, set_default=False)
 
     def _on_metric_column_toggled(self, column: int, checked: bool) -> None:
         """Header shortcuts explicitly apply to all rows; inspector to selection."""
