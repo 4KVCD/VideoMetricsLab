@@ -1451,7 +1451,7 @@ def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
 
     win._set_run_ui_active(True)
 
-    assert not win.files_box.isEnabled()
+    assert all(not w.isEnabled() for w in win._file_action_widgets)
     assert not win.options_box.isEnabled()
     assert not win.tabs.isTabEnabled(TAB_SETTINGS)
     assert not win.run_btn.isEnabled()
@@ -1459,9 +1459,65 @@ def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
     assert win.cancel_btn.isEnabled()
 
     win._set_run_ui_active(False)
-    assert win.files_box.isEnabled()
+    assert all(w.isEnabled() for w in win._file_action_widgets)
     assert win.options_box.isEnabled()
     assert win.tabs.isTabEnabled(TAB_SETTINGS)
+
+
+def test_the_video_table_stays_scrollable_during_a_run(qapp):
+    """Disabling the whole Videos box took the table's scrollbar with it.
+
+    A long queue is exactly what someone wants to scroll through while it
+    runs -- to see which videos are left, or to read a failure that scrolled
+    off. Freezing the controls that can change the jobs does not require
+    freezing the view of them.
+    """
+    win = MainWindow()
+    for i in range(30):
+        win._add_table_row(Path(f"encode-{i}.mp4"))
+    # Small enough that 30 rows genuinely overflow it; an unshown table is
+    # laid out at its full height and has nothing to scroll.
+    win.distorted_table.setFixedHeight(120)
+    qapp.processEvents()  # the scroll range is computed during layout
+
+    win._set_run_ui_active(True)
+
+    assert win.distorted_table.isEnabled()
+    scrollbar = win.distorted_table.verticalScrollBar()
+    assert scrollbar.isEnabled()
+    assert scrollbar.maximum() > 0, "nothing to scroll -- the test proves nothing"
+    # And it really scrolls, rather than merely reporting itself enabled.
+    scrollbar.setValue(scrollbar.maximum())
+    assert scrollbar.value() > 0
+
+
+def test_a_running_row_cannot_have_its_metrics_reticked(qapp):
+    # The table stays live, so the guards on what it can change have to hold.
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    before = win._rows[row].options.requested_metrics()
+    win._set_run_ui_active(True)
+
+    win.distorted_table.item(row, COL_PSNR).setCheckState(Qt.Unchecked)
+
+    assert win._rows[row].options.requested_metrics() == before
+    # ...and the box is put back rather than left contradicting the row.
+    assert win.distorted_table.item(row, COL_PSNR).checkState() == Qt.Checked
+
+
+def test_the_recompute_menu_is_suppressed_during_a_run(qapp):
+    # Its only entry deletes cached results and re-queues rows, which would
+    # fight the run currently using them.
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win.distorted_table.selectRow(row)
+    calls = []
+    win._recompute_rows = lambda rows: calls.append(rows)
+
+    win._set_run_ui_active(True)
+    win._on_table_context_menu(win.distorted_table.viewport().rect().center())
+
+    assert calls == []
 
 
 # ------------------------------------------------------------------ metric columns
@@ -2508,7 +2564,7 @@ def test_a_probe_finishing_mid_run_does_not_re_enable_the_options(qapp, tmp_path
     win._on_probe_finished()
 
     assert not win.options_box.isEnabled(), "a probe unlocked the options mid-run"
-    assert not win.files_box.isEnabled()
+    assert all(not w.isEnabled() for w in win._file_action_widgets)
     assert not win.run_btn.isEnabled()
 
 

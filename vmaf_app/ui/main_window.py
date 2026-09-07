@@ -612,7 +612,7 @@ class MainWindow(QMainWindow):
         src_row = QHBoxLayout()
         self.source_edit = QLineEdit()
         self.source_edit.setReadOnly(True)
-        src_browse = QPushButton("Browse...")
+        self.source_browse_btn = src_browse = QPushButton("Browse...")
         src_browse.clicked.connect(self._on_browse_source)
         src_row.addWidget(self.source_edit, stretch=1)
         src_row.addWidget(src_browse)
@@ -707,6 +707,16 @@ class MainWindow(QMainWindow):
         dist_btn_row.addWidget(self.remove_all_btn)
         dist_btn_row.addStretch(1)
         files_layout.addLayout(dist_btn_row)
+
+        # Frozen during a run, one control at a time rather than by disabling
+        # the whole box: a disabled QGroupBox disables its children, and that
+        # took the video table's scrollbar with it -- so a queue longer than
+        # the window could not be scrolled precisely while it was running,
+        # which is exactly when someone wants to watch it.
+        self._file_action_widgets = [
+            self.source_browse_btn, add_dist_btn, add_resample_btn,
+            remove_dist_btn, self.remove_all_btn,
+        ]
 
         return files_box
 
@@ -1810,6 +1820,10 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_table_context_menu(self, pos) -> None:
+        if self._run_active:
+            # Its only entry throws away cached results and re-queues rows,
+            # which would fight the run currently using them.
+            return
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
         if not rows:
             return
@@ -2332,7 +2346,13 @@ class MainWindow(QMainWindow):
     def _set_run_ui_active(self, active: bool) -> None:
         """Freezes every input that can change the meaning of a live job."""
         self._run_active = active
-        self.files_box.setEnabled(not active)
+        # The table itself stays live so the queue can be scrolled and read
+        # while it runs. Nothing reachable through it can change a running
+        # job: the metric tick boxes refuse edits mid-run (see
+        # _on_table_item_changed), the per-row Calculate checkboxes are read
+        # once when the run starts, and the context menu is suppressed below.
+        for widget in self._file_action_widgets:
+            widget.setEnabled(not active)
         self.options_box.setEnabled(not active and bool(self._panel_target_rows))
         self.tabs.setTabEnabled(TAB_SETTINGS, not active)
         self.run_btn.setEnabled(not active)
