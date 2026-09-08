@@ -395,7 +395,9 @@ class ChartWidget(QWidget):
         rect = self.plot_rect()
         for x in (old, px):
             if x is not None:
-                self.update(QRect(x - 1, rect.top(), 3, rect.height()))
+                # Pen caps and fractional display scaling can touch pixels
+                # outside either endpoint. Restore that fringe at BOTH ends.
+                self.update(QRect(x - 1, rect.top() - 2, 3, rect.height() + 4))
 
     # ------------------------------------------------------------------ input
     def mouseMoveEvent(self, event) -> None:

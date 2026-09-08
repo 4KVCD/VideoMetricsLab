@@ -54,6 +54,28 @@ def test_chart_cache_tracks_display_pixel_density(qapp, monkeypatch):
     assert chart._cache.devicePixelRatioF() == 2
 
 
+def test_cursor_damage_covers_both_endpoints(qapp, monkeypatch):
+    chart = _chart(qapp)
+    chart.set_series(0, _series([35, 40, 38]))
+    damaged = []
+    monkeypatch.setattr(chart, "update", damaged.append)
+    chart.set_cursor_time(0.01)
+    old_x = chart._cursor_x
+    damaged.clear()
+    chart.set_cursor_time(0.02)
+    assert len(damaged) == 2
+    rect = chart.plot_rect()
+    for area, x in zip(damaged, (old_x, chart._cursor_x), strict=True):
+        assert area.left() < x < area.right()
+        assert area.top() < rect.top()
+        assert area.bottom() > rect.bottom()
+    damaged.clear()
+    chart.set_cursor_time(None)
+    assert len(damaged) == 1
+    assert damaged[0].top() < rect.top()
+    assert damaged[0].bottom() > rect.bottom()
+
+
 # ------------------------------------------------------------------ ranges
 
 def test_y_range_is_capped_at_the_ceiling_with_no_headroom(qapp):
