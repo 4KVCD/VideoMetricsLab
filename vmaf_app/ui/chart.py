@@ -20,6 +20,7 @@ memory down from ~259MB to ~49MB.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import ceil
 
 import numpy as np
 from PySide6.QtCore import QLineF, QPoint, QPointF, QRect, Qt, Signal
@@ -226,12 +227,14 @@ class ChartWidget(QWidget):
         super().resizeEvent(event)
 
     def paintEvent(self, event) -> None:
-        if self._cache is None or self._cache.size() != self.size():
+        if not self._cache_matches_display():
             self._rebuild_cache()
         painter = QPainter(self)
         # Only the damaged rect is blitted -- moving the crosshair repaints a
         # couple of pixel columns, not the whole chart.
-        painter.drawPixmap(event.rect(), self._cache, event.rect())
+        # Qt clips to the paint event. Draw at the logical origin so the
+        # high-DPI pixmap's source coordinates are not confused with DIP.
+        painter.drawPixmap(0, 0, self._cache)
         if self._cursor_x is not None:
             painter.setPen(QPen(_CROSSHAIR_COLOR, 1))
             rect = self.plot_rect()
@@ -239,7 +242,9 @@ class ChartWidget(QWidget):
         painter.end()
 
     def _rebuild_cache(self) -> None:
-        pixmap = QPixmap(self.size())
+        ratio = self.devicePixelRatioF()
+        pixmap = QPixmap(ceil(self.width() * ratio), ceil(self.height() * ratio))
+        pixmap.setDevicePixelRatio(ratio)
         pixmap.fill(_BACKGROUND)
         painter = QPainter(pixmap)
         painter.setFont(self.font())
@@ -251,6 +256,13 @@ class ChartWidget(QWidget):
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
         painter.end()
         self._cache = pixmap
+
+    def _cache_matches_display(self) -> bool:
+        ratio = self.devicePixelRatioF()
+        return (self._cache is not None
+                and self._cache.devicePixelRatioF() == ratio
+                and self._cache.width() == ceil(self.width() * ratio)
+                and self._cache.height() == ceil(self.height() * ratio))
 
     def _draw_axes(self, painter: QPainter, rect: QRect) -> None:
         x0, x1 = self.x_range()
@@ -451,6 +463,9 @@ class ChartWidget(QWidget):
 
     def render_to_pixmap(self) -> QPixmap:
         """A standalone copy of the current chart, for PNG export."""
-        if self._cache is None or self._cache.size() != self.size():
+        if not self._cache_matches_display():
             self._rebuild_cache()
-        return QPixmap(self._cache)
+        exported = QPixmap(self._cache)
+        # Export compositors use physical pixel dimensions for layout.
+        exported.setDevicePixelRatio(1.0)
+        return exported

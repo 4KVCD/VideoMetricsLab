@@ -40,6 +40,20 @@ def test_value_ticks_use_1_2_5_steps():
     assert _nice_value_step(0) == 1.0  # degenerate span must not divide by zero
 
 
+def test_chart_cache_tracks_display_pixel_density(qapp, monkeypatch):
+    chart = _chart(qapp)
+    monkeypatch.setattr(chart, "devicePixelRatioF", lambda: 1.5)
+    exported = chart.render_to_pixmap()
+    assert chart._cache.width() == 1200
+    assert chart._cache.height() == 600
+    assert chart._cache.devicePixelRatioF() == 1.5
+    assert exported.devicePixelRatioF() == 1
+    monkeypatch.setattr(chart, "devicePixelRatioF", lambda: 2.0)
+    chart.render_to_pixmap()
+    assert chart._cache.width() == 1600
+    assert chart._cache.devicePixelRatioF() == 2
+
+
 # ------------------------------------------------------------------ ranges
 
 def test_y_range_is_capped_at_the_ceiling_with_no_headroom(qapp):
