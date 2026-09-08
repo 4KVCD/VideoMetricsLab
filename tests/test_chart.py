@@ -160,7 +160,9 @@ def test_rendering_downsamples_instead_of_drawing_every_point(qapp):
     chart = _chart(qapp)
     chart.set_series(0, _series(np.random.default_rng(0).uniform(80, 100, 200_000)))
     pixmap = chart.render_to_pixmap()
-    assert pixmap.width() == 800 and pixmap.height() == 400
+    ratio = chart.devicePixelRatioF()
+    assert pixmap.width() == int(np.ceil(800 * ratio))
+    assert pixmap.height() == int(np.ceil(400 * ratio))
 
 
 def test_a_narrow_dip_survives_downsampling(qapp):
