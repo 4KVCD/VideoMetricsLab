@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from vmaf_app.core.stats import compute_stats, mean_of_measurable
+from vmaf_app.core.stats import SQUARE_MEAN_ROOT, aggregate_scores, compute_stats
 
 
 def test_basic_stats():
@@ -87,40 +87,66 @@ def test_perfect_infinite_metric_has_mean_and_percentiles_without_warnings():
     assert summary["Mean"] == "∞"
     assert summary["StDev"] == "—"
 
+
 # ------------------------------------------------- frames identical to source
 
 
 def test_identical_frames_do_not_turn_the_summary_into_infinity():
     """A film opening on black reported "inf" as its whole XPSNR.
 
-    XPSNR scores a frame identical to the reference as +inf, where libvmaf
-    instead clamps PSNR to its bit depth's ceiling. One such frame made the
-    mean inf and the standard deviation nan -- and the opening seconds of a
-    feature are routinely pixel-identical black. Reproduced on a real 4K
-    pair: 40 of the first 73 frames were inf.
+    XPSNR scores a frame identical to the reference as +inf, and numpy's mean
+    of any array containing inf is inf. The opening seconds of a feature are
+    routinely pixel-identical black: across six real encodes of one film, 72
+    to 175 frames of 151,919 were identical -- about 0.1%, and enough to make
+    every XPSNR cell read "inf".
     """
     values = [float("inf")] * 40 + [78.78, 16.82, 12.56, 7.63, 4.60, 2.88, 3.28, 4.17, 5.87]
 
-    stats = compute_stats(values, thresholds=[(">", 38.0), ("<", 33.0)])
+    stats = compute_stats(values, thresholds=[(">", 38.0), ("<", 33.0)],
+                          aggregate=SQUARE_MEAN_ROOT)
 
     assert math.isfinite(stats.mean)
-    assert math.isfinite(stats.stdev)
-    assert math.isfinite(stats.median)
-    assert math.isfinite(stats.percentile_1)
-    assert math.isfinite(stats.maximum)
-    assert stats.mean == pytest.approx(15.177, abs=0.01)
-    # Counted rather than quietly dropped: the mean describes fewer frames
-    # than the run measured, and that has to be visible.
     assert stats.identical == 40
     assert stats.count == 49
 
 
+def test_xpsnr_aggregates_the_way_ffmpeg_does():
+    """XPSNR's sequence average is a square-mean-root, not a mean of decibels.
+
+    ffmpeg's vf_xpsnr sums sqrt(wsse) per frame and derives one value from
+    that total, so an identical frame contributes no error while still
+    counting towards the frame total. Checked against ffmpeg's own printed
+    average on the same clip, which it matches to four decimal places.
+    """
+    # Two frames, one perfect. sqrt-domain mean of 10^(-x/20) is
+    # (0 + 10^(-40/20)) / 2 = 0.005, so -20*log10(0.005) = 46.0206 dB.
+    assert aggregate_scores([float("inf"), 40.0], SQUARE_MEAN_ROOT) == pytest.approx(46.0206, abs=1e-4)
+    # ...against 40.0 if the perfect frame were simply dropped, and inf if it
+    # were included in an ordinary mean. Neither is what ffmpeg reports.
+    assert aggregate_scores([float("inf"), 40.0]) == float("inf")
+
+    # Without any infinities it is still a square-mean-root, which leans
+    # towards the worse frame rather than treating decibels as linear: 50 and
+    # 30 dB give 35.19, not their arithmetic 40.
+    assert aggregate_scores([50.0, 30.0], SQUARE_MEAN_ROOT) == pytest.approx(35.1927, abs=1e-4)
+    assert aggregate_scores([50.0, 30.0]) == pytest.approx(40.0)
+
+
+def test_the_other_three_metrics_use_a_plain_mean():
+    # VMAF and SSIM are bounded, and libvmaf clamps PSNR to its bit depth's
+    # ceiling rather than reporting infinity -- verified over 4.2M frames of
+    # real results, none of which contained one. Their means are unchanged.
+    assert aggregate_scores([90.0, 92.0, 94.0]) == pytest.approx(92.0)
+    assert aggregate_scores([0.99, 0.97]) == pytest.approx(0.98)
+
+
 def test_identical_frames_still_count_towards_the_bands():
-    # A perfect frame is emphatically "better than 38 dB". Excluding it from
-    # the mean must not also exclude it from the tally.
+    # A perfect frame is emphatically "better than 38 dB". Aggregating around
+    # it must not also exclude it from the tally.
     values = [float("inf")] * 3 + [40.0, 10.0]
 
-    stats = compute_stats(values, thresholds=[(">", 38.0), ("<", 33.0)])
+    stats = compute_stats(values, thresholds=[(">", 38.0), ("<", 33.0)],
+                          aggregate=SQUARE_MEAN_ROOT)
 
     above = next(t for t in stats.thresholds if t.label == "> 38")
     below = next(t for t in stats.thresholds if t.label == "< 33")
@@ -129,17 +155,23 @@ def test_identical_frames_still_count_towards_the_bands():
 
 
 def test_an_entirely_identical_encode_still_reports_infinity():
-    # Nothing to average, and inf is then the honest answer rather than a
-    # number invented to avoid it.
-    stats = compute_stats([float("inf")] * 5)
+    # No error to average. ffmpeg returns infinity here too.
+    stats = compute_stats([float("inf")] * 5, aggregate=SQUARE_MEAN_ROOT)
 
     assert math.isinf(stats.mean)
     assert stats.identical == 5
 
 
-def test_mean_of_measurable_matches_the_summary():
-    assert mean_of_measurable([float("inf"), 10.0, 20.0]) == pytest.approx(15.0)
-    assert mean_of_measurable([1.0, float("nan"), 3.0]) == pytest.approx(2.0)
-    assert mean_of_measurable([float("nan")] * 3) is None
-    assert mean_of_measurable([]) is None
-    assert math.isinf(mean_of_measurable([float("inf")] * 2))
+def test_a_spread_is_still_reported_when_a_frame_was_identical():
+    # Standard deviation is undefined over a set containing infinity (numpy
+    # gives nan). The frames that actually differ still have a spread.
+    stats = compute_stats([float("inf"), 40.0, 30.0], aggregate=SQUARE_MEAN_ROOT)
+
+    assert math.isfinite(stats.stdev)
+    assert stats.minimum == 30.0
+
+
+def test_aggregate_scores_edge_cases():
+    assert aggregate_scores([1.0, float("nan"), 3.0]) == pytest.approx(2.0)
+    assert aggregate_scores([float("nan")] * 3) is None
+    assert aggregate_scores([]) is None

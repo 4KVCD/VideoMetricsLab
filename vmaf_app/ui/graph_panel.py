@@ -39,10 +39,12 @@ from PySide6.QtWidgets import (
 from vmaf_app.core.models import FrameScore, VmafRunResult
 from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
 from vmaf_app.core.stats import (
+    AGGREGATE_BY_METRIC,
+    ARITHMETIC,
     DEFAULT_THRESHOLDS,
     VmafStats,
+    aggregate_scores,
     compute_stats,
-    mean_of_measurable,
 )
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
@@ -86,6 +88,11 @@ class MetricSpec:
     value_format: str  # format spec for hover-text values, e.g. "{:.2f}"
     fixed_y_max: float | None  # VMAF's natural ceiling (100); None = autoscale to the data
     thresholds: list[tuple[str, float]] = field(default_factory=list)  # per-metric bands; see PSNR/SSIM/XPSNR_THRESHOLDS
+
+    @property
+    def aggregate(self) -> str:
+        """How this metric's frames combine into one number. See stats."""
+        return AGGREGATE_BY_METRIC.get(self.key, ARITHMETIC)
 
     def value(self, frame: FrameScore) -> float | None:
         return getattr(frame, self.key)
@@ -188,7 +195,7 @@ def _metric_means(result: VmafRunResult) -> dict[str, float | None]:
         if values is None or len(values) == 0:
             means[metric.key] = None
             continue
-        means[metric.key] = mean_of_measurable(values)
+        means[metric.key] = aggregate_scores(values, metric.aggregate)
     return means
 
 
@@ -283,7 +290,8 @@ class _MetricPage(QWidget):
             times=entry.times, values=values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
-            stats=compute_stats(values, self.metric.thresholds), values=values,
+            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregate),
+            values=values,
             label=entry.label, visible=entry.visible,
         )
         self._update_no_data_label()

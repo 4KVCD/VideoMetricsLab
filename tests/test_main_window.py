@@ -887,7 +887,9 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
 
     assert win.distorted_table.item(0, COL_PSNR).text() == "43.00"
     assert win.distorted_table.item(0, COL_SSIM).text() == "0.9883"
-    assert win.distorted_table.item(0, COL_XPSNR).text() == "40.00"
+    # 39.94, not the arithmetic 40.00: XPSNR aggregates as a square-mean-root
+    # (ffmpeg's own sequence average), which leans towards the worse frame.
+    assert win.distorted_table.item(0, COL_XPSNR).text() == "39.94"
     assert win.distorted_table.item(0, COL_BLACK_BARS).text() == "No"
 
 

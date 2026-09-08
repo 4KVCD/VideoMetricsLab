@@ -67,7 +67,7 @@ from vmaf_app.core.models import (
 )
 from vmaf_app.core.run_io import load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
-from vmaf_app.core.stats import mean_of_measurable, stats_for_run
+from vmaf_app.core.stats import AGGREGATE_BY_METRIC, ARITHMETIC, aggregate_scores, stats_for_run
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
@@ -1342,7 +1342,7 @@ class MainWindow(QMainWindow):
         values = run.result.frames.values(metric)
         if values is None or len(values) == 0:
             return None
-        return mean_of_measurable(values)
+        return aggregate_scores(values, AGGREGATE_BY_METRIC.get(metric, ARITHMETIC))
 
     @staticmethod
     def _crop_detail(label: str, info: VideoInfo, crop: CropBox | None) -> str:
