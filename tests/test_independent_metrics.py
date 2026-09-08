@@ -21,7 +21,11 @@ from vmaf_app.core.run_io import export_csv, load_run, save_run
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.vmaf_runner import VmafRunError, run_resample_test, run_vmaf
 from vmaf_app.ui.main_window import (
-    COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR, MainWindow,
+    COL_PSNR,
+    COL_SSIM,
+    COL_VMAF,
+    COL_XPSNR,
+    MainWindow,
 )
 
 

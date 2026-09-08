@@ -14,7 +14,6 @@ give a single video its own crop/model/etc. independent of the rest).
 """
 from __future__ import annotations
 
-import math
 import os
 from dataclasses import dataclass, field, replace
 from functools import partial

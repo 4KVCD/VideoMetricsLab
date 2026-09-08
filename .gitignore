@@ -10,3 +10,7 @@ tests_scratch/
 gui_stdout.log
 gui_stderr.log
 vmaf_app/native/*.dll
+
+# PyInstaller build output
+build/
+dist/

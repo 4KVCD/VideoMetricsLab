@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import sys
 
 from PySide6.QtWidgets import QApplication
@@ -7,9 +8,78 @@ from PySide6.QtWidgets import QApplication
 from vmaf_app.ui.main_window import MainWindow
 
 
+def self_test() -> str:
+    """A report on everything the app needs but does not contain.
+
+    Exists for the packaged build: it has no console, so when it fails to
+    start or silently falls back there is otherwise nothing to look at.
+    Checks the pieces that are found at runtime rather than at build time --
+    FFmpeg on the user's machine, the bundled GStreamer, the GPU shader.
+    """
+    lines = [f"Video Metrics Calculator self-test (Python {sys.version.split()[0]})"]
+    frozen = getattr(sys, "frozen", False)
+    lines.append(f"  packaged build: {'yes' if frozen else 'no, running from source'}")
+
+    from vmaf_app.core.ffmpeg_locate import check_tools, format_version
+
+    status = check_tools()
+    if status.ok:
+        lines.append(f"  OK    ffmpeg {format_version(status.ffmpeg.version)} and ffprobe")
+    else:
+        for problem in status.problems:
+            lines.append(f"  FAIL  {problem}")
+
+    try:
+        from vmaf_app.core.gstreamer_playback import _load_gstreamer
+
+        gst, _ = _load_gstreamer()
+        version = ".".join(str(part) for part in gst.version()[:3])
+        lines.append(f"  OK    GStreamer {version}")
+        registry = gst.Registry.get()
+        for plugin in ("d3d11", "playback", "typefindfunctions"):
+            found = registry.find_plugin(plugin) is not None
+            lines.append(f"  {'OK   ' if found else 'WARN '} GStreamer plugin '{plugin}'")
+    except Exception as error:
+        lines.append(f"  WARN  GStreamer unavailable, playback falls back to FFmpeg: {error}")
+
+    from vmaf_app.core import d3d11_tonemap
+
+    if d3d11_tonemap.available():
+        lines.append(f"  OK    GPU HDR tone-map shader ({d3d11_tonemap.library_path().name})")
+    else:
+        lines.append("  WARN  GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
+
+    return "\n".join(lines)
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Video Metrics Calculator")
+
+    if "--self-test" in sys.argv:
+        report = self_test()
+        # Both, because neither alone reaches every caller: a packaged build
+        # has no console to print to, and an automated check has no one to
+        # dismiss a dialog.
+        with contextlib.suppress(OSError, ValueError):
+            print(report)  # a windowed build has no usable stdout
+        from pathlib import Path
+
+        destination = Path.home() / ".vmaf-calculator" / "self-test.txt"
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(report, encoding="utf-8")
+        except OSError:
+            destination = None
+        if "--quiet" not in sys.argv:
+            from PySide6.QtWidgets import QMessageBox
+
+            box = QMessageBox()
+            box.setWindowTitle("Self-test")
+            box.setText(report + (f"\n\nSaved to {destination}" if destination else ""))
+            box.exec()
+        return 0 if "FAIL" not in report else 1
+
     window = MainWindow()
     window.show()
     return app.exec()

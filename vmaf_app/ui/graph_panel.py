@@ -805,7 +805,7 @@ class GraphPanel(QWidget):
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.stats_table.verticalHeader().setVisible(False)
 
-        for column, spec in zip(_MEAN_COLUMNS, METRICS):
+        for column, spec in zip(_MEAN_COLUMNS, METRICS, strict=True):
             head = self.stats_table.horizontalHeaderItem(column)
             if head is None:
                 continue
@@ -1210,7 +1210,7 @@ class GraphPanel(QWidget):
                 # Every metric's mean, whether or not its page has been
                 # built -- the table is the comparison, and a lazily-built
                 # page must not decide what it can say.
-                for col, spec in zip(_MEAN_COLUMNS, METRICS):
+                for col, spec in zip(_MEAN_COLUMNS, METRICS, strict=True):
                     mean = entry.means.get(spec.key)
                     item = self._number_item(
                         "\u2014" if mean is None else spec.format_value(mean)
