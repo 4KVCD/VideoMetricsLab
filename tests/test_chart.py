@@ -86,6 +86,17 @@ def test_unbounded_metric_autoscales_around_its_data(qapp):
     assert low < 38.0 and high > 42.0
 
 
+@pytest.mark.parametrize("count", [12, 12000])
+def test_xpsnr_infinities_do_not_hide_finite_curve(qapp, count):
+    chart = _chart(qapp, fixed_y_max=None)
+    values = np.resize([35., 40., np.inf, np.nan, 38.], count)
+    chart.set_series(0, _series(values, color="#ff0000"))
+    assert np.isfinite(chart.y_range()).all()
+    image = chart.render_to_pixmap().toImage()
+    assert any(image.pixelColor(x, y).name() == "#ff0000"
+               for x in range(image.width()) for y in range(image.height()))
+
+
 def test_hidden_series_is_excluded_from_the_range(qapp):
     chart = _chart(qapp)
     chart.set_series(0, _series([90.0] * 20))

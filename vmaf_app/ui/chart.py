@@ -159,8 +159,8 @@ class ChartWidget(QWidget):
         if not visible:
             self._y_range = (0.0, self.fixed_y_max or 1.0)
             return
-        lo = min(float(np.nanmin(s.values)) for s in visible)
-        hi = max(float(np.nanmax(s.values)) for s in visible)
+        lo = min(float(np.min(s.values[np.isfinite(s.values)])) for s in visible)
+        hi = max(float(np.max(s.values[np.isfinite(s.values)])) for s in visible)
         if self.fixed_y_max is not None:
             # Bounded scale (VMAF): pin the top at the ceiling with no wasted
             # headroom, and floor the bottom to a round number below the data.
@@ -349,10 +349,13 @@ class ChartWidget(QWidget):
         starts_unique = starts[keep]
         columns = np.flatnonzero(keep)
 
-        finite = np.nan_to_num(values, nan=np.inf)
-        mins = np.minimum.reduceat(finite, starts_unique)
-        finite_max = np.nan_to_num(values, nan=-np.inf)
-        maxs = np.maximum.reduceat(finite_max, starts_unique)
+        # Restrict the final bucket to the visible slice. Treat infinities
+        # like gaps, not enormous finite values that erase the curve.
+        selected = values[lo:hi]
+        finite = np.where(np.isfinite(selected), selected, np.inf)
+        mins = np.minimum.reduceat(finite, starts_unique - lo)
+        finite_max = np.where(np.isfinite(selected), selected, -np.inf)
+        maxs = np.maximum.reduceat(finite_max, starts_unique - lo)
         good = np.isfinite(mins) & np.isfinite(maxs)
         if not good.any():
             return
