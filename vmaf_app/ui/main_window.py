@@ -691,13 +691,25 @@ class MainWindow(QMainWindow):
                 head_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header.setStretchLastSection(False)
         self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.distorted_table.setColumnWidth(COL_CHECK, 28)
-        self.distorted_table.setColumnWidth(COL_INFO, 150)
-        self.distorted_table.setColumnWidth(COL_BLACK_BARS, 78)
-        self.distorted_table.setColumnWidth(COL_SCALING, 90)
-        self.distorted_table.setColumnWidth(COL_BITRATE, 65)
-        for col, _, _ in _METRIC_COLUMNS:
-            self.distorted_table.setColumnWidth(col, 105 if col in (COL_PSNR, COL_XPSNR) else 78)
+        # Never narrower than the heading itself needs. "Video bitrate" was
+        # set to 65px and rendered as "'ideo bitrat" -- the widths here are
+        # picked for the values, which are shorter than several of the
+        # headings, and nothing widened the column until a row arrived with
+        # content to measure. An empty table showed a clipped heading, and a
+        # renamed one could clip again silently.
+        starting_widths = {
+            COL_CHECK: 28,
+            COL_INFO: 150,
+            COL_BLACK_BARS: 78,
+            COL_SCALING: 90,
+            COL_BITRATE: 65,
+            **{col: (105 if col in (COL_PSNR, COL_XPSNR) else 78)
+               for col, _, _ in _METRIC_COLUMNS},
+        }
+        for col, width in starting_widths.items():
+            self.distorted_table.setColumnWidth(
+                col, max(width, header.sectionSizeHint(col))
+            )
         files_layout.addWidget(self.distorted_table, stretch=1)
 
         dist_btn_row = QHBoxLayout()

@@ -155,6 +155,24 @@ def test_an_older_settings_file_is_upgraded_to_all_four_once(tmp_path, monkeypat
 # ------------------------------------------------------------------ row state
 
 
+def test_no_column_starts_narrower_than_its_own_heading(qapp):
+    """"Video bitrate" was set to 65px and rendered as "'ideo bitrat".
+
+    The starting widths are chosen for the values, which are shorter than
+    several of the headings, and nothing widened a column until a row arrived
+    with content to measure -- so an empty table showed a clipped heading.
+    """
+    win = MainWindow()
+    header = win.distorted_table.horizontalHeader()
+
+    for column in range(win.distorted_table.columnCount()):
+        if column == COL_PATH:
+            continue  # the fill column stretches; it starts at its minimum
+        assert win.distorted_table.columnWidth(column) >= header.sectionSizeHint(column), (
+            win.distorted_table.horizontalHeaderItem(column).text()
+        )
+
+
 def test_the_table_has_no_status_column(qapp):
     """The metric cells already answer it.
 
@@ -837,7 +855,18 @@ def test_resize_mismatch_note_for_test_both_row_ignores_a_stale_cached_direction
 
 def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):
     win = MainWindow()
-    win.resize(1280, 800)
+    # 1280 is the default window width, but the offscreen platform these
+    # tests run under renders at roughly twice a real display's font size,
+    # so the fixed columns alone can exceed it there and would fail for a
+    # reason no user could ever hit. Widened to whatever this font needs,
+    # which still proves the point: the fill column absorbs the remainder
+    # rather than a scrollbar appearing.
+    fixed = sum(
+        win.distorted_table.columnWidth(c)
+        for c in range(win.distorted_table.columnCount())
+        if c != COL_PATH
+    )
+    win.resize(max(1280, fixed + 400), 800)
     win.show()
 
     row = win._add_table_row(Path(
