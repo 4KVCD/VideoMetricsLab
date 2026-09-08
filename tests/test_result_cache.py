@@ -212,6 +212,44 @@ def test_asking_for_more_metrics_still_finds_an_earlier_run(tmp_path, asked_for)
     assert found[1] == "original"
 
 
+def test_clearing_forgets_runs_recorded_with_other_metric_sets(tmp_path):
+    """"Ignore cached results" has to mean every run a lookup could return.
+
+    Clearing only the exact-options entry left an older run of the same pair
+    alive, and load_cached reuses those across metric sets -- so a row told
+    to forget its results could pick one up again later.
+    """
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    all_four = VmafOptions(
+        extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True
+    )
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="older vmaf-only run", options=VmafOptions(),
+    )
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="today's run", options=all_four,
+    )
+    # Same pair, but a setting that changes what was measured.
+    elsewhere = VmafOptions(
+        extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True,
+        n_subsample=5,
+    )
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted),
+        label="a different recipe", options=elsewhere,
+    )
+
+    result_cache.clear(source, distorted, all_four)
+
+    assert result_cache.load_cached(source, distorted, all_four) is None
+    # ...but a run that measured different pictures was never in scope.
+    survivor = result_cache.load_cached(source, distorted, elsewhere)
+    assert survivor is not None and survivor[1] == "a different recipe"
+
+
 def test_asking_for_fewer_metrics_finds_the_fuller_run(tmp_path):
     # A run holding everything asked for and more is a complete answer.
     source = _make_file(tmp_path / "source.mp4", 1000)

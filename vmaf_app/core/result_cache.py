@@ -206,7 +206,17 @@ def store(
 def clear(
     source: Path, distorted: Path, options: VmafOptions, directory: Path | None = None
 ) -> None:
-    _cache_path(source, distorted, options, directory).unlink(missing_ok=True)
+    """Forgets every cached run for this pair that a lookup could return.
+
+    Not just the entry matching `options` exactly: load_cached deliberately
+    also reuses runs recorded with a different set of metrics (see
+    _candidate_options), so clearing only the exact match left an older run
+    of the same pair alive to be found again -- and "ignore cached results"
+    has to mean it. Everything else about the run still has to match, so a
+    result under a different crop, scale or duration is untouched.
+    """
+    for candidate in _candidate_options(options):
+        _cache_path(source, distorted, candidate, directory).unlink(missing_ok=True)
 
 
 def clear_all(directory: Path | None = None) -> int:
