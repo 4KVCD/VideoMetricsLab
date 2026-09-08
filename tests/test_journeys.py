@@ -331,6 +331,26 @@ def test_curves_appear_as_each_job_finishes_not_only_at_the_end(qapp):
 
 # ------------------------------------------------------------------ found by looking
 
+
+def test_recompute_removes_old_graph_identity(qapp):
+    win = MainWindow()
+    source = _info("C:/vid/source.mkv")
+    win._source_info = source
+    row = win._add_table_row(Path("C:/vid/a.mkv"))
+    result = _result(win._rows[row].path, source)
+    try:
+        _finish_run(win, [(row, result)])
+        win._file_writes.wait_until_idle()
+        assert len(win.graph_panel._entries) == 1
+        win._recompute_rows([row])
+        win._file_writes.wait_until_idle()
+        assert len(win.graph_panel._entries) == 0
+        _finish_run(win, [(row, result)])
+        win._file_writes.wait_until_idle()
+        assert len(win.graph_panel._entries) == 1
+    finally:
+        win.close()
+
 def test_the_delta_uses_each_metrics_own_precision(qapp):
     # Every metric's delta was formatted to 2dp. SSIM's entire range is 0-1,
     # so every real SSIM difference rendered as "+0.00" -- the number was

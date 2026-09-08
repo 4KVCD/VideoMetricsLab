@@ -1345,7 +1345,8 @@ class MainWindow(QMainWindow):
             return ""
         return (
             f"\n\n{identical} of {len(values)} frames were identical to the reference "
-            "and scored infinity; they are excluded from this mean."
+            "and scored infinity; they contribute zero distortion and are included "
+            "in the frame count for the XPSNR sequence average."
         )
 
     @staticmethod
@@ -1922,6 +1923,8 @@ class MainWindow(QMainWindow):
         self._cache_generation += 1
         for row in rows:
             row_data = self._rows[row]
+            if row_data.completed_run is not None:
+                self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
             row_data.completed_run = None
             row_data.analysis_status = ""
             self._set_row_metrics(row)

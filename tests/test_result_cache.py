@@ -16,6 +16,18 @@ from vmaf_app.core.models import (
 OPTIONS = VmafOptions()
 
 
+def test_reverse_stored_order_is_found_and_cleared(tmp_path):
+    source = _make_file(tmp_path / "source.mkv", 10)
+    distorted = _make_file(tmp_path / "distorted.mkv", 5)
+    reverse = VmafOptions(extra_features=["name=float_ssim", "name=psnr"])
+    normal = VmafOptions(extra_features=["name=psnr", "name=float_ssim"])
+    result_cache.store(source, distorted, _fake_result(source, distorted), "reverse", reverse)
+    result_cache.store(source, distorted, _fake_result(source, distorted), "partial", VmafOptions())
+    assert result_cache.load_cached(source, distorted, normal)[1] == "reverse"
+    result_cache.clear(source, distorted, normal)
+    assert result_cache.load_cached(source, distorted, reverse) is None
+
+
 @pytest.fixture(autouse=True)
 def _isolated_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)

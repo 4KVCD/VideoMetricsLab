@@ -82,9 +82,15 @@ class Settings:
             data = json.loads(cls.path().read_text(encoding="utf-8"))
         except Exception:
             return cls()  # no file: the dataclass defaults are already current
+        if not isinstance(data, dict):
+            return cls()
+        try:
+            version = int(data.get("settings_version", 0))
+        except (TypeError, ValueError, OverflowError):
+            version = 0
         known = {f.name for f in fields(cls)}
         settings = cls(**{k: v for k, v in data.items() if k in known})
-        if settings._migrate(int(data.get("settings_version", 0))):
+        if settings._migrate(version):
             # Persisted straight away, so an upgrade happens exactly once. If
             # it only lived in memory, a user who turned a metric back off
             # would find it on again at every launch.

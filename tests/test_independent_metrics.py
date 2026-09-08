@@ -65,6 +65,23 @@ def options_for(names):
 COMBINATIONS = [names for n in range(1, 5) for names in itertools.combinations(("vmaf", "psnr", "ssim", "xpsnr"), n)]
 
 
+def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):
+    mixed = options_for(("vmaf", "xpsnr"))
+    mixed.n_subsample = 3
+    alone = options_for(("xpsnr",))
+    alone.n_subsample = 3
+    source, distorted = real_pair
+    sampled = run_vmaf(source, distorted, mixed)
+    full = run_vmaf(source, distorted, alone)
+    assert len(sampled.frames) == 4
+    assert len(full.frames) == 12
+    result_cache.store(source.path, distorted.path, sampled, "sampled", mixed)
+    assert result_cache.load_cached(source.path, distorted.path, alone) is None
+    result_cache.clear(source.path, distorted.path, alone)
+    result_cache.store(source.path, distorted.path, full, "full", alone)
+    assert result_cache.load_cached(source.path, distorted.path, mixed) is None
+
+
 @pytest.mark.parametrize("names", COMBINATIONS)
 def test_real_metric_combinations_and_portable_roundtrip(real_pair, tmp_path, names):
     options = options_for(names)

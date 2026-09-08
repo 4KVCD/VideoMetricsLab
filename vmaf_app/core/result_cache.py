@@ -164,7 +164,19 @@ def _candidate_options(options: VmafOptions) -> list[VmafOptions]:
         for complete, covered, _, _, metrics in others
         if complete or covered
     ]
-    return candidates
+    # Both historical checkbox orders were persisted in cache identities.
+    # Keep those keys valid rather than changing the identity format.
+    expanded = []
+    for candidate in candidates:
+        expanded.append(candidate)
+        if all(f in candidate.extra_features for f in _FEATURE_BY_METRIC.values()):
+            alternate = clone_options(candidate)
+            alternate.extra_features = [
+                {"name=psnr": "name=float_ssim", "name=float_ssim": "name=psnr"}.get(f, f)
+                for f in candidate.extra_features
+            ]
+            expanded.append(alternate)
+    return expanded
 
 
 def load_cached(
@@ -178,6 +190,13 @@ def load_cached(
     is reused rather than thrown away -- see _candidate_options.
     """
     for candidate in _candidate_options(options):
+        # XPSNR alone retains all frames; a libvmaf-backed run retains only
+        # its sampled frames. Never substitute between those coverage modes.
+        if options.n_subsample > 1 and (
+            (options.requested_metrics() == ("xpsnr",))
+            != (candidate.requested_metrics() == ("xpsnr",))
+        ):
+            continue
         path = _cache_path(source, distorted, candidate, directory)
         if not path.exists():
             continue

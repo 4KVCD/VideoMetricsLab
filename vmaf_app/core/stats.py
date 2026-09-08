@@ -54,7 +54,7 @@ class VmafStats:
     percentile_1: float  # "1% low"
     percentile_0_1: float  # "0.1% low" -- needs a lot of frames to be meaningful
     #: Frames scoring +inf: mathematically identical to the reference. Kept
-    #: out of every summary above and counted here instead -- see
+    #: in the sequence aggregate and counted here too -- see
     #: compute_stats. They still appear per-frame and in the threshold
     #: counts, where "better than X" is exactly what they are.
     identical: int = 0
@@ -195,19 +195,29 @@ def compute_stats(
 
     # One sort, then every percentile is a lookup into it. Order statistics
     # are well defined with infinities present -- and the percentiles that
-    # matter here are all LOW ones, which infinities at the top cannot move.
+    # may also fall in the infinite tail for mostly identical material.
     ordered = np.sort(data)
     if np.isposinf(ordered).all():
         p10 = p5 = p1 = p01 = float("inf")
     elif np.isneginf(ordered).all():
         p10 = p5 = p1 = p01 = float("-inf")
     else:
-        with np.errstate(invalid="ignore"):
-            p10, p5, p1, p01 = (
-                float(v) for v in np.percentile(
-                    ordered, [10, 5, 1, 0.1], method="linear"
-                )
-            )
+        def percentile(q: float) -> float:
+            position = (len(ordered) - 1) * q / 100.0
+            lower = int(np.floor(position))
+            upper = int(np.ceil(position))
+            a, b = ordered[lower], ordered[upper]
+            if lower == upper or a == b:
+                return float(a)
+            # Extended-real linear interpolation: finite-to-infinite is
+            # infinite at any interior point. Opposite infinities are undefined.
+            if np.isinf(a) or np.isinf(b):
+                if np.isneginf(a) and np.isposinf(b):
+                    return float("nan")
+                return float(a if np.isinf(a) else b)
+            return float(a + (b - a) * (position - lower))
+
+        p10, p5, p1, p01 = (percentile(q) for q in (10, 5, 1, 0.1))
 
     threshold_stats = []
     for cmp_op, thresh in thresholds:

@@ -1227,7 +1227,8 @@ class GraphPanel(QWidget):
                     if identical:
                         item.setToolTip(
                             f"{identical} frames identical to the reference are "
-                            "excluded from this mean."
+                            "included in the XPSNR sequence average: zero distortion, "
+                            "with their frames included in the count."
                         )
                     selected = spec.key == metric.key
                     item.setBackground(QColor(*(
