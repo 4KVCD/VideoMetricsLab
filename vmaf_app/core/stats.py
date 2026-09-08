@@ -53,6 +53,11 @@ class VmafStats:
     percentile_5: float  # "5% low"
     percentile_1: float  # "1% low"
     percentile_0_1: float  # "0.1% low" -- needs a lot of frames to be meaningful
+    #: Frames scoring +inf: mathematically identical to the reference. Kept
+    #: out of every summary above and counted here instead -- see
+    #: compute_stats. They still appear per-frame and in the threshold
+    #: counts, where "better than X" is exactly what they are.
+    identical: int = 0
     thresholds: list[ThresholdStat] = field(default_factory=list)
     histogram: list[HistogramBin] = field(default_factory=list)
 
@@ -94,6 +99,26 @@ class VmafStats:
         return [(label, formatted(value)) for label, value in self.values]
 
 
+def mean_of_measurable(values) -> float | None:
+    """The mean of a metric column, or None if there is nothing to average.
+
+    Frames identical to the reference score +inf (XPSNR reports it; libvmaf
+    clamps PSNR instead), and one of them turns an ordinary mean into inf --
+    which is how a film opening on black came to report its whole encode's
+    XPSNR as "inf". Those frames are excluded, and NaN (a frame the metric
+    was not computed for) with them. If every frame is identical, inf is the
+    honest answer and is returned as such.
+    """
+    data = np.asarray(values, dtype=np.float64)
+    data = data[~np.isnan(data)]
+    if data.size == 0:
+        return None
+    finite = data[np.isfinite(data)]
+    if finite.size:
+        return float(finite.mean())
+    return float(data[0])  # all identical, or all -inf: report it rather than hide it
+
+
 def compute_stats(
     values,
     thresholds: list[tuple[str, float]] | None = None,
@@ -121,8 +146,22 @@ def compute_stats(
             thresholds=[], histogram=[],
         )
 
+    # A frame identical to the reference scores +inf -- XPSNR reports it
+    # outright, where libvmaf instead clamps PSNR to its bit depth's ceiling.
+    # A single such frame makes the mean inf and the standard deviation nan,
+    # so a film that opens on a few seconds of black reported "inf" as the
+    # XPSNR of the entire encode. They are held out of the summary below and
+    # counted separately; the threshold tallies still see them, because
+    # "better than 38 dB" is precisely what a perfect frame is.
+    finite = data[np.isfinite(data)]
+    identical = int(np.isposinf(data).sum())
+    # Unless there is nothing else: an encode that really is identical
+    # throughout has no finite frames to describe, and inf is then the
+    # honest answer rather than a missing one.
+    summarised = finite if finite.size else data
+
     # One sort, then every percentile is a lookup into it.
-    ordered = np.sort(data)
+    ordered = np.sort(summarised)
     if np.isposinf(ordered).all():
         p10 = p5 = p1 = p01 = float("inf")
     elif np.isneginf(ordered).all():
@@ -148,11 +187,12 @@ def compute_stats(
         histogram.append(HistogramBin(lo, hi, count, 100.0 * count / n))
 
     with np.errstate(invalid="ignore"):
-        mean = float(data.mean())
-        stdev = float(data.std())
+        mean = float(summarised.mean())
+        stdev = float(summarised.std())
 
     return VmafStats(
         count=n,
+        identical=identical,
         mean=mean,
         median=float(np.median(ordered)),
         stdev=stdev,  # population stdev; undefined for an infinite population

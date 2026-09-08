@@ -38,7 +38,12 @@ from PySide6.QtWidgets import (
 
 from vmaf_app.core.models import FrameScore, VmafRunResult
 from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
-from vmaf_app.core.stats import DEFAULT_THRESHOLDS, VmafStats, compute_stats
+from vmaf_app.core.stats import (
+    DEFAULT_THRESHOLDS,
+    VmafStats,
+    compute_stats,
+    mean_of_measurable,
+)
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
@@ -168,6 +173,14 @@ class SeriesEntry:
     means: dict[str, float | None] = field(default_factory=dict)
 
 
+def _identical_frame_count(result: VmafRunResult, key: str) -> int:
+    """Frames scoring +inf -- mathematically identical to the reference."""
+    values = result.frames.values(key)
+    if values is None or len(values) == 0:
+        return 0
+    return int(np.isposinf(np.asarray(values, dtype=np.float64)).sum())
+
+
 def _metric_means(result: VmafRunResult) -> dict[str, float | None]:
     means: dict[str, float | None] = {}
     for metric in METRICS:
@@ -175,11 +188,7 @@ def _metric_means(result: VmafRunResult) -> dict[str, float | None]:
         if values is None or len(values) == 0:
             means[metric.key] = None
             continue
-        # A metric can be present but NaN on every frame; nanmean would warn
-        # and hand back NaN, which is not a mean and must not be shown as one.
-        finite = np.asarray(values, dtype=np.float64)
-        finite = finite[~np.isnan(finite)]
-        means[metric.key] = float(finite.mean()) if finite.size else None
+        means[metric.key] = mean_of_measurable(values)
     return means
 
 
@@ -1206,6 +1215,12 @@ class GraphPanel(QWidget):
                     item = self._number_item(
                         "\u2014" if mean is None else spec.format_value(mean)
                     )
+                    identical = _identical_frame_count(entry.result, spec.key)
+                    if identical:
+                        item.setToolTip(
+                            f"{identical} frames identical to the reference are "
+                            "excluded from this mean."
+                        )
                     selected = spec.key == metric.key
                     item.setBackground(QColor(*(
                         _SELECTED_MEAN_TINT if selected else _MEAN_TINT)))

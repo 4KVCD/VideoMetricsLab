@@ -68,7 +68,7 @@ from vmaf_app.core.models import (
 )
 from vmaf_app.core.run_io import load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
-from vmaf_app.core.stats import stats_for_run
+from vmaf_app.core.stats import mean_of_measurable, stats_for_run
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
@@ -1258,7 +1258,12 @@ class MainWindow(QMainWindow):
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 item.setData(Qt.CheckStateRole, None)
                 item.setText(f"{value:.4f}" if col == COL_SSIM else f"{value:.2f}")
-                item.setToolTip("Mean of calculated frame scores." + (" VMAF colour bands are heuristic, not a universal quality rating." if col == COL_VMAF else ""))
+                item.setToolTip(
+                    "Mean of calculated frame scores."
+                    + self._identical_frames_note(run, col)
+                    + (" VMAF colour bands are heuristic, not a universal quality rating."
+                       if col == COL_VMAF else "")
+                )
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
@@ -1314,13 +1319,31 @@ class MainWindow(QMainWindow):
         item.setForeground(QColor(colour))
 
     @staticmethod
+    def _identical_frames_note(run: CompletedRun, column: int) -> str:
+        """Says when frames were held out of the mean, and why.
+
+        Without it the number silently describes fewer frames than the run
+        measured, which is worse than the "inf" it replaced.
+        """
+        metric = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        values = run.result.frames.values(metric)
+        if values is None:
+            return ""
+        identical = int(np.isposinf(np.asarray(values, dtype=np.float64)).sum())
+        if not identical:
+            return ""
+        return (
+            f"\n\n{identical} of {len(values)} frames were identical to the reference "
+            "and scored infinity; they are excluded from this mean."
+        )
+
+    @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
         metric = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
         values = run.result.frames.values(metric)
         if values is None or len(values) == 0:
             return None
-        mean = float(np.nanmean(values))
-        return None if math.isnan(mean) else mean
+        return mean_of_measurable(values)
 
     @staticmethod
     def _crop_detail(label: str, info: VideoInfo, crop: CropBox | None) -> str:

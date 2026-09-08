@@ -1,6 +1,8 @@
+import math
+
 import pytest
 
-from vmaf_app.core.stats import compute_stats
+from vmaf_app.core.stats import compute_stats, mean_of_measurable
 
 
 def test_basic_stats():
@@ -85,4 +87,59 @@ def test_perfect_infinite_metric_has_mean_and_percentiles_without_warnings():
     assert summary["Mean"] == "∞"
     assert summary["StDev"] == "—"
 
+# ------------------------------------------------- frames identical to source
 
+
+def test_identical_frames_do_not_turn_the_summary_into_infinity():
+    """A film opening on black reported "inf" as its whole XPSNR.
+
+    XPSNR scores a frame identical to the reference as +inf, where libvmaf
+    instead clamps PSNR to its bit depth's ceiling. One such frame made the
+    mean inf and the standard deviation nan -- and the opening seconds of a
+    feature are routinely pixel-identical black. Reproduced on a real 4K
+    pair: 40 of the first 73 frames were inf.
+    """
+    values = [float("inf")] * 40 + [78.78, 16.82, 12.56, 7.63, 4.60, 2.88, 3.28, 4.17, 5.87]
+
+    stats = compute_stats(values, thresholds=[(">", 38.0), ("<", 33.0)])
+
+    assert math.isfinite(stats.mean)
+    assert math.isfinite(stats.stdev)
+    assert math.isfinite(stats.median)
+    assert math.isfinite(stats.percentile_1)
+    assert math.isfinite(stats.maximum)
+    assert stats.mean == pytest.approx(15.177, abs=0.01)
+    # Counted rather than quietly dropped: the mean describes fewer frames
+    # than the run measured, and that has to be visible.
+    assert stats.identical == 40
+    assert stats.count == 49
+
+
+def test_identical_frames_still_count_towards_the_bands():
+    # A perfect frame is emphatically "better than 38 dB". Excluding it from
+    # the mean must not also exclude it from the tally.
+    values = [float("inf")] * 3 + [40.0, 10.0]
+
+    stats = compute_stats(values, thresholds=[(">", 38.0), ("<", 33.0)])
+
+    above = next(t for t in stats.thresholds if t.label == "> 38")
+    below = next(t for t in stats.thresholds if t.label == "< 33")
+    assert above.count == 4 and above.percentage == pytest.approx(80.0)
+    assert below.count == 1 and below.percentage == pytest.approx(20.0)
+
+
+def test_an_entirely_identical_encode_still_reports_infinity():
+    # Nothing to average, and inf is then the honest answer rather than a
+    # number invented to avoid it.
+    stats = compute_stats([float("inf")] * 5)
+
+    assert math.isinf(stats.mean)
+    assert stats.identical == 5
+
+
+def test_mean_of_measurable_matches_the_summary():
+    assert mean_of_measurable([float("inf"), 10.0, 20.0]) == pytest.approx(15.0)
+    assert mean_of_measurable([1.0, float("nan"), 3.0]) == pytest.approx(2.0)
+    assert mean_of_measurable([float("nan")] * 3) is None
+    assert mean_of_measurable([]) is None
+    assert math.isinf(mean_of_measurable([float("inf")] * 2))
