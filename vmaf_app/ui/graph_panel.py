@@ -651,6 +651,24 @@ class GraphPanel(QWidget):
         # the first time they're actually selected. Tabs the user never opens
         # then cost nothing.
         self.tabs = QTabWidget()
+        # Scope styling to the metric selector, not the application's other
+        # tabs. Native themes can make the selected tab nearly indistinguishable.
+        self.tabs.tabBar().setStyleSheet("""
+            QTabBar::tab {
+                padding: 7px 16px;
+                margin-right: 3px;
+                background: palette(button);
+                color: palette(button-text);
+                border: 1px solid palette(mid);
+                border-bottom: 3px solid transparent;
+            }
+            QTabBar::tab:selected {
+                background: palette(highlight);
+                color: palette(highlighted-text);
+                border-bottom: 3px solid palette(highlighted-text);
+                font-weight: bold;
+            }
+        """)
         self._pages: dict[str, _MetricPage] = {}
         vmaf_page = self._build_page(METRICS[0])
         self.tabs.addTab(vmaf_page, METRICS[0].label)

@@ -155,6 +155,30 @@ def test_unchecking_a_series_hides_its_curve_on_every_page_and_drops_it_from_sta
 
 # ------------------------------------------------------------------ per-metric tabs
 
+
+def test_active_metric_tab_has_visible_highlight_on_every_page(qapp):
+    from PySide6.QtGui import QPalette
+
+    panel = GraphPanel()
+    panel.resize(1000, 700)
+    panel.show()
+    try:
+        for index in range(4):
+            panel.tabs.setCurrentIndex(index)
+            qapp.processEvents()
+            bar = panel.tabs.tabBar()
+            image = bar.grab().toImage()
+            ratio = image.devicePixelRatio()
+            expected = bar.palette().color(QPalette.Highlight)
+            for tab in range(4):
+                rect = bar.tabRect(tab)
+                # Sample the padded background, clear of text and borders.
+                color = image.pixelColor(round((rect.left() + 5) * ratio),
+                                         round((rect.top() + 5) * ratio))
+                assert (color == expected) == (tab == index)
+    finally:
+        panel.close()
+
 def test_graph_has_one_tab_per_metric(qapp):
     win = GraphPanel()
     labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
