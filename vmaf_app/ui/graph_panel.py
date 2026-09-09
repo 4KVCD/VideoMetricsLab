@@ -151,6 +151,8 @@ METRICS: list[MetricSpec] = [
 #: metric's detail; then the remove button.
 _MEAN_COLUMNS = range(1, 1 + len(METRICS))
 
+_XPSNR_INFINITY_NOTE = "XPSNR: ∞ is plotted at 100 dB; stored scores and statistics retain infinity."
+
 
 def _is_reportable(value: float | None) -> bool:
     """Whether a metric value can be shown and differenced.
@@ -286,8 +288,13 @@ class _MetricPage(QWidget):
         if values is None or len(values) == 0:
             self._update_no_data_label()
             return
+        plot_values = values
+        if self.metric.key == "xpsnr" and np.isposinf(values).any():
+            # Display-only substitution: never mutate the result arrays used
+            # for aggregation, hover readouts or portable exports.
+            plot_values = np.where(np.isposinf(values), 100.0, values)
         self.chart.set_series(series_id, ChartSeries(
-            times=entry.times, values=values, color=color, visible=entry.visible,
+            times=entry.times, values=plot_values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
             stats=compute_stats(values, self.metric.thresholds, self.metric.aggregate),
@@ -727,6 +734,8 @@ class GraphPanel(QWidget):
         metric = self._current_metric()
         available = any(e.result.frames.has(metric.key) for e in self._entries.values())
         self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Tick it in the {metric.label} column in Videos, or load results containing it.")
+        if available and metric.key == "xpsnr":
+            self.metric_hint.setText(_XPSNR_INFINITY_NOTE)
         for i, spec in enumerate(METRICS):
             self.tabs.setTabToolTip(i, "" if any(e.result.frames.has(spec.key) for e in self._entries.values()) else "Not calculated")
 
@@ -1083,6 +1092,8 @@ class GraphPanel(QWidget):
         title_font.setPointSize(max(10, title_font.pointSize() + 3))
         title_fm = QFontMetrics(title_font)
         title = f"{metric.label} vs time"
+        if metric.key == "xpsnr":
+            title += " — ∞ plotted at 100 dB (display only)"
 
         cell_font = QFont("Consolas")
         cell_font.setStyleHint(QFont.Monospace)

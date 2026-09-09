@@ -24,6 +24,35 @@ def _row_for(win, label: str):
     raise AssertionError(f"no row for {label!r}")
 
 
+@pytest.mark.parametrize("all_infinite", [False, True])
+def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
+    panel = GraphPanel()
+    result = _fake_result("test.mp4", with_other_metrics=True)
+    result.frames.xpsnr[:] = np.inf
+    if not all_infinite:
+        result.frames.xpsnr[0] = 110.0  # genuine finite scores are not capped
+        result.frames.xpsnr[1] = np.nan
+    try:
+        panel.add_run(result, "test")
+        panel.tabs.setCurrentIndex(3)
+        page = panel._pages["xpsnr"]
+        plotted = next(iter(page.chart._series.values())).values
+        assert (plotted[2:] == 100).all()
+        assert np.isposinf(result.frames.xpsnr[2:]).all()
+        curve = next(iter(page._curves.values()))
+        assert np.isposinf(curve.stats.maximum)
+        if all_infinite:
+            assert np.isposinf(curve.stats.mean)
+        else:
+            assert plotted[0] == 110
+            assert np.isnan(plotted[1])
+        assert "100 dB" in panel.metric_hint.text()
+        assert "retain infinity" in panel.metric_hint.text()
+        assert not panel.render_export_image().isNull()
+    finally:
+        panel.close()
+
+
 def _fake_result(distorted_name: str, vmaf_value: float = 90.0, with_other_metrics: bool = False) -> VmafRunResult:
     info = VideoInfo(
         path=Path(distorted_name), width=1920, height=1080, fps=30.0, duration=5.0,
