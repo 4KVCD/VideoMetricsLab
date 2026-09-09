@@ -1233,6 +1233,15 @@ def test_add_opposite_scale_direction_twice_does_not_duplicate(qapp, monkeypatch
     assert len(win._rows) == 2
 
 
+def test_resolution_mismatch_labels_describe_scaling(qapp):
+    win = MainWindow()
+    try:
+        assert win.scale_direction_combo.itemText(0) == "Source downscaled to test"
+        assert win.scale_direction_combo.itemText(1) == "Test upscaled to source"
+    finally:
+        win.close()
+
+
 def test_scale_direction_combo_test_both_adds_a_row_and_reverts_the_combo(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info_res("source.mp4", 3840, 2160)

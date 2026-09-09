@@ -858,8 +858,8 @@ class MainWindow(QMainWindow):
 
         self.scale_direction_combo = QComboBox()
         self.scale_direction_combo.addItems([
-            "Reference → test (default)",
-            "Test → reference",
+            "Source downscaled to test",
+            "Test upscaled to source",
             "Test both (adds a comparison row)",
         ])
         self.scale_direction_combo.setToolTip(
