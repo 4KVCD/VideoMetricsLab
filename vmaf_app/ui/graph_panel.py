@@ -151,7 +151,27 @@ METRICS: list[MetricSpec] = [
 #: metric's detail; then the remove button.
 _MEAN_COLUMNS = range(1, 1 + len(METRICS))
 
-_XPSNR_INFINITY_NOTE = "XPSNR: ∞ is plotted at 100 dB; stored scores and statistics retain infinity."
+#: Where an infinite XPSNR frame is drawn. It has to sit above every real
+#: score, or a pixel-identical frame plots BELOW frames that merely scored
+#: well and the curve dips exactly where quality is perfect -- which 100 dB
+#: did: four of six real 4K encodes had finite frames above it, one reaching
+#: 114.68 dB.
+#:
+#: 123 dB is where ffmpeg's own square-mean-root branch stops applying: a
+#: frame whose total weighted squared error is exactly 1 scores
+#: 10*log10(W*H*max_error), which is 123.4 dB at 1080p 10-bit. That figure
+#: is resolution- and depth-dependent (111.3 at 1080p 8-bit, 129.4 at 4K
+#: 10-bit), so this is a fixed stand-in rather than a derived limit -- but it
+#: clears every value these metrics produce in practice.
+#:
+#: Display only. The stored arrays keep infinity, so statistics, hover
+#: readouts and exports are unaffected.
+_XPSNR_INFINITY_PLOT_DB = 123.0
+
+_XPSNR_INFINITY_NOTE = (
+    f"XPSNR: ∞ is plotted at {_XPSNR_INFINITY_PLOT_DB:g} dB; "
+    "stored scores and statistics retain infinity."
+)
 
 
 def _is_reportable(value: float | None) -> bool:
@@ -292,7 +312,9 @@ class _MetricPage(QWidget):
         if self.metric.key == "xpsnr" and np.isposinf(values).any():
             # Display-only substitution: never mutate the result arrays used
             # for aggregation, hover readouts or portable exports.
-            plot_values = np.where(np.isposinf(values), 100.0, values)
+            plot_values = np.where(
+                np.isposinf(values), _XPSNR_INFINITY_PLOT_DB, values
+            )
         self.chart.set_series(series_id, ChartSeries(
             times=entry.times, values=plot_values, color=color, visible=entry.visible,
         ))
@@ -1093,7 +1115,7 @@ class GraphPanel(QWidget):
         title_fm = QFontMetrics(title_font)
         title = f"{metric.label} vs time"
         if metric.key == "xpsnr":
-            title += " — ∞ plotted at 100 dB (display only)"
+            title += f" — ∞ plotted at {_XPSNR_INFINITY_PLOT_DB:g} dB (display only)"
 
         cell_font = QFont("Consolas")
         cell_font.setStyleHint(QFont.Monospace)

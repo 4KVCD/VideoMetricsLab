@@ -7,7 +7,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import FrameScore, VideoInfo, VmafRunResult
-from vmaf_app.ui.graph_panel import METRICS, GraphPanel
+from vmaf_app.ui.graph_panel import (
+    _XPSNR_INFINITY_PLOT_DB,
+    METRICS,
+    GraphPanel,
+)
 
 
 @pytest.fixture(scope="module")
@@ -37,7 +41,7 @@ def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
         panel.tabs.setCurrentIndex(3)
         page = panel._pages["xpsnr"]
         plotted = next(iter(page.chart._series.values())).values
-        assert (plotted[2:] == 100).all()
+        assert (plotted[2:] == _XPSNR_INFINITY_PLOT_DB).all()
         assert np.isposinf(result.frames.xpsnr[2:]).all()
         curve = next(iter(page._curves.values()))
         assert np.isposinf(curve.stats.maximum)
@@ -46,7 +50,11 @@ def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
         else:
             assert plotted[0] == 110
             assert np.isnan(plotted[1])
-        assert "100 dB" in panel.metric_hint.text()
+        assert "123 dB" in panel.metric_hint.text()
+        # Above every finite score in the series, so a perfect frame draws as
+        # the best one rather than dipping below merely-good frames.
+        finite = plotted[np.isfinite(plotted)]
+        assert (finite <= _XPSNR_INFINITY_PLOT_DB).all()
         assert "retain infinity" in panel.metric_hint.text()
         assert not panel.render_export_image().isNull()
     finally:
