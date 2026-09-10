@@ -667,6 +667,9 @@ class MainWindow(QMainWindow):
         self.distorted_table.verticalHeader().setVisible(False)
         self.distorted_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.distorted_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        # Keep internal column indices stable, but omit crop status from the
+        # test-video table. Cropping remains available in the row options.
+        self.distorted_table.setColumnHidden(COL_BLACK_BARS, True)
         self.distorted_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.distorted_table.itemSelectionChanged.connect(self._on_table_selection_changed)
         self.distorted_table.itemChanged.connect(self._on_table_item_changed)

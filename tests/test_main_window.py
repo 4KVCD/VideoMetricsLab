@@ -1242,6 +1242,21 @@ def test_resolution_mismatch_labels_describe_scaling(qapp):
         win.close()
 
 
+def test_test_video_table_omits_black_bar_column(qapp):
+    from vmaf_app.ui.main_window import COL_BLACK_BARS
+
+    win = MainWindow()
+    try:
+        assert win.distorted_table.isColumnHidden(COL_BLACK_BARS)
+        visible_headers = [win.distorted_table.horizontalHeaderItem(col).text()
+                           for col in range(win.distorted_table.columnCount())
+                           if not win.distorted_table.isColumnHidden(col)]
+        assert "Black bars" not in visible_headers
+        assert "Scaling" in visible_headers
+    finally:
+        win.close()
+
+
 def test_scale_direction_combo_test_both_adds_a_row_and_reverts_the_combo(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info_res("source.mp4", 3840, 2160)
