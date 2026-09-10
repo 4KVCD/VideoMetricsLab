@@ -78,7 +78,7 @@ from vmaf_app.core.vmaf_runner import (
 )
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.formatting import bitrate_string, media_info_string, vmaf_band_colour
+from vmaf_app.ui.formatting import bitrate_string, media_info_string
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
@@ -1275,15 +1275,12 @@ class MainWindow(QMainWindow):
                 item.setToolTip(
                     "Mean of calculated frame scores."
                     + self._identical_frames_note(run, col)
-                    + (" VMAF colour bands are heuristic, not a universal quality rating."
-                       if col == COL_VMAF else "")
                 )
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
                 item.setForeground(QColor("#000"))
-                # These heuristic VMAF bands must never be reused for other metrics.
-                item.setBackground(vmaf_band_colour(value) if col == COL_VMAF else QColor(0, 0, 0, 0))
+                item.setBackground(QColor(0, 0, 0, 0))
         finally:
             self._syncing_table = False
         self._refresh_row_state(row)

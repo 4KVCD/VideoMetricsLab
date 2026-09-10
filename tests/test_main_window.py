@@ -81,6 +81,23 @@ def _ask_for_vmaf_only(win, row: int) -> None:
     win._set_row_metrics(row)
 
 
+@pytest.mark.parametrize("score", [40.0, 80.0, 90.0, 98.0])
+def test_vmaf_results_have_no_quality_background(qapp, score):
+    win = MainWindow()
+    try:
+        row = win._add_table_row(Path("test.mp4"))
+        run = _fake_completed_run("test.mp4")
+        run.result.frames.vmaf[:] = score
+        win._rows[row].completed_run = run
+        win._set_row_metrics(row)
+        item = win.distorted_table.item(row, COL_VMAF)
+        assert item.text() == f"{score:.2f}"
+        assert item.background().color().alpha() == 0
+        assert "colour bands" not in item.toolTip()
+    finally:
+        win.close()
+
+
 def test_cached_scores_do_not_replace_fresh_hdr_preview_metadata(qapp):
     from dataclasses import replace
 
