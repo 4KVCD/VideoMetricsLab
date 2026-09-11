@@ -328,7 +328,7 @@ def test_video_mode_keeps_two_surfaces_ready_for_instant_s_switch(qapp, tmp_path
     panel = FrameComparePanel()
     panel.set_runs([_physical_entry(tmp_path)])
     panel.show()
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
     assert panel.video_view is not None
     QTest.keyPress(panel.video_view.distorted_video, Qt.Key_S)
     assert panel._showing_source is True
@@ -347,7 +347,7 @@ def test_switching_video_keeps_decoder_generation_and_preserves_seek(qapp, tmp_p
         _physical_entry(tmp_path, "second"),
     ])
     panel.set_frame(24)
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
     assert panel.video_view is not None
     previous_generation = panel.video_view._generation
 
@@ -363,7 +363,7 @@ def test_new_gpu_surfaces_receive_source_and_navigation_keys(qapp, tmp_path):
     panel = FrameComparePanel()
     panel.set_runs([_physical_entry(tmp_path, "a"), _physical_entry(tmp_path, "b")])
     panel.show()
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
     view = panel.video_view
     view._distorted_surface.setFocus()
     QTest.keyPress(view._distorted_surface, Qt.Key_S)
@@ -380,8 +380,8 @@ def test_source_resolution_option_preserves_seek_and_metric_recipe(qapp, tmp_pat
     entry = _physical_entry(tmp_path, "resolution")
     original = entry.comparison
     panel.set_runs([entry])
-    assert not panel.source_resolution_combo.isEnabled()
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    assert panel.source_resolution_combo.isEnabled()
+    panel.show()
     panel.set_frame(24)
     assert panel.video_view._source_native
     panel.source_resolution_combo.setCurrentIndex(1)
@@ -403,7 +403,7 @@ def test_top_arrow_button_switches_while_playback_is_requested(
         _physical_entry(tmp_path, "second"),
     ])
     panel.set_frame(24)
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
     view = panel.video_view
     assert view is not None
     view._wanted_playing = True
@@ -428,8 +428,13 @@ def test_top_arrow_button_switches_while_playback_is_requested(
 def test_frame_controls_seek_both_video_players(qapp, tmp_path, monkeypatch):
     panel = FrameComparePanel()
     panel.set_runs([_physical_entry(tmp_path)])
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
     assert panel.video_view is not None
+    assert not hasattr(panel, "view_mode_combo")
+    assert panel.content_stack.currentWidget() is panel.video_view
+    assert panel.play_btn.isEnabled()
+    assert panel.previous_frame_btn.isEnabled()
+    assert panel.next_frame_btn.isEnabled()
     positions = []
     monkeypatch.setattr(panel.video_view, "set_position", positions.append)
 
@@ -442,7 +447,7 @@ def test_frame_controls_seek_both_video_players(qapp, tmp_path, monkeypatch):
 def test_s_switches_halves_of_the_same_decoded_frame_pair(qapp, tmp_path):
     panel = FrameComparePanel()
     panel.set_runs([_physical_entry(tmp_path)])
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
     assert panel.video_view is not None
     view = panel.video_view
     payload = bytes(range(12))
@@ -471,13 +476,15 @@ def test_synthetic_resolution_test_stays_still_frame_only(qapp):
     panel.set_runs([entry])
 
     assert not panel.play_btn.isEnabled()
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
-    assert "synthetic resolution tests" in panel.color_status_label.text()
+    panel.show()
+    assert not panel.is_video_mode
+    assert panel.content_stack.currentWidget() is panel.viewer
     panel.close()
 
 
-def test_video_mode_discloses_native_hdr_or_actual_sdr_fallback(qapp, tmp_path):
+def test_video_mode_discloses_native_hdr_or_actual_sdr_fallback(qapp, tmp_path, monkeypatch):
     entry = _physical_entry(tmp_path, "hdr")
+    monkeypatch.setattr(FrameComparePanel, "_refresh_display_hdr", lambda self: None)
     entry.comparison.distorted_info.color_transfer = "smpte2084"
     entry.comparison.distorted_info.color_primaries = "bt2020"
     panel = FrameComparePanel()
@@ -490,7 +497,7 @@ def test_video_mode_discloses_native_hdr_or_actual_sdr_fallback(qapp, tmp_path):
     )
     panel.set_runs([entry])
 
-    panel.view_mode_combo.setCurrentIndex(panel.view_mode_combo.findData("video"))
+    panel.show()
 
     # Offscreen cannot create the native swapchain, so do not claim HDR
     # presentation simply because the monitor metadata says HDR is enabled.

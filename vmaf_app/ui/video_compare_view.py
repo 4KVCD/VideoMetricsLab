@@ -288,7 +288,7 @@ class VideoCompareView(QWidget):
             return (
                 False,
                 "Video playback is unavailable for synthetic resolution tests; "
-                "use Still frame to inspect their processed output.",
+                "their processed frames are displayed automatically.",
             )
         source = frame_input_path(comparison, "source")
         distorted = frame_input_path(comparison, "distorted")

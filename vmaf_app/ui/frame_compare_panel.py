@@ -196,17 +196,11 @@ class FrameComparePanel(QWidget):
         self.next_video_btn.clicked.connect(lambda: self.cycle_distorted(1))
         self.fit_checkbox = QCheckBox("Fit to window")
         self.fit_checkbox.setChecked(True)
-        self.view_mode_combo = QComboBox()
-        self.view_mode_combo.addItem("Still frame", "still")
-        self.view_mode_combo.addItem("Video playback", "video")
-        self.view_mode_combo.currentIndexChanged.connect(self._on_view_mode_changed)
         top.addWidget(QLabel("Test video:"))
         top.addWidget(self.previous_video_btn)
         top.addWidget(self.video_combo, stretch=1)
         top.addWidget(self.next_video_btn)
         top.addSpacing(12)
-        top.addWidget(QLabel("View:"))
-        top.addWidget(self.view_mode_combo)
         top.addWidget(self.fit_checkbox)
         root.addLayout(top)
 
@@ -378,7 +372,7 @@ class FrameComparePanel(QWidget):
             if self.is_video_mode:
                 self._load_current_video()
             else:
-                self._seek_timer.start()
+                self._show_or_request()
 
     @property
     def current_entry(self) -> FrameComparisonEntry | None:
@@ -388,7 +382,10 @@ class FrameComparePanel(QWidget):
 
     @property
     def is_video_mode(self) -> bool:
-        return self.view_mode_combo.currentData() == "video"
+        # Real video pairs share one renderer for paused frames and playback.
+        # Synthetic comparisons retain extraction automatically, not a user mode.
+        entry = self.current_entry
+        return entry is not None and VideoCompareView.can_play(entry.comparison)[0]
 
     def set_frame(self, frame: int) -> None:
         if not self._entries:
@@ -540,24 +537,6 @@ class FrameComparePanel(QWidget):
         self.video_view = view
         return view
 
-    def _on_view_mode_changed(self, _index: int) -> None:
-        self.source_resolution_combo.setEnabled(self.is_video_mode)
-        self._update_enabled_state()
-        self._update_labels()
-        if self.is_video_mode:
-            self._seek_timer.stop()
-            self._generation += 1
-            self._cancel_workers()
-            view = self._ensure_video_view()
-            self.content_stack.setCurrentWidget(view)
-            self._load_current_video(playing=False)
-        else:
-            if self.video_view is not None:
-                self.video_view.set_playing(False)
-            self.content_stack.setCurrentWidget(self.viewer)
-            self._generation += 1
-            self._show_or_request()
-
     def _on_source_resolution_changed(self, _index: int) -> None:
         if self.is_video_mode:
             self._load_current_video()
@@ -569,6 +548,9 @@ class FrameComparePanel(QWidget):
                 self.video_view.clear()
             return
         view = self._ensure_video_view()
+        self._seek_timer.stop()
+        self._cancel_workers()
+        self.content_stack.setCurrentWidget(view)
         if playing is None:
             playing = view.is_playing or view.playback_requested
         fps = entry.comparison.fps
@@ -590,9 +572,6 @@ class FrameComparePanel(QWidget):
         entry = self.current_entry
         if entry is None:
             return
-        if not self.is_video_mode:
-            index = self.view_mode_combo.findData("video")
-            self.view_mode_combo.setCurrentIndex(index)
         view = self._ensure_video_view()
         available, reason = view.can_play(entry.comparison)
         if not available:
@@ -718,6 +697,8 @@ class FrameComparePanel(QWidget):
         self.play_btn.setEnabled(available and playable)
         self.audio_checkbox.setEnabled(available and self.is_video_mode and playable)
         self.fit_checkbox.setEnabled(not self.is_video_mode)
+        self.fit_checkbox.setVisible(not self.is_video_mode)
+        self.source_resolution_combo.setEnabled(self.is_video_mode)
         self.color_mode_combo.setEnabled(available)
 
     def _update_labels(self) -> None:
@@ -900,6 +881,9 @@ class FrameComparePanel(QWidget):
                 self.video_view.set_color_settings(self._color_settings())
                 self.video_view.show_source(self._showing_source)
             return
+        if self.video_view is not None:
+            self.video_view.set_playing(False)
+        self.content_stack.setCurrentWidget(self.viewer)
         image = self._current_image()
         if image is not None:
             self.viewer.set_image(image)
