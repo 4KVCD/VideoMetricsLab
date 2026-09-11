@@ -5,6 +5,7 @@ import math
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
+from html import escape
 
 import numpy as np
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QStackedWidget,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -246,6 +248,8 @@ class FrameComparePanel(QWidget):
         color_row.addWidget(self.color_status_label, stretch=1)
         self.advanced_info_btn = QPushButton("Advanced info")
         self.advanced_info_btn.setToolTip("Playback details will appear here when a video is loaded.")
+        self.advanced_info_btn.installEventFilter(self)
+        self.advanced_info_btn.clicked.connect(self._show_advanced_info)
         color_row.addWidget(self.advanced_info_btn)
         root.addLayout(color_row)
 
@@ -471,6 +475,9 @@ class FrameComparePanel(QWidget):
         super().hideEvent(event)
 
     def eventFilter(self, watched, event) -> bool:
+        if watched is self.advanced_info_btn and event.type() == QEvent.ToolTip:
+            self._show_advanced_info()
+            return True
         if not self.isVisible():
             return super().eventFilter(watched, event)
         event_type = event.type()
@@ -621,7 +628,10 @@ class FrameComparePanel(QWidget):
 
     def _on_video_status_changed(self, message: str) -> None:
         self._video_status = message
-        self.advanced_info_btn.setToolTip(message.replace("distorted", "test"))
+        details = message.replace("distorted", "test")
+        tooltip = "<p>" + "<br>".join(escape(part) for part in details.split(" · ")) + "</p>"
+        if self.advanced_info_btn.toolTip() != tooltip:
+            self.advanced_info_btn.setToolTip(tooltip)
         if self.is_video_mode:
             self._update_color_status()
 
@@ -733,6 +743,11 @@ class FrameComparePanel(QWidget):
             parts.append("black bars not detected yet — shown uncropped")
         self.detail_label.setText("   ·   ".join(parts))
         self._update_color_status()
+
+    def _show_advanced_info(self) -> None:
+        button = self.advanced_info_btn
+        QToolTip.showText(button.mapToGlobal(button.rect().bottomLeft()),
+                          button.toolTip(), button, button.rect(), 30000)
 
     def _concise_playback_status(self) -> str:
         message = self._video_status.replace("distorted", "test")

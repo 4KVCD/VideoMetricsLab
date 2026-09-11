@@ -63,6 +63,23 @@ def test_playback_status_hides_diagnostics_but_keeps_decode_modes(qapp):
     assert "missing codec" in panel._concise_playback_status()
 
 
+def test_advanced_info_opens_on_tooltip_event_and_click(qapp, monkeypatch):
+    from PySide6.QtCore import QEvent, QPoint
+    from PySide6.QtGui import QHelpEvent
+    from PySide6.QtWidgets import QToolTip
+    calls = []
+    monkeypatch.setattr(QToolTip, "showText", lambda *args: calls.append(args))
+    panel = FrameComparePanel()
+    panel._on_video_status_changed("Paused · source GPU: d3d11 · memory:D3D11Memory")
+    button = panel.advanced_info_btn
+    qapp.sendEvent(button, QHelpEvent(QEvent.ToolTip, QPoint(1, 1), QPoint(10, 10)))
+    assert len(calls) == 1
+    assert "<br>" in calls[0][1]
+    assert "memory:D3D11Memory" in calls[0][1]
+    button.click()
+    assert len(calls) == 2
+
+
 def _unscored_entry(name: str, count: int = 120) -> FrameComparisonEntry:
     """A pair that has only been probed -- no run, no scores."""
     source = VideoInfo(
