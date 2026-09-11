@@ -31,6 +31,38 @@ def test_fast_source_never_advances_past_matching_distorted_frame():
     assert instance.pair == ("s11", "d11")
 
 
+def test_seek_reuses_cached_pairs_and_existing_decoders():
+    from unittest.mock import Mock
+    instance, output = pool()
+    instance.audio = Mock()
+    instance.eos = set()
+    instance.entries = {key: [Mock()] for key in instance.frames}
+    instance.frames[("distorted", 0)][11] = "d11"
+    instance.seek(440)
+    assert instance.pair == ("s11", "d11")
+    instance.seek(400)
+    assert instance.pair == ("s10", "d10")
+    assert output == ["d11", "d10"]
+    for entry in instance.entries.values():
+        entry[0].seek.assert_not_called()
+    instance.seek(4000)
+    assert instance.pair is None and instance.buffering
+    for entry in instance.entries.values():
+        entry[0].seek.assert_called_once_with(3960)
+    assert all(not queue for queue in instance.frames.values())
+
+
+def test_native_frame_step_does_not_restart_playback():
+    from unittest.mock import Mock
+    from vmaf_app.ui.rolling_video_view import RollingVideoCompareView
+    native = Mock(frame=42)
+    view = SimpleNamespace(_native_pool=native, _restart_decoder=Mock())
+    RollingVideoCompareView.set_position(view, 1750)
+    native.seek.assert_called_once_with(1750)
+    view._restart_decoder.assert_not_called()
+    assert view._frame == 42
+
+
 def test_s_toggles_held_pair_without_changing_frame_or_audio():
     instance, output = pool()
     instance._choose_pair(10)

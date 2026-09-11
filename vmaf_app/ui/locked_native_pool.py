@@ -128,6 +128,31 @@ class LockedNativePool:
     def set_audio_enabled(self, enabled):
         self.audio.set_enabled(enabled)
 
+    def seek(self, position_ms):
+        """Reuse decoders and renderer; nearby paired samples need no video seek."""
+        target = max(0, round(position_ms * self.fps / 1000))
+        if target == self.frame:
+            return
+        self.audio.set_playing(False)
+        self.audio_running = False
+        self.audio.seek(round(target * 1000 / self.fps))
+        self.audio_deadline = time.monotonic() + 15
+        self.ended = False
+        self.frame = target
+        self.position = round(target * 1000 / self.fps)
+        self.anchor, self.anchor_frame = time.monotonic(), target
+        self.pair = None
+        self.pair_index = None
+        for key, entry in self.entries.items():
+            queue = self.frames[key]
+            if target not in queue:
+                queue.clear()
+                self.eos.discard(key)
+                # Start one frame early: rounding a fractional frame time to
+                # milliseconds must not seek just beyond the requested frame.
+                entry[0].seek(max(0, self.position - round(1000 / self.fps)))
+        self.buffering = not self._choose_pair(target)
+
     def set_playing(self, playing):
         self.playing = bool(playing)
         self.anchor, self.anchor_frame = time.monotonic(), self.frame
@@ -158,10 +183,12 @@ class LockedNativePool:
             queue = self.frames[key]
             # Keep the currently displayed frame for immediate S/arrow swaps.
             for old in list(queue):
-                if old < self.frame:
+                if old < self.frame - 2:
                     del queue[old]
             sink = next(iter(player._sinks.values()))
-            while len(queue) < 3:
+            # Two previous frames plus the current and two upcoming frames.
+            # Bound retained GPU surfaces while making +/- frame reversible.
+            while len(queue) < 5:
                 sample = self._pull_sample(key, sink)
                 if sample is None:
                     break

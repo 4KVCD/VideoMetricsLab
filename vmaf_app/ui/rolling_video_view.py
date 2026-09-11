@@ -368,6 +368,10 @@ class RollingVideoCompareView(VideoCompareView):
             (self._source_surface if showing else self._distorted_surface).raise_()
 
     def set_position(self, position_ms):
+        if self._native_pool is not None:
+            self._native_pool.seek(position_ms)
+            self._frame = self._native_pool.frame
+            return
         if not self._pool_active and self._native_pool is None:
             return super().set_position(position_ms)
         self._frame = round(position_ms / 1000 * self._comparison.fps)
