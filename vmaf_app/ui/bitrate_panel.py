@@ -256,7 +256,22 @@ class BitratePanel(QWidget):
         self._refresh_plot()
 
     def _on_analyze_checked(self) -> None:
-        self._queue_keys([key for key, entry in self._entries.items() if entry.enabled])
+        if self._worker is not None:
+            return
+        keys = [key for key, entry in self._entries.items() if entry.enabled]
+        completed = [key for key in keys if self._entries[key].data is not None]
+        if completed:
+            answer = QMessageBox.question(
+                self, "Recalculate bitrate?",
+                f"{len(completed)} checked video(s) already have bitrate results.\n\n"
+                "Recalculate those files? Choose No to keep their results and "
+                "calculate only files without results.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                keys = [key for key in keys if key not in completed]
+        if keys:
+            self._queue_keys(keys)
 
     def _queue_keys(self, keys: list[str]) -> None:
         if self._stopping:

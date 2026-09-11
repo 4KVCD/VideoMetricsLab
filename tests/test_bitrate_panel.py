@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QApplication
+from PySide6.QtWidgets import QAbstractItemView, QApplication, QMessageBox
 
 from vmaf_app.core.bitrate import BitrateData
 from vmaf_app.core.models import VideoInfo
@@ -129,3 +129,51 @@ def test_metric_workflow_api_deduplicates_repeated_sources(qapp, tmp_path, monke
 
     assert panel.table.rowCount() == 2
     assert len(set(queued)) == 2
+
+
+@pytest.mark.parametrize("answer", [QMessageBox.Yes, QMessageBox.No])
+def test_recalculate_confirmation_only_applies_to_checked_results(qapp, tmp_path, monkeypatch, answer):
+    panel = BitratePanel()
+    paths = [tmp_path / f"{i}.mkv" for i in range(3)]
+    panel.add_files(paths)
+    for path in paths[:2]:
+        panel._on_analyzed(path, _info(path), _data(path))
+    panel.table.item(1, 0).setCheckState(Qt.Unchecked)
+    messages = []
+    def ask(*args):
+        messages.append(args[2])
+        assert args[-1] == QMessageBox.No
+        return answer
+    monkeypatch.setattr(QMessageBox, "question", ask)
+    queued = []
+    monkeypatch.setattr(panel, "_queue_keys", lambda keys: queued.extend(keys))
+    panel.analyze_btn.click()
+    keys = list(panel._entries)
+    assert queued == ([keys[0], keys[2]] if answer == QMessageBox.Yes else [keys[2]])
+    assert len(messages) == 1 and "1 checked video(s)" in messages[0]
+
+
+def test_no_recalculation_leaves_completed_results_and_no_work(qapp, tmp_path, monkeypatch):
+    panel = BitratePanel()
+    path = tmp_path / "done.mkv"
+    panel.add_files([path])
+    panel._on_analyzed(path, _info(path), _data(path))
+    saved = next(iter(panel._entries.values())).data
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.No)
+    queued = []
+    monkeypatch.setattr(panel, "_queue_keys", lambda keys: queued.append(keys))
+    panel.analyze_btn.click()
+    assert not queued
+    assert next(iter(panel._entries.values())).data is saved
+
+
+def test_new_files_calculate_without_confirmation(qapp, tmp_path, monkeypatch):
+    panel = BitratePanel()
+    panel.add_files([tmp_path / "new.mkv"])
+    def unexpected(*args):
+        pytest.fail("New files must not ask to recalculate")
+    monkeypatch.setattr(QMessageBox, "question", unexpected)
+    queued = []
+    monkeypatch.setattr(panel, "_queue_keys", lambda keys: queued.extend(keys))
+    panel.analyze_btn.click()
+    assert queued == list(panel._entries)
