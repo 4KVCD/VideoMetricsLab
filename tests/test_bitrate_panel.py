@@ -43,6 +43,8 @@ def test_files_can_be_added_without_a_vmaf_run(qapp, tmp_path):
     assert panel.table.editTriggers() == QAbstractItemView.NoEditTriggers
     assert next(iter(panel._entries.values())).data is None
     assert panel.analyze_btn.isEnabled()
+    assert panel.analyze_btn.text() == "Calculate bitrate"
+    assert "Use checkbox" in panel.analyze_btn.toolTip()
 
 
 def test_duplicate_paths_are_not_added_twice(qapp, tmp_path):
