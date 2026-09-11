@@ -241,6 +241,7 @@ class MainWindow(QMainWindow):
         # also the number a user actually wants while waiting.
         self._job_frames_done: dict[int, int] = {}
         self._job_fps: dict[int, float] = {}
+        self._job_decode_status: dict[int, str] = {}
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
         # job index -> which of the per-video lines it owns. Held for the
@@ -2397,6 +2398,7 @@ class MainWindow(QMainWindow):
         self._checked_rows_for_run = [self._rows[r] for r in checked_rows]
         self._job_frames_done = {}
         self._job_fps = {}
+        self._job_decode_status.clear()
         self._running_jobs = []
         self._finished_jobs = set()
         self._job_line_slot = {}
@@ -2515,6 +2517,7 @@ class MainWindow(QMainWindow):
         """
         self._finished_jobs.add(index)
         self._job_fps.pop(index, None)
+        self._job_decode_status.pop(index, None)
         slot = self._job_line_slot.pop(index, None)
         if slot is not None:
             self.job_progress_labels[slot].setVisible(False)
@@ -2558,6 +2561,8 @@ class MainWindow(QMainWindow):
         if slot is not None:
             pct = min(100, int(100 * current / total)) if total > 0 else 0
             parts = [f"{self._job_label(index)} — {pct}%"]
+            if decode_status := self._job_decode_status.get(index):
+                parts.append(decode_status)
             if fps > 0:
                 parts.append(f"{fps:.1f} fps")
                 parts.append(f"{format_hms(max(0, total - current) / fps)} left")
@@ -2622,6 +2627,16 @@ class MainWindow(QMainWindow):
         """
         slot = self._job_line_slot.get(index)
         if slot is not None:
+            # The runner sends the active plan on each attempt, including
+            # software fallbacks. Keep it when progress replaces this phase
+            # message; each parallel job owns its own decode plan.
+            marker = "(GPU decode: "
+            if marker in message:
+                plan = message.split(marker, 1)[1].split(")", 1)[0]
+                self._job_decode_status[index] = (
+                    "Decode: source CPU, test CPU" if plan == "off" else
+                    "Decode: " + plan.replace("distorted", "test").replace("cpu", "CPU")
+                )
             self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message}")
         self._update_run_status()
 

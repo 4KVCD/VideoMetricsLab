@@ -3431,6 +3431,42 @@ def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
     assert win.status_label.text().startswith("Running 2 of 2 together")
 
 
+@pytest.mark.parametrize("job_count", [1, 2])
+def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
+    win = MainWindow()
+    for i in range(job_count):
+        win._add_table_row(Path(f"encode-{i}.mp4"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100] * job_count
+    for i in range(job_count):
+        win._on_job_started(i, f"encode-{i}")
+        win._on_job_status(i, "Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
+        win._on_job_progress(i, current=20, total=100, fps=10.0)
+        text = win.job_progress_labels[win._job_line_slot[i]].text()
+        assert "Decode: source cuda, test cuda" in text
+        assert "20%" in text and "10.0 fps" in text
+
+    for plan, expected in (
+        ("source cuda, distorted cpu", "Decode: source cuda, test CPU"),
+        ("off", "Decode: source CPU, test CPU"),
+    ):
+        win._on_job_status(0, f"GPU decode failed, retrying (GPU decode: {plan})...")
+        win._on_job_progress(0, current=30, total=100, fps=5.0)
+        assert expected in win.job_progress_labels[win._job_line_slot[0]].text()
+        if job_count == 2:
+            assert "source cuda, test cuda" in win.job_progress_labels[win._job_line_slot[1]].text()
+
+    slot = win._job_line_slot[0]
+    win._mark_job_over(0)
+    assert 0 not in win._job_decode_status
+    row = win._add_table_row(Path("next.mp4"))
+    win._job_rows.append(win._rows[row])
+    win._job_total_frames.append(100)
+    win._on_job_started(job_count, "next")
+    win._on_job_progress(job_count, current=1, total=100, fps=1.0)
+    assert "Decode:" not in win.job_progress_labels[slot].text()
+
+
 def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
     # Even alone, the phase belongs to the video rather than to the run: the
     # shared line is what says when the queue ends.
