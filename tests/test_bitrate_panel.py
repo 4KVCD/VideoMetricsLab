@@ -72,12 +72,13 @@ def test_stop_cancels_worker_and_queue_and_preserves_results(qapp, tmp_path):
     worker = Mock()
     panel._worker = worker
     panel._update_buttons()
-    assert panel.stop_btn.isEnabled()
-    assert not panel.analyze_btn.isEnabled()
-    panel.stop_btn.click()
+    assert panel.analyze_btn.text() == "Stop"
+    assert panel.analyze_btn.isEnabled()
+    panel.analyze_btn.click()
     worker.cancel.assert_called_once()
     assert not panel._pending
-    assert not panel.stop_btn.isEnabled()
+    assert panel.analyze_btn.text() == "Stopping…"
+    assert not panel.analyze_btn.isEnabled()
     panel._on_progress(paths[1], 20, 100)
     assert "Stopping" in panel.status_label.text()
     panel._on_worker_finished(worker)
@@ -85,7 +86,7 @@ def test_stop_cancels_worker_and_queue_and_preserves_results(qapp, tmp_path):
     assert [entry.status for entry in panel._entries.values()] == ["Complete", "Stopped", "Stopped"]
     assert "stopped" in panel.status_label.text()
     assert panel.analyze_btn.isEnabled()
-    assert not panel.stop_btn.isEnabled()
+    assert panel.analyze_btn.text() == "Calculate bitrate"
 
 
 def test_completed_analysis_populates_stats_and_all_three_plot_views(qapp, tmp_path):

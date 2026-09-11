@@ -98,13 +98,10 @@ class BitratePanel(QWidget):
         self.remove_btn.clicked.connect(self._on_remove_selected)
         self.analyze_btn = QPushButton("Calculate bitrate")
         self.analyze_btn.setToolTip("Calculate bitrate for videos with the Use checkbox checked.")
-        self.analyze_btn.clicked.connect(self._on_analyze_checked)
+        self.analyze_btn.clicked.connect(self._on_calculate_or_stop)
         file_controls.addWidget(self.add_btn)
         file_controls.addWidget(self.remove_btn)
         file_controls.addWidget(self.analyze_btn)
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.clicked.connect(self.cancel)
-        file_controls.addWidget(self.stop_btn)
         file_controls.addStretch(1)
         root.addLayout(file_controls)
 
@@ -254,6 +251,12 @@ class BitratePanel(QWidget):
                 self._pending.pop(key, None)
         self._rebuild_table()
         self._refresh_plot()
+
+    def _on_calculate_or_stop(self) -> None:
+        if self._worker is not None:
+            self.cancel()
+        else:
+            self._on_analyze_checked()
 
     def _on_analyze_checked(self) -> None:
         if self._worker is not None:
@@ -440,8 +443,14 @@ class BitratePanel(QWidget):
 
     def _update_buttons(self) -> None:
         running = self._worker is not None
-        self.analyze_btn.setEnabled(bool(self._entries) and not running)
-        self.stop_btn.setEnabled(running and not self._stopping)
+        self.analyze_btn.setText(
+            "Stopping…" if self._stopping else "Stop" if running else "Calculate bitrate"
+        )
+        self.analyze_btn.setToolTip(
+            "Stop bitrate analysis and keep completed results." if running else
+            "Calculate bitrate for videos with the Use checkbox checked."
+        )
+        self.analyze_btn.setEnabled((running or bool(self._entries)) and not self._stopping)
         self.remove_btn.setEnabled(bool(self._entries))
         self.export_btn.setEnabled(self.chart.has_data() if hasattr(self, "chart") else False)
 
