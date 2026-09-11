@@ -86,6 +86,7 @@ class BitratePanel(QWidget):
         self._pending: OrderedDict[str, None] = OrderedDict()
         self._active_keys: set[str] = set()
         self._worker: BitrateWorker | None = None
+        self._stopping = False
         self._current_plots: dict[int, tuple[BitrateEntry, BitratePlot]] = {}
         self._populating = False
 
@@ -101,6 +102,9 @@ class BitratePanel(QWidget):
         file_controls.addWidget(self.add_btn)
         file_controls.addWidget(self.remove_btn)
         file_controls.addWidget(self.analyze_btn)
+        self.stop_btn = QPushButton("Stop")
+        self.stop_btn.clicked.connect(self.cancel)
+        file_controls.addWidget(self.stop_btn)
         file_controls.addStretch(1)
         root.addLayout(file_controls)
 
@@ -214,9 +218,16 @@ class BitratePanel(QWidget):
         return [self._worker] if self._worker is not None and self._worker.isRunning() else []
 
     def cancel(self) -> None:
+        for key in self._pending:
+            if key in self._entries:
+                self._entries[key].status = "Stopped"
         self._pending.clear()
-        if self._worker is not None and self._worker.isRunning():
+        if self._worker is not None:
+            self._stopping = True
+            self.status_label.setText("Stopping bitrate analysis…")
             self._worker.cancel()
+        self._refresh_table_values()
+        self._update_buttons()
 
     # --------------------------------------------------------------- file list
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -248,6 +259,8 @@ class BitratePanel(QWidget):
         self._queue_keys([key for key, entry in self._entries.items() if entry.enabled])
 
     def _queue_keys(self, keys: list[str]) -> None:
+        if self._stopping:
+            return
         for key in keys:
             entry = self._entries.get(key)
             if entry is not None and key not in self._active_keys:
@@ -257,7 +270,7 @@ class BitratePanel(QWidget):
         self._start_pending()
 
     def _start_pending(self) -> None:
-        if self._worker is not None and self._worker.isRunning():
+        if self._worker is not None:
             return
         jobs = []
         for key in list(self._pending):
@@ -281,6 +294,8 @@ class BitratePanel(QWidget):
         worker.start()
 
     def _on_file_started(self, path: Path) -> None:
+        if self._stopping:
+            return
         entry = self._entries.get(_path_key(path))
         if entry is not None:
             entry.status = "Reading video packets…"
@@ -289,6 +304,8 @@ class BitratePanel(QWidget):
             self._refresh_table_values()
 
     def _on_progress(self, path: Path, done: int, total: int) -> None:
+        if self._stopping:
+            return
         self.progress.setValue(min(99, round(done / max(1, total) * 100)))
         entry = self._entries.get(_path_key(path))
         if entry is not None:
@@ -320,6 +337,17 @@ class BitratePanel(QWidget):
         self.status_label.setText(f"Could not analyze {path.name}: {error}")
 
     def _on_worker_finished(self, worker: BitrateWorker) -> None:
+        if worker is not self._worker:
+            worker.deleteLater()
+            return
+        stopped = self._stopping
+        if stopped:
+            for key in self._active_keys:
+                entry = self._entries.get(key)
+                if entry is not None and entry.status not in ("Complete", "Failed"):
+                    entry.status = "Stopped"
+            self._refresh_table_values()
+        self._stopping = False
         if worker is self._worker:
             self._worker = None
             self._active_keys.clear()
@@ -328,6 +356,7 @@ class BitratePanel(QWidget):
             self._start_pending()
         else:
             self.status_label.setText(
+                "Bitrate analysis stopped. Completed results are kept." if stopped else
                 "Bitrate analysis complete. Values contain the first video stream only."
             )
             self._update_buttons()
@@ -395,8 +424,9 @@ class BitratePanel(QWidget):
             self._refresh_plot()
 
     def _update_buttons(self) -> None:
-        running = self._worker is not None and self._worker.isRunning()
+        running = self._worker is not None
         self.analyze_btn.setEnabled(bool(self._entries) and not running)
+        self.stop_btn.setEnabled(running and not self._stopping)
         self.remove_btn.setEnabled(bool(self._entries))
         self.export_btn.setEnabled(self.chart.has_data() if hasattr(self, "chart") else False)
 

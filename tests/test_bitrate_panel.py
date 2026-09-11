@@ -56,6 +56,38 @@ def test_duplicate_paths_are_not_added_twice(qapp, tmp_path):
     assert panel.table.rowCount() == 1
 
 
+def test_stop_cancels_worker_and_queue_and_preserves_results(qapp, tmp_path):
+    from unittest.mock import Mock
+
+    panel = BitratePanel()
+    paths = [tmp_path / f"{i}.mkv" for i in range(3)]
+    panel.add_files(paths)
+    keys = list(panel._entries)
+    panel._on_analyzed(paths[0], _info(paths[0]), _data(paths[0]))
+    saved = panel._entries[keys[0]].data
+    panel._entries[keys[1]].status = "Reading video packets…"
+    panel._entries[keys[2]].status = "Queued"
+    panel._active_keys = set(keys[:2])
+    panel._pending[keys[2]] = None
+    worker = Mock()
+    panel._worker = worker
+    panel._update_buttons()
+    assert panel.stop_btn.isEnabled()
+    assert not panel.analyze_btn.isEnabled()
+    panel.stop_btn.click()
+    worker.cancel.assert_called_once()
+    assert not panel._pending
+    assert not panel.stop_btn.isEnabled()
+    panel._on_progress(paths[1], 20, 100)
+    assert "Stopping" in panel.status_label.text()
+    panel._on_worker_finished(worker)
+    assert panel._entries[keys[0]].data is saved
+    assert [entry.status for entry in panel._entries.values()] == ["Complete", "Stopped", "Stopped"]
+    assert "stopped" in panel.status_label.text()
+    assert panel.analyze_btn.isEnabled()
+    assert not panel.stop_btn.isEnabled()
+
+
 def test_completed_analysis_populates_stats_and_all_three_plot_views(qapp, tmp_path):
     panel = BitratePanel()
     path = tmp_path / "encode.mkv"
