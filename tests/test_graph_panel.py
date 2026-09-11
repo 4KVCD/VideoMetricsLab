@@ -651,6 +651,16 @@ def test_the_table_is_capped_at_four_rows(qapp):
     assert win.stats_table.rowCount() == 7  # all series still listed, just scrolled
 
 
+def test_empty_footer_messages_do_not_reserve_space(qapp):
+    panel = GraphPanel()
+    panel.add_run(_fake_result("a.mp4"))
+    assert panel.status_label.isHidden()
+    assert panel.metric_hint.isHidden()
+    panel._on_file_write_failed("export", "test error")
+    assert not panel.status_label.isHidden()
+    assert "test error" in panel.status_label.text()
+
+
 # ------------------------------------------------- the merged series/stats table
 
 def test_the_stats_table_is_also_the_series_list(qapp):

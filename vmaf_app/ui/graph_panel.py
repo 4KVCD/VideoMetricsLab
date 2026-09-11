@@ -712,6 +712,7 @@ class GraphPanel(QWidget):
         # finish minutes later, and a modal stealing focus by then is worse
         # than the thing it announces.
         self.status_label = QLabel("")
+        self.status_label.hide()
         self.status_label.setStyleSheet("color: #666;")
         root.addWidget(self.status_label)
         self.metric_hint = QLabel("Calculate metrics or load analysis results to view graphs.")
@@ -758,6 +759,7 @@ class GraphPanel(QWidget):
         self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Tick it in the {metric.label} column in Videos, or load results containing it.")
         if available and metric.key == "xpsnr":
             self.metric_hint.setText(_XPSNR_INFINITY_NOTE)
+        self.metric_hint.setVisible(bool(self.metric_hint.text()))
         for i, spec in enumerate(METRICS):
             self.tabs.setTabToolTip(i, "" if any(e.result.frames.has(spec.key) for e in self._entries.values()) else "Not calculated")
 
@@ -1201,10 +1203,12 @@ class GraphPanel(QWidget):
         self.export_csv_btn.setEnabled(True)
         if self._export_destination is not None:
             self.status_label.setText(f"Export complete: {self._export_destination}")
+            self.status_label.show()
             self._export_destination = None
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
         self.status_label.setText(f"Could not {description}: {error}")
+        self.status_label.show()
 
     def wait_until_file_writes_idle(self, timeout_seconds: float = 30.0) -> bool:
         """Lets the owning window protect graph exports during shutdown."""
@@ -1235,6 +1239,7 @@ class GraphPanel(QWidget):
                 f"export {out_path.name}", partial(export_csv, entry.result, out_path)
             )
         self._export_destination = directory
+        self.status_label.show()
         self.status_label.setText(
             f"Exporting {len(self._entries)} CSV file(s) to {directory}..."
         )
