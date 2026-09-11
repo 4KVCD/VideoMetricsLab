@@ -209,7 +209,9 @@ class LockedNativePool:
     def description(self):
         state = "Buffering locked pair" if self.buffering else "Frame-locked GPU pair"
         audio = "source soundtrack" if not self.audio.failed else "audio unavailable"
-        return f"{state} · {audio} · " + self.status_details.get(("distorted", self.selected), "")
+        details = [self.status_details.get(key, "") for key in
+                   (self.source_key, ("distorted", self.selected))]
+        return f"{state} · {audio} · " + " · ".join(filter(None, details))
 
     def resize(self):
         self.surface.setGeometry(self.view.rect())

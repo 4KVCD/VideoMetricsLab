@@ -747,7 +747,7 @@ def test_resize_mismatch_note_reflects_the_actual_scale_direction_used(qapp):
     )
     win._rows[row].completed_run = CompletedRun(result, "a")
     win._set_row_info(row, result.distorted_info)
-    assert win.distorted_table.item(row, COL_SCALING).text() == "↑ distorted"
+    assert win.distorted_table.item(row, COL_SCALING).text() == "Test upscaled to source"
 
 
 def test_resize_mismatch_note_absent_when_resolutions_match(qapp):
@@ -867,7 +867,7 @@ def test_resize_mismatch_note_for_test_both_row_ignores_a_stale_cached_direction
     win._rows[companion_row].completed_run = CompletedRun(stale_result, "a")
     win._set_row_info(companion_row, stale_result.distorted_info)
 
-    assert win.distorted_table.item(companion_row, COL_SCALING).text() == "↑ distorted"
+    assert win.distorted_table.item(companion_row, COL_SCALING).text() == "Test upscaled to source"
 
 
 def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections import OrderedDict
 from dataclasses import dataclass
 
@@ -83,7 +84,7 @@ def parse_timestamp(value: str) -> float:
 #: Shown whenever there is no pair to look at. Deliberately does not ask for
 #: a VMAF run: frames are comparable before anything has been measured.
 _NOTHING_TO_COMPARE = (
-    "Select a source video and add a distorted video to compare their frames."
+    "Select a source video and add a test video to compare their frames."
 )
 
 
@@ -183,13 +184,13 @@ class FrameComparePanel(QWidget):
 
         top = QHBoxLayout()
         self.previous_video_btn = QPushButton("←")
-        self.previous_video_btn.setToolTip("Previous distorted video (Left arrow)")
+        self.previous_video_btn.setToolTip("Previous test video (Left arrow)")
         self.previous_video_btn.clicked.connect(lambda: self.cycle_distorted(-1))
         self.video_combo = QComboBox()
         self.video_combo.setMinimumContentsLength(30)
         self.video_combo.currentIndexChanged.connect(self._on_video_selected)
         self.next_video_btn = QPushButton("→")
-        self.next_video_btn.setToolTip("Next distorted video (Right arrow)")
+        self.next_video_btn.setToolTip("Next test video (Right arrow)")
         self.next_video_btn.clicked.connect(lambda: self.cycle_distorted(1))
         self.fit_checkbox = QCheckBox("Fit to window")
         self.fit_checkbox.setChecked(True)
@@ -243,6 +244,9 @@ class FrameComparePanel(QWidget):
         color_row.addWidget(QLabel("Reference playback:"))
         color_row.addWidget(self.source_resolution_combo)
         color_row.addWidget(self.color_status_label, stretch=1)
+        self.advanced_info_btn = QPushButton("Advanced info")
+        self.advanced_info_btn.setToolTip("Playback details will appear here when a video is loaded.")
+        color_row.addWidget(self.advanced_info_btn)
         root.addLayout(color_row)
 
         self.showing_label = QLabel("No videos loaded")
@@ -306,8 +310,8 @@ class FrameComparePanel(QWidget):
         self.detail_label.setAlignment(Qt.AlignCenter)
         root.addWidget(self.detail_label)
         self.guide_label = QLabel(
-            "Hold S: show reference   ·   ←/→: switch test video   ·   "
-            "Space: play/pause   ·   GPU playback: synchronized A/B"
+            "Hold S: show source   ·   ←/→: switch test video   ·   "
+            "Space: play/pause"
         )
         self.guide_label.setAlignment(Qt.AlignCenter)
         self.guide_label.setStyleSheet("color: #666;")
@@ -617,6 +621,7 @@ class FrameComparePanel(QWidget):
 
     def _on_video_status_changed(self, message: str) -> None:
         self._video_status = message
+        self.advanced_info_btn.setToolTip(message.replace("distorted", "test"))
         if self.is_video_mode:
             self._update_color_status()
 
@@ -713,14 +718,14 @@ class FrameComparePanel(QWidget):
             self.color_status_label.setText("No video selected.")
             return
         comparison = entry.comparison
-        side = "REFERENCE" if self._showing_source else "TEST"
+        side = "SOURCE" if self._showing_source else "TEST"
         name = comparison.source_info.path.name if self._showing_source else entry.label
         suffix = "" if self._showing_source else f" {self._current_index + 1} of {len(self._entries)}"
         self.showing_label.setText(f"{side}{suffix} — {name}")
         seconds = self._frame / comparison.fps if comparison.fps > 0 else 0
         parts = [f"Frame {self._frame:,}", format_hms(seconds, decimals=3), self._score_text(entry)]
         if self.is_video_mode:
-            parts.append(self._video_status)
+            parts.append(self._concise_playback_status())
         if comparison.auto_crop_pending:
             # Say so rather than showing cropped-looking frames that are not:
             # auto-crop is measured during a run, so until one happens these
@@ -728,6 +733,20 @@ class FrameComparePanel(QWidget):
             parts.append("black bars not detected yet — shown uncropped")
         self.detail_label.setText("   ·   ".join(parts))
         self._update_color_status()
+
+    def _concise_playback_status(self) -> str:
+        message = self._video_status.replace("distorted", "test")
+        # Errors stay visible; successful playback hides renderer diagnostics
+        # in Advanced info, retaining only state and actual decoder choices.
+        if any(word in message.lower() for word in ("failed", "could not", "error", "unavailable")):
+            return message
+        parts = [message.split(" · ", 1)[0]]
+        for side in ("source", "test"):
+            match = re.search(rf"\b{side} (GPU|software|cpu|cuda|d3d11va|qsv|vaapi)\b", message, re.I)
+            if match:
+                mode = "CPU" if match[1].lower() in ("software", "cpu") else "GPU"
+                parts.append(f"{side.title()}: {mode} decode")
+        return " · ".join(parts)
 
     def _score_text(self, entry: FrameComparisonEntry) -> str:
         """What this frame scored, or why there is no number to show."""
@@ -878,7 +897,7 @@ class FrameComparePanel(QWidget):
         if key in self._errors:
             self.viewer.set_message(f"Could not load frame:\n{self._errors[key]}")
         else:
-            self.viewer.set_message(f"Loading {side} frame {self._frame:,}…")
+            self.viewer.set_message(f"Loading {'source' if side == 'source' else 'test'} frame {self._frame:,}…")
         self._seek_timer.start()
 
     def _request_current_frames(self) -> None:

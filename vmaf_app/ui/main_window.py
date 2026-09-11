@@ -868,9 +868,9 @@ class MainWindow(QMainWindow):
         ])
         self.scale_direction_combo.setToolTip(
             "When the two resolutions differ: either evaluate quality at the resolution actually\n"
-            "delivered (source scaled to match distorted -- the default), or as if the test\n"
+            "delivered (source scaled to match test -- the default), or as if the test\n"
             "video were upscaled back to the reference's native resolution for playback.\n"
-            "\"Test both\" doesn't change this row -- it adds a second row for the same distorted\n"
+            "\"Test both\" doesn't change this row -- it adds a second row for the same test\n"
             "file using the other direction, so you can run and compare both."
         )
         self.scale_direction_combo.currentIndexChanged.connect(self._on_scale_direction_combo_changed)
@@ -1520,7 +1520,7 @@ class MainWindow(QMainWindow):
             or dist != (distorted_info.width, distorted_info.height)
         ) else ""
         if direction == ScaleDirection.DISTORTED_TO_SOURCE:
-            return "\u2191 distorted", (
+            return "Test upscaled to source", (
                 f"Test video upscaled {dist[0]}x{dist[1]} -> "
                 f"{ref[0]}x{ref[1]}{cropped} to match the reference."
             )
@@ -2637,7 +2637,7 @@ class MainWindow(QMainWindow):
                     "Decode: source CPU, test CPU" if plan == "off" else
                     "Decode: " + plan.replace("distorted", "test").replace("cpu", "CPU")
                 )
-            self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message}")
+            self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message.replace('distorted', 'test')}")
         self._update_run_status()
 
     def _row_index_of(self, row_data: RowData) -> int | None:

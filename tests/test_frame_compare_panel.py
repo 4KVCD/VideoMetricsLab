@@ -50,6 +50,19 @@ def _entry(name: str, score: float = 90.0, count: int = 120) -> FrameComparisonE
     )
 
 
+def test_playback_status_hides_diagnostics_but_keeps_decode_modes(qapp):
+    panel = FrameComparePanel()
+    raw = ("Paused · GStreamer D3D11 · 4/4 streams · Buffering locked pair · "
+           "source soundtrack · 3840x1608 RGBA64_LE sRGB · memory:D3D11Memory · "
+           "source GPU: d3d11h265dec · distorted software: avdec_h266")
+    panel._on_video_status_changed(raw)
+    assert panel._concise_playback_status() == "Paused · Source: GPU decode · Test: CPU decode"
+    assert "RGBA64_LE" in panel.advanced_info_btn.toolTip()
+    assert "distorted" not in panel.advanced_info_btn.toolTip()
+    panel._on_video_status_changed("Could not decode test video: missing codec")
+    assert "missing codec" in panel._concise_playback_status()
+
+
 def _unscored_entry(name: str, count: int = 120) -> FrameComparisonEntry:
     """A pair that has only been probed -- no run, no scores."""
     source = VideoInfo(
@@ -144,7 +157,7 @@ def test_holding_s_temporarily_shows_source(qapp, monkeypatch):
 
     QTest.keyPress(panel.viewer, Qt.Key_S)
     assert panel._showing_source is True
-    assert panel.showing_label.text().startswith("REFERENCE")
+    assert panel.showing_label.text().startswith("SOURCE")
 
     QTest.keyRelease(panel.viewer, Qt.Key_S)
     assert panel._showing_source is False
