@@ -14,6 +14,17 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
+def test_neg_header_reserves_room_for_checkbox_and_text(qapp):
+    table = QTableWidget(0, 1)
+    view = CheckableHeaderView({0: False}, table)
+    table.setHorizontalHeader(view)
+    table.setHorizontalHeaderLabels(["VMAF NEG"])
+    table.resizeColumnToContents(0)
+    text_width = view.fontMetrics().horizontalAdvance("VMAF NEG")
+    indicator_right = view.section_indicator_rect(0).right()
+    assert (view.sectionSize(0) - text_width) / 2 > indicator_right
+
+
 @pytest.fixture
 def header(qapp):
     """A 4-column table whose last three columns carry checkboxes, laid out

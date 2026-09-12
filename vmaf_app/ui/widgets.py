@@ -59,6 +59,16 @@ class CheckableHeaderView(QHeaderView):
         )
         self.style().drawPrimitive(QStyle.PE_IndicatorCheckBox, opt, painter, self)
 
+    def sectionSizeFromContents(self, logicalIndex):
+        size = super().sectionSizeFromContents(logicalIndex)
+        if logicalIndex in self._checked:
+            # The native size hint knows only the centered text, not the
+            # checkbox we paint over its left edge. Reserve symmetric space
+            # so the label cannot overlap the indicator at its default width.
+            indicator = self.style().pixelMetric(QStyle.PM_IndicatorWidth, None, self)
+            size.setWidth(size.width() + 2 * (indicator + _INDICATOR_MARGIN))
+        return size
+
     def section_indicator_rect(self, section: int) -> QRect:
         """Where this section's checkbox is drawn, in viewport coordinates.
 

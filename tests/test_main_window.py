@@ -536,7 +536,7 @@ def test_path_column_manually_widened_past_available_room_does_not_snap_back(qap
 
 def test_path_column_shrinks_when_another_column_is_widened(qapp):
     win = MainWindow()
-    win.resize(1280, 800)
+    win.resize(1600, 800)
     win.show()
     win._add_table_row(Path("a.mp4"))
     qapp.processEvents()
