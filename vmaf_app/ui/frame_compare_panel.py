@@ -752,9 +752,10 @@ class FrameComparePanel(QWidget):
         if idx < len(entry.scores) and int(entry.scores.frame[idx]) == self._frame:
             values = []
             for metric, label, precision, unit in (
-                ("vmaf", "VMAF", 2, ""), ("ssim", "SSIM", 4, ""),
-                ("psnr", "PSNR", 2, " dB"), ("xpsnr", "XPSNR", 2, " dB"),
+                ("vmaf", "VMAF", 2, ""),
                 ("vmaf_neg", "VMAF NEG", 2, ""),
+                ("psnr", "PSNR", 2, " dB"), ("ssim", "SSIM", 4, ""),
+                ("xpsnr", "XPSNR", 2, " dB"),
             ):
                 column = entry.scores.values(metric)
                 if column is None or math.isnan(float(column[idx])):

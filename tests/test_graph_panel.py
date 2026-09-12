@@ -38,7 +38,7 @@ def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
         result.frames.xpsnr[1] = np.nan
     try:
         panel.add_run(result, "test")
-        panel.tabs.setCurrentIndex(3)
+        panel.tabs.setCurrentIndex(4)
         page = panel._pages["xpsnr"]
         plotted = next(iter(page.chart._series.values())).values
         assert (plotted[2:] == _XPSNR_INFINITY_PLOT_DB).all()
@@ -219,7 +219,7 @@ def test_active_metric_tab_has_visible_highlight_on_every_page(qapp):
 def test_graph_has_one_tab_per_metric(qapp):
     win = GraphPanel()
     labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert labels == ["VMAF", "PSNR", "SSIM", "XPSNR", "VMAF NEG"]
+    assert labels == ["VMAF", "VMAF NEG", "PSNR", "SSIM", "XPSNR"]
 
 
 def test_non_default_tabs_are_not_built_until_first_visited(qapp):
@@ -233,7 +233,7 @@ def test_non_default_tabs_are_not_built_until_first_visited(qapp):
     assert "ssim" not in win._pages
     assert "xpsnr" not in win._pages
 
-    win.tabs.setCurrentIndex(1)  # PSNR
+    win.tabs.setCurrentIndex(2)  # PSNR
     assert "psnr" in win._pages
     assert "ssim" not in win._pages  # still untouched
 
@@ -245,7 +245,7 @@ def test_run_without_extra_metrics_only_gets_a_vmaf_curve(qapp):
     sid = next(iter(win._entries))
     for i in range(1, win.tabs.count()):  # visit PSNR/SSIM/XPSNR so their (lazy) pages exist
         win.tabs.setCurrentIndex(i)
-    win.tabs.setCurrentIndex(1)  # back to PSNR -- isVisible() below needs it to be the active tab
+    win.tabs.setCurrentIndex(2)  # back to PSNR -- isVisible() below needs it to be the active tab
 
     assert sid in win._pages["vmaf"]._curves
     assert sid not in win._pages["psnr"]._curves
@@ -294,7 +294,7 @@ def test_stats_table_reflects_the_currently_active_tab(qapp):
     # comparison being made is between encodes, not between tabs.
     assert [m.label for m in METRICS] == headers_vmaf[1:1 + len(METRICS)]
 
-    win.tabs.setCurrentIndex(1)  # PSNR
+    win.tabs.setCurrentIndex(2)  # PSNR
     assert win.stats_table.rowCount() == 1
     headers_psnr = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
     assert "> 95" not in headers_psnr  # each metric brings its own bands
@@ -313,7 +313,7 @@ def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
     win.tabs.setCurrentIndex(0)  # VMAF -- both series have it
     assert win.stats_table.rowCount() == 2
 
-    win.tabs.setCurrentIndex(1)  # PSNR -- only "a" has it
+    win.tabs.setCurrentIndex(2)  # PSNR -- only "a" has it
     # Both rows stay -- the table is the series list, so dropping "b" here
     # would make it un-removable and un-toggleable from this tab. "b" just
     # has no statistics to show.
@@ -366,12 +366,12 @@ def test_clicking_a_detail_column_does_not_change_the_metric(qapp):
     # switch what is being looked at.
     win = GraphPanel()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True))
-    win.tabs.setCurrentIndex(1)  # PSNR
+    win.tabs.setCurrentIndex(2)  # PSNR
 
     win.stats_table.horizontalHeader().sectionClicked.emit(1 + len(METRICS))
     win.stats_table.cellClicked.emit(0, 1 + len(METRICS))
 
-    assert win.tabs.currentIndex() == 1
+    assert win.tabs.currentIndex() == 2
 
 
 def test_metric_bands_are_calibrated_for_every_metric(qapp):
@@ -464,7 +464,7 @@ def test_hover_on_psnr_tab_reports_psnr_not_vmaf(qapp):
     win = GraphPanel()
     win.show()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0, with_other_metrics=True))
-    win.tabs.setCurrentIndex(1)  # PSNR -- lazily builds its page
+    win.tabs.setCurrentIndex(2)  # PSNR -- lazily builds its page
 
     page = win._pages["psnr"]
     _hover_middle(win, "psnr")
@@ -696,7 +696,7 @@ def test_a_series_with_no_data_for_this_metric_keeps_its_row(qapp):
     # no way to see or remove it from that tab.
     win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
-    win.tabs.setCurrentIndex(1)  # PSNR
+    win.tabs.setCurrentIndex(2)  # PSNR
 
     assert win.stats_table.rowCount() == 1
     assert _row_for(win, "a").text() == "a"

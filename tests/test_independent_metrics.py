@@ -229,7 +229,7 @@ def test_metric_scope_mixed_selection_and_graph_preference(qapp, monkeypatch):
     win.distorted_table.selectAll()
     click_metric(win, 1, COL_PSNR)
     assert all("psnr" not in rd.options.requested_metrics() for rd in win._rows)
-    win.graph_panel.tabs.setCurrentIndex(2)
+    win.graph_panel.tabs.setCurrentIndex(3)
     assert Settings.load().graph_metric == "ssim"
     assert "not calculated" in win.graph_panel.metric_hint.text()
     win.close()

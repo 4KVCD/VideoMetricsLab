@@ -125,12 +125,12 @@ _STATE_COLOURS = {
 # independently of calculation. Settings remains the final page.
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
-# Metric headers are shortcuts for the explicit selection in the inspector.
+# Metric headers toggle metric selection for the video rows.
 _METRIC_COLUMNS = [
-    (COL_PSNR, "PSNR", "name=psnr"),
-    (COL_SSIM, "SSIM", "name=float_ssim"),
     (COL_VMAF, "VMAF", None),
     (COL_VMAF_NEG, "VMAF NEG", None),
+    (COL_PSNR, "PSNR", "name=psnr"),
+    (COL_SSIM, "SSIM", "name=float_ssim"),
     (COL_XPSNR, "XPSNR", "xpsnr"),
 ]
 _METRIC_COLUMN_SET = frozenset(col for col, _, _ in _METRIC_COLUMNS)
@@ -397,6 +397,7 @@ class MainWindow(QMainWindow):
             extra_features=self._settings.default_extra_features(),
             compute_xpsnr=self._settings.default_compute_xpsnr,
             compute_vmaf=self._settings.default_compute_vmaf,
+            compute_vmaf_neg=self._settings.default_compute_vmaf_neg,
         )
 
     def _apply_ffmpeg_setting(self) -> None:
@@ -484,10 +485,12 @@ class MainWindow(QMainWindow):
         metrics_row.addWidget(QLabel("Default metrics:"))
         self.settings_default_psnr = QCheckBox("PSNR")
         self.settings_default_vmaf = QCheckBox("VMAF")
+        self.settings_default_vmaf_neg = QCheckBox("VMAF NEG")
         self.settings_default_ssim = QCheckBox("SSIM")
         self.settings_default_xpsnr = QCheckBox("XPSNR")
         for box, value in (
             (self.settings_default_vmaf, self._settings.default_compute_vmaf),
+            (self.settings_default_vmaf_neg, self._settings.default_compute_vmaf_neg),
             (self.settings_default_psnr, self._settings.default_compute_psnr),
             (self.settings_default_ssim, self._settings.default_compute_ssim),
             (self.settings_default_xpsnr, self._settings.default_compute_xpsnr),
@@ -544,6 +547,7 @@ class MainWindow(QMainWindow):
         self._settings.default_gpu_decode = self.settings_default_gpu.isChecked()
         self._settings.default_compute_psnr = self.settings_default_psnr.isChecked()
         self._settings.default_compute_vmaf = self.settings_default_vmaf.isChecked()
+        self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
@@ -659,6 +663,8 @@ class MainWindow(QMainWindow):
             self.distorted_table,
         )
         self.distorted_table.setHorizontalHeader(self.metric_header)
+        for visual, (column, _, _) in enumerate(_METRIC_COLUMNS, start=6):
+            self.metric_header.moveSection(self.metric_header.visualIndex(column), visual)
         self.metric_header.sectionToggled.connect(self._on_metric_column_toggled)
         self.distorted_table.setHorizontalHeaderLabels(
             [

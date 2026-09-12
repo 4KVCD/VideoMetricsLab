@@ -47,9 +47,9 @@ def test_identical_frame_tooltips_explain_sequence_average(tmp_path):
     panel = GraphPanel()
     try:
         panel.add_run(result, "test")
-        panel.tabs.setCurrentIndex(3)
+        panel.tabs.setCurrentIndex(4)
         app.processEvents()
-        tooltip = panel.stats_table.item(0, 4).toolTip()
+        tooltip = panel.stats_table.item(0, 5).toolTip()
         assert "excluded" not in tooltip
         assert "zero distortion" in tooltip
     finally:

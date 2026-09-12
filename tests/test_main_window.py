@@ -207,6 +207,17 @@ def test_the_table_has_no_status_column(qapp):
     assert win.distorted_table.columnCount() == 11
 
 
+def test_metrics_have_consistent_visual_order(qapp):
+    win = MainWindow()
+    header = win.distorted_table.horizontalHeader()
+    columns = main_window_module._METRIC_COLUMN_SET
+    labels = [win.distorted_table.horizontalHeaderItem(header.logicalIndex(i)).text().strip()
+              for i in range(header.count()) if header.logicalIndex(i) in columns]
+    assert labels == ["VMAF", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)"]
+    win.settings_default_vmaf_neg.setChecked(True)
+    assert win._options_from_settings().compute_vmaf_neg
+
+
 def test_a_failed_row_is_marked_on_its_name_with_the_error_on_hover(qapp):
     # Failure is the one state the metric cells cannot fully carry: they can
     # say "Failed", but not why.

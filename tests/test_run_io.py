@@ -96,7 +96,7 @@ def test_export_csv_writes_header_and_all_rows(tmp_path):
     export_csv(result, out_path)
 
     lines = out_path.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "frame,time_s,vmaf,psnr,ssim,xpsnr,vmaf_neg"
+    assert lines[0] == "frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr"
     assert len(lines) == 1 + len(result.frames)
 
 
@@ -120,8 +120,8 @@ def test_csv_export_keeps_genuine_zero_metric_values(tmp_path):
 
     rows = out_path.read_text(encoding="utf-8").splitlines()
     zero_row = rows[1].split(",")
-    assert zero_row[3] == "0.0" and zero_row[4] == "0.0" and zero_row[5] == "0.0"
-    assert rows[2].split(",")[3] == ""  # None still exports as blank
+    assert zero_row[4:7] == ["0.0", "0.0", "0.0"]
+    assert rows[2].split(",")[4] == ""  # None still exports as blank
 
 
 def test_xpsnr_round_trips(tmp_path):

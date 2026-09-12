@@ -214,6 +214,6 @@ def export_csv(result: VmafRunResult, path: Path) -> None:
 
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["frame", "time_s", "vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg"])
+        writer.writerow(["frame", "time_s", "vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr"])
         for fr in result.frames:
-            writer.writerow([fr.frame, f"{fr.time:.6f}", fr.vmaf, cell(fr.psnr), cell(fr.ssim), cell(fr.xpsnr), cell(fr.vmaf_neg)])
+            writer.writerow([fr.frame, f"{fr.time:.6f}", fr.vmaf, cell(fr.vmaf_neg), cell(fr.psnr), cell(fr.ssim), cell(fr.xpsnr)])

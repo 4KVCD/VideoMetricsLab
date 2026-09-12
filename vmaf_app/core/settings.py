@@ -41,6 +41,7 @@ class Settings:
     default_compute_ssim: bool = True
     default_compute_xpsnr: bool = True
     default_compute_vmaf: bool = True
+    default_compute_vmaf_neg: bool = False
     graph_metric: str = "vmaf"
 
     # Which upgrades have already been applied to the saved file. See
