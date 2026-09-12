@@ -204,7 +204,7 @@ def test_the_table_has_no_status_column(qapp):
         for c in range(win.distorted_table.columnCount())
     ]
     assert "Status" not in headers
-    assert win.distorted_table.columnCount() == 10
+    assert win.distorted_table.columnCount() == 11
 
 
 def test_a_failed_row_is_marked_on_its_name_with_the_error_on_hover(qapp):
@@ -506,7 +506,7 @@ def test_path_column_fills_leftover_space_by_default(qapp):
         win.distorted_table.columnWidth(c)
         for c in (
             COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
-            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR,
+            COL_PSNR, COL_SSIM, COL_VMAF, COL_XPSNR, main_window_module.COL_VMAF_NEG,
         )
     )
     viewport = win.distorted_table.viewport().width()

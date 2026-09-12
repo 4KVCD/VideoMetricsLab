@@ -145,6 +145,7 @@ METRICS: list[MetricSpec] = [
     MetricSpec("psnr", "PSNR", "PSNR (dB)", "{:.2f}", fixed_y_max=None, thresholds=PSNR_THRESHOLDS),
     MetricSpec("ssim", "SSIM", "SSIM", "{:.4f}", fixed_y_max=None, thresholds=SSIM_THRESHOLDS),
     MetricSpec("xpsnr", "XPSNR", "XPSNR (dB)", "{:.2f}", fixed_y_max=None, thresholds=XPSNR_THRESHOLDS),
+    MetricSpec("vmaf_neg", "VMAF NEG", "VMAF NEG", "{:.2f}", fixed_y_max=100.0, thresholds=DEFAULT_THRESHOLDS),
 ]
 
 #: Column 0 is the series; then one mean per metric; then the selected

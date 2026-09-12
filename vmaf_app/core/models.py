@@ -147,6 +147,7 @@ class VmafOptions:
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
     compute_xpsnr: bool = False
     compute_vmaf: bool = True
+    compute_vmaf_neg: bool = False
 
     duration_limit: float = 0.0  # seconds; 0 = no limit, process the full video
 
@@ -166,10 +167,18 @@ class VmafOptions:
     def requested_metrics(self) -> tuple[str, ...]:
         return tuple(name for name, enabled in (
             ("vmaf", self.compute_vmaf),
+            ("vmaf_neg", self.compute_vmaf_neg),
             ("psnr", "name=psnr" in self.extra_features),
             ("ssim", "name=float_ssim" in self.extra_features),
             ("xpsnr", self.compute_xpsnr),
         ) if enabled)
+
+    def __post_init__(self) -> None:
+        if self.model_choice == "version=vmaf_v0.6.1neg":
+            self.compute_vmaf_neg = self.compute_vmaf
+            self.compute_vmaf = False
+            self.model_choice = "__auto__"
+            self.model = "version=vmaf_v0.6.1"
 
 
 def clone_options(opts: VmafOptions) -> VmafOptions:
@@ -201,10 +210,11 @@ class FrameScore:
     psnr: float | None = None
     ssim: float | None = None
     xpsnr: float | None = None
+    vmaf_neg: float | None = None
 
 
 # All metrics are optional. Missing columns are represented by None.
-METRIC_NAMES = ("vmaf", "psnr", "ssim", "xpsnr")
+METRIC_NAMES = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
 
 
 class FrameScores:
@@ -222,7 +232,7 @@ class FrameScores:
     both of which genuinely occur.
     """
 
-    __slots__ = ("frame", "psnr", "ssim", "time", "vmaf", "xpsnr")
+    __slots__ = ("frame", "psnr", "ssim", "time", "vmaf", "vmaf_neg", "xpsnr")
 
     def __init__(
         self,
@@ -232,6 +242,7 @@ class FrameScores:
         psnr: np.ndarray | None = None,
         ssim: np.ndarray | None = None,
         xpsnr: np.ndarray | None = None,
+        vmaf_neg: np.ndarray | None = None,
     ) -> None:
         self.frame = np.asarray(frame, dtype=np.int32)
         # float64 for time: bisect during hover needs to stay exact across a
@@ -241,6 +252,7 @@ class FrameScores:
         self.psnr = None if psnr is None else np.asarray(psnr, dtype=np.float32)
         self.ssim = None if ssim is None else np.asarray(ssim, dtype=np.float32)
         self.xpsnr = None if xpsnr is None else np.asarray(xpsnr, dtype=np.float32)
+        self.vmaf_neg = None if vmaf_neg is None else np.asarray(vmaf_neg, dtype=np.float32)
 
     @classmethod
     def empty(cls) -> FrameScores:
@@ -265,6 +277,7 @@ class FrameScores:
             time=np.array([f.time for f in frames], dtype=np.float64),
             vmaf=column("vmaf"),
             psnr=column("psnr"), ssim=column("ssim"), xpsnr=column("xpsnr"),
+            vmaf_neg=column("vmaf_neg"),
         )
 
     def values(self, metric: str) -> np.ndarray | None:
@@ -288,6 +301,7 @@ class FrameScores:
             return FrameScores(
                 frame=self.frame[index], time=self.time[index], vmaf=sliced(self.vmaf),
                 psnr=sliced(self.psnr), ssim=sliced(self.ssim), xpsnr=sliced(self.xpsnr),
+                vmaf_neg=sliced(self.vmaf_neg),
             )
 
         def optional(arr: np.ndarray | None) -> float | None:
@@ -303,12 +317,13 @@ class FrameScores:
             time=float(self.time[index]),
             vmaf=optional(self.vmaf),
             psnr=optional(self.psnr), ssim=optional(self.ssim), xpsnr=optional(self.xpsnr),
+            vmaf_neg=optional(self.vmaf_neg),
         )
 
     def with_values(self, metric: str, values: np.ndarray | None) -> FrameScores:
         """A copy with one metric's column replaced -- the supported way to
         change scores, since the per-frame views are read-only."""
-        columns = {m: self.values(m) for m in ("psnr", "ssim", "xpsnr")}
+        columns = {m: self.values(m) for m in ("psnr", "ssim", "xpsnr", "vmaf_neg")}
         if metric in columns:
             columns[metric] = values
             return FrameScores(self.frame, self.time, self.vmaf, **columns)
@@ -371,5 +386,7 @@ class VmafRunResult:
         # reason about downstream.
         if not isinstance(self.frames, FrameScores):
             self.frames = FrameScores.from_frames(self.frames)
+        if self.model == "version=vmaf_v0.6.1neg" and self.frames.vmaf_neg is None:
+            self.frames = self.frames.with_values("vmaf_neg", self.frames.vmaf).with_values("vmaf", None)
         if self.compared_frame_count <= 0 and len(self.frames):
             self.compared_frame_count = int(self.frames.frame[-1]) + 1

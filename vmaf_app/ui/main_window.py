@@ -88,7 +88,6 @@ from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, VmafJob, VmafWorker
 _MODEL_CHOICES = [
     ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
     ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
-    ("VMAF v0.6.1neg (no enhancement gain)", "version=vmaf_v0.6.1neg"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
     ("Custom model file...", CUSTOM_MODEL_CHOICE),
 ]
@@ -109,7 +108,8 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
-) = range(10)
+    COL_VMAF_NEG,
+) = range(11)
 
 #: Row states worth colouring the file name for. Everything else the old
 #: Status column reported is now visible in the metric columns themselves --
@@ -130,6 +130,7 @@ _METRIC_COLUMNS = [
     (COL_PSNR, "PSNR", "name=psnr"),
     (COL_SSIM, "SSIM", "name=float_ssim"),
     (COL_VMAF, "VMAF", None),
+    (COL_VMAF_NEG, "VMAF NEG", None),
     (COL_XPSNR, "XPSNR", "xpsnr"),
 ]
 _METRIC_COLUMN_SET = frozenset(col for col, _, _ in _METRIC_COLUMNS)
@@ -641,7 +642,7 @@ class MainWindow(QMainWindow):
         ))
         metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
-            0, 10, fill_column=COL_PATH,
+            0, 11, fill_column=COL_PATH,
             other_columns=[
                 COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
                 *metric_cols,
@@ -662,7 +663,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.setHorizontalHeaderLabels(
             [
                 "", "File name", "Media info", "Black bars", "Scaling", "Video bitrate",
-                "   PSNR (dB)", "   SSIM", "   VMAF", "   XPSNR (dB)",
+                "   PSNR (dB)", "   SSIM", "   VMAF", "   XPSNR (dB)", "   VMAF NEG",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -1337,7 +1338,7 @@ class MainWindow(QMainWindow):
         Without it the number silently describes fewer frames than the run
         measured, which is worse than the "inf" it replaced.
         """
-        metric = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        metric = {COL_VMAF: "vmaf", COL_VMAF_NEG: "vmaf_neg", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
         values = run.result.frames.values(metric)
         if values is None:
             return ""
@@ -1352,7 +1353,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
-        metric = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        metric = {COL_VMAF: "vmaf", COL_VMAF_NEG: "vmaf_neg", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
         values = run.result.frames.values(metric)
         if values is None or len(values) == 0:
             return None
@@ -2070,9 +2071,10 @@ class MainWindow(QMainWindow):
             self.metric_header.set_checked(COL_SSIM, "name=float_ssim" in opts.extra_features)
             self.metric_header.set_checked(COL_XPSNR, opts.compute_xpsnr)
             self.metric_header.set_checked(COL_VMAF, opts.compute_vmaf)
+            self.metric_header.set_checked(COL_VMAF_NEG, opts.compute_vmaf_neg)
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
-            uses_libvmaf = any(o.compute_vmaf or o.extra_features for o in selected_options)
+            uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.extra_features for o in selected_options)
             self.threads_spin.setEnabled(uses_libvmaf)
             self.subsample_spin.setEnabled(uses_libvmaf)
         finally:
@@ -2105,6 +2107,7 @@ class MainWindow(QMainWindow):
             scale_direction=scale_direction,
             compute_xpsnr=self.metric_header.is_checked(COL_XPSNR),
             compute_vmaf=self.metric_header.is_checked(COL_VMAF),
+            compute_vmaf_neg=self.metric_header.is_checked(COL_VMAF_NEG),
             duration_limit=duration_limit,
             gpu_decode=self.gpu_checkbox.isChecked(),
             gpu_vendor=vendor,
@@ -2113,13 +2116,15 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_enabled(options: VmafOptions, column: int) -> bool:
-        key = {COL_VMAF: "vmaf", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
+        key = {COL_VMAF: "vmaf", COL_VMAF_NEG: "vmaf_neg", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
         return key in options.requested_metrics()
 
     @staticmethod
     def _set_metric_option(options: VmafOptions, column: int, checked: bool) -> None:
         if column == COL_VMAF:
             options.compute_vmaf = checked
+        elif column == COL_VMAF_NEG:
+            options.compute_vmaf_neg = checked
         elif column == COL_XPSNR:
             options.compute_xpsnr = checked
         else:
@@ -2822,6 +2827,7 @@ class MainWindow(QMainWindow):
             row_data.options.extra_features.append("name=float_ssim")
         row_data.options.compute_xpsnr = result.frames.has("xpsnr")
         row_data.options.compute_vmaf = result.frames.has("vmaf")
+        row_data.options.compute_vmaf_neg = result.frames.has("vmaf_neg")
         row_data.options.model = result.model
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm

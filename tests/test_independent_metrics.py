@@ -138,7 +138,7 @@ def test_legacy_cache_key_is_unchanged(tmp_path):
     source, test = tmp_path / "source.mkv", tmp_path / "test.mkv"
     options = VmafOptions(extra_features=["name=psnr"])
     legacy = asdict(options)
-    for key in ("compute_vmaf", "gpu_decode", "gpu_vendor", "n_threads"):
+    for key in ("compute_vmaf", "compute_vmaf_neg", "gpu_decode", "gpu_vendor", "n_threads"):
         legacy.pop(key)
     raw = f"{result_cache._file_identity(source)}|{result_cache._file_identity(test)}|{json.dumps(legacy, sort_keys=True, separators=(',', ':'))}"
     assert result_cache.cache_key(source, test, options) == hashlib.sha1(raw.encode()).hexdigest()

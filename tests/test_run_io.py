@@ -96,7 +96,7 @@ def test_export_csv_writes_header_and_all_rows(tmp_path):
     export_csv(result, out_path)
 
     lines = out_path.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "frame,time_s,vmaf,psnr,ssim,xpsnr"
+    assert lines[0] == "frame,time_s,vmaf,psnr,ssim,xpsnr,vmaf_neg"
     assert len(lines) == 1 + len(result.frames)
 
 

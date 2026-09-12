@@ -60,6 +60,8 @@ def _file_identity(path: Path) -> str:
 
 def _options_identity(options: VmafOptions) -> str:
     values = asdict(options)
+    if not options.compute_vmaf_neg:
+        values.pop("compute_vmaf_neg")  # preserve existing cache identities
     # Preserve the exact legacy key for every existing VMAF-enabled run.
     if options.compute_vmaf:
         values.pop("compute_vmaf")
@@ -97,7 +99,7 @@ def _cache_path(
 #: Every metric, and the options that request it. The identity of a cached
 #: run includes which metrics it holds, so a run is only found by asking for
 #: exactly the set it was computed with -- see _candidate_options.
-_ALL_METRICS = ("vmaf", "psnr", "ssim", "xpsnr")
+_ALL_METRICS = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
 _FEATURE_BY_METRIC = {"psnr": "name=psnr", "ssim": "name=float_ssim"}
 
 
@@ -111,6 +113,7 @@ def _options_for_metrics(options: VmafOptions, metrics: frozenset[str]) -> VmafO
     """
     candidate = clone_options(options)
     candidate.compute_vmaf = "vmaf" in metrics
+    candidate.compute_vmaf_neg = "vmaf_neg" in metrics
     candidate.compute_xpsnr = "xpsnr" in metrics
     # Rebuilt in a fixed order rather than filtered in place: extra_features
     # is a list, so its ORDER is part of the identity, and it is appended to
@@ -176,6 +179,17 @@ def _candidate_options(options: VmafOptions) -> list[VmafOptions]:
                 for f in candidate.extra_features
             ]
             expanded.append(alternate)
+    if options.compute_vmaf_neg:
+        # Before NEG had its own metric, it used the VMAF model selector.
+        # Try those exact old identities without rewriting or deleting files.
+        for candidate in list(expanded):
+            if not candidate.compute_vmaf_neg:
+                continue
+            legacy = clone_options(candidate)
+            legacy.compute_vmaf = True
+            legacy.compute_vmaf_neg = False
+            legacy.model = legacy.model_choice = "version=vmaf_v0.6.1neg"
+            expanded.append(legacy)
     return expanded
 
 

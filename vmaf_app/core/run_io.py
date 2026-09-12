@@ -119,10 +119,10 @@ def _frames_to_rows(frames: FrameScores) -> list[list]:
                 values.append(float(value))
         return values
 
-    vmaf, psnr, ssim, xpsnr = (column(m) for m in ("vmaf", "psnr", "ssim", "xpsnr"))
+    vmaf, psnr, ssim, xpsnr, neg = (column(m) for m in ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg"))
     return [
         [int(frames.frame[i]), round(float(frames.time[i]), 6), vmaf[i],
-         psnr[i], ssim[i], xpsnr[i]]
+         psnr[i], ssim[i], xpsnr[i], neg[i]]
         for i in range(len(frames))
     ]
 
@@ -143,6 +143,7 @@ def _rows_to_frames(rows: list[list]) -> FrameScores:
         time=np.array([r[1] for r in rows], dtype=np.float64),
         vmaf=column(2),
         psnr=column(3), ssim=column(4), xpsnr=column(5),
+        vmaf_neg=column(6),
     )
 
 
@@ -175,6 +176,8 @@ def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> Non
 def load_run(path: Path) -> tuple[VmafRunResult, str]:
     data = json.loads(path.read_text(encoding="utf-8"))
     frames = _rows_to_frames(data["frames"])
+    if data.get("model") == "version=vmaf_v0.6.1neg" and frames.vmaf_neg is None:
+        frames = frames.with_values("vmaf_neg", frames.vmaf).with_values("vmaf", None)
     result = VmafRunResult(
         source=Path(data["source"]),
         distorted=Path(data["distorted"]),
@@ -211,6 +214,6 @@ def export_csv(result: VmafRunResult, path: Path) -> None:
 
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["frame", "time_s", "vmaf", "psnr", "ssim", "xpsnr"])
+        writer.writerow(["frame", "time_s", "vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg"])
         for fr in result.frames:
-            writer.writerow([fr.frame, f"{fr.time:.6f}", fr.vmaf, cell(fr.psnr), cell(fr.ssim), cell(fr.xpsnr)])
+            writer.writerow([fr.frame, f"{fr.time:.6f}", fr.vmaf, cell(fr.psnr), cell(fr.ssim), cell(fr.xpsnr), cell(fr.vmaf_neg)])

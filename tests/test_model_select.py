@@ -56,8 +56,8 @@ def test_resolve_model_auto_picks_4k_for_uhd_distorted():
 
 
 def test_resolve_model_fixed_choice_passes_through():
-    opts = VmafOptions(model_choice="version=vmaf_v0.6.1neg")
-    assert resolve_model(opts, 1920, 1080) == "version=vmaf_v0.6.1neg"
+    opts = VmafOptions(model_choice="version=vmaf_4k_v0.6.1")
+    assert resolve_model(opts, 1920, 1080) == "version=vmaf_4k_v0.6.1"
 
 
 def test_resolve_model_custom_requires_a_path():

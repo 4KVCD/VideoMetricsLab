@@ -258,10 +258,16 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
     # Windows path (drive-letter colon) as an option value, even escaped or
     # quoted -- so ffmpeg is always launched with cwd=log_path.parent and we
     # reference the log (and any custom model file) by bare filename here.
+    model_value = model if model is not None else options.model
+    if options.compute_vmaf_neg:
+        # Explicit names keep the two output score arrays independent.
+        models = ([model_value + r"\\:name=vmaf"] if options.compute_vmaf else [])
+        models.append(r"version=vmaf_v0.6.1neg\\:name=vmaf_neg")
+        model_value = "|".join(models)
     opts = [
         f"log_path={log_path.name}",
         "log_fmt=json",
-        f"model={model if model is not None else options.model}" if options.compute_vmaf else "model=''",
+        f"model={model_value}" if options.compute_vmaf or options.compute_vmaf_neg else "model=''",
     ]
     # libvmaf 2.0+ defaults to single-threaded (n_threads=1) unless told
     # otherwise -- omitting this option here does NOT mean "use all cores",
@@ -300,7 +306,7 @@ def _build_libvmaf_stage(
     if not options.requested_metrics():
         raise VmafRunError("Select at least one metric to calculate.")
     # XPSNR-only needs no libvmaf filter or model at all.
-    if not options.compute_vmaf and not options.extra_features:
+    if not options.compute_vmaf and not options.compute_vmaf_neg and not options.extra_features:
         assert xpsnr_log_path is not None
         return f"[main][ref]xpsnr=stats_file={xpsnr_log_path.name}:" + ":".join(_FRAMESYNC_OPTS)
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
@@ -663,6 +669,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
     # thrown away here.
     frame_nums: list[int] = []
     vmafs: list[float | None] = []
+    negs: list[float | None] = []
     psnrs: list[float | None] = []
     ssims: list[float | None] = []
     xpsnrs: list[float | None] = []
@@ -671,7 +678,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         metrics = fr.get("metrics", {})
         frame_num = int(fr.get("frameNum", len(frame_nums)))
         vmaf = metrics.get("vmaf")
-        if not any(k in metrics for k in ("vmaf", "psnr_y", "psnr", "float_ssim", "ssim")):
+        if not any(k in metrics for k in ("vmaf", "vmaf_neg", "psnr_y", "psnr", "float_ssim", "ssim")):
             continue
         # `a if a is not None else b`, not `a or b`: libvmaf reports a real
         # 0.0 for badly degraded frames, and `or` would discard it and fall
@@ -684,6 +691,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
             ssim = metrics.get("ssim")
         frame_nums.append(frame_num)
         vmafs.append(None if vmaf is None else float(vmaf))
+        negs.append(metrics.get("vmaf_neg"))
         psnrs.append(psnr)
         ssims.append(ssim)
         xpsnrs.append(xpsnr_by_frame.get(frame_num))
@@ -703,6 +711,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         frame=frame_arr,
         time=time_arr,
         vmaf=column(vmafs),
+        vmaf_neg=column(negs),
         psnr=column(psnrs), ssim=column(ssims), xpsnr=column(xpsnrs),
     )
 
@@ -832,7 +841,7 @@ def _execute_run(
             tail = "\n".join(result.stderr.splitlines()[-25:])
             raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
 
-        if not options.compute_vmaf and not options.extra_features:
+        if not options.compute_vmaf and not options.compute_vmaf_neg and not options.extra_features:
             values = _parse_xpsnr_log(xpsnr_log_path)
             numbers = np.array(sorted(values), dtype=np.int32)
             frames = FrameScores(numbers, numbers / fps, None,
