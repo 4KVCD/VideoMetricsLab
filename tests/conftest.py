@@ -19,7 +19,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from vmaf_app.core import crop_detect, result_cache
-from vmaf_app.core.settings import Settings
+from vmaf_app.core.settings import SETTINGS_VERSION, Settings
 
 
 def _real_user_cache_dir() -> Path:
@@ -42,8 +42,18 @@ def isolate_user_state(tmp_path, monkeypatch):
     # loaded Settings say. With cache_dir blank that is None -- "use the
     # platform folder" -- so simply building a window silently un-isolated
     # the suite and pointed it back at the user's own cache.
+    #
+    # parallel_jobs is pinned because its default depends on the core count
+    # of the machine running the suite (see default_parallel_jobs), and the
+    # version is current so the migration that would re-derive it stays out
+    # of the baseline. Tests of either write their own file.
     settings_file.write_text(
-        json.dumps({"cache_dir": str(cache)}), encoding="utf-8"
+        json.dumps({
+            "cache_dir": str(cache),
+            "parallel_jobs": 1,
+            "settings_version": SETTINGS_VERSION,
+        }),
+        encoding="utf-8",
     )
 
     real_override = result_cache.set_cache_dir_override

@@ -7,14 +7,29 @@ belong to the user.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, fields
+import os
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from vmaf_app.core.app_paths import settings_file
 
 #: Bumped whenever a saved settings file needs upgrading in place. 1 turned
-#: the metric defaults on for files written before all four were the default.
-SETTINGS_VERSION = 1
+#: the metric defaults on for files written before all four were the default;
+#: 2 turned parallel scoring on for many-core machines that had never chosen.
+SETTINGS_VERSION = 2
+
+#: Above this many logical cores, a fresh install scores two videos at once.
+#: One libvmaf job leaves a big CPU largely idle (see MAX_PARALLEL_JOBS for
+#: the measurement); below it, a second job mostly competes with the first.
+PARALLEL_BY_DEFAULT_ABOVE_CORES = 12
+
+
+def default_parallel_jobs(cores: int | None = None) -> int:
+    """The parallel-jobs setting a machine with `cores` logical cores starts
+    with: two above PARALLEL_BY_DEFAULT_ABOVE_CORES, otherwise one."""
+    if cores is None:
+        cores = os.cpu_count() or 1
+    return 2 if cores > PARALLEL_BY_DEFAULT_ABOVE_CORES else 1
 
 
 @dataclass
@@ -50,10 +65,12 @@ class Settings:
 
     # How many videos to score at once (1 or 2 -- see MAX_PARALLEL_JOBS).
     # libvmaf does not saturate a modern many-core CPU on its own, so a
-    # second job largely fills the gap rather than competing for it. Kept out
-    # of VmafOptions on purpose: it changes how fast results arrive, never
-    # what they are, so it must not take part in cache identity.
-    parallel_jobs: int = 1
+    # second job largely fills the gap rather than competing for it -- which
+    # is why the default depends on the machine (default_parallel_jobs).
+    # Kept out of VmafOptions on purpose: it changes how fast results
+    # arrive, never what they are, so it must not take part in cache
+    # identity.
+    parallel_jobs: int = field(default_factory=default_parallel_jobs)
 
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True
@@ -115,6 +132,11 @@ class Settings:
             self.default_compute_ssim = True
             self.default_compute_xpsnr = True
             self.default_compute_vmaf = True
+        if from_version < 2 and self.parallel_jobs == 1:
+            # One was the only default before, so a saved 1 says nothing
+            # about whether it was chosen. Files that already say 2 are left
+            # alone, and once this has run, so is any later choice of 1.
+            self.parallel_jobs = default_parallel_jobs()
         self.settings_version = SETTINGS_VERSION
         return True
 

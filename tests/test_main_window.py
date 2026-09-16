@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -19,7 +20,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
-from vmaf_app.core.settings import Settings
+from vmaf_app.core.settings import SETTINGS_VERSION, Settings, default_parallel_jobs
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.main_window import (
@@ -161,12 +162,69 @@ def test_an_older_settings_file_is_upgraded_to_all_four_once(tmp_path, monkeypat
     assert upgraded.parallel_jobs == 2  # untouched settings survive
 
     # Written back, so it happens once rather than at every launch...
-    assert json.loads(settings_file.read_text(encoding="utf-8"))["settings_version"] == 1
+    assert json.loads(settings_file.read_text(encoding="utf-8"))["settings_version"] == SETTINGS_VERSION
 
     # ...and a later choice to turn one off is then respected, not undone.
     upgraded.default_compute_xpsnr = False
     upgraded.save()
     assert not Settings.load().default_compute_xpsnr
+
+
+@pytest.mark.parametrize(("cores", "expected"), [(8, 1), (12, 1), (13, 2), (24, 2)])
+def test_two_in_parallel_is_the_default_above_twelve_cores(cores, expected, monkeypatch):
+    """One libvmaf job leaves a big CPU largely idle; on a small one a second
+    job mostly competes with the first. "More than 12" is the line."""
+    assert default_parallel_jobs(cores) == expected
+
+    monkeypatch.setattr(os, "cpu_count", lambda: cores)
+    assert Settings().parallel_jobs == expected
+
+
+@pytest.mark.parametrize(("cores", "expected"), [(8, 1), (24, 2)])
+def test_an_older_settings_file_gets_the_machine_default_for_parallel_once(
+    cores, expected, tmp_path, monkeypatch,
+):
+    """Every file written before this default said 1, chosen or not, so the
+    upgrade treats a 1 as unchosen -- exactly once."""
+    monkeypatch.setattr(os, "cpu_count", lambda: cores)
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(Settings, "path", staticmethod(lambda: settings_file))
+    settings_file.write_text(json.dumps({"parallel_jobs": 1, "settings_version": 1}), encoding="utf-8")
+
+    assert Settings.load().parallel_jobs == expected
+
+    # Turning it off afterwards is a choice, and it stays off.
+    chosen = Settings.load()
+    chosen.parallel_jobs = 1
+    chosen.save()
+    assert Settings.load().parallel_jobs == 1
+
+
+def test_a_saved_choice_of_two_survives_the_upgrade_on_a_small_machine(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(Settings, "path", staticmethod(lambda: settings_file))
+    settings_file.write_text(json.dumps({"parallel_jobs": 2, "settings_version": 1}), encoding="utf-8")
+
+    assert Settings.load().parallel_jobs == 2
+
+
+@pytest.mark.parametrize(("cores", "ticked"), [(8, False), (24, True)])
+def test_the_parallel_box_starts_from_the_machine_default(cores, ticked, qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "cpu_count", lambda: cores)
+    # The isolated settings file pins parallel_jobs (see conftest); a fresh
+    # install has no such line.
+    settings_file = Settings.path()
+    saved = json.loads(settings_file.read_text(encoding="utf-8"))
+    del saved["parallel_jobs"], saved["settings_version"]
+    settings_file.write_text(json.dumps(saved), encoding="utf-8")
+
+    win = MainWindow()
+    try:
+        assert win.parallel_jobs_check.isChecked() is ticked
+        assert win._parallel_jobs() == (2 if ticked else 1)
+    finally:
+        win.close()
 
 
 # ------------------------------------------------------------------ row state
