@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core.models import VideoInfo, VmafOptions
 from vmaf_app.core.process_control import ProcessHandle
-from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, run_resample_test, run_vmaf
+from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
 
 
 @dataclass
@@ -59,6 +59,11 @@ class VmafWorker(QThread):
         self._active = 0
         self._paused = False
         self._cancellation_reported = False
+        # How many lanes this run actually has -- set by run(), and never
+        # more than there are jobs. It caps the share of the machine each
+        # job is planned for: a single video runs alone whatever the
+        # setting says, and should not be planned for half a CPU.
+        self._lane_count = 1
 
     # ------------------------------------------------------------- controls
     def cancel(self) -> None:
@@ -162,6 +167,25 @@ class VmafWorker(QThread):
         with self._handles_lock:
             self._handles.pop(index, None)
 
+    def _share_cores(self, options: VmafOptions) -> VmafOptions:
+        """Fills in "Auto" libvmaf threads with this job's share of the CPU.
+
+        Decided as the job starts, from the lane count in force at that
+        moment: a run that was widened to two lanes part-way through gives
+        every video started after that half the cores, while the one already
+        running keeps what it was launched with (a thread count cannot be
+        changed under a live ffmpeg). An explicit thread count is the
+        user's, and passes through untouched. n_threads never reaches the
+        cache key, so this changes how fast the result arrives, not what it
+        is.
+        """
+        if options.n_threads > 0:
+            return options
+        concurrent = min(self.parallel_jobs, self._lane_count)
+        if concurrent <= 1:
+            return options  # the runner resolves Auto to every core itself
+        return replace(options, n_threads=auto_threads(concurrent))
+
     def _report_cancelled_once(self) -> None:
         """`cancelled` means the run stopped, not that a job did -- with
         several jobs in flight they all raise Cancelled together."""
@@ -183,6 +207,7 @@ class VmafWorker(QThread):
         # is what lets the count be raised while the run is going. A blocked
         # lane costs a parked thread and nothing else.
         lane_count = min(MAX_PARALLEL_JOBS, len(self._jobs))
+        self._lane_count = lane_count
         if lane_count <= 1:
             self._run_jobs(pending)
         else:
@@ -218,12 +243,13 @@ class VmafWorker(QThread):
                 self._release_slot()
                 break
             job = self._jobs[i]
+            options = self._share_cores(job.options)
             self.job_started.emit(i, job.label)
             try:
-                if job.options.resample_test is not None:
+                if options.resample_test is not None:
                     result = run_resample_test(
                         job.source_info,
-                        job.options,
+                        options,
                         on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
                         on_status=lambda msg, idx=i: self.status.emit(idx, msg),
                         cancel_event=self._cancel_event,
@@ -233,7 +259,7 @@ class VmafWorker(QThread):
                     result = run_vmaf(
                         job.source_info,
                         job.distorted_info,
-                        job.options,
+                        options,
                         on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
                         on_status=lambda msg, idx=i: self.status.emit(idx, msg),
                         cancel_event=self._cancel_event,

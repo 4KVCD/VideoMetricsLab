@@ -841,7 +841,11 @@ class MainWindow(QMainWindow):
             lambda _value: self._on_panel_field_edited("n_threads")
         )
         performance_form.addRow("libvmaf threads:", self.threads_spin)
-        self.threads_spin.setToolTip("Controls VMAF, PSNR and SSIM extraction in libvmaf, not XPSNR or video decoding.")
+        self.threads_spin.setToolTip(
+            "Controls VMAF, PSNR and SSIM extraction in libvmaf, not XPSNR "
+            "or video decoding.\n\nAuto uses every core, or half of them "
+            "for each video when two are calculated in parallel."
+        )
 
         self.subsample_spin = QSpinBox()
         self.subsample_spin.setRange(1, 60)
@@ -932,11 +936,12 @@ class MainWindow(QMainWindow):
             f"Scores two videos simultaneously on this {cores}-core "
             "machine. libvmaf does not keep a many-core CPU busy on its "
             "own, so a second video largely fills the idle capacity "
-            "rather than competing for it.\n\nCan be changed while a run "
-            "is in progress: ticking it starts another video straight "
-            "away, unticking it lets the running ones finish first."
-            "\n\nOnly affects how fast results arrive, never what they "
-            "are."
+            "rather than competing for it. libvmaf threads left on Auto "
+            "are shared: each video gets half the cores.\n\nCan be "
+            "changed while a run is in progress: ticking it starts another "
+            "video straight away, unticking it lets the running ones finish "
+            "first.\n\nOnly affects how fast results arrive, never what "
+            "they are."
         )
         self.parallel_jobs_check.toggled.connect(self._on_parallel_jobs_changed)
         run_row.addWidget(self.parallel_jobs_check)

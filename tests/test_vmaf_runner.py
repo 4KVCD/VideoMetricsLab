@@ -23,6 +23,7 @@ from vmaf_app.core.vmaf_runner import (
     _fallback_ladder,
     _hw_native_format,
     analysis_pix_fmt,
+    auto_threads,
     estimate_total_frames,
     validate_display_geometry,
 )
@@ -191,6 +192,21 @@ def test_default_n_threads_resolves_to_cpu_count_not_omitted():
 
     libvmaf_part = graph.split("libvmaf=", 1)[1]
     assert f"n_threads={os.cpu_count() or 1}" in libvmaf_part
+
+
+def test_auto_threads_are_shared_equally_between_concurrent_jobs(monkeypatch):
+    """Two jobs each asking for every core is twice as many threads as
+    cores; they take turns rather than doing more work."""
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    assert auto_threads() == 24
+    assert auto_threads(1) == 24
+    assert auto_threads(2) == 12
+
+    monkeypatch.setattr(os, "cpu_count", lambda: 13)
+    assert auto_threads(2) == 6  # rounds down; a spare core is not a problem
+
+    monkeypatch.setattr(os, "cpu_count", lambda: 1)
+    assert auto_threads(2) == 1  # never zero, which libvmaf would reject
 
 
 def test_duration_limit_adds_output_side_t_flag():

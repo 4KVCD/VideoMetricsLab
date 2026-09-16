@@ -228,6 +228,19 @@ def analysis_pix_fmt(*pix_fmts: str) -> str:
     return _ANALYSIS_FORMAT_BY_DEPTH[12]
 
 
+def auto_threads(concurrent_jobs: int = 1) -> int:
+    """How many threads "Auto" (n_threads <= 0) means for libvmaf.
+
+    Every logical core for a video scored on its own. When several are
+    scored at once each gets an equal share, so two jobs on a 24-core
+    machine ask for 12 threads each rather than 24 each: twice as many
+    threads as cores cannot do more work than exactly as many, they only
+    take turns on the same cores and pay for the switching.
+    """
+    cores = os.cpu_count() or 1
+    return max(1, cores // max(1, concurrent_jobs))
+
+
 def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None = None) -> list[str]:
     # ffmpeg's filtergraph option parser can't reliably handle an absolute
     # Windows path (drive-letter colon) as an option value, even escaped or
@@ -247,8 +260,9 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
     # libvmaf 2.0+ defaults to single-threaded (n_threads=1) unless told
     # otherwise -- omitting this option here does NOT mean "use all cores",
     # so "Auto" (n_threads <= 0) is resolved to the actual core count instead
-    # of leaving it unset.
-    resolved_threads = options.n_threads if options.n_threads > 0 else (os.cpu_count() or 1)
+    # of leaving it unset. A job that shares the machine with another has
+    # already had its share filled in by the worker (VmafWorker._share_cores).
+    resolved_threads = options.n_threads if options.n_threads > 0 else auto_threads()
     opts.append(f"n_threads={resolved_threads}")
     if options.n_subsample > 1:
         opts.append(f"n_subsample={options.n_subsample}")

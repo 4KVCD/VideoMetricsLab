@@ -1,4 +1,6 @@
 import contextlib
+import os
+import threading
 import time
 from pathlib import Path
 
@@ -70,6 +72,118 @@ def test_worker_reports_cancellation_as_a_distinct_terminal_state(qapp, monkeypa
     worker.run()
 
     assert reported == [True]
+
+
+# ---------------------------------------------------- sharing out the cores
+
+def _threads_asked_for(monkeypatch) -> dict[str, int]:
+    """Records the n_threads each job reached run_vmaf with, by file."""
+    seen: dict[str, int] = {}
+
+    def record(source, distorted, options, *a, **kw):
+        seen[distorted.path.name] = options.n_threads
+        return _fake_result(distorted.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", record)
+    return seen
+
+
+def test_auto_threads_are_halved_when_two_videos_are_scored_at_once(qapp, monkeypatch):
+    """Two libvmaf instances each asking for all 24 cores is 48 threads
+    taking turns on 24; each gets half instead."""
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    seen = _threads_asked_for(monkeypatch)
+
+    VmafWorker(_jobs(3), parallel_jobs=2).run()
+
+    assert seen == {"d0.mp4": 12, "d1.mp4": 12, "d2.mp4": 12}
+
+
+def test_a_lone_video_keeps_every_core_however_the_box_is_ticked(qapp, monkeypatch):
+    """The setting says two may run at once; with one video queued, one
+    runs. Planning it for half the machine would leave the other half
+    idle for the whole run."""
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    seen = _threads_asked_for(monkeypatch)
+
+    VmafWorker(_jobs(1), parallel_jobs=2).run()
+
+    assert seen == {"d0.mp4": 0}  # still Auto, which the runner resolves to every core
+
+
+def test_videos_scored_one_at_a_time_keep_every_core(qapp, monkeypatch):
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    seen = _threads_asked_for(monkeypatch)
+
+    VmafWorker(_jobs(3), parallel_jobs=1).run()
+
+    assert seen == {"d0.mp4": 0, "d1.mp4": 0, "d2.mp4": 0}
+
+
+def test_an_explicit_thread_count_is_the_users_and_is_not_shared(qapp, monkeypatch):
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    seen = _threads_asked_for(monkeypatch)
+    jobs = [
+        VmafJob(_info("s.mp4"), _info(f"d{n}.mp4"), VmafOptions(n_threads=20), label=f"d{n}")
+        for n in range(2)
+    ]
+
+    VmafWorker(jobs, parallel_jobs=2).run()
+
+    assert seen == {"d0.mp4": 20, "d1.mp4": 20}
+
+
+def test_a_resample_test_shares_the_cores_like_any_other_job(qapp, monkeypatch):
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    seen = []
+
+    def record(source, options, *a, **kw):
+        seen.append(options.n_threads)
+        return _fake_result("s [downscale-1080p-upscale].mp4")
+
+    monkeypatch.setattr(worker_module, "run_resample_test", record)
+    options = VmafOptions(resample_test=ResampleTarget(width=1920, label="1080p"))
+    jobs = [VmafJob(_info("s.mp4"), _info("s.mp4"), options, label=f"t{n}") for n in range(2)]
+
+    VmafWorker(jobs, parallel_jobs=2).run()
+
+    assert seen == [12, 12]
+
+
+def test_a_video_started_after_the_count_was_raised_gets_half(qapp, monkeypatch):
+    """The share is decided as each video starts, not when the run does.
+    The one already running keeps its threads -- ffmpeg cannot be re-told
+    -- and everything that starts after the change shares the machine."""
+    monkeypatch.setattr(os, "cpu_count", lambda: 24)
+    first_started = threading.Event()
+    release = threading.Event()
+    seen: dict[str, int] = {}
+
+    def blocking(source, distorted, options, *a, **kw):
+        seen[distorted.path.name] = options.n_threads
+        first_started.set()
+        release.wait(10)
+        return _fake_result(distorted.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", blocking)
+    worker = VmafWorker(_jobs(4), parallel_jobs=1)
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    try:
+        assert first_started.wait(5)
+        deadline = time.time() + 5
+        worker.set_parallel_jobs(2)
+        while len(seen) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+    finally:
+        release.set()
+        runner.join(timeout=10)
+
+    # Lanes pull their index before they wait for a slot, so which file went
+    # first is a race; which *launch* went first is not (insertion order).
+    launched = list(seen.values())
+    assert launched[0] == 0      # launched alone: Auto, every core
+    assert launched[1] == 12     # launched beside it: half
 
 
 # --------------------------------------------------- scoring several at once
