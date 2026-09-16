@@ -54,4 +54,8 @@ class BitrateWorker(QThread):
                     self.failed.emit(path, str(exc))
                 continue
             if not self._cancelled:
+                # Here, not in the UI thread: the summary walks every packet
+                # in Python, and the table would otherwise do that on every
+                # redraw of every row.
+                data.prime()
                 self.analyzed.emit(path, info, data)

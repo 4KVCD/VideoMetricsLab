@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +36,16 @@ class BitrateData:
     durations: np.ndarray
     sizes: np.ndarray
     keyframes: np.ndarray
+    # Derived once, kept for the life of the data. The per-second bins walk
+    # every packet in Python -- 290 ms for a 151,919-packet encode -- and
+    # the table asked for them again on every refresh, for every row: a
+    # five-row table cost 1.4 s of UI thread each time it redrew. The scan
+    # that produced this data took minutes; its summary is not worth
+    # recomputing, and analyze_video_bitrate primes it on the worker so the
+    # UI thread never computes it at all. Keyed by adjust_start, because the
+    # bin edges move with it.
+    _second_bins: dict = field(default_factory=dict, repr=False, compare=False)
+    _summary: object = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.times = np.asarray(self.times, dtype=np.float64)
@@ -73,6 +83,29 @@ class BitrateData:
     @property
     def average_kbps(self) -> float:
         return self.total_bytes * 8 / self.duration / 1000 if self.duration > 0 else 0.0
+
+    def second_bins(self, adjust_start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(starts, ends, kb/s) per one-second bin, computed once per variant."""
+        bins = self._second_bins.get(adjust_start)
+        if bins is None:
+            bins = _compute_second_bins(self, adjust_start)
+            self._second_bins[adjust_start] = bins
+        return bins
+
+    def summary(self) -> BitrateSummary:
+        if self._summary is None:
+            _starts, _ends, rates = self.second_bins(True)
+            self._summary = BitrateSummary(
+                average_kbps=self.average_kbps,
+                minimum_kbps=float(np.min(rates)) if len(rates) else 0.0,
+                maximum_kbps=float(np.max(rates)) if len(rates) else 0.0,
+            )
+        return self._summary
+
+    def prime(self) -> None:
+        """Computes what the table and the default plot will ask for, so the
+        thread that produced the data pays for its summary as well."""
+        self.summary()
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,7 +240,8 @@ def frame_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
     )
 
 
-def _second_bins(data: BitrateData, adjust_start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _compute_second_bins(data: BitrateData, adjust_start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The raw computation. Callers go through BitrateData.second_bins."""
     if not data.frame_count:
         empty = np.empty(0, np.float64)
         return empty, empty, np.empty(0, np.float32)
@@ -243,7 +277,7 @@ def _second_bins(data: BitrateData, adjust_start: bool) -> tuple[np.ndarray, np.
 
 
 def second_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
-    starts, ends, rates = _second_bins(data, adjust_start)
+    starts, ends, rates = data.second_bins(adjust_start)
     times, values = _step_points(starts, ends, rates)
     return BitratePlot(times, values, "Video bitrate (kb/s)", "kb/s")
 
@@ -278,9 +312,4 @@ def gop_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
 
 
 def bitrate_summary(data: BitrateData) -> BitrateSummary:
-    _starts, _ends, rates = _second_bins(data, True)
-    return BitrateSummary(
-        average_kbps=data.average_kbps,
-        minimum_kbps=float(np.min(rates)) if len(rates) else 0.0,
-        maximum_kbps=float(np.max(rates)) if len(rates) else 0.0,
-    )
+    return data.summary()
