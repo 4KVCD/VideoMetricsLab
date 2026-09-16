@@ -1062,6 +1062,55 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "No"
 
 
+def test_neg_computed_on_top_of_an_older_run_shows_when_the_video_is_re_added(qapp, tmp_path, monkeypatch):
+    """The user's report: VMAF NEG computed for three feature-length encodes,
+    the app restarted, the same files added again -- four scores back, NEG
+    gone. Both files were on disk; the four-metric one was loaded because
+    it matched the new row's request exactly, and the NEG scores sat in the
+    other. The fuller run is the one to show, and the tooltip names NEG."""
+    from vmaf_app.core import result_cache
+    from vmaf_app.core.models import VmafOptions
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "distorted.mp4"
+    distorted.write_bytes(b"d" * 500)
+    info = _fake_video_info(str(distorted))
+
+    def run(with_neg: bool) -> VmafRunResult:
+        frames = [
+            FrameScore(frame=i, time=i / 30.0, vmaf=90.0, psnr=42.0, ssim=0.99, xpsnr=40.0,
+                       vmaf_neg=88.0 if with_neg else None)
+            for i in range(10)
+        ]
+        return VmafRunResult(
+            source=source, distorted=distorted, frames=frames, fps=30.0, model="m",
+            source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+        )
+
+    four = VmafOptions(extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True)
+    five = VmafOptions(extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True,
+                       compute_vmaf_neg=True)
+    result_cache.store(source, distorted, run(False), label="four", options=four)
+    result_cache.store(source, distorted, run(True), label="with NEG", options=five)
+
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)  # a fresh row asks for four; NEG is off by default
+    assert not win._rows[row].options.compute_vmaf_neg
+    win._set_row_info(row, info)
+
+    assert win._try_load_cached_result(row)
+    assert win._rows[row].completed_run.label == "with NEG"
+    neg_cell = win.distorted_table.item(row, main_window_module.COL_VMAF_NEG)
+    assert neg_cell.text() == "88.00"
+    assert not neg_cell.flags() & Qt.ItemIsUserCheckable  # a score, not a tick box
+    assert "VMAF NEG" in win._rows[row].status_detail
+    win.close()
+
+
 def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
     monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)

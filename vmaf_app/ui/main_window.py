@@ -134,6 +134,12 @@ _METRIC_COLUMNS = [
     (COL_XPSNR, "XPSNR", "xpsnr"),
 ]
 _METRIC_COLUMN_SET = frozenset(col for col, _, _ in _METRIC_COLUMNS)
+# Result field name -> display name, in column order, for listing what a
+# finished run holds.
+_METRIC_NAMES = (
+    ("vmaf", "VMAF"), ("vmaf_neg", "VMAF NEG"), ("psnr", "PSNR"),
+    ("ssim", "SSIM"), ("xpsnr", "XPSNR"),
+)
 
 class CompletedRun:
     """A finished run plus the label it's shown under and its summary stats,
@@ -1903,7 +1909,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))
+            + ", ".join(name for key, name in _METRIC_NAMES if result.frames.has(key))
             + "\nLoaded from a previous run (matching files and calculation settings) -- "
             "right-click to recompute."
         )
@@ -2728,7 +2734,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(m.upper() for m in ('vmaf', 'psnr', 'ssim', 'xpsnr') if result.frames.has(m))
+            + ", ".join(name for key, name in _METRIC_NAMES if result.frames.has(key))
         )
         self._set_row_metrics(row)
         # Straight onto the graph: a run that has finished is a curve, and
