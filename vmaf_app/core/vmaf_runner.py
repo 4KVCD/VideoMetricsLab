@@ -19,7 +19,19 @@ import numpy as np
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-from vmaf_app.core.gpu import HwAccelPlan, plan_hwaccel
+from vmaf_app.core.gpu import (
+    HwAccelPlan,
+    plan_hwaccel,
+)
+from vmaf_app.core.gpu import (
+    bit_depth as _bit_depth,
+)
+from vmaf_app.core.gpu import (
+    hw_native_format as _hw_native_format,
+)
+from vmaf_app.core.gpu import (
+    hwaccel_args as _hwaccel_args,
+)
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution
 from vmaf_app.core.models import (
     CropBox,
@@ -159,19 +171,23 @@ def _resolve_crops(
     status_callback: Callable[[str], None] | None,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
+    hwaccel: HwAccelPlan | None = None,
 ) -> tuple[CropBox | None, CropBox | None]:
+    """`hwaccel` is the run's own decode plan; each input's detection windows
+    decode the same way the run will. Speed only -- the box is the same."""
     if options.crop_mode == CropMode.NONE:
         return None, None
 
     if options.crop_mode == CropMode.MANUAL:
         return options.manual_source_crop, options.manual_distorted_crop
 
+    plan = hwaccel or HwAccelPlan()
     if status_callback:
         status_callback("Detecting black bars in source...")
     try:
         src_crop = detect_crop(
             source_info, cancel_event=cancel_event, process_handle=process_handle,
-            duration_limit=options.duration_limit,
+            duration_limit=options.duration_limit, hwaccel=plan.source,
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
@@ -180,58 +196,17 @@ def _resolve_crops(
     try:
         dist_crop = detect_crop(
             distorted_info, cancel_event=cancel_event, process_handle=process_handle,
-            duration_limit=options.duration_limit,
+            duration_limit=options.duration_limit, hwaccel=plan.distorted,
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
     return src_crop, dist_crop
 
 
-def _hw_native_format(pix_fmt: str) -> str:
-    """The system-memory pixel format a cuda/qsv/d3d11va hw surface downloads
-    to, based on that input's bit depth. 10/12-bit 4:2:0 video decodes to a
-    p010-family surface; everything else (including 8-bit) decodes to nv12."""
-    if _bit_depth(pix_fmt) > 8:
-        return "p010le"
-    return "nv12"
-
-
 #: Analysis bit depth -> the planar 4:2:0 format both branches are converted
 #: to before they meet. libvmaf compares two streams that must agree on
 #: format, so one has to be picked for the pair.
 _ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
-
-#: Depth digits sit immediately after the planar marker and at the end of
-#: the name: yuv420p10le, gbrp12be, yuv444p16le. Anchoring on that "p" is
-#: what keeps nv12 (8-bit semi-planar, whose 12 is part of the *name*) and
-#: rgb24 (8-bit, whose 24 is bits per pixel) from being read as deep.
-_PLANAR_DEPTH_RE = re.compile(r"p(\d{1,2})(?:le|be)?$")
-#: Single-plane formats put the digits straight after the plane name.
-_GRAY_DEPTH_RE = re.compile(r"^(?:gray|ya)(\d{1,2})(?:le|be)?$")
-#: The semi-planar hardware-surface formats: digits in the middle, and
-#: "p010" means 10 significant bits stored in 16.
-_HW_SURFACE_DEPTHS = (("p016", 16), ("p012", 12), ("p010", 10))
-
-
-def _bit_depth(pix_fmt: str) -> int:
-    """The bit depth encoded in an ffmpeg pixel-format name.
-
-    ffmpeg spells depth into the name rather than reporting it separately,
-    and the 8-bit names carry no depth digits at all. Anything unrecognised
-    is treated as 8-bit, which is the safe direction: it costs precision
-    only for a format the pipeline was never going to handle specially.
-    """
-    name = (pix_fmt or "").lower()
-    if not name:
-        return 8
-    for token, depth in _HW_SURFACE_DEPTHS:
-        if name.startswith(token):
-            return depth
-    for pattern in (_PLANAR_DEPTH_RE, _GRAY_DEPTH_RE):
-        match = pattern.search(name)
-        if match:
-            return int(match.group(1))
-    return 8
 
 
 def analysis_pix_fmt(*pix_fmts: str) -> str:
@@ -472,15 +447,6 @@ def _build_resample_test_filtergraph(
 
 _PROGRESS_FRAME_RE = re.compile(r"frame=(\d+)")
 _PROGRESS_FPS_RE = re.compile(r"fps=\s*([\d.]+)")
-
-
-def _hwaccel_args(hwaccel: str | None) -> list[str]:
-    """The -hwaccel options for ONE input. ffmpeg reads these as per-input
-    options, applying to the next -i on the command line, which is what
-    allows the two inputs to be decoded differently."""
-    if not hwaccel:
-        return []
-    return ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel]
 
 
 def _build_ffmpeg_cmd(
@@ -875,19 +841,23 @@ def run_vmaf(
     other, the same way a resample test's synthetic path already does.
     """
     validate_video_pair(source_info, distorted_info, options)
-    source_crop, distorted_crop = _resolve_crops(
-        source_info, distorted_info, options, on_status,
-        cancel_event=cancel_event, process_handle=process_handle,
-    )
-    # After cropping, not before: removing a letterbox is precisely what
-    # makes a padded source and an already-cropped encode the same shape.
-    validate_display_geometry(source_info, distorted_info, source_crop, distorted_crop)
 
+    # Planned before crop detection rather than after, so the detection
+    # windows can decode the way the run will. The plan depends only on the
+    # codecs and the vendor, never on the crops.
     hwaccel = HwAccelPlan()
     if options.gpu_decode:
         hwaccel = plan_hwaccel(
             options.gpu_vendor, source_info.codec_name, distorted_info.codec_name
         )
+
+    source_crop, distorted_crop = _resolve_crops(
+        source_info, distorted_info, options, on_status,
+        cancel_event=cancel_event, process_handle=process_handle, hwaccel=hwaccel,
+    )
+    # After cropping, not before: removing a letterbox is precisely what
+    # makes a padded source and an already-cropped encode the same shape.
+    validate_display_geometry(source_info, distorted_info, source_crop, distorted_crop)
 
     # Auto picks its model from the size frames are compared at, which is
     # only known now: it depends on the scale direction and on crops that
@@ -954,6 +924,11 @@ def run_resample_test(
     """
     assert options.resample_test is not None
 
+    hwaccel = HwAccelPlan()
+    if options.gpu_decode:
+        # One input file, so there is no distorted side to decide.
+        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name)
+
     source_crop: CropBox | None = None
     if options.crop_mode == CropMode.AUTO:
         if on_status:
@@ -961,17 +936,12 @@ def run_resample_test(
         try:
             source_crop = detect_crop(
                 source_info, cancel_event=cancel_event, process_handle=process_handle,
-                duration_limit=options.duration_limit,
+                duration_limit=options.duration_limit, hwaccel=hwaccel.source,
             )
         except CropDetectCancelled as e:
             raise Cancelled("Cancelled by user") from e
     elif options.crop_mode == CropMode.MANUAL:
         source_crop = options.manual_source_crop
-
-    hwaccel = HwAccelPlan()
-    if options.gpu_decode:
-        # One input file, so there is no distorted side to decide.
-        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name)
 
     effective_model = _auto_model_or(
         options, resample_analysis_dimensions(source_info, source_crop)

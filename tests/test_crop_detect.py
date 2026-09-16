@@ -1,4 +1,5 @@
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -31,24 +32,231 @@ def test_auto_crop_failure_is_reported_instead_of_silently_using_full_frame(monk
         crop_detect.detect_crop(info)
 
 
-def test_crop_detection_stops_before_another_window_after_cancel(monkeypatch):
+def test_cancel_wins_over_windows_that_already_answered(monkeypatch):
+    """The windows run concurrently, so some may have a box in hand by the
+    time Cancel lands. A partial vote is not an answer the caller asked for:
+    cancellation is reported, and nothing is returned."""
     info = VideoInfo(
         path=Path("movie.mp4"), width=1920, height=1080, fps=30.0,
         duration=60.0, nb_frames=1800, codec_name="h264",
     )
     cancel = threading.Event()
-    calls = []
 
-    def first_window(*args, **kwargs):
-        calls.append(args[1])
+    def window(*args, **kwargs):
         cancel.set()
         return crop_detect.CropBox(1920, 1080, 0, 0)
 
-    monkeypatch.setattr(crop_detect, "_run_single_window", first_window)
+    monkeypatch.setattr(crop_detect, "_run_single_window", window)
 
     with pytest.raises(crop_detect.CropDetectCancelled):
         crop_detect.detect_crop(info, cancel_event=cancel)
-    assert len(calls) == 1
+
+
+def test_a_window_does_not_launch_once_cancelled():
+    # The real window checks before starting a process, so a cancel that
+    # lands while others are running never starts another ffmpeg.
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(crop_detect.CropDetectCancelled):
+        crop_detect._run_single_window("movie.mp4", 0.0, 3.0, 0.1, cancel_event=cancel)
+
+
+def test_windows_run_at_the_same_time(monkeypatch):
+    """Five sequential 4K windows measured 6.9s; five concurrent ones 2.0s.
+    They are independent samples, and nothing about the vote needs them in
+    order."""
+    info = VideoInfo(
+        path=Path("movie.mp4"), width=1920, height=1080, fps=30.0,
+        duration=60.0, nb_frames=1800, codec_name="h264",
+    )
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def window(*args, **kwargs):
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.05)
+        with lock:
+            running -= 1
+        return crop_detect.CropBox(1920, 800, 0, 140)
+
+    monkeypatch.setattr(crop_detect, "_run_single_window", window)
+
+    assert crop_detect.detect_crop(info) == crop_detect.CropBox(1920, 800, 0, 140)
+    assert peak > 1, "the windows ran one after another"
+
+
+# ------------------------------------------------------------- the cache
+
+def _real_file(tmp_path, name="movie.mkv", duration=60.0) -> VideoInfo:
+    path = tmp_path / name
+    path.write_bytes(b"x" * 1000)
+    return VideoInfo(
+        path=path, width=1920, height=1080, fps=30.0,
+        duration=duration, nb_frames=int(duration * 30), codec_name="h264",
+    )
+
+
+def test_a_files_bars_are_detected_once_per_process(monkeypatch, tmp_path):
+    """Six encodes of one film detected the source's bars six times over --
+    thirty ffmpeg processes for one answer."""
+    info = _real_file(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        crop_detect, "_run_single_window",
+        lambda *a, **kw: (calls.append(a[1]), crop_detect.CropBox(1920, 800, 0, 140))[1],
+    )
+
+    first = crop_detect.detect_crop(info)
+    launched = len(calls)
+    second = crop_detect.detect_crop(info)
+
+    assert first == second
+    assert launched == 5
+    assert len(calls) == launched, "the second call ran detection again"
+
+
+def test_a_different_scored_stretch_is_a_different_answer(monkeypatch, tmp_path):
+    # The samples are taken from inside the stretch that will be scored, so
+    # a duration limit changes what is measured and must not reuse the
+    # full-length answer.
+    info = _real_file(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        crop_detect, "_run_single_window",
+        lambda *a, **kw: (calls.append(a[1]), crop_detect.CropBox(1920, 800, 0, 140))[1],
+    )
+
+    crop_detect.detect_crop(info)
+    crop_detect.detect_crop(info, duration_limit=10.0)
+
+    assert len(calls) == 10
+
+
+def test_a_replaced_file_is_detected_afresh(monkeypatch, tmp_path):
+    info = _real_file(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        crop_detect, "_run_single_window",
+        lambda *a, **kw: (calls.append(a[1]), crop_detect.CropBox(1920, 800, 0, 140))[1],
+    )
+    crop_detect.detect_crop(info)
+
+    info.path.write_bytes(b"y" * 2000)  # new size: a different file
+    crop_detect.detect_crop(info)
+
+    assert len(calls) == 10
+
+
+def test_a_failed_detection_is_not_remembered(monkeypatch, tmp_path):
+    info = _real_file(tmp_path)
+    monkeypatch.setattr(crop_detect, "_run_single_window", lambda *a, **kw: None)
+    with pytest.raises(CropDetectError):
+        crop_detect.detect_crop(info)
+
+    monkeypatch.setattr(
+        crop_detect, "_run_single_window",
+        lambda *a, **kw: crop_detect.CropBox(1920, 800, 0, 140),
+    )
+    assert crop_detect.detect_crop(info) == crop_detect.CropBox(1920, 800, 0, 140)
+
+
+def test_two_callers_for_one_file_share_a_single_detection(monkeypatch, tmp_path):
+    """Two parallel lanes starting on the same source at the same moment
+    used to launch ten processes for one answer. The second now waits for
+    the first."""
+    info = _real_file(tmp_path)
+    calls = []
+    lock = threading.Lock()
+
+    def window(*a, **kw):
+        with lock:
+            calls.append(a[1])
+        time.sleep(0.1)
+        return crop_detect.CropBox(1920, 800, 0, 140)
+
+    monkeypatch.setattr(crop_detect, "_run_single_window", window)
+    results = []
+    threads = [
+        threading.Thread(target=lambda: results.append(crop_detect.detect_crop(info)))
+        for _ in range(2)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results == [crop_detect.CropBox(1920, 800, 0, 140)] * 2
+    assert len(calls) == 5
+
+
+# ------------------------------------------------------- GPU decode
+
+@pytest.mark.parametrize("hwaccel", ["cuda", "qsv", "d3d11va"])
+def test_a_window_decodes_on_whatever_gpu_the_run_will_use(monkeypatch, hwaccel):
+    """No vendor is named in crop detection. It takes the decoder the run's
+    own plan chose -- NVIDIA, Intel or AMD, whatever this machine has and
+    this ffmpeg build supports -- and passes it through unchanged."""
+    seen = []
+
+    def fake_launch(cmd, cancel_event, process_handle):
+        seen.append(cmd)
+        return 0, "crop=1920:800:0:140"
+
+    monkeypatch.setattr(crop_detect, "_launch_window", fake_launch)
+
+    box = crop_detect._run_single_window(
+        "movie.mkv", 5.0, 3.0, 0.1, hwaccel=hwaccel, download_format="p010le"
+    )
+
+    assert box == crop_detect.CropBox(1920, 800, 0, 140)
+    (cmd,) = seen
+    assert cmd[cmd.index("-hwaccel") + 1] == hwaccel
+    assert cmd[cmd.index("-hwaccel_output_format") + 1] == hwaccel
+    assert cmd.index("-hwaccel") < cmd.index("-i")  # a per-input option
+    assert "hwdownload,format=p010le,cropdetect=" in cmd[cmd.index("-vf") + 1]
+
+
+def test_crop_detection_names_no_vendor_of_its_own():
+    # Belt and braces for the above: the module has no idea what a GPU is.
+    source = Path(crop_detect.__file__).read_text(encoding="utf-8").lower()
+    for word in ("cuda", "qsv", "d3d11", "nvidia", "intel", "amd", "vaapi", "videotoolbox"):
+        assert word not in source, f"crop_detect hardcodes {word!r}"
+
+
+def test_a_failed_gpu_window_falls_back_to_software(monkeypatch):
+    # No free decoder session, an unsupported profile: the metric run falls
+    # back to the CPU, and so does this. Same pixels, same box.
+    seen = []
+
+    def fake_launch(cmd, cancel_event, process_handle):
+        seen.append(cmd)
+        if "-hwaccel" in cmd:
+            return 1, "Failed to initialise hwaccel"
+        return 0, "crop=1920:800:0:140"
+
+    monkeypatch.setattr(crop_detect, "_launch_window", fake_launch)
+
+    box = crop_detect._run_single_window("movie.mkv", 5.0, 3.0, 0.1, hwaccel="cuda")
+
+    assert box == crop_detect.CropBox(1920, 800, 0, 140)
+    assert len(seen) == 2
+    assert "-hwaccel" not in seen[1]
+    assert seen[1][seen[1].index("-vf") + 1].startswith("cropdetect=")
+
+
+def test_no_gpu_means_no_fallback_attempt(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        crop_detect, "_launch_window",
+        lambda cmd, *_: (seen.append(cmd), (1, "boom"))[1],
+    )
+    with pytest.raises(CropDetectError):
+        crop_detect._run_single_window("movie.mkv", 5.0, 3.0, 0.1)
+    assert len(seen) == 1
 
 
 # ---------------------------------------- sampling inside a duration limit
@@ -111,7 +319,7 @@ def test_no_limit_samples_the_whole_video_as_before(monkeypatch):
 
     crop_detect.detect_crop(_info(10.0))
 
-    assert [round(s, 3) for s, _w in seen] == [1.0, 2.5, 4.0, 5.5, 7.0]
+    assert sorted(round(s, 3) for s, _w in seen) == [1.0, 2.5, 4.0, 5.5, 7.0]
     assert {w for _s, w in seen} == {_SAMPLE_WINDOW_SECONDS}
 
 

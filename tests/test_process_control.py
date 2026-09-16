@@ -145,3 +145,30 @@ def test_a_pause_requested_before_the_process_existed_survives_a_resume_race():
     assert calls[-1] == "resume", (
         f"the last thing done to the process was {calls[-1]!r}, so it stayed paused"
     )
+
+
+def test_a_handle_reaches_every_attached_process(monkeypatch):
+    """Black-bar detection runs its sample windows as several processes at
+    once. Pause or Cancel during that moment has to reach all of them -- a
+    handle that remembered only the latest pid left the others running."""
+    actions = []
+    monkeypatch.setattr(
+        ProcessHandle, "_try", staticmethod(lambda pid, action: actions.append((pid, action)))
+    )
+    handle = ProcessHandle()
+    handle.attach(101)
+    handle.attach(102)
+    handle.attach(103)
+
+    handle.pause()
+    assert sorted(actions) == [(101, "suspend"), (102, "suspend"), (103, "suspend")]
+
+    actions.clear()
+    handle.detach(102)  # one window finished; the others are still running
+    handle.terminate()
+    assert sorted(actions) == [(101, "terminate"), (103, "terminate")]
+
+    handle.detach()  # no pid: everything, as single-process callers expect
+    actions.clear()
+    handle.resume()
+    assert actions == []

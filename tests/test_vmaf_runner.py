@@ -747,7 +747,7 @@ def test_the_process_handle_is_detached_even_when_the_callback_raises(monkeypatc
             cancel_event=None, cwd=tmp_path, process_handle=handle,
         )
 
-    assert handle._pid is None, "a detached handle must not still address a dead pid"
+    assert handle._pids == set(), "a detached handle must not still address a dead pid"
 
 
 def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_path):
@@ -1099,3 +1099,55 @@ def test_a_run_checks_geometry_after_resolving_crops(monkeypatch):
         )
 
     assert order == ["crops", "geometry"]
+
+
+def test_crop_detection_decodes_each_input_the_way_the_run_will(monkeypatch, tmp_path):
+    """The plan is per input: a GPU-decodable source and a codec with no
+    hardware path get different answers, and crop detection follows each.
+    Nothing here is a vendor -- it is whatever plan_hwaccel produced from this
+    machine's GPU, this ffmpeg build and these codecs."""
+    from vmaf_app.core import vmaf_runner as vr
+    from vmaf_app.core.gpu import HwAccelPlan
+
+    seen = {}
+
+    def fake_detect(info, **kwargs):
+        seen[info.path.name] = kwargs.get("hwaccel")
+        return vr.CropBox(w=info.width, h=info.height, x=0, y=0)
+
+    monkeypatch.setattr(vr, "detect_crop", fake_detect)
+    monkeypatch.setattr(
+        vr, "plan_hwaccel",
+        lambda vendor, src_codec, dist_codec=None: HwAccelPlan(source="whatever-the-planner-chose", distorted=None),
+    )
+    # Stop short of running ffmpeg: the plan and the crops are decided first.
+    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
+
+    source = vr.VideoInfo(path=tmp_path / "source.mkv", width=3840, height=2160, fps=24.0,
+                          duration=10.0, nb_frames=240, codec_name="hevc")
+    distorted = vr.VideoInfo(path=tmp_path / "encode.mkv", width=3840, height=2160, fps=24.0,
+                             duration=10.0, nb_frames=240, codec_name="vvc")
+    options = vr.VmafOptions(gpu_decode=True, crop_mode=vr.CropMode.AUTO)
+
+    with pytest.raises(RuntimeError, match="stop"):
+        vr.run_vmaf(source, distorted, options)
+
+    assert seen == {"source.mkv": "whatever-the-planner-chose", "encode.mkv": None}
+
+
+def test_crop_detection_stays_on_the_cpu_when_gpu_decode_is_off(monkeypatch, tmp_path):
+    from vmaf_app.core import vmaf_runner as vr
+
+    seen = {}
+    monkeypatch.setattr(
+        vr, "detect_crop",
+        lambda info, **kw: seen.setdefault(info.path.name, kw.get("hwaccel")) or vr.CropBox(w=info.width, h=info.height, x=0, y=0),
+    )
+    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
+    info = vr.VideoInfo(path=tmp_path / "a.mkv", width=1920, height=1080, fps=24.0,
+                        duration=10.0, nb_frames=240, codec_name="hevc")
+
+    with pytest.raises(RuntimeError, match="stop"):
+        vr.run_vmaf(info, info, vr.VmafOptions(gpu_decode=False, crop_mode=vr.CropMode.AUTO))
+
+    assert seen == {"a.mkv": None}

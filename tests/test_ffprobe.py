@@ -89,7 +89,7 @@ def test_the_handle_is_detached_once_the_probe_returns(monkeypatch):
     with pytest.raises(ProbeError):
         ffprobe.probe_video(Path("broken.mp4"), process_handle=handle)
 
-    assert handle._pid is None, "a detached handle must not still address a dead pid"
+    assert handle._pids == set(), "a detached handle must not still address a dead pid"
 
 
 def test_probe_preserves_hdr_colour_tags(monkeypatch):

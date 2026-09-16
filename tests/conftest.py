@@ -18,7 +18,7 @@ import pytest
 # rather than failing it.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from vmaf_app.core import result_cache
+from vmaf_app.core import crop_detect, result_cache
 from vmaf_app.core.settings import Settings
 
 
@@ -66,5 +66,9 @@ def isolate_user_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(result_cache, "set_cache_dir_override", guarded_override)
     result_cache.set_cache_dir_override(cache)
+    # Detected black bars are remembered per file for the life of the
+    # process; a test's answer must not leak into the next one's.
+    crop_detect.clear_cache()
     yield
     real_override(None)
+    crop_detect.clear_cache()
