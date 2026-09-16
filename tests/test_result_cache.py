@@ -297,6 +297,37 @@ def test_a_fuller_run_is_preferred_over_a_thinner_one(tmp_path):
     assert found is not None and found[1] == "vmaf and psnr"
 
 
+def test_a_fuller_run_beats_an_exact_match_that_recorded_less(tmp_path):
+    """VMAF NEG was computed on top of a finished four-metric run, which
+    stored a second, fuller file beside the first. Re-adding the video asked
+    for the four again; the exact match was tried first and won, and the
+    NEG scores sat unseen in the other file. Every score a run holds is
+    shown, so the run holding the most of them is the one to load."""
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    four = VmafOptions(
+        extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True
+    )
+    five = VmafOptions(
+        extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True,
+        compute_vmaf_neg=True,
+    )
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted), label="four", options=four,
+    )
+    result_cache.store(
+        source, distorted, _fake_result(source, distorted), label="four and NEG", options=five,
+    )
+
+    found = result_cache.load_cached(source, distorted, four)
+    assert found is not None and found[1] == "four and NEG"
+
+    # Still found under its own name, and forgotten together with the rest.
+    assert result_cache.load_cached(source, distorted, five)[1] == "four and NEG"
+    result_cache.clear(source, distorted, four)
+    assert result_cache.load_cached(source, distorted, five) is None
+
+
 def test_reuse_across_metrics_still_respects_how_frames_were_compared(tmp_path):
     # The relaxation is ONLY about which metrics were recorded. A run that
     # cropped differently, or sampled different frames, measured different

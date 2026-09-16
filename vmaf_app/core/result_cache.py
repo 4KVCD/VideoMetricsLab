@@ -128,45 +128,51 @@ def _options_for_metrics(options: VmafOptions, metrics: frozenset[str]) -> VmafO
 def _candidate_options(options: VmafOptions) -> list[VmafOptions]:
     """Every cached run that could answer for `options`, best first.
 
-    The caller's own options come first, so an exact hit costs one stat call
-    and nothing changes for a run computed with the metrics being asked for.
+    A run holding a SUPERSET of the requested metrics is a complete answer
+    -- it measured everything wanted and more -- and the more it measured,
+    the better: every score it holds is shown, whether or not it was asked
+    for. So the fullest complete answer comes first, and the run recorded
+    with exactly the requested set takes its place in that order rather
+    than jumping the queue. It used to come first as a cheap exact hit,
+    which hid a fuller run: VMAF NEG computed on top of an existing
+    four-metric run was stored as a second, fuller file, and re-adding the
+    video asked for the four, found the older file first, and never showed
+    the NEG scores sitting in the other one.
 
-    After that: a run holding a SUPERSET of the requested metrics is a
-    complete answer -- it measured everything wanted and more. A run holding
-    a SUBSET is a partial one worth having, because the alternative is
-    discarding a finished measurement of a feature-length video and
-    recomputing it from nothing. The UI already distinguishes the two: a
-    partial load shows as "Partially calculated" and is re-run to fill the
-    gaps, rather than being reported as done.
+    A run holding a SUBSET is a partial answer worth having, because the
+    alternative is discarding a finished measurement of a feature-length
+    video and recomputing it from nothing. The UI already distinguishes the
+    two: a partial load leaves the missing metrics as tick boxes and is
+    re-run to fill the gaps, rather than being reported as done.
     """
     wanted = frozenset(options.requested_metrics())
-    candidates = [options]
     if not wanted:
-        return candidates
-    others = []
+        return [options]
+    ranked = []
     for mask in range(1, 1 << len(_ALL_METRICS)):
         metrics = frozenset(
             m for i, m in enumerate(_ALL_METRICS) if mask & (1 << i)
         )
-        # The wanted set is NOT skipped even though the caller's own options
-        # are already first: those carry extra_features in whatever order the
-        # metrics were ticked, and that order is part of the identity. The
-        # canonical rebuild of the same set finds a run stored under the
-        # other order.
         covered = len(metrics & wanted)
-        others.append((
+        if not covered:
+            continue
+        ranked.append((
             wanted <= metrics,  # complete answers before partial ones
             covered,            # then whichever supplies the most of them
-            -len(metrics - wanted),  # then the least unrelated extra work
+            len(metrics),       # then whichever recorded the most in all
             sorted(metrics),    # stable, so the choice does not vary by run
             metrics,
         ))
-    others.sort(key=lambda entry: (entry[0], entry[1], entry[2], entry[3]), reverse=True)
-    candidates += [
-        _options_for_metrics(options, metrics)
-        for complete, covered, _, _, metrics in others
-        if complete or covered
-    ]
+    ranked.sort(key=lambda entry: (entry[0], entry[1], entry[2], entry[3]), reverse=True)
+    candidates = []
+    for _complete, _covered, _count, _names, metrics in ranked:
+        if metrics == wanted:
+            # The caller's own options carry extra_features in whatever
+            # order the metrics were ticked, and that order is part of the
+            # identity. Tried alongside the canonical rebuild of the same
+            # set, which finds a run stored under the other order.
+            candidates.append(options)
+        candidates.append(_options_for_metrics(options, metrics))
     # Both historical checkbox orders were persisted in cache identities.
     # Keep those keys valid rather than changing the identity format.
     expanded = []
