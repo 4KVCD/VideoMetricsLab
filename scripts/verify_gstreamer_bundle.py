@@ -88,10 +88,13 @@ def inspect_runtime(root: Path, required: list[str], media: list[str]) -> dict:
             if not path.is_relative_to(root):
                 raise RuntimeError(f"a plugin outside the runtime under test was loaded: {filename}")
             plugins[plugin.get_name()] = path.relative_to(root).as_posix()
+        # Rank NONE is excluded: decodebin3 never autoplugs those, so a
+        # rank-0 decoder does not make a codec playable.
         decodable = sorted({
             structure.get_name()
             for factory in registry.get_feature_list(Gst.ElementFactory)
             if "Decoder" in (factory.get_metadata(Gst.ELEMENT_METADATA_KLASS) or "").split("/")
+            and factory.get_rank() > Gst.Rank.NONE
             for template in factory.get_static_pad_templates()
             if template.direction == Gst.PadDirection.SINK
             for structure in _structures(template.get_caps())
