@@ -328,7 +328,7 @@ def test_a_limit_longer_than_the_video_changes_nothing(monkeypatch):
 
     crop_detect.detect_crop(_info(10.0), duration_limit=30.0)
 
-    assert [round(s, 3) for s, _w in seen] == [1.0, 2.5, 4.0, 5.5, 7.0]
+    assert sorted(round(s, 3) for s, _w in seen) == [1.0, 2.5, 4.0, 5.5, 7.0]  # windows run concurrently
 
 
 @pytest.mark.parametrize("resample", [False, True])
