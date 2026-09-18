@@ -6,16 +6,19 @@ py -3 -m venv .venv
 ./scripts/build_release.ps1
 ```
 
-Roughly three minutes. It builds the GPU shader, freezes the app with
-PyInstaller, runs the packaged executable's self-test, and zips the result.
+About a minute. It builds the GPU shader, freezes the app with PyInstaller,
+verifies the packaged GStreamer against the development installation, runs
+the packaged executable's self-test, and zips the result.
 
 | | |
 |---|---|
-| Folder | ~449 MB |
-| Zip | ~168 MB |
+| Folder | ~217 MB |
+| Zip | ~86 MB |
 | Output | `%LOCALAPPDATA%\VideoMetricsCalculator-build\` |
 
-Pass `-OutputRoot <path>` to build somewhere else.
+Pass `-OutputRoot <path>` to build somewhere else, and `-VerifyMedia
+<file>, <file>` to also decode real videos through the packaged GStreamer as
+part of the build (see [GSTREAMER_BUNDLE.md](GSTREAMER_BUNDLE.md)).
 
 ## Why the output is not in `dist/`
 
@@ -30,9 +33,11 @@ case anyone overrides that.
 
 - **Python 3.14, PySide6/Qt and NumPy** — the app runs with no Python
   installed.
-- **GStreamer 1.28.6**, all plugin sets except the GTK sinks and the
-  command-line tools, plus the `gi` bindings. This is what makes hardware
-  video comparison work on a machine that has never seen GStreamer.
+- **GStreamer 1.28.6**, pruned to the 40 plugins the app can reach and
+  their dependencies — 53 MB of the wheels' 302 — plus the `gi` bindings.
+  This is what makes hardware video comparison work on a machine that has
+  never seen GStreamer. [GSTREAMER_BUNDLE.md](GSTREAMER_BUNDLE.md) says what
+  is kept, why, and how the build proves it still plays everything.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
 
@@ -77,7 +82,9 @@ GStreamer failing on `No module named 'optparse'`.
   computes its own plugin, typelib and scanner paths from `__file__`
   (`gstreamer_libs.environment`). Frozen into the archive, every one of those
   paths would point at a file that does not exist. They are therefore in
-  `datas` and in `excludes`.
+  `datas` and in `excludes` — file by file, chosen by
+  `scripts/gstreamer_bundle.py`, so change what is shipped there rather than
+  in the spec.
 - **`scripts/pyi_rth_gstreamer.py` replaces the `.pth` file.** Outside a
   bundle, `gstreamer_bundle.pth` runs `setup_python_environment()` at
   interpreter startup. Frozen apps do not process `.pth` files, so the
@@ -97,11 +104,10 @@ GStreamer failing on `No module named 'optparse'`.
 
 ## Trimming it further
 
-- `gstreamer_plugins_gpl_restricted` (~24 MB) and
-  `gstreamer_plugins_restricted` (~4 MB) can go if the codecs in them are not
-  needed, at the cost of playback support for some formats.
+- GStreamer is already cut to what the app uses; the next largest item is
+  Qt at ~110 MB, then NumPy at ~28 MB.
 - `--onefile` produces a single executable instead of a folder. It is nicer
-  to hand someone, but it unpacks ~450 MB to a temp directory on every
+  to hand someone, but it unpacks ~220 MB to a temp directory on every
   launch, which is slow enough to be noticeable.
 - UPX compression is off. It reduces the download but is a common
   false-positive trigger for antivirus, which matters more for an unsigned

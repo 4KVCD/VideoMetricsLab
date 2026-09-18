@@ -9,7 +9,11 @@
 # OneDrive's own file handles made the previous build's output impossible to
 # delete ("Access is denied" on _internal\...). Pass -OutputRoot to override.
 param(
-    [string]$OutputRoot = (Join-Path $env:LOCALAPPDATA 'VideoMetricsCalculator-build')
+    [string]$OutputRoot = (Join-Path $env:LOCALAPPDATA 'VideoMetricsCalculator-build'),
+    # Videos to decode for real through the packaged GStreamer, in addition
+    # to the structural checks that always run. Any files with video and
+    # audio will do; the more codecs they cover, the more the build proves.
+    [string[]]$VerifyMedia = @()
 )
 $ErrorActionPreference = 'Stop'
 
@@ -60,16 +64,35 @@ try {
         throw 'PyInstaller reported success but produced no executable'
     }
 
+    # The GStreamer bundle is pruned to what the app uses (see the spec and
+    # scripts/gstreamer_bundle.py). Prove the pruned copy still does all of
+    # it, in child interpreters that cannot see the development wheels --
+    # otherwise the full installation on this machine would conceal a
+    # missing plugin or DLL in the packaged one.
+    Write-Host '==> Verifying the packaged GStreamer' -ForegroundColor Cyan
+    $verifyArguments = @('--bundle', (Join-Path $output '_internal'))
+    foreach ($file in $VerifyMedia) { $verifyArguments += @('--media', $file) }
+    & $python (Join-Path $PSScriptRoot 'verify_gstreamer_bundle.py') @verifyArguments
+    if ($LASTEXITCODE -ne 0) { throw 'The packaged GStreamer failed verification' }
+
     # 3. Prove it runs and can find everything it does not contain. A build
     #    that starts and then silently falls back to software playback looks
     #    identical to a good one until someone plays a video.
     Write-Host '==> Self-test' -ForegroundColor Cyan
-    & $exe --self-test --quiet
-    $selfTest = $LASTEXITCODE
+    # Start-Process -Wait, not `& $exe`: this is a windowed executable, and
+    # PowerShell does not wait for those. Called directly, the script read
+    # the previous build's report and a stale exit code while the new
+    # executable was still starting.
     $report = Join-Path $env:USERPROFILE '.vmaf-calculator/self-test.txt'
-    if (Test-Path $report) { Get-Content $report | ForEach-Object { "    $_" } }
+    if (Test-Path $report) { Remove-Item $report -Force }
+    $selfTest = (Start-Process -FilePath $exe -ArgumentList '--self-test', '--quiet' -Wait -PassThru).ExitCode
+    if (Test-Path $report) {
+        Get-Content $report | ForEach-Object { "    $_" }
+    } else {
+        throw 'The self-test wrote no report; the executable did not get as far as running it'
+    }
     if ($selfTest -ne 0) {
-        Write-Warning 'Self-test reported a failure (see above). The build exists but is not usable as-is.'
+        throw 'The self-test reported a failure (see above)'
     }
 
     # 4. Zip it, so a release asset is one file.

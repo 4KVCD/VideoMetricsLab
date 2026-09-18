@@ -5,6 +5,7 @@
 #
 # Build it with scripts/build_release.ps1 rather than calling pyinstaller
 # directly: the tone-map DLL has to exist before this file is read.
+import sys
 import sysconfig
 from pathlib import Path
 
@@ -13,38 +14,30 @@ SITE_PACKAGES = Path(sysconfig.get_paths()["purelib"])
 
 # --- GStreamer -------------------------------------------------------------
 # The wheels are ordinary directories whose own paths are computed from
-# __file__ (see gstreamer_libs.environment), so copying each tree intact and
-# putting it back under the same package name is enough for them to find
-# their own plugins, typelibs and scanner.
+# __file__ (see gstreamer_libs.environment), so every shipped file keeps its
+# path relative to site-packages and each wheel still finds its own bin/,
+# plugin and typelib directories.
 #
-# They are shipped as DATA and excluded from analysis on purpose. Frozen as
-# modules their __file__ would point inside the archive, and every path they
-# derive from it -- GST_PLUGIN_PATH, GI_TYPELIB_PATH, the plugin scanner
-# executable -- would point at files that are not there.
-GSTREAMER_PACKAGES = [
-    "gstreamer_libs",              # core libraries, typelibs, plugin scanner
-    "gstreamer_plugins",           # base/good plugin set
-    "gstreamer_plugins_libs",      # their shared dependencies
-    "gstreamer_plugins_restricted",
-    "gstreamer_plugins_gpl",
-    "gstreamer_plugins_gpl_restricted",
-    "gstreamer_python",            # the `gi` bindings live in here
-    "gstreamer_ext_runtime",       # Windows runtime shims
-    # gstreamer_cli (gst-launch et al) and gstreamer_gtk (GTK video sinks)
-    # are omitted: the app drives the pipeline through `gi` and presents with
-    # d3d11. Both are optional imports in gstreamer_libs.gstreamer_env, so
-    # their absence is handled rather than fatal. Together they are ~35 MB.
-]
+# Not every file is shipped. The wheels are a complete media framework (302
+# MB); the app plays two videos through D3D11 and one soundtrack, which
+# needs about a sixth of that. scripts/gstreamer_bundle.py
+# holds the allow-list of plugins and computes their dependencies from the
+# DLL import tables; scripts/verify_gstreamer_bundle.py then proves the
+# packaged runtime can still do everything the app asks, as part of the
+# build. Change what is shipped there, not here.
+#
+# The packages are shipped as DATA and excluded from analysis on purpose.
+# Frozen as modules their __file__ would point inside the archive, and every
+# path they derive from it -- GST_PLUGIN_PATH, GI_TYPELIB_PATH, the plugin
+# scanner executable -- would point at files that are not there.
+sys.path.insert(0, str(PROJECT / "scripts"))
+from gstreamer_bundle import PACKAGES as GSTREAMER_PACKAGES, collect as collect_gstreamer  # noqa: E402
 
-datas = []
-for package in GSTREAMER_PACKAGES:
-    source = SITE_PACKAGES / package
-    if not source.is_dir():
-        raise SystemExit(
-            f"{package} is not installed. Run:\n"
-            f"    pip install -r requirements.txt"
-        )
-    datas.append((str(source), package))
+datas, gstreamer_report = collect_gstreamer(SITE_PACKAGES)
+print(
+    "GStreamer: shipping %d of the wheels' files, %.0f of %.0f MB"
+    % (len(datas), gstreamer_report["bundled_bytes"] / 1e6, gstreamer_report["original_bytes"] / 1e6)
+)
 
 # --- the GPU HDR->SDR shader ----------------------------------------------
 # vmaf_app.core.d3d11_tonemap resolves this as <package>/native/<name>, so it
