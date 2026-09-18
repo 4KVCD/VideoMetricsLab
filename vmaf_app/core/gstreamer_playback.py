@@ -39,6 +39,37 @@ class PlaybackUpdate:
 _GST: tuple[Any, Any] | None = None
 _GST_ERROR: str | None = None
 
+#: Elements the pipelines create by name. Without any of these the GStreamer
+#: path cannot be built at all, so _load_gstreamer refuses and playback uses
+#: FFmpeg instead.
+_PIPELINE_ELEMENTS = (
+    "uridecodebin3", "d3d11upload", "d3d11convert", "d3d11videosink", "videocrop",
+)
+
+#: What a complete GStreamer installation provides for this app: the pipeline
+#: elements, the parsers and demuxers uridecodebin3 needs for the files people
+#: compare, software decoders for what no GPU decodes (VVC, 10-bit H.264,
+#: ProRes), and the soundtrack path. The self-test and the packaging check
+#: (scripts/verify_gstreamer_bundle.py) both test against this list, so a
+#: bundle that dropped a plugin fails loudly instead of quietly falling back
+#: to FFmpeg for one kind of file. GPU decoders are deliberately absent:
+#: which of d3d11h264dec, d3d11h265dec, d3d11av1dec and d3d11vp9dec exist
+#: depends on the GPU the registry was scanned on, not on the installation.
+REQUIRED_ELEMENTS = (
+    *_PIPELINE_ELEMENTS,
+    "queue", "capsfilter", "capssetter", "appsink", "appsrc", "playbin3",
+    "h264parse", "h265parse", "h266parse", "av1parse", "vp9parse", "mpegvideoparse",
+    "matroskademux", "qtdemux", "tsdemux", "avidemux",
+    "avdec_h264", "avdec_h265", "avdec_h266", "avdec_prores", "dav1ddec",
+    "aacparse", "ac3parse", "dcaparse", "opusparse",
+    "avdec_aac", "avdec_ac3", "avdec_eac3", "avdec_dca", "avdec_truehd",
+    "opusdec", "vorbisdec", "flacdec",
+    "audioconvert", "audioresample", "volume", "autoaudiosink", "wasapi2sink",
+)
+
+#: Hardware decoders, reported rather than required (see REQUIRED_ELEMENTS).
+GPU_DECODERS = ("d3d11h264dec", "d3d11h265dec", "d3d11av1dec", "d3d11vp9dec", "d3d11mpeg2dec")
+
 
 def _load_gstreamer() -> tuple[Any, Any]:
     """Import lazily so metric-only use does not pay GStreamer's start cost."""
@@ -62,11 +93,7 @@ def _load_gstreamer() -> tuple[Any, Any]:
             factory = Gst.ElementFactory.find(name)
             if factory is not None:
                 factory.set_rank(max(factory.get_rank(), int(Gst.Rank.PRIMARY) + 16))
-        required = (
-            "uridecodebin3", "d3d11upload",
-            "d3d11convert", "d3d11videosink", "videocrop",
-        )
-        missing = [name for name in required if Gst.ElementFactory.find(name) is None]
+        missing = [name for name in _PIPELINE_ELEMENTS if Gst.ElementFactory.find(name) is None]
         if missing:
             raise RuntimeError("missing elements: " + ", ".join(missing))
         _GST = Gst, GstVideo

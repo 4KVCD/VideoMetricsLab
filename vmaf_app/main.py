@@ -30,15 +30,24 @@ def self_test() -> str:
             lines.append(f"  FAIL  {problem}")
 
     try:
-        from vmaf_app.core.gstreamer_playback import _load_gstreamer
+        from vmaf_app.core.gstreamer_playback import GPU_DECODERS, REQUIRED_ELEMENTS, _load_gstreamer
 
         gst, _ = _load_gstreamer()
         version = ".".join(str(part) for part in gst.version()[:3])
         lines.append(f"  OK    GStreamer {version}")
-        registry = gst.Registry.get()
-        for plugin in ("d3d11", "playback", "typefindfunctions"):
-            found = registry.find_plugin(plugin) is not None
-            lines.append(f"  {'OK   ' if found else 'WARN '} GStreamer plugin '{plugin}'")
+        # Element by element rather than plugin by plugin: the packaged
+        # build ships a pruned plugin set (scripts/gstreamer_bundle.py), and
+        # a plugin can be present while the decoder someone needs is not.
+        missing = [name for name in REQUIRED_ELEMENTS if gst.ElementFactory.find(name) is None]
+        if missing:
+            lines.append(f"  FAIL  GStreamer elements missing: {', '.join(missing)}")
+        else:
+            lines.append(f"  OK    all {len(REQUIRED_ELEMENTS)} GStreamer elements the app uses")
+        gpu = [name for name in GPU_DECODERS if gst.ElementFactory.find(name) is not None]
+        lines.append(
+            f"  OK    GPU decoders on this machine: {', '.join(gpu)}" if gpu else
+            "  WARN  no D3D11 GPU decoders registered; video decodes in software"
+        )
     except Exception as error:
         lines.append(f"  WARN  GStreamer unavailable, playback falls back to FFmpeg: {error}")
 
