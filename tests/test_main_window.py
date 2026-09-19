@@ -3655,6 +3655,9 @@ def test_the_decoded_videos_setting_persists_and_reaches_the_compare_panel(qapp)
         # A dropdown of the plain numbers 1 to 9.
         assert [box.itemData(i) for i in range(box.count())] == list(range(1, 10))
         assert [box.itemText(i) for i in range(box.count())] == [str(n) for n in range(1, 10)]
+        # One digit wide, not the width of the window.
+        assert box.sizePolicy().horizontalPolicy() == main_window_module.QSizePolicy.Fixed
+        assert box.sizeHint().width() < 4 * box.fontMetrics().horizontalAdvance("9") + 60
 
         box.setCurrentIndex(box.findData(5))
 

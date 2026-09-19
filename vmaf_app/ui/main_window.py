@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidgetItem,
@@ -518,6 +519,10 @@ class MainWindow(QMainWindow):
         self.settings_decoded_videos.setCurrentIndex(
             max(0, self.settings_decoded_videos.findData(self._settings.compare_decoded_videos))
         )
+        # As wide as its widest entry and no wider: a form row would
+        # otherwise stretch a one-digit dropdown across the window.
+        self.settings_decoded_videos.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.settings_decoded_videos.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.settings_decoded_videos.setToolTip(
             "How many test videos keep decoding while one is shown, so the "
             "left and right arrows switch to a video that is already running: "
