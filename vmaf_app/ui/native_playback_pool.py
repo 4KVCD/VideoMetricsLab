@@ -63,7 +63,7 @@ class NativePlaybackPool:
         source_key = ("source", str(comparison.source_info.path), None if crop is None else (crop.w, crop.h, crop.x, crop.y), comparison_dimensions(comparison))
         self.desired = {source_key: (comparison, "source")}
         self.desired.update({("distorted", i): (self.series[i], "distorted")
-                             for i in neighbour_indices(len(self.series), selected)})
+                             for i in neighbour_indices(len(self.series), selected, self.view.decoded_videos)})
         # Raise the already-running target before any background cleanup.
         self.show_source(self.showing_source)
         for key in list(self.entries):
@@ -93,7 +93,7 @@ class NativePlaybackPool:
             return
         occupied = len(self.entries) + sum(w.isRunning() for w in self.view._retired_workers)
         for key, (comparison, side) in self.desired.items():
-            if key in self.entries or occupied >= 4:
+            if key in self.entries or occupied >= self.view.decoder_limit:
                 continue
             surface = _PairedFrameWidget(self.view)
             surface.setFocusProxy(self.view)

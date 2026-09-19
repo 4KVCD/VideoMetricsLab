@@ -80,7 +80,7 @@ class LockedNativePool:
                            comparison_dimensions(source))
         self.desired = {self.source_key: (source, "source")}
         self.desired.update({("distorted", i): (self.series[i], "distorted")
-                             for i in neighbour_indices(len(self.series), selected)})
+                             for i in neighbour_indices(len(self.series), selected, self.view.decoded_videos)})
         for key in list(self.entries):
             if key not in self.desired:
                 self._retire(self.entries.pop(key)[0])
@@ -93,7 +93,7 @@ class LockedNativePool:
         occupied = len(self.entries) + sum(w.isRunning() and getattr(w, "counts_as_decoder", True)
                                           for w in self.view._retired_workers)
         for key, (comparison, side) in self.desired.items():
-            if key in self.entries or occupied >= 4 or self.closed:
+            if key in self.entries or occupied >= self.view.decoder_limit or self.closed:
                 continue
             player = GstComparePipeline(comparison, 0, 0, self.settings,
                                         single_side=side, audio_enabled=False,

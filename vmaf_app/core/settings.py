@@ -84,6 +84,13 @@ class Settings:
     # are converted for preview and is independent of the VMAF recipe.
     frame_preview_color_mode: str = "display_aware"
 
+    # How many test videos Video Compare decodes at once: the selected one
+    # plus neighbours, so switching with the arrow keys is instant. Each one
+    # is a running GPU decoder (about a quarter of a gigabyte of RAM for 4K),
+    # which is why it is a choice. See video_playback.neighbour_indices for
+    # which neighbours.
+    compare_decoded_videos: int = 3
+
     @staticmethod
     def path() -> Path:
         path = settings_file()

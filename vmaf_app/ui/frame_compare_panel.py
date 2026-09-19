@@ -38,6 +38,7 @@ from vmaf_app.core.frame_extract import (
 )
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
+from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.rolling_video_view import RollingVideoCompareView as VideoCompareView
 
@@ -163,8 +164,10 @@ class FrameComparePanel(QWidget):
         self,
         parent=None,
         color_mode: str | PreviewColorMode = PreviewColorMode.DISPLAY_AWARE,
+        decoded_videos: int = DEFAULT_COMPARE_DECODED_VIDEOS,
     ) -> None:
         super().__init__(parent)
+        self._decoded_videos = max(1, int(decoded_videos))
         self._entries: list[FrameComparisonEntry] = []
         self._current_index = 0
         self._frame = 0
@@ -523,6 +526,7 @@ class FrameComparePanel(QWidget):
         if self.video_view is not None:
             return self.video_view
         view = VideoCompareView(self)
+        view.set_decoded_videos(self._decoded_videos)
         view.position_changed.connect(self._on_video_position_changed)
         view.playing_changed.connect(self._on_video_playing_changed)
         view.status_changed.connect(self._on_video_status_changed)
@@ -536,6 +540,12 @@ class FrameComparePanel(QWidget):
             child.installEventFilter(self)
         self.video_view = view
         return view
+
+    def set_decoded_videos(self, count: int) -> None:
+        """How many test videos playback keeps decoding (Settings tab)."""
+        self._decoded_videos = max(1, int(count))
+        if self.video_view is not None:
+            self.video_view.set_decoded_videos(self._decoded_videos)
 
     def _on_source_resolution_changed(self, _index: int) -> None:
         if self.is_video_mode:

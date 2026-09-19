@@ -3646,6 +3646,21 @@ def test_queue_eta_is_unknown_until_something_reports_a_rate(qapp):
     assert win._queue_eta_seconds() is None
 
 
+def test_the_decoded_videos_setting_persists_and_reaches_the_compare_panel(qapp):
+    win = MainWindow()
+    try:
+        assert win.settings_decoded_videos.value() == 3
+        assert win.frame_compare_panel._decoded_videos == 3
+
+        win.settings_decoded_videos.setValue(5)
+
+        assert win._settings.compare_decoded_videos == 5
+        assert win.frame_compare_panel._decoded_videos == 5
+        assert json.loads(Settings.path().read_text(encoding="utf-8"))["compare_decoded_videos"] == 5
+    finally:
+        win.close()
+
+
 def test_the_parallel_control_stays_usable_during_a_run(qapp):
     # The Settings tab is locked during a run, which is why this lives on the
     # Videos tab -- being unable to reach it mid-run was the whole complaint.

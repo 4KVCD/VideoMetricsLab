@@ -382,7 +382,8 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self.frame_compare_panel = FrameComparePanel(
-            color_mode=self._settings.frame_preview_color_mode
+            color_mode=self._settings.frame_preview_color_mode,
+            decoded_videos=self._settings.compare_decoded_videos,
         )
         self.frame_compare_panel.color_mode_changed.connect(
             self._on_frame_color_mode_changed
@@ -508,6 +509,29 @@ class MainWindow(QMainWindow):
         defaults_layout.addLayout(metrics_row)
         outer.addWidget(defaults_box)
 
+        compare_box = QGroupBox("Video Compare")
+        compare_form = QFormLayout(compare_box)
+        self.settings_decoded_videos = QSpinBox()
+        self.settings_decoded_videos.setRange(1, 9)
+        self.settings_decoded_videos.setValue(self._settings.compare_decoded_videos)
+        self.settings_decoded_videos.setToolTip(
+            "How many test videos keep decoding while one is shown, so the "
+            "left and right arrows switch to a video that is already running.\n\n"
+            "1: the selected video only. 2: and the one to its right. 3: and "
+            "the one to its left. 4: and the next to the right. 5: and the "
+            "next to the left, and so on.\n\nEach one is a running GPU "
+            "decoder (about 250 MB of RAM for 4K), plus the source."
+        )
+        self.settings_decoded_videos.valueChanged.connect(self._on_settings_edited)
+        compare_form.addRow("Test videos decoded at once:", self.settings_decoded_videos)
+        compare_hint = QLabel(
+            "The selected video, then its neighbours: right, left, second right, "
+            "second left... Takes effect immediately, even during playback."
+        )
+        compare_hint.setStyleSheet("color: #666; font-style: italic;")
+        compare_form.addRow("", compare_hint)
+        outer.addWidget(compare_box)
+
         window_box = QGroupBox("Window")
         window_layout = QVBoxLayout(window_box)
         self.settings_remember_size = QCheckBox("Reopen at the size the window was last closed at")
@@ -556,6 +580,8 @@ class MainWindow(QMainWindow):
         self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
+        self._settings.compare_decoded_videos = self.settings_decoded_videos.value()
+        self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
 
         if self._settings.ffmpeg_dir != before_ffmpeg:

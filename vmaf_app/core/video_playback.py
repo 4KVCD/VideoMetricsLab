@@ -39,11 +39,27 @@ def source_playback_comparison(comparison, native=True):
                    resample_target=None)
 
 
-def neighbour_indices(count: int, selected: int) -> tuple[int, ...]:
-    """Current, left and right, following the panel's wraparound navigation."""
+#: How many test videos Video Compare keeps decoding at once, by default:
+#: the selected one and its two neighbours, so a left or right arrow
+#: switches to a video that is already running. Settings.compare_decoded_videos.
+DEFAULT_COMPARE_DECODED_VIDEOS = 3
+
+
+def neighbour_indices(count: int, selected: int, width: int = DEFAULT_COMPARE_DECODED_VIDEOS) -> tuple[int, ...]:
+    """The `width` test videos to keep decoding, the selected one first.
+
+    Neighbours follow the panel's wraparound navigation and are added to the
+    right first, then the left, then further out on each side in turn: 2 is
+    the selected video and the next one, 3 adds the previous, 4 the one after
+    next, 5 the one before previous, and so on. Never more than there are.
+    """
     if count <= 0 or not 0 <= selected < count:
         return ()
-    return tuple(dict.fromkeys((selected, (selected - 1) % count, (selected + 1) % count)))
+    order = [selected]
+    for step in range(1, count):
+        order.append((selected + step) % count)
+        order.append((selected - step) % count)
+    return tuple(dict.fromkeys(order))[: max(1, width)]
 
 
 def series_layout(comparisons, maximum=None):

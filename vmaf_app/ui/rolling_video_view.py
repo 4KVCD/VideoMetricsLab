@@ -9,7 +9,12 @@ from PySide6.QtGui import QColor, QImage, QPainter
 
 from vmaf_app.core.frame_extract import PreviewColorSettings
 from vmaf_app.core.gpu import GpuVendor, plan_hwaccel
-from vmaf_app.core.video_playback import neighbour_indices, playback_dimensions, source_playback_comparison
+from vmaf_app.core.video_playback import (
+    DEFAULT_COMPARE_DECODED_VIDEOS,
+    neighbour_indices,
+    playback_dimensions,
+    source_playback_comparison,
+)
 from vmaf_app.ui.playback_worker import StreamDecodeWorker
 from vmaf_app.ui.video_compare_view import VideoCompareView, _PairedFrameWidget
 
@@ -63,6 +68,7 @@ class RollingVideoCompareView(VideoCompareView):
         self._pool_active = False
         self._native_pool = None
         self._last_status = ""
+        self._decoded_videos = DEFAULT_COMPARE_DECODED_VIDEOS
         self._pool_timer = QTimer(self)
         self._pool_timer.setInterval(10)
         self._pool_timer.timeout.connect(self._tick)
@@ -199,6 +205,28 @@ class RollingVideoCompareView(VideoCompareView):
             self._last_status = text
             self.status_changed.emit(text)
 
+    @property
+    def decoded_videos(self) -> int:
+        """How many test videos are kept decoding: the selected one and its neighbours."""
+        return self._decoded_videos
+
+    @property
+    def decoder_limit(self) -> int:
+        """Decoders that may run at once: the source plus the test videos."""
+        return 1 + self._decoded_videos
+
+    def set_decoded_videos(self, count: int) -> None:
+        """Applies immediately to whatever is playing: extra neighbours are
+        retired, missing ones started, the selected pair is never touched."""
+        count = max(1, int(count))
+        if count == self._decoded_videos:
+            return
+        self._decoded_videos = count
+        if self._native_pool is not None:
+            self._native_pool.sync(self._selected)
+        elif self._pool_active:
+            self._sync_pool()
+
     def _source_recipe(self):
         return replace(source_playback_comparison(self._comparison, self._source_native),
                        fps=self._series[0].fps)
@@ -210,7 +238,7 @@ class RollingVideoCompareView(VideoCompareView):
         crop = source.source_crop
         source_key = ("source", str(source.source_info.path), None if crop is None else (crop.w, crop.h, crop.x, crop.y), playback_dimensions(source, self._pool_maximum))
         desired = {source_key: (source, "source")}
-        for index in neighbour_indices(len(self._series), self._selected):
+        for index in neighbour_indices(len(self._series), self._selected, self._decoded_videos):
             desired[("distorted", index)] = (replace(self._series[index], fps=self._series[0].fps), "distorted")
         self._desired = desired
         for key in list(self._pool):
@@ -227,10 +255,10 @@ class RollingVideoCompareView(VideoCompareView):
         if not self._pool_active:
             return
         # Retiring workers count too: rapid navigation may not transiently
-        # spawn a fifth video decoder while the old process is exiting.
+        # spawn one video decoder more than allowed while the old process is exiting.
         occupied = sum(w.isRunning() for w in self._retired_workers) + len(self._pool)
         for key, (comparison, side) in self._desired.items():
-            if key in self._pool or occupied >= 4:
+            if key in self._pool or occupied >= self.decoder_limit:
                 continue
             plan = plan_hwaccel(GpuVendor.AUTO, comparison.source_info.codec_name, comparison.distorted_info.codec_name)
             worker = StreamDecodeWorker(comparison, side, self._target_frame(), self._color_settings,
@@ -275,7 +303,7 @@ class RollingVideoCompareView(VideoCompareView):
                     self.position_changed.emit(position)
                 if self._native_pool.ended and self._wanted_playing:
                     self.set_playing(False)
-                self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(self._native_pool.entries)}/4 streams · {self._native_pool.description}")
+                self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(self._native_pool.entries)}/{self.decoder_limit} streams · {self._native_pool.description}")
                 self._check_end()
             except Exception as exc:
                 self._native_pool.stop()
@@ -351,7 +379,7 @@ class RollingVideoCompareView(VideoCompareView):
         detail = self._details.get(distorted_key, "GPU processing starting")
         if self._pool_reason:
             detail += " · SDR preview (native playback unavailable)"
-        self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · {len(self._pool)}/4 streams · {detail}")
+        self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · {len(self._pool)}/{self.decoder_limit} streams · {detail}")
         self._check_end()
 
     def _check_end(self):

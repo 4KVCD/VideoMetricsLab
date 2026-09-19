@@ -34,9 +34,23 @@ def series(tmp_path, count=5):
 def test_neighbours_are_bounded_unique_and_wrap():
     assert neighbour_indices(1, 0) == (0,)
     assert neighbour_indices(2, 0) == (0, 1)
-    assert neighbour_indices(5, 0) == (0, 4, 1)
-    assert neighbour_indices(5, 4) == (4, 3, 0)
+    assert neighbour_indices(5, 0) == (0, 1, 4)
+    assert neighbour_indices(5, 4) == (4, 0, 3)
     assert neighbour_indices(0, 0) == ()
+
+
+def test_neighbours_are_added_right_then_left_then_further_out():
+    """The Settings count: 1 is the selected video alone, 2 adds the one to
+    its right, 3 the one to its left, 4 the next right, 5 the next left."""
+    assert neighbour_indices(7, 3, 1) == (3,)
+    assert neighbour_indices(7, 3, 2) == (3, 4)
+    assert neighbour_indices(7, 3, 3) == (3, 4, 2)
+    assert neighbour_indices(7, 3, 4) == (3, 4, 2, 5)
+    assert neighbour_indices(7, 3, 5) == (3, 4, 2, 5, 1)
+    assert neighbour_indices(7, 3, 6) == (3, 4, 2, 5, 1, 6)
+    assert neighbour_indices(7, 3, 99) == (3, 4, 2, 5, 1, 6, 0)  # never more than there are
+    assert neighbour_indices(5, 4, 4) == (4, 0, 3, 1)             # wraps like the arrow keys
+    assert neighbour_indices(3, 0, 0) == (0,)                      # never fewer than the selected one
 
 
 def test_gpu_stream_uses_vulkan_decode_and_gpu_rgb_without_cpu_tone_mapper(tmp_path):
@@ -130,6 +144,26 @@ def test_selection_keeps_source_and_warm_neighbours_without_fifth_decoder(qapp, 
     original[("distorted", 4)].finish()
     assert ("distorted", 2) in view._pool
     assert len(view._pool) == 4
+    cleanup(view)
+
+
+def test_the_decoded_video_count_applies_immediately_to_a_running_pool(qapp, monkeypatch, tmp_path):
+    """Settings tab -> panel -> view -> pool, while playing. Lowering it
+    retires neighbours (not the selected pair); raising it starts them."""
+    view, _items = make_view(monkeypatch, tmp_path, count=6)
+    assert view.decoder_limit == 4 and len(view._pool) == 4  # source + selected + right + left
+
+    view.set_decoded_videos(1)
+    kept = set(view._pool)
+    source_key = next(k for k in kept if k[0] == "source")
+    assert kept == {source_key, ("distorted", 0)}
+    for worker in list(view._retired_workers):  # finishing one removes it from the set
+        worker.finish()
+
+    view.set_decoded_videos(5)
+    distorted = sorted(k[1] for k in view._pool if k[0] == "distorted")
+    assert distorted == [0, 1, 2, 4, 5]  # selected 0, right 1, left 5, second right 2, second left 4
+    assert len(view._pool) == 6 == view.decoder_limit
     cleanup(view)
 
 
@@ -320,7 +354,8 @@ def test_native_pool_retains_neighbours_and_shifts_shared_clock_after_pause(monk
     monkeypatch.setattr(native, "GstComparePipeline", Pipeline)
     monkeypatch.setattr(native, "_PairedFrameWidget", Surface)
     monkeypatch.setattr(native, "_StopNative", Stop)
-    view = SimpleNamespace(_retired_workers=set(), _audio_enabled=False, rect=lambda: None)
+    view = SimpleNamespace(_retired_workers=set(), _audio_enabled=False, rect=lambda: None,
+                           decoded_videos=3, decoder_limit=4)
     pool = native.NativePlaybackPool(view, series(tmp_path), 0, 1000, PreviewColorSettings(), True)
     assert len(pool.entries) == 4
     pool.poll()
