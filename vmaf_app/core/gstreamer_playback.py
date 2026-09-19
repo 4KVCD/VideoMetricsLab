@@ -43,11 +43,11 @@ _GST_ERROR: str | None = None
 #: path cannot be built at all, so _load_gstreamer refuses and playback uses
 #: FFmpeg instead.
 _PIPELINE_ELEMENTS = (
-    "uridecodebin3", "d3d11upload", "d3d11convert", "d3d11videosink", "videocrop",
+    "filesrc", "decodebin3", "d3d11upload", "d3d11convert", "d3d11videosink", "videocrop",
 )
 
 #: What a complete GStreamer installation provides for this app: the pipeline
-#: elements, the parsers and demuxers uridecodebin3 needs for the files people
+#: elements, the parsers and demuxers decodebin3 needs for the files people
 #: compare, software decoders for what no GPU decodes (VVC, 10-bit H.264,
 #: ProRes), and the soundtrack path. The self-test and the packaging check
 #: (scripts/verify_gstreamer_bundle.py) both test against this list, so a
@@ -57,7 +57,8 @@ _PIPELINE_ELEMENTS = (
 #: depends on the GPU the registry was scanned on, not on the installation.
 REQUIRED_ELEMENTS = (
     *_PIPELINE_ELEMENTS,
-    "queue", "capsfilter", "capssetter", "appsink", "appsrc", "playbin3",
+    "queue", "capsfilter", "capssetter", "appsink", "appsrc",
+    "playbin3", "uridecodebin3",  # the soundtrack: playbin3 is built on uridecodebin3
     "h264parse", "h265parse", "h266parse", "av1parse", "vp9parse", "mpegvideoparse",
     "matroskademux", "qtdemux", "tsdemux", "avidemux",
     "avdec_h264", "avdec_h265", "avdec_h266", "avdec_prores", "dav1ddec",
@@ -293,8 +294,21 @@ class GstComparePipeline:
             self._comparison.source_crop
             if side == "source" else self._comparison.distorted_crop
         )
-        decoder = self._make("uridecodebin3", f"{side}-decoder")
-        decoder.set_property("uri", frame_input_path(self._comparison, side).resolve().as_uri())
+        # filesrc into decodebin3, not uridecodebin3. The difference is
+        # urisourcebin, which uridecodebin3 puts in front of decodebin3: it
+        # holds the demuxed streams in a multiqueue with no byte limit, only
+        # a time limit that it grows whenever one stream looks empty while
+        # another is full. For AV1 on a hardware decoder the parser emits
+        # frame-aligned buffers whose time level reads as zero, so that
+        # queue kept growing until it held the whole file: 2.7 GB of RAM per
+        # 4K AV1 stream against 0.35 GB for HEVC, and 5.7 GB for a
+        # four-video comparison. decodebin3 on its own has the same
+        # autoplugging, the same select-stream and pad-added signals, seeks
+        # the same way, and its multiqueue is bounded (10 MB / 250 ms): the
+        # same AV1 stream then costs 0.39 GB.
+        source = self._make("filesrc", f"{side}-file")
+        source.set_property("location", str(frame_input_path(self._comparison, side).resolve()))
+        decoder = self._make("decodebin3", f"{side}-decoder")
         decoder.connect("select-stream", self._select_stream, side)
         decoder.connect("pad-added", self._pad_added, side)
         queue = self._make("queue", f"{side}-video-queue")
@@ -372,7 +386,9 @@ class GstComparePipeline:
         if retag is not None:
             chain.append(retag)
         chain.append(sink)
-        self._add(decoder, *chain)
+        self._add(source, decoder, *chain)
+        if not source.link(decoder):
+            raise GStreamerPlaybackError(f"Could not open the {side} video file for decoding.")
         for first, second in pairwise(chain):
             if not first.link(second):
                 raise GStreamerPlaybackError(
@@ -454,7 +470,7 @@ class GstComparePipeline:
             element.sync_state_with_parent()
 
     def start(self, position_ms: int, playing: bool) -> None:
-        # Preroll both sinks before seeking or playing.  uridecodebin3 cannot
+        # Preroll both sinks before seeking or playing.  decodebin3 cannot
         # accept a reliable seek while still in READY, and starting PLAYING
         # would briefly display frame zero when opening at a later timestamp.
         self._wanted_playing = bool(playing)

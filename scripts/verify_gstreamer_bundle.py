@@ -20,8 +20,8 @@ Checks:
   4. every codec the development installation could decode, the bundle can
      too (compared by the caps decoders accept), except the losses named in
      ALLOWED_LOSSES;
-  5. for each --media file, the app's own video branch (uridecodebin3 ->
-     videocrop -> d3d11upload -> d3d11convert) delivers a GPU frame, and the
+  5. for each --media file, the app's own video branch (filesrc -> decodebin3
+     -> videocrop -> d3d11upload -> d3d11convert) delivers a GPU frame, and the
      soundtrack branch delivers audio, with the decoders that did it named.
 
     .venv\\Scripts\\python.exe scripts\\verify_gstreamer_bundle.py --bundle <dist>\\_internal [--media file.mkv ...]
@@ -127,10 +127,10 @@ def _probe(Gst, path: str, kind: str) -> dict:  # noqa: N803 - gi namespace
         # gstreamer_playback._build_audio_branch, with the sink replaced.
         chain = "queue ! audioconvert ! audioresample ! volume"
     pipeline = Gst.parse_launch(
-        f"uridecodebin3 name=decode ! {chain} ! appsink name=out sync=false max-buffers=1 drop=true"
+        f"filesrc name=file ! decodebin3 name=decode ! {chain} ! appsink name=out sync=false max-buffers=1 drop=true"
     )
+    pipeline.get_by_name("file").set_property("location", str(Path(path).resolve()))
     decoder = pipeline.get_by_name("decode")
-    decoder.set_property("uri", Path(path).resolve().as_uri())
     # Only the stream kind under test, the way the app selects streams; an
     # unselected stream is never decoded, so its codec cannot fail the probe.
     decoder.connect(
@@ -160,7 +160,7 @@ def _caps_name(caps) -> str:
 
 
 def _decoders_inside(Gst, element) -> list[str]:  # noqa: N803 - gi namespace
-    """Names of the decoder elements uridecodebin3 ended up plugging."""
+    """Names of the decoder elements decodebin3 ended up plugging."""
     found = []
     iterator = element.iterate_recurse()
     while True:

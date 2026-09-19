@@ -16,10 +16,10 @@ when PyInstaller reads the spec.
 everything else from it:
 
 1. **`KEEP_PLUGINS`** — the plugin DLLs, each with a note saying what the app
-   uses it for: the elements the pipelines create by name (`uridecodebin3`,
-   `videocrop`, `d3d11upload`, `d3d11convert`, `d3d11videosink`, `capssetter`,
-   `appsink`, `appsrc`, `playbin3`), the parsers and demuxers `uridecodebin3`
-   needs for the files people compare, `libav` and `dav1d` for what no GPU
+   uses it for: the elements the pipelines create by name (`filesrc`,
+   `decodebin3`, `videocrop`, `d3d11upload`, `d3d11convert`, `d3d11videosink`,
+   `capssetter`, `appsink`, `appsrc`, `playbin3`), the parsers and demuxers
+   `decodebin3` needs for the files people compare, `libav` and `dav1d` for what no GPU
    decodes (VVC, 10-bit H.264, ProRes), and the soundtrack path down to
    `wasapi2sink`.
 2. **Their dependencies**, read from the DLL import tables (normal and
@@ -72,7 +72,7 @@ folder and the plugin path restricted to the runtime under test. It fails if:
   private-stream spellings of AC-3 and DTS, karaoke graphics).
 
 With `-VerifyMedia` (or `--media` when run by hand) it also decodes each
-given file through the app's own branch topology — `uridecodebin3 →
+given file through the app's own branch topology — `filesrc → decodebin3 →
 videocrop → d3d11upload → d3d11convert` for video, `audioconvert →
 audioresample → volume` for audio — and names the decoder that did it, so a
 run shows `d3d11h265dec` for HEVC and `avdec_h266` for VVC:

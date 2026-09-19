@@ -34,13 +34,13 @@ PACKAGES = (
 
 #: Plugin DLL stems and what the app uses each for. The pipelines are built
 #: in vmaf_app/core/gstreamer_playback.py and locked_presentation.py;
-#: uridecodebin3 and playbin3 pick demuxers, parsers and decoders from
+#: decodebin3 and playbin3 pick demuxers, parsers and decoders from
 #: whatever is registered, which is why the containers and codecs are here.
 KEEP_PLUGINS: dict[str, str] = {
     # -- the pipeline itself ------------------------------------------------
     "gstcoreelements": "filesrc, queue, multiqueue, capsfilter, typefind, identity, tee",
     "gsttypefindfunctions": "recognises what kind of file a URI points at",
-    "gstplayback": "uridecodebin3, decodebin3, parsebin, urisourcebin, playbin3, playsink",
+    "gstplayback": "decodebin3, parsebin, playbin3 and its uridecodebin3, playsink",
     "gstapp": "appsink (frame-locked pool) and appsrc (locked presenter)",
     "gstvideocrop": "videocrop: removes the detected black bars",
     "gstdebug": "capssetter: retags tone-mapped frames as SDR",
