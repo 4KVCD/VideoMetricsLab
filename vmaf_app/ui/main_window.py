@@ -65,7 +65,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
-from vmaf_app.core.run_io import load_run, save_run, unique_output_path
+from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import AGGREGATE_BY_METRIC, ARITHMETIC, aggregate_scores, stats_for_run
 from vmaf_app.core.time_format import format_hms
@@ -561,7 +561,7 @@ class MainWindow(QMainWindow):
         self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
 
         directory = result_cache.cache_dir()
-        entries = list(directory.glob("*.vmafrun.json"))
+        entries = result_cache.result_files(directory)
         total = sum(f.stat().st_size for f in entries) / 1_048_576
         self.settings_cache_summary.setText(
             f"{len(entries)} saved result(s), {total:.1f} MB in {directory}"
@@ -623,7 +623,7 @@ class MainWindow(QMainWindow):
 
     def _on_clear_cache(self) -> None:
         directory = result_cache.cache_dir()
-        entries = list(directory.glob("*.vmafrun.json"))
+        entries = result_cache.result_files(directory)
         if not entries and self._file_writes.pending == 0:
             self.settings_status.setText("There are no saved results to clear.")
             return
@@ -2835,7 +2835,7 @@ class MainWindow(QMainWindow):
             return Path(a) == Path(b)
 
     def _on_load_saved_run(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Load analysis results", "", "Analysis results (*.vmafrun.json *.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Load analysis results", "", RESULT_FILE_FILTER)
         if not path:
             return
         try:
@@ -2925,7 +2925,8 @@ class MainWindow(QMainWindow):
             return
         if len(runs) == 1:
             path, _ = QFileDialog.getSaveFileName(
-                self, "Save analysis results", f"{runs[0].label}.vmafrun.json", "Analysis results (*.vmafrun.json)"
+                self, "Save analysis results", f"{runs[0].label}{RESULT_SUFFIX}",
+                f"Analysis results (*{RESULT_SUFFIX})",
             )
             if path:
                 self._submit_save(runs[0].result, Path(path), runs[0].label)
@@ -2937,7 +2938,7 @@ class MainWindow(QMainWindow):
         for run in runs:
             self._submit_save(
                 run.result,
-                unique_output_path(Path(directory), run.label, ".vmafrun.json", reserved),
+                unique_output_path(Path(directory), run.label, RESULT_SUFFIX, reserved),
                 run.label,
             )
 

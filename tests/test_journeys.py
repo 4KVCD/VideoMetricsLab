@@ -513,7 +513,7 @@ def test_a_new_source_clears_scores_that_belonged_to_the_old_one(qapp, monkeypat
 def test_saving_two_runs_with_the_same_label_keeps_both_files(qapp, tmp_path, monkeypatch):
     """Two rows can carry the same label -- the same basename from two
     folders is the everyday case -- and saving them into one folder used to
-    write both to <label>.vmafrun.json, losing the first."""
+    write both to <label>.metrics.json, losing the first."""
     win = MainWindow()
     source = _info("C:/vid/source.mkv")
     win._source_info = source
@@ -534,7 +534,7 @@ def test_saving_two_runs_with_the_same_label_keeps_both_files(qapp, tmp_path, mo
     win._on_save_selected()
     assert win._file_writes.wait_until_idle(10.0), "the save never finished"
 
-    saved = sorted(p.name for p in tmp_path.glob("*.vmafrun.json"))
-    assert saved == ["movie.vmafrun.json", "movie_2.vmafrun.json"], (
+    saved = sorted(p.name for p in tmp_path.glob("*.metrics.json"))
+    assert saved == ["movie.metrics.json", "movie_2.metrics.json"], (
         "one run overwrote the other"
     )

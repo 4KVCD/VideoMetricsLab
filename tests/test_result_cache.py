@@ -328,6 +328,40 @@ def test_a_fuller_run_beats_an_exact_match_that_recorded_less(tmp_path):
     assert result_cache.load_cached(source, distorted, five) is None
 
 
+def test_a_cache_saved_by_the_vmaf_only_tool_is_renamed_and_still_found(tmp_path):
+    """Cached runs used to be <key>.vmafrun.json. The suffix says VMAF and the
+    tool no longer is; the files are renamed as the folder is first used,
+    once, and a run stored under the old name loads under the new one."""
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(source, distorted, _fake_result(source, distorted), "old", OPTIONS)
+    current = next(tmp_path.glob("*.metrics.json"))
+    legacy = current.with_name(current.name.replace(".metrics.json", ".vmafrun.json"))
+    current.rename(legacy)
+    result_cache._adopted.discard(tmp_path)
+
+    assert result_cache.adopt_legacy_names(tmp_path) == 1
+    assert not legacy.exists() and current.exists()
+    assert result_cache.load_cached(source, distorted, OPTIONS)[1] == "old"
+    assert result_cache.adopt_legacy_names(tmp_path) == 0  # once per folder per process
+
+
+def test_adoption_never_replaces_a_run_already_saved_under_the_new_name(tmp_path):
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    result_cache.store(source, distorted, _fake_result(source, distorted), "new", OPTIONS)
+    current = next(tmp_path.glob("*.metrics.json"))
+    legacy = current.with_name(current.name.replace(".metrics.json", ".vmafrun.json"))
+    legacy.write_text("stale", encoding="utf-8")
+    result_cache._adopted.discard(tmp_path)
+
+    assert result_cache.adopt_legacy_names(tmp_path) == 0
+    assert result_cache.load_cached(source, distorted, OPTIONS)[1] == "new"
+    # ...but "clear saved results" still knows about it.
+    assert result_cache.clear_all(tmp_path) == 2
+    assert not legacy.exists() and not current.exists()
+
+
 def test_reuse_across_metrics_still_respects_how_frames_were_compared(tmp_path):
     # The relaxation is ONLY about which metrics were recorded. A run that
     # cropped differently, or sampled different frames, measured different

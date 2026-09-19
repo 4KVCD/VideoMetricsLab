@@ -1012,7 +1012,7 @@ def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypa
     from vmaf_app.core import result_cache
 
     monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
-    app_result = tmp_path / "abc.vmafrun.json"
+    app_result = tmp_path / "abc.metrics.json"
     app_result.write_text("{}", encoding="utf-8")
     unrelated = tmp_path / "family_budget.json"
     unrelated.write_text("important", encoding="utf-8")
@@ -2443,8 +2443,8 @@ def test_a_queued_store_lands_in_the_folder_that_was_configured(qapp, tmp_path, 
     release.set()
     assert win._file_writes.wait_until_idle(10.0)
 
-    assert list(folder_a.glob("*.vmafrun.json")), "the result was written to the wrong folder"
-    assert not list(folder_b.glob("*.vmafrun.json"))
+    assert list(folder_a.glob("*.metrics.json")), "the result was written to the wrong folder"
+    assert not list(folder_b.glob("*.metrics.json"))
 
 
 def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, monkeypatch):
@@ -2453,8 +2453,8 @@ def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, 
     from vmaf_app.core import result_cache
 
     folder_a, folder_b = _two_cache_dirs(tmp_path)
-    (folder_a / "one.vmafrun.json").write_text("{}", encoding="utf-8")
-    (folder_b / "two.vmafrun.json").write_text("{}", encoding="utf-8")
+    (folder_a / "one.metrics.json").write_text("{}", encoding="utf-8")
+    (folder_b / "two.metrics.json").write_text("{}", encoding="utf-8")
 
     win = MainWindow()
     result_cache.set_cache_dir_override(folder_a)
@@ -2469,8 +2469,8 @@ def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, 
     release.set()
     assert win._file_writes.wait_until_idle(10.0)
 
-    assert not list(folder_a.glob("*.vmafrun.json")), "the named folder was not cleared"
-    assert list(folder_b.glob("*.vmafrun.json")), "an unnamed folder was cleared instead"
+    assert not list(folder_a.glob("*.metrics.json")), "the named folder was not cleared"
+    assert list(folder_b.glob("*.metrics.json")), "an unnamed folder was cleared instead"
 
 
 def test_a_queued_recompute_deletes_from_the_folder_it_was_asked_about(qapp, tmp_path):

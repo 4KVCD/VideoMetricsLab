@@ -8,7 +8,7 @@ from pathlib import Path
 
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.models import VmafOptions, VmafRunResult, clone_options
-from vmaf_app.core.run_io import load_run, save_run
+from vmaf_app.core.run_io import LEGACY_RESULT_SUFFIXES, RESULT_SUFFIX, load_run, save_run
 
 _dir_override: Path | None = None
 
@@ -36,7 +36,45 @@ def cache_dir() -> Path:
     if d is None:
         d = default_cache_dir()
     d.mkdir(parents=True, exist_ok=True)
+    adopt_legacy_names(d)
     return d
+
+
+_adopted: set[Path] = set()
+
+
+def adopt_legacy_names(directory: Path) -> int:
+    """Renames cached runs saved under an older suffix to the current one.
+
+    Once per folder per process: the scan is one directory listing, but
+    cache_dir() is called on every lookup. Returns how many were renamed. A
+    file whose new name already exists is left alone rather than replaced;
+    clear_all removes both spellings, so nothing is ever stranded.
+    """
+    directory = Path(directory)
+    if directory in _adopted:
+        return 0
+    _adopted.add(directory)
+    renamed = 0
+    for legacy in LEGACY_RESULT_SUFFIXES:
+        for path in directory.glob(f"*{legacy}"):
+            target = path.with_name(path.name[: -len(legacy)] + RESULT_SUFFIX)
+            if target.exists():
+                continue
+            try:
+                path.rename(target)
+                renamed += 1
+            except OSError:
+                pass
+    return renamed
+
+
+def result_files(directory: Path) -> list[Path]:
+    """Every saved run in `directory`, under the current suffix or an older one."""
+    files: list[Path] = []
+    for suffix in (RESULT_SUFFIX, *LEGACY_RESULT_SUFFIXES):
+        files.extend(Path(directory).glob(f"*{suffix}"))
+    return files
 
 
 def _cache_dir() -> Path:
@@ -93,7 +131,7 @@ def _cache_path(
     source: Path, distorted: Path, options: VmafOptions, directory: Path | None = None
 ) -> Path:
     base = directory if directory is not None else _cache_dir()
-    return base / f"{cache_key(source, distorted, options)}.vmafrun.json"
+    return base / f"{cache_key(source, distorted, options)}{RESULT_SUFFIX}"
 
 
 #: Every metric, and the options that request it. The identity of a cached
@@ -267,7 +305,7 @@ def clear_all(directory: Path | None = None) -> int:
     """
     base = directory if directory is not None else _cache_dir()
     removed = 0
-    for path in base.glob("*.vmafrun.json"):
+    for path in result_files(base):
         try:
             path.unlink()
             removed += 1

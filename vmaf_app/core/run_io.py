@@ -21,6 +21,18 @@ from vmaf_app.core.models import (
 
 FORMAT_VERSION = 1
 
+#: The file extension of a saved run, cached or exported. A double extension
+#: rather than a bare .json on purpose: "Clear saved results" deletes every
+#: file with this suffix in a folder the user can point anywhere, and bare
+#: .json would make that folder's unrelated files fair game.
+RESULT_SUFFIX = ".metrics.json"
+#: What the files were called when this was a VMAF-only tool. Still opened,
+#: and cache folders are renamed to the current suffix as they are used.
+LEGACY_RESULT_SUFFIXES = (".vmafrun.json",)
+#: For the open dialogs: the current suffix first, then any .json, which is
+#: how a file under an older suffix is still offered.
+RESULT_FILE_FILTER = f"Analysis results (*{RESULT_SUFFIX} *.json)"
+
 
 def _legacy_resample_target(distorted_path: str) -> ResampleTarget | None:
     """Recover the recipe encoded in pre-Frame-Compare synthetic names."""

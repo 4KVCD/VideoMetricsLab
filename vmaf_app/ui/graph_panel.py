@@ -37,7 +37,14 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app.core.models import FrameScore, VmafRunResult
-from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
+from vmaf_app.core.run_io import (
+    RESULT_FILE_FILTER,
+    RESULT_SUFFIX,
+    export_csv,
+    load_run,
+    save_run,
+    unique_output_path,
+)
 from vmaf_app.core.stats import (
     AGGREGATE_BY_METRIC,
     ARITHMETIC,
@@ -1057,7 +1064,7 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ actions
     def _on_add_saved_run(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open analysis results", "", "Analysis results (*.vmafrun.json *.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open analysis results", "", RESULT_FILE_FILTER)
         if not path:
             return
         try:
@@ -1247,7 +1254,7 @@ class GraphPanel(QWidget):
 
     def save_run_for_later(self, result: VmafRunResult, label: str) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save analysis results", f"{label}.vmafrun.json", "Analysis results (*.vmafrun.json)"
+            self, "Save analysis results", f"{label}{RESULT_SUFFIX}", f"Analysis results (*{RESULT_SUFFIX})"
         )
         if not path:
             return
