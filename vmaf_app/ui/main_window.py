@@ -527,7 +527,10 @@ class MainWindow(QMainWindow):
             "immediately, even during playback."
         )
         self.settings_decoded_videos.currentIndexChanged.connect(self._on_settings_edited)
-        compare_form.addRow("Test videos decoded at once:", self.settings_decoded_videos)
+        compare_form.addRow(
+            "Number of test videos decoded simultaneously for fast comparison switching:",
+            self.settings_decoded_videos,
+        )
         outer.addWidget(compare_box)
 
         window_box = QGroupBox("Window")
