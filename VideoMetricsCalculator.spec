@@ -30,8 +30,9 @@ SITE_PACKAGES = Path(sysconfig.get_paths()["purelib"])
 # Frozen as modules their __file__ would point inside the archive, and every
 # path they derive from it -- GST_PLUGIN_PATH, GI_TYPELIB_PATH, the plugin
 # scanner executable -- would point at files that are not there.
-sys.path.insert(0, str(PROJECT / "scripts"))
-from gstreamer_bundle import PACKAGES as GSTREAMER_PACKAGES, collect as collect_gstreamer  # noqa: E402
+sys.path.insert(0, str(PROJECT))
+from scripts.gstreamer_bundle import PACKAGES as GSTREAMER_PACKAGES  # noqa: E402
+from scripts.gstreamer_bundle import collect as collect_gstreamer  # noqa: E402
 
 datas, gstreamer_report = collect_gstreamer(SITE_PACKAGES)
 print(
@@ -113,6 +114,20 @@ a = Analysis(
     ],
     noarchive=False,
     optimize=0,
+)
+
+# --- Qt --------------------------------------------------------------------
+# PyInstaller's Qt hooks bundle by category -- a software OpenGL renderer,
+# QtMultimedia's FFmpeg, the QML stack, PDF, networking and 96 translations
+# for an app that imports QtCore, QtGui and QtWidgets. scripts/qt_bundle.py
+# keeps those three modules, the plugins the app needs and their import
+# closure, and drops the rest of the PySide6 folder after the analysis.
+from scripts.qt_bundle import prune as prune_qt  # noqa: E402
+
+a.binaries, a.datas, qt_report = prune_qt(a.binaries, a.datas)
+print(
+    "Qt: keeping %d of PySide6's files, %.0f of %.0f MB"
+    % (len(qt_report["kept"]), qt_report["qt_bytes_after"] / 1e6, qt_report["qt_bytes_before"] / 1e6)
 )
 
 pyz = PYZ(a.pure)

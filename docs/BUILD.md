@@ -12,8 +12,8 @@ the packaged executable's self-test, and zips the result.
 
 | | |
 |---|---|
-| Folder | ~217 MB |
-| Zip | ~86 MB |
+| Folder | ~148 MB |
+| Zip | ~58 MB |
 | Output | `%LOCALAPPDATA%\VideoMetricsCalculator-build\` |
 
 Pass `-OutputRoot <path>` to build somewhere else, and `-VerifyMedia
@@ -38,6 +38,13 @@ case anyone overrides that.
   This is what makes hardware video comparison work on a machine that has
   never seen GStreamer. [GSTREAMER_BUNDLE.md](GSTREAMER_BUNDLE.md) says what
   is kept, why, and how the build proves it still plays everything.
+- **Qt**, cut the same way to the three modules the app imports (QtCore,
+  QtGui, QtWidgets), the Windows platform plugin, the Windows style, the
+  common image formats and their dependencies -- 42 MB of PySide6's 114.
+  PyInstaller's Qt hooks would otherwise add a software OpenGL renderer,
+  QtMultimedia's FFmpeg, the QML stack, PDF, networking and 96 translations.
+  `scripts/qt_bundle.py` decides; the self-test reports the platform plugin,
+  style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
 
@@ -104,10 +111,11 @@ GStreamer failing on `No module named 'optparse'`.
 
 ## Trimming it further
 
-- GStreamer is already cut to what the app uses; the next largest item is
-  Qt at ~110 MB, then NumPy at ~28 MB.
+- GStreamer and Qt are already cut to what the app uses. The next largest
+  item is NumPy's OpenBLAS at ~20 MB, which NumPy links unconditionally, then
+  `python314.dll` and OpenSSL (pulled in by `asyncio`, which `gi` imports).
 - `--onefile` produces a single executable instead of a folder. It is nicer
-  to hand someone, but it unpacks ~220 MB to a temp directory on every
+  to hand someone, but it unpacks ~150 MB to a temp directory on every
   launch, which is slow enough to be noticeable.
 - UPX compression is off. It reduces the download but is a common
   false-positive trigger for antivirus, which matters more for an unsigned

@@ -51,6 +51,20 @@ def self_test() -> str:
     except Exception as error:
         lines.append(f"  WARN  GStreamer unavailable, playback falls back to FFmpeg: {error}")
 
+    # Which Qt platform plugin, style and image formats loaded. The packaged
+    # build ships a pruned PySide6 (scripts/qt_bundle.py); Qt would silently
+    # fall back to a plain style or refuse an image format if one were missing.
+    app = QApplication.instance()
+    if app is not None:
+        from PySide6.QtCore import qVersion
+        from PySide6.QtGui import QImageReader
+
+        formats = sorted(bytes(f).decode() for f in QImageReader.supportedImageFormats())
+        lines.append(
+            f"  OK    Qt {qVersion()} on '{app.platformName()}', style '{app.style().objectName()}', "
+            f"images: {', '.join(formats)}"
+        )
+
     from vmaf_app.core import d3d11_tonemap
 
     if d3d11_tonemap.available():
