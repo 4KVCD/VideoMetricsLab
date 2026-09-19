@@ -126,17 +126,37 @@ def _probe(Gst, path: str, kind: str) -> dict:  # noqa: N803 - gi namespace
     else:
         # gstreamer_playback._build_audio_branch, with the sink replaced.
         chain = "queue ! audioconvert ! audioresample ! volume"
-    pipeline = Gst.parse_launch(
-        f"filesrc name=file ! decodebin3 name=decode ! {chain} ! appsink name=out sync=false max-buffers=1 drop=true"
-    )
-    pipeline.get_by_name("file").set_property("location", str(Path(path).resolve()))
-    decoder = pipeline.get_by_name("decode")
+    # Built by hand in the app's order: the location goes on before the link,
+    # because linking into decodebin3 activates the source, and a filesrc
+    # with no location yet fails to start ("No file name specified").
+    pipeline = Gst.Pipeline.new("probe")
+    source = Gst.ElementFactory.make("filesrc", "file")
+    source.set_property("location", str(Path(path).resolve()))
+    decoder = Gst.ElementFactory.make("decodebin3", "decode")
+    pipeline.add(source)
+    pipeline.add(decoder)
+    if not source.link(decoder):
+        raise RuntimeError(f"could not link filesrc to decodebin3 for {Path(path).name}")
     # Only the stream kind under test, the way the app selects streams; an
     # unselected stream is never decoded, so its codec cannot fail the probe.
     decoder.connect(
         "select-stream",
         lambda _dec, _collection, stream: int(_caps_name(stream.get_caps()).startswith(kind + "/")),
     )
+    # Linked from pad-added by pad name, as the app does, rather than by a
+    # `!` in the launch line: that links whichever pad appears first, and an
+    # audio pad appearing before the video one sent PCM into videocrop.
+    branch = Gst.parse_bin_from_description(
+        f"{chain} ! appsink name=out sync=false max-buffers=1 drop=true", True
+    )
+    pipeline.add(branch)
+    branch_sink = branch.get_static_pad("sink")
+
+    def on_pad_added(_decoder, pad):
+        if pad.get_name().startswith(kind + "_") and not branch_sink.is_linked():
+            pad.link(branch_sink)
+
+    decoder.connect("pad-added", on_pad_added)
     sink = pipeline.get_by_name("out")
     result = {"file": Path(path).name, "kind": kind}
     try:
@@ -207,8 +227,8 @@ def main() -> None:
         parser.error(f"{args.bundle} does not contain gstreamer_libs")
 
     sys.path.insert(0, str(PROJECT))
-    from gstreamer_bundle import KEEP_PLUGINS
-
+    # Through the package: a bare `gstreamer_bundle` is the GStreamer wheel.
+    from scripts.gstreamer_bundle import KEEP_PLUGINS
     from vmaf_app.core.gstreamer_playback import GPU_DECODERS, REQUIRED_ELEMENTS
 
     required = list(REQUIRED_ELEMENTS)
