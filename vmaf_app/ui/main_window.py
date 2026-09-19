@@ -511,7 +511,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(defaults_box)
 
         compare_box = QGroupBox("Video Compare")
-        compare_form = QFormLayout(compare_box)
+        compare_layout = QVBoxLayout(compare_box)
         # A dropdown, not a spin box: 1 to 9 is one click away.
         self.settings_decoded_videos = QComboBox()
         for count in range(1, 10):
@@ -532,10 +532,16 @@ class MainWindow(QMainWindow):
             "immediately, even during playback."
         )
         self.settings_decoded_videos.currentIndexChanged.connect(self._on_settings_edited)
-        compare_form.addRow(
-            "Number of test videos decoded simultaneously for fast comparison switching:",
-            self.settings_decoded_videos,
+        # Dropdown first, at the left edge, with its label beside it -- the
+        # way the check boxes above sit -- rather than a form row that puts
+        # the field wherever the label column ends.
+        decoded_row = QHBoxLayout()
+        decoded_row.addWidget(self.settings_decoded_videos)
+        decoded_row.addWidget(
+            QLabel("Number of test videos decoded simultaneously for fast comparison switching")
         )
+        decoded_row.addStretch(1)
+        compare_layout.addLayout(decoded_row)
         outer.addWidget(compare_box)
 
         window_box = QGroupBox("Window")
