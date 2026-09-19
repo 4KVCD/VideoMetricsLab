@@ -3649,10 +3649,15 @@ def test_queue_eta_is_unknown_until_something_reports_a_rate(qapp):
 def test_the_decoded_videos_setting_persists_and_reaches_the_compare_panel(qapp):
     win = MainWindow()
     try:
-        assert win.settings_decoded_videos.value() == 3
+        box = win.settings_decoded_videos
+        assert box.currentData() == 3
         assert win.frame_compare_panel._decoded_videos == 3
+        # A dropdown whose entries say what they keep decoding, 1 to 9.
+        assert [box.itemData(i) for i in range(box.count())] == list(range(1, 10))
+        assert box.itemText(2).startswith("3 ") and "right, left" in box.itemText(2)
+        assert box.itemText(4).endswith("2nd right, 2nd left")
 
-        win.settings_decoded_videos.setValue(5)
+        box.setCurrentIndex(box.findData(5))
 
         assert win._settings.compare_decoded_videos == 5
         assert win.frame_compare_panel._decoded_videos == 5

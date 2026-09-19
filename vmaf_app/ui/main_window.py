@@ -141,6 +141,20 @@ _METRIC_NAMES = (
     ("ssim", "SSIM"), ("xpsnr", "XPSNR"),
 )
 
+def _decoded_videos_label(count: int) -> str:
+    """"3 \u2014 selected, right, left": what each dropdown choice keeps decoding.
+
+    Follows video_playback.neighbour_indices: neighbours are added to the
+    right first, then the left, then further out on each side in turn.
+    """
+    parts = ["selected"]
+    for step in range(1, count):
+        distance, side = divmod(step - 1, 2)
+        ordinal = {0: "", 1: "2nd ", 2: "3rd ", 3: "4th "}[distance]
+        parts.append(f"{ordinal}{'right' if side == 0 else 'left'}")
+    return f"{count} \u2014 " + ", ".join(parts)
+
+
 class CompletedRun:
     """A finished run plus the label it's shown under and its summary stats,
     computed once here rather than recomputed everywhere it's displayed."""
@@ -511,25 +525,22 @@ class MainWindow(QMainWindow):
 
         compare_box = QGroupBox("Video Compare")
         compare_form = QFormLayout(compare_box)
-        self.settings_decoded_videos = QSpinBox()
-        self.settings_decoded_videos.setRange(1, 9)
-        self.settings_decoded_videos.setValue(self._settings.compare_decoded_videos)
+        # A dropdown, not a spin box: each choice can then say which
+        # neighbours it keeps decoding, and 1 to 9 is one click away.
+        self.settings_decoded_videos = QComboBox()
+        for count in range(1, 10):
+            self.settings_decoded_videos.addItem(_decoded_videos_label(count), count)
+        self.settings_decoded_videos.setCurrentIndex(
+            max(0, self.settings_decoded_videos.findData(self._settings.compare_decoded_videos))
+        )
         self.settings_decoded_videos.setToolTip(
             "How many test videos keep decoding while one is shown, so the "
-            "left and right arrows switch to a video that is already running.\n\n"
-            "1: the selected video only. 2: and the one to its right. 3: and "
-            "the one to its left. 4: and the next to the right. 5: and the "
-            "next to the left, and so on.\n\nEach one is a running GPU "
-            "decoder (about 250 MB of RAM for 4K), plus the source."
+            "left and right arrows switch to a video that is already running. "
+            "Each one is a running GPU decoder (about 250 MB of RAM for 4K), "
+            "plus the source. Takes effect immediately, even during playback."
         )
-        self.settings_decoded_videos.valueChanged.connect(self._on_settings_edited)
+        self.settings_decoded_videos.currentIndexChanged.connect(self._on_settings_edited)
         compare_form.addRow("Test videos decoded at once:", self.settings_decoded_videos)
-        compare_hint = QLabel(
-            "The selected video, then its neighbours: right, left, second right, "
-            "second left... Takes effect immediately, even during playback."
-        )
-        compare_hint.setStyleSheet("color: #666; font-style: italic;")
-        compare_form.addRow("", compare_hint)
         outer.addWidget(compare_box)
 
         window_box = QGroupBox("Window")
@@ -580,7 +591,7 @@ class MainWindow(QMainWindow):
         self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
-        self._settings.compare_decoded_videos = self.settings_decoded_videos.value()
+        self._settings.compare_decoded_videos = int(self.settings_decoded_videos.currentData())
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
 
