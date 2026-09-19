@@ -3652,10 +3652,9 @@ def test_the_decoded_videos_setting_persists_and_reaches_the_compare_panel(qapp)
         box = win.settings_decoded_videos
         assert box.currentData() == 3
         assert win.frame_compare_panel._decoded_videos == 3
-        # A dropdown whose entries say what they keep decoding, 1 to 9.
+        # A dropdown of the plain numbers 1 to 9.
         assert [box.itemData(i) for i in range(box.count())] == list(range(1, 10))
-        assert box.itemText(2).startswith("3 ") and "right, left" in box.itemText(2)
-        assert box.itemText(4).endswith("2nd right, 2nd left")
+        assert [box.itemText(i) for i in range(box.count())] == [str(n) for n in range(1, 10)]
 
         box.setCurrentIndex(box.findData(5))
 
