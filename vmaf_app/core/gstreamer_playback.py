@@ -57,7 +57,7 @@ _PIPELINE_ELEMENTS = (
 #: depends on the GPU the registry was scanned on, not on the installation.
 REQUIRED_ELEMENTS = (
     *_PIPELINE_ELEMENTS,
-    "queue", "capsfilter", "capssetter", "appsink", "appsrc",
+    "d3d11compositor", "queue", "capsfilter", "capssetter", "appsink", "appsrc",
     "playbin3", "uridecodebin3",  # the soundtrack: playbin3 is built on uridecodebin3
     "h264parse", "h265parse", "h266parse", "av1parse", "vp9parse", "mpegvideoparse",
     "matroskademux", "qtdemux", "tsdemux", "avidemux",
@@ -324,7 +324,26 @@ class GstComparePipeline:
         upload = self._make("d3d11upload", f"{side}-upload")
         gpu_memory = self._make("capsfilter", f"{side}-gpu-memory")
         gpu_memory.set_property("caps", self.Gst.Caps.from_string("video/x-raw(memory:D3D11Memory)"))
-        convert = self._make("d3d11convert", f"{side}-convert")
+        # On GPU memory videocrop cannot touch pixels; it attaches a crop
+        # rectangle (GstVideoCropMeta) for the next element to honour, and
+        # refuses to run unless that element says it will. d3d11convert does
+        # not, so every letterboxed comparison used to fail here and fall
+        # back to FFmpeg. d3d11compositor does: with one input stretched to
+        # the output size it is the same crop-scale-convert pass on the GPU,
+        # checked frame for frame against d3d11convert on the same source.
+        # It re-times its output to the frame grid, which d3d11convert does
+        # not, so the uncropped case keeps the element it always had.
+        width, height = comparison_dimensions(self._comparison)
+        if any((left, top, right, bottom)):
+            convert = self._make("d3d11compositor", f"{side}-convert")
+            convert.set_property("background", 1)  # black, not the checkerboard
+            picture = convert.request_pad_simple("sink_%u")
+            if picture is None:
+                raise GStreamerPlaybackError(f"Could not request the {side} compositor input.")
+            picture.set_property("width", width)
+            picture.set_property("height", height)
+        else:
+            convert = self._make("d3d11convert", f"{side}-convert")
         capsfilter = self._make("capsfilter", f"{side}-output-caps")
         caps = self.Gst.Caps.from_string(
             output_caps_string(self._comparison, settings, side)
@@ -337,7 +356,6 @@ class GstComparePipeline:
             # Force a private, high-precision converter output, not an 8-bit
             # intermediate or the decoder's reference surface. Keep PQ/HLG
             # encoded values until our explicit highlight mapping stage.
-            width, height = comparison_dimensions(self._comparison)
             caps = self.Gst.Caps.from_string(
                 "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
                 f"width={width},height={height},pixel-aspect-ratio=1/1,"
