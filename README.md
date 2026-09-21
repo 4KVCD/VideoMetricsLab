@@ -6,9 +6,9 @@ A Windows desktop app for measuring and comparing video encode quality.
 
 ## Features
 
-- Calculate **VMAF, VMAF NEG, PSNR, SSIM, and XPSNR** for multiple test videos.
+- Calculate VMAF, VMAF NEG, PSNR, SSIM, and XPSNR for multiple test videos.
 - Compare metric curves, statistics, and per-frame scores.
-- Switch between synchronized source and test video playback for visual A/B comparisons.
+- Instant switch between source and encoded video for easy visual A/B comparisons, both frame by frame and during playback, and between different encoded videos.
 - Inspect bitrate by frame, second, or GOP without running quality metrics.
 - Detect black bars and handle resolution mismatches automatically.
 - Use GPU decoding when supported, with independent software fallback per input.
