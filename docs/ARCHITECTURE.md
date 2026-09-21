@@ -77,4 +77,7 @@ Shutdown cancels workers and waits for pending writes before closing.
 - Bound decode queues; do not preload all encodes in a series.
 - Prefer per-input hardware decisions with software fallback.
 - Profile CPU, memory, GPU and I/O separately before attributing a bottleneck.
-- Do not disable garbage collection as a blanket crash workaround.
+- Background file writes temporarily suspend automatic cyclic collection;
+  runnable cleanup and the deferred collection return to the GUI thread so
+  PySide wrappers are never finalized by the writer. Reference counting stays
+  active throughout. Preserve that thread-affinity rule when changing writes.

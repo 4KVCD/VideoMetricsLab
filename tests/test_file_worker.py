@@ -3,6 +3,7 @@ the UI thread stopping while a large result is serialised.
 """
 from __future__ import annotations
 
+import gc
 import threading
 import time
 from pathlib import Path
@@ -52,6 +53,18 @@ def test_writes_run_in_the_order_they_were_submitted(qapp):
     assert order == list(range(10))
 
 
+def test_cyclic_gc_and_runnable_cleanup_return_to_the_gui_thread(qapp):
+    queue = FileWriteQueue()
+    gc_state_in_worker: list[bool] = []
+
+    queue.submit("allocation-heavy write", lambda: gc_state_in_worker.append(gc.isenabled()))
+
+    assert queue.wait_until_idle(10.0)
+    assert gc_state_in_worker == [False]
+    assert gc.isenabled(), "automatic collection was not restored after the write"
+    assert not queue._tasks, "the GUI-thread completion did not release the runnable"
+
+
 def test_a_failing_write_is_reported_and_does_not_stop_the_queue(qapp):
     # A QRunnable that raises takes its exception nowhere useful, so a
     # failure has to come back as a signal -- and must not take the rest of
@@ -78,6 +91,8 @@ def test_a_failing_write_is_reported_and_does_not_stop_the_queue(qapp):
 def test_idle_is_reported_only_once_everything_has_finished(qapp):
     queue = FileWriteQueue()
     release = threading.Event()
+    idle_signals: list[bool] = []
+    queue.became_idle.connect(lambda: idle_signals.append(True))
     queue.submit("first", release.wait)
     queue.submit("second", lambda: None)
 
@@ -85,6 +100,7 @@ def test_idle_is_reported_only_once_everything_has_finished(qapp):
     release.set()
     assert queue.wait_until_idle(10.0)
     assert queue.pending == 0
+    assert idle_signals == [True]
 
 
 def test_a_queue_with_nothing_submitted_is_already_idle(qapp):

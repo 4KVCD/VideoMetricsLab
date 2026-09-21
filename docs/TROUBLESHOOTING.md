@@ -42,8 +42,8 @@ FFmpeg and GStreamer versions and the commit/release. For a source launch:
 ```
 
 Windows Event Viewer → Windows Logs → Application may identify the faulting
-module. Redact personal paths before reporting. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md)
-for the currently unresolved GC-related crash.
+module. Redact personal paths before reporting and check
+[known limitations](KNOWN_ISSUES.md) before opening an issue.
 
 ## Packaged build diagnostics
 
