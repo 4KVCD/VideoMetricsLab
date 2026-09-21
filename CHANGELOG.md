@@ -1,9 +1,8 @@
 # Changelog
 
-Notable user-facing changes belong here. No public release version has been
-assigned in this document.
+Notable user-facing changes belong here.
 
-## Unreleased
+## 1.0 - 2026-09-21
 
 ### Added
 
