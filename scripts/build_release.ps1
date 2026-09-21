@@ -109,6 +109,11 @@ try {
         throw 'The self-test reported a failure (see above)'
     }
 
+    # Distributions must carry the project's MIT terms and the notices for
+    # the third-party components bundled alongside the executable.
+    Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt') -Force
+    Copy-Item (Join-Path $projectDirectory 'docs/THIRD_PARTY.md') (Join-Path $output 'THIRD_PARTY.md') -Force
+
     # 4. Zip it, so a release asset is one file.
     Write-Host '==> Packaging' -ForegroundColor Cyan
     $zip = Join-Path $OutputRoot 'VideoMetricsCalculator-windows.zip'
