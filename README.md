@@ -2,7 +2,32 @@
 
 A Windows desktop app for measuring and comparing video encode quality.
 
-![Empty Videos tab](docs/screenshot-videos.png)
+## Videos
+
+Configure each test independently, inspect its codec and bitrate, and calculate
+multiple quality metrics in one run.
+
+![Videos tab with H.264 and HEVC test encodes](docs/screenshots/01-videos.png)
+
+## Metric graphs
+
+Compare real per-frame curves and distribution statistics. The frame readout
+shows both test values and their signed delta at the same moment.
+
+![VMAF graph, statistics, and per-frame delta for two test encodes](docs/screenshots/02-metric-graphs.png)
+
+## Video Compare
+
+Switch instantly between the reference and test encodes during playback, or
+seek to an exact frame for close inspection.
+
+![Frame-exact Video Compare view with keyboard controls](docs/screenshots/03-video-compare.png)
+
+## Bitrate Viewer
+
+Analyze video-only bitrate independently by frame, second, or GOP.
+
+![Bitrate Viewer results for two test encodes](docs/screenshots/04-bitrate-viewer.png)
 
 ## Features
 
