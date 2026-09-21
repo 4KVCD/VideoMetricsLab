@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Video Metrics Calculator. Start with an issue for
+Thanks for helping improve VideoMetricsLab. Start with an issue for
 large changes, new playback backends, or changes to metric definitions.
 
 ## Development setup

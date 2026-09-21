@@ -38,8 +38,21 @@ def test_default_cache_is_stable_under_the_user_profile(monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
 
     assert result_cache.default_cache_dir() == (
-        tmp_path / ".vmaf-calculator" / "results_cache"
+        tmp_path / ".videometricslab" / "results_cache"
     )
+
+
+def test_legacy_user_data_is_migrated_to_new_product_name(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    legacy = tmp_path / ".vmaf-calculator"
+    legacy.mkdir()
+    (legacy / "settings.json").write_text("{}", encoding="utf-8")
+
+    new_cache = result_cache.default_cache_dir()
+
+    assert new_cache == tmp_path / ".videometricslab" / "results_cache"
+    assert (tmp_path / ".videometricslab" / "settings.json").is_file()
+    assert not legacy.exists()
 
 
 def test_settings_and_cache_share_the_same_stable_data_root(monkeypatch, tmp_path):

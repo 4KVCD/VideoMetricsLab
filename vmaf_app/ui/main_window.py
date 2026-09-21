@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from vmaf_app import APP_NAME
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.frame_extract import FrameComparison
@@ -201,7 +202,7 @@ class RowData:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Video Metrics Calculator")
+        self.setWindowTitle(APP_NAME)
         # Settings first: the ffmpeg location and what new rows default to
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.

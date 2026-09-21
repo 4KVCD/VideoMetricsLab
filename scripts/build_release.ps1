@@ -4,12 +4,12 @@
 #   ./scripts/build_release.ps1
 #
 # Output goes OUTSIDE the repository by default, under
-# %LOCALAPPDATA%\VideoMetricsCalculator-build. This repository lives in a
+# %LOCALAPPDATA%\VideoMetricsLab-build. This repository lives in a
 # OneDrive folder: building into it would upload ~450 MB on every build, and
 # OneDrive's own file handles made the previous build's output impossible to
 # delete ("Access is denied" on _internal\...). Pass -OutputRoot to override.
 param(
-    [string]$OutputRoot = (Join-Path $env:LOCALAPPDATA 'VideoMetricsCalculator-build'),
+    [string]$OutputRoot = (Join-Path $env:LOCALAPPDATA 'VideoMetricsLab-build'),
     # Videos to decode for real through the packaged GStreamer, in addition
     # to the structural checks that always run. Any files with video and
     # audio will do; the more codecs they cover, the more the build proves.
@@ -60,14 +60,14 @@ try {
     try {
         & $python -m PyInstaller --noconfirm `
             --workpath $workPath --distpath $distPath `
-            'VideoMetricsCalculator.spec'
+            'VideoMetricsLab.spec'
     } finally {
         $ErrorActionPreference = $previous
     }
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
-    $output = Join-Path $distPath 'VideoMetricsCalculator'
-    $exe = Join-Path $output 'VideoMetricsCalculator.exe'
+    $output = Join-Path $distPath 'VideoMetricsLab'
+    $exe = Join-Path $output 'VideoMetricsLab.exe'
     if (-not (Test-Path $exe)) {
         throw 'PyInstaller reported success but produced no executable'
     }
@@ -97,7 +97,7 @@ try {
     # PowerShell does not wait for those. Called directly, the script read
     # the previous build's report and a stale exit code while the new
     # executable was still starting.
-    $report = Join-Path $env:USERPROFILE '.vmaf-calculator/self-test.txt'
+    $report = Join-Path $env:USERPROFILE '.videometricslab/self-test.txt'
     if (Test-Path $report) { Remove-Item $report -Force }
     $selfTest = (Start-Process -FilePath $exe -ArgumentList '--self-test', '--quiet' -Wait -PassThru).ExitCode
     if (Test-Path $report) {
@@ -116,7 +116,7 @@ try {
 
     # 4. Zip it, so a release asset is one file.
     Write-Host '==> Packaging' -ForegroundColor Cyan
-    $zip = Join-Path $OutputRoot 'VideoMetricsCalculator-windows.zip'
+    $zip = Join-Path $OutputRoot 'VideoMetricsLab-windows.zip'
     if (Test-Path $zip) { Remove-Item $zip -Force }
     Compress-Archive -Path $output -DestinationPath $zip -CompressionLevel Optimal
 

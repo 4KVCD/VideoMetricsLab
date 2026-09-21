@@ -19,13 +19,17 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from vmaf_app.core import crop_detect, result_cache
+from vmaf_app.core.app_paths import DATA_DIR_NAME
 from vmaf_app.core.settings import SETTINGS_VERSION, Settings
 
 
 def _real_user_cache_dir() -> Path:
     """Where the installed app keeps results. Nothing in the suite may touch
     it, so it is resolved once here to be recognised and refused."""
-    return result_cache.default_cache_dir()
+    # Compute this directly: user_data_dir() performs the one-time product
+    # rename migration, and merely starting a test suite must never move the
+    # user's real files.
+    return Path.home() / DATA_DIR_NAME / "results_cache"
 
 
 @pytest.fixture(autouse=True)

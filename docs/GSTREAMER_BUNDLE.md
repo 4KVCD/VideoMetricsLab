@@ -81,7 +81,7 @@ run shows `d3d11h265dec` for HEVC and `avdec_h266` for VVC:
 ./scripts/build_release.ps1 -VerifyMedia "D:\clips\hevc-hdr.mkv", "D:\clips\vvc.mkv", "D:\clips\av1.mkv"
 ```
 
-**`VideoMetricsCalculator.exe --self-test`** runs inside the packaged
+**`VideoMetricsLab.exe --self-test`** runs inside the packaged
 process itself and checks the same `REQUIRED_ELEMENTS` list, so a bundle
 that passes the verifier but fails to load in the frozen environment (a
 missing hidden import, say) is still caught. The build script waits for it

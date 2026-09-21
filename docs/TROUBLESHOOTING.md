@@ -47,8 +47,8 @@ for the currently unresolved GC-related crash.
 
 ## Packaged build diagnostics
 
-Run `VideoMetricsCalculator.exe --self-test`; `--quiet` omits the dialog.
-The report is saved to `~/.vmaf-calculator/self-test.txt`. Self-test checks
+Run `VideoMetricsLab.exe --self-test`; `--quiet` omits the dialog.
+The report is saved to `~/.videometricslab/self-test.txt`. Self-test checks
 availability, not actual HDR appearance, frame lock or performance.
 
 Use the repository's bug template for non-security reports. Never upload an

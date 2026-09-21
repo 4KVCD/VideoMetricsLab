@@ -49,7 +49,8 @@ alternative metric sets and historical feature orders. A partial result is
 not complete. With subsampling, XPSNR-only and libvmaf-backed results have
 different frame coverage and must not be interchanged.
 
-User data lives under `~/.vmaf-calculator/`, independent of checkout or launcher.
+User data lives under `~/.videometricslab/`, independent of checkout or launcher.
+Existing `~/.vmaf-calculator/` data is migrated automatically on first launch.
 The cache folder is configurable. FFmpeg location uses legacy QSettings keys.
 Never rename storage paths as a cosmetic branding change.
 

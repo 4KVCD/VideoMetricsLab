@@ -9,7 +9,7 @@
   `.gitignore` does not remove already committed content. Rotate exposed secrets.
 - Confirm ownership/permission for all contributions and screenshots.
 - Set the GitHub description, topics and repository URL; verify relative links
-  from the hosted README. There is no configured remote in this checkout yet.
+  from the hosted README.
 - Enable Issues, private vulnerability reporting, and branch protection as
   appropriate. Choose a monitored security contact. Enable CI after upload.
 - Do not publish a passing-status badge until the hosted checks actually pass.

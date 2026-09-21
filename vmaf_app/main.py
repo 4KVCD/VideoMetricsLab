@@ -5,6 +5,8 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
+from vmaf_app import APP_NAME, __version__
+from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.ui.main_window import MainWindow
 
 
@@ -16,7 +18,7 @@ def self_test() -> str:
     Checks the pieces that are found at runtime rather than at build time --
     FFmpeg on the user's machine, the bundled GStreamer, the GPU shader.
     """
-    lines = [f"Video Metrics Calculator self-test (Python {sys.version.split()[0]})"]
+    lines = [f"{APP_NAME} {__version__} self-test (Python {sys.version.split()[0]})"]
     frozen = getattr(sys, "frozen", False)
     lines.append(f"  packaged build: {'yes' if frozen else 'no, running from source'}")
 
@@ -77,7 +79,7 @@ def self_test() -> str:
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Video Metrics Calculator")
+    app.setApplicationName(APP_NAME)
 
     if "--self-test" in sys.argv:
         report = self_test()
@@ -86,9 +88,7 @@ def main() -> int:
         # dismiss a dialog.
         with contextlib.suppress(OSError, ValueError):
             print(report)  # a windowed build has no usable stdout
-        from pathlib import Path
-
-        destination = Path.home() / ".vmaf-calculator" / "self-test.txt"
+        destination = user_data_dir() / "self-test.txt"
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(report, encoding="utf-8")

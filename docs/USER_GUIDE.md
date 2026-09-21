@@ -61,7 +61,7 @@ Save portable results as `.vmafrun.json` or export CSV. Cached results are reuse
 when files and relevant settings match. A compatible subset can load as
 partially calculated; request calculation to fill missing metrics.
 
-Settings and the default cache are under `~/.vmaf-calculator/`. Back up that
+Settings and the default cache are under `~/.videometricslab/`. Back up that
 folder before maintenance; changing checkout should not require clearing it.
 File moves or replacements can cause cache misses. Use explicit saved-result
 loading when you need to inspect a portable result. Right-click recalculation

@@ -17,6 +17,7 @@ from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from vmaf_app import APP_NAME
 from vmaf_app.core import result_cache
 from vmaf_app.core.settings import SETTINGS_VERSION, Settings
 from vmaf_app.ui.main_window import MainWindow
@@ -41,7 +42,7 @@ def main() -> None:
         result_cache.set_cache_dir_override(folder / "cache")
 
         app = QApplication.instance() or QApplication([])
-        app.setApplicationName("Video Metrics Calculator")
+        app.setApplicationName(APP_NAME)
         font_path = Path("C:/Windows/Fonts/segoeui.ttf")
         if font_path.exists():
             QFontDatabase.addApplicationFont(str(font_path))

@@ -43,7 +43,7 @@ def _setup() -> None:
     os.environ.setdefault(
         "GST_REGISTRY_1_0",
         os.path.join(
-            os.path.expanduser("~"), ".vmaf-calculator", "gstreamer-registry.bin"
+            os.path.expanduser("~"), ".videometricslab", "gstreamer-registry.bin"
         ),
     )
 

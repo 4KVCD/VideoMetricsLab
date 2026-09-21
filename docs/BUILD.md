@@ -14,7 +14,7 @@ the packaged executable's self-test, and zips the result.
 |---|---|
 | Folder | ~148 MB |
 | Zip | ~58 MB |
-| Output | `%LOCALAPPDATA%\VideoMetricsCalculator-build\` |
+| Output | `%LOCALAPPDATA%\VideoMetricsLab-build\` |
 
 Pass `-OutputRoot <path>` to build somewhere else, and `-VerifyMedia
 <file>, <file>` to also decode real videos through the packaged GStreamer as
@@ -70,11 +70,11 @@ application directory.
 The packaged executable can check itself:
 
 ```powershell
-.\VideoMetricsCalculator.exe --self-test
+.\VideoMetricsLab.exe --self-test
 ```
 
 It reports FFmpeg, GStreamer and its plugins, and the GPU shader, in a dialog
-and at `~\.vmaf-calculator\self-test.txt`. `--quiet` skips the dialog and
+and at `~\.videometricslab\self-test.txt`. `--quiet` skips the dialog and
 sets the exit code instead, which is how `build_release.ps1` uses it.
 
 This exists because a broken bundle is not obvious from the outside. GStreamer

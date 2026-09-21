@@ -1,4 +1,4 @@
-# Video Metrics Calculator
+# VideoMetricsLab
 
 A Windows desktop app for measuring and comparing video encode quality.
 
@@ -31,8 +31,8 @@ For detailed instructions, see the [User Guide](docs/USER_GUIDE.md).
 
 ### Packaged release
 
-Download the Windows zip from the repository's Releases page, extract it, and
-run `VideoMetricsCalculator.exe`.
+Download the Windows zip from the [latest release](https://github.com/4KVCD/VideoMetricsLab/releases/latest),
+extract it, and run `VideoMetricsLab.exe`.
 
 The app requires **FFmpeg 9 or newer with libvmaf**. FFmpeg is not bundled; the
 app prompts for its location if it is not available on `PATH`.
