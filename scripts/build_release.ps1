@@ -43,6 +43,14 @@ try {
 
     # 2. Freeze. --noconfirm so a rebuild does not stop to ask about dist/.
     Write-Host '==> Running PyInstaller' -ForegroundColor Cyan
+    # Resolve Windows system DLLs before anything injected into the calling
+    # process's PATH.  Development shells can prepend private tool runtimes
+    # (Poppler is a common example) that ship an unrelated icuuc.dll with the
+    # same name as Windows' ICU compatibility DLL.  If PyInstaller finds that
+    # copy first, Qt6Core loads it and QtWidgets fails at startup with a
+    # missing-procedure error.
+    $system32 = Join-Path $env:SystemRoot 'System32'
+    $env:PATH = "$system32;$env:PATH"
     # PyInstaller writes its progress log to stderr. Under
     # $ErrorActionPreference = 'Stop' PowerShell turns each of those lines
     # into a terminating NativeCommandError, so a perfectly successful build
@@ -62,6 +70,12 @@ try {
     $exe = Join-Path $output 'VideoMetricsCalculator.exe'
     if (-not (Test-Path $exe)) {
         throw 'PyInstaller reported success but produced no executable'
+    }
+    # Qt uses the Windows ICU compatibility DLL.  It must not be copied into
+    # the application root from an unrelated SDK or command-line tool.
+    $foreignIcu = Join-Path $output '_internal/icuuc.dll'
+    if (Test-Path $foreignIcu) {
+        throw "The bundle contains a foreign icuuc.dll ($foreignIcu); refusing to package a Qt runtime that will not start"
     }
 
     # The GStreamer bundle is pruned to what the app uses (see the spec and
