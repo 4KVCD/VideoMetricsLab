@@ -31,7 +31,7 @@ case anyone overrides that.
 
 ## What is bundled
 
-- **Python 3.14, PySide6/Qt and NumPy** — the app runs with no Python
+- **The build environment's Python, PySide6/Qt and NumPy** — the app runs with no Python
   installed.
 - **GStreamer 1.28.6**, pruned to the 40 plugins the app can reach and
   their dependencies — 53 MB of the wheels' 302 — plus the `gi` bindings.
@@ -54,9 +54,9 @@ case anyone overrides that.
 location if they are missing. They are left out deliberately:
 
 - A libvmaf-enabled FFmpeg is another ~80 MB on an already large download.
-- The builds that include libvmaf are GPL, which would change the licensing
-  of the whole distribution. That is a decision for the project owner, not a
-  packaging convenience.
+- FFmpeg licensing depends on its build configuration and linked libraries.
+  Redistribution requires reviewing that exact build's obligations; the
+  presence of libvmaf alone is not a sufficient licensing classification.
 - Users comparing encoders generally already have a specific FFmpeg build
   they trust, and silently shipping a different one invites results that
   disagree with their own command line for reasons nobody can see.
@@ -122,6 +122,11 @@ GStreamer failing on `No module named 'optparse'`.
   binary.
 
 ## Releasing
+
+Complete [RELEASING.md](RELEASING.md), including the third-party license review.
+The bundle ships no GPL GStreamer plugins (the GPL wheels are left out
+entirely and the bundled FFmpeg is LGPL 2.1), but leaving FFmpeg external
+does not remove the need to review the remaining third-party components.
 
 The executable is unsigned, so SmartScreen will warn on first run. Signing
 needs a certificate; without one, "More info → Run anyway" is the path, and

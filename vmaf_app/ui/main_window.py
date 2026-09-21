@@ -68,7 +68,7 @@ from vmaf_app.core.models import (
 )
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
-from vmaf_app.core.stats import AGGREGATE_BY_METRIC, ARITHMETIC, aggregate_scores, stats_for_run
+from vmaf_app.core.stats import AGGREGATE_BY_METRIC, ARITHMETIC, aggregate_scores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
@@ -143,13 +143,15 @@ _METRIC_NAMES = (
 )
 
 class CompletedRun:
-    """A finished run plus the label it's shown under and its summary stats,
-    computed once here rather than recomputed everywhere it's displayed."""
+    """A finished run, its display label, and its graph identity.
+
+    Metric-specific statistics belong to the graph; the video table reads
+    metric aggregates directly from the result.
+    """
 
     def __init__(self, result, label: str):
         self.result = result
         self.label = label
-        self.stats = stats_for_run(result)
         self.graph_identity = object()
 
 
@@ -354,8 +356,8 @@ class MainWindow(QMainWindow):
 
         # Tabs, not separate windows: the graph lives beside the run that
         # produced it, its series survive switching away and back, and there
-        # is no second taskbar entry to manage. A frame-comparison tab is
-        # planned and slots in between Graph and Settings.
+        # is no second taskbar entry to manage. Video Compare and the
+        # independent Bitrate Viewer sit between Metric Graphs and Settings.
         self.tabs = QTabWidget()
         root.addWidget(self.tabs, stretch=1)
 
@@ -717,11 +719,11 @@ class MainWindow(QMainWindow):
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
-        self.distorted_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.distorted_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         # Keep internal column indices stable, but omit crop status from the
         # test-video table. Cropping remains available in the row options.
         self.distorted_table.setColumnHidden(COL_BLACK_BARS, True)
+        self.distorted_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.distorted_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.distorted_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.distorted_table.itemSelectionChanged.connect(self._on_table_selection_changed)
         self.distorted_table.itemChanged.connect(self._on_table_item_changed)

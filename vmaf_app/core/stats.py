@@ -1,4 +1,4 @@
-"""Summary statistics over a VMAF per-frame run."""
+"""Per-frame metric statistics and metric-specific sequence aggregation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -164,9 +164,8 @@ def compute_stats(
 ) -> VmafStats:
     """Despite the name (kept for the VMAF-specific callers/tests that exist
     already), this works over any sequence of per-frame float scores -- PSNR,
-    SSIM and XPSNR reuse it for their own stats tables in the graph window,
-    just with VMAF-specific `thresholds` left empty since ">95"-style bands
-    only make sense on VMAF's fixed 0-100 scale.
+    SSIM and XPSNR reuse it with their own threshold bands and aggregation.
+    Pass an empty threshold list to omit bands entirely.
 
     Accepts a numpy array or a plain list. Computed vectorised: a run is
     hundreds of thousands of frames and this is called once per metric per

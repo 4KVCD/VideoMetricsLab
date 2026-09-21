@@ -956,7 +956,7 @@ def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):
     win.show()
 
     row = win._add_table_row(Path(
-        r"E:\Video encodings\The.Beekeeper.2024.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.HYBRID.REMUX-FraMeSToR.mkv"
+        r"E:\Video tests\Big Buck Bunny 2160p Reference.mkv"
     ))
     info = VideoInfo(
         path=Path("x.mkv"), width=3840, height=2160, fps=23.976, duration=6300.0,
