@@ -920,6 +920,7 @@ def run_vmaf(
         scale_direction=options.scale_direction,
         scale_algorithm=options.scale_algorithm,
         compared_frame_count=total_frames,
+        model_choice=options.model_choice,
     )
 
 
@@ -997,4 +998,5 @@ def run_resample_test(
         scale_algorithm=options.scale_algorithm,
         resample_target=options.resample_test,
         compared_frame_count=total_frames,
+        model_choice=options.model_choice,
     )

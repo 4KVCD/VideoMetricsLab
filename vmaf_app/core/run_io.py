@@ -167,6 +167,7 @@ def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> Non
         "distorted": str(result.distorted),
         "fps": result.fps,
         "model": result.model,
+        "model_choice": result.model_choice,
         "source_crop": _crop_to_dict(result.source_crop),
         "distorted_crop": _crop_to_dict(result.distorted_crop),
         "source_info": _info_to_dict(result.source_info),
@@ -211,6 +212,7 @@ def load_run(path: Path) -> tuple[VmafRunResult, str]:
             else _legacy_resample_target(data["distorted"])
         ),
         compared_frame_count=data.get("compared_frame_count", 0),
+        model_choice=data.get("model_choice"),
     )
     label = data.get("label") or result.distorted.stem
     return result, label

@@ -378,6 +378,9 @@ class VmafRunResult:
     scale_algorithm: str = "bicubic"
     resample_target: ResampleTarget | None = None
     compared_frame_count: int = 0
+    # The UI choice that produced ``model`` (for example a bundled VMAF v1
+    # model).  Older saved runs do not have this field and remain loadable.
+    model_choice: str | None = None
 
     def __post_init__(self) -> None:
         # Accept a plain list of FrameScore and pack it. Callers that build a

@@ -2900,6 +2900,20 @@ class MainWindow(QMainWindow):
         row_data.options.compute_vmaf = result.frames.has("vmaf")
         row_data.options.compute_vmaf_neg = result.frames.has("vmaf_neg")
         row_data.options.model = result.model
+        # Preserve the model selection when a saved run is reopened.  Without
+        # this, a bundled VMAF v1 result would appear in the table correctly
+        # but a later cache lookup/recalculation would silently revert the row
+        # to Auto (v0).  Older files have no model_choice, so infer the two
+        # legacy forms where it is unambiguous.
+        if result.model_choice:
+            row_data.options.model_choice = result.model_choice
+            if result.model_choice == CUSTOM_MODEL_CHOICE and result.model.startswith("path="):
+                row_data.options.custom_model_path = result.model.removeprefix("path=")
+        elif result.model.startswith("version="):
+            row_data.options.model_choice = result.model
+        elif result.model.startswith("path="):
+            row_data.options.model_choice = CUSTOM_MODEL_CHOICE
+            row_data.options.custom_model_path = result.model.removeprefix("path=")
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm
         row_data.options.resample_test = result.resample_target

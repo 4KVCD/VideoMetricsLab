@@ -94,6 +94,17 @@ def test_store_then_load_cached_round_trips(tmp_path):
     assert len(loaded_result.frames) == len(result.frames)
 
 
+def test_cache_keys_differ_between_vmaf_model_choices(tmp_path):
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    v0 = VmafOptions(model_choice="version=vmaf_v0.6.1")
+    v1 = VmafOptions(model_choice="__builtin:vmaf_v1_3d0h")
+
+    assert result_cache.cache_key(source, distorted, v0) != result_cache.cache_key(
+        source, distorted, v1
+    )
+
+
 def test_cache_miss_when_distorted_file_size_differs(tmp_path):
     source = _make_file(tmp_path / "source.mp4", 1000)
     distorted_v1 = _make_file(tmp_path / "distorted.mp4", 500)
