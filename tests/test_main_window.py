@@ -219,7 +219,7 @@ def test_the_table_has_no_status_column(qapp):
         for c in range(win.distorted_table.columnCount())
     ]
     assert "Status" not in headers
-    assert win.distorted_table.columnCount() == 11
+    assert win.distorted_table.columnCount() == 13
 
 
 def test_metrics_have_consistent_visual_order(qapp):
@@ -228,7 +228,10 @@ def test_metrics_have_consistent_visual_order(qapp):
     columns = main_window_module._METRIC_COLUMN_SET
     labels = [win.distorted_table.horizontalHeaderItem(header.logicalIndex(i)).text().strip()
               for i in range(header.count()) if header.logicalIndex(i) in columns]
-    assert labels == ["VMAF", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)"]
+    assert labels == [
+        "VMAF", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)",
+        "SSIMULACRA2", "Butteraugli",
+    ]
     win.settings_default_vmaf_neg.setChecked(True)
     assert win._options_from_settings().compute_vmaf_neg
 
@@ -562,7 +565,9 @@ def test_path_column_manually_widened_past_available_room_does_not_snap_back(qap
 
 def test_path_column_shrinks_when_another_column_is_widened(qapp):
     win = MainWindow()
-    win.resize(1600, 800)
+    # Seven metric columns legitimately need more room than the historical
+    # five-column layout; use a width where the fill column has spare space.
+    win.resize(2200, 800)
     win.show()
     win._add_table_row(Path("a.mp4"))
     qapp.processEvents()

@@ -141,20 +141,20 @@ class SeriesEntry:
 
 def _identical_frame_count(result: ComparisonResult, key: str) -> int:
     """Frames scoring +inf -- mathematically identical to the reference."""
-    values = result.frames.values(key)
-    if values is None or len(values) == 0:
+    metric = result.frame_metric(key)
+    if metric is None or len(metric.values) == 0:
         return 0
-    return int(np.isposinf(np.asarray(values, dtype=np.float64)).sum())
+    return int(np.isposinf(np.asarray(metric.values, dtype=np.float64)).sum())
 
 
 def _metric_means(result: ComparisonResult) -> dict[str, float | None]:
     means: dict[str, float | None] = {}
     for metric in METRICS:
-        values = result.frames.values(metric.key)
-        if values is None or len(values) == 0:
+        frame_result = result.frame_metric(metric.key)
+        if frame_result is None or len(frame_result.values) == 0:
             means[metric.key] = None
             continue
-        means[metric.key] = aggregate_scores(values, metric.aggregation)
+        means[metric.key] = aggregate_scores(frame_result.values, metric.aggregation)
     return means
 
 
@@ -171,6 +171,8 @@ class _MetricCurve:
     # Held once per add_run rather than re-derived on every hover move --
     # that per-call work was a measured CPU bottleneck on a long run.
     values: np.ndarray
+    frames: np.ndarray
+    times: np.ndarray
     label: str = ""  # the series' display name, for sizing the hover readout
     visible: bool = True
 
@@ -241,10 +243,11 @@ class _MetricPage(QWidget):
         # PSNR/SSIM/XPSNR are computed for a whole run or not at all -- it's
         # a per-run option, never a per-frame one -- so the array is either
         # present or None, and lines up index-for-index with entry.times.
-        values = entry.result.frames.values(self.metric.key)
-        if values is None or len(values) == 0:
+        result = entry.result.frame_metric(self.metric.key)
+        if result is None or len(result.values) == 0:
             self._update_no_data_label()
             return
+        values = result.values
         plot_values = values
         if self.metric.key == "xpsnr" and np.isposinf(values).any():
             # Display-only substitution: never mutate the result arrays used
@@ -253,11 +256,13 @@ class _MetricPage(QWidget):
                 np.isposinf(values), _XPSNR_INFINITY_PLOT_DB, values
             )
         self.chart.set_series(series_id, ChartSeries(
-            times=entry.times, values=plot_values, color=color, visible=entry.visible,
+            times=result.time, values=plot_values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
             stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation),
             values=values,
+            frames=result.frame,
+            times=result.time,
             label=entry.label, visible=entry.visible,
         )
         self._update_no_data_label()
@@ -377,7 +382,7 @@ class _MetricPage(QWidget):
         return idx if (times[idx] - x) < (x - times[idx - 1]) else idx - 1
 
     def _find_hover_index(
-        self, entry: SeriesEntry, values: np.ndarray, x: float, y: float, half_window: float,
+        self, curve: _MetricCurve, values: np.ndarray, x: float, y: float, half_window: float,
     ) -> int:
         """Finds the frame to report for this series at the cursor.
 
@@ -392,7 +397,7 @@ class _MetricPage(QWidget):
         Vectorised: zoomed out over a long run this window spans thousands
         of frames, and it runs on every mouse move.
         """
-        times = entry.times
+        times = curve.times
         lo = int(np.searchsorted(times, x - half_window, side="left"))
         hi = int(np.searchsorted(times, x + half_window, side="right"))
         if lo >= hi:
@@ -414,7 +419,7 @@ class _MetricPage(QWidget):
         return lo + int(finite[np.argmin(window[finite])])
 
     def _find_shared_hover_time(
-        self, pages: list[tuple[SeriesEntry, np.ndarray]], x: float, y: float, x_per_pixel: float,
+        self, pages: list[tuple[SeriesEntry, _MetricCurve]], x: float, y: float, x_per_pixel: float,
     ) -> float:
         """The multi-series equivalent of _find_hover_index: picks ONE target
         time using the same dip-snap rule (nearest-in-time among points
@@ -427,9 +432,10 @@ class _MetricPage(QWidget):
         fallback_time: float | None = None
         fallback_val = 0.0
 
-        for entry, values in pages:
-            times = entry.times
-            half_window = max(entry.step, x_per_pixel) * _HOVER_SEARCH_STEPS
+        for _entry, curve in pages:
+            times, values = curve.times, curve.values
+            step = float(times[-1] - times[0]) / (len(times) - 1) if len(times) > 1 else 1.0
+            half_window = max(step, x_per_pixel) * _HOVER_SEARCH_STEPS
             lo = int(np.searchsorted(times, x - half_window, side="left"))
             hi = int(np.searchsorted(times, x + half_window, side="right"))
             if lo >= hi:
@@ -462,7 +468,7 @@ class _MetricPage(QWidget):
         and put the crosshair on the chosen moment."""
         x_per_pixel = self.chart.seconds_per_pixel()
         visible = [
-            (entries_by_id[sid], c.values)
+            (entries_by_id[sid], c)
             for sid, c in self._curves.items() if c.visible
         ]
         if not visible:
@@ -477,18 +483,17 @@ class _MetricPage(QWidget):
             # Every series reports the SAME moment -- snapping each to its own
             # nearest dip would compare different frames against each other.
             target_time = self._find_shared_hover_time(visible, x, y, x_per_pixel)
-            picks = [(entry, self._nearest_index_by_time(entry.times, target_time)) for entry, _ in visible]
+            picks = [(entry, curve, self._nearest_index_by_time(curve.times, target_time)) for entry, curve in visible]
         else:
-            entry, values = visible[0]
-            half_window = max(entry.step, x_per_pixel) * _HOVER_SEARCH_STEPS
-            picks = [(entry, self._find_hover_index(entry, values, x, y, half_window))]
+            entry, curve = visible[0]
+            step = float(curve.times[-1] - curve.times[0]) / (len(curve.times) - 1) if len(curve.times) > 1 else 1.0
+            half_window = max(step, x_per_pixel) * _HOVER_SEARCH_STEPS
+            picks = [(entry, curve, self._find_hover_index(curve, curve.values, x, y, half_window))]
 
-        for entry, idx in picks:
-            frames = entry.result.frames
-            val = frames.values(self.metric.key)
-            value = None if val is None else float(val[idx])
-            frame = int(frames.frame[idx])
-            time = float(frames.time[idx])
+        for entry, curve, idx in picks:
+            value = float(curve.values[idx])
+            frame = int(curve.frames[idx])
+            time = float(curve.times[idx])
             prefix = self._readout_prefix(entry.label, frame, time)
             if not _is_reportable(value):
                 # A run can carry the column while individual frames have no
@@ -505,7 +510,7 @@ class _MetricPage(QWidget):
             if not np.isnan(delta):
                 lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(delta)}")
 
-        self.chart.set_cursor_time(float(picks[0][0].times[picks[0][1]]))
+        self.chart.set_cursor_time(float(picks[0][1].times[picks[0][2]]))
         self._set_hover_text("\n".join(lines))
 
 
@@ -517,7 +522,7 @@ class _MetricPage(QWidget):
         compared at a specific moment. Returns whether any series had it.
         """
         visible = [
-            (entries_by_id[sid], c.values)
+            (entries_by_id[sid], c)
             for sid, c in self._curves.items() if c.visible
         ]
         if not visible:
@@ -528,32 +533,30 @@ class _MetricPage(QWidget):
         found: list[tuple[str, float]] = []
         cursor_time: float | None = None
 
-        for entry, _values in visible:
-            frames = entry.result.frames
-            idx = int(np.searchsorted(frames.frame, frame))
+        for entry, curve in visible:
+            idx = int(np.searchsorted(curve.frames, frame))
             # A run can be shorter than another, or subsampled, so the frame
             # may not exist in it -- that is reported rather than silently
             # showing a neighbouring frame's score.
-            if idx >= len(frames) or int(frames.frame[idx]) != frame:
+            if idx >= len(curve.frames) or int(curve.frames[idx]) != frame:
                 lines.append(self._readout_missing_frame(entry.label, frame))
                 continue
-            values = frames.values(self.metric.key)
-            value = None if values is None else float(values[idx])
+            value = float(curve.values[idx])
             if not _is_reportable(value):
                 lines.append(
                     self._readout_prefix(
-                        entry.label, int(frames.frame[idx]), float(frames.time[idx])
+                        entry.label, int(curve.frames[idx]), float(curve.times[idx])
                     ) + f"no {self.metric.label}"
                 )
                 continue
             lines.append(
                 self._readout_prefix(
-                    entry.label, int(frames.frame[idx]), float(frames.time[idx])
+                    entry.label, int(curve.frames[idx]), float(curve.times[idx])
                 ) + f"{self.metric.label}={self.metric.format_value(value)}"
             )
             found.append((entry.label, float(value)))
             if cursor_time is None:
-                cursor_time = float(frames.time[idx])
+                cursor_time = float(curve.times[idx])
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
@@ -570,13 +573,12 @@ class _MetricPage(QWidget):
         """The frame numbers spanned by the visible series, for bounding the
         jump-to-frame control."""
         lo, hi = None, None
-        for sid, curve in self._curves.items():
+        for _sid, curve in self._curves.items():
             if not curve.visible:
                 continue
-            frames = entries_by_id[sid].result.frames
-            if len(frames) == 0:
+            if len(curve.frames) == 0:
                 continue
-            first, last = int(frames.frame[0]), int(frames.frame[-1])
+            first, last = int(curve.frames[0]), int(curve.frames[-1])
             lo = first if lo is None else min(lo, first)
             hi = last if hi is None else max(hi, last)
         return (lo or 0, hi if hi is not None else 0)
@@ -725,16 +727,16 @@ class GraphPanel(QWidget):
 
     def _update_metric_hint(self) -> None:
         metric = self._current_metric()
-        available = any(e.result.frames.has(metric.key) for e in self._entries.values())
+        available = any(e.result.has_metric(metric.key) for e in self._entries.values())
         self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Tick it in the {metric.label} column in Videos, or load results containing it.")
         if available and metric.key == "xpsnr":
             self.metric_hint.setText(_XPSNR_INFINITY_NOTE)
         self.metric_hint.setVisible(bool(self.metric_hint.text()))
         for i, spec in enumerate(METRICS):
-            self.tabs.setTabToolTip(i, "" if any(e.result.frames.has(spec.key) for e in self._entries.values()) else "Not calculated")
+            self.tabs.setTabToolTip(i, "" if any(e.result.has_metric(spec.key) for e in self._entries.values()) else "Not calculated")
 
     def _select_available_metric(self) -> None:
-        available = [m.key for m in METRICS if any(e.result.frames.has(m.key) for e in self._entries.values())]
+        available = [m.key for m in METRICS if any(e.result.has_metric(m.key) for e in self._entries.values())]
         key = self._preferred_metric if self._preferred_metric in available else next(iter(available), self._preferred_metric)
         self._selecting_available_metric = True
         try:

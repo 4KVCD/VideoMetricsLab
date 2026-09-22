@@ -125,7 +125,9 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_VMAF,
     COL_XPSNR,
     COL_VMAF_NEG,
-) = range(11)
+    COL_SSIMULACRA2,
+    COL_BUTTERAUGLI,
+) = range(13)
 
 #: Row states worth colouring the file name for. Everything else the old
 #: Status column reported is now visible in the metric columns themselves --
@@ -157,6 +159,7 @@ _METRIC_COLUMNS = (
     MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
     MetricColumn(COL_PSNR, "psnr"), MetricColumn(COL_SSIM, "ssim"),
     MetricColumn(COL_XPSNR, "xpsnr"),
+    MetricColumn(COL_SSIMULACRA2, "ssimulacra2"), MetricColumn(COL_BUTTERAUGLI, "butteraugli"),
 )
 _METRIC_COLUMN_BY_INDEX = {item.column: item for item in _METRIC_COLUMNS}
 _METRIC_COLUMN_SET = frozenset(_METRIC_COLUMN_BY_INDEX)
@@ -191,6 +194,9 @@ class RowData:
     video_info: VideoInfo | None = None
     completed_run: CompletedRun | None = None
     options: VmafOptions = field(default_factory=VmafOptions)
+    # Non-FFmpeg metrics deliberately live outside VmafOptions. The row keeps
+    # one generic selection alongside the existing FFmpeg adapter settings.
+    extra_metric_keys: set[str] = field(default_factory=set)
     analysis_status: str = ""
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
@@ -289,6 +295,7 @@ class MainWindow(QMainWindow):
         # Per-video settings machinery: the Options panel is an inspector for
         # whichever rows are selected, not one global setting.
         self._default_options = self._options_from_settings()  # what a newly-added row starts with
+        self._default_extra_metric_keys: set[str] = set()
         self._panel_target_rows: list[int] = []  # rows the panel currently edits
         self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
         self._syncing_panel = False  # guards against write-back while populating the panel programmatically
@@ -710,7 +717,7 @@ class MainWindow(QMainWindow):
         ))
         metric_cols = [item.column for item in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
-            0, 11, fill_column=COL_PATH,
+            0, len(_METRIC_COLUMNS) + 6, fill_column=COL_PATH,
             other_columns=[
                 COL_CHECK, COL_INFO, COL_BLACK_BARS, COL_SCALING, COL_BITRATE,
                 *metric_cols,
@@ -736,6 +743,8 @@ class MainWindow(QMainWindow):
                 f"   {metric_definition('psnr').table_header}", f"   {metric_definition('ssim').table_header}",
                 f"   {metric_definition('vmaf').table_header}", f"   {metric_definition('xpsnr').table_header}",
                 f"   {metric_definition('vmaf_neg').table_header}",
+                f"   {metric_definition('ssimulacra2').table_header}",
+                f"   {metric_definition('butteraugli').table_header}",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -780,7 +789,7 @@ class MainWindow(QMainWindow):
             COL_BLACK_BARS: 78,
             COL_SCALING: 90,
             COL_BITRATE: 65,
-            **{col: (105 if col in (COL_PSNR, COL_XPSNR) else 78)
+            **{col: (110 if col in (COL_PSNR, COL_XPSNR, COL_SSIMULACRA2, COL_BUTTERAUGLI) else 78)
                for item in _METRIC_COLUMNS for col in (item.column,)},
         }
         for col, width in starting_widths.items():
@@ -1299,7 +1308,10 @@ class MainWindow(QMainWindow):
         # adding several similar files in a row doesn't mean reconfiguring
         # each one from scratch -- but it's still an independent copy from
         # this point on, so editing one row never affects another.
-        self._rows.append(RowData(path=path, options=clone_options(self._default_options)))
+        self._rows.append(RowData(
+            path=path, options=clone_options(self._default_options),
+            extra_metric_keys=set(self._default_extra_metric_keys),
+        ))
         self._set_row_metrics(row)
         return row
 
@@ -1318,7 +1330,6 @@ class MainWindow(QMainWindow):
         """
         row_data = self._rows[row]
         run = row_data.completed_run
-        opts = row_data.options
         # setCheckState/setData below emit itemChanged, which is also how a
         # real click reaches _on_table_item_changed. Without this the window
         # would read its own repaint back as the user asking for a change.
@@ -1329,7 +1340,7 @@ class MainWindow(QMainWindow):
                 item = self.distorted_table.item(row, col)
                 if item is None:
                     continue
-                enabled = self._metric_enabled(opts, col)
+                enabled = self._row_metric_enabled(row_data, col)
                 value = self._metric_mean(run, col) if run is not None else None
                 if value is None:
                     item.setFlags(
@@ -1384,7 +1395,7 @@ class MainWindow(QMainWindow):
         is at, and why a finished job is not being shown.
         """
         return row_data.analysis_status or (
-            "No metrics selected" if not row_data.options.requested_metrics() else
+            "No metrics selected" if not self._requested_metrics(row_data) else
             "Complete" if self._has_requested_results(row_data) else
             "Partially calculated" if row_data.completed_run is not None
             else "Not calculated"
@@ -1437,7 +1448,8 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
         metric = _METRIC_COLUMN_BY_INDEX[column].metric
-        values = run.result.frames.values(metric.key)
+        result = run.result.frame_metric(metric.key)
+        values = result.values if result is not None else run.result.frames.values(metric.key)
         if values is None or len(values) == 0:
             return None
         return aggregate_scores(values, metric.aggregation)
@@ -1814,7 +1826,7 @@ class MainWindow(QMainWindow):
         worker = ProbeWorker(
             paths, self._source_info.path, True,
             {
-                rd.path: analysis_request_from_vmaf_options(clone_options(rd.options))
+                rd.path: analysis_request_from_vmaf_options(clone_options(rd.options), self._requested_metrics(rd))
                 for rd in cache_rows
             },
             cache_paths={rd.path: rd.identity_path for rd in cache_rows},
@@ -1850,7 +1862,7 @@ class MainWindow(QMainWindow):
             return
         current_key = result_cache.cache_key(
             self._source_info.path, self._rows[row].identity_path,
-            analysis_request_from_vmaf_options(self._rows[row].options),
+            analysis_request_from_vmaf_options(self._rows[row].options, self._requested_metrics(self._rows[row])),
         )
         if key == current_key:
             self._on_cached_found(path, result, label)
@@ -1871,9 +1883,9 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         if row_data.completed_run is not None:
             existing = row_data.completed_run.result.frames
-            if all(existing.has(m) for m in row_data.options.requested_metrics()):
+            if all(existing.has(m) for m in self._requested_metrics(row_data)):
                 return
-            if not all(result.frames.has(m) for m in row_data.options.requested_metrics()):
+            if not all(result.has_metric(m) for m in self._requested_metrics(row_data)):
                 return
             self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
         run = CompletedRun(result, label)
@@ -1965,7 +1977,7 @@ class MainWindow(QMainWindow):
             return False
         cached = result_cache.load_cached(
             self._source_info.path, row_data.identity_path,
-            analysis_request_from_vmaf_options(row_data.options),
+            analysis_request_from_vmaf_options(row_data.options, self._requested_metrics(row_data)),
             supplemental_specs=supplemental_metric_specs(row_data.options),
         )
         if cached is None:
@@ -1983,7 +1995,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(metric.label for metric in FRAME_METRICS if result.frames.has(metric.key))
+            + ", ".join(metric.label for metric in FRAME_METRICS if result.has_metric(metric.key))
             + "\nLoaded from a previous run (matching files and calculation settings) -- "
             "right-click to recompute."
         )
@@ -2028,7 +2040,7 @@ class MainWindow(QMainWindow):
                     partial(
                         result_cache.clear,
                         self._source_info.path, row_data.identity_path,
-                        analysis_request_from_vmaf_options(clone_options(row_data.options)),
+                        analysis_request_from_vmaf_options(clone_options(row_data.options), self._requested_metrics(row_data)),
                         cache_directory,
                         supplemental_metric_specs(clone_options(row_data.options)),
                     ),
@@ -2161,9 +2173,11 @@ class MainWindow(QMainWindow):
             # Keep the global header shortcuts and selected-row inspector
             # consistent without firing their write-back signals.
             for metric_column in _METRIC_COLUMNS:
-                self.metric_header.set_checked(
-                    metric_column.column, opts.metric_enabled(metric_column.key)
+                enabled = (
+                    metric_column.key in self._requested_metrics(self._rows[self._panel_target_rows[0]])
+                    if self._panel_target_rows else self._metric_enabled(opts, metric_column.column)
                 )
+                self.metric_header.set_checked(metric_column.column, enabled)
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
             uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.extra_features for o in selected_options)
@@ -2210,11 +2224,25 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_enabled(options: VmafOptions, column: int) -> bool:
-        return options.metric_enabled(_METRIC_COLUMN_BY_INDEX[column].key)
+        metric = _METRIC_COLUMN_BY_INDEX[column].key
+        return metric_definition(metric).ffmpeg_binding is not None and options.metric_enabled(metric)
 
     @staticmethod
     def _set_metric_option(options: VmafOptions, column: int, checked: bool) -> None:
-        options.set_metric_enabled(_METRIC_COLUMN_BY_INDEX[column].key, checked)
+        metric = _METRIC_COLUMN_BY_INDEX[column].key
+        if metric_definition(metric).ffmpeg_binding is None:
+            raise ValueError(f"{metric} is not an FFmpeg option")
+        options.set_metric_enabled(metric, checked)
+
+    @staticmethod
+    def _requested_metrics(row_data: RowData) -> tuple[str, ...]:
+        requested = set(row_data.options.requested_metrics()) | row_data.extra_metric_keys
+        return tuple(metric.key for metric in FRAME_METRICS if metric.key in requested)
+
+    @classmethod
+    def _row_metric_enabled(cls, row_data: RowData, column: int) -> bool:
+        key = _METRIC_COLUMN_BY_INDEX[column].key
+        return key in cls._requested_metrics(row_data)
 
     def _apply_metric_selection(
         self, rows: list[int], column: int, checked: bool, *, set_default: bool = True,
@@ -2230,13 +2258,27 @@ class MainWindow(QMainWindow):
             return
         for row in rows:
             rd = self._rows[row]
-            self._set_metric_option(rd.options, column, checked)
+            key = _METRIC_COLUMN_BY_INDEX[column].key
+            if metric_definition(key).ffmpeg_binding is None:
+                if checked:
+                    rd.extra_metric_keys.add(key)
+                else:
+                    rd.extra_metric_keys.discard(key)
+            else:
+                self._set_metric_option(rd.options, column, checked)
             rd.analysis_status = ""
             # The existing scores remain valid: selecting another metric
             # changes the requested output, not the measured pictures.
             self._set_row_metrics(row)
         if set_default:
-            self._set_metric_option(self._default_options, column, checked)
+            key = _METRIC_COLUMN_BY_INDEX[column].key
+            if metric_definition(key).ffmpeg_binding is None:
+                if checked:
+                    self._default_extra_metric_keys.add(key)
+                else:
+                    self._default_extra_metric_keys.discard(key)
+            else:
+                self._set_metric_option(self._default_options, column, checked)
         self._reload_cached_for_rows(rows)
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
@@ -2262,7 +2304,7 @@ class MainWindow(QMainWindow):
         if not item.flags() & Qt.ItemIsUserCheckable:
             return  # a cell showing a score or live progress, not a tick box
         checked = item.checkState() == Qt.Checked
-        if checked == self._metric_enabled(self._rows[row].options, column):
+        if checked == self._row_metric_enabled(self._rows[row], column):
             # itemChanged also fires for text, colour and font edits. Only a
             # box that now disagrees with the row it stands for is a click.
             return
@@ -2280,10 +2322,11 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _has_requested_results(row_data: RowData) -> bool:
-        requested = row_data.options.requested_metrics()
+        requested = MainWindow._requested_metrics(row_data)
         return bool(requested and row_data.completed_run is not None and all(
-            row_data.completed_run.result.frames.has(m)
-            and np.any(~np.isnan(row_data.completed_run.result.frames.values(m))) for m in requested
+            row_data.completed_run.result.has_metric(m)
+            and (metric := row_data.completed_run.result.frame_metric(m)) is not None
+            and np.any(~np.isnan(metric.values)) for m in requested
         ))
 
     def _invalidate_completed_result(self, row: int) -> None:
@@ -2402,7 +2445,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No test videos", "Check at least one test video to calculate metrics.")
             return
 
-        if any(not self._rows[r].options.requested_metrics() for r in checked_rows):
+        if any(not self._requested_metrics(self._rows[r]) for r in checked_rows):
             QMessageBox.warning(self, "No metrics selected", "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.")
             return
 
@@ -2464,7 +2507,7 @@ class MainWindow(QMainWindow):
             job_options = replace(row_data.options, model=model)
             jobs.append(VmafJob(
                 self._source_info, dist_info, job_options, label=row_data.path.stem,
-                result_distorted_path=row_data.path,
+                result_distorted_path=row_data.path, metric_keys=self._requested_metrics(row_data),
             ))
             job_rows.append(row_data)
             # A resample test's output timeline is driven by the reference (see
@@ -2762,7 +2805,7 @@ class MainWindow(QMainWindow):
                 # which for a synthetic row is a path that does not exist and
                 # so carries no size or mtime to notice a replacement by.
                 result.source, row_data.identity_path, result, label,
-                analysis_request_from_vmaf_options(cache_options),
+                analysis_request_from_vmaf_options(cache_options, self._requested_metrics(row_data)),
                 result_cache.cache_dir(),
             ),
         )
@@ -2800,7 +2843,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(metric.label for metric in FRAME_METRICS if result.frames.has(metric.key))
+            + ", ".join(metric.label for metric in FRAME_METRICS if result.has_metric(metric.key))
         )
         self._set_row_metrics(row)
         # Straight onto the graph: a run that has finished is a curve, and

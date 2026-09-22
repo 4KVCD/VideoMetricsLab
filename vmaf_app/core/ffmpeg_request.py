@@ -10,7 +10,7 @@ from vmaf_app.core.analysis_request import (
     MetricRequestSpec,
 )
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
-from vmaf_app.core.metrics import FRAME_METRICS
+from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 from vmaf_app.core.models import CropBox, ResampleTarget, VmafOptions, clone_options
 
 
@@ -41,9 +41,22 @@ def metric_request_specs(
 ) -> tuple[MetricRequestSpec, ...]:
     """Translate current FFmpeg metric choices into backend-neutral specs."""
     requested = options.requested_metrics() if metric_keys is None else metric_keys
-    libvmaf_requested = any(key != "xpsnr" for key in requested)
+    ffmpeg_requested = tuple(key for key in requested if metric_definition(key).ffmpeg_binding is not None)
+    libvmaf_requested = any(key != "xpsnr" for key in ffmpeg_requested)
     specs: list[MetricRequestSpec] = []
     for key in requested:
+        definition = metric_definition(key)
+        if definition.ffmpeg_binding is None:
+            if definition.backend_id is None:
+                raise ValueError(f"No executable backend is registered for metric {key!r}")
+            specs.append(MetricRequestSpec(
+                key=key,
+                backend_id=definition.backend_id,
+                parameters=(),
+                coverage=FrameCoverage("sampled" if options.n_subsample > 1 else "full", options.n_subsample),
+                implementation_compatibility_id=f"{key}-reference-cli-v1",
+            ))
+            continue
         coverage = FrameCoverage(
             "sampled" if libvmaf_requested and options.n_subsample > 1 else "full",
             options.n_subsample if libvmaf_requested and options.n_subsample > 1 else 1,
@@ -78,11 +91,13 @@ def metric_request_specs(
     return tuple(specs)
 
 
-def analysis_request_from_vmaf_options(options: VmafOptions) -> AnalysisRequest:
+def analysis_request_from_vmaf_options(
+    options: VmafOptions, metric_keys: tuple[str, ...] | None = None,
+) -> AnalysisRequest:
     """Freeze one mutable UI/backend option object into a generic request."""
     return AnalysisRequest(
         recipe=comparison_recipe_from_vmaf_options(options),
-        metrics=metric_request_specs(options),
+        metrics=metric_request_specs(options, metric_keys),
         execution=ExecutionPreferences(
             gpu_decode=options.gpu_decode,
             gpu_vendor=options.gpu_vendor,

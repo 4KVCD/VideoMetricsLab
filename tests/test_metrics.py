@@ -19,7 +19,7 @@ from vmaf_app.core.models import FrameScores, VmafOptions
 
 def test_registry_has_the_established_logical_order_and_metadata():
     assert tuple(metric.key for metric in METRICS) == (
-        "vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr",
+        "vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli",
     )
     assert FRAME_METRICS == METRICS
     assert metric_definition("xpsnr").aggregation is MetricAggregation.SQUARE_MEAN_ROOT_DB

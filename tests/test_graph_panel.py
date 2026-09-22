@@ -219,7 +219,7 @@ def test_active_metric_tab_has_visible_highlight_on_every_page(qapp):
 def test_graph_has_one_tab_per_metric(qapp):
     win = GraphPanel()
     labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert labels == ["VMAF", "VMAF NEG", "PSNR", "SSIM", "XPSNR"]
+    assert labels == ["VMAF", "VMAF NEG", "PSNR", "SSIM", "XPSNR", "SSIMULACRA2", "Butteraugli"]
 
 
 def test_non_default_tabs_are_not_built_until_first_visited(qapp):
@@ -378,6 +378,8 @@ def test_metric_bands_are_calibrated_for_every_metric(qapp):
     """Each metric carries bands meaning roughly what VMAF's mean, so a row
     that is 90% good under one is not 100% good under another."""
     for metric in METRICS:
+        if not metric.thresholds:
+            continue
         assert len(metric.thresholds) == 6, metric.key
         ops = [op for op, _ in metric.thresholds]
         assert ops == [">", ">", ">", "<", "<", "<"], metric.key

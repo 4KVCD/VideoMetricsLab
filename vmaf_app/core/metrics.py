@@ -51,6 +51,10 @@ class MetricDefinition:
     fixed_y_max: float | None
     thresholds: tuple[tuple[str, float], ...]
     ffmpeg_binding: FfmpegMetricBinding | None = None
+    # Optional because a registry entry can be display/import-only before an
+    # executable backend ships. FFmpeg metrics retain their established
+    # binding; standalone metrics name their backend explicitly.
+    backend_id: str | None = None
 
     # These small presentation helpers keep all precision and infinity rules
     # together with the metric metadata rather than duplicated in Qt panels.
@@ -79,6 +83,7 @@ _VMAF_THRESHOLDS = ((">", 95.0), (">", 90.0), (">", 85.0), ("<", 85.0), ("<", 80
 _PSNR_THRESHOLDS = ((">", 41.0), (">", 38.0), (">", 35.0), ("<", 35.0), ("<", 34.0), ("<", 32.0))
 _SSIM_THRESHOLDS = ((">", 0.99), (">", 0.98), (">", 0.97), ("<", 0.97), ("<", 0.96), ("<", 0.95))
 _XPSNR_THRESHOLDS = ((">", 38.0), (">", 35.0), (">", 33.0), ("<", 33.0), ("<", 30.0), ("<", 27.0))
+_SSIMULACRA2_THRESHOLDS = ((">", 90.0), (">", 80.0), (">", 70.0), ("<", 70.0), ("<", 50.0), ("<", 30.0))
 
 
 # This is the logical/display order.  The version-1 result-file row order is
@@ -99,6 +104,12 @@ METRICS = (
     MetricDefinition("xpsnr", "XPSNR", "XPSNR", "XPSNR (dB)", "XPSNR (dB)", "{:.2f}", " dB", MetricKind.FRAME,
                      MetricDirection.HIGHER_IS_BETTER, MetricAggregation.SQUARE_MEAN_ROOT_DB, None,
                      _XPSNR_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_xpsnr")),
+    MetricDefinition("ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "{:.2f}", "", MetricKind.FRAME,
+                     MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
+                     _SSIMULACRA2_THRESHOLDS, backend_id="perceptual_cpu"),
+    MetricDefinition("butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "{:.4f}", "", MetricKind.FRAME,
+                     MetricDirection.LOWER_IS_BETTER, MetricAggregation.ARITHMETIC, None,
+                     (), backend_id="perceptual_cpu"),
 )
 
 METRIC_BY_KEY = MappingProxyType({metric.key: metric for metric in METRICS})

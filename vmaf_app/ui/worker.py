@@ -9,7 +9,9 @@ from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.models import VideoInfo, VmafOptions
+from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, run_perceptual_task
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
 
@@ -24,6 +26,9 @@ class VmafJob:
     # result_distorted_path param. None means "just use distorted_info.path"
     # (the normal case).
     result_distorted_path: Path | None = None
+    # Selection lives with the job/request, not VmafOptions: standalone
+    # metrics are not FFmpeg adapter configuration.
+    metric_keys: tuple[str, ...] | None = None
 
 
 #: Two, because a third buys nothing. Measured on a 24-core machine over four
@@ -250,30 +255,64 @@ class VmafWorker(QThread):
             try:
                 # The plan is deliberately used in production, not only in
                 # tests. Part 2 still produces one efficient FFmpeg task.
-                plan = build_execution_plan(analysis_request_from_vmaf_options(options))
-                # The only current task keeps the exact established runner
-                # call surface, including testable cancellation semantics.
-                if len(plan.tasks) != 1 or plan.tasks[0].backend_id != "ffmpeg":
+                request = analysis_request_from_vmaf_options(options, job.metric_keys)
+                plan = build_execution_plan(request)
+                result = None
+                combined = MetricResultSet()
+                for task in plan.tasks:
+                    if task.backend_id == "ffmpeg":
+                        task_options = replace(options)
+                        for key in options.requested_metrics():
+                            task_options.set_metric_enabled(key, key in task.metric_keys)
+                        if options.resample_test is not None:
+                            current = run_resample_test(
+                                job.source_info, task_options,
+                                on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
+                                on_status=lambda msg, idx=i: self.status.emit(idx, msg),
+                                cancel_event=self._cancel_event, process_handle=handle,
+                            )
+                        else:
+                            current = run_vmaf(
+                                job.source_info, job.distorted_info, task_options,
+                                on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
+                                on_status=lambda msg, idx=i: self.status.emit(idx, msg),
+                                cancel_event=self._cancel_event, process_handle=handle,
+                                result_distorted_path=job.result_distorted_path,
+                            )
+                        result = current
+                        combined = current.metric_results
+                    elif task.backend_id == "perceptual_cpu":
+                        perceptual = run_perceptual_task(
+                            job.source_info, job.distorted_info, request, task.requested_specs,
+                            on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
+                            on_status=lambda msg, idx=i: self.status.emit(idx, msg),
+                            cancel_event=self._cancel_event, process_handle=handle,
+                        )
+                        if result is None:
+                            from vmaf_app.core.models import ComparisonResult, FrameScores
+                            result = ComparisonResult(
+                                source=job.source_info.path,
+                                distorted=job.result_distorted_path or job.distorted_info.path,
+                                frames=FrameScores.empty(), fps=job.source_info.fps, model="",
+                                source_crop=perceptual.source_crop, distorted_crop=perceptual.distorted_crop,
+                                source_info=job.source_info, distorted_info=job.distorted_info,
+                                scale_direction=options.scale_direction, scale_algorithm=options.scale_algorithm,
+                                compared_frame_count=perceptual.compared_frame_count,
+                            )
+                        combined = combined.copy()
+                        for key in perceptual.metrics:
+                            value = perceptual.metrics.get(key)
+                            assert value is not None
+                            combined.add(value)
+                    else:
+                        raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
+                if result is None:
                     raise VmafRunError("No executable metric task was planned.")
-                if options.resample_test is not None:
-                    result = run_resample_test(
-                        job.source_info, options,
-                        on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
-                        on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                        cancel_event=self._cancel_event, process_handle=handle,
-                    )
-                else:
-                    result = run_vmaf(
-                        job.source_info, job.distorted_info, options,
-                        on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
-                        on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                        cancel_event=self._cancel_event, process_handle=handle,
-                        result_distorted_path=job.result_distorted_path,
-                    )
-            except Cancelled:
+                result.merge_metric_results(combined)
+            except (Cancelled, PerceptualCancelled):
                 self._report_cancelled_once()
                 break
-            except VmafRunError as e:
+            except (VmafRunError, PerceptualRunError) as e:
                 self.job_failed.emit(i, str(e), e.stderr_tail)
                 continue
             except Exception as e:
