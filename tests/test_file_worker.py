@@ -11,6 +11,12 @@ from pathlib import Path
 import pytest
 from PySide6.QtWidgets import QApplication
 
+from tests.factories import (
+    fake_completed_run as _fake_completed_run,
+)
+from tests.factories import (
+    fake_video_info as _fake_video_info,
+)
 from vmaf_app.ui.file_worker import FileWriteQueue
 
 
@@ -110,7 +116,6 @@ def test_a_queue_with_nothing_submitted_is_already_idle(qapp):
 def test_finishing_a_run_does_not_block_the_window(qapp, tmp_path, monkeypatch):
     """The end-to-end version: the handler that a finished run lands in must
     return promptly even when the cache write is slow."""
-    from tests.test_main_window import _fake_completed_run, _fake_video_info
     from vmaf_app.core import result_cache
     from vmaf_app.ui.main_window import MainWindow
 
@@ -155,7 +160,6 @@ def test_finishing_a_run_does_not_block_the_window(qapp, tmp_path, monkeypatch):
 def test_recompute_is_ordered_after_a_pending_cache_store(qapp, monkeypatch):
     """A clear issued while store is running must be last, or the supposedly
     ignored result is recreated as soon as the background write finishes."""
-    from tests.test_main_window import _fake_completed_run, _fake_video_info
     from vmaf_app.core import result_cache
     from vmaf_app.ui.main_window import MainWindow
 

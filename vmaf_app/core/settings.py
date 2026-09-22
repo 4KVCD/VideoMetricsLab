@@ -13,11 +13,6 @@ from pathlib import Path
 
 from vmaf_app.core.app_paths import settings_file
 
-#: Bumped whenever a saved settings file needs upgrading in place. 1 turned
-#: the metric defaults on for files written before all four were the default;
-#: 2 turned parallel scoring on for many-core machines that had never chosen.
-SETTINGS_VERSION = 2
-
 #: Above this many logical cores, a fresh install scores two videos at once.
 #: One libvmaf job leaves a big CPU largely idle (see MAX_PARALLEL_JOBS for
 #: the measurement); below it, a second job mostly competes with the first.
@@ -59,10 +54,6 @@ class Settings:
     default_compute_vmaf_neg: bool = False
     graph_metric: str = "vmaf"
 
-    # Which upgrades have already been applied to the saved file. See
-    # SETTINGS_VERSION and _migrate.
-    settings_version: int = SETTINGS_VERSION
-
     # How many videos to score at once (1 or 2 -- see MAX_PARALLEL_JOBS).
     # libvmaf does not saturate a modern many-core CPU on its own, so a
     # second job largely fills the gap rather than competing for it -- which
@@ -99,53 +90,19 @@ class Settings:
 
     @classmethod
     def load(cls) -> Settings:
-        """Reads the saved settings, falling back to defaults for anything
-        missing or unreadable -- a corrupt or half-written file must not stop
-        the app starting, and a file from an older build won't mention
-        fields added since."""
+        """Read saved settings, using defaults for missing or unreadable data.
+
+        Unknown keys are ignored so a stray or future field cannot stop the
+        application from starting.
+        """
         try:
             data = json.loads(cls.path().read_text(encoding="utf-8"))
         except Exception:
-            return cls()  # no file: the dataclass defaults are already current
+            return cls()
         if not isinstance(data, dict):
             return cls()
-        try:
-            version = int(data.get("settings_version", 0))
-        except (TypeError, ValueError, OverflowError):
-            version = 0
         known = {f.name for f in fields(cls)}
-        settings = cls(**{k: v for k, v in data.items() if k in known})
-        if settings._migrate(version):
-            # Persisted straight away, so an upgrade happens exactly once. If
-            # it only lived in memory, a user who turned a metric back off
-            # would find it on again at every launch.
-            settings.save()
-        return settings
-
-    def _migrate(self, from_version: int) -> bool:
-        """Brings a settings file written by an older build up to date.
-
-        Returns whether anything changed. Each step is written against the
-        version it upgrades from, so a file several versions behind is
-        carried forward through all of them in order.
-        """
-        if from_version >= SETTINGS_VERSION:
-            return False
-        if from_version < 1:
-            # All four metrics come from one decode pass, so computing only
-            # VMAF saved almost no time while making PSNR/SSIM/XPSNR cost a
-            # whole second run of the video to obtain later.
-            self.default_compute_psnr = True
-            self.default_compute_ssim = True
-            self.default_compute_xpsnr = True
-            self.default_compute_vmaf = True
-        if from_version < 2 and self.parallel_jobs == 1:
-            # One was the only default before, so a saved 1 says nothing
-            # about whether it was chosen. Files that already say 2 are left
-            # alone, and once this has run, so is any later choice of 1.
-            self.parallel_jobs = default_parallel_jobs()
-        self.settings_version = SETTINGS_VERSION
-        return True
+        return cls(**{k: v for k, v in data.items() if k in known})
 
     def save(self) -> str | None:
         """Returns None on success, or a message to show the user."""

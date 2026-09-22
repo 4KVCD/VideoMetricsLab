@@ -10,11 +10,11 @@ from typing import Literal
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.models import (
+    ComparisonResult,
     CropBox,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
-    VmafRunResult,
 )
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import analysis_pix_fmt, display_aspect_ratio
@@ -96,7 +96,7 @@ class FrameComparison:
     auto_crop_pending: bool = False
 
     @classmethod
-    def from_result(cls, result: VmafRunResult) -> FrameComparison:
+    def from_result(cls, result: ComparisonResult) -> FrameComparison:
         """The exact geometry a finished run actually used."""
         return cls(
             source_info=result.source_info,

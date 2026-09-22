@@ -1,4 +1,4 @@
-"""Compatibility tests for the headless metric registry and packed scores."""
+"""Tests for the headless metric registry and packed score storage."""
 from __future__ import annotations
 
 import numpy as np
@@ -9,6 +9,9 @@ from vmaf_app.core.metrics import (
     METRIC_BY_KEY,
     METRICS,
     MetricAggregation,
+    MetricDefinition,
+    MetricDirection,
+    MetricKind,
     metric_definition,
 )
 from vmaf_app.core.models import FrameScores, VmafOptions
@@ -22,8 +25,23 @@ def test_registry_has_the_established_logical_order_and_metadata():
     assert metric_definition("xpsnr").aggregation is MetricAggregation.SQUARE_MEAN_ROOT_DB
     assert metric_definition("ssim").value_format == "{:.4f}"
     assert metric_definition("vmaf").fixed_y_max == 100.0
+    assert metric_definition("psnr").ffmpeg_binding.libvmaf_feature == "name=psnr"
+    assert metric_definition("xpsnr").ffmpeg_binding.bool_option == "compute_xpsnr"
     with pytest.raises(TypeError):
         METRIC_BY_KEY["new"] = metric_definition("vmaf")  # type: ignore[index]
+
+
+def test_registry_allows_metrics_without_an_ffmpeg_options_binding():
+    future = MetricDefinition(
+        key="future_sequence", label="Future", short_label="Future",
+        table_header="Future", axis_label="Future", value_format="{:.2f}",
+        value_suffix="", kind=MetricKind.SEQUENCE,
+        direction=MetricDirection.HIGHER_IS_BETTER,
+        aggregation=MetricAggregation.ARITHMETIC, fixed_y_max=None,
+        thresholds=(), ffmpeg_binding=None,
+    )
+
+    assert future.ffmpeg_binding is None
 
 
 def test_options_registry_mapping_preserves_unknown_feature_order():

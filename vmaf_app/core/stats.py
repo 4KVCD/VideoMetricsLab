@@ -7,7 +7,7 @@ from itertools import pairwise
 import numpy as np
 
 from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation
-from vmaf_app.core.models import VmafRunResult
+from vmaf_app.core.models import ComparisonResult
 
 # Default threshold breakdown requested: >95, >90, >85, <85, <80, <70
 DEFAULT_THRESHOLDS = METRIC_BY_KEY["vmaf"].thresholds
@@ -249,5 +249,5 @@ def compute_stats(
     )
 
 
-def stats_for_run(result: VmafRunResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
+def stats_for_run(result: ComparisonResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
     return compute_stats(result.frames.vmaf if result.frames.vmaf is not None else [], thresholds)

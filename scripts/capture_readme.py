@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from vmaf_app import APP_NAME
 from vmaf_app.core import result_cache
-from vmaf_app.core.settings import SETTINGS_VERSION, Settings
+from vmaf_app.core.settings import Settings
 from vmaf_app.ui.main_window import MainWindow
 
 
@@ -31,7 +31,6 @@ def main() -> None:
         Settings.path().write_text(
             json.dumps(
                 {
-                    "settings_version": SETTINGS_VERSION,
                     "cache_dir": str(folder / "cache"),
                     "remember_window_size": False,
                     "parallel_jobs": 1,

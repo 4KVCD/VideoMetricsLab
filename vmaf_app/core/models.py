@@ -172,23 +172,25 @@ class VmafOptions:
     resample_test: ResampleTarget | None = None
 
     def requested_metrics(self) -> tuple[str, ...]:
-        return tuple(metric.key for metric in FRAME_METRICS if self.metric_enabled(metric.key))
+        return tuple(
+            metric.key for metric in FRAME_METRICS
+            if metric.ffmpeg_binding is not None and self.metric_enabled(metric.key)
+        )
 
     def metric_enabled(self, metric: str) -> bool:
         """Whether an established metric is requested by this options object."""
-        binding = metric_definition(metric).legacy_binding
+        binding = metric_definition(metric).ffmpeg_binding
+        if binding is None:
+            return False
         if binding.bool_option is not None:
             return bool(getattr(self, binding.bool_option))
         return binding.libvmaf_feature in self.extra_features
 
     def set_metric_enabled(self, metric: str, enabled: bool) -> None:
-        """Enable or disable one metric without disturbing custom features.
-
-        Feature order remains meaningful to old cache keys, so enabling a
-        feature appends it just as the pre-registry UI did; disabling removes
-        only the feature owned by this metric.
-        """
-        binding = metric_definition(metric).legacy_binding
+        """Enable or disable one metric without disturbing custom features."""
+        binding = metric_definition(metric).ffmpeg_binding
+        if binding is None:
+            raise ValueError(f"metric {metric!r} is not provided by the FFmpeg options backend")
         if binding.bool_option is not None:
             setattr(self, binding.bool_option, enabled)
             return
@@ -199,14 +201,6 @@ class VmafOptions:
                 self.extra_features.append(feature)
         else:
             self.extra_features = [item for item in self.extra_features if item != feature]
-
-    def __post_init__(self) -> None:
-        if self.model_choice == "version=vmaf_v0.6.1neg":
-            self.compute_vmaf_neg = self.compute_vmaf
-            self.compute_vmaf = False
-            self.model_choice = "__auto__"
-            self.model = "version=vmaf_v0.6.1"
-
 
 def clone_options(opts: VmafOptions) -> VmafOptions:
     """A real copy, not a shared reference -- each row needs its own
@@ -238,10 +232,6 @@ class FrameScore:
     ssim: float | None = None
     xpsnr: float | None = None
     vmaf_neg: float | None = None
-
-
-# Compatibility name for existing callers.  New code should use FRAME_METRICS.
-METRIC_NAMES = tuple(metric.key for metric in FRAME_METRICS)
 
 
 class FrameScores:
@@ -278,11 +268,11 @@ class FrameScores:
         # multi-hour run, where float32 only has ~0.001s of resolution.
         self.time = np.asarray(time, dtype=np.float64)
         self._metrics: dict[str, np.ndarray] = {}
-        legacy = {
+        metric_arrays = {
             "vmaf": vmaf, "psnr": psnr, "ssim": ssim,
             "xpsnr": xpsnr, "vmaf_neg": vmaf_neg,
         }
-        for key, values in legacy.items():
+        for key, values in metric_arrays.items():
             if values is not None:
                 self._metrics[key] = np.asarray(values, dtype=np.float32)
         if metrics is not None:
@@ -291,38 +281,37 @@ class FrameScores:
                     continue
                 self._metrics[key] = np.asarray(values, dtype=np.float32)
 
-    def _legacy_values(self, metric: str) -> np.ndarray | None:
+    def _metric_values(self, metric: str) -> np.ndarray | None:
         return self._metrics.get(metric)
 
     @property
     def vmaf(self) -> np.ndarray | None:
-        return self._legacy_values("vmaf")
+        return self._metric_values("vmaf")
 
     @property
     def vmaf_neg(self) -> np.ndarray | None:
-        return self._legacy_values("vmaf_neg")
+        return self._metric_values("vmaf_neg")
 
     @property
     def psnr(self) -> np.ndarray | None:
-        return self._legacy_values("psnr")
+        return self._metric_values("psnr")
 
     @property
     def ssim(self) -> np.ndarray | None:
-        return self._legacy_values("ssim")
+        return self._metric_values("ssim")
 
     @property
     def xpsnr(self) -> np.ndarray | None:
-        return self._legacy_values("xpsnr")
+        return self._metric_values("xpsnr")
 
     @classmethod
     def empty(cls) -> FrameScores:
-        f32, i32, f64 = np.float32, np.int32, np.float64
-        return cls(np.empty(0, i32), np.empty(0, f64), np.empty(0, f32))
+        i32, f64 = np.int32, np.float64
+        return cls(np.empty(0, i32), np.empty(0, f64))
 
     @classmethod
     def from_frames(cls, frames: Sequence[FrameScore]) -> FrameScores:
-        """Packs a list of per-frame objects (tests, older save files) down
-        into arrays."""
+        """Pack a sequence of per-frame view objects into arrays."""
         if not frames:
             return cls.empty()
 
@@ -417,7 +406,7 @@ class FrameScores:
 
 
 @dataclass
-class VmafRunResult:
+class ComparisonResult:
     source: Path
     distorted: Path
     frames: FrameScores
@@ -433,33 +422,28 @@ class VmafRunResult:
     # scores, even if the row's own settings were changed since.
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
     # Frame Compare needs the exact preprocessing recipe that produced the
-    # scored pictures. These defaults keep older saved runs/loaders valid.
+    # scored pictures.
     scale_algorithm: str = "bicubic"
     resample_target: ResampleTarget | None = None
     compared_frame_count: int = 0
     # The UI choice that produced ``model`` (for example a bundled VMAF v1
-    # model).  Older saved runs do not have this field and remain loadable.
+    # model). Programmatically-created results may leave it unset.
     model_choice: str | None = None
-    # Generic results are authoritative for future backends. ``frames`` is
-    # deliberately retained as the current five-metric compatibility view.
+    # Generic results are authoritative. ``frames`` is the shared-axis view
+    # consumed by the current UI and established frame-oriented tools.
     metric_results: MetricResultSet = field(default_factory=MetricResultSet)
 
     def __post_init__(self) -> None:
-        # Accept a plain list of FrameScore and pack it. Callers that build a
-        # result by hand (and every older caller) stay valid, while storage
-        # is always the array form -- there's exactly one representation to
-        # reason about downstream.
+        # Accept a plain list of FrameScore and pack it so storage always has
+        # exactly one representation downstream.
         if not isinstance(self.frames, FrameScores):
             self.frames = FrameScores.from_frames(self.frames)
-        if self.model == "version=vmaf_v0.6.1neg" and self.frames.vmaf_neg is None:
-            self.frames = self.frames.with_values("vmaf_neg", self.frames.vmaf).with_values("vmaf", None)
         if not self.metric_results:
             self.metric_results = results_from_frame_scores(self.frames)
         else:
             compatible = frame_scores_from_results(self.metric_results)
-            # An explicitly supplied legacy view (for example the v1-cache
-            # precision-compatible view) wins. Generic-only construction
-            # supplies FrameScores.empty() and is rebuilt when safe.
+            # Generic-only construction supplies FrameScores.empty(); rebuild
+            # the UI view when the available frame metrics share one axis.
             if not self.frames and compatible:
                 self.frames = compatible
         if self.compared_frame_count <= 0 and len(self.frames):

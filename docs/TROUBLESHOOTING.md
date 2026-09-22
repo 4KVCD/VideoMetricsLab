@@ -19,7 +19,7 @@ that a build contains all required filters. Restart after changing PATH.
 Check the configured cache folder, original file paths and calculation settings.
 Moving/replacing media can change cache identity. Different metric selections
 may load partial results. Do not delete the cache to diagnose a cache miss.
-Back it up and try loading an explicitly saved `.vmafrun.json` instead.
+Back it up and try loading an explicitly saved `.metrics.json` instead.
 
 ## Slow or incorrect playback
 

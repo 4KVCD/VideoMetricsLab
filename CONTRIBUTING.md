@@ -43,7 +43,7 @@ keep expensive work off the UI thread, and route subprocesses through
 - Explain the symptom, cause, fix and verification in the commit body.
 - Keep refactors separate from behavior changes. Avoid unrelated formatting.
 - For bug fixes, check that the new test fails without the fix when feasible.
-- Preserve saved-run compatibility, cache identity and shared user-data paths.
+- Treat persistence/cache changes as deliberate behavior changes and document them.
 - Document new settings and any changes to score interpretation.
 - Include screenshots for UI changes, using generated or shareable media.
 - Report skipped tests and hardware-dependent checks you could not perform.

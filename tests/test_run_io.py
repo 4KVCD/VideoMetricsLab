@@ -1,20 +1,26 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from vmaf_app.core.metric_results import (
+    FrameMetricResult,
+    MetricProvenance,
+    MetricResultSet,
+    SequenceMetricResult,
+)
 from vmaf_app.core.models import (
+    ComparisonResult,
     CropBox,
     FrameScore,
     FrameScores,
     ResampleTarget,
     VideoInfo,
-    VmafRunResult,
-    synthetic_resample_distorted_path,
 )
 from vmaf_app.core.run_io import export_csv, load_run, save_run, unique_output_path
 
 
-def _sample_result() -> VmafRunResult:
+def _sample_result() -> ComparisonResult:
     src_info = VideoInfo(
         path=Path("source.mov"), width=3840, height=2160, fps=24000 / 1001,
         duration=10.0, nb_frames=240, codec_name="prores",
@@ -24,7 +30,7 @@ def _sample_result() -> VmafRunResult:
         duration=10.0, nb_frames=240, codec_name="h264",
     )
     frames = [FrameScore(frame=i, time=i / dist_info.fps, vmaf=90 + (i % 10)) for i in range(240)]
-    return VmafRunResult(
+    return ComparisonResult(
         source=src_info.path, distorted=dist_info.path, frames=frames, fps=dist_info.fps,
         model="version=vmaf_v0.6.1",
         source_crop=CropBox(w=3840, h=1634, x=0, y=263),
@@ -43,7 +49,7 @@ def test_save_and_load_round_trips_frames(tmp_path):
     result.scale_algorithm = "lanczos"
     result.resample_target = ResampleTarget(width=1920, label="1080p")
     result.compared_frame_count = 321
-    out_path = tmp_path / "run.vmafrun.json"
+    out_path = tmp_path / "run.metrics.json"
     save_run(result, out_path, label="my-encode")
 
     loaded, label = load_run(out_path)
@@ -79,7 +85,7 @@ def test_save_and_load_preserves_scores_bit_for_bit(tmp_path):
         ssim=rng.uniform(0, 1, n).astype(np.float32),
         xpsnr=rng.uniform(20, 60, n).astype(np.float32),
     )
-    out_path = tmp_path / "run.vmafrun.json"
+    out_path = tmp_path / "run.metrics.json"
     save_run(result, out_path, label="exact")
 
     loaded, _ = load_run(out_path)
@@ -87,9 +93,9 @@ def test_save_and_load_preserves_scores_bit_for_bit(tmp_path):
         np.testing.assert_array_equal(
             loaded.frames.values(metric), result.frames.values(metric), err_msg=metric,
         )
-    # `time` is the one column deliberately rounded (to 6dp / 1us) to keep the
-    # file small; that is far finer than anything displayed or searched on.
-    np.testing.assert_allclose(loaded.frames.time, result.frames.time, atol=1e-6)
+    # Portable v2 keeps each metric's float64 timeline exactly rather than
+    # forcing every metric through one rounded shared frame table.
+    np.testing.assert_array_equal(loaded.frames.time, result.frames.time)
 
 
 def test_export_csv_writes_header_and_all_rows(tmp_path):
@@ -131,7 +137,7 @@ def test_xpsnr_round_trips(tmp_path):
     xpsnr = np.full(len(result.frames), np.nan, dtype=np.float32)
     xpsnr[0] = 42.5
     result.frames = result.frames.with_values("xpsnr", xpsnr)
-    out_path = tmp_path / "run.vmafrun.json"
+    out_path = tmp_path / "run.metrics.json"
     save_run(result, out_path, label="x")
 
     loaded, _ = load_run(out_path)
@@ -145,7 +151,7 @@ def test_infinite_xpsnr_round_trips_as_standards_compliant_json(tmp_path):
     result.frames = result.frames.with_values(
         "xpsnr", np.full(len(result.frames), np.inf, dtype=np.float32)
     )
-    out_path = tmp_path / "perfect.vmafrun.json"
+    out_path = tmp_path / "perfect.metrics.json"
     save_run(result, out_path, label="perfect")
 
     # Reject JavaScript-style bare Infinity constants: the portable file
@@ -158,40 +164,87 @@ def test_infinite_xpsnr_round_trips_as_standards_compliant_json(tmp_path):
     assert np.isposinf(loaded.frames.xpsnr).all()
 
 
-def test_loading_a_run_saved_before_xpsnr_existed_does_not_raise(tmp_path):
-    # Simulates an old save file whose frame tuples are 5 elements (no xpsnr).
-    import json
-    result = _sample_result()
-    out_path = tmp_path / "old_run.vmafrun.json"
-    save_run(result, out_path, label="old")
-    data = json.loads(out_path.read_text(encoding="utf-8"))
-    data["frames"] = [fr[:5] for fr in data["frames"]]
-    out_path.write_text(json.dumps(data), encoding="utf-8")
-
-    loaded, _ = load_run(out_path)
-    assert loaded.frames[0].xpsnr is None
-
-
-def test_old_resolution_run_recovers_recipe_from_its_synthetic_name(tmp_path):
+def test_load_rejects_unknown_format_version(tmp_path):
     import json
 
     result = _sample_result()
-    target = ResampleTarget(width=1920, label="1080p")
-    result.distorted = synthetic_resample_distorted_path(result.source, target)
-    result.distorted_info = result.source_info
-    out_path = tmp_path / "old_resolution.vmafrun.json"
+    out_path = tmp_path / "unsupported.metrics.json"
     save_run(result, out_path)
     data = json.loads(out_path.read_text(encoding="utf-8"))
-    data.pop("resample_target")
-    data.pop("scale_algorithm")
-    data.pop("compared_frame_count")
+    data["format_version"] = 999
     out_path.write_text(json.dumps(data), encoding="utf-8")
 
-    loaded, _ = load_run(out_path)
+    with pytest.raises(ValueError, match="Unsupported analysis result format version"):
+        load_run(out_path)
 
-    assert loaded.resample_target == target
-    assert loaded.scale_algorithm == "bicubic"
-    assert loaded.compared_frame_count == int(loaded.frames.frame[-1]) + 1
+
+def test_load_rejects_mismatched_frame_metric_arrays(tmp_path):
+    import json
+
+    result = _sample_result()
+    out_path = tmp_path / "malformed.metrics.json"
+    save_run(result, out_path)
+    data = json.loads(out_path.read_text(encoding="utf-8"))
+    data["metric_results"][0]["values"] = data["metric_results"][0]["values"][:-1]
+    out_path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="equal lengths"):
+        load_run(out_path)
+
+
+def test_portable_results_preserve_independent_axes_sequence_metrics_and_provenance(tmp_path):
+    provenance = MetricProvenance(
+        "reference/cvvdp", "0.1", "cpu", "cvvdp-v1", {"display": "standard"}
+    )
+    vmaf = FrameMetricResult(
+        "vmaf", [0, 2], [0.0, 0.1], [90.0, 91.0], provenance,
+    )
+    future = FrameMetricResult(
+        "future_frame_metric", [0, 5, 10], [0.0, 0.25, 0.5],
+        [1.0, np.nan, np.inf], provenance,
+    )
+    sequence = SequenceMetricResult("cvvdp", float("-inf"), provenance)
+    result = _sample_result()
+    result.frames = FrameScores.empty()
+    result.metric_results = MetricResultSet([vmaf, future, sequence])
+
+    out_path = tmp_path / "generic.metrics.json"
+    save_run(result, out_path, label="generic")
+    loaded, label = load_run(out_path)
+
+    assert label == "generic"
+    np.testing.assert_array_equal(loaded.frame_metric("vmaf").frame, [0, 2])
+    np.testing.assert_array_equal(loaded.frame_metric("future_frame_metric").frame, [0, 5, 10])
+    assert np.isnan(loaded.frame_metric("future_frame_metric").values[1])
+    assert np.isposinf(loaded.frame_metric("future_frame_metric").values[2])
+    assert np.isneginf(loaded.sequence_metric("cvvdp").score)
+    assert loaded.sequence_metric("cvvdp").provenance == provenance
+    # The current UI view keeps the registered metric it can display and does
+    # not try to align an unknown independently sampled metric onto that axis.
+    assert loaded.frames.vmaf.tolist() == [90.0, 91.0]
+    assert not loaded.frames.has("future_frame_metric")
+
+
+def test_portable_file_is_strict_json_with_generic_special_values(tmp_path):
+    import json
+
+    provenance = MetricProvenance("test", "1", "cpu", "test-v1")
+    result = _sample_result()
+    result.frames = FrameScores.empty()
+    result.metric_results = MetricResultSet([
+        FrameMetricResult("future", [0], [0.0], [np.inf], provenance),
+        SequenceMetricResult("sequence", float("nan"), provenance),
+    ])
+    out_path = tmp_path / "special.metrics.json"
+    save_run(result, out_path)
+
+    json.loads(
+        out_path.read_text(encoding="utf-8"),
+        parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+    )
+    loaded, _ = load_run(out_path)
+    assert np.isposinf(loaded.frame_metric("future").values[0])
+    assert np.isnan(loaded.sequence_metric("sequence").score)
 
 
 # ------------------------------------------------------ unique output paths

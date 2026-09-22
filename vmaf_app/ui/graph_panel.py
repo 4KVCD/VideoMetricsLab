@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition
-from vmaf_app.core.models import VmafRunResult
+from vmaf_app.core.models import ComparisonResult
 from vmaf_app.core.run_io import (
     RESULT_FILE_FILTER,
     RESULT_SUFFIX,
@@ -81,10 +81,8 @@ _EXPORT_SWATCH = 12
 _EXPORT_ROW_PADDING = 6
 
 
-# Compatibility names for callers which historically imported graph metadata.
-# Definitions themselves now live in the headless core registry.
-MetricSpec = MetricDefinition
-METRICS = list(FRAME_METRICS)
+# Graph ordering comes directly from the headless core registry.
+METRICS = FRAME_METRICS
 
 #: Column 0 is the series; then one mean per metric; then the selected
 #: metric's detail; then the remove button.
@@ -126,7 +124,7 @@ def _is_reportable(value: float | None) -> bool:
 
 @dataclass
 class SeriesEntry:
-    result: VmafRunResult
+    result: ComparisonResult
     label: str
     color: str
     times: np.ndarray
@@ -141,7 +139,7 @@ class SeriesEntry:
     means: dict[str, float | None] = field(default_factory=dict)
 
 
-def _identical_frame_count(result: VmafRunResult, key: str) -> int:
+def _identical_frame_count(result: ComparisonResult, key: str) -> int:
     """Frames scoring +inf -- mathematically identical to the reference."""
     values = result.frames.values(key)
     if values is None or len(values) == 0:
@@ -149,7 +147,7 @@ def _identical_frame_count(result: VmafRunResult, key: str) -> int:
     return int(np.isposinf(np.asarray(values, dtype=np.float64)).sum())
 
 
-def _metric_means(result: VmafRunResult) -> dict[str, float | None]:
+def _metric_means(result: ComparisonResult) -> dict[str, float | None]:
     means: dict[str, float | None] = {}
     for metric in METRICS:
         values = result.frames.values(metric.key)
@@ -932,7 +930,7 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ public API
     def add_run(
-        self, result: VmafRunResult, label: str | None = None, *,
+        self, result: ComparisonResult, label: str | None = None, *,
         identity: object | None = None, restore: bool = True,
     ) -> None:
         # Callers with real rows provide that row/run's stable identity, so
@@ -1216,7 +1214,7 @@ class GraphPanel(QWidget):
             f"Exporting {len(self._entries)} CSV file(s) to {directory}..."
         )
 
-    def save_run_for_later(self, result: VmafRunResult, label: str) -> None:
+    def save_run_for_later(self, result: ComparisonResult, label: str) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self, "Save analysis results", f"{label}{RESULT_SUFFIX}", f"Analysis results (*{RESULT_SUFFIX})"
         )

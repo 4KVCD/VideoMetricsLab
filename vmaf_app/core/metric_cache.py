@@ -1,6 +1,7 @@
 """Version-2 internal cache: direct, independently-addressable metric files."""
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -10,15 +11,16 @@ from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core.analysis_request import MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
-from vmaf_app.core.execution import MetricRequestSpec
 from vmaf_app.core.metric_results import (
     FrameMetricResult,
-    MetricProvenance,
     MetricResultSet,
     SequenceMetricResult,
+    provenance_from_dict,
+    provenance_to_dict,
 )
-from vmaf_app.core.models import CropBox, ResampleTarget, ScaleDirection, VideoInfo, VmafRunResult
+from vmaf_app.core.models import ComparisonResult, CropBox, ResampleTarget, ScaleDirection, VideoInfo
 
 METRIC_CACHE_FORMAT_VERSION = 2
 _V2_DIR = "v2"
@@ -95,20 +97,6 @@ def _info_from_dict(data: dict) -> VideoInfo:
                      color_primaries=data.get("color_primaries", ""))
 
 
-def _provenance_dict(provenance: MetricProvenance) -> dict:
-    return {
-        "implementation": provenance.implementation,
-        "implementation_version": provenance.implementation_version,
-        "compute_backend": provenance.compute_backend,
-        "implementation_compatibility_id": provenance.implementation_compatibility_id,
-        "parameters": provenance.parameters,
-    }
-
-
-def _provenance_from_dict(data: dict) -> MetricProvenance:
-    return MetricProvenance(**data)
-
-
 def _atomic_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -138,7 +126,7 @@ def _metadata(result, spec: MetricRequestSpec) -> np.ndarray:
         "format_version": METRIC_CACHE_FORMAT_VERSION,
         "kind": "frame" if isinstance(result, FrameMetricResult) else "sequence",
         "key": result.key, "request": spec.identity_dict(),
-        "provenance": _provenance_dict(result.provenance),
+        "provenance": provenance_to_dict(result.provenance),
     }
     return np.array(_canonical(data))
 
@@ -169,7 +157,7 @@ def load_metric(directory: Path, spec: MetricRequestSpec):
                     or metadata.get("key") != spec.key
                     or metadata.get("request") != spec.identity_dict()):
                 return None
-            provenance = _provenance_from_dict(metadata["provenance"])
+            provenance = provenance_from_dict(metadata["provenance"])
             if metadata["kind"] == "frame":
                 return FrameMetricResult(spec.key, data["frame"], data["time"], data["values"], provenance)
             if metadata["kind"] == "sequence":
@@ -188,7 +176,7 @@ def load_metrics(directory: Path, specs: tuple[MetricRequestSpec, ...]) -> Metri
     return results
 
 
-def _context_from_result(result: VmafRunResult, label: str, recipe: ComparisonRecipe) -> dict:
+def _context_from_result(result: ComparisonResult, label: str, recipe: ComparisonRecipe) -> dict:
     return {
         "format_version": METRIC_CACHE_FORMAT_VERSION, "label": label,
         "source": str(result.source), "distorted": str(result.distorted), "fps": result.fps,
@@ -206,7 +194,7 @@ def _context_from_result(result: VmafRunResult, label: str, recipe: ComparisonRe
 
 def store_result(
     base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe,
-    result: VmafRunResult, label: str, specs: tuple[MetricRequestSpec, ...],
+    result: ComparisonResult, label: str, specs: tuple[MetricRequestSpec, ...],
 ) -> Path:
     directory = recipe_directory(base, source, distorted, recipe)
     _atomic_json(directory / "context.json", _context_from_result(result, label, recipe))
@@ -232,32 +220,38 @@ def load_result(
     except (OSError, ValueError, json.JSONDecodeError):
         return None
     results = load_metrics(directory, specs)
-    if any(not results.has(spec.key) for spec in specs):
-        return None
-    # Extra current metrics are direct lookups too. They improve the legacy
-    # UI's "show the fullest compatible run" behavior without an exponential
-    # search through metric combinations.
+    # Extra current metrics are direct lookups too. They preserve the UI
+    # behavior of showing every compatible score already cached for a row
+    # without an exponential search through metric combinations.
     for spec in supplemental_specs:
         if not results.has(spec.key):
             extra = load_metric(directory, spec)
             if extra is not None:
                 results.add(extra)
-    from vmaf_app.core.metric_results import frame_scores_from_results
-    from vmaf_app.core.models import FrameScores
+    if not results:
+        return None
 
-    legacy_frames = frame_scores_from_results(results)
-    # Existing cache loads pass through the v1 JSON shape, which rounds time
-    # to six decimals. Preserve that public compatibility view while generic
-    # frame results retain their original float64 timeline.
-    legacy_frames = FrameScores(
-        legacy_frames.frame, np.round(legacy_frames.time, 6),
-        metrics={key: legacy_frames.values(key) for key in legacy_frames.metric_keys},
-    )
+    from vmaf_app.core.metric_results import frame_scores_from_results
+
+    expected_frames = context.get("compared_frame_count")
+    if isinstance(expected_frames, int) and expected_frames > 0:
+        compatible = MetricResultSet()
+        for key in results:
+            metric = results.get(key)
+            if isinstance(metric, FrameMetricResult) and len(metric.frame) != expected_frames:
+                continue
+            if metric is not None:
+                compatible.add(metric)
+        results = compatible
+        if not results:
+            return None
+
+    frame_view = frame_scores_from_results(results)
 
     try:
-        result = VmafRunResult(
+        result = ComparisonResult(
             source=Path(context["source"]), distorted=Path(context["distorted"]),
-            frames=legacy_frames, fps=context["fps"], model=context.get("model", ""),
+            frames=frame_view, fps=context["fps"], model=context.get("model", ""),
             source_crop=_crop_from_dict(context.get("source_crop")), distorted_crop=_crop_from_dict(context.get("distorted_crop")),
             source_info=_info_from_dict(context["source_info"]), distorted_info=_info_from_dict(context["distorted_info"]),
             scale_direction=ScaleDirection(context.get("scale_direction", ScaleDirection.SOURCE_TO_DISTORTED.value)),
@@ -269,6 +263,43 @@ def load_result(
         return result, context.get("label") or Path(context["distorted"]).stem
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def cache_summary(base: Path) -> tuple[int, int]:
+    """Return ``(comparison_count, byte_count)`` for the metric cache."""
+    root = Path(base) / _V2_DIR
+    if not root.exists():
+        return 0, 0
+    contexts = list(root.glob("*/context.json"))
+    total = 0
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        with contextlib.suppress(OSError):
+            total += path.stat().st_size
+    return len(contexts), total
+
+
+def clear_metrics(
+    base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe,
+    specs: tuple[MetricRequestSpec, ...],
+) -> int:
+    """Delete only the requested metric identities for one comparison recipe."""
+    directory = recipe_directory(base, source, distorted, recipe)
+    removed = 0
+    for spec in specs:
+        path = metric_path(directory, spec)
+        try:
+            path.unlink()
+            removed += 1
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+    if directory.exists() and not any(directory.glob("*.npz")):
+        with contextlib.suppress(OSError):
+            shutil.rmtree(directory)
+    return removed
 
 
 def clear_recipe(base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe) -> int:
@@ -287,7 +318,7 @@ def clear_all(base: Path) -> int:
     root = Path(base) / _V2_DIR
     if not root.exists():
         return 0
-    count = sum(1 for path in root.rglob("*") if path.is_file())
+    count = sum(1 for path in root.glob("*/context.json") if path.is_file())
     try:
         shutil.rmtree(root)
     except OSError:

@@ -10,7 +10,7 @@ Qt-free: tool discovery uses QSettings and native playback loads GI bindings.
 | Concern | Main modules |
 | --- | --- |
 | Media metadata and geometry | `core/ffprobe.py`, `crop_detect.py`, `model_select.py` |
-| Metric execution | `core/vmaf_runner.py`, `ui/worker.py` |
+| Metric requests and execution | `core/analysis_request.py`, `ffmpeg_request.py`, `execution.py`, `vmaf_runner.py`, `ui/worker.py` |
 | Metric registry and packed scores | `core/metrics.py`, `core/models.py` |
 | Results and persistence | `core/run_io.py`, `core/result_cache.py` |
 | Statistics and plotting | `core/stats.py`, `ui/graph_panel.py`, `chart.py` |
@@ -24,10 +24,13 @@ Qt-free: tool discovery uses QSettings and native playback loads GI bindings.
 ## Metric lifecycle
 
 1. Probe the reference and encodes asynchronously; validate compatibility.
-2. Capture each row's options, crop and scaling recipe, and model selection.
-3. Check cached results for matching media identity and calculation settings.
-4. Schedule one or optionally two calculations. Build an FFmpeg filtergraph
-   for the requested metrics; XPSNR alone does not require a VMAF score.
+2. Snapshot the row's mutable FFmpeg/UI options into an immutable
+   `AnalysisRequest`: common `ComparisonRecipe`, metric request specs, and
+   execution preferences.
+3. Check cached results using only the request's scientific identity.
+4. Group missing metrics by backend. The current FFmpeg backend still builds
+   one efficient filtergraph for its requested metrics; XPSNR alone does not
+   require a VMAF score.
 5. Parse per-frame logs into `FrameScores`, a collection of packed NumPy arrays.
 6. Deliver results to the UI, update graph identities, and queue cache writes.
 
@@ -38,36 +41,41 @@ graph identity, without removing unrelated imported curves.
 
 ## Persistence contracts
 
-The legacy names `VmafOptions`, `VmafRunResult` and `.vmafrun.json` remain for
-compatibility. Missing metrics are not zero scores: columns can be absent and
-individual unavailable values can be NaN. JSON uses null for missing values
-and strings for infinities. Use `run_io` rather than ad-hoc serialization.
+Portable user-saved results use the current format-v2 `.metrics.json` format.
+Each metric is serialized independently with its own kind, frame/time axis when
+applicable, values, and provenance, so sequence metrics and independently
+sampled frame metrics round-trip without being flattened into a shared table.
+Missing frame values use JSON null and infinities use explicit strings. Use
+`run_io` rather than ad-hoc serialization.
 
-Cache keys include resolved file paths, size, mtime and calculation options.
-Execution-only controls such as GPU vendor and thread count are excluded.
-Metric selection remains part of the stored key; lookup searches compatible
-alternative metric sets and historical feature orders. A partial result is
-not complete. With subsampling, XPSNR-only and libvmaf-backed results have
-different frame coverage and must not be interchanged.
+Internal caching is per metric. Cache identity includes resolved file paths,
+size, mtime, the common comparison recipe, metric-specific scientific
+parameters, frame coverage, and implementation compatibility ID. Execution-only
+controls such as GPU vendor and thread count are excluded. Partial cache hits
+are valid and can be displayed while missing metrics are recomputed. With
+subsampling, XPSNR-only and libvmaf-backed results have different frame
+coverage and must not be interchanged.
 
 ## Metric architecture
 
 `core/metrics.py` is the sole registry for metric labels, formatting,
-thresholds, sequence aggregation and legacy execution bindings. It is
-headless: it must not import Qt, ffmpeg wrappers or result models. Current
-logical order is VMAF, VMAF NEG, PSNR, SSIM and XPSNR. UI tables retain their
-separate stable physical column mapping in `ui/main_window.py`.
+thresholds and sequence aggregation. It is headless: it must not import Qt,
+ffmpeg wrappers or result models. Metrics may optionally carry an
+`FfmpegMetricBinding` for today's FFmpeg/UI adapter; a metric implemented by a
+different backend does not need a `VmafOptions` field just to join the
+registry. Current logical order is VMAF, VMAF NEG, PSNR, SSIM and XPSNR. UI
+tables retain their separate stable physical column mapping in
+`ui/main_window.py`.
 
-`VmafOptions` deliberately keeps its legacy boolean fields and
-`extra_features` list because those fields feed existing cache identities.
-Use `metric_enabled`, `set_metric_enabled`, and `requested_metrics` for new
-metric-aware code; do not reorder unknown feature strings.
+`VmafOptions` is now confined to the current FFmpeg/UI edge.
+`core/ffmpeg_request.py` snapshots it into the backend-neutral request model;
+generic cache and planning code must not import or inspect `VmafOptions`.
 
-`FrameScores` stores a dictionary of packed arrays and accepts future metric
-keys without a model change. The five legacy properties remain compatibility
-views. This flexibility is internal only: version-1 `.metrics.json` rows and
-CSV output serialize the historical five columns in their fixed order. Do not
-bump `run_io.FORMAT_VERSION` or silently add arbitrary keys to those files.
+`FrameScores` is the shared-axis view used by established UI and CSV paths.
+The five named convenience properties remain typed views over its packed arrays.
+It is not the persistence model: portable `.metrics.json` stores the generic
+`MetricResultSet` directly. CSV intentionally remains a shared-frame export of
+the current five displayed metrics.
 
 ## Comparison recipe, requests and execution
 
@@ -76,19 +84,26 @@ policy, manual crops, scaling algorithm and direction, duration limit, and a
 possible resolution round-trip recipe. It intentionally excludes decode GPU,
 GPU vendor, libvmaf thread count, and the application's parallel-job count.
 
-Each requested result has a `MetricRequestSpec`: metric key, metric-specific
-scientific parameters, frame coverage, and an implementation compatibility
-identifier. VMAF variants therefore identify their model separately from the
-common picture recipe. The current XPSNR exception remains explicit: XPSNR
-alone has full-frame coverage despite `n_subsample`; a mixed libvmaf/XPSNR run
-uses the sampled timeline. Those two outputs cannot share a cache entry.
+`AnalysisRequest` is the backend-neutral contract used by cache and planning.
+It contains the common recipe, immutable `MetricRequestSpec` objects, and
+`ExecutionPreferences`. Each metric spec carries its metric key, `backend_id`,
+metric-specific scientific parameters, frame coverage, and an implementation
+compatibility identifier. Backend routing is not cache identity: two backends
+can reuse a result only when they explicitly declare the same implementation
+compatibility ID and scientific parameters.
 
-`ExecutionPreferences` holds performance choices, separately from scientific
-identity. `build_execution_plan` groups the current metrics into one
-`legacy_ffmpeg` task, preserving the existing one-pass filtergraph. The Qt
-worker constructs that plan in production before dispatching the established
-runner. Multiple tasks are structurally supported, but no additional metric
-backend exists yet.
+`core/ffmpeg_request.py` translates today's mutable `VmafOptions` into that
+request model. VMAF variants identify their model separately from the common
+picture recipe. The XPSNR exception remains explicit: XPSNR alone has
+full-frame coverage despite `n_subsample`; a mixed libvmaf/XPSNR run uses the
+sampled timeline. Those outputs cannot share a cache entry.
+
+`build_execution_plan` only sees `AnalysisRequest`. It groups metrics by
+`backend_id`, skips a backend group only when every metric in that group is
+already cached, and otherwise keeps the group together so coupled backends can
+execute efficiently. The current Qt worker dispatches the `ffmpeg` group to
+the established runner; future CPU/GPU backends can create additional groups
+without adding branches to cache identity or the planner.
 
 ## Generic metric results and provenance
 
@@ -99,16 +114,17 @@ both kinds by key. `MetricProvenance` records implementation, version,
 compute backend, compatibility ID, and metric parameters. Compute backend
 means metric computation—not hardware video decoding.
 
-`VmafRunResult` bridges this generic model to legacy consumers. It creates
-generic results from `FrameScores` when loading old data, and only rebuilds a
-legacy `FrameScores` view when established frame metrics share an exact axis.
-Sequence and arbitrary future metrics remain generic rather than being
-misaligned into the old container.
+`ComparisonResult` currently carries both the authoritative generic result set and
+the shared-axis `FrameScores` view used by established UI/frame-oriented code.
+It creates generic results from a supplied frame view when needed. When generic
+frame metrics use different axes, the UI projection keeps the first registered
+axis and includes only metrics aligned to it; independently sampled metrics stay
+authoritative in `MetricResultSet` instead of blanking or corrupting the view.
+Sequence metrics never need invented frame data.
 
-## Cache generations
+## Metric cache
 
-The legacy flat cache remains a combined `.metrics.json` cache for rollback
-and compatibility. The v2 internal metric cache is separate:
+The internal cache stores each metric independently:
 
 ```text
 <cache>/v2/<sha256 recipe hash>/context.json
@@ -117,22 +133,22 @@ and compatibility. The v2 internal metric cache is separate:
 
 Recipe hashes include source/distorted file identity (absolute path, size,
 mtime) and `ComparisonRecipe`. Metric hashes include key, scientific
-parameters, coverage, and implementation compatibility ID. Performance
-preferences are deliberately excluded. Each metric is looked up directly—v2
-does not enumerate metric subsets. NPZ loads disable pickle; corrupt one
-artifact is a miss for that metric only.
+parameters, coverage, and implementation compatibility ID. Backend routing and
+performance preferences are deliberately excluded. `result_cache` consumes
+`AnalysisRequest` directly; FFmpeg/UI options are translated before reaching
+the cache. Each metric is looked up directly—v2 does not enumerate metric
+subsets. NPZ loads disable pickle; corrupt one artifact is a miss for that
+metric only.
 
-During the transition, completed FFmpeg runs write both cache generations.
-Lookup tries compatible v2 entries first, then legacy cache entries; a legacy
-hit is lazily promoted using explicit `legacy-v1` provenance and is never
-deleted. Cache clearing removes both generations. v2 refers only to this
-internal cache architecture: portable `.metrics.json` and `.vmafrun.json`
-remain format v1 because they cannot yet represent future sequence metrics.
+Completed runs write only this per-metric cache. Lookup probes requested
+metric identities directly and may also load compatible supplemental metrics
+for the current UI. Clearing a row removes only the metric identities that row
+could load, leaving scientifically different coverage/model entries intact.
+Portable `.metrics.json` files are a separate user-facing persistence format
+and are not used as cache entries.
 
-User data lives under `~/.videometricslab/`, independent of checkout or launcher.
-Existing `~/.vmaf-calculator/` data is migrated automatically on first launch.
-The cache folder is configurable. FFmpeg location uses legacy QSettings keys.
-Never rename storage paths as a cosmetic branding change.
+User data lives under `~/.videometricslab/`, independent of checkout or
+launcher. The cache folder is configurable.
 
 ## Playback and threading
 

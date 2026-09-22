@@ -1,13 +1,13 @@
 """Generic metric results, independent of any particular execution backend."""
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import TypeAlias
 
 import numpy as np
 
-from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation
+from vmaf_app.core.metrics import FRAME_METRICS, METRIC_BY_KEY, MetricAggregation
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
@@ -34,10 +34,35 @@ class MetricProvenance:
         object.__setattr__(self, "parameters", copied)
 
 
-LEGACY_PROVENANCE = MetricProvenance(
-    implementation="legacy", implementation_version="", compute_backend="unknown",
-    implementation_compatibility_id="legacy-v1",
+UNSPECIFIED_PROVENANCE = MetricProvenance(
+    implementation="unknown", implementation_version="", compute_backend="unknown",
+    implementation_compatibility_id="unversioned",
 )
+
+
+def provenance_to_dict(provenance: MetricProvenance) -> dict[str, JSONValue]:
+    """Return the JSON-ready representation shared by caches and portable files."""
+    return {
+        "implementation": provenance.implementation,
+        "implementation_version": provenance.implementation_version,
+        "compute_backend": provenance.compute_backend,
+        "implementation_compatibility_id": provenance.implementation_compatibility_id,
+        "parameters": dict(provenance.parameters),
+    }
+
+
+def provenance_from_dict(data: Mapping[str, object]) -> MetricProvenance:
+    """Rebuild provenance from trusted JSON-decoded data."""
+    parameters = data.get("parameters", {})
+    if not isinstance(parameters, dict):
+        raise TypeError("metric provenance parameters must be an object")
+    return MetricProvenance(
+        implementation=str(data["implementation"]),
+        implementation_version=str(data["implementation_version"]),
+        compute_backend=str(data["compute_backend"]),
+        implementation_compatibility_id=str(data["implementation_compatibility_id"]),
+        parameters=parameters,
+    )
 
 
 def current_ffmpeg_provenance(key: str, version: str, parameters: dict[str, JSONValue] | None = None) -> MetricProvenance:
@@ -136,7 +161,7 @@ class MetricResultSet:
 
 
 def results_from_frame_scores(frames, provenance_by_key: dict[str, MetricProvenance] | None = None) -> MetricResultSet:
-    """Adapt legacy packed columns without copying their arrays."""
+    """Adapt a shared-axis ``FrameScores`` view without copying its arrays."""
     provenance_by_key = provenance_by_key or {}
     results = MetricResultSet()
     for key in frames.metric_keys:
@@ -144,31 +169,36 @@ def results_from_frame_scores(frames, provenance_by_key: dict[str, MetricProvena
         if values is not None:
             results.add(FrameMetricResult(
                 key, frames.frame, frames.time, values,
-                provenance_by_key.get(key, LEGACY_PROVENANCE),
+                provenance_by_key.get(key, UNSPECIFIED_PROVENANCE),
             ))
     return results
 
 
 def frame_scores_from_results(results: MetricResultSet):
-    """Build a legacy view only when current metrics share one exact axis.
+    """Build the shared-axis UI view when registered frame metrics align.
 
-    Arbitrary future metric keys and metrics on a different sampling axis are
-    intentionally excluded rather than being misaligned into FrameScores.
+    Metrics on a different sampling axis and sequence metrics remain in the
+    generic result set rather than being misaligned into ``FrameScores``.
     """
     from vmaf_app.core.models import FrameScores
 
-    legacy = [results.frame(key) for key in ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")]
-    present = [result for result in legacy if result is not None]
+    frame_results = [results.frame(metric.key) for metric in FRAME_METRICS]
+    present = [result for result in frame_results if result is not None]
     if not present:
         return FrameScores.empty()
+
+    # The first registered metric that is present defines the UI axis. Metrics
+    # with their own sampling axis stay authoritative in MetricResultSet and
+    # are simply omitted from this shared-axis projection. One independent
+    # metric must never make otherwise-displayable scores disappear.
     reference = present[0]
-    if any(
-        not (np.array_equal(reference.frame, result.frame) and np.array_equal(reference.time, result.time))
-        for result in present[1:]
-    ):
-        return FrameScores.empty()
+    aligned = [
+        result for result in present
+        if np.array_equal(reference.frame, result.frame)
+        and np.array_equal(reference.time, result.time)
+    ]
     return FrameScores(reference.frame, reference.time, metrics={
-        result.key: result.values for result in present
+        result.key: result.values for result in aligned
     })
 
 

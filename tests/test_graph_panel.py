@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from vmaf_app.core.models import FrameScore, VideoInfo, VmafRunResult
+from vmaf_app.core.models import ComparisonResult, FrameScore, VideoInfo
 from vmaf_app.ui.graph_panel import (
     _XPSNR_INFINITY_PLOT_DB,
     METRICS,
@@ -61,7 +61,7 @@ def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
         panel.close()
 
 
-def _fake_result(distorted_name: str, vmaf_value: float = 90.0, with_other_metrics: bool = False) -> VmafRunResult:
+def _fake_result(distorted_name: str, vmaf_value: float = 90.0, with_other_metrics: bool = False) -> ComparisonResult:
     info = VideoInfo(
         path=Path(distorted_name), width=1920, height=1080, fps=30.0, duration=5.0,
         nb_frames=10, codec_name="h264",
@@ -75,37 +75,37 @@ def _fake_result(distorted_name: str, vmaf_value: float = 90.0, with_other_metri
         )
         for i in range(10)
     ]
-    return VmafRunResult(
+    return ComparisonResult(
         source=Path("source.mp4"), distorted=Path(distorted_name), frames=frames, fps=30.0,
         model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
         source_info=info, distorted_info=info,
     )
 
 
-def _values_result(name: str, values: list[float]) -> VmafRunResult:
+def _values_result(name: str, values: list[float]) -> ComparisonResult:
     info = VideoInfo(
         path=Path(name), width=1920, height=1080, fps=30.0, duration=len(values) / 30.0,
         nb_frames=len(values), codec_name="h264",
     )
     frames = [FrameScore(frame=i, time=i / 30.0, vmaf=v) for i, v in enumerate(values)]
-    return VmafRunResult(
+    return ComparisonResult(
         source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=30.0,
         model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
         source_info=info, distorted_info=info,
     )
 
 
-def _dip_result(name: str) -> VmafRunResult:
+def _dip_result(name: str) -> ComparisonResult:
     return _values_result(name, [95, 95, 93, 95, 95, 60, 95, 95, 95, 95])  # small low at 2, sharp dip at 5
 
 
-def _long_result(name: str, n_frames: int, fps: float = 30.0) -> VmafRunResult:
+def _long_result(name: str, n_frames: int, fps: float = 30.0) -> ComparisonResult:
     info = VideoInfo(
         path=Path(name), width=1920, height=1080, fps=fps, duration=n_frames / fps,
         nb_frames=n_frames, codec_name="h264",
     )
     frames = [FrameScore(frame=i, time=i / fps, vmaf=90.0) for i in range(n_frames)]
-    return VmafRunResult(
+    return ComparisonResult(
         source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=fps,
         model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
         source_info=info, distorted_info=info,
@@ -496,7 +496,7 @@ def test_hover_finds_a_narrow_dip_even_when_zoomed_out_over_a_long_run(qapp):
         values[i] = 30.0
     info = VideoInfo(path=Path("a.mp4"), width=1920, height=1080, fps=fps, duration=n / fps, nb_frames=n, codec_name="h264")
     frames = [FrameScore(frame=i, time=i / fps, vmaf=v) for i, v in enumerate(values)]
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=Path("source.mp4"), distorted=Path("a.mp4"), frames=frames, fps=fps,
         model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
         source_info=info, distorted_info=info,
@@ -915,7 +915,7 @@ def _page(panel: GraphPanel, key: str):
     return panel._pages[key]
 
 
-def _nan_metric_result(name: str, metric: str, n: int = 10) -> VmafRunResult:
+def _nan_metric_result(name: str, metric: str, n: int = 10) -> ComparisonResult:
     """A run that HAS the metric column but no finite value in it.
 
     This is not hypothetical: libvmaf writes the key with a null/NaN when a
@@ -935,7 +935,7 @@ def _nan_metric_result(name: str, metric: str, n: int = 10) -> VmafRunResult:
         )
         for i in range(n)
     ]
-    return VmafRunResult(
+    return ComparisonResult(
         source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=30.0,
         model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
         source_info=info, distorted_info=info,
@@ -1066,7 +1066,7 @@ def test_the_readout_is_not_sized_to_both_states_stacked(qapp):
 
 # ------------------------------------------------- statistics precision
 
-def _ssim_result(name: str, ssim_values: list[float]) -> VmafRunResult:
+def _ssim_result(name: str, ssim_values: list[float]) -> ComparisonResult:
     n = len(ssim_values)
     info = VideoInfo(
         path=Path(name), width=1920, height=1080, fps=30.0, duration=n / 30.0,
@@ -1076,7 +1076,7 @@ def _ssim_result(name: str, ssim_values: list[float]) -> VmafRunResult:
         FrameScore(frame=i, time=i / 30.0, vmaf=90.0, ssim=v)
         for i, v in enumerate(ssim_values)
     ]
-    return VmafRunResult(
+    return ComparisonResult(
         source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=30.0,
         model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
         source_info=info, distorted_info=info,

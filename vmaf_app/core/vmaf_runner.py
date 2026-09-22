@@ -35,13 +35,13 @@ from vmaf_app.core.gpu import (
 from vmaf_app.core.metric_results import current_ffmpeg_provenance, results_from_frame_scores
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution
 from vmaf_app.core.models import (
+    ComparisonResult,
     CropBox,
     CropMode,
     FrameScores,
     ScaleDirection,
     VideoInfo,
     VmafOptions,
-    VmafRunResult,
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
@@ -57,7 +57,9 @@ def _metric_results_for_current_run(frames: FrameScores, model: str):
         frames,
         {
             key: current_ffmpeg_provenance(
-                key, version, {"model": model} if key in {"vmaf", "vmaf_neg"} else None,
+                key, version,
+                ({"model": "version=vmaf_v0.6.1neg"} if key == "vmaf_neg"
+                 else {"model": model} if key == "vmaf" else None),
             )
             for key in frames.metric_keys
         },
@@ -861,7 +863,7 @@ def run_vmaf(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     result_distorted_path: Path | None = None,
-) -> VmafRunResult:
+) -> ComparisonResult:
     """result_distorted_path overrides the returned result's `distorted`
     identity (defaulting to distorted_info.path). It doesn't affect which
     file is actually decoded -- only what identity the result carries for
@@ -923,7 +925,7 @@ def run_vmaf(
         process_handle=process_handle,
     )
 
-    return VmafRunResult(
+    return ComparisonResult(
         source=source_info.path,
         distorted=result_distorted_path or distorted_info.path,
         frames=frames,
@@ -948,7 +950,7 @@ def run_resample_test(
     on_status: Callable[[str], None] | None = None,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
-) -> VmafRunResult:
+) -> ComparisonResult:
     """Runs a resolution round-trip test (see VmafOptions.resample_test):
     downscales the source to a target width, scales it back up to the
     source's original resolution, and computes VMAF against the untouched
@@ -1002,7 +1004,7 @@ def run_resample_test(
     )
 
     distorted_path = synthetic_resample_distorted_path(source_info.path, options.resample_test)
-    return VmafRunResult(
+    return ComparisonResult(
         source=source_info.path,
         distorted=distorted_path,
         frames=frames,

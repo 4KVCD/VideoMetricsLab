@@ -52,6 +52,10 @@ from vmaf_app import APP_NAME
 from vmaf_app.core import result_cache
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
+from vmaf_app.core.ffmpeg_request import (
+    analysis_request_from_vmaf_options,
+    supplemental_metric_specs,
+)
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition, metric_definition
@@ -590,10 +594,9 @@ class MainWindow(QMainWindow):
         self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
 
         directory = result_cache.cache_dir()
-        entries = result_cache.result_files(directory)
-        total = sum(f.stat().st_size for f in entries) / 1_048_576
+        count, size_bytes = result_cache.cache_summary(directory)
         self.settings_cache_summary.setText(
-            f"{len(entries)} saved result(s), {total:.1f} MB in {directory}"
+            f"{count} saved result(s), {size_bytes / 1_048_576:.1f} MB in {directory}"
         )
 
     def _on_settings_edited(self, *_args) -> None:
@@ -652,8 +655,8 @@ class MainWindow(QMainWindow):
 
     def _on_clear_cache(self) -> None:
         directory = result_cache.cache_dir()
-        entries = result_cache.result_files(directory)
-        if not entries and self._file_writes.pending == 0:
+        count, _size_bytes = result_cache.cache_summary(directory)
+        if count == 0 and self._file_writes.pending == 0:
             self.settings_status.setText("There are no saved results to clear.")
             return
         if self._cache_clear_result is not None:
@@ -1807,11 +1810,17 @@ class MainWindow(QMainWindow):
             self._cache_worker.cancel()
         self._cache_generation += 1
         generation = self._cache_generation
+        cache_rows = [rd for rd in self._rows if rd.path in paths]
         worker = ProbeWorker(
             paths, self._source_info.path, True,
-            {rd.path: clone_options(rd.options) for rd in self._rows if rd.path in paths},
-            cache_paths={
-                rd.path: rd.identity_path for rd in self._rows if rd.path in paths
+            {
+                rd.path: analysis_request_from_vmaf_options(clone_options(rd.options))
+                for rd in cache_rows
+            },
+            cache_paths={rd.path: rd.identity_path for rd in cache_rows},
+            cache_supplemental={
+                rd.path: supplemental_metric_specs(clone_options(rd.options))
+                for rd in cache_rows
             },
             probe_media=False,
         )
@@ -1841,7 +1850,7 @@ class MainWindow(QMainWindow):
             return
         current_key = result_cache.cache_key(
             self._source_info.path, self._rows[row].identity_path,
-            self._rows[row].options,
+            analysis_request_from_vmaf_options(self._rows[row].options),
         )
         if key == current_key:
             self._on_cached_found(path, result, label)
@@ -1955,7 +1964,9 @@ class MainWindow(QMainWindow):
         if row_data.completed_run is not None:
             return False
         cached = result_cache.load_cached(
-            self._source_info.path, row_data.identity_path, row_data.options
+            self._source_info.path, row_data.identity_path,
+            analysis_request_from_vmaf_options(row_data.options),
+            supplemental_specs=supplemental_metric_specs(row_data.options),
         )
         if cached is None:
             return False
@@ -2017,7 +2028,9 @@ class MainWindow(QMainWindow):
                     partial(
                         result_cache.clear,
                         self._source_info.path, row_data.identity_path,
-                        clone_options(row_data.options), cache_directory,
+                        analysis_request_from_vmaf_options(clone_options(row_data.options)),
+                        cache_directory,
+                        supplemental_metric_specs(clone_options(row_data.options)),
                     ),
                 )
             # Refreshes the resize-mismatch note (Info column) back to the
@@ -2161,9 +2174,10 @@ class MainWindow(QMainWindow):
 
     def _read_panel_options(self) -> VmafOptions:
         extra_features = [
-            metric.legacy_binding.libvmaf_feature
+            metric.ffmpeg_binding.libvmaf_feature
             for metric in FRAME_METRICS
-            if metric.legacy_binding.libvmaf_feature is not None
+            if metric.ffmpeg_binding is not None
+            and metric.ffmpeg_binding.libvmaf_feature is not None
             and self.metric_header.is_checked(next(item.column for item in _METRIC_COLUMNS if item.key == metric.key))
         ]
 
@@ -2747,7 +2761,8 @@ class MainWindow(QMainWindow):
                 # The key uses the row's REAL file, not result.distorted --
                 # which for a synthetic row is a path that does not exist and
                 # so carries no size or mtime to notice a replacement by.
-                result.source, row_data.identity_path, result, label, cache_options,
+                result.source, row_data.identity_path, result, label,
+                analysis_request_from_vmaf_options(cache_options),
                 result_cache.cache_dir(),
             ),
         )

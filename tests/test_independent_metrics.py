@@ -1,10 +1,7 @@
 """Metric-neutral journeys, including real FFmpeg (no mocked scores)."""
-import hashlib
 import itertools
-import json
 import subprocess
 import time
-from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -15,6 +12,10 @@ from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_request import (
+    analysis_request_from_vmaf_options,
+    supplemental_metric_specs,
+)
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VmafOptions
 from vmaf_app.core.run_io import export_csv, load_run, save_run
@@ -34,6 +35,34 @@ def click_metric(win, row, column):
     item = win.distorted_table.item(row, column)
     item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
 
+
+
+def _cache_request(options):
+    return analysis_request_from_vmaf_options(options)
+
+
+def _cache_key(source, distorted, options):
+    return result_cache.cache_key(source, distorted, _cache_request(options))
+
+
+def _load_cached(source, distorted, options, directory=None):
+    return result_cache.load_cached(
+        source, distorted, _cache_request(options), directory,
+        supplemental_metric_specs(options),
+    )
+
+
+def _store_cached(source, distorted, result, label, options, directory=None):
+    return result_cache.store(
+        source, distorted, result, label, _cache_request(options), directory
+    )
+
+
+def _clear_cached(source, distorted, options, directory=None):
+    return result_cache.clear(
+        source, distorted, _cache_request(options), directory,
+        supplemental_metric_specs(options),
+    )
 
 @pytest.fixture(scope="module")
 def qapp():
@@ -75,11 +104,11 @@ def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):
     full = run_vmaf(source, distorted, alone)
     assert len(sampled.frames) == 4
     assert len(full.frames) == 12
-    result_cache.store(source.path, distorted.path, sampled, "sampled", mixed)
-    assert result_cache.load_cached(source.path, distorted.path, alone) is None
-    result_cache.clear(source.path, distorted.path, alone)
-    result_cache.store(source.path, distorted.path, full, "full", alone)
-    assert result_cache.load_cached(source.path, distorted.path, mixed) is None
+    _store_cached(source.path, distorted.path, sampled, "sampled", mixed)
+    assert _load_cached(source.path, distorted.path, alone) is None
+    _clear_cached(source.path, distorted.path, alone)
+    _store_cached(source.path, distorted.path, full, "full", alone)
+    assert _load_cached(source.path, distorted.path, mixed) is None
 
 
 @pytest.mark.parametrize("names", COMBINATIONS)
@@ -95,7 +124,7 @@ def test_real_metric_combinations_and_portable_roundtrip(real_pair, tmp_path, na
     assert tuple(m for m in ("vmaf", "psnr", "ssim", "xpsnr") if result.frames.has(m)) == names
     assert all(np.isfinite(result.frames.values(m)).all() for m in names)
     assert bool(result.model) == ("vmaf" in names)
-    path = tmp_path / "portable.vmafrun.json"
+    path = tmp_path / "portable.metrics.json"
     save_run(result, path)
     loaded, _ = load_run(path)
     np.testing.assert_array_equal(loaded.frames.frame, result.frames.frame)
@@ -105,8 +134,8 @@ def test_real_metric_combinations_and_portable_roundtrip(real_pair, tmp_path, na
     assert loaded.frames.has("vmaf") == ("vmaf" in names)
     assert loaded.frames[:2].nbytes() > 0
     export_csv(loaded, tmp_path / "metrics.csv")
-    result_cache.store(result.source, result.distorted, result, "test", options)
-    cached = result_cache.load_cached(result.source, result.distorted, options)
+    _store_cached(result.source, result.distorted, result, "test", options)
+    cached = _load_cached(result.source, result.distorted, options)
     assert cached is not None and cached[0].frames == loaded.frames
 
 
@@ -132,18 +161,6 @@ def test_non_vmaf_resample_and_subsample(real_pair):
 def test_empty_selection_is_rejected(real_pair):
     with pytest.raises(VmafRunError, match="at least one metric"):
         run_vmaf(*real_pair, options_for(()))
-
-
-def test_legacy_cache_key_is_unchanged(tmp_path):
-    source, test = tmp_path / "source.mkv", tmp_path / "test.mkv"
-    options = VmafOptions(extra_features=["name=psnr"])
-    legacy = asdict(options)
-    for key in ("compute_vmaf", "compute_vmaf_neg", "gpu_decode", "gpu_vendor", "n_threads"):
-        legacy.pop(key)
-    raw = f"{result_cache._file_identity(source)}|{result_cache._file_identity(test)}|{json.dumps(legacy, sort_keys=True, separators=(',', ':'))}"
-    assert result_cache.cache_key(source, test, options) == hashlib.sha1(raw.encode()).hexdigest()
-    options.compute_vmaf = False
-    assert result_cache.cache_key(source, test, options) != hashlib.sha1(raw.encode()).hexdigest()
 
 
 def test_missing_vmaf_arrays_have_normal_sequence_semantics():
@@ -195,7 +212,7 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     assert win._has_requested_results(win._rows[row])
     assert win._rows[row].completed_run.result.frames.has("ssim")
     assert len(win.graph_panel._entries) == 1
-    path = tmp_path / "results.vmafrun.json"
+    path = tmp_path / "results.metrics.json"
     save_run(result, path)
     monkeypatch.setattr("vmaf_app.ui.main_window.QFileDialog.getOpenFileName", lambda *_: (str(path), ""))
     win._on_load_saved_run()

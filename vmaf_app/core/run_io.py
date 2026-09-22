@@ -1,5 +1,4 @@
-"""Save/load a VmafRunResult to a portable JSON file, and CSV export, so
-past runs can be reloaded later and overlaid in the comparison graph."""
+"""Portable result persistence and CSV export."""
 from __future__ import annotations
 
 import csv
@@ -9,41 +8,29 @@ from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core.metric_results import (
+    UNSPECIFIED_PROVENANCE,
+    FrameMetricResult,
+    MetricResultSet,
+    SequenceMetricResult,
+    provenance_from_dict,
+    provenance_to_dict,
+)
 from vmaf_app.core.models import (
-    RESAMPLE_TARGET_CHOICES,
+    ComparisonResult,
     CropBox,
     FrameScores,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
-    VmafRunResult,
 )
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
-# The v1 file format is an external compatibility contract.  Its row order
-# predates the registry's logical/display order and must never be reordered.
-LEGACY_V1_FRAME_ROW_METRICS = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
-
-#: The file extension of a saved run, cached or exported. A double extension
-#: rather than a bare .json on purpose: "Clear saved results" deletes every
-#: file with this suffix in a folder the user can point anywhere, and bare
-#: .json would make that folder's unrelated files fair game.
+#: The file extension of a saved run. A double extension rather than a bare
+#: .json keeps result-file operations scoped away from unrelated JSON files.
 RESULT_SUFFIX = ".metrics.json"
-#: What the files were called when this was a VMAF-only tool. Still opened,
-#: and cache folders are renamed to the current suffix as they are used.
-LEGACY_RESULT_SUFFIXES = (".vmafrun.json",)
-#: For the open dialogs: the current suffix first, then any .json, which is
-#: how a file under an older suffix is still offered.
-RESULT_FILE_FILTER = f"Analysis results (*{RESULT_SUFFIX} *.json)"
-
-
-def _legacy_resample_target(distorted_path: str) -> ResampleTarget | None:
-    """Recover the recipe encoded in pre-Frame-Compare synthetic names."""
-    for target in RESAMPLE_TARGET_CHOICES:
-        if f"[downscale-{target.label}-upscale]" in Path(distorted_path).stem:
-            return ResampleTarget(width=target.width, label=target.label)
-    return None
+RESULT_FILE_FILTER = f"Analysis results (*{RESULT_SUFFIX})"
 
 
 def safe_filename_stem(label: str) -> str:
@@ -110,60 +97,94 @@ def _info_from_dict(d: dict) -> VideoInfo:
     )
 
 
-def _frames_to_rows(frames: FrameScores) -> list[list]:
-    """The on-disk shape is unchanged (one row per frame) so files written by
-    older versions still load -- the arrays are just unpacked to write."""
-    # Scores are written unrounded: they are float32, so float(v) is already
-    # the shortest decimal that reads back to the same bits, and rounding to
-    # 6dp would land between two float32s and break an exact reload. Only
-    # `time` is rounded -- it is float64 and derived from frame/fps, where
-    # microsecond precision is far beyond what anything displays.
-    def column(metric: str) -> list:
-        arr = frames.values(metric)
-        if arr is None:
-            return [None] * len(frames)
-        values = []
-        for value in arr:
-            if math.isnan(value):
-                values.append(None)
-            elif math.isinf(value):
-                # JSON has no numeric infinity. A string keeps the file
-                # standards-compliant and NumPy accepts it as a float when
-                # loading the run again.
-                values.append("Infinity" if value > 0 else "-Infinity")
-            else:
-                values.append(float(value))
-        return values
-
-    vmaf, psnr, ssim, xpsnr, neg = (column(m) for m in LEGACY_V1_FRAME_ROW_METRICS)
-    return [
-        [int(frames.frame[i]), round(float(frames.time[i]), 6), vmaf[i],
-         psnr[i], ssim[i], xpsnr[i], neg[i]]
-        for i in range(len(frames))
-    ]
+def _json_float(value: float) -> float | str | None:
+    value = float(value)
+    if math.isnan(value):
+        return None
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
 
 
-def _rows_to_frames(rows: list[list]) -> FrameScores:
-    if not rows:
-        return FrameScores.empty()
-
-    def column(index: int) -> np.ndarray | None:
-        # fr[5] (xpsnr) is missing in files saved before XPSNR support existed.
-        values = [r[index] if len(r) > index else None for r in rows]
-        if all(v is None for v in values):
-            return None
-        return np.array([np.nan if v is None else v for v in values], dtype=np.float32)
-
-    return FrameScores(
-        frame=np.array([r[0] for r in rows], dtype=np.int32),
-        time=np.array([r[1] for r in rows], dtype=np.float64),
-        vmaf=column(2),
-        psnr=column(3), ssim=column(4), xpsnr=column(5),
-        vmaf_neg=column(6),
-    )
+def _float_from_json(value: float | int | str | None) -> float:
+    if value is None:
+        return float("nan")
+    if value == "Infinity":
+        return float("inf")
+    if value == "-Infinity":
+        return float("-inf")
+    return float(value)
 
 
-def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> None:
+def _portable_metric_results(result: ComparisonResult) -> MetricResultSet:
+    """Return authoritative results with the current shared frame view applied.
+
+    `metric_results` is the architectural source of truth, but established
+    callers can still replace `result.frames` directly. Overlaying the frame
+    view here keeps those current APIs coherent without discarding generic
+    sequence results or independently sampled metrics that have no frame-view
+    representation.
+    """
+    results = result.metric_results.copy()
+    for key in result.frames.metric_keys:
+        values = result.frames.values(key)
+        if values is None:
+            continue
+        current = results.frame(key)
+        provenance = current.provenance if current is not None else UNSPECIFIED_PROVENANCE
+        results.add(FrameMetricResult(
+            key, result.frames.frame, result.frames.time, values, provenance,
+        ))
+    return results
+
+
+def _metric_to_dict(metric) -> dict:
+    common = {
+        "key": metric.key,
+        "provenance": provenance_to_dict(metric.provenance),
+    }
+    if isinstance(metric, FrameMetricResult):
+        return {
+            **common,
+            "kind": "frame",
+            "frame": [int(value) for value in metric.frame],
+            "time": [_json_float(value) for value in metric.time],
+            "values": [_json_float(value) for value in metric.values],
+        }
+    if isinstance(metric, SequenceMetricResult):
+        return {**common, "kind": "sequence", "score": _json_float(metric.score)}
+    raise TypeError(f"Unsupported metric result type: {type(metric).__name__}")
+
+
+def _metric_from_dict(data: dict):
+    if not isinstance(data, dict):
+        raise TypeError("metric result must be an object")
+    key = data["key"]
+    if not isinstance(key, str) or not key:
+        raise ValueError("metric result key must be a non-empty string")
+    provenance_data = data["provenance"]
+    if not isinstance(provenance_data, dict):
+        raise TypeError("metric provenance must be an object")
+    provenance = provenance_from_dict(provenance_data)
+    kind = data.get("kind")
+    if kind == "frame":
+        frames, times, values = data["frame"], data["time"], data["values"]
+        if not all(isinstance(column, list) for column in (frames, times, values)):
+            raise TypeError("frame metric arrays must be lists")
+        return FrameMetricResult(
+            key,
+            np.asarray(frames, dtype=np.int32),
+            np.asarray([_float_from_json(value) for value in times], dtype=np.float64),
+            np.asarray([_float_from_json(value) for value in values], dtype=np.float32),
+            provenance,
+        )
+    if kind == "sequence":
+        return SequenceMetricResult(key, _float_from_json(data["score"]), provenance)
+    raise ValueError(f"Unsupported metric result kind: {kind!r}")
+
+
+def save_run(result: ComparisonResult, path: Path, label: str | None = None) -> None:
+    metrics = _portable_metric_results(result)
     payload = {
         "format_version": FORMAT_VERSION,
         "label": label or result.distorted.stem,
@@ -185,48 +206,53 @@ def save_run(result: VmafRunResult, path: Path, label: str | None = None) -> Non
             }
         ),
         "compared_frame_count": result.compared_frame_count,
-        "frames": _frames_to_rows(result.frames),
+        "metric_results": [
+            _metric_to_dict(metric)
+            for key in metrics
+            if (metric := metrics.get(key)) is not None
+        ],
     }
     path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
 
 
-def load_run(path: Path) -> tuple[VmafRunResult, str]:
+def load_run(path: Path) -> tuple[ComparisonResult, str]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    frames = _rows_to_frames(data["frames"])
-    if data.get("model") == "version=vmaf_v0.6.1neg" and frames.vmaf_neg is None:
-        frames = frames.with_values("vmaf_neg", frames.vmaf).with_values("vmaf", None)
-    result = VmafRunResult(
+    if data.get("format_version") != FORMAT_VERSION:
+        raise ValueError(
+            f"Unsupported analysis result format version: {data.get('format_version')!r}"
+        )
+    metric_data = data.get("metric_results")
+    if not isinstance(metric_data, list):
+        raise TypeError("metric_results must be a list")
+    metrics = MetricResultSet(_metric_from_dict(item) for item in metric_data)
+    result = ComparisonResult(
         source=Path(data["source"]),
         distorted=Path(data["distorted"]),
-        frames=frames,
+        frames=FrameScores.empty(),
         fps=data["fps"],
         model=data["model"],
         source_crop=_crop_from_dict(data.get("source_crop")),
         distorted_crop=_crop_from_dict(data.get("distorted_crop")),
         source_info=_info_from_dict(data["source_info"]),
         distorted_info=_info_from_dict(data["distorted_info"]),
-        # Missing in files saved before "test both directions" existed --
-        # SOURCE_TO_DISTORTED was the only behavior then, so it's the correct
-        # default for those older files, not just an arbitrary fallback.
-        scale_direction=ScaleDirection(data.get("scale_direction", ScaleDirection.SOURCE_TO_DISTORTED.value)),
-        scale_algorithm=data.get("scale_algorithm", "bicubic"),
+        scale_direction=ScaleDirection(data["scale_direction"]),
+        scale_algorithm=data["scale_algorithm"],
         resample_target=(
             ResampleTarget(**data["resample_target"])
-            if data.get("resample_target") is not None
-            else _legacy_resample_target(data["distorted"])
+            if data["resample_target"] is not None
+            else None
         ),
-        compared_frame_count=data.get("compared_frame_count", 0),
-        model_choice=data.get("model_choice"),
+        compared_frame_count=data["compared_frame_count"],
+        model_choice=data["model_choice"],
+        metric_results=metrics,
     )
-    label = data.get("label") or result.distorted.stem
-    return result, label
+    return result, data["label"]
 
 
-def export_csv(result: VmafRunResult, path: Path) -> None:
-    # `x if x is not None else ""`, not `x or ""`: a metric that's genuinely
-    # 0.0 (VMAF and SSIM both really do bottom out at 0 for badly degraded
-    # frames) is falsy, and `or` exported it as an empty cell -- making a
-    # real score indistinguishable from "this metric wasn't computed".
+def export_csv(result: ComparisonResult, path: Path) -> None:
+    # CSV remains the current shared-frame UI export. Portable `.metrics.json`
+    # carries the complete generic result set, including sequence metrics and
+    # independently sampled frame metrics.
     def cell(value: float | None) -> float | str:
         return "" if value is None else value
 
