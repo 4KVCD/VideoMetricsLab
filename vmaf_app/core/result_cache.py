@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from vmaf_app.core.app_paths import user_data_dir
+from vmaf_app.core.metrics import FRAME_METRICS
 from vmaf_app.core.models import VmafOptions, VmafRunResult, clone_options
 from vmaf_app.core.run_io import LEGACY_RESULT_SUFFIXES, RESULT_SUFFIX, load_run, save_run
 
@@ -137,8 +138,11 @@ def _cache_path(
 #: Every metric, and the options that request it. The identity of a cached
 #: run includes which metrics it holds, so a run is only found by asking for
 #: exactly the set it was computed with -- see _candidate_options.
-_ALL_METRICS = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
-_FEATURE_BY_METRIC = {"psnr": "name=psnr", "ssim": "name=float_ssim"}
+_ALL_METRICS = tuple(metric.key for metric in FRAME_METRICS)
+_FEATURE_BY_METRIC = {
+    metric.key: metric.legacy_binding.libvmaf_feature
+    for metric in FRAME_METRICS if metric.legacy_binding.libvmaf_feature is not None
+}
 
 
 def _options_for_metrics(options: VmafOptions, metrics: frozenset[str]) -> VmafOptions:
@@ -150,9 +154,10 @@ def _options_for_metrics(options: VmafOptions, metrics: frozenset[str]) -> VmafO
     same frames whether or not it also recorded SSIM.
     """
     candidate = clone_options(options)
-    candidate.compute_vmaf = "vmaf" in metrics
-    candidate.compute_vmaf_neg = "vmaf_neg" in metrics
-    candidate.compute_xpsnr = "xpsnr" in metrics
+    for metric in FRAME_METRICS:
+        binding = metric.legacy_binding
+        if binding.bool_option is not None:
+            candidate.set_metric_enabled(metric.key, metric.key in metrics)
     # Rebuilt in a fixed order rather than filtered in place: extra_features
     # is a list, so its ORDER is part of the identity, and it is appended to
     # in whatever order the metrics were ticked.

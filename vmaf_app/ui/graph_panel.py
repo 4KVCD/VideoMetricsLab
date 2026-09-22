@@ -36,7 +36,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vmaf_app.core.models import FrameScore, VmafRunResult
+from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition
+from vmaf_app.core.models import VmafRunResult
 from vmaf_app.core.run_io import (
     RESULT_FILE_FILTER,
     RESULT_SUFFIX,
@@ -45,14 +46,7 @@ from vmaf_app.core.run_io import (
     save_run,
     unique_output_path,
 )
-from vmaf_app.core.stats import (
-    AGGREGATE_BY_METRIC,
-    ARITHMETIC,
-    DEFAULT_THRESHOLDS,
-    VmafStats,
-    aggregate_scores,
-    compute_stats,
-)
+from vmaf_app.core.stats import VmafStats, aggregate_scores, compute_stats
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
@@ -87,73 +81,10 @@ _EXPORT_SWATCH = 12
 _EXPORT_ROW_PADDING = 6
 
 
-@dataclass
-class MetricSpec:
-    key: str  # "vmaf", "psnr", "ssim", "xpsnr" -- also the FrameScore attribute name
-    label: str  # tab title / series-list column label
-    axis_label: str  # plot Y-axis label
-    value_format: str  # format spec for hover-text values, e.g. "{:.2f}"
-    fixed_y_max: float | None  # VMAF's natural ceiling (100); None = autoscale to the data
-    thresholds: list[tuple[str, float]] = field(default_factory=list)  # per-metric bands; see PSNR/SSIM/XPSNR_THRESHOLDS
-
-    @property
-    def aggregate(self) -> str:
-        """How this metric's frames combine into one number. See stats."""
-        return AGGREGATE_BY_METRIC.get(self.key, ARITHMETIC)
-
-    def value(self, frame: FrameScore) -> float | None:
-        return getattr(frame, self.key)
-
-    def format_delta(self, delta: float) -> str:
-        """A signed difference at this metric's own precision. SSIM's whole
-        range is 0-1, so the 2dp used for VMAF/PSNR rounds every real SSIM
-        difference to "0.00"."""
-        if np.isposinf(delta):
-            return "+∞"
-        if np.isneginf(delta):
-            return "−∞"
-        return self.value_format.replace("{:", "{:+").format(delta)
-
-    def format_value(self, value: float) -> str:
-        if np.isposinf(value):
-            return "∞"
-        if np.isneginf(value):
-            return "−∞"
-        return self.value_format.format(value)
-
-
-#: Where each metric reads when VMAF is at its own band edges, so ">90" means
-#: roughly the same thing on all four. Calibrated over 2,520 paired frames --
-#: three synthetic sources (fine detail, smooth gradient, flat regions) at
-#: seven CRFs each, spanning VMAF 13 to 99.6 -- by taking the median value of
-#: each metric on the frames where VMAF sat at 95/90/85/80/70:
-#:
-#:   VMAF  95    90    85    80    70
-#:   PSNR  40.8  38.2  35.3  33.7  32.1
-#:   SSIM  .988  .983  .973  .958  .947
-#:   XPSNR 37.8  35.5  33.3  29.1  27.1
-#:
-#: PSNR's low end is genuinely compressed -- VMAF 85 to 70 spans only 3 dB --
-#: so its bottom three bands sit close together and tend to move as one. The
-#: calibration used synthetic sources, real content will shift these, and
-#: they are defaults rather than constants.
-PSNR_THRESHOLDS: list[tuple[str, float]] = [
-    (">", 41.0), (">", 38.0), (">", 35.0), ("<", 35.0), ("<", 34.0), ("<", 32.0),
-]
-SSIM_THRESHOLDS: list[tuple[str, float]] = [
-    (">", 0.99), (">", 0.98), (">", 0.97), ("<", 0.97), ("<", 0.96), ("<", 0.95),
-]
-XPSNR_THRESHOLDS: list[tuple[str, float]] = [
-    (">", 38.0), (">", 35.0), (">", 33.0), ("<", 33.0), ("<", 30.0), ("<", 27.0),
-]
-
-METRICS: list[MetricSpec] = [
-    MetricSpec("vmaf", "VMAF", "VMAF", "{:.2f}", fixed_y_max=100.0, thresholds=DEFAULT_THRESHOLDS),
-    MetricSpec("vmaf_neg", "VMAF NEG", "VMAF NEG", "{:.2f}", fixed_y_max=100.0, thresholds=DEFAULT_THRESHOLDS),
-    MetricSpec("psnr", "PSNR", "PSNR (dB)", "{:.2f}", fixed_y_max=None, thresholds=PSNR_THRESHOLDS),
-    MetricSpec("ssim", "SSIM", "SSIM", "{:.4f}", fixed_y_max=None, thresholds=SSIM_THRESHOLDS),
-    MetricSpec("xpsnr", "XPSNR", "XPSNR (dB)", "{:.2f}", fixed_y_max=None, thresholds=XPSNR_THRESHOLDS),
-]
+# Compatibility names for callers which historically imported graph metadata.
+# Definitions themselves now live in the headless core registry.
+MetricSpec = MetricDefinition
+METRICS = list(FRAME_METRICS)
 
 #: Column 0 is the series; then one mean per metric; then the selected
 #: metric's detail; then the remove button.
@@ -225,7 +156,7 @@ def _metric_means(result: VmafRunResult) -> dict[str, float | None]:
         if values is None or len(values) == 0:
             means[metric.key] = None
             continue
-        means[metric.key] = aggregate_scores(values, metric.aggregate)
+        means[metric.key] = aggregate_scores(values, metric.aggregation)
     return means
 
 
@@ -252,7 +183,7 @@ class _MetricPage(QWidget):
     a run without PSNR selected has no curve on the PSNR page).
     """
 
-    def __init__(self, metric: MetricSpec, parent: QWidget | None = None) -> None:
+    def __init__(self, metric: MetricDefinition, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.metric = metric
         self._curves: dict[int, _MetricCurve] = {}  # series_id -> stats/values, only entries with data
@@ -327,7 +258,7 @@ class _MetricPage(QWidget):
             times=entry.times, values=plot_values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
-            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregate),
+            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation),
             values=values,
             label=entry.label, visible=entry.visible,
         )
@@ -530,17 +461,20 @@ class _MetricPage(QWidget):
             picks = [(entry, self._find_hover_index(entry, values, x, y, half_window))]
 
         for entry, idx in picks:
-            fr = entry.result.frames[idx]
-            val = self.metric.value(fr)
-            prefix = f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
-            if not _is_reportable(val):
+            frames = entry.result.frames
+            val = frames.values(self.metric.key)
+            value = None if val is None else float(val[idx])
+            frame = int(frames.frame[idx])
+            time = float(frames.time[idx])
+            prefix = f"[{entry.label}]  frame {frame:>6}   t={format_hms(time, decimals=2)}   "
+            if not _is_reportable(value):
                 # A run can carry the column while individual frames have no
                 # score (libvmaf's n_subsample, or a metric that failed on
                 # some frames). Formatting None here raised TypeError.
                 lines.append(f"{prefix}no {self.metric.label}")
                 continue
-            lines.append(f"{prefix}{self.metric.label}={self.metric.format_value(val)}")
-            found.append((entry.label, float(val)))
+            lines.append(f"{prefix}{self.metric.label}={self.metric.format_value(value)}")
+            found.append((entry.label, float(value)))
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
@@ -580,18 +514,18 @@ class _MetricPage(QWidget):
             if idx >= len(frames) or int(frames.frame[idx]) != frame:
                 lines.append(f"[{entry.label}]  frame {frame} not in this run")
                 continue
-            fr = frames[idx]
-            val = self.metric.value(fr)
-            if not _is_reportable(val):
+            values = frames.values(self.metric.key)
+            value = None if values is None else float(values[idx])
+            if not _is_reportable(value):
                 lines.append(f"[{entry.label}]  no {self.metric.label} for this frame")
                 continue
             lines.append(
-                f"[{entry.label}]  frame {fr.frame:>6}   t={format_hms(fr.time, decimals=2)}   "
-                f"{self.metric.label}={self.metric.format_value(val)}"
+                f"[{entry.label}]  frame {int(frames.frame[idx]):>6}   t={format_hms(float(frames.time[idx]), decimals=2)}   "
+                f"{self.metric.label}={self.metric.format_value(value)}"
             )
-            found.append((entry.label, float(val)))
+            found.append((entry.label, float(value)))
             if cursor_time is None:
-                cursor_time = float(fr.time)
+                cursor_time = float(frames.time[idx])
 
         if len(found) == 2:
             (label_a, val_a), (label_b, val_b) = found
@@ -729,7 +663,7 @@ class GraphPanel(QWidget):
         self._setup_stats_table()
         self._cap_panel_heights()
 
-    def _build_page(self, metric: MetricSpec) -> _MetricPage:
+    def _build_page(self, metric: MetricDefinition) -> _MetricPage:
         page = _MetricPage(metric)
         page.chart.hovered.connect(lambda x, y, p=page: p.on_hover(x, y, self._entries))
         self._pages[metric.key] = page
@@ -846,7 +780,7 @@ class GraphPanel(QWidget):
             header_height + _VISIBLE_SERIES_ROWS * row_height + chrome + 2
         )
 
-    def _current_metric(self) -> MetricSpec:
+    def _current_metric(self) -> MetricDefinition:
         return METRICS[self.tabs.currentIndex()] if self.tabs.currentIndex() >= 0 else METRICS[0]
 
     #: The statistics shown for the selected metric. "Mean" is deliberately

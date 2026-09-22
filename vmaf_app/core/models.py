@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 
 import numpy as np
+
+from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 
 
 class CropMode(str, Enum):
@@ -165,13 +167,33 @@ class VmafOptions:
     resample_test: ResampleTarget | None = None
 
     def requested_metrics(self) -> tuple[str, ...]:
-        return tuple(name for name, enabled in (
-            ("vmaf", self.compute_vmaf),
-            ("vmaf_neg", self.compute_vmaf_neg),
-            ("psnr", "name=psnr" in self.extra_features),
-            ("ssim", "name=float_ssim" in self.extra_features),
-            ("xpsnr", self.compute_xpsnr),
-        ) if enabled)
+        return tuple(metric.key for metric in FRAME_METRICS if self.metric_enabled(metric.key))
+
+    def metric_enabled(self, metric: str) -> bool:
+        """Whether an established metric is requested by this options object."""
+        binding = metric_definition(metric).legacy_binding
+        if binding.bool_option is not None:
+            return bool(getattr(self, binding.bool_option))
+        return binding.libvmaf_feature in self.extra_features
+
+    def set_metric_enabled(self, metric: str, enabled: bool) -> None:
+        """Enable or disable one metric without disturbing custom features.
+
+        Feature order remains meaningful to old cache keys, so enabling a
+        feature appends it just as the pre-registry UI did; disabling removes
+        only the feature owned by this metric.
+        """
+        binding = metric_definition(metric).legacy_binding
+        if binding.bool_option is not None:
+            setattr(self, binding.bool_option, enabled)
+            return
+        feature = binding.libvmaf_feature
+        assert feature is not None
+        if enabled:
+            if feature not in self.extra_features:
+                self.extra_features.append(feature)
+        else:
+            self.extra_features = [item for item in self.extra_features if item != feature]
 
     def __post_init__(self) -> None:
         if self.model_choice == "version=vmaf_v0.6.1neg":
@@ -213,8 +235,8 @@ class FrameScore:
     vmaf_neg: float | None = None
 
 
-# All metrics are optional. Missing columns are represented by None.
-METRIC_NAMES = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
+# Compatibility name for existing callers.  New code should use FRAME_METRICS.
+METRIC_NAMES = tuple(metric.key for metric in FRAME_METRICS)
 
 
 class FrameScores:
@@ -232,27 +254,60 @@ class FrameScores:
     both of which genuinely occur.
     """
 
-    __slots__ = ("frame", "psnr", "ssim", "time", "vmaf", "vmaf_neg", "xpsnr")
+    __slots__ = ("_metrics", "frame", "time")
 
     def __init__(
         self,
         frame: np.ndarray,
         time: np.ndarray,
-        vmaf: np.ndarray | None,
+        vmaf: np.ndarray | None = None,
         psnr: np.ndarray | None = None,
         ssim: np.ndarray | None = None,
         xpsnr: np.ndarray | None = None,
         vmaf_neg: np.ndarray | None = None,
+        *,
+        metrics: Mapping[str, object] | None = None,
     ) -> None:
         self.frame = np.asarray(frame, dtype=np.int32)
         # float64 for time: bisect during hover needs to stay exact across a
         # multi-hour run, where float32 only has ~0.001s of resolution.
         self.time = np.asarray(time, dtype=np.float64)
-        self.vmaf = None if vmaf is None else np.asarray(vmaf, dtype=np.float32)
-        self.psnr = None if psnr is None else np.asarray(psnr, dtype=np.float32)
-        self.ssim = None if ssim is None else np.asarray(ssim, dtype=np.float32)
-        self.xpsnr = None if xpsnr is None else np.asarray(xpsnr, dtype=np.float32)
-        self.vmaf_neg = None if vmaf_neg is None else np.asarray(vmaf_neg, dtype=np.float32)
+        self._metrics: dict[str, np.ndarray] = {}
+        legacy = {
+            "vmaf": vmaf, "psnr": psnr, "ssim": ssim,
+            "xpsnr": xpsnr, "vmaf_neg": vmaf_neg,
+        }
+        for key, values in legacy.items():
+            if values is not None:
+                self._metrics[key] = np.asarray(values, dtype=np.float32)
+        if metrics is not None:
+            for key, values in metrics.items():
+                if values is None:
+                    continue
+                self._metrics[key] = np.asarray(values, dtype=np.float32)
+
+    def _legacy_values(self, metric: str) -> np.ndarray | None:
+        return self._metrics.get(metric)
+
+    @property
+    def vmaf(self) -> np.ndarray | None:
+        return self._legacy_values("vmaf")
+
+    @property
+    def vmaf_neg(self) -> np.ndarray | None:
+        return self._legacy_values("vmaf_neg")
+
+    @property
+    def psnr(self) -> np.ndarray | None:
+        return self._legacy_values("psnr")
+
+    @property
+    def ssim(self) -> np.ndarray | None:
+        return self._legacy_values("ssim")
+
+    @property
+    def xpsnr(self) -> np.ndarray | None:
+        return self._legacy_values("xpsnr")
 
     @classmethod
     def empty(cls) -> FrameScores:
@@ -282,10 +337,14 @@ class FrameScores:
 
     def values(self, metric: str) -> np.ndarray | None:
         """The array for a metric by name, or None if it wasn't computed."""
-        return getattr(self, metric)
+        return self._metrics.get(metric)
 
     def has(self, metric: str) -> bool:
         return self.values(metric) is not None
+
+    @property
+    def metric_keys(self) -> tuple[str, ...]:
+        return tuple(self._metrics)
 
     def __len__(self) -> int:
         return int(self.frame.shape[0])
@@ -298,11 +357,8 @@ class FrameScores:
             def sliced(arr: np.ndarray | None) -> np.ndarray | None:
                 return None if arr is None else arr[index]
 
-            return FrameScores(
-                frame=self.frame[index], time=self.time[index], vmaf=sliced(self.vmaf),
-                psnr=sliced(self.psnr), ssim=sliced(self.ssim), xpsnr=sliced(self.xpsnr),
-                vmaf_neg=sliced(self.vmaf_neg),
-            )
+            return FrameScores(self.frame[index], self.time[index],
+                               metrics={key: sliced(values) for key, values in self._metrics.items()})
 
         def optional(arr: np.ndarray | None) -> float | None:
             if arr is None:
@@ -323,13 +379,12 @@ class FrameScores:
     def with_values(self, metric: str, values: np.ndarray | None) -> FrameScores:
         """A copy with one metric's column replaced -- the supported way to
         change scores, since the per-frame views are read-only."""
-        columns = {m: self.values(m) for m in ("psnr", "ssim", "xpsnr", "vmaf_neg")}
-        if metric in columns:
+        columns = dict(self._metrics)
+        if values is None:
+            columns.pop(metric, None)
+        else:
             columns[metric] = values
-            return FrameScores(self.frame, self.time, self.vmaf, **columns)
-        if metric == "vmaf":
-            return FrameScores(self.frame, self.time, values, **columns)
-        raise KeyError(f"unknown metric {metric!r}")
+        return FrameScores(self.frame, self.time, metrics=columns)
 
     def __iter__(self) -> Iterator[FrameScore]:
         for i in range(len(self)):
@@ -340,7 +395,9 @@ class FrameScores:
             return NotImplemented
         if not (np.array_equal(self.frame, other.frame) and np.array_equal(self.time, other.time)):
             return False
-        for metric in METRIC_NAMES:
+        if set(self._metrics) != set(other._metrics):
+            return False
+        for metric in self._metrics:
             a, b = self.values(metric), other.values(metric)
             if (a is None) != (b is None):
                 return False
@@ -350,10 +407,7 @@ class FrameScores:
 
     def nbytes(self) -> int:
         total = self.frame.nbytes + self.time.nbytes
-        for metric in METRIC_NAMES:
-            arr = self.values(metric)
-            if arr is not None:
-                total += arr.nbytes
+        total += sum(arr.nbytes for arr in self._metrics.values())
         return total
 
 

@@ -21,6 +21,10 @@ from vmaf_app.core.models import (
 
 FORMAT_VERSION = 1
 
+# The v1 file format is an external compatibility contract.  Its row order
+# predates the registry's logical/display order and must never be reordered.
+LEGACY_V1_FRAME_ROW_METRICS = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
+
 #: The file extension of a saved run, cached or exported. A double extension
 #: rather than a bare .json on purpose: "Clear saved results" deletes every
 #: file with this suffix in a folder the user can point anywhere, and bare
@@ -131,7 +135,7 @@ def _frames_to_rows(frames: FrameScores) -> list[list]:
                 values.append(float(value))
         return values
 
-    vmaf, psnr, ssim, xpsnr, neg = (column(m) for m in ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg"))
+    vmaf, psnr, ssim, xpsnr, neg = (column(m) for m in LEGACY_V1_FRAME_ROW_METRICS)
     return [
         [int(frames.frame[i]), round(float(frames.time[i]), 6), vmaf[i],
          psnr[i], ssim[i], xpsnr[i], neg[i]]

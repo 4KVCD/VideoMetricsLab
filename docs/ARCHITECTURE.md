@@ -11,7 +11,8 @@ Qt-free: tool discovery uses QSettings and native playback loads GI bindings.
 | --- | --- |
 | Media metadata and geometry | `core/ffprobe.py`, `crop_detect.py`, `model_select.py` |
 | Metric execution | `core/vmaf_runner.py`, `ui/worker.py` |
-| Results and persistence | `core/models.py`, `run_io.py`, `result_cache.py` |
+| Metric registry and packed scores | `core/metrics.py`, `core/models.py` |
+| Results and persistence | `core/run_io.py`, `core/result_cache.py` |
 | Statistics and plotting | `core/stats.py`, `ui/graph_panel.py`, `chart.py` |
 | Still comparison | `core/frame_extract.py`, `ui/frame_extract_worker.py` |
 | Playback orchestration | `ui/rolling_video_view.py`, `video_compare_view.py` |
@@ -48,6 +49,25 @@ Metric selection remains part of the stored key; lookup searches compatible
 alternative metric sets and historical feature orders. A partial result is
 not complete. With subsampling, XPSNR-only and libvmaf-backed results have
 different frame coverage and must not be interchanged.
+
+## Metric architecture
+
+`core/metrics.py` is the sole registry for metric labels, formatting,
+thresholds, sequence aggregation and legacy execution bindings. It is
+headless: it must not import Qt, ffmpeg wrappers or result models. Current
+logical order is VMAF, VMAF NEG, PSNR, SSIM and XPSNR. UI tables retain their
+separate stable physical column mapping in `ui/main_window.py`.
+
+`VmafOptions` deliberately keeps its legacy boolean fields and
+`extra_features` list because those fields feed existing cache identities.
+Use `metric_enabled`, `set_metric_enabled`, and `requested_metrics` for new
+metric-aware code; do not reorder unknown feature strings.
+
+`FrameScores` stores a dictionary of packed arrays and accepts future metric
+keys without a model change. The five legacy properties remain compatibility
+views. This flexibility is internal only: version-1 `.metrics.json` rows and
+CSV output serialize the historical five columns in their fixed order. Do not
+bump `run_io.FORMAT_VERSION` or silently add arbitrary keys to those files.
 
 User data lives under `~/.videometricslab/`, independent of checkout or launcher.
 Existing `~/.vmaf-calculator/` data is migrated automatically on first launch.

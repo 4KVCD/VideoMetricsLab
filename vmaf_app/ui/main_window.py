@@ -54,6 +54,7 @@ from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
+from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
     RESAMPLE_TARGET_CHOICES,
@@ -70,7 +71,7 @@ from vmaf_app.core.models import (
 )
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
-from vmaf_app.core.stats import AGGREGATE_BY_METRIC, ARITHMETIC, aggregate_scores
+from vmaf_app.core.stats import aggregate_scores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
@@ -136,21 +137,25 @@ _STATE_COLOURS = {
 # independently of calculation. Settings remains the final page.
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
-# Metric headers toggle metric selection for the video rows.
-_METRIC_COLUMNS = [
-    (COL_VMAF, "VMAF", None),
-    (COL_VMAF_NEG, "VMAF NEG", None),
-    (COL_PSNR, "PSNR", "name=psnr"),
-    (COL_SSIM, "SSIM", "name=float_ssim"),
-    (COL_XPSNR, "XPSNR", "xpsnr"),
-]
-_METRIC_COLUMN_SET = frozenset(col for col, _, _ in _METRIC_COLUMNS)
-# Result field name -> display name, in column order, for listing what a
-# finished run holds.
-_METRIC_NAMES = (
-    ("vmaf", "VMAF"), ("vmaf_neg", "VMAF NEG"), ("psnr", "PSNR"),
-    ("ssim", "SSIM"), ("xpsnr", "XPSNR"),
+@dataclass(frozen=True)
+class MetricColumn:
+    """A stable physical table column bound to one registry metric."""
+    column: int
+    key: str
+
+    @property
+    def metric(self) -> MetricDefinition:
+        return metric_definition(self.key)
+
+
+# Keep these physical indices and visual order exactly as the established UI.
+_METRIC_COLUMNS = (
+    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
+    MetricColumn(COL_PSNR, "psnr"), MetricColumn(COL_SSIM, "ssim"),
+    MetricColumn(COL_XPSNR, "xpsnr"),
 )
+_METRIC_COLUMN_BY_INDEX = {item.column: item for item in _METRIC_COLUMNS}
+_METRIC_COLUMN_SET = frozenset(_METRIC_COLUMN_BY_INDEX)
 
 class CompletedRun:
     """A finished run, its display label, and its graph identity.
@@ -700,7 +705,7 @@ class MainWindow(QMainWindow):
             "Test videos to compare against the reference. Check rows to calculate; "
             "select rows to edit their settings below. Metric header shortcuts apply to all rows."
         ))
-        metric_cols = [c for c, _, _ in _METRIC_COLUMNS]
+        metric_cols = [item.column for item in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
             0, 11, fill_column=COL_PATH,
             other_columns=[
@@ -714,18 +719,20 @@ class MainWindow(QMainWindow):
         self.metric_header = CheckableHeaderView(
             {
                 col: self._metric_enabled(self._default_options, col)
-                for col, _, _ in _METRIC_COLUMNS
+                for item in _METRIC_COLUMNS for col in (item.column,)
             },
             self.distorted_table,
         )
         self.distorted_table.setHorizontalHeader(self.metric_header)
-        for visual, (column, _, _) in enumerate(_METRIC_COLUMNS, start=6):
-            self.metric_header.moveSection(self.metric_header.visualIndex(column), visual)
+        for visual, item in enumerate(_METRIC_COLUMNS, start=6):
+            self.metric_header.moveSection(self.metric_header.visualIndex(item.column), visual)
         self.metric_header.sectionToggled.connect(self._on_metric_column_toggled)
         self.distorted_table.setHorizontalHeaderLabels(
             [
                 "", "File name", "Media info", "Black bars", "Scaling", "Video bitrate",
-                "   PSNR (dB)", "   SSIM", "   VMAF", "   XPSNR (dB)", "   VMAF NEG",
+                f"   {metric_definition('psnr').table_header}", f"   {metric_definition('ssim').table_header}",
+                f"   {metric_definition('vmaf').table_header}", f"   {metric_definition('xpsnr').table_header}",
+                f"   {metric_definition('vmaf_neg').table_header}",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -771,7 +778,7 @@ class MainWindow(QMainWindow):
             COL_SCALING: 90,
             COL_BITRATE: 65,
             **{col: (105 if col in (COL_PSNR, COL_XPSNR) else 78)
-               for col, _, _ in _METRIC_COLUMNS},
+               for item in _METRIC_COLUMNS for col in (item.column,)},
         }
         for col, width in starting_widths.items():
             self.distorted_table.setColumnWidth(
@@ -1279,7 +1286,8 @@ class MainWindow(QMainWindow):
         self.distorted_table.setItem(row, COL_BLACK_BARS, bars_item)
         self.distorted_table.setItem(row, COL_SCALING, QTableWidgetItem(""))
         self.distorted_table.setItem(row, COL_BITRATE, QTableWidgetItem(""))
-        for col, _, _ in _METRIC_COLUMNS:
+        for metric_column in _METRIC_COLUMNS:
+            col = metric_column.column
             item = QTableWidgetItem("")
             item.setTextAlignment(Qt.AlignCenter)
             self.distorted_table.setItem(row, col, item)
@@ -1313,7 +1321,8 @@ class MainWindow(QMainWindow):
         # would read its own repaint back as the user asking for a change.
         self._syncing_table = True
         try:
-            for col, _, _ in _METRIC_COLUMNS:
+            for metric_column in _METRIC_COLUMNS:
+                col = metric_column.column
                 item = self.distorted_table.item(row, col)
                 if item is None:
                     continue
@@ -1344,7 +1353,7 @@ class MainWindow(QMainWindow):
                 # Qt draws one for any item that merely *has* the role set.
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 item.setData(Qt.CheckStateRole, None)
-                item.setText(f"{value:.4f}" if col == COL_SSIM else f"{value:.2f}")
+                item.setText(metric_column.metric.format_value(value))
                 item.setToolTip(
                     "Mean of calculated frame scores."
                     + self._identical_frames_note(run, col)
@@ -1409,8 +1418,8 @@ class MainWindow(QMainWindow):
         Without it the number silently describes fewer frames than the run
         measured, which is worse than the "inf" it replaced.
         """
-        metric = {COL_VMAF: "vmaf", COL_VMAF_NEG: "vmaf_neg", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
-        values = run.result.frames.values(metric)
+        metric = _METRIC_COLUMN_BY_INDEX[column].metric
+        values = run.result.frames.values(metric.key)
         if values is None:
             return ""
         identical = int(np.isposinf(np.asarray(values, dtype=np.float64)).sum())
@@ -1424,11 +1433,11 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
-        metric = {COL_VMAF: "vmaf", COL_VMAF_NEG: "vmaf_neg", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
-        values = run.result.frames.values(metric)
+        metric = _METRIC_COLUMN_BY_INDEX[column].metric
+        values = run.result.frames.values(metric.key)
         if values is None or len(values) == 0:
             return None
-        return aggregate_scores(values, AGGREGATE_BY_METRIC.get(metric, ARITHMETIC))
+        return aggregate_scores(values, metric.aggregation)
 
     @staticmethod
     def _crop_detail(label: str, info: VideoInfo, crop: CropBox | None) -> str:
@@ -1963,7 +1972,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(name for key, name in _METRIC_NAMES if result.frames.has(key))
+            + ", ".join(metric.label for metric in FRAME_METRICS if result.frames.has(metric.key))
             + "\nLoaded from a previous run (matching files and calculation settings) -- "
             "right-click to recompute."
         )
@@ -2138,11 +2147,10 @@ class MainWindow(QMainWindow):
 
             # Keep the global header shortcuts and selected-row inspector
             # consistent without firing their write-back signals.
-            self.metric_header.set_checked(COL_PSNR, "name=psnr" in opts.extra_features)
-            self.metric_header.set_checked(COL_SSIM, "name=float_ssim" in opts.extra_features)
-            self.metric_header.set_checked(COL_XPSNR, opts.compute_xpsnr)
-            self.metric_header.set_checked(COL_VMAF, opts.compute_vmaf)
-            self.metric_header.set_checked(COL_VMAF_NEG, opts.compute_vmaf_neg)
+            for metric_column in _METRIC_COLUMNS:
+                self.metric_header.set_checked(
+                    metric_column.column, opts.metric_enabled(metric_column.key)
+                )
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
             uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.extra_features for o in selected_options)
@@ -2152,11 +2160,12 @@ class MainWindow(QMainWindow):
             self._syncing_panel = False
 
     def _read_panel_options(self) -> VmafOptions:
-        extra_features = []
-        if self.metric_header.is_checked(COL_PSNR):
-            extra_features.append("name=psnr")
-        if self.metric_header.is_checked(COL_SSIM):
-            extra_features.append("name=float_ssim")
+        extra_features = [
+            metric.legacy_binding.libvmaf_feature
+            for metric in FRAME_METRICS
+            if metric.legacy_binding.libvmaf_feature is not None
+            and self.metric_header.is_checked(next(item.column for item in _METRIC_COLUMNS if item.key == metric.key))
+        ]
 
         vendor = _GPU_VENDOR_BY_INDEX[self.gpu_vendor_combo.currentIndex()] if self.gpu_checkbox.isChecked() else GpuVendor.NONE
         crop_mode = CropMode.AUTO if self.crop_combo.currentIndex() == 0 else CropMode.NONE
@@ -2176,9 +2185,9 @@ class MainWindow(QMainWindow):
             n_subsample=self.subsample_spin.value(),
             scale_algorithm=self.scale_algo_combo.currentText(),
             scale_direction=scale_direction,
-            compute_xpsnr=self.metric_header.is_checked(COL_XPSNR),
-            compute_vmaf=self.metric_header.is_checked(COL_VMAF),
-            compute_vmaf_neg=self.metric_header.is_checked(COL_VMAF_NEG),
+            compute_xpsnr=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_XPSNR].column),
+            compute_vmaf=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF].column),
+            compute_vmaf_neg=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF_NEG].column),
             duration_limit=duration_limit,
             gpu_decode=self.gpu_checkbox.isChecked(),
             gpu_vendor=vendor,
@@ -2187,23 +2196,11 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_enabled(options: VmafOptions, column: int) -> bool:
-        key = {COL_VMAF: "vmaf", COL_VMAF_NEG: "vmaf_neg", COL_PSNR: "psnr", COL_SSIM: "ssim", COL_XPSNR: "xpsnr"}[column]
-        return key in options.requested_metrics()
+        return options.metric_enabled(_METRIC_COLUMN_BY_INDEX[column].key)
 
     @staticmethod
     def _set_metric_option(options: VmafOptions, column: int, checked: bool) -> None:
-        if column == COL_VMAF:
-            options.compute_vmaf = checked
-        elif column == COL_VMAF_NEG:
-            options.compute_vmaf_neg = checked
-        elif column == COL_XPSNR:
-            options.compute_xpsnr = checked
-        else:
-            feature = {COL_PSNR: "name=psnr", COL_SSIM: "name=float_ssim"}[column]
-            if checked and feature not in options.extra_features:
-                options.extra_features.append(feature)
-            elif not checked and feature in options.extra_features:
-                options.extra_features.remove(feature)
+        options.set_metric_enabled(_METRIC_COLUMN_BY_INDEX[column].key, checked)
 
     def _apply_metric_selection(
         self, rows: list[int], column: int, checked: bool, *, set_default: bool = True,
@@ -2788,7 +2785,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(name for key, name in _METRIC_NAMES if result.frames.has(key))
+            + ", ".join(metric.label for metric in FRAME_METRICS if result.frames.has(metric.key))
         )
         self._set_row_metrics(row)
         # Straight onto the graph: a run that has finished is a curve, and
