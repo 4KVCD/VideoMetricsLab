@@ -49,6 +49,20 @@ def test_core_does_not_import_the_ui_layer():
     assert not offenders, f"core must not depend on ui: {offenders}"
 
 
+def test_metric_execution_layers_are_explicitly_headless():
+    """Future backends must plug into these modules without importing Qt."""
+    names = {"metrics.py", "metric_results.py", "comparison_recipe.py", "execution.py", "metric_cache.py"}
+    offenders = {}
+    for path in CORE.glob("*.py"):
+        if path.name not in names:
+            continue
+        imports = _imported_modules(path)
+        bad = sorted(name for name in imports if name.startswith(("PySide6", "vmaf_app.ui")))
+        if bad:
+            offenders[path.name] = bad
+    assert not offenders
+
+
 def test_no_core_module_spawns_a_visible_console_window():
     """Every subprocess must go through vmaf_app.core.proc.
 

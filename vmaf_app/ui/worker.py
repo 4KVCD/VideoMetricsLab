@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.models import VideoInfo, VmafOptions
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
@@ -246,24 +247,26 @@ class VmafWorker(QThread):
             options = self._share_cores(job.options)
             self.job_started.emit(i, job.label)
             try:
+                # The plan is deliberately used in production, not only in
+                # tests. Part 2 still produces one efficient FFmpeg task.
+                plan = build_execution_plan(options)
+                # The only current task keeps the exact established runner
+                # call surface, including testable cancellation semantics.
+                if len(plan.tasks) != 1 or plan.tasks[0].backend_id != "legacy_ffmpeg":
+                    raise VmafRunError("No executable metric task was planned.")
                 if options.resample_test is not None:
                     result = run_resample_test(
-                        job.source_info,
-                        options,
+                        job.source_info, options,
                         on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
                         on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                        cancel_event=self._cancel_event,
-                        process_handle=handle,
+                        cancel_event=self._cancel_event, process_handle=handle,
                     )
                 else:
                     result = run_vmaf(
-                        job.source_info,
-                        job.distorted_info,
-                        options,
+                        job.source_info, job.distorted_info, options,
                         on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
                         on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                        cancel_event=self._cancel_event,
-                        process_handle=handle,
+                        cancel_event=self._cancel_event, process_handle=handle,
                         result_distorted_path=job.result_distorted_path,
                     )
             except Cancelled:

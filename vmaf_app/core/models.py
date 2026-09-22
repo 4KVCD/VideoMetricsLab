@@ -9,6 +9,11 @@ from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core.metric_results import (
+    MetricResultSet,
+    frame_scores_from_results,
+    results_from_frame_scores,
+)
 from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 
 
@@ -435,6 +440,9 @@ class VmafRunResult:
     # The UI choice that produced ``model`` (for example a bundled VMAF v1
     # model).  Older saved runs do not have this field and remain loadable.
     model_choice: str | None = None
+    # Generic results are authoritative for future backends. ``frames`` is
+    # deliberately retained as the current five-metric compatibility view.
+    metric_results: MetricResultSet = field(default_factory=MetricResultSet)
 
     def __post_init__(self) -> None:
         # Accept a plain list of FrameScore and pack it. Callers that build a
@@ -445,5 +453,35 @@ class VmafRunResult:
             self.frames = FrameScores.from_frames(self.frames)
         if self.model == "version=vmaf_v0.6.1neg" and self.frames.vmaf_neg is None:
             self.frames = self.frames.with_values("vmaf_neg", self.frames.vmaf).with_values("vmaf", None)
+        if not self.metric_results:
+            self.metric_results = results_from_frame_scores(self.frames)
+        else:
+            compatible = frame_scores_from_results(self.metric_results)
+            # An explicitly supplied legacy view (for example the v1-cache
+            # precision-compatible view) wins. Generic-only construction
+            # supplies FrameScores.empty() and is rebuilt when safe.
+            if not self.frames and compatible:
+                self.frames = compatible
         if self.compared_frame_count <= 0 and len(self.frames):
             self.compared_frame_count = int(self.frames.frame[-1]) + 1
+
+    def metric(self, key: str):
+        return self.metric_results.get(key)
+
+    def has_metric(self, key: str) -> bool:
+        return self.metric_results.has(key)
+
+    def frame_metric(self, key: str):
+        return self.metric_results.frame(key)
+
+    def sequence_metric(self, key: str):
+        return self.metric_results.sequence(key)
+
+    def merge_metric_results(self, incoming: MetricResultSet) -> None:
+        """Single merge point for result adapters; UI never merges arrays."""
+        from vmaf_app.core.metric_results import merge_metric_results
+
+        self.metric_results = merge_metric_results(self.metric_results, incoming)
+        compatible = frame_scores_from_results(self.metric_results)
+        if compatible:
+            self.frames = compatible

@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import suppress
 from dataclasses import asdict
 from pathlib import Path
 
+from vmaf_app.core import metric_cache
 from vmaf_app.core.app_paths import user_data_dir
+from vmaf_app.core.comparison_recipe import ComparisonRecipe
+from vmaf_app.core.execution import metric_request_specs
 from vmaf_app.core.metrics import FRAME_METRICS
 from vmaf_app.core.models import VmafOptions, VmafRunResult, clone_options
 from vmaf_app.core.run_io import LEGACY_RESULT_SUFFIXES, RESULT_SUFFIX, load_run, save_run
@@ -252,6 +256,21 @@ def load_cached(
     a different set of them looked at the same frames in the same way, so it
     is reused rather than thrown away -- see _candidate_options.
     """
+    base = directory if directory is not None else _cache_dir()
+    recipe = ComparisonRecipe.from_vmaf_options(options)
+    specs = metric_request_specs(options)
+    supplemental_specs = ()
+    if any(key != "xpsnr" for key in options.requested_metrics()):
+        # The old cache facade deliberately displays a fuller compatible
+        # current-FFmpeg run. Directly probe the known additional metrics;
+        # this remains O(metric count), not a subset/superset enumeration.
+        fuller = clone_options(options)
+        for metric in FRAME_METRICS:
+            fuller.set_metric_enabled(metric.key, True)
+        supplemental_specs = metric_request_specs(fuller)
+    current = metric_cache.load_result(base, source, distorted, recipe, specs, supplemental_specs)
+    if current is not None:
+        return current
     for candidate in _candidate_options(options):
         # XPSNR alone retains all frames; a libvmaf-backed run retains only
         # its sampled frames. Never substitute between those coverage modes.
@@ -264,7 +283,12 @@ def load_cached(
         if not path.exists():
             continue
         try:
-            return load_run(path)
+            legacy = load_run(path)
+            # Promotion is deliberately best-effort: a valid old cache must
+            # remain usable even if the new cache folder is unavailable.
+            with suppress(OSError):
+                metric_cache.store_result(base, source, distorted, recipe, legacy[0], legacy[1], specs)
+            return legacy
         except Exception:
             continue
     return None
@@ -282,7 +306,13 @@ def store(
     B if the user changed the setting before it ran. Callers that queue must
     capture the directory at submit time and pass it here.
     """
-    save_run(result, _cache_path(source, distorted, options, directory), label=label)
+    base = directory if directory is not None else _cache_dir()
+    save_run(result, _cache_path(source, distorted, options, base), label=label)
+    with suppress(OSError):
+        metric_cache.store_result(
+            base, source, distorted, ComparisonRecipe.from_vmaf_options(options), result,
+            label, metric_request_specs(options),
+        )
 
 
 def clear(
@@ -299,6 +329,8 @@ def clear(
     """
     for candidate in _candidate_options(options):
         _cache_path(source, distorted, candidate, directory).unlink(missing_ok=True)
+    base = directory if directory is not None else _cache_dir()
+    metric_cache.clear_recipe(base, source, distorted, ComparisonRecipe.from_vmaf_options(options))
 
 
 def clear_all(directory: Path | None = None) -> int:
@@ -316,4 +348,8 @@ def clear_all(directory: Path | None = None) -> int:
             removed += 1
         except OSError:
             pass
+    # Keep the established return value: callers historically receive the
+    # number of combined legacy result files, even though v2 entries are
+    # removed alongside them.
+    metric_cache.clear_all(base)
     return removed

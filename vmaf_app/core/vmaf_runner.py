@@ -18,7 +18,7 @@ import numpy as np
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
 from vmaf_app.core.gpu import (
     HwAccelPlan,
     plan_hwaccel,
@@ -32,6 +32,7 @@ from vmaf_app.core.gpu import (
 from vmaf_app.core.gpu import (
     hwaccel_args as _hwaccel_args,
 )
+from vmaf_app.core.metric_results import current_ffmpeg_provenance, results_from_frame_scores
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution
 from vmaf_app.core.models import (
     CropBox,
@@ -46,6 +47,21 @@ from vmaf_app.core.models import (
 from vmaf_app.core.process_control import ProcessHandle
 
 ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_frames, fps)
+
+
+def _metric_results_for_current_run(frames: FrameScores, model: str):
+    """Adapt one FFmpeg parse into generic results without re-parsing it."""
+    status = check_tools()
+    version = format_version(status.ffmpeg.version) if status.ffmpeg.runnable else "unknown"
+    return results_from_frame_scores(
+        frames,
+        {
+            key: current_ffmpeg_provenance(
+                key, version, {"model": model} if key in {"vmaf", "vmaf_neg"} else None,
+            )
+            for key in frames.metric_keys
+        },
+    )
 
 
 class VmafRunError(RuntimeError):
@@ -921,6 +937,7 @@ def run_vmaf(
         scale_algorithm=options.scale_algorithm,
         compared_frame_count=total_frames,
         model_choice=options.model_choice,
+        metric_results=_metric_results_for_current_run(frames, effective_model),
     )
 
 
@@ -999,4 +1016,5 @@ def run_resample_test(
         resample_target=options.resample_test,
         compared_frame_count=total_frames,
         model_choice=options.model_choice,
+        metric_results=_metric_results_for_current_run(frames, effective_model),
     )

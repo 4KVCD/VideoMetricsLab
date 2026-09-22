@@ -69,6 +69,66 @@ views. This flexibility is internal only: version-1 `.metrics.json` rows and
 CSV output serialize the historical five columns in their fixed order. Do not
 bump `run_io.FORMAT_VERSION` or silently add arbitrary keys to those files.
 
+## Comparison recipe, requests and execution
+
+`ComparisonRecipe` describes the scientifically compared pictures: crop
+policy, manual crops, scaling algorithm and direction, duration limit, and a
+possible resolution round-trip recipe. It intentionally excludes decode GPU,
+GPU vendor, libvmaf thread count, and the application's parallel-job count.
+
+Each requested result has a `MetricRequestSpec`: metric key, metric-specific
+scientific parameters, frame coverage, and an implementation compatibility
+identifier. VMAF variants therefore identify their model separately from the
+common picture recipe. The current XPSNR exception remains explicit: XPSNR
+alone has full-frame coverage despite `n_subsample`; a mixed libvmaf/XPSNR run
+uses the sampled timeline. Those two outputs cannot share a cache entry.
+
+`ExecutionPreferences` holds performance choices, separately from scientific
+identity. `build_execution_plan` groups the current metrics into one
+`legacy_ffmpeg` task, preserving the existing one-pass filtergraph. The Qt
+worker constructs that plan in production before dispatching the established
+runner. Multiple tasks are structurally supported, but no additional metric
+backend exists yet.
+
+## Generic metric results and provenance
+
+`FrameMetricResult` owns a metric's own packed frame/time/value arrays;
+different metrics do not need to share a sampling axis. `SequenceMetricResult`
+stores its scalar score without inventing frame data. `MetricResultSet` holds
+both kinds by key. `MetricProvenance` records implementation, version,
+compute backend, compatibility ID, and metric parameters. Compute backend
+means metric computation—not hardware video decoding.
+
+`VmafRunResult` bridges this generic model to legacy consumers. It creates
+generic results from `FrameScores` when loading old data, and only rebuilds a
+legacy `FrameScores` view when established frame metrics share an exact axis.
+Sequence and arbitrary future metrics remain generic rather than being
+misaligned into the old container.
+
+## Cache generations
+
+The legacy flat cache remains a combined `.metrics.json` cache for rollback
+and compatibility. The v2 internal metric cache is separate:
+
+```text
+<cache>/v2/<sha256 recipe hash>/context.json
+<cache>/v2/<sha256 recipe hash>/<metric>_<sha256 request hash>.npz
+```
+
+Recipe hashes include source/distorted file identity (absolute path, size,
+mtime) and `ComparisonRecipe`. Metric hashes include key, scientific
+parameters, coverage, and implementation compatibility ID. Performance
+preferences are deliberately excluded. Each metric is looked up directly—v2
+does not enumerate metric subsets. NPZ loads disable pickle; corrupt one
+artifact is a miss for that metric only.
+
+During the transition, completed FFmpeg runs write both cache generations.
+Lookup tries compatible v2 entries first, then legacy cache entries; a legacy
+hit is lazily promoted using explicit `legacy-v1` provenance and is never
+deleted. Cache clearing removes both generations. v2 refers only to this
+internal cache architecture: portable `.metrics.json` and `.vmafrun.json`
+remain format v1 because they cannot yet represent future sequence metrics.
+
 User data lives under `~/.videometricslab/`, independent of checkout or launcher.
 Existing `~/.vmaf-calculator/` data is migrated automatically on first launch.
 The cache folder is configurable. FFmpeg location uses legacy QSettings keys.
