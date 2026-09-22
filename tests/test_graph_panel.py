@@ -833,6 +833,26 @@ def test_going_to_a_frame_shows_the_difference_for_exactly_two_series(qapp):
     assert "Δ" in win._pages["vmaf"].hover_label.text()
 
 
+def test_frame_readout_aligns_fields_for_different_length_series_names(qapp):
+    """A long encode name must not push only its own values to the right."""
+    win = GraphPanel()
+    win.add_run(_values_result("short.mp4", [90.0, 90.0]), "short encode")
+    win.add_run(
+        _values_result("long.mp4", [80.0, 80.0]),
+        "a much longer encode name",
+    )
+
+    page = win._pages["vmaf"]
+    assert page.show_frame(1, win._entries)
+    series_lines = [line for line in page.hover_label.text().splitlines() if line.startswith("[")]
+
+    assert len(series_lines) == 2
+    # The fixed series column is followed by frame, time, and metric columns.
+    # Their exact positions must be independent of the individual label length.
+    for field in ("frame", "t=", "VMAF="):
+        assert series_lines[0].index(field) == series_lines[1].index(field)
+
+
 def test_a_frame_missing_from_one_run_is_reported_not_faked(qapp):
     # A shorter or subsampled run simply may not have that frame; showing a
     # neighbour's score under the requested number would be a lie.

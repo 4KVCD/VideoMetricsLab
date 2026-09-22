@@ -336,6 +336,31 @@ class _MetricPage(QWidget):
         """Names of the series currently plotted on this page, in display order."""
         return [c.label for c in self._curves.values() if c.visible]
 
+    def _series_readout_column_width(self) -> int:
+        """Width of the shared series-name column in the point readout.
+
+        The readout is intentionally plain monospaced text for cheap updates.
+        Without padding the series field, though, every following value starts
+        immediately after that particular file name.  That made frame, time,
+        and score columns zig-zag whenever encodes had different name lengths.
+        One width per visible-page state keeps the columns aligned while
+        retaining the no-relayout-on-hover performance property.
+        """
+        return max((len(f"[{label}]") for label in self._visible_labels()), default=0)
+
+    def _readout_prefix(self, label: str, frame: int, time: float) -> str:
+        """Format the aligned, shared fields preceding a per-frame value."""
+        series = f"[{label}]"
+        return (
+            f"{series:<{self._series_readout_column_width()}}  "
+            f"frame {frame:>6}   t={format_hms(time, decimals=2)}   "
+        )
+
+    def _readout_missing_frame(self, label: str, frame: int) -> str:
+        """Format a missing-frame notice in the same series column."""
+        series = f"[{label}]"
+        return f"{series:<{self._series_readout_column_width()}}  frame {frame:>6}   not in this run"
+
     def _set_hover_text(self, text: str) -> None:
         # Dragging across one frame's worth of pixels reports the same thing
         # every time; repainting it again is pure waste.
@@ -466,7 +491,7 @@ class _MetricPage(QWidget):
             value = None if val is None else float(val[idx])
             frame = int(frames.frame[idx])
             time = float(frames.time[idx])
-            prefix = f"[{entry.label}]  frame {frame:>6}   t={format_hms(time, decimals=2)}   "
+            prefix = self._readout_prefix(entry.label, frame, time)
             if not _is_reportable(value):
                 # A run can carry the column while individual frames have no
                 # score (libvmaf's n_subsample, or a metric that failed on
@@ -483,7 +508,7 @@ class _MetricPage(QWidget):
                 lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(delta)}")
 
         self.chart.set_cursor_time(float(picks[0][0].times[picks[0][1]]))
-        self.hover_label.setText("\n".join(lines))
+        self._set_hover_text("\n".join(lines))
 
 
     def show_frame(self, frame: int, entries_by_id: dict[int, SeriesEntry]) -> bool:
@@ -512,16 +537,21 @@ class _MetricPage(QWidget):
             # may not exist in it -- that is reported rather than silently
             # showing a neighbouring frame's score.
             if idx >= len(frames) or int(frames.frame[idx]) != frame:
-                lines.append(f"[{entry.label}]  frame {frame} not in this run")
+                lines.append(self._readout_missing_frame(entry.label, frame))
                 continue
             values = frames.values(self.metric.key)
             value = None if values is None else float(values[idx])
             if not _is_reportable(value):
-                lines.append(f"[{entry.label}]  no {self.metric.label} for this frame")
+                lines.append(
+                    self._readout_prefix(
+                        entry.label, int(frames.frame[idx]), float(frames.time[idx])
+                    ) + f"no {self.metric.label}"
+                )
                 continue
             lines.append(
-                f"[{entry.label}]  frame {int(frames.frame[idx]):>6}   t={format_hms(float(frames.time[idx]), decimals=2)}   "
-                f"{self.metric.label}={self.metric.format_value(value)}"
+                self._readout_prefix(
+                    entry.label, int(frames.frame[idx]), float(frames.time[idx])
+                ) + f"{self.metric.label}={self.metric.format_value(value)}"
             )
             found.append((entry.label, float(value)))
             if cursor_time is None:
