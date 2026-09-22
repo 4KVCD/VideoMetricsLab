@@ -6,6 +6,7 @@ for 4K auto-selection had to import a private name out of a UI module.
 """
 from __future__ import annotations
 
+from vmaf_app.core.builtin_models import builtin_model_path, is_builtin_model_choice
 from vmaf_app.core.models import VmafOptions
 
 # A distorted video at or above this resolution is considered UHD/4K for the
@@ -47,6 +48,9 @@ def resolve_model(options: VmafOptions, width: int, height: int) -> str:
         # run_vmaf() copies this into its per-run temp dir and references
         # it by bare filename, so the raw absolute path is fine here.
         return f"path={options.custom_model_path}"
+    if is_builtin_model_choice(options.model_choice):
+        model_id = options.model_choice.removeprefix("__builtin:")
+        return f"path={builtin_model_path(model_id)}"
     if options.model_choice == AUTO_MODEL_CHOICE:
         return model_for_resolution(width, height)
     return options.model_choice

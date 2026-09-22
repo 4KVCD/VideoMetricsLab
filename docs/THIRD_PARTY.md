@@ -12,6 +12,7 @@ legal clearance for the generated Windows bundle.
 | psutil | Process control | [psutil license](https://github.com/giampaolo/psutil/blob/master/LICENSE) |
 | GStreamer and plugin dependencies | Native decoding, audio and presentation | [GStreamer licensing](https://gstreamer.freedesktop.org/documentation/frequently-asked-questions/licensing.html) |
 | FFmpeg and libvmaf | External metric/probing tools, not bundled by default | [FFmpeg legal information](https://ffmpeg.org/legal.html), [VMAF license](https://github.com/Netflix/vmaf/blob/master/LICENSE) |
+| Netflix VMAF v1 model files | Optional built-in model data passed to external libvmaf | [VMAF source models](https://github.com/Netflix/vmaf/tree/master/model/vmaf_v1.0.16), [BSD-2-Clause-Patent license](https://github.com/Netflix/vmaf/blob/master/LICENSE) |
 
 The spec includes GStreamer GPL and restricted plugin packages. Inspect the
 actual libraries in those packages; a package name or top-level LGPL label

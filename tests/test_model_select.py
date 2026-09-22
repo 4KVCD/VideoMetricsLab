@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from vmaf_app.core.builtin_models import builtin_choice, builtin_model_path
 from vmaf_app.core.model_select import (
     AUTO_MODEL_CHOICE,
     CUSTOM_MODEL_CHOICE,
@@ -67,6 +68,12 @@ def test_resolve_model_custom_requires_a_path():
 
     opts2 = VmafOptions(model_choice="__custom__", custom_model_path="C:/models/mine.json")
     assert resolve_model(opts2, 1920, 1080) == "path=C:/models/mine.json"
+
+
+def test_bundled_vmaf_v1_model_resolves_to_an_existing_path():
+    choice = builtin_choice("vmaf_v1_3d0h")
+    resolved = resolve_model(VmafOptions(model_choice=choice), 1920, 1080)
+    assert resolved == f"path={builtin_model_path('vmaf_v1_3d0h')}"
 
 
 def test_clone_options_is_an_independent_copy():

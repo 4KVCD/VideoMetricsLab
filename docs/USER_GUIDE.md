@@ -6,6 +6,12 @@
 2. Select the metric checkboxes in each row. Cell edits apply to selected rows;
    header checkboxes apply across rows. All four metrics are enabled by default.
 3. Review crop, scale, model, duration and subsampling settings before starting.
+
+The model selector includes Netflix VMAF v0 models and the bundled VMAF v1
+models (1080p, phone, 4K, and high-frame-rate variants). VMAF v1 requires an
+FFmpeg build linked against a libvmaf version that supports the v1 feature set;
+older FFmpeg packages will report a clear model/feature error and should use a
+v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 4. Choose **Calculate metrics**. Optional two-job parallelism can help on large
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column

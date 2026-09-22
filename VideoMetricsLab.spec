@@ -50,6 +50,12 @@ else:
     print("WARNING: d3d11_tonemap.dll is missing; the build will fall back "
           "to FFmpeg tone mapping. Run scripts/build_d3d11_tonemap.ps1 first.")
 
+# Netflix's VMAF v1 models are data files, not part of the external FFmpeg
+# installation.  Keep them beside the package so the app can pass a portable
+# path= model to any compatible libvmaf build.
+VMAF_MODELS = PROJECT / "vmaf_app" / "models"
+datas.append((str(VMAF_MODELS), "vmaf_app/models"))
+
 a = Analysis(
     [str(PROJECT / "vmaf_app" / "main.py")],
     pathex=[str(PROJECT)],

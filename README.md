@@ -32,6 +32,7 @@ Analyze video-only bitrate independently by frame, second, or GOP.
 ## Features
 
 - Calculate VMAF, VMAF NEG, PSNR, SSIM, and XPSNR for multiple test videos.
+- Use the bundled Netflix VMAF v1 models for standard, phone, 4K, and HFR viewing scenarios.
 - Compare metric curves, statistics, and per-frame scores.
 - Instant switch between source and encoded video for easy visual A/B comparisons, both frame by frame and during playback, and between different encoded videos.
 - Inspect bitrate by frame, second, or GOP without running quality metrics.

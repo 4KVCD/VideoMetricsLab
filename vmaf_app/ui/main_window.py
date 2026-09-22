@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 
 from vmaf_app import APP_NAME
 from vmaf_app.core import result_cache
+from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
@@ -91,6 +92,14 @@ _MODEL_CHOICES = [
     ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
     ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
+    ("VMAF v1 (1080p / 3H)", builtin_choice("vmaf_v1_3d0h")),
+    ("VMAF v1 (1080p phone / 5H)", builtin_choice("vmaf_v1_5d0h")),
+    ("VMAF v1 (4K / 1.5H)", builtin_choice("vmaf_v1_1d5h_2160")),
+    ("VMAF v1 (4K / 3H, up to 110)", builtin_choice("vmaf_v1_3d0h_2160")),
+    ("VMAF v1 HFR (1080p / 3H)", builtin_choice("vmaf_v1_hfr_3d0h")),
+    ("VMAF v1 HFR (1080p phone / 5H)", builtin_choice("vmaf_v1_hfr_5d0h")),
+    ("VMAF v1 HFR (4K / 1.5H)", builtin_choice("vmaf_v1_hfr_1d5h_2160")),
+    ("VMAF v1 HFR (4K / 3H, up to 110)", builtin_choice("vmaf_v1_hfr_3d0h_2160")),
     ("Custom model file...", CUSTOM_MODEL_CHOICE),
 ]
 
@@ -828,7 +837,11 @@ class MainWindow(QMainWindow):
         for name, _ in _MODEL_CHOICES:
             self.model_combo.addItem(name)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
-        self.model_combo.setToolTip("VMAF only. Auto selects the model using the resolution after calculation cropping and scaling.")
+        self.model_combo.setToolTip(
+            "VMAF only. Auto selects the v0 model using the resolution after "
+            "calculation cropping and scaling. Bundled v1 models require a "
+            "recent libvmaf-capable FFmpeg build."
+        )
         metric_options_form.addRow("VMAF model:", self.model_combo)
 
         self.gpu_checkbox = QCheckBox("Use GPU decoding")

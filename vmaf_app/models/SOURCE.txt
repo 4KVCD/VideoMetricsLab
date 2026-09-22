@@ -1,0 +1,10 @@
+These VMAF v1.0.16 model files are copied from Netflix/vmaf at commit
+86da14d0306a138fd3f01319860b905169746516 (September 2026).
+
+Source:
+https://github.com/Netflix/vmaf/tree/86da14d0306a138fd3f01319860b905169746516/model
+
+License: BSD-2-Clause-Patent; see LICENSE-vmaf.txt.
+
+The model files require an external FFmpeg/libvmaf build new enough to
+implement the VMAF v1 feature set. Older builds should use VMAF v0 models.
