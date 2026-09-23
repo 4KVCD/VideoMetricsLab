@@ -22,6 +22,7 @@ import subprocess
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -264,6 +265,44 @@ def clear_cache() -> None:
     replaced a file in place with the same size and mtime."""
     with _cache_lock:
         _cache.clear()
+
+
+def detect_pair(
+    detect_source: Callable[[], CropBox | None],
+    detect_distorted: Callable[[], CropBox | None],
+) -> tuple[CropBox | None, CropBox | None]:
+    """Detects a comparison's two inputs at the same time.
+
+    Each input's windows run in turn, so this is two decoders -- exactly the
+    app-wide limit -- and about half the wall time of one input after the
+    other. Both are waited for before anything is raised, so no detection
+    outlives the call. Cancellation is reported in preference to an error,
+    and the reference's error in preference to the test's.
+    """
+    results: list[CropBox | None] = [None, None]
+    errors: list[BaseException | None] = [None, None]
+
+    def run(index: int, detect: Callable[[], CropBox | None]) -> None:
+        try:
+            results[index] = detect()
+        except BaseException as error:  # re-raised on the calling thread
+            errors[index] = error
+
+    threads = [
+        threading.Thread(target=run, args=(0, detect_source), name="crop-reference", daemon=True),
+        threading.Thread(target=run, args=(1, detect_distorted), name="crop-test", daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    for error in errors:
+        if isinstance(error, CropDetectCancelled):
+            raise error
+    for error in errors:
+        if error is not None:
+            raise error
+    return results[0], results[1]
 
 
 def detect_crop(

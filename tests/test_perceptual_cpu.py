@@ -132,7 +132,7 @@ def test_auto_crop_detection_uses_full_video_not_score_duration(monkeypatch):
 
     _resolve_crops(_info("source.mp4"), _info("test.mp4"), recipe, None, None, None)
 
-    assert [name for name, _kwargs in calls] == ["source.mp4", "test.mp4"]
+    assert sorted(name for name, _kwargs in calls) == ["source.mp4", "test.mp4"]
     assert all("duration_limit" not in kwargs for _name, kwargs in calls)
 
 

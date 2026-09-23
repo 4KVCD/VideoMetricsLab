@@ -500,7 +500,8 @@ def test_crop_detection_receives_run_cancel_and_process_controls(monkeypatch):
             source, distorted, VmafOptions(),
             cancel_event=cancel, process_handle=handle,
         )
-    assert received == [(cancel, handle)]
+    # Both inputs are detected at once, and each gets the run's controls.
+    assert received == [(cancel, handle)] * 2
 
 
 @pytest.mark.parametrize(

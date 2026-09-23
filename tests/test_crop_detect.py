@@ -412,3 +412,45 @@ def test_waiting_for_a_decoder_slot_still_answers_cancel():
     finally:
         for _ in range(crop_detect._MAX_DETECTION_DECODERS):
             crop_detect._decoder_slots.release()
+
+
+def test_a_comparisons_two_inputs_are_detected_at_the_same_time():
+    """Two decoders -- the app-wide limit -- and half the wall time."""
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def detect(box):
+        def run():
+            nonlocal running, peak
+            with lock:
+                running += 1
+                peak = max(peak, running)
+            time.sleep(0.05)
+            with lock:
+                running -= 1
+            return box
+        return run
+
+    a, b = crop_detect.CropBox(1920, 800, 0, 140), crop_detect.CropBox(1920, 1080, 0, 0)
+    assert crop_detect.detect_pair(detect(a), detect(b)) == (a, b)
+    assert peak == 2
+
+
+def test_pair_detection_waits_for_both_and_prefers_cancel_over_errors():
+    finished = []
+
+    def fails():
+        raise CropDetectError("reference unreadable")
+
+    def cancelled():
+        time.sleep(0.05)
+        finished.append("test")
+        raise crop_detect.CropDetectCancelled("stop")
+
+    with pytest.raises(crop_detect.CropDetectCancelled):
+        crop_detect.detect_pair(fails, cancelled)
+    assert finished == ["test"], "raised before the other input had finished"
+
+    with pytest.raises(CropDetectError, match="reference"):
+        crop_detect.detect_pair(fails, lambda: crop_detect.CropBox(1, 1, 0, 0))

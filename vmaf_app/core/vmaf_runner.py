@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
+from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
 from vmaf_app.core.gpu import (
     HwAccelPlan,
@@ -201,24 +201,20 @@ def _resolve_crops(
 
     plan = hwaccel or HwAccelPlan()
     if status_callback:
-        status_callback("Detecting black bars in source...")
+        status_callback("Detecting black bars in source and distorted...")
     try:
-        src_crop = detect_crop(
-            source_info, cancel_event=cancel_event, process_handle=process_handle,
-            hwaccel=plan.source,
+        return detect_pair(
+            lambda: detect_crop(
+                source_info, cancel_event=cancel_event, process_handle=process_handle,
+                hwaccel=plan.source,
+            ),
+            lambda: detect_crop(
+                distorted_info, cancel_event=cancel_event, process_handle=process_handle,
+                hwaccel=plan.distorted,
+            ),
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
-    if status_callback:
-        status_callback("Detecting black bars in distorted...")
-    try:
-        dist_crop = detect_crop(
-            distorted_info, cancel_event=cancel_event, process_handle=process_handle,
-            hwaccel=plan.distorted,
-        )
-    except CropDetectCancelled as e:
-        raise Cancelled("Cancelled by user") from e
-    return src_crop, dist_crop
 
 
 #: Analysis bit depth -> the planar 4:2:0 format both branches are converted

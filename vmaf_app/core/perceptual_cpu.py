@@ -24,7 +24,7 @@ import numpy as np
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
-from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
+from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
@@ -124,12 +124,12 @@ def _resolve_crops(
     try:
         if on_status:
             on_status("Detecting black bars for perceptual metrics…")
-        return (
-            # Crop detection samples representative windows across the whole
-            # file. A short score-duration limit may land entirely in a dark
-            # intro and must not define the crop used for the comparison.
-            detect_crop(source, cancel_event=cancel_event, process_handle=process_handle),
-            detect_crop(distorted, cancel_event=cancel_event, process_handle=process_handle),
+        # Crop detection samples representative windows across the whole
+        # file. A short score-duration limit may land entirely in a dark
+        # intro and must not define the crop used for the comparison.
+        return detect_pair(
+            lambda: detect_crop(source, cancel_event=cancel_event, process_handle=process_handle),
+            lambda: detect_crop(distorted, cancel_event=cancel_event, process_handle=process_handle),
         )
     except CropDetectCancelled as exc:
         raise PerceptualCancelled("Cancelled by user") from exc
