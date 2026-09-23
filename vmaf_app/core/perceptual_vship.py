@@ -742,7 +742,43 @@ def _compute_metric(
     return value
 
 
+#: One Vship pass at a time in the whole app. A pass already fills the GPU:
+#: at 4K two passes at once scored no faster than one after the other (84.5
+#: vs 83.6 pairs/s) while holding twice the VRAM (9.1 vs 4.5 GB, more than
+#: most cards have). Running two jobs in parallel still pays off -- 23% at
+#: 1080p, 27% at 4K -- because one job's VMAF/PSNR/SSIM pass, which is CPU
+#: work, overlaps the other's Vship pass; only this GPU pass is serialized,
+#: never crop detection or the FFmpeg metrics.
+_gpu_pass = threading.Lock()
+
+
 def run_vship_task(
+    source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
+    specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+    on_progress: Callable[[int, int, float], None] | None = None,
+    on_status: Callable[[str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    process_handle: ProcessHandle | None = None,
+) -> PerceptualTaskOutput:
+    """Scores `specs` on the GPU once no other Vship pass is running."""
+    if not _gpu_pass.acquire(blocking=False):
+        if on_status:
+            on_status("Waiting for the GPU: another video's SSIMULACRA2/Butteraugli pass is running…")
+        while not _gpu_pass.acquire(timeout=0.1):
+            if cancel_event is not None and cancel_event.is_set():
+                raise PerceptualCancelled("Cancelled by user")
+    try:
+        return _run_vship_pass(
+            source, distorted, request, specs, device, source_crop, distorted_crop,
+            on_progress=on_progress, on_status=on_status,
+            cancel_event=cancel_event, process_handle=process_handle,
+        )
+    finally:
+        _gpu_pass.release()
+
+
+def _run_vship_pass(
     source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
     specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
     source_crop: CropBox | None, distorted_crop: CropBox | None, *,

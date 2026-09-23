@@ -4,6 +4,7 @@ import ctypes
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -378,3 +379,51 @@ def test_scores_are_packed_by_frame_index_across_chunk_boundaries():
     assert values.dtype == np.float32 and len(values) == count
     assert values[0] == 0.0 and values[-1] == (count - 1) * 0.5
     assert values[vship._ScoreArray._CHUNK] == vship._ScoreArray._CHUNK * 0.5
+
+
+
+def test_only_one_vship_pass_runs_at_a_time(monkeypatch):
+    """Two parallel jobs reaching their GPU pass together take turns; the
+    second says it is waiting rather than looking stuck."""
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def pass_(*_args, **_kwargs):
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.1)
+        with lock:
+            running -= 1
+        return "done"
+
+    monkeypatch.setattr(vship, "_run_vship_pass", pass_)
+    statuses = []
+    results = []
+
+    def job():
+        results.append(vship.run_vship_task(None, None, None, (), None, None, None,
+                                            on_status=statuses.append))
+
+    threads = [threading.Thread(target=job) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert results == ["done", "done"]
+    assert peak == 1
+    assert any("Waiting for the GPU" in status for status in statuses)
+
+
+def test_cancel_while_waiting_for_the_gpu(monkeypatch):
+    cancel = threading.Event()
+    cancel.set()
+    vship._gpu_pass.acquire()
+    try:
+        with pytest.raises(PerceptualCancelled):
+            vship.run_vship_task(None, None, None, (), None, None, None, cancel_event=cancel)
+    finally:
+        vship._gpu_pass.release()
