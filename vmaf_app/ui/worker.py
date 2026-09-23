@@ -9,12 +9,25 @@ from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.models import VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
 from vmaf_app.core.perceptual_vship import apply_vship_cpu_fallback
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
+
+
+class _TaskCancelToken:
+    """Cancel one job's sibling tasks without cancelling the entire queue."""
+
+    def __init__(self, run_cancel: threading.Event) -> None:
+        self._run_cancel = run_cancel
+        self._job_cancel = threading.Event()
+
+    def is_set(self) -> bool:
+        return self._run_cancel.is_set() or self._job_cancel.is_set()
+
+    def cancel_job(self) -> None:
+        self._job_cancel.set()
 
 
 @dataclass
@@ -204,6 +217,141 @@ class VmafWorker(QThread):
             self._cancellation_reported = True
         self.cancelled.emit()
 
+    def _execute_plan(self, index: int, job: VmafJob, options: VmafOptions,
+                      handle: ProcessHandle):
+        """Run independent backends together and publish one atomic result."""
+        request = analysis_request_from_vmaf_options(
+            options, job.metric_keys, job.metric_backends,
+        )
+        plan = build_execution_plan(request)
+        token = _TaskCancelToken(self._cancel_event)
+        task_results: dict[str, object] = {}
+        task_errors: list[Exception] = []
+        task_lock = threading.Lock()
+        task_progress: dict[str, tuple[int, int, float]] = {}
+
+        def report_progress(backend: str, cur: int, total: int, fps: float) -> None:
+            if len(plan.tasks) == 1:
+                self.progress.emit(index, cur, total, fps)
+                return
+            # Each pass may cover a different number of frames. Until both
+            # are done, the slower completion fraction owns job progress.
+            with task_lock:
+                task_progress[backend] = (cur, total, fps)
+                known_total = max((value[1] for value in task_progress.values()), default=0)
+                fractions = [
+                    1.0 if task.backend_id in task_results else
+                    min(0.999, value[0] / value[1]) if value[1] > 0 else 0.0
+                    for task in plan.tasks
+                    for value in [task_progress.get(task.backend_id, (0, 0, 0.0))]
+                ]
+                fraction = min(fractions)
+                remaining = []
+                for task in plan.tasks:
+                    if task.backend_id in task_results:
+                        remaining.append(0.0)
+                        continue
+                    value = task_progress.get(task.backend_id)
+                    if value is None or value[2] <= 0 or value[0] >= value[1]:
+                        remaining = []
+                        break
+                    remaining.append(max(0, value[1] - value[0]) / value[2])
+                overall_cur = round(known_total * fraction)
+                if len(task_results) < len(plan.tasks) and known_total > 0:
+                    overall_cur = min(overall_cur, known_total - 1)
+                overall_fps = (
+                    (known_total - overall_cur) / max(remaining)
+                    if remaining and max(remaining) > 0 else 0.0
+                )
+            self.progress.emit(index, overall_cur, known_total, overall_fps)
+
+        def execute_task(task) -> object:
+            if task.backend_id == "ffmpeg":
+                task_options = replace(options)
+                for key in options.requested_metrics():
+                    task_options.set_metric_enabled(key, key in task.metric_keys)
+                if options.resample_test is not None:
+                    return run_resample_test(
+                        job.source_info, task_options,
+                        on_progress=lambda cur, tot, fps: report_progress(task.backend_id, cur, tot, fps),
+                        on_status=lambda msg: self.status.emit(index, msg),
+                        cancel_event=token, process_handle=handle,
+                    )
+                return run_vmaf(
+                    job.source_info, job.distorted_info, task_options,
+                    on_progress=lambda cur, tot, fps: report_progress(task.backend_id, cur, tot, fps),
+                    on_status=lambda msg: self.status.emit(index, msg),
+                    cancel_event=token, process_handle=handle,
+                    result_distorted_path=job.result_distorted_path,
+                )
+            if task.backend_id == "perceptual":
+                return apply_vship_cpu_fallback(
+                    job.source_info, job.distorted_info, request, task.requested_specs,
+                    on_progress=lambda cur, tot, fps: report_progress(task.backend_id, cur, tot, fps),
+                    on_status=lambda msg: self.status.emit(index, msg),
+                    cancel_event=token, process_handle=handle,
+                )
+            raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
+
+        def run_task(task) -> None:
+            try:
+                output = execute_task(task)
+                with task_lock:
+                    task_results[task.backend_id] = output
+                    last_progress = task_progress.get(task.backend_id, (1, 1, 0.0))
+                if len(plan.tasks) > 1:
+                    report_progress(task.backend_id, *last_progress)
+            except Exception as error:
+                with task_lock:
+                    task_errors.append(error)
+                if len(plan.tasks) > 1:
+                    token.cancel_job()
+                    # A paused sibling cannot observe the cancellation flag.
+                    handle.terminate()
+
+        if len(plan.tasks) > 1:
+            threads = [
+                threading.Thread(target=run_task, args=(task,),
+                                 name=f"metric-{task.backend_id}-{index}", daemon=True)
+                for task in plan.tasks
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        else:
+            for task in plan.tasks:
+                run_task(task)
+
+        if self._cancel_event.is_set():
+            raise Cancelled("Cancelled by user")
+        if task_errors:
+            raise task_errors[0]
+
+        result = task_results.get("ffmpeg")
+        perceptual = task_results.get("perceptual")
+        if perceptual is not None:
+            if result is None:
+                from vmaf_app.core.models import ComparisonResult, FrameScores
+                result = ComparisonResult(
+                    source=job.source_info.path,
+                    distorted=job.result_distorted_path or job.distorted_info.path,
+                    frames=FrameScores.empty(), fps=job.source_info.fps, model="",
+                    source_crop=perceptual.source_crop, distorted_crop=perceptual.distorted_crop,
+                    source_info=job.source_info, distorted_info=job.distorted_info,
+                    scale_direction=options.scale_direction, scale_algorithm=options.scale_algorithm,
+                    compared_frame_count=perceptual.compared_frame_count,
+                )
+            combined = result.metric_results.copy()
+            for key in perceptual.metrics:
+                value = perceptual.metrics.get(key)
+                assert value is not None
+                combined.add(value)
+            result.merge_metric_results(combined)
+        if result is None:
+            raise VmafRunError("No executable metric task was planned.")
+        return result
+
     # ------------------------------------------------------------------ run
     def run(self) -> None:
         # Jobs are pulled from one shared iterator rather than dealt out in
@@ -255,64 +403,7 @@ class VmafWorker(QThread):
             options = self._share_cores(job.options)
             self.job_started.emit(i, job.label)
             try:
-                # The plan is deliberately used in production, not only in
-                # tests. Part 2 still produces one efficient FFmpeg task.
-                request = analysis_request_from_vmaf_options(
-                    options, job.metric_keys, job.metric_backends,
-                )
-                plan = build_execution_plan(request)
-                result = None
-                combined = MetricResultSet()
-                for task in plan.tasks:
-                    if task.backend_id == "ffmpeg":
-                        task_options = replace(options)
-                        for key in options.requested_metrics():
-                            task_options.set_metric_enabled(key, key in task.metric_keys)
-                        if options.resample_test is not None:
-                            current = run_resample_test(
-                                job.source_info, task_options,
-                                on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
-                                on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                                cancel_event=self._cancel_event, process_handle=handle,
-                            )
-                        else:
-                            current = run_vmaf(
-                                job.source_info, job.distorted_info, task_options,
-                                on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
-                                on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                                cancel_event=self._cancel_event, process_handle=handle,
-                                result_distorted_path=job.result_distorted_path,
-                            )
-                        result = current
-                        combined = current.metric_results
-                    elif task.backend_id == "perceptual":
-                        perceptual = apply_vship_cpu_fallback(
-                            job.source_info, job.distorted_info, request, task.requested_specs,
-                            on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
-                            on_status=lambda msg, idx=i: self.status.emit(idx, msg),
-                            cancel_event=self._cancel_event, process_handle=handle,
-                        )
-                        if result is None:
-                            from vmaf_app.core.models import ComparisonResult, FrameScores
-                            result = ComparisonResult(
-                                source=job.source_info.path,
-                                distorted=job.result_distorted_path or job.distorted_info.path,
-                                frames=FrameScores.empty(), fps=job.source_info.fps, model="",
-                                source_crop=perceptual.source_crop, distorted_crop=perceptual.distorted_crop,
-                                source_info=job.source_info, distorted_info=job.distorted_info,
-                                scale_direction=options.scale_direction, scale_algorithm=options.scale_algorithm,
-                                compared_frame_count=perceptual.compared_frame_count,
-                            )
-                        combined = combined.copy()
-                        for key in perceptual.metrics:
-                            value = perceptual.metrics.get(key)
-                            assert value is not None
-                            combined.add(value)
-                    else:
-                        raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
-                if result is None:
-                    raise VmafRunError("No executable metric task was planned.")
-                result.merge_metric_results(combined)
+                result = self._execute_plan(i, job, options, handle)
             except (Cancelled, PerceptualCancelled):
                 self._report_cancelled_once()
                 break

@@ -582,7 +582,7 @@ def _run_ffmpeg(
         # files pile up in %TEMP% for the rest of the session.
         _reap(proc, stderr_thread)
         if process_handle is not None:
-            process_handle.detach()
+            process_handle.detach(proc.pid)
 
 
 def _reap(proc: subprocess.Popen, drain_thread: threading.Thread | None) -> None:

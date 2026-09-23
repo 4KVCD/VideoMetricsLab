@@ -228,7 +228,7 @@ def _extract_png_pairs(
         raise
     finally:
         if process_handle is not None:
-            process_handle.detach()
+            process_handle.detach(process.pid)
     if process.returncode != 0:
         raise PerceptualRunError("FFmpeg could not prepare lossless perceptual-metric frames.")
     references = sorted(directory.glob("reference-*.png"))
