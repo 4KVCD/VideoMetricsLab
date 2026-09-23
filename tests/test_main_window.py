@@ -3998,3 +3998,53 @@ def test_a_row_set_to_cpu_does_not_show_a_cached_gpu_score(qapp, tmp_path, monke
     rd.metric_backends["ssimulacra2"] = "gpu"
     assert win._try_load_cached_result(row)
     win.close()
+
+
+def _perceptual_row_with_saved_run(win, backend: str, *saved_metrics):
+    from vmaf_app.core.metric_results import MetricResultSet
+
+    row = _long_row(win, "clip.mkv", minutes=5, backend=backend)
+    rd = win._rows[row]
+    for key in ("psnr", "ssim", "xpsnr", "vmaf_neg"):
+        rd.options.set_metric_enabled(key, False)
+    info = rd.video_info
+    result = ComparisonResult(
+        source=win._source_info.path, distorted=info.path,
+        frames=[FrameScore(frame=i, time=i / 24.0, vmaf=90.0) for i in range(4)], fps=24.0, model="m",
+        source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+    )
+    result.merge_metric_results(MetricResultSet(saved_metrics))
+    rd.completed_run = CompletedRun(result, "saved")
+    return row
+
+
+def test_a_run_hands_the_worker_what_the_row_already_has(qapp, monkeypatch):
+    win = MainWindow()
+    row = _perceptual_row_with_saved_run(win, "gpu")
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+
+    win._on_run_clicked()
+
+    job, = win._worker._jobs
+    assert job.metric_keys == ("vmaf", "ssimulacra2")
+    assert job.cached_metrics.keys() == ("vmaf",)
+    assert job.cached_result is win._rows[row].completed_run.result
+    win._worker = None
+    win.close()
+
+
+def test_a_gpu_score_does_not_count_as_done_when_the_row_asks_for_cpu(qapp):
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
+
+    gpu = FrameMetricResult("ssimulacra2", [0], [0.0], [44.47],
+                            MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1"))
+    win = MainWindow()
+    row = _perceptual_row_with_saved_run(win, "cpu", gpu)
+    rd = win._rows[row]
+    assert win._reusable_results(rd).keys() == ("vmaf",)
+    assert not win._has_requested_results(rd)
+
+    rd.metric_backends["ssimulacra2"] = "gpu"
+    assert set(win._reusable_results(rd).keys()) == {"vmaf", "ssimulacra2"}
+    assert win._has_requested_results(rd)
+    win.close()

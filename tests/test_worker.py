@@ -645,3 +645,55 @@ def test_lowering_the_lane_count_does_not_interrupt_a_running_job(qapp):
     # Nothing was cancelled; there is simply no room for another to start.
     assert worker.parallel_jobs == 1
     assert not worker._cancel_event.is_set()
+
+
+def _saved_run(*metrics: FrameMetricResult) -> ComparisonResult:
+    result = _fake_result("d.mp4")
+    result.merge_metric_results(MetricResultSet(metrics))
+    return result
+
+
+def test_a_row_with_saved_vmaf_runs_only_the_new_perceptual_metric(qapp, monkeypatch):
+    """Adding SSIMULACRA2 to a row that already had VMAF recalculated VMAF
+    too: the planner was never told what was saved."""
+    calls = []
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda *a, **kw: calls.append("ffmpeg") or _fake_result("d.mp4"))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+                        lambda *a, **kw: calls.append("perceptual") or _perceptual_output())
+    saved = _fake_result("d.mp4")
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=("vmaf", "ssimulacra2"),
+                  cached_result=saved, cached_metrics=MetricResultSet([saved.frame_metric("vmaf")]))
+    worker = VmafWorker([job])
+    finished = []
+    worker.job_finished.connect(lambda _, result: finished.append(result))
+    worker.run()
+    _drain(qapp)
+
+    assert calls == ["perceptual"]
+    result, = finished
+    assert result.frame_metric("vmaf").values.tolist() == [90.0] * 10  # the saved scores
+    assert result.frame_metric("ssimulacra2").values.tolist() == [87.0]
+    assert not saved.has_metric("ssimulacra2"), "the row's own result must not change under it"
+
+
+def test_a_row_with_a_saved_perceptual_score_runs_only_ffmpeg(qapp, monkeypatch):
+    calls = []
+    fresh = _fake_result("d.mp4")
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda *a, **kw: calls.append("ffmpeg") or fresh)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+                        lambda *a, **kw: calls.append("perceptual") or _perceptual_output())
+    butteraugli = FrameMetricResult("butteraugli", [0, 1], [0.0, 0.033], [1.5, 2.5],
+                                    MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1"))
+    saved = _saved_run(butteraugli)
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=("vmaf", "butteraugli"),
+                  cached_result=saved, cached_metrics=MetricResultSet([butteraugli]))
+    worker = VmafWorker([job])
+    finished = []
+    worker.job_finished.connect(lambda _, result: finished.append(result))
+    worker.run()
+    _drain(qapp)
+
+    assert calls == ["ffmpeg"]
+    result, = finished
+    assert result.frame_metric("butteraugli").values.tolist() == [1.5, 2.5]
+    assert result.has_metric("vmaf")

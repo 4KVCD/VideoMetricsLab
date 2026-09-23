@@ -58,6 +58,7 @@ from vmaf_app.core.ffmpeg_request import (
 )
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
+from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
@@ -2376,12 +2377,12 @@ class MainWindow(QMainWindow):
             info = row_data.video_info
             if info is None:
                 continue
-            cached = row_data.completed_run.result if row_data.completed_run is not None else None
+            reusable = self._reusable_results(row_data)
             cpu_metrics = [
                 metric_definition(key).label for key in ("ssimulacra2", "butteraugli")
                 if key in self._requested_metrics(row_data)
                 and row_data.metric_backends.get(key) == "cpu"
-                and not (cached is not None and cached.has_metric(key))
+                and not reusable.has(key)
             ]
             if not cpu_metrics:
                 continue
@@ -2571,13 +2572,31 @@ class MainWindow(QMainWindow):
         """Header shortcuts explicitly apply to all rows; inspector to selection."""
         self._apply_metric_selection(list(range(len(self._rows))), column, checked)
 
+    def _reusable_results(self, row_data: RowData) -> MetricResultSet:
+        """The requested metrics the row already has and a run can keep.
+
+        A metric counts when it has at least one score and, for a metric
+        set to CPU, when that score came from the CPU tool: a GPU (Vship)
+        score does not stand in for a CPU one. The GPU choice accepts
+        either, as the cache lookup does, because a GPU choice runs on the
+        CPU when no supported GPU is present.
+        """
+        reusable = MetricResultSet()
+        if row_data.completed_run is None:
+            return reusable
+        result = row_data.completed_run.result
+        for key in self._requested_metrics(row_data):
+            metric = result.frame_metric(key)
+            if metric is None or not np.any(~np.isnan(metric.values)):
+                continue
+            if row_data.metric_backends.get(key) == "cpu" and metric.provenance.compute_backend != "cpu":
+                continue
+            reusable.add(metric)
+        return reusable
+
     def _has_requested_results(self, row_data: RowData) -> bool:
         requested = self._requested_metrics(row_data)
-        return bool(requested and row_data.completed_run is not None and all(
-            row_data.completed_run.result.has_metric(m)
-            and (metric := row_data.completed_run.result.frame_metric(m)) is not None
-            and np.any(~np.isnan(metric.values)) for m in requested
-        ))
+        return bool(requested) and set(self._reusable_results(row_data).keys()) == set(requested)
 
     def _invalidate_completed_result(self, row: int) -> None:
         """Marks a row stale after an option that affects its run changes."""
@@ -2774,6 +2793,11 @@ class MainWindow(QMainWindow):
                 self._source_info, dist_info, job_options, label=row_data.path.stem,
                 result_distorted_path=row_data.path, metric_keys=self._requested_metrics(row_data),
                 metric_backends=dict(row_data.metric_backends),
+                # Only a result for the row's current settings is ever
+                # attached (a settings change clears completed_run), so its
+                # scores belong to this exact recipe.
+                cached_result=row_data.completed_run.result if row_data.completed_run else None,
+                cached_metrics=self._reusable_results(row_data),
             ))
             job_rows.append(row_data)
             # A resample test's output timeline is driven by the reference (see

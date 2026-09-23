@@ -1,6 +1,7 @@
 """Background worker that runs one or more VMAF jobs without blocking the UI."""
 from __future__ import annotations
 
+import copy
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -9,7 +10,8 @@ from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-from vmaf_app.core.models import VideoInfo, VmafOptions
+from vmaf_app.core.metric_results import MetricResultSet
+from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
 from vmaf_app.core.perceptual_vship import apply_vship_cpu_fallback
 from vmaf_app.core.process_control import ProcessHandle
@@ -44,6 +46,12 @@ class VmafJob:
     # metrics are not FFmpeg adapter configuration.
     metric_keys: tuple[str, ...] | None = None
     metric_backends: dict[str, str] = field(default_factory=dict)
+    # What the row already shows for this exact recipe, and which of its
+    # metrics can stand as they are. A backend group whose metrics are all
+    # in cached_metrics is not run; the rest are merged back into the
+    # result, so adding SSIMULACRA2 to a row with VMAF runs Vship alone.
+    cached_result: ComparisonResult | None = None
+    cached_metrics: MetricResultSet | None = None
 
 
 #: Two, because a third buys nothing. Measured on a 24-core machine over four
@@ -223,7 +231,8 @@ class VmafWorker(QThread):
         request = analysis_request_from_vmaf_options(
             options, job.metric_keys, job.metric_backends,
         )
-        plan = build_execution_plan(request)
+        cached = job.cached_metrics if job.cached_result is not None and job.cached_metrics else None
+        plan = build_execution_plan(request, cached)
         token = _TaskCancelToken(self._cancel_event)
         task_results: dict[str, object] = {}
         task_errors: list[Exception] = []
@@ -329,6 +338,13 @@ class VmafWorker(QThread):
             raise task_errors[0]
 
         result = task_results.get("ffmpeg")
+        if result is None and cached is not None:
+            # FFmpeg's metrics are all saved: the saved run is the base, so
+            # its crops, frame table and file info carry over. A shallow
+            # copy is enough -- merge_metric_results replaces the metric set
+            # and frame table rather than editing them, and the row's own
+            # result object must not change under the UI thread.
+            result = copy.copy(job.cached_result)
         perceptual = task_results.get("perceptual")
         if perceptual is not None:
             if result is None:
@@ -350,6 +366,15 @@ class VmafWorker(QThread):
             result.merge_metric_results(combined)
         if result is None:
             raise VmafRunError("No executable metric task was planned.")
+        if cached is not None:
+            # Saved metrics fill only what this run did not calculate: a
+            # fresh score always wins over the saved one.
+            carried = MetricResultSet(
+                value for key in cached
+                if not result.has_metric(key) and (value := cached.get(key)) is not None
+            )
+            if carried:
+                result.merge_metric_results(carried)
         return result
 
     # ------------------------------------------------------------------ run
