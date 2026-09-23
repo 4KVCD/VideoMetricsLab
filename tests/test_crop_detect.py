@@ -33,9 +33,9 @@ def test_auto_crop_failure_is_reported_instead_of_silently_using_full_frame(monk
 
 
 def test_cancel_wins_over_windows_that_already_answered(monkeypatch):
-    """The windows run concurrently, so some may have a box in hand by the
-    time Cancel lands. A partial vote is not an answer the caller asked for:
-    cancellation is reported, and nothing is returned."""
+    """Some windows may have a box in hand by the time Cancel lands. A partial
+    vote is not an answer the caller asked for: cancellation is reported, and
+    nothing is returned."""
     info = VideoInfo(
         path=Path("movie.mp4"), width=1920, height=1080, fps=30.0,
         duration=60.0, nb_frames=1800, codec_name="h264",
@@ -61,24 +61,26 @@ def test_a_window_does_not_launch_once_cancelled():
         crop_detect._run_single_window("movie.mp4", 0.0, 3.0, 0.1, cancel_event=cancel)
 
 
-def test_windows_run_at_the_same_time(monkeypatch):
-    """Five sequential 4K windows measured 6.9s; five concurrent ones 2.0s.
-    They are independent samples, and nothing about the vote needs them in
-    order."""
+def test_windows_run_one_at_a_time(monkeypatch):
+    """Each window is its own decoder. Five at once held 6.2 GB of VRAM for a
+    4K source on the GPU decoder, and two inputs reached ten decoders, so the
+    windows of one input never overlap."""
     info = VideoInfo(
         path=Path("movie.mp4"), width=1920, height=1080, fps=30.0,
         duration=60.0, nb_frames=1800, codec_name="h264",
     )
     running = 0
     peak = 0
+    calls = 0
     lock = threading.Lock()
 
     def window(*args, **kwargs):
-        nonlocal running, peak
+        nonlocal running, peak, calls
         with lock:
             running += 1
+            calls += 1
             peak = max(peak, running)
-        time.sleep(0.05)
+        time.sleep(0.02)
         with lock:
             running -= 1
         return crop_detect.CropBox(1920, 800, 0, 140)
@@ -86,7 +88,8 @@ def test_windows_run_at_the_same_time(monkeypatch):
     monkeypatch.setattr(crop_detect, "_run_single_window", window)
 
     assert crop_detect.detect_crop(info) == crop_detect.CropBox(1920, 800, 0, 140)
-    assert peak > 1, "the windows ran one after another"
+    assert calls == crop_detect._SAMPLE_COUNT
+    assert peak == 1, "two windows of one input decoded at the same time"
 
 
 # ------------------------------------------------------------- the cache
@@ -328,7 +331,7 @@ def test_a_limit_longer_than_the_video_changes_nothing(monkeypatch):
 
     crop_detect.detect_crop(_info(10.0), duration_limit=30.0)
 
-    assert sorted(round(s, 3) for s, _w in seen) == [1.0, 2.5, 4.0, 5.5, 7.0]  # windows run concurrently
+    assert sorted(round(s, 3) for s, _w in seen) == [1.0, 2.5, 4.0, 5.5, 7.0]
 
 
 @pytest.mark.parametrize("resample", [False, True])

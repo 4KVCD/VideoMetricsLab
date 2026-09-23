@@ -22,7 +22,6 @@ import subprocess
 import threading
 import time
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,11 +38,6 @@ _CROP_RE = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
 _SAMPLE_WINDOW_SECONDS = 3.0
 _SAMPLE_COUNT = 5
 _SAMPLE_SPAN = (0.1, 0.9)  # fraction of duration to sample within
-
-#: Every window at once. Five short ffmpeg processes; on the GPU they share
-#: the decoder, on the CPU they share the cores, and either way they finish
-#: together instead of in turn.
-_MAX_CONCURRENT_WINDOWS = _SAMPLE_COUNT
 
 #: How many files' answers to remember. A CropBox is four ints; this is a
 #: bound against a pathological session, not a memory budget.
@@ -307,32 +301,28 @@ def _detect_uncached(
     if cancel_event is not None and cancel_event.is_set():
         raise CropDetectCancelled("Crop detection cancelled")
 
+    # One window at a time. Running all five at once was faster, but each
+    # one is its own decoder: five hardware decoders per input held 6.2 GB of
+    # VRAM for a 4K source, and a two-input comparison reached ten, more
+    # than most GPUs have. Sequential windows keep one decoder per input.
     boxes: list[CropBox] = []
     failures: list[str] = []
-    cancelled = False
-    with ThreadPoolExecutor(max_workers=min(len(starts), _MAX_CONCURRENT_WINDOWS)) as pool:
-        futures = [
-            pool.submit(
-                _run_single_window, path, start, window, limit,
+    for start in starts:
+        try:
+            box = _run_single_window(
+                path, start, window, limit,
                 cancel_event=cancel_event, process_handle=process_handle,
                 hwaccel=hwaccel, download_format=download_format,
             )
-            for start in starts
-        ]
-        for future in futures:
-            try:
-                box = future.result()
-            except CropDetectCancelled:
-                cancelled = True
-            except CropDetectError as e:
-                failures.append(str(e))
-            else:
-                if box is not None:
-                    boxes.append(box)
+        except CropDetectError as e:
+            failures.append(str(e))
+        else:
+            if box is not None:
+                boxes.append(box)
 
     # Cancel wins over any boxes that came back before it landed: a partial
     # vote is not an answer the caller asked for.
-    if cancelled or (cancel_event is not None and cancel_event.is_set()):
+    if cancel_event is not None and cancel_event.is_set():
         raise CropDetectCancelled("Crop detection cancelled")
 
     if not boxes:
