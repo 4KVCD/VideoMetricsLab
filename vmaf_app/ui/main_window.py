@@ -1425,6 +1425,20 @@ class MainWindow(QMainWindow):
                     continue
                 enabled = self._row_metric_enabled(row_data, col)
                 value = self._metric_mean(run, col) if run is not None else None
+                if value is None and not self._metric_supported(row_data, metric_column.key):
+                    # No tick box: there is nothing to choose. The row's own
+                    # selection is left alone for when it applies again.
+                    item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                    item.setData(Qt.CheckStateRole, None)
+                    item.setText("n/a")
+                    item.setToolTip(
+                        f"{metric_column.metric.label} is not available for resolution "
+                        "round-trip tests; the other selected metrics are still calculated."
+                    )
+                    item.setForeground(QColor("#888"))
+                    item.setBackground(QColor(0, 0, 0, 0))
+                    item.setFont(QFont())
+                    continue
                 if value is None:
                     item.setFlags(
                         Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
@@ -2395,13 +2409,31 @@ class MainWindow(QMainWindow):
         return tuple(metric.key for metric in FRAME_METRICS if metric.key in requested)
 
     def _requested_metrics(self, row_data: RowData) -> tuple[str, ...]:
-        """What a run of this row calculates: its ticks, less hidden metrics.
+        """What a run of this row calculates: its ticks, less hidden metrics
+        and metrics the row's kind of comparison cannot produce.
 
         Hiding a metric takes it out of every run and every "already
         calculated?" check, but leaves the row's tick untouched, so showing
         the metric again restores the choice as it was.
         """
-        return tuple(key for key in self._selected_metrics(row_data) if key not in self._hidden_metrics)
+        return tuple(
+            key for key in self._selected_metrics(row_data)
+            if key not in self._hidden_metrics and self._metric_supported(row_data, key)
+        )
+
+    @staticmethod
+    def _metric_supported(row_data: RowData, key: str) -> bool:
+        """Whether this row's comparison can produce `key` at all.
+
+        Neither perceptual backend (Vship, libjxl CPU tools) implements the
+        resolution round-trip test, which derives both sides from the source
+        at run time. Requesting SSIMULACRA2/Butteraugli on such a row failed
+        the whole job -- VMAF included -- with "do not support resolution
+        round-trip tests yet".
+        """
+        if row_data.options.resample_test is None:
+            return True
+        return metric_definition(key).backend_id != "perceptual"
 
     @classmethod
     def _row_metric_enabled(cls, row_data: RowData, column: int) -> bool:

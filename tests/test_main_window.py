@@ -3932,3 +3932,32 @@ def test_the_metrics_button_sits_on_the_tables_top_right_corner(qapp):
     assert button_corner.x() == table_corner.x()
     assert 0 <= table_corner.y() - button_corner.y() <= 2
     win.close()
+
+
+
+def test_perceptual_metrics_are_unavailable_on_a_resolution_round_trip_row(qapp, monkeypatch):
+    """Neither perceptual backend does round-trip tests. Asking for one used
+    to fail the whole job, VMAF included; now the row simply cannot request
+    it, and the rest of its metrics run."""
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("source.mp4"))
+    rd = win._rows[row]
+    rd.video_info = _fake_video_info("source.mp4")
+    rd.options.resample_test = ResampleTarget(width=1280, label="720p")
+    rd.extra_metric_keys |= {"ssimulacra2", "butteraugli"}
+    win._set_row_metrics(row)
+
+    assert "ssimulacra2" not in win._requested_metrics(rd)
+    assert "butteraugli" not in win._requested_metrics(rd)
+    assert "vmaf" in win._requested_metrics(rd)
+    cell = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
+    assert cell.text() == "n/a" and not cell.flags() & Qt.ItemIsUserCheckable
+
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+    win._on_run_clicked()
+    assert win._worker is not None
+    (job,) = win._worker._jobs
+    assert "ssimulacra2" not in job.metric_keys and "vmaf" in job.metric_keys
+    win._worker = None
+    win.close()
