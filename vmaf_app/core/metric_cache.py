@@ -127,10 +127,9 @@ def _atomic_npz(path: Path, arrays: dict[str, np.ndarray]) -> None:
 def _metadata(result, spec: MetricRequestSpec) -> np.ndarray:
     provenance = provenance_to_dict(result.provenance)
     if result.key != "vmaf":
-        # The per-metric cache is for score reuse, not a record of which
-        # library build produced a numerically compatible non-VMAF metric.
-        # Keep the field for the shared provenance schema, but do not persist
-        # the library version in new cache entries.
+        # This cache supports score reuse. Non-VMAF implementation-library
+        # versions must not become part of its stored results; VMAF retains
+        # version provenance alongside its model-specific request identity.
         provenance["implementation_version"] = ""
     data = {
         "format_version": METRIC_CACHE_FORMAT_VERSION,

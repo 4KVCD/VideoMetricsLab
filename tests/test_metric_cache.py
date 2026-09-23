@@ -99,13 +99,38 @@ def test_frame_and_sequence_metric_round_trip_with_special_values(tmp_path):
     sequence = load_metric(directory, sequence_spec)
     assert isinstance(frame, FrameMetricResult)
     assert frame.values.dtype == np.float32 and np.isnan(frame.values[1]) and np.isposinf(frame.values[2])
-    cache_provenance = MetricProvenance(
+    cached_provenance = MetricProvenance(
         PROVENANCE.implementation, "", PROVENANCE.compute_backend,
         PROVENANCE.implementation_compatibility_id, PROVENANCE.parameters,
     )
-    assert frame.provenance == cache_provenance
+    assert frame.provenance == cached_provenance
     assert isinstance(sequence, SequenceMetricResult) and np.isneginf(sequence.score)
-    assert sequence.provenance == cache_provenance
+    assert sequence.provenance == cached_provenance
+
+
+def test_cache_omits_library_versions_except_for_vmaf(tmp_path):
+    source, test = _paths(tmp_path)
+    options = VmafOptions()
+    directory = recipe_directory(
+        tmp_path, source, test, comparison_recipe_from_vmaf_options(options)
+    )
+    specs = metric_request_specs(options, ("vmaf", "vmaf_neg", "psnr"))
+    specs_by_key = {spec.key: spec for spec in specs}
+    for key, score in (("vmaf", 97.0), ("vmaf_neg", 96.0), ("psnr", 42.0)):
+        store_metric(directory, FrameMetricResult(
+            key, [0], [0.0], [score],
+            MetricProvenance("FFmpeg/libvmaf", "FFmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1"),
+        ), specs_by_key[key])
+
+    metadata = {}
+    for key, spec in specs_by_key.items():
+        with np.load(metric_path(directory, spec), allow_pickle=False) as data:
+            metadata[key] = json.loads(str(data["metadata"].item()))
+
+    assert metadata["vmaf"]["provenance"]["implementation_version"] == "FFmpeg 9.0"
+    assert metadata["vmaf_neg"]["provenance"]["implementation_version"] == ""
+    assert metadata["psnr"]["provenance"]["implementation_version"] == ""
+    assert dict(metadata["vmaf"]["request"]["parameters"])["model"] == "version=vmaf_v0.6.1"
 
 
 def test_direct_lookup_keeps_other_metrics_when_one_artifact_is_corrupt(tmp_path):
