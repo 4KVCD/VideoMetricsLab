@@ -3752,3 +3752,85 @@ def test_a_finished_video_leaves_its_line(qapp):
 
     assert not win.job_progress_labels[0].isVisible()
     assert 0 not in win._job_line_slot
+
+
+
+# ------------------------------------------------ long CPU perceptual metrics
+
+def _long_row(win, name, *, minutes, backend="cpu"):
+    win._source_info = VideoInfo(path=Path("source.mkv"), width=3840, height=2160, fps=24.0,
+                                 duration=minutes * 60, nb_frames=minutes * 60 * 24, codec_name="hevc")
+    row = win._add_table_row(Path(name))
+    win._rows[row].video_info = VideoInfo(path=Path(name), width=3840, height=2160, fps=24.0,
+                                          duration=minutes * 60, nb_frames=minutes * 60 * 24,
+                                          codec_name="hevc")
+    win._rows[row].extra_metric_keys.add("ssimulacra2")
+    win._rows[row].metric_backends["ssimulacra2"] = backend
+    return row
+
+
+def _answer_warning(monkeypatch, answer):
+    shown = []
+
+    def warning(_parent, title, text, *args):
+        shown.append((title, text))
+        return answer
+
+    monkeypatch.setattr(main_window_module.QMessageBox, "warning", warning)
+    return shown
+
+
+def test_cpu_perceptual_on_a_long_video_asks_first_and_no_means_no_run(qapp, monkeypatch):
+    win = MainWindow()
+    _long_row(win, "film.mkv", minutes=105)
+    shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
+
+    win._on_run_clicked()
+
+    assert win._worker is None
+    (_title, text), = shown
+    assert "not recommended" in text and "film.mkv" in text and "SSIMULACRA2" in text
+    assert "TB" in text, "a 105-minute 4K film is terabytes of temporary images"
+    win.close()
+
+
+def test_accepting_the_warning_starts_the_run(qapp, monkeypatch):
+    win = MainWindow()
+    _long_row(win, "film.mkv", minutes=105)
+    _answer_warning(monkeypatch, main_window_module.QMessageBox.Yes)
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+
+    win._on_run_clicked()
+
+    assert win._worker is not None
+    win._worker = None
+    win.close()
+
+
+@pytest.mark.parametrize(("minutes", "backend"), [(105, "gpu"), (9, "cpu")])
+def test_no_warning_on_the_gpu_or_under_ten_minutes(qapp, monkeypatch, minutes, backend):
+    win = MainWindow()
+    _long_row(win, "clip.mkv", minutes=minutes, backend=backend)
+    shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+
+    win._on_run_clicked()
+
+    assert shown == []
+    assert win._worker is not None
+    win._worker = None
+    win.close()
+
+
+def test_a_duration_limit_under_ten_minutes_needs_no_warning(qapp, monkeypatch):
+    win = MainWindow()
+    row = _long_row(win, "film.mkv", minutes=105)
+    win._rows[row].options.duration_limit = 300
+    shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+
+    win._on_run_clicked()
+
+    assert shown == []
+    win._worker = None
+    win.close()
