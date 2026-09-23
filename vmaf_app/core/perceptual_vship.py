@@ -1,8 +1,10 @@
 """GPU implementation of the frame-based perceptual metrics via Vship's C API.
 
 FFmpeg remains responsible for decoding, cropping, sampling, and scaling. It
-streams tightly packed planar frames into two pinned host buffers; Vship only
-does the metric computation on a supported NVIDIA CUDA or AMD HIP device.
+streams tightly packed planar frames into rings of pinned host buffers (see
+_FrameStream); Vship only does the metric computation on a supported NVIDIA
+CUDA or AMD HIP device. Because FFmpeg decodes, every codec it supports works,
+VVC included, and hardware decode is used per input where the GPU has one.
 This avoids bundling FFVship/FFMS2 executables and keeps video decode behavior
 under the same FFmpeg installation used by the rest of the app.
 """
@@ -12,6 +14,7 @@ import contextlib
 import ctypes
 import math
 import os
+import queue
 import re
 import subprocess
 import threading
@@ -27,8 +30,9 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.gpu import hw_native_format, hwaccel_args, pick_hwaccel
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
-from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo
+from vmaf_app.core.models import CropBox, GpuVendor, ScaleDirection, VideoInfo
 from vmaf_app.core.perceptual_cpu import (
     PerceptualCancelled,
     PerceptualRunError,
@@ -379,9 +383,15 @@ def _scaled_sizes(
 
 def _filter_chain(
     info: VideoInfo, crop: CropBox | None, target_size: tuple[int, int],
-    pixel_format: str, step: int, algorithm: str,
+    pixel_format: str, step: int, algorithm: str, hwaccel: str | None = None,
 ) -> str:
     operations: list[str] = []
+    if hwaccel:
+        # A hardware-decoded surface is brought to system memory in its
+        # native layout first; crop, scale and the final format conversion
+        # then run exactly as they do for a software-decoded input, so the
+        # pictures Vship scores do not depend on which decoder produced them.
+        operations.append(f"hwdownload,format={hw_native_format(info.pix_fmt)}")
     if crop is not None and not crop.is_noop(info.width, info.height):
         operations.append(crop.as_filter())
     current_size = _content_size(info, crop)
@@ -393,37 +403,186 @@ def _filter_chain(
     return ",".join(operations)
 
 
-def _read_pinned_frame(
-    process: subprocess.Popen, destination: int, frame_bytes: int,
-    processes: tuple[subprocess.Popen, ...], cancel_event: threading.Event | None,
-) -> bool:
-    """Read one exact raw frame into pinned memory, polling for cancellation.
+#: Concurrent Vship handlers per metric. One handler leaves the GPU idle
+#: between its own kernels; two keep it busy. Measured at 4K 10-bit on an
+#: RTX 5090: SSIMULACRA2 217 -> 277 pairs/s, Butteraugli 82 -> 95, both
+#: metrics together 61 -> 72. This is also how FFVship runs Vship.
+_LANES_PER_METRIC = 2
+#: Frames in flight per video: one per lane being scored, one waiting and
+#: one being filled, so decode, transfer and GPU compute overlap instead of
+#: taking turns. A 4K 10-bit frame is 25 MB of pinned memory, so this is
+#: 250 MB for a 4K pair.
+_RING_SLOTS = _LANES_PER_METRIC + 3
+#: The pipe between FFmpeg and this process. Windows' default is a few
+#: kilobytes, which caps a raw 4K stream near 55 fps no matter how fast the
+#: decoder is; 64 MB doubles that. Measured on one 4K 10-bit HEVC stream:
+#: 55 -> 107 fps alone, 46 -> 78 fps with the two inputs in parallel.
+_PIPE_BYTES = 64 * 1024 * 1024
+_EOF = -1
 
-    Keep pipe reads on the calculation thread rather than handing CUDA-pinned
-    memory to Python's buffered pipe reader. Reads are incremental, so only two
-    frames are resident; ProcessHandle can terminate a blocked FFmpeg read.
+
+def _spawn_raw_ffmpeg(command: list[str]) -> tuple[subprocess.Popen, object]:
+    """Start FFmpeg writing raw frames to a large pipe; returns (process, reader)."""
+    if os.name == "nt":
+        import _winapi
+        import msvcrt
+
+        read_handle, write_handle = _winapi.CreatePipe(None, _PIPE_BYTES)
+        write_fd = msvcrt.open_osfhandle(write_handle, 0)
+        try:
+            process = proc_util.popen(
+                command, stdin=subprocess.DEVNULL, stdout=write_fd, stderr=subprocess.PIPE,
+            )
+        except BaseException:
+            os.close(write_fd)
+            _winapi.CloseHandle(read_handle)
+            raise
+        os.close(write_fd)  # the child holds its own copy; EOF arrives when it exits
+        reader = open(msvcrt.open_osfhandle(read_handle, os.O_RDONLY), "rb", buffering=0)  # noqa: SIM115
+        return process, reader
+    process = proc_util.popen(
+        command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
+    )
+    return process, process.stdout
+
+
+def _read_exact(reader, view: memoryview) -> int:
+    """Fill `view` from the pipe with whole-buffer reads; returns bytes read.
+
+    readinto straight into pinned memory: no intermediate bytes objects and
+    no second copy. The previous transport read 1 MB chunks into new bytes
+    objects and memmoved each one, which held a 4K stream to 6 fps.
     """
-    if process.stdout is None:
-        raise VshipUnavailableError("FFmpeg did not provide a video frame pipe.")
-    offset = 0
-    while offset < frame_bytes:
-        if cancel_event is not None and cancel_event.is_set():
-            for child in processes:
-                with contextlib.suppress(OSError):
-                    child.terminate()
-            raise PerceptualCancelled("Cancelled by user")
-
-        chunk = process.stdout.read(min(1024 * 1024, frame_bytes - offset))
-        if not chunk:
+    offset, total = 0, len(view)
+    while offset < total:
+        count = reader.readinto(view[offset:])
+        if not count:
             break
-        ctypes.memmove(destination + offset, chunk, len(chunk))
-        offset += len(chunk)
+        offset += count
+    return offset
 
-    if offset == frame_bytes:
-        return True
-    if offset:
-        raise VshipUnavailableError("FFmpeg ended partway through a raw video frame.")
-    return False
+
+class _FrameStream:
+    """One input's FFmpeg decode, feeding a ring of pinned frame buffers.
+
+    A background thread reads frames into free slots and hands them over in
+    order; the scoring thread returns each slot once Vship is done with it.
+    Both the pipe read and the Vship call release the GIL, so the two inputs
+    and the GPU all make progress at once. If hardware decode fails before
+    delivering a frame, the same pictures are decoded in software instead.
+    """
+
+    def __init__(
+        self, lib: ctypes.CDLL, frame_bytes: int, commands: list[list[str]],
+        process_handle: ProcessHandle | None, label: str,
+    ) -> None:
+        self.buffers = [_PinnedBuffer(lib, frame_bytes) for _ in range(_RING_SLOTS)]
+        self.views = [memoryview(buffer.array).cast("B") for buffer in self.buffers]
+        self._commands = commands
+        self._process_handle = process_handle
+        self._label = label
+        self._free: queue.Queue[int] = queue.Queue()
+        self._filled: queue.Queue[int | BaseException] = queue.Queue()
+        for slot in range(_RING_SLOTS):
+            self._free.put(slot)
+        self._stopping = threading.Event()
+        self._lock = threading.Lock()
+        self._process: subprocess.Popen | None = None
+        self._reader = None
+        self.used_hardware = False
+        self._thread = threading.Thread(target=self._run, name=f"vship-{label}", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            for attempt, command in enumerate(self._commands):
+                frames, code, stderr = self._decode(command)
+                if self._stopping.is_set():
+                    return
+                if code == 0:
+                    self.used_hardware = attempt == 0 and len(self._commands) > 1
+                    self._filled.put(_EOF)
+                    return
+                if frames == 0 and attempt + 1 < len(self._commands):
+                    continue  # hardware decode refused this stream: decode it in software
+                raise VshipUnavailableError(
+                    f"FFmpeg failed while decoding the {self._label} for Vship"
+                    + (f": {stderr}" if stderr else ".")
+                )
+        except BaseException as error:  # handed to the scoring thread, never lost
+            self._filled.put(error)
+
+    def _decode(self, command: list[str]) -> tuple[int, int, str]:
+        try:
+            process, reader = _spawn_raw_ffmpeg(command)
+        except OSError as error:
+            raise VshipUnavailableError(f"Could not start FFmpeg for Vship: {error}") from error
+        with self._lock:
+            self._process, self._reader = process, reader
+        if self._process_handle is not None:
+            self._process_handle.attach(process.pid)
+        stderr_tail: list[bytes] = []
+        drain = threading.Thread(
+            target=lambda: stderr_tail.append(process.stderr.read()[-2000:]) if process.stderr else None,
+            daemon=True,
+        )
+        drain.start()
+        frames = 0
+        try:
+            while not self._stopping.is_set():
+                slot = self._free.get()
+                if slot == _EOF:
+                    break
+                received = _read_exact(reader, self.views[slot])
+                if received == len(self.views[slot]):
+                    self._filled.put(slot)
+                    frames += 1
+                    continue
+                self._free.put(slot)
+                if received:
+                    raise VshipUnavailableError(f"FFmpeg ended partway through a {self._label} frame.")
+                break
+        finally:
+            with contextlib.suppress(OSError):
+                reader.close()
+            code = process.wait()
+            drain.join(timeout=5)
+            if self._process_handle is not None:
+                self._process_handle.detach(process.pid)
+        message = b"".join(stderr_tail).decode("utf-8", errors="replace").strip()
+        return frames, code, message
+
+    def next(self, cancel_event: threading.Event | None) -> int:
+        """The next filled slot, or _EOF. Raises the reader's error or on cancel."""
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                raise PerceptualCancelled("Cancelled by user")
+            try:
+                item = self._filled.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if isinstance(item, BaseException):
+                raise item
+            return item
+
+    def release(self, slot: int) -> None:
+        self._free.put(slot)
+
+    def close(self) -> None:
+        self._stopping.set()
+        self._free.put(_EOF)  # wake a reader waiting for a slot
+        with self._lock:
+            process = self._process
+        if process is not None and process.poll() is None:
+            with contextlib.suppress(OSError):
+                process.terminate()
+        self._thread.join(timeout=10)
+        # Pinned memory is freed only once the reader cannot be writing to it.
+        if not self._thread.is_alive():
+            for buffer in self.buffers:
+                buffer.close()
 
 
 class _PinnedBuffer:
@@ -447,6 +606,64 @@ class _PinnedBuffer:
         if self.address.value:
             self.lib.Vship_PinnedFree(self.address)
             self.address = ctypes.c_void_p()
+
+
+class _MetricLane:
+    """One Vship handler for one metric, on its own thread.
+
+    Frame pairs are dealt to lanes round-robin; each lane writes its score
+    by frame index, so completion order does not matter. The pinned slots
+    of a pair go back to their readers once every metric has scored it.
+    """
+
+    def __init__(self, device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace,
+                 source_planes, distorted_planes, src_strides: _I64_3, dist_strides: _I64_3,
+                 scores: dict[int, float], finished: Callable[[int], None],
+                 failed: Callable[[BaseException], None], abort: threading.Event) -> None:
+        self.key = key
+        self._args = (device, src, dist)
+        self._planes = (source_planes, distorted_planes)
+        self._strides = (src_strides, dist_strides)
+        self._scores, self._finished, self._failed, self._abort = scores, finished, failed, abort
+        self.jobs: queue.Queue[tuple[int, int, int] | None] = queue.Queue()
+        self._thread = threading.Thread(target=self._run, name=f"vship-{key}", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def _run(self) -> None:
+        device, src, dist = self._args
+        lib = device.loaded.library
+        handler = None
+        try:
+            # The CUDA/HIP device is per thread, and a handler allocates on
+            # the device current when it is created.
+            error = lib.Vship_SetDevice(device.gpu_id)
+            if error != 0:
+                raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
+            handler = _init_handler(device, self.key, src, dist)
+            while True:
+                job = self.jobs.get()
+                if job is None or self._abort.is_set():
+                    return
+                index, source_slot, distorted_slot = job
+                self._scores[index] = _compute_metric(
+                    device, self.key, handler, self._planes[0][source_slot],
+                    self._planes[1][distorted_slot], *self._strides,
+                )
+                self._finished(index)
+        except BaseException as error:
+            self._failed(error)
+        finally:
+            if handler is not None:
+                with contextlib.suppress(Exception):
+                    (lib.Vship_SSIMU2Free if self.key == "ssimulacra2" else lib.Vship_ButteraugliFree)(handler)
+
+    def stop(self) -> None:
+        self.jobs.put(None)
+
+    def join(self) -> None:
+        self._thread.join()
 
 
 def _init_handler(device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace) -> _Handler:
@@ -531,37 +748,36 @@ def run_vship_task(
     if on_status:
         on_status(f"Vship GPU ({device.name}): calculating {', '.join(spec.key.upper() for spec in specs)}…")
 
-    handlers: dict[str, _Handler] = {}
-    initialized: list[tuple[str, _Handler]] = []
-    src_buffer: _PinnedBuffer | None = None
-    dist_buffer: _PinnedBuffer | None = None
-    process_list: list[subprocess.Popen] = []
+    streams: list[_FrameStream] = []
+    lanes: list[_MetricLane] = []
     started = time.perf_counter()
-    values: dict[str, list[float]] = {spec.key: [] for spec in specs}
+    scores: dict[str, dict[int, float]] = {spec.key: {} for spec in specs}
+    abort = threading.Event()
+    failures: list[BaseException] = []
+    pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
+    pending_lock = threading.Lock()
     expected_frames = min(source.estimated_frame_count, distorted.estimated_frame_count)
     if request.recipe.duration_limit > 0:
         expected_frames = min(expected_frames, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
     expected_samples = max(1, math.ceil(expected_frames / step))
     total_units = expected_samples * step
+    # Decode follows the row's GPU-decode setting, per input and per codec:
+    # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
+    # decoder (VVC). Hardware decode is bit-exact, so it changes speed only.
+    vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
 
-    try:
-        src_buffer = _PinnedBuffer(lib, src_frame_bytes)
-        dist_buffer = _PinnedBuffer(lib, dist_frame_bytes)
-        for spec in specs:
-            handler = _init_handler(device, spec.key, src_color, dist_color)
-            handlers[spec.key] = handler
-            initialized.append((spec.key, handler))
-
-        for info, crop, target, image_format in (
-            (source, source_crop, src_size, src_format),
-            (distorted, distorted_crop, dist_size, dist_format),
-        ):
+    def commands(info: VideoInfo, crop: CropBox | None, target: tuple[int, int],
+                 image_format: _ImageFormat) -> list[list[str]]:
+        hwaccel = pick_hwaccel(vendor, info.codec_name)
+        attempts = []
+        for accel in ([hwaccel, None] if hwaccel else [None]):
             filter_chain = _filter_chain(
                 info, crop, target, image_format.pixel_format, step,
-                request.recipe.scale_algorithm,
+                request.recipe.scale_algorithm, accel,
             )
             command = [
                 ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-nostdin",
+                *hwaccel_args(accel),
                 "-i", str(info.path.resolve()), "-map", "0:v:0", "-an", "-sn", "-dn",
                 "-vf", filter_chain,
             ]
@@ -569,50 +785,71 @@ def run_vship_task(
                 command += ["-t", f"{request.recipe.duration_limit:.6f}"]
             command += ["-fps_mode", "passthrough", "-pix_fmt", image_format.pixel_format,
                         "-f", "rawvideo", "pipe:1"]
-            try:
-                process = proc_util.popen(
-                    command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL, bufsize=0,
-                )
-            except OSError as error:
-                raise VshipUnavailableError(f"Could not start FFmpeg for Vship: {error}") from error
-            process_list.append(process)
-            if process_handle is not None:
-                process_handle.attach(process.pid)
+            attempts.append(command)
+        return attempts
+
+    def failed(error: BaseException) -> None:
+        failures.append(error)
+        abort.set()
+
+    try:
+        streams = [
+            _FrameStream(lib, src_frame_bytes, commands(source, source_crop, src_size, src_format),
+                         process_handle, "reference"),
+            _FrameStream(lib, dist_frame_bytes, commands(distorted, distorted_crop, dist_size, dist_format),
+                         process_handle, "test video"),
+        ]
+        for stream in streams:
+            stream.start()
+        source_stream, distorted_stream = streams
+        source_planes = [buffer.planes(src_format, src_plane_sizes) for buffer in source_stream.buffers]
+        distorted_planes = [buffer.planes(dist_format, dist_plane_sizes) for buffer in distorted_stream.buffers]
+
+        def finished(index: int) -> None:
+            with pending_lock:
+                entry = pending[index]
+                entry[0] -= 1
+                if entry[0]:
+                    return
+                del pending[index]
+            source_stream.release(entry[1])
+            distorted_stream.release(entry[2])
+
+        by_metric: dict[str, list[_MetricLane]] = {}
+        for spec in specs:
+            by_metric[spec.key] = [
+                _MetricLane(device, spec.key, src_color, dist_color, source_planes, distorted_planes,
+                            src_strides, dist_strides, scores[spec.key], finished, failed, abort)
+                for _ in range(_LANES_PER_METRIC)
+            ]
+            lanes.extend(by_metric[spec.key])
+        for lane in lanes:
+            lane.start()
 
         frame = 0
         while True:
-            source_has_frame = _read_pinned_frame(
-                process_list[0], ctypes.addressof(src_buffer.array), src_frame_bytes,
-                tuple(process_list), cancel_event,
-            )
-            distorted_has_frame = _read_pinned_frame(
-                process_list[1], ctypes.addressof(dist_buffer.array), dist_frame_bytes,
-                tuple(process_list), cancel_event,
-            )
-            if not source_has_frame and not distorted_has_frame:
+            if failures:
+                raise failures[0]
+            source_slot = source_stream.next(cancel_event)
+            distorted_slot = distorted_stream.next(cancel_event)
+            if source_slot == _EOF and distorted_slot == _EOF:
                 break
-            if source_has_frame != distorted_has_frame:
+            if (source_slot == _EOF) != (distorted_slot == _EOF):
                 raise VshipUnavailableError("The source and test produced different frame counts for Vship.")
-            source_planes = src_buffer.planes(src_format, src_plane_sizes)
-            distorted_planes = dist_buffer.planes(dist_format, dist_plane_sizes)
+            with pending_lock:
+                pending[frame] = [len(specs), source_slot, distorted_slot]
             for spec in specs:
-                values[spec.key].append(_compute_metric(
-                    device, spec.key, handlers[spec.key], source_planes,
-                    distorted_planes, src_strides, dist_strides,
-                ))
+                by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put((frame, source_slot, distorted_slot))
             frame += 1
             if on_progress:
-                on_progress(min(frame * step, total_units), total_units, 0.0)
-            if cancel_event is not None and cancel_event.is_set():
-                raise PerceptualCancelled("Cancelled by user")
-
-        for process in process_list:
-            code = process.wait(timeout=30)
-            if process_handle is not None:
-                process_handle.detach(process.pid)
-            if code != 0:
-                raise VshipUnavailableError("FFmpeg failed while streaming frames to Vship.")
+                elapsed = max(time.perf_counter() - started, 1e-6)
+                on_progress(min(frame * step, total_units), total_units, frame / elapsed)
+        for lane in lanes:
+            lane.stop()
+        for lane in lanes:
+            lane.join()
+        if failures:
+            raise failures[0]
         if frame == 0:
             raise VshipUnavailableError("FFmpeg produced no frame pairs for Vship.")
 
@@ -628,7 +865,8 @@ def run_vship_task(
         }
         for spec in specs:
             results.add(FrameMetricResult(
-                spec.key, frame_numbers, times, np.asarray(values[spec.key], dtype=np.float32),
+                spec.key, frame_numbers, times,
+                np.asarray([scores[spec.key][index] for index in range(frame)], dtype=np.float32),
                 MetricProvenance(
                     implementation=f"Vship/{spec.key}",
                     implementation_version=f"Vship {device.version}",
@@ -648,27 +886,15 @@ def run_vship_task(
     except Exception as error:
         raise VshipUnavailableError(f"Vship GPU calculation failed: {error}") from error
     finally:
-        for process in process_list:
-            if process.poll() is None:
-                with contextlib.suppress(OSError):
-                    process.terminate()
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=5)
-            if process_handle is not None:
-                process_handle.detach(process.pid)
-            if process.stdout is not None:
-                with contextlib.suppress(OSError):
-                    process.stdout.close()
-        for key, handler in reversed(initialized):
-            with contextlib.suppress(Exception):
-                if key == "ssimulacra2":
-                    lib.Vship_SSIMU2Free(handler)
-                else:
-                    lib.Vship_ButteraugliFree(handler)
-        if dist_buffer is not None:
-            dist_buffer.close()
-        if src_buffer is not None:
-            src_buffer.close()
+        # Lanes first: they read the pinned frames the streams own, so the
+        # streams may only free that memory once no lane can touch it.
+        abort.set()
+        for lane in lanes:
+            lane.stop()
+        for lane in lanes:
+            lane.join()
+        for stream in streams:
+            stream.close()
 
 
 def apply_vship_cpu_fallback(
