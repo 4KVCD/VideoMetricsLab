@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from vmaf_app.core import perceptual_cpu
@@ -363,3 +364,17 @@ def test_the_large_pipe_carries_raw_frames_intact():
     reader.close()
     assert process.wait() == 0
     assert firsts == [0, 1, 2, 3]
+
+
+def test_scores_are_packed_by_frame_index_across_chunk_boundaries():
+    """Lanes finish out of order and a long video spans several chunks."""
+    scores = vship._ScoreArray()
+    count = vship._ScoreArray._CHUNK * 2 + 5
+    for index in range(count):
+        scores.reserve(index)
+    for index in reversed(range(count)):  # completion order must not matter
+        scores[index] = index * 0.5
+    values = scores.values(count)
+    assert values.dtype == np.float32 and len(values) == count
+    assert values[0] == 0.0 and values[-1] == (count - 1) * 0.5
+    assert values[vship._ScoreArray._CHUNK] == vship._ScoreArray._CHUNK * 0.5

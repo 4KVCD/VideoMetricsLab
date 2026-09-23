@@ -608,6 +608,37 @@ class _PinnedBuffer:
             self.address = ctypes.c_void_p()
 
 
+class _ScoreArray:
+    """Per-frame scores in packed float64 chunks, written by frame index.
+
+    Lanes finish frames out of order, so scores are stored by position rather
+    than appended. Chunks rather than one array because a feature-length
+    video's frame count is only estimated up front, and growing one array
+    would reallocate it under a lane that is writing to it; a new chunk is
+    added by the dispatching thread before any lane can be handed an index
+    in it, and existing chunks never move. 172,800 frames (two hours at 24
+    fps) take 1.4 MB, where a dict of Python floats took about 17 MB.
+    """
+
+    _CHUNK = 8192
+
+    def __init__(self) -> None:
+        self._chunks: list[np.ndarray] = []
+
+    def reserve(self, index: int) -> None:
+        """Make room for `index`; called before the index is dispatched."""
+        while index >= len(self._chunks) * self._CHUNK:
+            self._chunks.append(np.full(self._CHUNK, np.nan))
+
+    def __setitem__(self, index: int, value: float) -> None:
+        self._chunks[index // self._CHUNK][index % self._CHUNK] = value
+
+    def values(self, count: int) -> np.ndarray:
+        if not self._chunks:
+            return np.empty(0, dtype=np.float32)
+        return np.concatenate(self._chunks)[:count].astype(np.float32)
+
+
 class _MetricLane:
     """One Vship handler for one metric, on its own thread.
 
@@ -618,7 +649,7 @@ class _MetricLane:
 
     def __init__(self, device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace,
                  source_planes, distorted_planes, src_strides: _I64_3, dist_strides: _I64_3,
-                 scores: dict[int, float], finished: Callable[[int], None],
+                 scores: _ScoreArray, finished: Callable[[int], None],
                  failed: Callable[[BaseException], None], abort: threading.Event) -> None:
         self.key = key
         self._args = (device, src, dist)
@@ -751,7 +782,7 @@ def run_vship_task(
     streams: list[_FrameStream] = []
     lanes: list[_MetricLane] = []
     started = time.perf_counter()
-    scores: dict[str, dict[int, float]] = {spec.key: {} for spec in specs}
+    scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in specs}
     abort = threading.Event()
     failures: list[BaseException] = []
     pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
@@ -839,6 +870,8 @@ def run_vship_task(
             with pending_lock:
                 pending[frame] = [len(specs), source_slot, distorted_slot]
             for spec in specs:
+                scores[spec.key].reserve(frame)
+            for spec in specs:
                 by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put((frame, source_slot, distorted_slot))
             frame += 1
             if on_progress:
@@ -866,7 +899,7 @@ def run_vship_task(
         for spec in specs:
             results.add(FrameMetricResult(
                 spec.key, frame_numbers, times,
-                np.asarray([scores[spec.key][index] for index in range(frame)], dtype=np.float32),
+                scores[spec.key].values(frame),
                 MetricProvenance(
                     implementation=f"Vship/{spec.key}",
                     implementation_version=f"Vship {device.version}",
