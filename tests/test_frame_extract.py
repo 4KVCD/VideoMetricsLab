@@ -14,12 +14,12 @@ from vmaf_app.core.frame_extract import (
     frame_input_path,
 )
 from vmaf_app.core.models import (
+    ComparisonResult,
     CropBox,
     FrameScores,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
-    VmafRunResult,
 )
 
 
@@ -39,10 +39,10 @@ def _result(*, direction=ScaleDirection.SOURCE_TO_DISTORTED) -> FrameComparison:
     return FrameComparison.from_result(_run_result(direction=direction))
 
 
-def _run_result(*, direction=ScaleDirection.SOURCE_TO_DISTORTED) -> VmafRunResult:
+def _run_result(*, direction=ScaleDirection.SOURCE_TO_DISTORTED) -> ComparisonResult:
     source = _info("source.mkv", 3840, 2160)
     distorted = _info("distorted.mkv", 1920, 1080)
-    return VmafRunResult(
+    return ComparisonResult(
         source=source.path,
         distorted=distorted.path,
         frames=FrameScores(

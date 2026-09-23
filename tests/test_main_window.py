@@ -9,18 +9,29 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
+from tests.factories import (
+    fake_completed_run as _fake_completed_run,
+)
+from tests.factories import (
+    fake_video_info as _fake_video_info,
+)
+from vmaf_app.core import result_cache
+from vmaf_app.core.ffmpeg_request import (
+    analysis_request_from_vmaf_options,
+    supplemental_metric_specs,
+)
 from vmaf_app.core.models import (
+    ComparisonResult,
     CropBox,
     CropMode,
     FrameScore,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
-    VmafRunResult,
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
-from vmaf_app.core.settings import SETTINGS_VERSION, Settings, default_parallel_jobs
+from vmaf_app.core.settings import Settings, default_parallel_jobs
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.main_window import (
@@ -44,27 +55,36 @@ from vmaf_app.ui.main_window import (
 )
 
 
+def _cache_request(options):
+    return analysis_request_from_vmaf_options(options)
+
+
+def _cache_key(source, distorted, options):
+    return result_cache.cache_key(source, distorted, _cache_request(options))
+
+
+def _load_cached(source, distorted, options, directory=None):
+    return result_cache.load_cached(
+        source, distorted, _cache_request(options), directory,
+        supplemental_metric_specs(options),
+    )
+
+
+def _store_cached(source, distorted, result, label, options, directory=None):
+    return result_cache.store(
+        source, distorted, result, label, _cache_request(options), directory
+    )
+
+
+def _clear_cached(source, distorted, options, directory=None):
+    return result_cache.clear(
+        source, distorted, _cache_request(options), directory,
+        supplemental_metric_specs(options),
+    )
+
 @pytest.fixture(scope="module")
 def qapp():
     return QApplication.instance() or QApplication([])
-
-
-def _fake_video_info(name: str) -> VideoInfo:
-    return VideoInfo(
-        path=Path(name), width=1920, height=1080, fps=30.0, duration=5.0,
-        nb_frames=150, codec_name="h264",
-    )
-
-
-def _fake_completed_run(name: str) -> CompletedRun:
-    info = _fake_video_info(name)
-    frames = [FrameScore(frame=i, time=i / 30.0, vmaf=90.0) for i in range(10)]
-    result = VmafRunResult(
-        source=Path("source.mp4"), distorted=Path(name), frames=frames, fps=30.0,
-        model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
-        source_info=info, distorted_info=info,
-    )
-    return CompletedRun(result, name)
 
 
 def _ask_for_vmaf_only(win, row: int) -> None:
@@ -136,40 +156,6 @@ def test_a_new_video_asks_for_all_four_metrics(qapp):
     assert win._rows[row].options.requested_metrics() == ("vmaf", "psnr", "ssim", "xpsnr")
 
 
-def test_an_older_settings_file_is_upgraded_to_all_four_once(tmp_path, monkeypatch):
-    """The new default has to reach installs that already have a settings file.
-
-    Those files record the previous default explicitly, so without an upgrade
-    step the change would apply to nobody who has already run the app.
-    """
-    settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr(Settings, "path", staticmethod(lambda: settings_file))
-    settings_file.write_text(
-        json.dumps({
-            "default_compute_psnr": False,
-            "default_compute_ssim": False,
-            "default_compute_xpsnr": False,
-            "parallel_jobs": 2,
-        }),
-        encoding="utf-8",
-    )
-
-    upgraded = Settings.load()
-    assert upgraded.default_compute_psnr
-    assert upgraded.default_compute_ssim
-    assert upgraded.default_compute_xpsnr
-    assert upgraded.default_compute_vmaf
-    assert upgraded.parallel_jobs == 2  # untouched settings survive
-
-    # Written back, so it happens once rather than at every launch...
-    assert json.loads(settings_file.read_text(encoding="utf-8"))["settings_version"] == SETTINGS_VERSION
-
-    # ...and a later choice to turn one off is then respected, not undone.
-    upgraded.default_compute_xpsnr = False
-    upgraded.save()
-    assert not Settings.load().default_compute_xpsnr
-
-
 @pytest.mark.parametrize(("cores", "expected"), [(8, 1), (12, 1), (13, 2), (24, 2)])
 def test_two_in_parallel_is_the_default_above_twelve_cores(cores, expected, monkeypatch):
     """One libvmaf job leaves a big CPU largely idle; on a small one a second
@@ -180,35 +166,6 @@ def test_two_in_parallel_is_the_default_above_twelve_cores(cores, expected, monk
     assert Settings().parallel_jobs == expected
 
 
-@pytest.mark.parametrize(("cores", "expected"), [(8, 1), (24, 2)])
-def test_an_older_settings_file_gets_the_machine_default_for_parallel_once(
-    cores, expected, tmp_path, monkeypatch,
-):
-    """Every file written before this default said 1, chosen or not, so the
-    upgrade treats a 1 as unchosen -- exactly once."""
-    monkeypatch.setattr(os, "cpu_count", lambda: cores)
-    settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr(Settings, "path", staticmethod(lambda: settings_file))
-    settings_file.write_text(json.dumps({"parallel_jobs": 1, "settings_version": 1}), encoding="utf-8")
-
-    assert Settings.load().parallel_jobs == expected
-
-    # Turning it off afterwards is a choice, and it stays off.
-    chosen = Settings.load()
-    chosen.parallel_jobs = 1
-    chosen.save()
-    assert Settings.load().parallel_jobs == 1
-
-
-def test_a_saved_choice_of_two_survives_the_upgrade_on_a_small_machine(tmp_path, monkeypatch):
-    monkeypatch.setattr(os, "cpu_count", lambda: 8)
-    settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr(Settings, "path", staticmethod(lambda: settings_file))
-    settings_file.write_text(json.dumps({"parallel_jobs": 2, "settings_version": 1}), encoding="utf-8")
-
-    assert Settings.load().parallel_jobs == 2
-
-
 @pytest.mark.parametrize(("cores", "ticked"), [(8, False), (24, True)])
 def test_the_parallel_box_starts_from_the_machine_default(cores, ticked, qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(os, "cpu_count", lambda: cores)
@@ -216,7 +173,7 @@ def test_the_parallel_box_starts_from_the_machine_default(cores, ticked, qapp, t
     # install has no such line.
     settings_file = Settings.path()
     saved = json.loads(settings_file.read_text(encoding="utf-8"))
-    del saved["parallel_jobs"], saved["settings_version"]
+    del saved["parallel_jobs"]
     settings_file.write_text(json.dumps(saved), encoding="utf-8")
 
     win = MainWindow()
@@ -673,7 +630,7 @@ def test_black_bars_column_answers_yes_or_no_about_the_test_video(qapp):
     distorted = _fake_video_info_res("encode.mp4", 1920, 804)
     win._source_info = source
     row = win._add_table_row(distorted.path)
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=source.path,
         distorted=distorted.path,
         frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
@@ -706,7 +663,7 @@ def test_black_bars_column_says_yes_when_the_test_video_is_letterboxed(qapp):
     source = _fake_video_info_res("source.mp4", 1920, 1080)
     distorted = _fake_video_info_res("encode.mp4", 1920, 1080)
     row = win._add_table_row(distorted.path)
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=source.path,
         distorted=distorted.path,
         frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
@@ -732,7 +689,7 @@ def test_black_bars_column_says_yes_for_a_letterboxed_test_video(qapp):
     source = _fake_video_info_res("source.mp4", 1920, 1080)
     distorted = _fake_video_info_res("encode.mp4", 1920, 1080)
     row = win._add_table_row(distorted.path)
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=source.path,
         distorted=distorted.path,
         frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
@@ -758,7 +715,7 @@ def test_black_bars_column_for_a_resolution_test_answers_for_the_reference(qapp)
     source = _fake_video_info_res("source.mp4", 3840, 2160)
     row = win._add_table_row(Path("source [downscale-1080p-upscale].mp4"))
     win._rows[row].options.resample_test = ResampleTarget(width=1920, label="1080p")
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=source.path,
         distorted=win._rows[row].path,
         frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)],
@@ -808,7 +765,7 @@ def test_resize_mismatch_note_reflects_the_actual_scale_direction_used(qapp):
     # A completed run recorded as the *other* direction should override the
     # row's current (unrelated) settings when describing what happened.
     frames = [FrameScore(frame=0, time=0.0, vmaf=90.0)]
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=Path("source.mp4"), distorted=Path("a.mp4"), frames=frames, fps=30.0,
         model="m", source_crop=None, distorted_crop=None,
         source_info=win._source_info, distorted_info=_fake_video_info_res("a.mp4", 1920, 1080),
@@ -851,7 +808,7 @@ def test_letterboxed_reference_of_the_same_width_is_not_called_a_downscale(qapp)
     source = _fake_video_info_res("source.mp4", 1920, 1080)
     distorted = _fake_video_info_res("a.mp4", 1920, 804)
     win._rows[row].completed_run = CompletedRun(
-        VmafRunResult(
+        ComparisonResult(
             source=source.path, distorted=distorted.path,
             frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)], fps=30.0, model="m",
             source_crop=CropBox(w=1920, h=804, x=0, y=138),
@@ -889,7 +846,7 @@ def test_scaling_note_is_measured_after_the_crops_a_run_applied(qapp):
     win._source_info = source
     row = win._add_table_row(distorted.path)
     win._rows[row].completed_run = CompletedRun(
-        VmafRunResult(
+        ComparisonResult(
             source=source.path, distorted=distorted.path,
             frames=[FrameScore(frame=0, time=0.0, vmaf=90.0)], fps=30.0, model="m",
             source_crop=CropBox(w=3840, h=1608, x=0, y=276),
@@ -927,7 +884,7 @@ def test_resize_mismatch_note_for_test_both_row_ignores_a_stale_cached_direction
     # defaulted to SOURCE_TO_DISTORTED (e.g. loaded from a file saved before
     # scale_direction existed) -- the *wrong* direction for this row.
     frames = [FrameScore(frame=0, time=0.0, vmaf=90.0)]
-    stale_result = VmafRunResult(
+    stale_result = ComparisonResult(
         source=Path("source.mp4"), distorted=win._rows[companion_row].path, frames=frames, fps=30.0,
         model="m", source_crop=None, distorted_crop=None,
         source_info=win._source_info, distorted_info=_fake_video_info_res("a.mp4", 1920, 1080),
@@ -981,7 +938,7 @@ def test_no_horizontal_scrollbar_at_default_with_a_typical_row(qapp):
 def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypatch):
     win = MainWindow()
     info = _fake_video_info("saved.mp4")
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=Path("source.mp4"), distorted=Path("saved.mp4"),
         frames=[
             FrameScore(0, 0.0, 90.0, psnr=42.0, ssim=0.9876, xpsnr=39.0),
@@ -994,7 +951,7 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
     )
     monkeypatch.setattr(
         main_window_module.QFileDialog, "getOpenFileName",
-        lambda *a, **kw: ("saved.vmafrun.json", ""),
+        lambda *a, **kw: ("saved.metrics.json", ""),
     )
     monkeypatch.setattr(main_window_module, "load_run", lambda _path: (result, "saved"))
 
@@ -1012,7 +969,8 @@ def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypa
     from vmaf_app.core import result_cache
 
     monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
-    app_result = tmp_path / "abc.metrics.json"
+    app_result = tmp_path / "v2" / "comparison" / "context.json"
+    app_result.parent.mkdir(parents=True)
     app_result.write_text("{}", encoding="utf-8")
     unrelated = tmp_path / "family_budget.json"
     unrelated.write_text("important", encoding="utf-8")
@@ -1047,7 +1005,7 @@ def test_adding_a_row_picks_up_a_cached_result(qapp, tmp_path, monkeypatch):
     cached_result.distorted = distorted
     cached_result.source_crop = CropBox(w=1920, h=1080, x=0, y=0)
     cached_result.distorted_crop = CropBox(w=1920, h=1080, x=0, y=0)
-    result_cache.store(
+    _store_cached(
         source, distorted, cached_result, label="cached-label",
         options=win._rows[0].options if win._rows else win._default_options,
     )
@@ -1078,13 +1036,13 @@ def test_neg_computed_on_top_of_an_older_run_shows_when_the_video_is_re_added(qa
     distorted.write_bytes(b"d" * 500)
     info = _fake_video_info(str(distorted))
 
-    def run(with_neg: bool) -> VmafRunResult:
+    def run(with_neg: bool) -> ComparisonResult:
         frames = [
             FrameScore(frame=i, time=i / 30.0, vmaf=90.0, psnr=42.0, ssim=0.99, xpsnr=40.0,
                        vmaf_neg=88.0 if with_neg else None)
             for i in range(10)
         ]
-        return VmafRunResult(
+        return ComparisonResult(
             source=source, distorted=distorted, frames=frames, fps=30.0, model="m",
             source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
         )
@@ -1092,8 +1050,8 @@ def test_neg_computed_on_top_of_an_older_run_shows_when_the_video_is_re_added(qa
     four = VmafOptions(extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True)
     five = VmafOptions(extra_features=["name=psnr", "name=float_ssim"], compute_xpsnr=True,
                        compute_vmaf_neg=True)
-    result_cache.store(source, distorted, run(False), label="four", options=four)
-    result_cache.store(source, distorted, run(True), label="with NEG", options=five)
+    _store_cached(source, distorted, run(False), label="four", options=four)
+    _store_cached(source, distorted, run(True), label="with NEG", options=five)
 
     win = MainWindow()
     win._source_info = _fake_video_info(str(source))
@@ -1134,7 +1092,7 @@ def test_finishing_a_job_persists_to_cache(qapp, tmp_path, monkeypatch):
     # to wait for it rather than assuming it happened inline.
     assert win._file_writes.wait_until_idle(10.0)
 
-    assert result_cache.load_cached(source, distorted, win._rows[row].options) is not None
+    assert _load_cached(source, distorted, win._rows[row].options) is not None
 
 
 def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
@@ -1162,8 +1120,8 @@ def test_finishing_an_old_job_cannot_attach_or_cache_it_under_a_new_source(
     assert win._file_writes.wait_until_idle(10.0)
 
     assert win._rows[row].completed_run is None
-    assert result_cache.load_cached(old_source, distorted, win._rows[row].options) is not None
-    assert result_cache.load_cached(new_source, distorted, win._rows[row].options) is None
+    assert _load_cached(old_source, distorted, win._rows[row].options) is not None
+    assert _load_cached(new_source, distorted, win._rows[row].options) is None
 
 
 def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatch):
@@ -1180,7 +1138,7 @@ def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatc
     win._source_info.path = source
     row = win._add_table_row(distorted)
     win._rows[row].completed_run = _fake_completed_run(str(distorted))
-    result_cache.store(
+    _store_cached(
         source, distorted, win._rows[row].completed_run.result, label="x",
         options=win._rows[row].options,
     )
@@ -1189,7 +1147,7 @@ def test_recompute_clears_row_and_deletes_cache_entry(qapp, tmp_path, monkeypatc
     assert win._file_writes.wait_until_idle(10.0)
 
     assert win._rows[row].completed_run is None
-    assert result_cache.load_cached(source, distorted, win._rows[row].options) is None
+    assert _load_cached(source, distorted, win._rows[row].options) is None
 
 
 # ------------------------------------------------------------------ resolution round-trip test row
@@ -2023,7 +1981,6 @@ def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
 
 
 def test_cache_result_is_rejected_if_options_changed_while_it_loaded(qapp, tmp_path):
-    from vmaf_app.core import result_cache
 
     source = tmp_path / "source.mp4"
     distorted = tmp_path / "distorted.mp4"
@@ -2034,7 +1991,7 @@ def test_cache_result_is_rejected_if_options_changed_while_it_loaded(qapp, tmp_p
     win._source_info = _fake_video_info(str(source))
     win._source_info.path = source
     row = win._add_table_row(distorted)
-    old_key = result_cache.cache_key(source, distorted, win._rows[row].options)
+    old_key = _cache_key(source, distorted, win._rows[row].options)
 
     # This is exactly what can happen while ProbeWorker is parsing a large
     # cached JSON file: the row remains editable before its signal arrives.
@@ -2059,7 +2016,7 @@ def test_metric_columns_show_each_metrics_own_mean(qapp):
 
     info = _fake_video_info("a.mp4")
     frames = [FrameScore(frame=i, time=i / 30.0, vmaf=90.0, psnr=42.0, ssim=0.95, xpsnr=38.0) for i in range(4)]
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=Path("source.mp4"), distorted=Path("a.mp4"), frames=frames, fps=30.0,
         model="m", source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
     )
@@ -2443,8 +2400,8 @@ def test_a_queued_store_lands_in_the_folder_that_was_configured(qapp, tmp_path, 
     release.set()
     assert win._file_writes.wait_until_idle(10.0)
 
-    assert list(folder_a.glob("*.metrics.json")), "the result was written to the wrong folder"
-    assert not list(folder_b.glob("*.metrics.json"))
+    assert list(folder_a.glob("v2/*/context.json")), "the result was written to the wrong folder"
+    assert not list(folder_b.glob("v2/*/context.json"))
 
 
 def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, monkeypatch):
@@ -2453,8 +2410,10 @@ def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, 
     from vmaf_app.core import result_cache
 
     folder_a, folder_b = _two_cache_dirs(tmp_path)
-    (folder_a / "one.metrics.json").write_text("{}", encoding="utf-8")
-    (folder_b / "two.metrics.json").write_text("{}", encoding="utf-8")
+    (folder_a / "v2" / "one").mkdir(parents=True)
+    (folder_b / "v2" / "two").mkdir(parents=True)
+    (folder_a / "v2" / "one" / "context.json").write_text("{}", encoding="utf-8")
+    (folder_b / "v2" / "two" / "context.json").write_text("{}", encoding="utf-8")
 
     win = MainWindow()
     result_cache.set_cache_dir_override(folder_a)
@@ -2469,8 +2428,8 @@ def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, 
     release.set()
     assert win._file_writes.wait_until_idle(10.0)
 
-    assert not list(folder_a.glob("*.metrics.json")), "the named folder was not cleared"
-    assert list(folder_b.glob("*.metrics.json")), "an unnamed folder was cleared instead"
+    assert not list(folder_a.glob("v2/*/context.json")), "the named folder was not cleared"
+    assert list(folder_b.glob("v2/*/context.json")), "an unnamed folder was cleared instead"
 
 
 def test_a_queued_recompute_deletes_from_the_folder_it_was_asked_about(qapp, tmp_path):
@@ -2492,8 +2451,8 @@ def test_a_queued_recompute_deletes_from_the_folder_it_was_asked_about(qapp, tmp
     result = _fake_completed_run(str(distorted)).result
     result.source = source
     result.distorted = distorted
-    result_cache.store(source, distorted, result, "d", options, folder_a)
-    result_cache.store(source, distorted, result, "d", options, folder_b)
+    _store_cached(source, distorted, result, "d", options, folder_a)
+    _store_cached(source, distorted, result, "d", options, folder_b)
 
     release = _block_writes(win)
     win._recompute_rows([row])
@@ -2501,8 +2460,8 @@ def test_a_queued_recompute_deletes_from_the_folder_it_was_asked_about(qapp, tmp
     release.set()
     assert win._file_writes.wait_until_idle(10.0)
 
-    assert result_cache.load_cached(source, distorted, options, folder_a) is None
-    assert result_cache.load_cached(source, distorted, options, folder_b) is not None
+    assert _load_cached(source, distorted, options, folder_a) is None
+    assert _load_cached(source, distorted, options, folder_b) is not None
 
 
 # ------------------------- cache identity of synthetic ("test both") rows
@@ -2532,7 +2491,6 @@ def test_a_companion_rows_identity_follows_the_file_it_actually_decodes(qapp, tm
     # The companion carries a synthetic path that does not exist, so
     # _file_identity records size and mtime as -1 for it: nothing about the
     # real video reaches the key.
-    from vmaf_app.core import result_cache
 
     win = MainWindow()
     source, distorted, companion = _companion_row(win, tmp_path)
@@ -2540,15 +2498,14 @@ def test_a_companion_rows_identity_follows_the_file_it_actually_decodes(qapp, tm
     assert companion.path != distorted, "the companion should have its own row identity"
     assert companion.identity_path == distorted
 
-    before = result_cache.cache_key(source, companion.identity_path, companion.options)
+    before = _cache_key(source, companion.identity_path, companion.options)
     distorted.write_bytes(b"REPLACED" * 200)  # different content, different size
-    after = result_cache.cache_key(source, companion.identity_path, companion.options)
+    after = _cache_key(source, companion.identity_path, companion.options)
 
     assert before != after, "replacing the real video left the companion's key unchanged"
 
 
 def test_the_two_scale_directions_still_have_separate_keys(qapp, tmp_path):
-    from vmaf_app.core import result_cache
 
     win = MainWindow()
     source, _distorted, companion = _companion_row(win, tmp_path)
@@ -2556,8 +2513,8 @@ def test_the_two_scale_directions_still_have_separate_keys(qapp, tmp_path):
 
     assert original.identity_path == companion.identity_path, "same physical file"
     assert original.options.scale_direction != companion.options.scale_direction
-    assert result_cache.cache_key(source, original.identity_path, original.options) != \
-        result_cache.cache_key(source, companion.identity_path, companion.options)
+    assert _cache_key(source, original.identity_path, original.options) != \
+        _cache_key(source, companion.identity_path, companion.options)
 
 
 def test_the_companion_keeps_its_own_graph_identity(qapp, tmp_path):
@@ -2572,7 +2529,6 @@ def test_the_companion_keeps_its_own_graph_identity(qapp, tmp_path):
 
 
 def test_a_resolution_test_row_follows_the_source_file(qapp, tmp_path, monkeypatch):
-    from vmaf_app.core import result_cache
 
     source = tmp_path / "master.mkv"
     source.write_bytes(b"s" * 1000)
@@ -2588,15 +2544,14 @@ def test_a_resolution_test_row_follows_the_source_file(qapp, tmp_path, monkeypat
     row_data = win._rows[0]
 
     assert row_data.identity_path == source
-    before = result_cache.cache_key(source, row_data.identity_path, row_data.options)
+    before = _cache_key(source, row_data.identity_path, row_data.options)
     source.write_bytes(b"REPLACED" * 400)
-    after = result_cache.cache_key(source, row_data.identity_path, row_data.options)
+    after = _cache_key(source, row_data.identity_path, row_data.options)
 
     assert before != after, "replacing the source left the resolution test's key unchanged"
 
 
 def test_a_stale_companion_result_is_not_loaded_after_the_file_changes(qapp, tmp_path):
-    from vmaf_app.core import result_cache
 
     win = MainWindow()
     source, distorted, companion = _companion_row(win, tmp_path)
@@ -2604,7 +2559,7 @@ def test_a_stale_companion_result_is_not_loaded_after_the_file_changes(qapp, tmp
     result = _fake_completed_run(str(distorted)).result
     result.source = source
     result.distorted = companion.path
-    result_cache.store(
+    _store_cached(
         source, companion.identity_path, result, "movie", companion.options
     )
     assert win._try_load_cached_result(1), "the freshly stored result should load"
@@ -2877,7 +2832,6 @@ def test_a_result_is_not_shown_under_options_it_was_not_computed_with(qapp, tmp_
     """Defence in depth for the same bug. Even if something re-enables the
     panel, a finished job must not be labelled with settings changed after
     it was launched."""
-    from vmaf_app.core import result_cache
     from vmaf_app.core.models import clone_options
 
     source = tmp_path / "source.mp4"
@@ -2906,8 +2860,8 @@ def test_a_result_is_not_shown_under_options_it_was_not_computed_with(qapp, tmp_
     )
     # It is still cached under the settings it really used, so going back to
     # them brings it straight back rather than forcing a recomputation.
-    assert result_cache.load_cached(source, distorted, launched_with) is not None
-    assert result_cache.load_cached(source, distorted, win._rows[row].options) is None
+    assert _load_cached(source, distorted, launched_with) is not None
+    assert _load_cached(source, distorted, win._rows[row].options) is None
 
 
 def test_an_unchanged_row_still_receives_its_result(qapp, tmp_path):
@@ -3176,7 +3130,7 @@ def test_a_new_test_for_the_new_source_is_not_a_duplicate(qapp, tmp_path, monkey
 
 # --------------------- a loaded run belongs to the source it was measured on
 
-def _saved_run_file(tmp_path, source, distorted, name="run.vmafrun.json"):
+def _saved_run_file(tmp_path, source, distorted, name="run.metrics.json"):
     from vmaf_app.core.run_io import save_run
 
     result = _fake_completed_run(str(distorted)).result

@@ -18,7 +18,7 @@ import numpy as np
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
 from vmaf_app.core.gpu import (
     HwAccelPlan,
     plan_hwaccel,
@@ -32,20 +32,38 @@ from vmaf_app.core.gpu import (
 from vmaf_app.core.gpu import (
     hwaccel_args as _hwaccel_args,
 )
+from vmaf_app.core.metric_results import current_ffmpeg_provenance, results_from_frame_scores
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution
 from vmaf_app.core.models import (
+    ComparisonResult,
     CropBox,
     CropMode,
     FrameScores,
     ScaleDirection,
     VideoInfo,
     VmafOptions,
-    VmafRunResult,
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
 
 ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_frames, fps)
+
+
+def _metric_results_for_current_run(frames: FrameScores, model: str):
+    """Adapt one FFmpeg parse into generic results without re-parsing it."""
+    status = check_tools()
+    version = format_version(status.ffmpeg.version) if status.ffmpeg.runnable else "unknown"
+    return results_from_frame_scores(
+        frames,
+        {
+            key: current_ffmpeg_provenance(
+                key, version,
+                ({"model": "version=vmaf_v0.6.1neg"} if key == "vmaf_neg"
+                 else {"model": model} if key == "vmaf" else None),
+            )
+            for key in frames.metric_keys
+        },
+    )
 
 
 class VmafRunError(RuntimeError):
@@ -845,7 +863,7 @@ def run_vmaf(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     result_distorted_path: Path | None = None,
-) -> VmafRunResult:
+) -> ComparisonResult:
     """result_distorted_path overrides the returned result's `distorted`
     identity (defaulting to distorted_info.path). It doesn't affect which
     file is actually decoded -- only what identity the result carries for
@@ -907,7 +925,7 @@ def run_vmaf(
         process_handle=process_handle,
     )
 
-    return VmafRunResult(
+    return ComparisonResult(
         source=source_info.path,
         distorted=result_distorted_path or distorted_info.path,
         frames=frames,
@@ -921,6 +939,7 @@ def run_vmaf(
         scale_algorithm=options.scale_algorithm,
         compared_frame_count=total_frames,
         model_choice=options.model_choice,
+        metric_results=_metric_results_for_current_run(frames, effective_model),
     )
 
 
@@ -931,7 +950,7 @@ def run_resample_test(
     on_status: Callable[[str], None] | None = None,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
-) -> VmafRunResult:
+) -> ComparisonResult:
     """Runs a resolution round-trip test (see VmafOptions.resample_test):
     downscales the source to a target width, scales it back up to the
     source's original resolution, and computes VMAF against the untouched
@@ -985,7 +1004,7 @@ def run_resample_test(
     )
 
     distorted_path = synthetic_resample_distorted_path(source_info.path, options.resample_test)
-    return VmafRunResult(
+    return ComparisonResult(
         source=source_info.path,
         distorted=distorted_path,
         frames=frames,
@@ -999,4 +1018,5 @@ def run_resample_test(
         resample_target=options.resample_test,
         compared_frame_count=total_frames,
         model_choice=options.model_choice,
+        metric_results=_metric_results_for_current_run(frames, effective_model),
     )

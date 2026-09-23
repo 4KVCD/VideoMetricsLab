@@ -13,8 +13,9 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from vmaf_app.core import result_cache
+from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.ffprobe import ProbeCancelled, probe_video
-from vmaf_app.core.models import VideoInfo, VmafOptions, VmafRunResult
+from vmaf_app.core.models import ComparisonResult, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
 
 
@@ -23,21 +24,23 @@ class ProbeWorker(QThread):
 
     # (path, VideoInfo or None, error message or "")
     probed = Signal(object, object, str)
-    # (path, VmafRunResult, label, cache key) -- only for videos with a
+    # (path, ComparisonResult, label, cache key) -- only for videos with a
     # cached result. The key lets the UI reject a result if the row's options
     # changed while this background read was in flight.
     cached_found = Signal(object, object, str, str)
     finished_all = Signal()
 
     def __init__(self, paths: list[Path], source: Path | None, use_cache: bool,
-                 cache_options: dict[Path, VmafOptions],
+                 cache_requests: dict[Path, AnalysisRequest],
                  cache_paths: dict[Path, Path] | None = None,
+                 cache_supplemental: dict[Path, tuple[MetricRequestSpec, ...]] | None = None,
                  probe_media: bool = True, parent=None):
         super().__init__(parent)
         self._paths = list(paths)
         self._source = source
         self._use_cache = use_cache
-        self._cache_options = cache_options
+        self._cache_requests = cache_requests
+        self._cache_supplemental = cache_supplemental or {}
         # Row path -> the real file its cache identity comes from. They
         # differ only for synthetic rows (a "test both" companion, a
         # resolution test), whose own path does not exist on disk.
@@ -80,13 +83,16 @@ class ProbeWorker(QThread):
                     continue
                 # A miss is the normal case and must not be reported as a
                 # failure; the row simply stays unscored until it is run.
-                options = self._cache_options[path]
+                request = self._cache_requests[path]
                 identity = self._cache_paths.get(path, path)
                 # Capture identity before parsing the file. If either video
                 # is replaced during a long read, the UI will reject this
                 # token rather than accepting old scores under the new file.
-                key = result_cache.cache_key(self._source, identity, options)
-                cached = result_cache.load_cached(self._source, identity, options)
+                key = result_cache.cache_key(self._source, identity, request)
+                cached = result_cache.load_cached(
+                    self._source, identity, request,
+                    supplemental_specs=self._cache_supplemental.get(path, ()),
+                )
                 if cached is not None:
                     result, label = cached
                     self.cached_found.emit(path, result, label, key)
@@ -94,4 +100,4 @@ class ProbeWorker(QThread):
             self.finished_all.emit()
 
 
-__all__ = ["ProbeWorker", "VmafRunResult"]
+__all__ = ["ComparisonResult", "ProbeWorker"]

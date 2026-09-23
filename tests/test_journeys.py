@@ -24,10 +24,10 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.models import (
+    ComparisonResult,
     FrameScores,
     ResampleTarget,
     VideoInfo,
-    VmafRunResult,
     synthetic_resample_distorted_path,
 )
 from vmaf_app.ui import main_window as main_window_module
@@ -61,9 +61,9 @@ def _info(name: str, w: int = 3840, h: int = 2160) -> VideoInfo:
                      nb_frames=240, codec_name="hevc")
 
 
-def _result(distorted: Path, source: VideoInfo, score: float = 95.0) -> VmafRunResult:
+def _result(distorted: Path, source: VideoInfo, score: float = 95.0) -> ComparisonResult:
     n = 240
-    return VmafRunResult(
+    return ComparisonResult(
         source=source.path, distorted=distorted,
         frames=FrameScores(
             frame=np.arange(n, dtype=np.int32),

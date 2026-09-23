@@ -2,6 +2,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.models import VmafOptions
 from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.probe_worker import ProbeWorker
@@ -15,7 +16,7 @@ def test_unexpected_probe_failure_is_reported_and_worker_always_finishes(monkeyp
         lambda _path, **kwargs: (_ for _ in ()).throw(TimeoutError("unexpected timeout")),
     )
     worker = ProbeWorker(
-        [path], None, False, {path: VmafOptions()}
+        [path], None, False, {path: analysis_request_from_vmaf_options(VmafOptions())}
     )
     errors = []
     finished = []

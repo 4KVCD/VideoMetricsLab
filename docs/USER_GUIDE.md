@@ -63,7 +63,7 @@ bitrate is video packet bytes × 8 divided by the measured video duration.
 
 ## Saved results and caches
 
-Save portable results as `.vmafrun.json` or export CSV. Cached results are reused
+Save portable results as `.metrics.json` or export CSV. Cached results are reused
 when files and relevant settings match. A compatible subset can load as
 partially calculated; request calculation to fill missing metrics.
 

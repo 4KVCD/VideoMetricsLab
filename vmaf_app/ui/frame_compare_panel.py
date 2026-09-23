@@ -761,18 +761,13 @@ class FrameComparePanel(QWidget):
         idx = int(np.searchsorted(entry.scores.frame, self._frame))
         if idx < len(entry.scores) and int(entry.scores.frame[idx]) == self._frame:
             values = []
-            for metric, label, precision, unit in (
-                ("vmaf", "VMAF", 2, ""),
-                ("vmaf_neg", "VMAF NEG", 2, ""),
-                ("psnr", "PSNR", 2, " dB"), ("ssim", "SSIM", 4, ""),
-                ("xpsnr", "XPSNR", 2, " dB"),
-            ):
-                column = entry.scores.values(metric)
+            from vmaf_app.core.metrics import FRAME_METRICS
+            for metric in FRAME_METRICS:
+                column = entry.scores.values(metric.key)
                 if column is None or math.isnan(float(column[idx])):
                     continue
                 candidate = float(column[idx])
-                value = ("∞" if candidate > 0 else "−∞") if math.isinf(candidate) else f"{candidate:.{precision}f}"
-                values.append(f"{label} {value}{unit}")
+                values.append(f"{metric.label} {metric.format_value(candidate)}{metric.value_suffix}")
             if values:
                 return " · ".join(values)
         return "Metrics not calculated for this frame"

@@ -19,8 +19,8 @@ ignore = [
     "RUF012",  # ClassVar annotations aren't worth the noise on small test doubles
     # `class X(str, Enum)` rather than StrEnum is deliberate and load-bearing:
     # saved runs on disk hold the plain member values, and the two differ in
-    # what str()/format() produce. Switching would silently change what gets
-    # written to every .vmafrun.json.
+    # what str()/format() produce. Switching would silently change current
+    # `.metrics.json` output.
     "UP042",
 ]
 

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.display_hdr import DisplayHdrInfo
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorMode
-from vmaf_app.core.models import FrameScores, ResampleTarget, VideoInfo, VmafRunResult
+from vmaf_app.core.models import ComparisonResult, FrameScores, ResampleTarget, VideoInfo
 from vmaf_app.ui.frame_compare_panel import (
     FrameComparePanel,
     FrameComparisonEntry,
@@ -31,7 +31,7 @@ def _entry(name: str, score: float = 90.0, count: int = 120) -> FrameComparisonE
         path=Path(f"{name}.mkv"), width=1920, height=1080, fps=24.0,
         duration=5.0, nb_frames=count, codec_name="h264",
     )
-    result = VmafRunResult(
+    result = ComparisonResult(
         source=source.path,
         distorted=distorted.path,
         frames=FrameScores(

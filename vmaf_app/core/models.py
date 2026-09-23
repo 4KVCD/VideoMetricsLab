@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 
 import numpy as np
+
+from vmaf_app.core.metric_results import (
+    MetricResultSet,
+    frame_scores_from_results,
+    results_from_frame_scores,
+)
+from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 
 
 class CropMode(str, Enum):
@@ -165,21 +172,35 @@ class VmafOptions:
     resample_test: ResampleTarget | None = None
 
     def requested_metrics(self) -> tuple[str, ...]:
-        return tuple(name for name, enabled in (
-            ("vmaf", self.compute_vmaf),
-            ("vmaf_neg", self.compute_vmaf_neg),
-            ("psnr", "name=psnr" in self.extra_features),
-            ("ssim", "name=float_ssim" in self.extra_features),
-            ("xpsnr", self.compute_xpsnr),
-        ) if enabled)
+        return tuple(
+            metric.key for metric in FRAME_METRICS
+            if metric.ffmpeg_binding is not None and self.metric_enabled(metric.key)
+        )
 
-    def __post_init__(self) -> None:
-        if self.model_choice == "version=vmaf_v0.6.1neg":
-            self.compute_vmaf_neg = self.compute_vmaf
-            self.compute_vmaf = False
-            self.model_choice = "__auto__"
-            self.model = "version=vmaf_v0.6.1"
+    def metric_enabled(self, metric: str) -> bool:
+        """Whether an established metric is requested by this options object."""
+        binding = metric_definition(metric).ffmpeg_binding
+        if binding is None:
+            return False
+        if binding.bool_option is not None:
+            return bool(getattr(self, binding.bool_option))
+        return binding.libvmaf_feature in self.extra_features
 
+    def set_metric_enabled(self, metric: str, enabled: bool) -> None:
+        """Enable or disable one metric without disturbing custom features."""
+        binding = metric_definition(metric).ffmpeg_binding
+        if binding is None:
+            raise ValueError(f"metric {metric!r} is not provided by the FFmpeg options backend")
+        if binding.bool_option is not None:
+            setattr(self, binding.bool_option, enabled)
+            return
+        feature = binding.libvmaf_feature
+        assert feature is not None
+        if enabled:
+            if feature not in self.extra_features:
+                self.extra_features.append(feature)
+        else:
+            self.extra_features = [item for item in self.extra_features if item != feature]
 
 def clone_options(opts: VmafOptions) -> VmafOptions:
     """A real copy, not a shared reference -- each row needs its own
@@ -213,10 +234,6 @@ class FrameScore:
     vmaf_neg: float | None = None
 
 
-# All metrics are optional. Missing columns are represented by None.
-METRIC_NAMES = ("vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg")
-
-
 class FrameScores:
     """Per-frame scores for a whole run, stored as packed arrays rather than
     one object per frame (structure-of-arrays).
@@ -232,37 +249,69 @@ class FrameScores:
     both of which genuinely occur.
     """
 
-    __slots__ = ("frame", "psnr", "ssim", "time", "vmaf", "vmaf_neg", "xpsnr")
+    __slots__ = ("_metrics", "frame", "time")
 
     def __init__(
         self,
         frame: np.ndarray,
         time: np.ndarray,
-        vmaf: np.ndarray | None,
+        vmaf: np.ndarray | None = None,
         psnr: np.ndarray | None = None,
         ssim: np.ndarray | None = None,
         xpsnr: np.ndarray | None = None,
         vmaf_neg: np.ndarray | None = None,
+        *,
+        metrics: Mapping[str, object] | None = None,
     ) -> None:
         self.frame = np.asarray(frame, dtype=np.int32)
         # float64 for time: bisect during hover needs to stay exact across a
         # multi-hour run, where float32 only has ~0.001s of resolution.
         self.time = np.asarray(time, dtype=np.float64)
-        self.vmaf = None if vmaf is None else np.asarray(vmaf, dtype=np.float32)
-        self.psnr = None if psnr is None else np.asarray(psnr, dtype=np.float32)
-        self.ssim = None if ssim is None else np.asarray(ssim, dtype=np.float32)
-        self.xpsnr = None if xpsnr is None else np.asarray(xpsnr, dtype=np.float32)
-        self.vmaf_neg = None if vmaf_neg is None else np.asarray(vmaf_neg, dtype=np.float32)
+        self._metrics: dict[str, np.ndarray] = {}
+        metric_arrays = {
+            "vmaf": vmaf, "psnr": psnr, "ssim": ssim,
+            "xpsnr": xpsnr, "vmaf_neg": vmaf_neg,
+        }
+        for key, values in metric_arrays.items():
+            if values is not None:
+                self._metrics[key] = np.asarray(values, dtype=np.float32)
+        if metrics is not None:
+            for key, values in metrics.items():
+                if values is None:
+                    continue
+                self._metrics[key] = np.asarray(values, dtype=np.float32)
+
+    def _metric_values(self, metric: str) -> np.ndarray | None:
+        return self._metrics.get(metric)
+
+    @property
+    def vmaf(self) -> np.ndarray | None:
+        return self._metric_values("vmaf")
+
+    @property
+    def vmaf_neg(self) -> np.ndarray | None:
+        return self._metric_values("vmaf_neg")
+
+    @property
+    def psnr(self) -> np.ndarray | None:
+        return self._metric_values("psnr")
+
+    @property
+    def ssim(self) -> np.ndarray | None:
+        return self._metric_values("ssim")
+
+    @property
+    def xpsnr(self) -> np.ndarray | None:
+        return self._metric_values("xpsnr")
 
     @classmethod
     def empty(cls) -> FrameScores:
-        f32, i32, f64 = np.float32, np.int32, np.float64
-        return cls(np.empty(0, i32), np.empty(0, f64), np.empty(0, f32))
+        i32, f64 = np.int32, np.float64
+        return cls(np.empty(0, i32), np.empty(0, f64))
 
     @classmethod
     def from_frames(cls, frames: Sequence[FrameScore]) -> FrameScores:
-        """Packs a list of per-frame objects (tests, older save files) down
-        into arrays."""
+        """Pack a sequence of per-frame view objects into arrays."""
         if not frames:
             return cls.empty()
 
@@ -282,10 +331,14 @@ class FrameScores:
 
     def values(self, metric: str) -> np.ndarray | None:
         """The array for a metric by name, or None if it wasn't computed."""
-        return getattr(self, metric)
+        return self._metrics.get(metric)
 
     def has(self, metric: str) -> bool:
         return self.values(metric) is not None
+
+    @property
+    def metric_keys(self) -> tuple[str, ...]:
+        return tuple(self._metrics)
 
     def __len__(self) -> int:
         return int(self.frame.shape[0])
@@ -298,11 +351,8 @@ class FrameScores:
             def sliced(arr: np.ndarray | None) -> np.ndarray | None:
                 return None if arr is None else arr[index]
 
-            return FrameScores(
-                frame=self.frame[index], time=self.time[index], vmaf=sliced(self.vmaf),
-                psnr=sliced(self.psnr), ssim=sliced(self.ssim), xpsnr=sliced(self.xpsnr),
-                vmaf_neg=sliced(self.vmaf_neg),
-            )
+            return FrameScores(self.frame[index], self.time[index],
+                               metrics={key: sliced(values) for key, values in self._metrics.items()})
 
         def optional(arr: np.ndarray | None) -> float | None:
             if arr is None:
@@ -323,13 +373,12 @@ class FrameScores:
     def with_values(self, metric: str, values: np.ndarray | None) -> FrameScores:
         """A copy with one metric's column replaced -- the supported way to
         change scores, since the per-frame views are read-only."""
-        columns = {m: self.values(m) for m in ("psnr", "ssim", "xpsnr", "vmaf_neg")}
-        if metric in columns:
+        columns = dict(self._metrics)
+        if values is None:
+            columns.pop(metric, None)
+        else:
             columns[metric] = values
-            return FrameScores(self.frame, self.time, self.vmaf, **columns)
-        if metric == "vmaf":
-            return FrameScores(self.frame, self.time, values, **columns)
-        raise KeyError(f"unknown metric {metric!r}")
+        return FrameScores(self.frame, self.time, metrics=columns)
 
     def __iter__(self) -> Iterator[FrameScore]:
         for i in range(len(self)):
@@ -340,7 +389,9 @@ class FrameScores:
             return NotImplemented
         if not (np.array_equal(self.frame, other.frame) and np.array_equal(self.time, other.time)):
             return False
-        for metric in METRIC_NAMES:
+        if set(self._metrics) != set(other._metrics):
+            return False
+        for metric in self._metrics:
             a, b = self.values(metric), other.values(metric)
             if (a is None) != (b is None):
                 return False
@@ -350,15 +401,12 @@ class FrameScores:
 
     def nbytes(self) -> int:
         total = self.frame.nbytes + self.time.nbytes
-        for metric in METRIC_NAMES:
-            arr = self.values(metric)
-            if arr is not None:
-                total += arr.nbytes
+        total += sum(arr.nbytes for arr in self._metrics.values())
         return total
 
 
 @dataclass
-class VmafRunResult:
+class ComparisonResult:
     source: Path
     distorted: Path
     frames: FrameScores
@@ -374,22 +422,50 @@ class VmafRunResult:
     # scores, even if the row's own settings were changed since.
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
     # Frame Compare needs the exact preprocessing recipe that produced the
-    # scored pictures. These defaults keep older saved runs/loaders valid.
+    # scored pictures.
     scale_algorithm: str = "bicubic"
     resample_target: ResampleTarget | None = None
     compared_frame_count: int = 0
     # The UI choice that produced ``model`` (for example a bundled VMAF v1
-    # model).  Older saved runs do not have this field and remain loadable.
+    # model). Programmatically-created results may leave it unset.
     model_choice: str | None = None
+    # Generic results are authoritative. ``frames`` is the shared-axis view
+    # consumed by the current UI and established frame-oriented tools.
+    metric_results: MetricResultSet = field(default_factory=MetricResultSet)
 
     def __post_init__(self) -> None:
-        # Accept a plain list of FrameScore and pack it. Callers that build a
-        # result by hand (and every older caller) stay valid, while storage
-        # is always the array form -- there's exactly one representation to
-        # reason about downstream.
+        # Accept a plain list of FrameScore and pack it so storage always has
+        # exactly one representation downstream.
         if not isinstance(self.frames, FrameScores):
             self.frames = FrameScores.from_frames(self.frames)
-        if self.model == "version=vmaf_v0.6.1neg" and self.frames.vmaf_neg is None:
-            self.frames = self.frames.with_values("vmaf_neg", self.frames.vmaf).with_values("vmaf", None)
+        if not self.metric_results:
+            self.metric_results = results_from_frame_scores(self.frames)
+        else:
+            compatible = frame_scores_from_results(self.metric_results)
+            # Generic-only construction supplies FrameScores.empty(); rebuild
+            # the UI view when the available frame metrics share one axis.
+            if not self.frames and compatible:
+                self.frames = compatible
         if self.compared_frame_count <= 0 and len(self.frames):
             self.compared_frame_count = int(self.frames.frame[-1]) + 1
+
+    def metric(self, key: str):
+        return self.metric_results.get(key)
+
+    def has_metric(self, key: str) -> bool:
+        return self.metric_results.has(key)
+
+    def frame_metric(self, key: str):
+        return self.metric_results.frame(key)
+
+    def sequence_metric(self, key: str):
+        return self.metric_results.sequence(key)
+
+    def merge_metric_results(self, incoming: MetricResultSet) -> None:
+        """Single merge point for result adapters; UI never merges arrays."""
+        from vmaf_app.core.metric_results import merge_metric_results
+
+        self.metric_results = merge_metric_results(self.metric_results, incoming)
+        compatible = frame_scores_from_results(self.metric_results)
+        if compatible:
+            self.frames = compatible

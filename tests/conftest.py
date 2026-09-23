@@ -20,15 +20,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from vmaf_app.core import crop_detect, result_cache
 from vmaf_app.core.app_paths import DATA_DIR_NAME
-from vmaf_app.core.settings import SETTINGS_VERSION, Settings
+from vmaf_app.core.settings import Settings
 
 
 def _real_user_cache_dir() -> Path:
     """Where the installed app keeps results. Nothing in the suite may touch
     it, so it is resolved once here to be recognised and refused."""
-    # Compute this directly: user_data_dir() performs the one-time product
-    # rename migration, and merely starting a test suite must never move the
-    # user's real files.
+    # Compute this directly rather than invoking application path helpers.
     return Path.home() / DATA_DIR_NAME / "results_cache"
 
 
@@ -48,14 +46,11 @@ def isolate_user_state(tmp_path, monkeypatch):
     # the suite and pointed it back at the user's own cache.
     #
     # parallel_jobs is pinned because its default depends on the core count
-    # of the machine running the suite (see default_parallel_jobs), and the
-    # version is current so the migration that would re-derive it stays out
-    # of the baseline. Tests of either write their own file.
+    # of the machine running the suite (see default_parallel_jobs).
     settings_file.write_text(
         json.dumps({
             "cache_dir": str(cache),
             "parallel_jobs": 1,
-            "settings_version": SETTINGS_VERSION,
         }),
         encoding="utf-8",
     )

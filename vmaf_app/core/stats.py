@@ -6,17 +6,11 @@ from itertools import pairwise
 
 import numpy as np
 
-from vmaf_app.core.models import VmafRunResult
+from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation
+from vmaf_app.core.models import ComparisonResult
 
 # Default threshold breakdown requested: >95, >90, >85, <85, <80, <70
-DEFAULT_THRESHOLDS: list[tuple[str, float]] = [
-    (">", 95.0),
-    (">", 90.0),
-    (">", 85.0),
-    ("<", 85.0),
-    ("<", 80.0),
-    ("<", 70.0),
-]
+DEFAULT_THRESHOLDS = METRIC_BY_KEY["vmaf"].thresholds
 
 HISTOGRAM_BIN_EDGES: list[float] = [0, 70, 80, 85, 90, 95, 100]
 
@@ -124,11 +118,11 @@ class VmafStats:
 #: ffmpeg's own accumulator does with sqrt(0). Checked against ffmpeg's
 #: printed average on the same clip: 54.9459 over 72 frames and 45.0831 over
 #: 480, matching to four decimal places both times.
-ARITHMETIC = "arithmetic"
-SQUARE_MEAN_ROOT = "square_mean_root"
+ARITHMETIC = MetricAggregation.ARITHMETIC
+SQUARE_MEAN_ROOT = MetricAggregation.SQUARE_MEAN_ROOT_DB
 
 #: Only XPSNR differs, and only because only XPSNR reports infinity.
-AGGREGATE_BY_METRIC = {"xpsnr": SQUARE_MEAN_ROOT}
+AGGREGATE_BY_METRIC = {key: definition.aggregation for key, definition in METRIC_BY_KEY.items()}
 
 
 def _square_mean_root_db(data: np.ndarray) -> float:
@@ -141,7 +135,7 @@ def _square_mean_root_db(data: np.ndarray) -> float:
     return float("inf") if mean <= 0.0 else float(-20.0 * np.log10(mean))
 
 
-def aggregate_scores(values, aggregate: str = ARITHMETIC) -> float | None:
+def aggregate_scores(values, aggregate: MetricAggregation | str = ARITHMETIC) -> float | None:
     """One number for a whole run, by the metric's own convention.
 
     None when there is nothing to combine. NaN frames -- ones the metric was
@@ -160,7 +154,7 @@ def aggregate_scores(values, aggregate: str = ARITHMETIC) -> float | None:
 def compute_stats(
     values,
     thresholds: list[tuple[str, float]] | None = None,
-    aggregate: str = ARITHMETIC,
+    aggregate: MetricAggregation | str = ARITHMETIC,
 ) -> VmafStats:
     """Despite the name (kept for the VMAF-specific callers/tests that exist
     already), this works over any sequence of per-frame float scores -- PSNR,
@@ -255,5 +249,5 @@ def compute_stats(
     )
 
 
-def stats_for_run(result: VmafRunResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
+def stats_for_run(result: ComparisonResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
     return compute_stats(result.frames.vmaf if result.frames.vmaf is not None else [], thresholds)
