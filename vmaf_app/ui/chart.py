@@ -163,11 +163,13 @@ class ChartWidget(QWidget):
         lo = min(float(np.min(s.values[np.isfinite(s.values)])) for s in visible)
         hi = max(float(np.max(s.values[np.isfinite(s.values)])) for s in visible)
         if self.fixed_y_max is not None:
-            # Bounded scale (VMAF): pin the top at the ceiling with no wasted
-            # headroom, and floor the bottom to a round number below the data.
+            # Bounded scale (VMAF): use the metric ceiling when the scores fit,
+            # but grow the axis when a valid model (for example VMAF v1 4K/3H)
+            # can exceed it. Never clip real samples at the nominal ceiling.
+            top = max(self.fixed_y_max, float(np.ceil(hi / 5.0) * 5.0))
             bottom = int(np.floor(lo / 5.0)) * 5
-            bottom = min(bottom, self.fixed_y_max - 5)
-            self._y_range = (float(bottom), float(self.fixed_y_max))
+            bottom = min(bottom, top - 5)
+            self._y_range = (float(bottom), top)
         else:
             # Unbounded (dB, SSIM): pad slightly so the extremes aren't drawn
             # exactly on the frame.

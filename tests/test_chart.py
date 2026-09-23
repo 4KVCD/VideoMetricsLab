@@ -84,6 +84,13 @@ def test_y_range_is_capped_at_the_ceiling_with_no_headroom(qapp):
     assert chart.y_range()[1] == 100.0
 
 
+def test_y_range_expands_to_show_vmaf_v1_scores_above_100(qapp):
+    chart = _chart(qapp)
+    chart.set_series(0, _series([99.0, 105.0, 110.0]))
+
+    assert chart.y_range() == (95.0, 110.0)
+
+
 def test_y_range_floors_the_bottom_below_the_lowest_score(qapp):
     chart = _chart(qapp)
     chart.set_series(0, _series([95.0] * 10 + [62.0] + [95.0] * 10))

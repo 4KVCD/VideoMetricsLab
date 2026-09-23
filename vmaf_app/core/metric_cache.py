@@ -122,11 +122,17 @@ def _atomic_npz(path: Path, arrays: dict[str, np.ndarray]) -> None:
 
 
 def _metadata(result, spec: MetricRequestSpec) -> np.ndarray:
+    provenance = provenance_to_dict(result.provenance)
+    if result.key != "vmaf":
+        # This cache supports score reuse. Non-VMAF implementation-library
+        # versions must not become part of its stored results; VMAF retains
+        # version provenance alongside its model-specific request identity.
+        provenance["implementation_version"] = ""
     data = {
         "format_version": METRIC_CACHE_FORMAT_VERSION,
         "kind": "frame" if isinstance(result, FrameMetricResult) else "sequence",
         "key": result.key, "request": spec.identity_dict(),
-        "provenance": provenance_to_dict(result.provenance),
+        "provenance": provenance,
     }
     return np.array(_canonical(data))
 

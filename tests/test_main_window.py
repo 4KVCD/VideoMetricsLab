@@ -87,6 +87,14 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
+def test_main_window_title_includes_release_version(qapp):
+    win = MainWindow()
+    try:
+        assert win.windowTitle() == "VideoMetricsLab 1.1.1"
+    finally:
+        win.close()
+
+
 def _ask_for_vmaf_only(win, row: int) -> None:
     """Narrows a row to VMAF, matching what _fake_completed_run provides.
 

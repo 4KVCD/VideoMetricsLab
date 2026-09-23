@@ -48,7 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vmaf_app import APP_NAME
+from vmaf_app import APP_NAME, __version__
 from vmaf_app.core import result_cache
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
@@ -220,7 +220,7 @@ class RowData:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(f"{APP_NAME} {__version__}")
         # Settings first: the ffmpeg location and what new rows default to
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
