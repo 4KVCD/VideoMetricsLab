@@ -312,19 +312,14 @@ def load_result(
 
     from vmaf_app.core.metric_results import frame_scores_from_results
 
-    expected_frames = context.get("compared_frame_count")
-    if isinstance(expected_frames, int) and expected_frames > 0:
-        compatible = MetricResultSet()
-        for key in results:
-            metric = results.get(key)
-            if isinstance(metric, FrameMetricResult) and len(metric.frame) != expected_frames:
-                continue
-            if metric is not None:
-                compatible.add(metric)
-        results = compatible
-        if not results:
-            return None
-
+    # Every stored metric is kept, whatever its number of scores. A metric's
+    # frame axis is its own: a subsampled one holds every n-th frame, and
+    # FFmpeg and Vship can legitimately end a frame apart. Comparing each
+    # metric's length with context.json's compared_frame_count threw such
+    # metrics away on reload -- and context.json is rewritten by every run,
+    # so which metric survived depended on which run was saved last. The
+    # directory is already keyed by file identity and the comparison recipe,
+    # which is what makes a stored score valid for this comparison.
     frame_view = frame_scores_from_results(results)
 
     try:

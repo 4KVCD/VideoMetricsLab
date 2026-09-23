@@ -399,3 +399,46 @@ def test_cache_summary_counts_comparisons_not_metric_artifacts(tmp_path):
     count, size_bytes = result_cache.cache_summary(tmp_path)
     assert count == 1
     assert size_bytes > 0
+
+
+
+def _stored_and_reloaded(tmp_path, options, metrics, compared_frame_count):
+    """Store `metrics` as one run of a 24 fps comparison, then load it back."""
+    source, test = _paths(tmp_path)
+    info = VideoInfo(test, 64, 48, 24.0, 1.0, 24, "hevc")
+    result = ComparisonResult(
+        source=source, distorted=test, frames=FrameScores.empty(), fps=24.0, model="",
+        source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+        compared_frame_count=compared_frame_count, metric_results=MetricResultSet(metrics),
+    )
+    request = analysis_request_from_vmaf_options(options, tuple(m.key for m in metrics))
+    result_cache.store(source, test, result, "run", request, tmp_path)
+    loaded = result_cache.load_cached(source, test, request, tmp_path)
+    return None if loaded is None else loaded[0]
+
+
+def test_subsampled_perceptual_scores_survive_a_reload(tmp_path):
+    """24 frames scored every fourth frame are six scores, not 24."""
+    frames = list(range(0, 24, 4))
+    gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
+    metric = FrameMetricResult("ssimulacra2", frames, [f / 24 for f in frames], [80.0] * 6, gpu)
+
+    loaded = _stored_and_reloaded(tmp_path, VmafOptions(n_subsample=4), [metric], 24)
+
+    assert loaded is not None and loaded.has_metric("ssimulacra2")
+    assert list(loaded.metric("ssimulacra2").frame) == frames
+
+
+def test_metrics_that_end_a_frame_apart_all_survive_a_reload(tmp_path):
+    """FFmpeg scored 23 frames and Vship 24 in one run; the run recorded 24.
+    VMAF used to be dropped on reload for not matching."""
+    cpu = MetricProvenance("ffmpeg/libvmaf", "", "cpu", "ffmpeg-libvmaf-v1")
+    gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
+    vmaf = FrameMetricResult("vmaf", range(23), [f / 24 for f in range(23)], [95.0] * 23, cpu)
+    ssim2 = FrameMetricResult("ssimulacra2", range(24), [f / 24 for f in range(24)], [80.0] * 24, gpu)
+
+    loaded = _stored_and_reloaded(tmp_path, VmafOptions(), [vmaf, ssim2], 24)
+
+    assert loaded is not None
+    assert len(loaded.metric("vmaf").frame) == 23
+    assert len(loaded.metric("ssimulacra2").frame) == 24

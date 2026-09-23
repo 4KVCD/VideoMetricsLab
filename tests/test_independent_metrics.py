@@ -108,7 +108,12 @@ def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):
     assert _load_cached(source.path, distorted.path, alone) is None
     _clear_cached(source.path, distorted.path, alone)
     _store_cached(source.path, distorted.path, full, "full", alone)
-    assert _load_cached(source.path, distorted.path, mixed) is None
+    # The subsampled run stored first is still a valid answer for the
+    # subsampled request (it was never cleared); the full-frame XPSNR must
+    # not stand in for it.
+    reloaded, _label = _load_cached(source.path, distorted.path, mixed)
+    assert len(reloaded.metric("xpsnr").frame) == 4
+    assert len(reloaded.metric("vmaf").frame) == 4
 
 
 @pytest.mark.parametrize("names", COMBINATIONS)
