@@ -2041,6 +2041,25 @@ def test_options_panel_sits_below_the_file_table_not_beside_it(qapp):
     assert options_y > files_y
 
 
+def test_perceptual_compute_controls_default_to_gpu_and_apply_per_metric(qapp):
+    win = MainWindow()
+    assert [win.ssimulacra2_backend_combo.itemText(i) for i in range(win.ssimulacra2_backend_combo.count())] == ["GPU", "CPU"]
+    assert [win.butteraugli_backend_combo.itemText(i) for i in range(win.butteraugli_backend_combo.count())] == ["GPU", "CPU"]
+    assert win.ssimulacra2_backend_combo.currentText() == "GPU"
+    assert win.butteraugli_backend_combo.currentText() == "GPU"
+
+    row = win._add_table_row(Path("test.mkv"))
+    win._panel_target_rows = [row]
+    win.butteraugli_backend_combo.setCurrentIndex(1)
+
+    assert win._rows[row].metric_backends == {"ssimulacra2": "gpu", "butteraugli": "cpu"}
+    assert win._default_metric_backends["butteraugli"] == "cpu"
+    new_row = win._add_table_row(Path("later.mkv"))
+    assert win._rows[new_row].metric_backends["butteraugli"] == "cpu"
+    assert win._rows[new_row].metric_backends["ssimulacra2"] == "gpu"
+    win.close()
+
+
 def test_metric_toggle_does_not_clobber_other_per_row_settings(qapp):
     # The global default used to be rebuilt from row 0's options, so toggling
     # a metric column pushed that one row's unrelated model/crop/GPU choices

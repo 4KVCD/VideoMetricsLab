@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
@@ -30,6 +30,7 @@ class VmafJob:
     # Selection lives with the job/request, not VmafOptions: standalone
     # metrics are not FFmpeg adapter configuration.
     metric_keys: tuple[str, ...] | None = None
+    metric_backends: dict[str, str] = field(default_factory=dict)
 
 
 #: Two, because a third buys nothing. Measured on a 24-core machine over four
@@ -256,7 +257,9 @@ class VmafWorker(QThread):
             try:
                 # The plan is deliberately used in production, not only in
                 # tests. Part 2 still produces one efficient FFmpeg task.
-                request = analysis_request_from_vmaf_options(options, job.metric_keys)
+                request = analysis_request_from_vmaf_options(
+                    options, job.metric_keys, job.metric_backends,
+                )
                 plan = build_execution_plan(request)
                 result = None
                 combined = MetricResultSet()

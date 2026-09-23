@@ -45,6 +45,11 @@ class ExecutionPreferences:
     gpu_decode: bool
     gpu_vendor: GpuVendor
     n_threads: int
+    perceptual_backends: tuple[tuple[str, str], ...] = ()
+
+    def perceptual_backend(self, metric_key: str) -> str:
+        """Return the selected compute backend for a standalone perceptual metric."""
+        return dict(self.perceptual_backends).get(metric_key, "gpu")
 
 
 @dataclass(frozen=True, slots=True)

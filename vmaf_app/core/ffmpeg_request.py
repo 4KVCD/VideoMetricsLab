@@ -1,6 +1,7 @@
 """Adapter from the current FFmpeg/UI options into generic analysis requests."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from vmaf_app.core.analysis_request import (
@@ -93,8 +94,17 @@ def metric_request_specs(
 
 def analysis_request_from_vmaf_options(
     options: VmafOptions, metric_keys: tuple[str, ...] | None = None,
+    perceptual_backends: Mapping[str, str] | None = None,
 ) -> AnalysisRequest:
     """Freeze one mutable UI/backend option object into a generic request."""
+    backend_choices = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
+    if perceptual_backends is not None:
+        for key, backend in perceptual_backends.items():
+            if key not in backend_choices:
+                raise ValueError(f"Unknown perceptual metric backend setting: {key!r}")
+            if backend not in {"gpu", "cpu"}:
+                raise ValueError(f"Unsupported {key} compute backend: {backend!r}")
+            backend_choices[key] = backend
     return AnalysisRequest(
         recipe=comparison_recipe_from_vmaf_options(options),
         metrics=metric_request_specs(options, metric_keys),
@@ -102,6 +112,7 @@ def analysis_request_from_vmaf_options(
             gpu_decode=options.gpu_decode,
             gpu_vendor=options.gpu_vendor,
             n_threads=options.n_threads,
+            perceptual_backends=tuple(sorted(backend_choices.items())),
         ),
     )
 

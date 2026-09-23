@@ -197,6 +197,11 @@ class RowData:
     # Non-FFmpeg metrics deliberately live outside VmafOptions. The row keeps
     # one generic selection alongside the existing FFmpeg adapter settings.
     extra_metric_keys: set[str] = field(default_factory=set)
+    # Compute preference is execution-only and must not invalidate scores or
+    # cache entries. GPU is the default; Vship falls back to CPU if unavailable.
+    metric_backends: dict[str, str] = field(default_factory=lambda: {
+        "ssimulacra2": "gpu", "butteraugli": "gpu",
+    })
     analysis_status: str = ""
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
@@ -296,6 +301,7 @@ class MainWindow(QMainWindow):
         # whichever rows are selected, not one global setting.
         self._default_options = self._options_from_settings()  # what a newly-added row starts with
         self._default_extra_metric_keys: set[str] = set()
+        self._default_metric_backends = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
         self._panel_target_rows: list[int] = []  # rows the panel currently edits
         self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
         self._syncing_panel = False  # guards against write-back while populating the panel programmatically
@@ -886,6 +892,30 @@ class MainWindow(QMainWindow):
         gpu_row.addWidget(self.gpu_vendor_combo)
         performance_form.addRow("GPU decode:", gpu_row)
 
+        self.ssimulacra2_backend_combo = QComboBox()
+        self.ssimulacra2_backend_combo.addItems(["GPU", "CPU"])
+        self.ssimulacra2_backend_combo.setToolTip(
+            "GPU uses Vship when a supported device is available. If GPU computation "
+            "cannot run, the metric automatically falls back to CPU. Choose CPU to "
+            "always use the bundled libjxl reference implementation."
+        )
+        self.ssimulacra2_backend_combo.currentIndexChanged.connect(
+            lambda _index: self._on_metric_backend_changed("ssimulacra2")
+        )
+        performance_form.addRow("SSIMULACRA2 compute:", self.ssimulacra2_backend_combo)
+
+        self.butteraugli_backend_combo = QComboBox()
+        self.butteraugli_backend_combo.addItems(["GPU", "CPU"])
+        self.butteraugli_backend_combo.setToolTip(
+            "GPU uses Vship when a supported device is available. If GPU computation "
+            "cannot run, the metric automatically falls back to CPU. Choose CPU to "
+            "always use the bundled libjxl reference implementation."
+        )
+        self.butteraugli_backend_combo.currentIndexChanged.connect(
+            lambda _index: self._on_metric_backend_changed("butteraugli")
+        )
+        performance_form.addRow("Butteraugli compute:", self.butteraugli_backend_combo)
+
         detected = detected_gpu_vendors()
         if detected:
             names = ", ".join(v.value.upper() for v in detected)
@@ -1311,6 +1341,7 @@ class MainWindow(QMainWindow):
         self._rows.append(RowData(
             path=path, options=clone_options(self._default_options),
             extra_metric_keys=set(self._default_extra_metric_keys),
+            metric_backends=dict(self._default_metric_backends),
         ))
         self._set_row_metrics(row)
         return row
@@ -2126,6 +2157,16 @@ class MainWindow(QMainWindow):
             self.panel_target_label.setText(
                 "Select one or more videos in the table to view or edit their settings."
             )
+            self._syncing_panel = True
+            try:
+                self.ssimulacra2_backend_combo.setCurrentIndex(
+                    0 if self._default_metric_backends["ssimulacra2"] == "gpu" else 1
+                )
+                self.butteraugli_backend_combo.setCurrentIndex(
+                    0 if self._default_metric_backends["butteraugli"] == "gpu" else 1
+                )
+            finally:
+                self._syncing_panel = False
             return
 
         # A run owns these settings until it finishes. This is reached from
@@ -2156,6 +2197,17 @@ class MainWindow(QMainWindow):
             self.gpu_checkbox.setChecked(opts.gpu_decode)
             self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
             self.gpu_vendor_combo.setEnabled(opts.gpu_decode)
+
+            selected_backends = (
+                self._rows[self._panel_target_rows[0]].metric_backends
+                if self._panel_target_rows else self._default_metric_backends
+            )
+            self.ssimulacra2_backend_combo.setCurrentIndex(
+                0 if selected_backends.get("ssimulacra2", "gpu") == "gpu" else 1
+            )
+            self.butteraugli_backend_combo.setCurrentIndex(
+                0 if selected_backends.get("butteraugli", "gpu") == "gpu" else 1
+            )
 
             self.crop_combo.setCurrentIndex(0 if opts.crop_mode == CropMode.AUTO else 1)
 
@@ -2395,6 +2447,21 @@ class MainWindow(QMainWindow):
                 self._set_row_black_bars(row)
         self._reload_cached_for_rows(changed_rows)
 
+    def _on_metric_backend_changed(self, metric_key: str) -> None:
+        """Apply one standalone metric's compute preference without cache churn."""
+        if self._syncing_panel:
+            return
+        combo = {
+            "ssimulacra2": self.ssimulacra2_backend_combo,
+            "butteraugli": self.butteraugli_backend_combo,
+        }.get(metric_key)
+        if combo is None:
+            raise ValueError(f"Unknown standalone metric: {metric_key}")
+        backend = "gpu" if combo.currentIndex() == 0 else "cpu"
+        self._default_metric_backends[metric_key] = backend
+        for row in self._panel_target_rows:
+            self._rows[row].metric_backends[metric_key] = backend
+
     def _on_scale_direction_combo_changed(self, index: int) -> None:
         if self._syncing_panel:
             return
@@ -2508,6 +2575,7 @@ class MainWindow(QMainWindow):
             jobs.append(VmafJob(
                 self._source_info, dist_info, job_options, label=row_data.path.stem,
                 result_distorted_path=row_data.path, metric_keys=self._requested_metrics(row_data),
+                metric_backends=dict(row_data.metric_backends),
             ))
             job_rows.append(row_data)
             # A resample test's output timeline is driven by the reference (see

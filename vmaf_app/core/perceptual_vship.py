@@ -679,29 +679,87 @@ def apply_vship_cpu_fallback(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
-    """Shared fallback entry point; import the CPU code lazily to avoid cycles."""
+    """Run selected backends, with a per-metric GPU-to-CPU fallback."""
     from vmaf_app.core.perceptual_cpu import _resolve_crops, run_perceptual_task
 
+    cpu_specs = tuple(spec for spec in specs if request.execution.perceptual_backend(spec.key) == "cpu")
+    gpu_specs = tuple(spec for spec in specs if request.execution.perceptual_backend(spec.key) == "gpu")
+    if len(cpu_specs) + len(gpu_specs) != len(specs):
+        raise ValueError("perceptual metric backend must be either GPU or CPU")
+
+    # An explicit CPU selection must not probe Vship or touch a compute GPU.
+    if not gpu_specs:
+        return run_perceptual_task(
+            source, distorted, request, cpu_specs,
+            on_progress=on_progress, on_status=on_status,
+            cancel_event=cancel_event, process_handle=process_handle,
+        )
+
     device, reason = detect_vship_device()
+    if device is None:
+        if on_status:
+            on_status(f"Vship GPU unavailable ({reason}); using CPU reference metrics…")
+        return run_perceptual_task(
+            source, distorted, request, specs,
+            on_progress=on_progress, on_status=on_status,
+            cancel_event=cancel_event, process_handle=process_handle,
+        )
+
     crops = _resolve_crops(
         source, distorted, request.recipe, cancel_event, process_handle, on_status,
     )
-    if device is not None:
-        try:
-            return run_vship_task(
-                source, distorted, request, specs, device, *crops,
-                on_progress=on_progress, on_status=on_status,
-                cancel_event=cancel_event, process_handle=process_handle,
-            )
-        except PerceptualCancelled:
-            raise
-        except Exception as error:
-            reason = str(error)
+    try:
+        gpu_output = run_vship_task(
+            source, distorted, request, gpu_specs, device, *crops,
+            on_progress=(
+                (lambda cur, total, fps: on_progress(cur, total * 2, fps))
+                if cpu_specs and on_progress else on_progress
+            ),
+            on_status=on_status, cancel_event=cancel_event,
+            process_handle=process_handle,
+        )
+    except PerceptualCancelled:
+        raise
+    except Exception as error:
+        if cancel_event is not None and cancel_event.is_set():
+            raise PerceptualCancelled("Cancelled by user") from error
+        if on_status:
+            on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
+        # Run all metrics together after a GPU failure so CPU frame extraction
+        # happens only once, and the returned result remains atomic.
+        return run_perceptual_task(
+            source, distorted, request, specs,
+            on_progress=on_progress, on_status=on_status,
+            cancel_event=cancel_event, process_handle=process_handle,
+            resolved_crops=crops,
+        )
+
+    if not cpu_specs:
+        return gpu_output
+
     if on_status:
-        on_status(f"Vship GPU unavailable ({reason}); using CPU reference metrics…")
-    return run_perceptual_task(
-        source, distorted, request, specs,
-        on_progress=on_progress, on_status=on_status,
-        cancel_event=cancel_event, process_handle=process_handle,
-        resolved_crops=crops,
+        on_status("Calculating selected perceptual metric(s) on CPU…")
+
+    def report_cpu_progress(cur: int, total: int, fps: float) -> None:
+        if on_progress:
+            on_progress(total + cur, total * 2, fps)
+
+    cpu_output = run_perceptual_task(
+        source, distorted, request, cpu_specs,
+        on_progress=report_cpu_progress,
+        on_status=on_status, cancel_event=cancel_event,
+        process_handle=process_handle, resolved_crops=crops,
+    )
+    if gpu_output.compared_frame_count != cpu_output.compared_frame_count:
+        raise PerceptualRunError("GPU and CPU perceptual metrics produced different frame counts.")
+    combined = MetricResultSet()
+    for spec in specs:
+        value = gpu_output.metrics.get(spec.key) or cpu_output.metrics.get(spec.key)
+        if value is None:
+            raise PerceptualRunError(f"Selected backend did not produce {spec.key}.")
+        assert value is not None
+        combined.add(value)
+    return PerceptualTaskOutput(
+        combined, gpu_output.source_crop, gpu_output.distorted_crop,
+        gpu_output.compared_frame_count,
     )

@@ -219,6 +219,23 @@ def test_backend_routing_is_not_part_of_metric_cache_identity():
     assert metric_path(Path("cache"), cpu) == metric_path(Path("cache"), gpu)
 
 
+def test_perceptual_compute_choice_does_not_change_cache_key(tmp_path):
+    source, test = _paths(tmp_path)
+    options = VmafOptions()
+    requested = ("ssimulacra2", "butteraugli")
+    gpu_request = analysis_request_from_vmaf_options(
+        options, requested, {"ssimulacra2": "gpu", "butteraugli": "gpu"},
+    )
+    mixed_request = analysis_request_from_vmaf_options(
+        options, requested, {"ssimulacra2": "cpu", "butteraugli": "gpu"},
+    )
+
+    assert gpu_request.execution != mixed_request.execution
+    assert result_cache.cache_key(source, test, gpu_request) == result_cache.cache_key(
+        source, test, mixed_request,
+    )
+
+
 def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
     source, test = _paths(tmp_path)
     options = VmafOptions()

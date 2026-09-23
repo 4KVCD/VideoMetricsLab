@@ -33,6 +33,14 @@ def _cpu_output() -> PerceptualTaskOutput:
     return PerceptualTaskOutput(metrics, None, None, 1)
 
 
+def _single_metric_output(key: str, value: float, backend: str) -> PerceptualTaskOutput:
+    provenance = MetricProvenance(backend, "1", backend, f"{key}-{backend}-v1")
+    results = MetricResultSet([
+        FrameMetricResult(key, [0], [0.0], [value], provenance),
+    ])
+    return PerceptualTaskOutput(results, None, None, 1)
+
+
 def test_vship_device_info_matches_c_api_layout():
     assert ctypes.sizeof(vship._DeviceInfo) == 304
     assert [name for name, _kind in vship._DeviceInfo._fields_] == [
@@ -73,6 +81,62 @@ def test_no_supported_gpu_falls_back_to_cpu(monkeypatch):
 
     assert actual is expected
     assert any("no supported GPU" in status and "CPU" in status for status in statuses)
+
+
+def test_cpu_selection_skips_gpu_detection(monkeypatch):
+    source, test = _info("source.mkv"), _info("test.mkv")
+    request = analysis_request_from_vmaf_options(
+        VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2", "butteraugli"),
+        {"ssimulacra2": "cpu", "butteraugli": "cpu"},
+    )
+    expected = _cpu_output()
+    calls = []
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: pytest.fail("CPU mode must not probe Vship"))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", lambda *args, **kwargs: calls.append(args[3]) or expected)
+
+    actual = vship.apply_vship_cpu_fallback(source, test, request, request.metrics)
+
+    assert actual is expected
+    assert [spec.key for spec in calls[0]] == ["ssimulacra2", "butteraugli"]
+
+
+def test_mixed_backend_selection_runs_each_metric_on_selected_backend(monkeypatch):
+    source, test = _info("source.mkv"), _info("test.mkv")
+    request = analysis_request_from_vmaf_options(
+        VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2", "butteraugli"),
+        {"ssimulacra2": "gpu", "butteraugli": "cpu"},
+    )
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "4.0.2", None)
+    crops = (None, None)
+    routed = {"gpu": [], "cpu": []}
+    progress = []
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: crops)
+
+    def run_gpu(_source, _test, _request, specs, _device, *_crops, on_progress=None, **_kwargs):
+        routed["gpu"].extend(spec.key for spec in specs)
+        on_progress(1, 1, 10.0)
+        return _single_metric_output("ssimulacra2", 91.0, "gpu")
+
+    def run_cpu(_source, _test, _request, specs, *, resolved_crops=None, on_progress=None, **_kwargs):
+        routed["cpu"].extend(spec.key for spec in specs)
+        assert resolved_crops == crops
+        on_progress(1, 1, 8.0)
+        return _single_metric_output("butteraugli", 0.2, "cpu")
+
+    monkeypatch.setattr(vship, "run_vship_task", run_gpu)
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", run_cpu)
+
+    actual = vship.apply_vship_cpu_fallback(
+        source, test, request, request.metrics,
+        on_progress=lambda cur, total, fps: progress.append((cur, total, fps)),
+    )
+
+    assert routed == {"gpu": ["ssimulacra2"], "cpu": ["butteraugli"]}
+    assert actual.metrics.keys() == ("ssimulacra2", "butteraugli")
+    assert actual.metrics.get("ssimulacra2").provenance.compute_backend == "gpu"
+    assert actual.metrics.get("butteraugli").provenance.compute_backend == "cpu"
+    assert progress == [(1, 2, 10.0), (2, 2, 8.0)]
 
 
 def test_vship_processing_error_falls_back_without_repeating_crop_detection(monkeypatch):
