@@ -738,12 +738,12 @@ class MainWindow(QMainWindow):
         files_layout.addLayout(src_row)
         self.source_info_label = QLabel("No reference selected.")
         self.source_info_label.setStyleSheet("color: #666;")
-        # The Metrics picker sits under Browse, at the right edge. Every
-        # metric is a column in the table below, and more are coming, so
-        # which ones appear -- and are calculated -- is a choice.
-        info_row = QHBoxLayout()
-        info_row.addWidget(self.source_info_label, stretch=1)
-        self.metrics_btn = QPushButton("Metrics...")
+        files_layout.addWidget(self.source_info_label)
+
+        # The metric picker belongs to the table: every metric is a column
+        # in it, and more are coming. So it sits on the table's top-right
+        # corner, in the row that introduces the table, with no gap below.
+        self.metrics_btn = QPushButton("Add/remove metrics")
         self.metrics_btn.setToolTip(
             "Choose which metrics appear in the test-video table. A hidden metric "
             "is not calculated; scores already saved for it come back when it is "
@@ -754,13 +754,17 @@ class MainWindow(QMainWindow):
                 self.metrics_btn.mapToGlobal(self.metrics_btn.rect().bottomLeft())
             )
         )
-        info_row.addWidget(self.metrics_btn)
-        files_layout.addLayout(info_row)
-
-        files_layout.addWidget(QLabel(
+        table_heading = QHBoxLayout()
+        table_heading.addWidget(QLabel(
             "Test videos to compare against the reference. Check rows to calculate; "
             "select rows to edit their settings below. Metric header shortcuts apply to all rows."
-        ))
+        ), stretch=1, alignment=Qt.AlignBottom)
+        table_heading.addWidget(self.metrics_btn, alignment=Qt.AlignBottom)
+        # One block, heading row and table, with no spacing between them, so
+        # the button reads as part of the table rather than as a separate row.
+        table_block = QVBoxLayout()
+        table_block.setSpacing(0)
+        table_block.addLayout(table_heading)
         metric_cols = [item.column for item in _METRIC_COLUMNS]
         self.distorted_table = FillColumnTable(
             0, len(_METRIC_COLUMNS) + 6, fill_column=COL_PATH,
@@ -847,7 +851,8 @@ class MainWindow(QMainWindow):
             self.distorted_table.setColumnWidth(
                 col, max(width, header.sectionSizeHint(col))
             )
-        files_layout.addWidget(self.distorted_table, stretch=1)
+        table_block.addWidget(self.distorted_table, stretch=1)
+        files_layout.addLayout(table_block, stretch=1)
 
         dist_btn_row = QHBoxLayout()
         add_dist_btn = QPushButton("Add files...")

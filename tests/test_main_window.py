@@ -3914,3 +3914,21 @@ def test_the_picker_is_locked_while_a_run_is_going(qapp):
     win._set_run_ui_active(False)
     assert win.metrics_btn.isEnabled()
     win.close()
+
+
+
+def test_the_metrics_button_sits_on_the_tables_top_right_corner(qapp):
+    """It belongs to the table, so it is attached to it: right edges aligned,
+    directly above, not up with the reference video's Browse button."""
+    win = MainWindow()
+    win.resize(1400, 900)
+    win.show()
+    qapp.processEvents()
+    button, table = win.metrics_btn, win.distorted_table
+    button_corner = button.mapTo(win.files_box, button.rect().bottomRight())
+    table_corner = table.mapTo(win.files_box, table.rect().topRight())
+
+    assert button.text() == "Add/remove metrics"
+    assert button_corner.x() == table_corner.x()
+    assert 0 <= table_corner.y() - button_corner.y() <= 2
+    win.close()
