@@ -203,10 +203,11 @@ def _extract_png_pairs(
     distorted_pattern = directory / "test-%08d.png"
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y", "-i", str(distorted.path.resolve()),
            "-i", str(source.path.resolve()), "-filter_complex", graph]
+    output_args = ["-fps_mode", "passthrough", "-pix_fmt", "rgb48le"]
     if recipe.duration_limit > 0:
-        cmd += ["-t", f"{recipe.duration_limit:.3f}"]
-    cmd += ["-map", "[distorted]", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le", str(distorted_pattern),
-            "-map", "[reference]", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le", str(reference_pattern)]
+        output_args = ["-t", f"{recipe.duration_limit:.3f}", *output_args]
+    cmd += ["-map", "[distorted]", *output_args, str(distorted_pattern)]
+    cmd += ["-map", "[reference]", *output_args, str(reference_pattern)]
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
     # A long FFmpeg extraction can write enough diagnostics to fill a pipe.

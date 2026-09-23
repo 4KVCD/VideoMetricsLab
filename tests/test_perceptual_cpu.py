@@ -77,6 +77,44 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     assert output.metrics.frame("ssimulacra2").provenance.compute_backend == "cpu"
 
 
+def test_cpu_frame_extraction_applies_duration_limit_to_both_outputs(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from vmaf_app.core.perceptual_cpu import _extract_png_pairs
+
+    request = _request()
+    recipe = replace(request.recipe, duration_limit=1.0)
+    command = []
+
+    class FinishedProcess:
+        pid = 123
+        returncode = 0
+
+        @staticmethod
+        def poll():
+            return 0
+
+    def fake_popen(args, **_kwargs):
+        command.extend(args)
+        (tmp_path / "test-00000001.png").touch()
+        (tmp_path / "reference-00000001.png").touch()
+        return FinishedProcess()
+
+    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
+
+    _extract_png_pairs(
+        _info("source.mp4"), _info("test.mp4"), recipe, None, None, 1,
+        tmp_path, None, None,
+    )
+
+    assert command.count("-t") == 2
+    for pattern in ("test-%08d.png", "reference-%08d.png"):
+        output_index = next(i for i, value in enumerate(command) if value.endswith(pattern))
+        assert command[output_index - 6:output_index] == [
+            "-t", "1.000", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le",
+        ]
+
+
 def test_auto_crop_detection_uses_full_video_not_score_duration(monkeypatch):
     from dataclasses import replace
 
@@ -96,6 +134,7 @@ def test_auto_crop_detection_uses_full_video_not_score_duration(monkeypatch):
 
     assert [name for name, _kwargs in calls] == ["source.mp4", "test.mp4"]
     assert all("duration_limit" not in kwargs for _name, kwargs in calls)
+
 
 def test_cached_backend_does_not_suppress_missing_backend():
     options = VmafOptions(compute_vmaf=True)
