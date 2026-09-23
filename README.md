@@ -2,11 +2,17 @@
 
 A Windows desktop app for measuring and comparing video encode quality.
 
-## v1.1
+## Features
 
-The v1.1 release adds bundled Netflix VMAF v1.0 model files and refactors
-metric execution, result storage, provenance, and caching so additional video
-metrics can be added without VMAF-specific plumbing.
+- Calculate VMAF, VMAF NEG, PSNR, SSIM, and XPSNR for multiple test videos.
+- Use the bundled Netflix VMAF v1 models for standard, phone, 4K, and HFR viewing scenarios.
+- Compare metric curves, statistics, and per-frame scores.
+- Instantly switch between source and encoded video for visual A/B comparisons, both frame by frame and during playback.
+- Inspect bitrate by frame, second, or GOP without running quality metrics.
+- Detect black bars and handle resolution mismatches automatically.
+- Use GPU decoding when supported, with independent software fallback per input.
+- Calculate two test videos in parallel on many-core CPUs.
+- Cache completed results and restore them when matching videos are loaded again.
 
 ## Videos
 
@@ -34,18 +40,6 @@ seek to an exact frame for close inspection.
 Analyze video-only bitrate independently by frame, second, or GOP.
 
 ![Bitrate Viewer results for two test encodes](docs/screenshots/04-bitrate-viewer.png)
-
-## Features
-
-- Calculate VMAF, VMAF NEG, PSNR, SSIM, and XPSNR for multiple test videos.
-- Use the bundled Netflix VMAF v1 models for standard, phone, 4K, and HFR viewing scenarios.
-- Compare metric curves, statistics, and per-frame scores.
-- Instant switch between source and encoded video for easy visual A/B comparisons, both frame by frame and during playback, and between different encoded videos.
-- Inspect bitrate by frame, second, or GOP without running quality metrics.
-- Detect black bars and handle resolution mismatches automatically.
-- Use GPU decoding when supported, with independent software fallback per input.
-- Calculate two test videos in parallel on many-core CPUs.
-- Cache completed results and restore them when matching videos are loaded again.
 
 ## Quick start
 
@@ -111,3 +105,10 @@ Build the distributable with `./scripts/build_release.ps1`. See the
 Licensed under the [MIT License](LICENSE). Copyright (c) 2026 **4KVCD**.
 Third-party components retain their own licenses; see
 [Third-Party Notices](docs/THIRD_PARTY.md).
+
+## v1.1 changelog
+
+- Added bundled Netflix VMAF v1.0 model files for standard, phone, 4K, and HFR analysis.
+- Refactored metric execution around a shared registry and backend plan.
+- Added per-metric results, provenance, and cache identities so saved results remain tied to their implementation and settings.
+- Improved generalized metric graph and per-frame readout handling.
