@@ -268,11 +268,9 @@ def detect_crop(
 ) -> CropBox:
     """Detects the black-bar crop box, or raises when it cannot analyze it.
 
-    `duration_limit` is the run's own limit. Every sample is taken from
-    inside the stretch that will actually be scored: a film that is
-    full-frame for its opening seconds and letterboxed afterwards would
-    otherwise be measured on footage the comparison never looks at, and the
-    detected bars cropped away from content that is really there.
+    `duration_limit` bounds crop sampling when explicitly requested. Metric
+    workflows omit their score-duration limit so a short/dark opening cannot
+    incorrectly determine the crop used for the entire comparison.
 
     `hwaccel` is the decoder the run itself will use for this input, or
     None for software. It changes how fast the answer arrives, never what

@@ -332,13 +332,13 @@ def test_a_limit_longer_than_the_video_changes_nothing(monkeypatch):
 
 
 @pytest.mark.parametrize("resample", [False, True])
-def test_both_run_paths_pass_the_duration_limit_through(monkeypatch, resample):
-    """The round-trip-test path resolves crop separately, and had its own
-    copy of the same omission."""
+def test_metric_run_crop_detection_ignores_score_duration_limit(monkeypatch, resample):
+    """Black-bar detection samples representative parts of the full video,
+    even when the metric itself is limited to a short opening segment."""
     from vmaf_app.core import vmaf_runner
     from vmaf_app.core.models import CropMode, ResampleTarget, VmafOptions
 
-    seen: list[float] = []
+    seen: list[float | None] = []
 
     def fake_detect(info, **kwargs):
         seen.append(kwargs.get("duration_limit"))
@@ -357,4 +357,4 @@ def test_both_run_paths_pass_the_duration_limit_through(monkeypatch, resample):
         else:
             vmaf_runner._resolve_crops(source, _info(10.0), options, None)
 
-    assert seen and all(limit == 1.5 for limit in seen)
+    assert seen and all(limit is None for limit in seen)

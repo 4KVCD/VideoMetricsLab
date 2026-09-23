@@ -77,6 +77,26 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     assert output.metrics.frame("ssimulacra2").provenance.compute_backend == "cpu"
 
 
+def test_auto_crop_detection_uses_full_video_not_score_duration(monkeypatch):
+    from dataclasses import replace
+
+    from vmaf_app.core.perceptual_cpu import _resolve_crops
+
+    request = _request()
+    recipe = replace(request.recipe, crop_mode=CropMode.AUTO, duration_limit=1.0)
+    calls = []
+
+    def fake_detect(info, **kwargs):
+        calls.append((info.path.name, kwargs))
+        return None
+
+    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.detect_crop", fake_detect)
+
+    _resolve_crops(_info("source.mp4"), _info("test.mp4"), recipe, None, None, None)
+
+    assert [name for name, _kwargs in calls] == ["source.mp4", "test.mp4"]
+    assert all("duration_limit" not in kwargs for _name, kwargs in calls)
+
 def test_cached_backend_does_not_suppress_missing_backend():
     options = VmafOptions(compute_vmaf=True)
     request = analysis_request_from_vmaf_options(options, ("vmaf", "ssimulacra2"))

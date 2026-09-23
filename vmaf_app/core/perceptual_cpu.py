@@ -125,10 +125,11 @@ def _resolve_crops(
         if on_status:
             on_status("Detecting black bars for perceptual metrics…")
         return (
-            detect_crop(source, cancel_event=cancel_event, process_handle=process_handle,
-                        duration_limit=recipe.duration_limit),
-            detect_crop(distorted, cancel_event=cancel_event, process_handle=process_handle,
-                        duration_limit=recipe.duration_limit),
+            # Crop detection samples representative windows across the whole
+            # file. A short score-duration limit may land entirely in a dark
+            # intro and must not define the crop used for the comparison.
+            detect_crop(source, cancel_event=cancel_event, process_handle=process_handle),
+            detect_crop(distorted, cancel_event=cancel_event, process_handle=process_handle),
         )
     except CropDetectCancelled as exc:
         raise PerceptualCancelled("Cancelled by user") from exc

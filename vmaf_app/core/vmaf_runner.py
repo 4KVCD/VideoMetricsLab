@@ -205,7 +205,7 @@ def _resolve_crops(
     try:
         src_crop = detect_crop(
             source_info, cancel_event=cancel_event, process_handle=process_handle,
-            duration_limit=options.duration_limit, hwaccel=plan.source,
+            hwaccel=plan.source,
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
@@ -214,7 +214,7 @@ def _resolve_crops(
     try:
         dist_crop = detect_crop(
             distorted_info, cancel_event=cancel_event, process_handle=process_handle,
-            duration_limit=options.duration_limit, hwaccel=plan.distorted,
+            hwaccel=plan.distorted,
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
@@ -970,7 +970,7 @@ def run_resample_test(
         try:
             source_crop = detect_crop(
                 source_info, cancel_event=cancel_event, process_handle=process_handle,
-                duration_limit=options.duration_limit, hwaccel=hwaccel.source,
+                hwaccel=hwaccel.source,
             )
         except CropDetectCancelled as e:
             raise Cancelled("Cancelled by user") from e
