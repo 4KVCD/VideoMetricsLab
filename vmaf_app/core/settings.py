@@ -52,6 +52,16 @@ class Settings:
     default_compute_xpsnr: bool = True
     default_compute_vmaf: bool = True
     default_compute_vmaf_neg: bool = False
+    # The perceptual metrics start off: each is its own pass over both
+    # videos (Vship on the GPU, far slower on the CPU), not a feature of the
+    # shared libvmaf decode above.
+    default_compute_ssimulacra2: bool = False
+    default_compute_butteraugli: bool = False
+    # "gpu" (Vship, falling back to the CPU tools without a supported GPU)
+    # or "cpu" (libjxl's tools). Set from the Options panel's GPU/CPU
+    # choice, which is also what a newly added video starts with.
+    default_ssimulacra2_backend: str = "gpu"
+    default_butteraugli_backend: str = "gpu"
     graph_metric: str = "vmaf"
 
     # How many videos to score at once (1 or 2 -- see MAX_PARALLEL_JOBS).

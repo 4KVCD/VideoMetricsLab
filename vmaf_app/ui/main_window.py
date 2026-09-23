@@ -177,6 +177,9 @@ class _StayOpenMenu(QMenu):
         super().mouseReleaseEvent(event)
 
 
+#: The metrics with their own pass and a GPU/CPU choice, not a libvmaf feature.
+_PERCEPTUAL_METRIC_KEYS = ("ssimulacra2", "butteraugli")
+
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = 10 * 60
 #: Bytes of lossless 16-bit RGB PNG per pixel, as written by the CPU backend:
@@ -320,8 +323,11 @@ class MainWindow(QMainWindow):
         # Per-video settings machinery: the Options panel is an inspector for
         # whichever rows are selected, not one global setting.
         self._default_options = self._options_from_settings()  # what a newly-added row starts with
-        self._default_extra_metric_keys: set[str] = set()
-        self._default_metric_backends = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
+        self._default_extra_metric_keys = self._extra_metrics_from_settings()
+        self._default_metric_backends = {
+            key: "cpu" if getattr(self._settings, f"default_{key}_backend", "gpu") == "cpu" else "gpu"
+            for key in _PERCEPTUAL_METRIC_KEYS
+        }
         known = {item.key for item in _METRIC_COLUMNS}
         self._hidden_metrics: set[str] = {key for key in self._settings.hidden_metrics if key in known}
         if len(self._hidden_metrics) >= len(known):
@@ -466,6 +472,13 @@ class MainWindow(QMainWindow):
             compute_vmaf_neg=self._settings.default_compute_vmaf_neg,
         )
 
+    def _extra_metrics_from_settings(self) -> set[str]:
+        """The perceptual metrics a newly added video starts with ticked."""
+        return {
+            key for key in _PERCEPTUAL_METRIC_KEYS
+            if getattr(self._settings, f"default_compute_{key}", False) is True
+        }
+
     def _apply_ffmpeg_setting(self) -> None:
         """Points the finder at the configured folder, or clears the override
         so it goes back to searching PATH and the known install locations.
@@ -554,12 +567,16 @@ class MainWindow(QMainWindow):
         self.settings_default_vmaf_neg = QCheckBox("VMAF NEG")
         self.settings_default_ssim = QCheckBox("SSIM")
         self.settings_default_xpsnr = QCheckBox("XPSNR")
+        self.settings_default_ssimulacra2 = QCheckBox("SSIMULACRA2")
+        self.settings_default_butteraugli = QCheckBox("Butteraugli")
         for box, value in (
             (self.settings_default_vmaf, self._settings.default_compute_vmaf),
             (self.settings_default_vmaf_neg, self._settings.default_compute_vmaf_neg),
             (self.settings_default_psnr, self._settings.default_compute_psnr),
             (self.settings_default_ssim, self._settings.default_compute_ssim),
             (self.settings_default_xpsnr, self._settings.default_compute_xpsnr),
+            (self.settings_default_ssimulacra2, self._settings.default_compute_ssimulacra2),
+            (self.settings_default_butteraugli, self._settings.default_compute_butteraugli),
         ):
             box.setChecked(value)
             box.toggled.connect(self._on_settings_edited)
@@ -649,6 +666,8 @@ class MainWindow(QMainWindow):
         self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
+        self._settings.default_compute_ssimulacra2 = self.settings_default_ssimulacra2.isChecked()
+        self._settings.default_compute_butteraugli = self.settings_default_butteraugli.isChecked()
         self._settings.compare_decoded_videos = int(self.settings_decoded_videos.currentData())
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
@@ -662,6 +681,7 @@ class MainWindow(QMainWindow):
         # Only the starting point for new rows; existing rows keep whatever
         # they were given.
         self._default_options = self._options_from_settings()
+        self._default_extra_metric_keys = self._extra_metrics_from_settings()
         error = self._settings.save()
         self.settings_status.setText(error or "Settings saved.")
         self._refresh_settings_status()
@@ -2678,6 +2698,11 @@ class MainWindow(QMainWindow):
         self._default_metric_backends[metric_key] = backend
         for row in self._panel_target_rows:
             self._rows[row].metric_backends[metric_key] = backend
+        # The last choice is what the next session starts with, too.
+        setattr(self._settings, f"default_{metric_key}_backend", backend)
+        error = self._settings.save()
+        if error:
+            self.status_label.setText(error)
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:
         if self._syncing_panel:

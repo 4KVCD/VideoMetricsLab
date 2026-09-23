@@ -4048,3 +4048,34 @@ def test_a_gpu_score_does_not_count_as_done_when_the_row_asks_for_cpu(qapp):
     assert set(win._reusable_results(rd).keys()) == {"vmaf", "ssimulacra2"}
     assert win._has_requested_results(rd)
     win.close()
+
+
+def test_perceptual_metric_defaults_survive_a_restart(qapp):
+    """The SSIMULACRA2/Butteraugli default ticks and their GPU/CPU choice
+    lived only in the window, so every restart went back to off and GPU."""
+    first = MainWindow()
+    first.settings_default_ssimulacra2.setChecked(True)
+    first.butteraugli_backend_combo.setCurrentIndex(1)  # CPU, with no rows selected
+    first.close()
+
+    saved = json.loads(Settings.path().read_text(encoding="utf-8"))
+    assert saved["default_compute_ssimulacra2"] is True
+    assert saved["default_butteraugli_backend"] == "cpu"
+
+    second = MainWindow()
+    assert second.settings_default_ssimulacra2.isChecked()
+    assert not second.settings_default_butteraugli.isChecked()
+    row = second._add_table_row(Path("new.mkv"))
+    rd = second._rows[row]
+    assert rd.extra_metric_keys == {"ssimulacra2"}
+    assert rd.metric_backends == {"ssimulacra2": "gpu", "butteraugli": "cpu"}
+    second.close()
+
+
+def test_an_unknown_saved_backend_falls_back_to_gpu(qapp):
+    saved = json.loads(Settings.path().read_text(encoding="utf-8"))
+    saved["default_ssimulacra2_backend"] = "tpu"
+    Settings.path().write_text(json.dumps(saved), encoding="utf-8")
+    win = MainWindow()
+    assert win._default_metric_backends["ssimulacra2"] == "gpu"
+    win.close()
