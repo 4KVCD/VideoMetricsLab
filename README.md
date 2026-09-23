@@ -5,7 +5,7 @@ A Windows desktop app for measuring and comparing video encode quality.
 ## Features
 
 - Calculate VMAF, VMAF NEG, PSNR, SSIM, and XPSNR for multiple test videos.
-- Use the bundled Netflix VMAF v1 models for standard, phone, 4K, and HFR viewing scenarios.
+- VMAF v0.61 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
 - Compare metric curves, statistics, and per-frame scores.
 - Instantly switch between source and encoded video for visual A/B comparisons, both frame by frame and during playback.
 - Inspect bitrate by frame, second, or GOP without running quality metrics.
