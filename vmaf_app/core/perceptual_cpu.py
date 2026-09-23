@@ -319,8 +319,7 @@ def run_perceptual_task(
     results = MetricResultSet()
     for spec in specs:
         version = _implementation_version(executables[spec.key])
-        compatibility_version = version.casefold().removeprefix("libjxl ").replace(" ", "-")
-        compatibility = f"{spec.key}-libjxl-{compatibility_version}-cpu-v1"
+        compatibility = f"{spec.key}-libjxl-cpu-v1"
         results.add(FrameMetricResult(
             spec.key, frame, time, np.asarray(values[spec.key], dtype=np.float32),
             MetricProvenance(

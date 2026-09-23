@@ -125,11 +125,18 @@ def _atomic_npz(path: Path, arrays: dict[str, np.ndarray]) -> None:
 
 
 def _metadata(result, spec: MetricRequestSpec) -> np.ndarray:
+    provenance = provenance_to_dict(result.provenance)
+    if result.key != "vmaf":
+        # The per-metric cache is for score reuse, not a record of which
+        # library build produced a numerically compatible non-VMAF metric.
+        # Keep the field for the shared provenance schema, but do not persist
+        # the library version in new cache entries.
+        provenance["implementation_version"] = ""
     data = {
         "format_version": METRIC_CACHE_FORMAT_VERSION,
         "kind": "frame" if isinstance(result, FrameMetricResult) else "sequence",
         "key": result.key, "request": spec.identity_dict(),
-        "provenance": provenance_to_dict(result.provenance),
+        "provenance": provenance,
     }
     return np.array(_canonical(data))
 
@@ -168,7 +175,12 @@ def _is_auto_perceptual_spec(spec: MetricRequestSpec) -> bool:
 def _auto_perceptual_compatibility(spec: MetricRequestSpec, compatibility: object) -> bool:
     value = str(compatibility or "")
     return (
-        value == f"{spec.key}-vship-4.0.2-gpu-v1"
+        value == f"{spec.key}-vship-gpu-v1"
+        or value == f"{spec.key}-libjxl-cpu-v1"
+        # Accept existing cache entries written before implementation-library
+        # versions were removed from compatibility IDs. The implementation
+        # family/backend remains part of the ID; only its package version does not.
+        or (value.startswith(f"{spec.key}-vship-") and value.endswith("-gpu-v1"))
         or (value.startswith(f"{spec.key}-libjxl-") and value.endswith("-cpu-v1"))
     )
 

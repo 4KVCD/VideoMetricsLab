@@ -633,7 +633,7 @@ def run_vship_task(
                     implementation=f"Vship/{spec.key}",
                     implementation_version=f"Vship {device.version}",
                     compute_backend="gpu",
-                    implementation_compatibility_id=f"{spec.key}-vship-{device.version}-gpu-v1",
+                    implementation_compatibility_id=f"{spec.key}-vship-gpu-v1",
                     parameters=parameters,
                 ),
             ))

@@ -1,6 +1,7 @@
 """Direct v2 metric-cache and generic-result regression coverage."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -98,9 +99,13 @@ def test_frame_and_sequence_metric_round_trip_with_special_values(tmp_path):
     sequence = load_metric(directory, sequence_spec)
     assert isinstance(frame, FrameMetricResult)
     assert frame.values.dtype == np.float32 and np.isnan(frame.values[1]) and np.isposinf(frame.values[2])
-    assert frame.provenance == PROVENANCE
+    cache_provenance = MetricProvenance(
+        PROVENANCE.implementation, "", PROVENANCE.compute_backend,
+        PROVENANCE.implementation_compatibility_id, PROVENANCE.parameters,
+    )
+    assert frame.provenance == cache_provenance
     assert isinstance(sequence, SequenceMetricResult) and np.isneginf(sequence.score)
-    assert sequence.provenance == PROVENANCE
+    assert sequence.provenance == cache_provenance
 
 
 def test_direct_lookup_keeps_other_metrics_when_one_artifact_is_corrupt(tmp_path):
@@ -220,8 +225,8 @@ def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
     recipe = comparison_recipe_from_vmaf_options(options)
     directory = recipe_directory(tmp_path, source, test, recipe)
     spec = next(spec for spec in metric_request_specs(options, ("ssimulacra2",)) if spec.key == "ssimulacra2")
-    cpu_id = "ssimulacra2-libjxl-0.12.0-cpu-v1"
-    gpu_id = "ssimulacra2-vship-4.0.2-gpu-v1"
+    cpu_id = "ssimulacra2-libjxl-cpu-v1"
+    gpu_id = "ssimulacra2-vship-gpu-v1"
     sampled = MetricRequestSpec(
         spec.key, spec.backend_id, spec.parameters, FrameCoverage("sampled", 2), spec.implementation_compatibility_id,
     )
@@ -240,6 +245,67 @@ def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
     assert clear_metrics(tmp_path, source, test, recipe, (spec,)) == 2
     assert len(list(directory.glob("ssimulacra2_*.npz"))) == 1
     assert load_metric(directory, sampled).values.tolist() == [80.0]
+
+
+def test_cache_omits_library_version_except_for_vmaf(tmp_path):
+    source, test = _paths(tmp_path)
+    options = VmafOptions()
+    directory = recipe_directory(
+        tmp_path, source, test, comparison_recipe_from_vmaf_options(options)
+    )
+    specs = metric_request_specs(options, ("ssimulacra2", "vmaf", "vmaf_neg"))
+    perceptual = next(spec for spec in specs if spec.key == "ssimulacra2")
+    vmaf = next(spec for spec in specs if spec.key == "vmaf")
+    vmaf_neg = next(spec for spec in specs if spec.key == "vmaf_neg")
+
+    store_metric(directory, FrameMetricResult(
+        perceptual.key, [0], [0.0], [82.0],
+        MetricProvenance("SSIMULACRA2", "libjxl 0.12.0", "cpu", "ssimulacra2-libjxl-cpu-v1"),
+    ), perceptual)
+    store_metric(directory, FrameMetricResult(
+        vmaf.key, [0], [0.0], [96.0],
+        MetricProvenance("FFmpeg/libvmaf", "FFmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1"),
+    ), vmaf)
+    store_metric(directory, FrameMetricResult(
+        vmaf_neg.key, [0], [0.0], [94.0],
+        MetricProvenance("FFmpeg/libvmaf", "FFmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1"),
+    ), vmaf_neg)
+
+    perceptual_path = next(directory.glob("ssimulacra2_*.npz"))
+    with np.load(perceptual_path, allow_pickle=False) as data:
+        perceptual_metadata = json.loads(str(data["metadata"].item()))
+    with np.load(metric_path(directory, vmaf), allow_pickle=False) as data:
+        vmaf_metadata = json.loads(str(data["metadata"].item()))
+    with np.load(metric_path(directory, vmaf_neg), allow_pickle=False) as data:
+        vmaf_neg_metadata = json.loads(str(data["metadata"].item()))
+
+    assert perceptual_metadata["provenance"]["implementation_version"] == ""
+    assert vmaf_metadata["provenance"]["implementation_version"] == "FFmpeg 9.0"
+    assert vmaf_neg_metadata["provenance"]["implementation_version"] == ""
+    assert dict(vmaf_neg_metadata["request"]["parameters"])["model"] == "version=vmaf_v0.6.1neg"
+
+
+def test_auto_perceptual_cache_reuses_scores_across_library_versions(tmp_path):
+    source, test = _paths(tmp_path)
+    options = VmafOptions()
+    recipe = comparison_recipe_from_vmaf_options(options)
+    directory = recipe_directory(tmp_path, source, test, recipe)
+    spec = next(spec for spec in metric_request_specs(options, ("ssimulacra2",)) if spec.key == "ssimulacra2")
+    old_gpu_id = "ssimulacra2-vship-4.0.2-gpu-v1"
+    old_gpu_provenance = MetricProvenance("Vship/SSIMULACRA2", "Vship 4.0.2", "gpu", old_gpu_id)
+    old_cpu_id = "ssimulacra2-libjxl-0.11.1-cpu-v1"
+    old_cpu_provenance = MetricProvenance("SSIMULACRA2", "libjxl 0.11.1", "cpu", old_cpu_id)
+
+    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [91.0], old_gpu_provenance), spec)
+    assert load_metric(directory, spec).values.tolist() == [91.0]
+
+    # The auto policy still prefers GPU data, but CPU results from any libjxl
+    # version remain valid fallbacks when no GPU result exists.
+    clear_metrics(tmp_path, source, test, recipe, (spec,))
+    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [82.0], old_cpu_provenance), spec)
+    loaded = load_metric(directory, spec)
+    assert loaded.values.tolist() == [82.0]
+    assert loaded.provenance.implementation_version == ""
 
 
 def test_planning_retains_grouping_and_special_xpsnr_coverage():
