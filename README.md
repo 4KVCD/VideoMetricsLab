@@ -2,6 +2,12 @@
 
 A Windows desktop app for measuring and comparing video encode quality.
 
+## v1.1
+
+The v1.1 release adds bundled Netflix VMAF v1.0 model files and refactors
+metric execution, result storage, provenance, and caching so additional video
+metrics can be added without VMAF-specific plumbing.
+
 ## Videos
 
 Configure each test independently, inspect its codec and bitrate, and calculate
