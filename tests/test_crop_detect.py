@@ -361,3 +361,54 @@ def test_metric_run_crop_detection_ignores_score_duration_limit(monkeypatch, res
             vmaf_runner._resolve_crops(source, _info(10.0), options, None)
 
     assert seen and all(limit is None for limit in seen)
+
+
+def test_no_more_than_two_detection_decoders_run_in_the_whole_app(monkeypatch):
+    """Several jobs detecting at once -- two parallel jobs, each with two
+    inputs -- still never have more than two decoders running."""
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    class FakeProcess:
+        pid = 1
+        returncode = 0
+
+        def communicate(self, timeout=None):
+            nonlocal running
+            time.sleep(0.03)
+            with lock:
+                running -= 1
+            return "", "crop=1920:800:0:140"
+
+    def fake_popen(*args, **kwargs):
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        return FakeProcess()
+
+    monkeypatch.setattr(crop_detect.proc_util, "popen", fake_popen)
+    threads = [
+        threading.Thread(target=crop_detect._launch_window, args=(["ffmpeg"], None, None))
+        for _ in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert peak == crop_detect._MAX_DETECTION_DECODERS == 2
+
+
+def test_waiting_for_a_decoder_slot_still_answers_cancel():
+    cancel = threading.Event()
+    cancel.set()
+    for _ in range(crop_detect._MAX_DETECTION_DECODERS):
+        crop_detect._decoder_slots.acquire()
+    try:
+        with pytest.raises(crop_detect.CropDetectCancelled):
+            crop_detect._launch_window(["ffmpeg"], cancel, None)
+    finally:
+        for _ in range(crop_detect._MAX_DETECTION_DECODERS):
+            crop_detect._decoder_slots.release()

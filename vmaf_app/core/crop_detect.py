@@ -39,6 +39,14 @@ _SAMPLE_WINDOW_SECONDS = 3.0
 _SAMPLE_COUNT = 5
 _SAMPLE_SPAN = (0.1, 0.9)  # fraction of duration to sample within
 
+#: Detection decoders allowed to run at once in the whole app, across every
+#: job. Windows of one input already run in turn; this bounds the rest --
+#: two jobs in parallel, each detecting both of its inputs -- at two, which
+#: is 2.5 GB of VRAM for 4K on the GPU decoder rather than whatever the
+#: number of jobs multiplies it to.
+_MAX_DETECTION_DECODERS = 2
+_decoder_slots = threading.BoundedSemaphore(_MAX_DETECTION_DECODERS)
+
 #: How many files' answers to remember. A CropBox is four ints; this is a
 #: bound against a pathological session, not a memory budget.
 _CACHE_LIMIT = 512
@@ -109,6 +117,10 @@ def _launch_window(
     process_handle: ProcessHandle | None,
 ) -> tuple[int, str]:
     """Runs one window to completion. Returns (returncode, stderr)."""
+    # Waits for a decoder slot, still answering Cancel while it waits.
+    while not _decoder_slots.acquire(timeout=0.1):
+        if cancel_event is not None and cancel_event.is_set():
+            raise CropDetectCancelled("Crop detection cancelled")
     proc = None
     try:
         proc = proc_util.popen(
@@ -143,6 +155,7 @@ def _launch_window(
         # handle, and a bare detach() would drop them from Pause and Cancel.
         if process_handle is not None and proc is not None:
             process_handle.detach(proc.pid)
+        _decoder_slots.release()
 
 
 def _run_single_window(
