@@ -3834,3 +3834,75 @@ def test_a_duration_limit_under_ten_minutes_needs_no_warning(qapp, monkeypatch):
     assert shown == []
     win._worker = None
     win.close()
+
+
+
+# ---------------------------------------------------------- metrics picker
+
+def test_hiding_a_metric_hides_its_column_and_leaves_it_out_of_runs(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    assert "xpsnr" in win._requested_metrics(win._rows[row])
+
+    win._on_metric_visibility_toggled("xpsnr", False)
+
+    assert win.distorted_table.isColumnHidden(COL_XPSNR)
+    assert "xpsnr" not in win._requested_metrics(win._rows[row])
+    # The row's own tick is kept, so showing the metric restores the choice.
+    assert "xpsnr" in win._selected_metrics(win._rows[row])
+    assert win._settings.hidden_metrics == ["xpsnr"]
+    assert json.loads(Settings.path().read_text(encoding="utf-8"))["hidden_metrics"] == ["xpsnr"]
+
+    win._on_metric_visibility_toggled("xpsnr", True)
+
+    assert not win.distorted_table.isColumnHidden(COL_XPSNR)
+    assert "xpsnr" in win._requested_metrics(win._rows[row])
+    win.close()
+
+
+def test_hidden_metrics_are_remembered_between_sessions(qapp):
+    first = MainWindow()
+    first._on_metric_visibility_toggled("butteraugli", False)
+    first.close()
+
+    second = MainWindow()
+    assert second.distorted_table.isColumnHidden(main_window_module.COL_BUTTERAUGLI)
+    assert "butteraugli" in second._hidden_metrics
+    second.close()
+
+
+def test_the_last_shown_metric_cannot_be_hidden(qapp):
+    win = MainWindow()
+    keys = [item.key for item in main_window_module._METRIC_COLUMNS]
+    for key in keys:
+        win._on_metric_visibility_toggled(key, False)
+
+    shown = [key for key in keys if key not in win._hidden_metrics]
+    assert len(shown) == 1
+    win.close()
+
+
+def test_a_run_skips_a_row_whose_only_missing_metric_is_hidden(qapp):
+    """A cached row lacking only a hidden metric counts as done."""
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("a.mp4"))
+    win._rows[row].video_info = _fake_video_info("a.mp4")
+    win._rows[row].completed_run = _fake_completed_run("a.mp4")  # VMAF only
+    for key in ("vmaf_neg", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli"):
+        win._on_metric_visibility_toggled(key, False)
+
+    win._on_run_clicked()
+
+    assert win._worker is None
+    assert "already have all requested metrics" in win.status_label.text()
+    win.close()
+
+
+def test_the_picker_is_locked_while_a_run_is_going(qapp):
+    win = MainWindow()
+    win._set_run_ui_active(True)
+    assert not win.metrics_btn.isEnabled()
+    win._set_run_ui_active(False)
+    assert win.metrics_btn.isEnabled()
+    win.close()

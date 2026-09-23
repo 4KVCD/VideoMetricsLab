@@ -82,6 +82,13 @@ class Settings:
     # which neighbours.
     compare_decoded_videos: int = 3
 
+    # Metrics left out of the test-video table (the Metrics... picker). A
+    # hidden metric is not calculated either; its cached scores come back
+    # when it is shown again. Stored as the hidden set rather than the shown
+    # one, so a metric added in a later version appears instead of being
+    # silently off for everyone who already has a settings file.
+    hidden_metrics: list[str] = field(default_factory=list)
+
     @staticmethod
     def path() -> Path:
         path = settings_file()

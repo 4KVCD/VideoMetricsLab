@@ -164,6 +164,18 @@ _METRIC_COLUMNS = (
 _METRIC_COLUMN_BY_INDEX = {item.column: item for item in _METRIC_COLUMNS}
 _METRIC_COLUMN_SET = frozenset(_METRIC_COLUMN_BY_INDEX)
 
+class _StayOpenMenu(QMenu):
+    """A menu of check boxes that stays open while boxes are ticked, so
+    several metrics can be switched in one visit."""
+
+    def mouseReleaseEvent(self, event) -> None:
+        action = self.actionAt(event.position().toPoint())
+        if action is not None and action.isCheckable() and action.isEnabled():
+            action.trigger()
+            return
+        super().mouseReleaseEvent(event)
+
+
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = 10 * 60
 #: Bytes of lossless 16-bit RGB PNG per pixel, as written by the CPU backend:
@@ -309,6 +321,10 @@ class MainWindow(QMainWindow):
         self._default_options = self._options_from_settings()  # what a newly-added row starts with
         self._default_extra_metric_keys: set[str] = set()
         self._default_metric_backends = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
+        known = {item.key for item in _METRIC_COLUMNS}
+        self._hidden_metrics: set[str] = {key for key in self._settings.hidden_metrics if key in known}
+        if len(self._hidden_metrics) >= len(known):
+            self._hidden_metrics.clear()  # a settings file that hides everything shows everything
         self._panel_target_rows: list[int] = []  # rows the panel currently edits
         self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
         self._syncing_panel = False  # guards against write-back while populating the panel programmatically
@@ -722,7 +738,24 @@ class MainWindow(QMainWindow):
         files_layout.addLayout(src_row)
         self.source_info_label = QLabel("No reference selected.")
         self.source_info_label.setStyleSheet("color: #666;")
-        files_layout.addWidget(self.source_info_label)
+        # The Metrics picker sits under Browse, at the right edge. Every
+        # metric is a column in the table below, and more are coming, so
+        # which ones appear -- and are calculated -- is a choice.
+        info_row = QHBoxLayout()
+        info_row.addWidget(self.source_info_label, stretch=1)
+        self.metrics_btn = QPushButton("Metrics...")
+        self.metrics_btn.setToolTip(
+            "Choose which metrics appear in the test-video table. A hidden metric "
+            "is not calculated; scores already saved for it come back when it is "
+            "shown again. Also available by right-clicking the column headers."
+        )
+        self.metrics_btn.clicked.connect(
+            lambda: self._show_metrics_menu(
+                self.metrics_btn.mapToGlobal(self.metrics_btn.rect().bottomLeft())
+            )
+        )
+        info_row.addWidget(self.metrics_btn)
+        files_layout.addLayout(info_row)
 
         files_layout.addWidget(QLabel(
             "Test videos to compare against the reference. Check rows to calculate; "
@@ -764,6 +797,11 @@ class MainWindow(QMainWindow):
         # Keep internal column indices stable, but omit crop status from the
         # test-video table. Cropping remains available in the row options.
         self.distorted_table.setColumnHidden(COL_BLACK_BARS, True)
+        self.metric_header.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.metric_header.customContextMenuRequested.connect(
+            lambda pos: self._show_metrics_menu(self.metric_header.mapToGlobal(pos))
+        )
+        self._apply_metric_visibility()
         self.distorted_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.distorted_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.distorted_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -839,6 +877,8 @@ class MainWindow(QMainWindow):
         self._file_action_widgets = [
             self.source_browse_btn, add_dist_btn, add_resample_btn,
             remove_dist_btn, self.remove_all_btn,
+            # What a run calculates is fixed when it starts.
+            self.metrics_btn,
         ]
 
         return files_box
@@ -2344,14 +2384,69 @@ class MainWindow(QMainWindow):
         return answer == QMessageBox.Yes
 
     @staticmethod
-    def _requested_metrics(row_data: RowData) -> tuple[str, ...]:
+    def _selected_metrics(row_data: RowData) -> tuple[str, ...]:
+        """The row's tick boxes, including metrics whose column is hidden."""
         requested = set(row_data.options.requested_metrics()) | row_data.extra_metric_keys
         return tuple(metric.key for metric in FRAME_METRICS if metric.key in requested)
+
+    def _requested_metrics(self, row_data: RowData) -> tuple[str, ...]:
+        """What a run of this row calculates: its ticks, less hidden metrics.
+
+        Hiding a metric takes it out of every run and every "already
+        calculated?" check, but leaves the row's tick untouched, so showing
+        the metric again restores the choice as it was.
+        """
+        return tuple(key for key in self._selected_metrics(row_data) if key not in self._hidden_metrics)
 
     @classmethod
     def _row_metric_enabled(cls, row_data: RowData, column: int) -> bool:
         key = _METRIC_COLUMN_BY_INDEX[column].key
-        return key in cls._requested_metrics(row_data)
+        return key in cls._selected_metrics(row_data)
+
+    # ------------------------------------------------------ metrics picker
+    def _apply_metric_visibility(self) -> None:
+        for item in _METRIC_COLUMNS:
+            self.distorted_table.setColumnHidden(item.column, item.key in self._hidden_metrics)
+
+    def _show_metrics_menu(self, position) -> None:
+        if self._run_active:
+            return
+        menu = _StayOpenMenu(self)
+        menu.setToolTipsVisible(True)
+        shown = [item for item in _METRIC_COLUMNS if item.key not in self._hidden_metrics]
+        for item in _METRIC_COLUMNS:
+            action = menu.addAction(item.metric.label)
+            action.setCheckable(True)
+            action.setChecked(item.key not in self._hidden_metrics)
+            # The last visible metric cannot be hidden: a table with no
+            # metrics could calculate nothing.
+            if len(shown) == 1 and item in shown:
+                action.setEnabled(False)
+                action.setToolTip("At least one metric must stay shown.")
+            action.toggled.connect(
+                lambda checked, key=item.key, m=menu: self._on_metric_visibility_toggled(key, checked, m)
+            )
+        menu.exec(position)
+
+    def _on_metric_visibility_toggled(self, key: str, shown: bool, menu: QMenu | None = None) -> None:
+        if shown:
+            self._hidden_metrics.discard(key)
+        else:
+            if len(self._hidden_metrics) + 1 >= len(_METRIC_COLUMNS):
+                return
+            self._hidden_metrics.add(key)
+        self._settings.hidden_metrics = [item.key for item in _METRIC_COLUMNS if item.key in self._hidden_metrics]
+        self._settings.save()
+        self._apply_metric_visibility()
+        if menu is not None:
+            visible = [a for a in menu.actions() if a.isChecked()]
+            for action in menu.actions():
+                action.setEnabled(not (len(visible) == 1 and action.isChecked()))
+        for row in range(len(self._rows)):
+            self._set_row_metrics(row)
+        if shown and self._rows:
+            # Scores saved for the metric while it was hidden come back.
+            self._reload_cached_for_rows(list(range(len(self._rows))))
 
     def _apply_metric_selection(
         self, rows: list[int], column: int, checked: bool, *, set_default: bool = True,
@@ -2429,9 +2524,8 @@ class MainWindow(QMainWindow):
         """Header shortcuts explicitly apply to all rows; inspector to selection."""
         self._apply_metric_selection(list(range(len(self._rows))), column, checked)
 
-    @staticmethod
-    def _has_requested_results(row_data: RowData) -> bool:
-        requested = MainWindow._requested_metrics(row_data)
+    def _has_requested_results(self, row_data: RowData) -> bool:
+        requested = self._requested_metrics(row_data)
         return bool(requested and row_data.completed_run is not None and all(
             row_data.completed_run.result.has_metric(m)
             and (metric := row_data.completed_run.result.frame_metric(m)) is not None
