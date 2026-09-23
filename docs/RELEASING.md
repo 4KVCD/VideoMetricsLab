@@ -20,8 +20,10 @@
    separate commits with regression tests.
 2. Install development dependencies in a fresh environment. Run `pip check`,
    Ruff and pytest. Record Python, dependency and FFmpeg versions.
-3. Test all four metrics, a metric-only subset, saved-result round-trip and
-   cache reuse. Check still comparison and independent bitrate analysis.
+3. Test every metric, including SSIMULACRA2 and Butteraugli through both the
+   Vship GPU path and the libjxl CPU fallback. Check saved-result round-trip,
+   backend-specific cache reuse, still comparison and independent bitrate
+   analysis.
 4. Test playback on real hardware: H.264/H.265 plus supported software-decoded
    formats, source hold/release, neighbor switching, HDR/SDR, seeking and audio.
 5. Build using [BUILD.md](BUILD.md). Review self-test output: the script may

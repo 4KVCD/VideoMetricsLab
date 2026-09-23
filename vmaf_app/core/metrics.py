@@ -106,10 +106,10 @@ METRICS = (
                      _XPSNR_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_xpsnr")),
     MetricDefinition("ssimulacra2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "SSIMULACRA2", "{:.2f}", "", MetricKind.FRAME,
                      MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
-                     _SSIMULACRA2_THRESHOLDS, backend_id="perceptual_cpu"),
+                     _SSIMULACRA2_THRESHOLDS, backend_id="perceptual"),
     MetricDefinition("butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "{:.4f}", "", MetricKind.FRAME,
                      MetricDirection.LOWER_IS_BETTER, MetricAggregation.ARITHMETIC, None,
-                     (), backend_id="perceptual_cpu"),
+                     (), backend_id="perceptual"),
 )
 
 METRIC_BY_KEY = MappingProxyType({metric.key: metric for metric in METRICS})

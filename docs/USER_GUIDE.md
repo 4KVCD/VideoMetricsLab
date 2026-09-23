@@ -4,7 +4,8 @@
 
 1. In **Videos**, select a reference and add encoded/distorted files.
 2. Select the metric checkboxes in each row. Cell edits apply to selected rows;
-   header checkboxes apply across rows. All four metrics are enabled by default.
+   header checkboxes apply across rows. VMAF, PSNR, SSIM and XPSNR are enabled
+   by default; VMAF NEG, SSIMULACRA2 and Butteraugli can be selected separately.
 3. Review crop, scale, model, duration and subsampling settings before starting.
 
 The model selector includes Netflix VMAF v0 models and the bundled VMAF v1
@@ -17,15 +18,23 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
    to show its detailed statistics. Export a graph PNG or CSV as needed.
 
+SSIMULACRA2 and Butteraugli use Vship GPU acceleration by default on supported
+NVIDIA CUDA or AMD HIP systems. If no compatible GPU/runtime is available, the
+input format is unsupported, or GPU scoring fails, the app falls back to its
+bundled libjxl CPU implementation. GPU and CPU results are cached separately
+because their implementations can produce different scores. These two metrics
+are opt-in and do not add processing to runs where they are unchecked.
+
 The files must describe corresponding frames. The app rejects several timing
 and geometry mismatches; this is not automatic content alignment. A source with
 a different cut, opening sequence or frame offset must be aligned first.
 
 ## Interpreting scores
 
-VMAF, PSNR, SSIM and XPSNR are different measurements, not interchangeable
-quality percentages. Higher values generally indicate closer agreement for
-the same comparison recipe. Change the crop, scale or model and you change the
+VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2 and Butteraugli are different
+measurements, not interchangeable quality percentages. Higher values generally
+indicate closer agreement for the same comparison recipe, except Butteraugli,
+where lower is better. Change the crop, scale or model and you change the
 question being measured. Use visual inspection alongside scores.
 
 The graph's non-VMAF threshold bands are heuristic defaults from synthetic

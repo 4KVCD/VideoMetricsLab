@@ -31,7 +31,11 @@ Analyze video-only bitrate independently by frame, second, or GOP.
 
 ## Features
 
-- Calculate VMAF, VMAF NEG, PSNR, SSIM, and XPSNR for multiple test videos.
+- Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, and Butteraugli
+  for multiple test videos.
+- Accelerate SSIMULACRA2 and Butteraugli with Vship on supported NVIDIA/AMD
+  GPUs; automatically use the bundled libjxl CPU tools when GPU scoring is
+  unavailable.
 - Use the bundled Netflix VMAF v1 models for standard, phone, 4K, and HFR viewing scenarios.
 - Compare metric curves, statistics, and per-frame scores.
 - Instant switch between source and encoded video for easy visual A/B comparisons, both frame by frame and during playback, and between different encoded videos.
@@ -77,7 +81,9 @@ py -3 -m venv .venv
 
 - Windows 10 or 11
 - FFmpeg 9+ with `ffmpeg`, `ffprobe`, and `libvmaf`
-- Optional NVIDIA, Intel, or AMD GPU for hardware decoding
+- Optional NVIDIA, Intel, or AMD GPU for hardware decoding.
+- Optional supported NVIDIA/AMD GPU and driver runtime for accelerated
+  SSIMULACRA2 and Butteraugli; CPU calculation works without one.
 - Python 3.11+ when running from source
 
 ## Development

@@ -30,7 +30,7 @@ from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, Me
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
 
-BACKEND_ID = "perceptual_cpu"
+BACKEND_ID = "perceptual"
 _NUMBER = re.compile(r"(?<![\w.])([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)")
 
 
@@ -55,19 +55,34 @@ class PerceptualTaskOutput:
 
 
 def find_metric_executable(metric: str) -> str | None:
-    """Find an explicitly configured or PATH-visible reference CLI.
+    """Find the bundled or explicitly configured reference CLI.
 
     Environment overrides keep this optional tooling out of app settings and
     make CI/fake executable tests deterministic: ``SSIMULACRA2_PATH`` and
-    ``BUTTERAUGLI_PATH``.  We intentionally do not download or bundle a
-    substitute implementation.
+    ``BUTTERAUGLI_PATH``.  Packaged builds ship the official static libjxl
+    tools, so a normal user does not need to install either executable.
     """
     if metric not in {"ssimulacra2", "butteraugli"}:
         raise KeyError(metric)
     override = os.environ.get(f"{metric.upper()}_PATH", "").strip()
     if override:
         return override if Path(override).exists() else None
-    return shutil.which(metric)
+    bundled_names = {
+        "ssimulacra2": ("ssimulacra2.exe", "ssimulacra2"),
+        # libjxl names the CLI butteraugli_main; accept the short name for
+        # user-provided installations as well.
+        "butteraugli": ("butteraugli_main.exe", "butteraugli.exe", "butteraugli_main", "butteraugli"),
+    }[metric]
+    bundled_dir = Path(__file__).resolve().parents[1] / "tools" / "libjxl"
+    for name in bundled_names:
+        candidate = bundled_dir / name
+        if candidate.is_file():
+            return str(candidate)
+    for name in bundled_names:
+        on_path = shutil.which(name)
+        if on_path:
+            return on_path
+    return None
 
 
 def _tool_version(executable: str) -> str:
@@ -80,6 +95,21 @@ def _tool_version(executable: str) -> str:
             line = (completed.stdout or completed.stderr or "").strip().splitlines()
             return line[0][:160] if line else "unknown"
     return "unknown"
+
+
+def _implementation_version(executable: str) -> str:
+    """Prefer the bundled release manifest when a CLI omits its version flag."""
+    version = _tool_version(executable)
+    bundled_dir = (Path(__file__).resolve().parents[1] / "tools" / "libjxl").resolve()
+    try:
+        is_bundled = Path(executable).resolve().parent == bundled_dir
+    except OSError:
+        is_bundled = False
+    if version == "unknown" and is_bundled:
+        manifest = bundled_dir / "LIBJXL-VERSION.txt"
+        if manifest.is_file():
+            return manifest.read_text(encoding="utf-8").splitlines()[0].strip()
+    return version
 
 
 def _resolve_crops(
@@ -174,8 +204,8 @@ def _extract_png_pairs(
            "-i", str(source.path.resolve()), "-filter_complex", graph]
     if recipe.duration_limit > 0:
         cmd += ["-t", f"{recipe.duration_limit:.3f}"]
-    cmd += ["-map", "[distorted]", "-vsync", "0", "-pix_fmt", "rgb48le", str(distorted_pattern),
-            "-map", "[reference]", "-vsync", "0", "-pix_fmt", "rgb48le", str(reference_pattern)]
+    cmd += ["-map", "[distorted]", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le", str(distorted_pattern),
+            "-map", "[reference]", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le", str(reference_pattern)]
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
     # A long FFmpeg extraction can write enough diagnostics to fill a pipe.
@@ -235,10 +265,11 @@ def run_perceptual_task(
     on_status: Callable[[str], None] | None = None,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
+    resolved_crops: tuple[CropBox | None, CropBox | None] | None = None,
 ) -> PerceptualTaskOutput:
-    """Execute one ``perceptual_cpu`` task and return independent frame results."""
+    """Execute the CPU reference implementation and return independent frame results."""
     if not specs or any(spec.backend_id != BACKEND_ID for spec in specs):
-        raise ValueError("perceptual task requires perceptual_cpu metric specs")
+        raise ValueError("perceptual task requires perceptual metric specs")
     if request.recipe.resample_test is not None:
         raise PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.")
     _validate_pair(source, distorted, request.recipe)
@@ -255,7 +286,9 @@ def run_perceptual_task(
     if len(steps) != 1:
         raise PerceptualRunError("Perceptual metrics in one task must use the same frame coverage.")
     step = steps.pop()
-    source_crop, distorted_crop = _resolve_crops(source, distorted, request.recipe, cancel_event, process_handle, on_status)
+    source_crop, distorted_crop = resolved_crops or _resolve_crops(
+        source, distorted, request.recipe, cancel_event, process_handle, on_status
+    )
     if on_status:
         on_status("Preparing lossless frames for CPU perceptual metrics…")
     with tempfile.TemporaryDirectory(prefix="videometricslab-perceptual-") as temp:
@@ -283,14 +316,16 @@ def run_perceptual_task(
     time = frame.astype(np.float64) / max(source.fps, 1.0)
     results = MetricResultSet()
     for spec in specs:
-        version = _tool_version(executables[spec.key])
+        version = _implementation_version(executables[spec.key])
+        compatibility_version = version.casefold().removeprefix("libjxl ").replace(" ", "-")
+        compatibility = f"{spec.key}-libjxl-{compatibility_version}-cpu-v1"
         results.add(FrameMetricResult(
             spec.key, frame, time, np.asarray(values[spec.key], dtype=np.float32),
             MetricProvenance(
                 implementation=spec.key,
                 implementation_version=version,
                 compute_backend="cpu",
-                implementation_compatibility_id=spec.implementation_compatibility_id,
+                implementation_compatibility_id=compatibility,
                 parameters={"intermediate": "png/rgb48le", "coverage_step": step},
             ),
         ))

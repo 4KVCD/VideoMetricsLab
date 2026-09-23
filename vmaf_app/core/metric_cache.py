@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -84,6 +85,7 @@ def _info_to_dict(info: VideoInfo) -> dict:
         "bit_rate": info.bit_rate, "nominal_fps": info.nominal_fps,
         "color_range": info.color_range, "color_space": info.color_space,
         "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
+        "chroma_location": info.chroma_location,
     }
 
 
@@ -94,7 +96,8 @@ def _info_from_dict(data: dict) -> VideoInfo:
                      pix_fmt=data.get("pix_fmt", ""), bit_rate=data.get("bit_rate", 0),
                      nominal_fps=data.get("nominal_fps", 0.0), color_range=data.get("color_range", ""),
                      color_space=data.get("color_space", ""), color_transfer=data.get("color_transfer", ""),
-                     color_primaries=data.get("color_primaries", ""))
+                     color_primaries=data.get("color_primaries", ""),
+                     chroma_location=data.get("chroma_location", ""))
 
 
 def _atomic_json(path: Path, data: dict) -> None:
@@ -134,6 +137,15 @@ def _metadata(result, spec: MetricRequestSpec) -> np.ndarray:
 def store_metric(directory: Path, result, spec: MetricRequestSpec) -> Path:
     if result.key != spec.key:
         raise ValueError("metric result and request key differ")
+    # The UI request is backend-neutral, but the implementation used for a
+    # perceptual score affects its numeric result. Persist under the concrete
+    # implementation ID reported by provenance so a CPU score can never
+    # masquerade as a Vship GPU score (or vice versa).
+    if _is_auto_perceptual_spec(spec):
+        spec = replace(
+            spec,
+            implementation_compatibility_id=result.provenance.implementation_compatibility_id,
+        )
     arrays = {"metadata": _metadata(result, spec)}
     if isinstance(result, FrameMetricResult):
         arrays.update(frame=result.frame, time=result.time, values=result.values)
@@ -146,9 +158,23 @@ def store_metric(directory: Path, result, spec: MetricRequestSpec) -> Path:
     return path
 
 
-def load_metric(directory: Path, spec: MetricRequestSpec):
-    path = metric_path(directory, spec)
-    if not path.exists():
+def _is_auto_perceptual_spec(spec: MetricRequestSpec) -> bool:
+    return (
+        spec.backend_id == "perceptual"
+        and spec.implementation_compatibility_id.endswith("-auto-or-libjxl-cpu-v1")
+    )
+
+
+def _auto_perceptual_compatibility(spec: MetricRequestSpec, compatibility: object) -> bool:
+    value = str(compatibility or "")
+    return (
+        value == f"{spec.key}-vship-4.0.2-gpu-v1"
+        or (value.startswith(f"{spec.key}-libjxl-") and value.endswith("-cpu-v1"))
+    )
+
+
+def _load_metric_file(path: Path, spec: MetricRequestSpec):
+    if not path.is_file():
         return None
     try:
         with np.load(path, allow_pickle=False) as data:
@@ -165,6 +191,48 @@ def load_metric(directory: Path, spec: MetricRequestSpec):
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
         return None
     return None
+
+
+def _auto_perceptual_candidates(directory: Path, spec: MetricRequestSpec):
+    """Return concrete saved implementations matching a backend-neutral request."""
+    candidates: list[tuple[int, Path, MetricRequestSpec]] = []
+    try:
+        paths = directory.glob(f"{spec.key}_*.npz")
+        for path in paths:
+            try:
+                with np.load(path, allow_pickle=False) as data:
+                    metadata = json.loads(str(data["metadata"].item()))
+                request = metadata.get("request", {})
+                compatibility = request.get("implementation_compatibility_id")
+                provenance = metadata.get("provenance", {})
+                if (metadata.get("format_version") != METRIC_CACHE_FORMAT_VERSION
+                        or metadata.get("key") != spec.key
+                        or not _auto_perceptual_compatibility(spec, compatibility)
+                        or not isinstance(provenance, dict)
+                        or provenance.get("implementation_compatibility_id") != compatibility):
+                    continue
+                concrete = replace(spec, implementation_compatibility_id=compatibility)
+                if request != concrete.identity_dict():
+                    continue
+                # Prefer a prior GPU run, while still allowing CPU-only
+                # machines to reuse the bundled libjxl result.
+                rank = 0 if "-vship-" in compatibility else 1
+                candidates.append((rank, path, concrete))
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+                continue
+    except OSError:
+        return []
+    return sorted(candidates, key=lambda item: item[0])
+
+
+def load_metric(directory: Path, spec: MetricRequestSpec):
+    if _is_auto_perceptual_spec(spec):
+        for _rank, path, concrete in _auto_perceptual_candidates(directory, spec):
+            result = _load_metric_file(path, concrete)
+            if result is not None:
+                return result
+        return None
+    return _load_metric_file(metric_path(directory, spec), spec)
 
 
 def load_metrics(directory: Path, specs: tuple[MetricRequestSpec, ...]) -> MetricResultSet:
@@ -288,6 +356,16 @@ def clear_metrics(
     directory = recipe_directory(base, source, distorted, recipe)
     removed = 0
     for spec in specs:
+        if _is_auto_perceptual_spec(spec):
+            for _rank, path, _concrete in _auto_perceptual_candidates(directory, spec):
+                try:
+                    path.unlink()
+                    removed += 1
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    continue
+            continue
         path = metric_path(directory, spec)
         try:
             path.unlink()

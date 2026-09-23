@@ -30,7 +30,8 @@ Qt-free: tool discovery uses QSettings and native playback loads GI bindings.
 3. Check cached results using only the request's scientific identity.
 4. Group missing metrics by backend. The current FFmpeg backend still builds
    one efficient filtergraph for its requested metrics; XPSNR alone does not
-   require a VMAF score.
+   require a VMAF score. SSIMULACRA2 and Butteraugli use the perceptual backend,
+   which tries Vship GPU scoring and falls back to the bundled libjxl CPU tools.
 5. Parse per-frame logs into `FrameScores`, a collection of packed NumPy arrays.
 6. Deliver results to the UI, update graph identities, and queue cache writes.
 
@@ -63,7 +64,8 @@ thresholds and sequence aggregation. It is headless: it must not import Qt,
 ffmpeg wrappers or result models. Metrics may optionally carry an
 `FfmpegMetricBinding` for today's FFmpeg/UI adapter; a metric implemented by a
 different backend does not need a `VmafOptions` field just to join the
-registry. Current logical order is VMAF, VMAF NEG, PSNR, SSIM and XPSNR. UI
+registry. Current logical order is VMAF, VMAF NEG, PSNR, SSIM, XPSNR,
+SSIMULACRA2 and Butteraugli. UI
 tables retain their separate stable physical column mapping in
 `ui/main_window.py`.
 
@@ -72,7 +74,8 @@ tables retain their separate stable physical column mapping in
 generic cache and planning code must not import or inspect `VmafOptions`.
 
 `FrameScores` is the shared-axis view used by established UI and CSV paths.
-The five named convenience properties remain typed views over its packed arrays.
+The five legacy convenience properties remain typed views over its packed arrays;
+the newer independent-backend results use the generic metric result model.
 It is not the persistence model: portable `.metrics.json` stores the generic
 `MetricResultSet` directly. CSV intentionally remains a shared-frame export of
 the current five displayed metrics.

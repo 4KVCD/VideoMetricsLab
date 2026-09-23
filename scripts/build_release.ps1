@@ -109,6 +109,25 @@ try {
         throw 'The self-test reported a failure (see above)'
     }
 
+    $perceptualTools = @('ssimulacra2.exe', 'butteraugli_main.exe')
+    foreach ($tool in $perceptualTools) {
+        if (-not (Test-Path (Join-Path $output "_internal/vmaf_app/tools/libjxl/$tool"))) {
+            throw "Bundled perceptual metric tool is missing: $tool"
+        }
+    }
+
+    foreach ($vendor in @('nvidia', 'amd')) {
+        if (-not (Test-Path (Join-Path $output "_internal/vmaf_app/tools/vship/$vendor/libvship.dll"))) {
+            throw "Bundled Vship $vendor GPU library is missing"
+        }
+    }
+
+    foreach ($notice in @('LICENSE.vship.txt', 'LICENSE.ssimulacra2.txt', 'LICENSE.butteraugli.txt')) {
+        if (-not (Test-Path (Join-Path $output "_internal/vmaf_app/tools/vship/licenses/$notice"))) {
+            throw "Bundled Vship metric license notice is missing: $notice"
+        }
+    }
+
     # Distributions must carry the project's MIT terms and the notices for
     # the third-party components bundled alongside the executable.
     Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt') -Force

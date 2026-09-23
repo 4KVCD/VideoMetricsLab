@@ -78,6 +78,7 @@ class VideoInfo:
     color_space: str = ""
     color_transfer: str = ""
     color_primaries: str = ""
+    chroma_location: str = ""
 
     @property
     def estimated_frame_count(self) -> int:

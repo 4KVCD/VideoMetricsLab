@@ -11,7 +11,8 @@ from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.models import VideoInfo, VmafOptions
-from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, run_perceptual_task
+from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
+from vmaf_app.core.perceptual_vship import apply_vship_cpu_fallback
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
 
@@ -281,8 +282,8 @@ class VmafWorker(QThread):
                             )
                         result = current
                         combined = current.metric_results
-                    elif task.backend_id == "perceptual_cpu":
-                        perceptual = run_perceptual_task(
+                    elif task.backend_id == "perceptual":
+                        perceptual = apply_vship_cpu_fallback(
                             job.source_info, job.distorted_info, request, task.requested_specs,
                             on_progress=lambda cur, tot, fps, idx=i: self.progress.emit(idx, cur, tot, fps),
                             on_status=lambda msg, idx=i: self.status.emit(idx, msg),

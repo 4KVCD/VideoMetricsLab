@@ -56,6 +56,24 @@ else:
 VMAF_MODELS = PROJECT / "vmaf_app" / "models"
 datas.append((str(VMAF_MODELS), "vmaf_app/models"))
 
+# SSIMULACRA2 and Butteraugli are standalone CPU image tools from the
+# official libjxl Windows static distribution.  Keep only the two tools and
+# their notices; perceptual_cpu.py finds them relative to this directory.
+LIBJXL_TOOLS = PROJECT / "vmaf_app" / "tools" / "libjxl"
+if LIBJXL_TOOLS.is_dir():
+    datas.append((str(LIBJXL_TOOLS), "vmaf_app/tools/libjxl"))
+else:
+    print("WARNING: bundled libjxl perceptual tools are missing")
+
+# Vship's MIT-licensed metric library only (not FFVship/FFMS2). Its CUDA
+# build is self-contained apart from the NVIDIA driver; the HIP build will
+# use the AMD HIP runtime when available. Runtime failures select libjxl CPU.
+VSHIP_TOOLS = PROJECT / "vmaf_app" / "tools" / "vship"
+if VSHIP_TOOLS.is_dir():
+    datas.append((str(VSHIP_TOOLS), "vmaf_app/tools/vship"))
+else:
+    print("WARNING: bundled Vship GPU libraries are missing; perceptual metrics will use CPU")
+
 a = Analysis(
     [str(PROJECT / "vmaf_app" / "main.py")],
     pathex=[str(PROJECT)],

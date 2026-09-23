@@ -12,8 +12,8 @@ the packaged executable's self-test, and zips the result.
 
 | | |
 |---|---|
-| Folder | ~148 MB |
-| Zip | ~58 MB |
+| Folder | ~203 MB |
+| Zip | ~72 MB |
 | Output | `%LOCALAPPDATA%\VideoMetricsLab-build\` |
 
 Pass `-OutputRoot <path>` to build somewhere else, and `-VerifyMedia
@@ -47,6 +47,16 @@ case anyone overrides that.
   style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
+- **SSIMULACRA2 and Butteraugli**, the official libjxl 0.12.0 static Windows
+  command-line tools. Only these two executables and their notices are copied
+  into the bundle; users do not need to install libjxl or a runtime separately.
+  In the current build they add about 12 MB installed and 7 MB compressed.
+- **Vship 4.0.2 GPU libraries** for SSIMULACRA2 and Butteraugli. The app first
+  tries the matching NVIDIA CUDA or AMD HIP library and falls back to the
+  bundled CPU tools if the GPU, driver/runtime, input format, or GPU processing
+  is unavailable. The Vship CLI and FFMS2 decoder are not included; video
+  frames continue to come from the user's FFmpeg installation. Vship and
+  metric notices are packaged beside the libraries.
 
 ## What is not, and why
 

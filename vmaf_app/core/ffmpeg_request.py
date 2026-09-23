@@ -54,7 +54,7 @@ def metric_request_specs(
                 backend_id=definition.backend_id,
                 parameters=(),
                 coverage=FrameCoverage("sampled" if options.n_subsample > 1 else "full", options.n_subsample),
-                implementation_compatibility_id=f"{key}-reference-cli-v1",
+                implementation_compatibility_id=f"{key}-vship-4.0.2-auto-or-libjxl-cpu-v1",
             ))
             continue
         coverage = FrameCoverage(

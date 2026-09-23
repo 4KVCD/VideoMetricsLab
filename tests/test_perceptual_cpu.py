@@ -23,7 +23,7 @@ def _info(path: str) -> VideoInfo:
 def _request(*keys: str) -> AnalysisRequest:
     return AnalysisRequest(
         recipe=ComparisonRecipe(CropMode.NONE, None, None, "bicubic", ScaleDirection.SOURCE_TO_DISTORTED, 0.0, None),
-        metrics=tuple(MetricRequestSpec(key, "perceptual_cpu", (), FrameCoverage("full"), f"{key}-reference-cli-v1") for key in keys),
+        metrics=tuple(MetricRequestSpec(key, "perceptual", (), FrameCoverage("full"), f"{key}-reference-cli-v1") for key in keys),
         execution=ExecutionPreferences(False, GpuVendor.NONE, 1),
     )
 
@@ -42,7 +42,7 @@ def test_mixed_request_groups_perceptual_metrics_separately():
     plan = build_execution_plan(request)
     assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
         ("ffmpeg", ("vmaf", "psnr")),
-        ("perceptual_cpu", ("ssimulacra2", "butteraugli")),
+        ("perceptual", ("ssimulacra2", "butteraugli")),
     ]
 
 
@@ -86,16 +86,16 @@ def test_cached_backend_does_not_suppress_missing_backend():
     ])
     plan = build_execution_plan(request, cached)
     assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
-        ("perceptual_cpu", ("ssimulacra2",)),
+        ("perceptual", ("ssimulacra2",)),
     ]
 
 
 def test_perceptual_cache_entries_are_independent_and_coverage_specific(tmp_path):
     full, sampled = (
-        MetricRequestSpec("ssimulacra2", "perceptual_cpu", (), FrameCoverage(mode, step), "ssimulacra2-reference-cli-v1")
+        MetricRequestSpec("ssimulacra2", "perceptual", (), FrameCoverage(mode, step), "ssimulacra2-reference-cli-v1")
         for mode, step in (("full", 1), ("sampled", 2))
     )
-    butter = MetricRequestSpec("butteraugli", "perceptual_cpu", (), FrameCoverage("full", 1), "butteraugli-reference-cli-v1")
+    butter = MetricRequestSpec("butteraugli", "perceptual", (), FrameCoverage("full", 1), "butteraugli-reference-cli-v1")
     provenance = MetricProvenance("test", "1", "cpu", "ssimulacra2-reference-cli-v1")
     store_metric(tmp_path, FrameMetricResult("ssimulacra2", [0], [0.0], [90.0], provenance), full)
     store_metric(tmp_path, FrameMetricResult("butteraugli", [0], [0.0], [0.2], provenance), butter)

@@ -1,0 +1,3 @@
+libjxl 0.12.0
+Windows x64 static distribution
+Source: https://github.com/libjxl/libjxl/releases/tag/v0.12.0

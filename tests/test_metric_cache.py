@@ -20,6 +20,7 @@ from vmaf_app.core.ffmpeg_request import (
     supplemental_metric_specs,
 )
 from vmaf_app.core.metric_cache import (
+    clear_metrics,
     clear_recipe,
     load_metric,
     load_metrics,
@@ -211,6 +212,34 @@ def test_backend_routing_is_not_part_of_metric_cache_identity():
 
     assert cpu.identity_dict() == gpu.identity_dict()
     assert metric_path(Path("cache"), cpu) == metric_path(Path("cache"), gpu)
+
+
+def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
+    source, test = _paths(tmp_path)
+    options = VmafOptions()
+    recipe = comparison_recipe_from_vmaf_options(options)
+    directory = recipe_directory(tmp_path, source, test, recipe)
+    spec = next(spec for spec in metric_request_specs(options, ("ssimulacra2",)) if spec.key == "ssimulacra2")
+    cpu_id = "ssimulacra2-libjxl-0.12.0-cpu-v1"
+    gpu_id = "ssimulacra2-vship-4.0.2-gpu-v1"
+    sampled = MetricRequestSpec(
+        spec.key, spec.backend_id, spec.parameters, FrameCoverage("sampled", 2), spec.implementation_compatibility_id,
+    )
+    cpu_provenance = MetricProvenance("SSIMULACRA2", "libjxl 0.12.0", "cpu", cpu_id)
+    gpu_provenance = MetricProvenance("Vship/SSIMULACRA2", "Vship 4.0.2", "gpu", gpu_id)
+    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [82.0], cpu_provenance), spec)
+    assert load_metric(directory, spec).provenance.compute_backend == "cpu"
+    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [91.0], gpu_provenance), spec)
+    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [80.0], cpu_provenance), sampled)
+
+    loaded = load_metric(directory, spec)
+    assert loaded.values.tolist() == [91.0]
+    assert loaded.provenance.compute_backend == "gpu"
+    assert len(list(directory.glob("ssimulacra2_*.npz"))) == 3
+
+    assert clear_metrics(tmp_path, source, test, recipe, (spec,)) == 2
+    assert len(list(directory.glob("ssimulacra2_*.npz"))) == 1
+    assert load_metric(directory, sampled).values.tolist() == [80.0]
 
 
 def test_planning_retains_grouping_and_special_xpsnr_coverage():

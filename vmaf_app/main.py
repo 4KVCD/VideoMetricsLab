@@ -11,12 +11,11 @@ from vmaf_app.ui.main_window import MainWindow
 
 
 def self_test() -> str:
-    """A report on everything the app needs but does not contain.
+    """A report on external tools and bundled runtime components.
 
     Exists for the packaged build: it has no console, so when it fails to
     start or silently falls back there is otherwise nothing to look at.
-    Checks the pieces that are found at runtime rather than at build time --
-    FFmpeg on the user's machine, the bundled GStreamer, the GPU shader.
+    Checks the pieces that are found at runtime rather than at build time.
     """
     lines = [f"{APP_NAME} {__version__} self-test (Python {sys.version.split()[0]})"]
     frozen = getattr(sys, "frozen", False)
@@ -73,6 +72,23 @@ def self_test() -> str:
         lines.append(f"  OK    GPU HDR tone-map shader ({d3d11_tonemap.library_path().name})")
     else:
         lines.append("  WARN  GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
+
+    from vmaf_app.core.perceptual_cpu import find_metric_executable
+
+    for metric in ("ssimulacra2", "butteraugli"):
+        tool = find_metric_executable(metric)
+        lines.append(f"  OK    {metric} ({tool})" if tool else f"  WARN  {metric} tool absent")
+
+    from vmaf_app.core.perceptual_vship import detect_vship_device
+
+    vship_device, vship_reason = detect_vship_device()
+    if vship_device is not None:
+        lines.append(
+            f"  OK    Vship {vship_device.version} GPU metrics "
+            f"({vship_device.vendor.upper()}: {vship_device.name})"
+        )
+    else:
+        lines.append(f"  WARN  Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
 
     return "\n".join(lines)
 

@@ -81,6 +81,7 @@ def _info_to_dict(v: VideoInfo) -> dict:
         "color_range": v.color_range, "color_space": v.color_space,
         "color_transfer": v.color_transfer,
         "color_primaries": v.color_primaries,
+        "chroma_location": v.chroma_location,
     }
 
 
@@ -94,6 +95,7 @@ def _info_from_dict(d: dict) -> VideoInfo:
         color_space=d.get("color_space", ""),
         color_transfer=d.get("color_transfer", ""),
         color_primaries=d.get("color_primaries", ""),
+        chroma_location=d.get("chroma_location", ""),
     )
 
 
