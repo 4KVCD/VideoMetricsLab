@@ -71,8 +71,12 @@ def load_cached(
     request identity.
     """
     base = directory if directory is not None else _cache_dir()
+    # The GPU/CPU choice is not part of cache identity, but it does decide
+    # which saved implementation of a perceptual metric may answer: choosing
+    # CPU must never show a GPU score (see metric_cache.load_metric).
     return metric_cache.load_result(
-        base, source, distorted, request.recipe, request.metrics, supplemental_specs
+        base, source, distorted, request.recipe, request.metrics, supplemental_specs,
+        compute_backends=dict(request.execution.perceptual_backends),
     )
 
 

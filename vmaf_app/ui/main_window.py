@@ -1923,7 +1923,9 @@ class MainWindow(QMainWindow):
         worker = ProbeWorker(
             paths, self._source_info.path, True,
             {
-                rd.path: analysis_request_from_vmaf_options(clone_options(rd.options), self._requested_metrics(rd))
+                rd.path: analysis_request_from_vmaf_options(
+                    clone_options(rd.options), self._requested_metrics(rd), rd.metric_backends,
+                )
                 for rd in cache_rows
             },
             cache_paths={rd.path: rd.identity_path for rd in cache_rows},
@@ -1959,7 +1961,10 @@ class MainWindow(QMainWindow):
             return
         current_key = result_cache.cache_key(
             self._source_info.path, self._rows[row].identity_path,
-            analysis_request_from_vmaf_options(self._rows[row].options, self._requested_metrics(self._rows[row])),
+            analysis_request_from_vmaf_options(
+                self._rows[row].options, self._requested_metrics(self._rows[row]),
+                self._rows[row].metric_backends,
+            ),
         )
         if key == current_key:
             self._on_cached_found(path, result, label)
@@ -2074,7 +2079,9 @@ class MainWindow(QMainWindow):
             return False
         cached = result_cache.load_cached(
             self._source_info.path, row_data.identity_path,
-            analysis_request_from_vmaf_options(row_data.options, self._requested_metrics(row_data)),
+            analysis_request_from_vmaf_options(
+                row_data.options, self._requested_metrics(row_data), row_data.metric_backends,
+            ),
             supplemental_specs=supplemental_metric_specs(row_data.options),
         )
         if cached is None:
@@ -2137,7 +2144,10 @@ class MainWindow(QMainWindow):
                     partial(
                         result_cache.clear,
                         self._source_info.path, row_data.identity_path,
-                        analysis_request_from_vmaf_options(clone_options(row_data.options), self._requested_metrics(row_data)),
+                        analysis_request_from_vmaf_options(
+                            clone_options(row_data.options), self._requested_metrics(row_data),
+                            row_data.metric_backends,
+                        ),
                         cache_directory,
                         supplemental_metric_specs(clone_options(row_data.options)),
                     ),
@@ -3063,7 +3073,9 @@ class MainWindow(QMainWindow):
                 # which for a synthetic row is a path that does not exist and
                 # so carries no size or mtime to notice a replacement by.
                 result.source, row_data.identity_path, result, label,
-                analysis_request_from_vmaf_options(cache_options, self._requested_metrics(row_data)),
+                analysis_request_from_vmaf_options(
+                    cache_options, self._requested_metrics(row_data), row_data.metric_backends,
+                ),
                 result_cache.cache_dir(),
             ),
         )

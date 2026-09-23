@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.analysis_request import (
@@ -442,3 +443,50 @@ def test_metrics_that_end_a_frame_apart_all_survive_a_reload(tmp_path):
     assert loaded is not None
     assert len(loaded.metric("vmaf").frame) == 23
     assert len(loaded.metric("ssimulacra2").frame) == 24
+
+
+
+def test_choosing_cpu_never_loads_a_gpu_score(tmp_path):
+    """A 640x360 test: with CPU selected, the cache showed the GPU
+    SSIMULACRA2 score (44.47) although the CPU tool gives 46.89 on the same
+    frames. CPU now accepts only a CPU score; GPU prefers a GPU one and
+    falls back to CPU, which a GPU choice produces without a supported GPU."""
+    source, test = _paths(tmp_path)
+    options = VmafOptions()
+    info = VideoInfo(test, 640, 360, 24.0, 1.0, 24, "h264")
+    gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
+    cpu = MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1")
+
+    def store(provenance, value):
+        result = ComparisonResult(
+            source=source, distorted=test, frames=FrameScores.empty(), fps=24.0, model="",
+            source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+            compared_frame_count=1,
+            metric_results=MetricResultSet([FrameMetricResult("ssimulacra2", [0], [0.0], [value], provenance)]),
+        )
+        result_cache.store(source, test, result, "run", analysis_request_from_vmaf_options(options, ("ssimulacra2",)), tmp_path)
+
+    def lookup(backend):
+        request = analysis_request_from_vmaf_options(options, ("ssimulacra2",), {"ssimulacra2": backend})
+        loaded = result_cache.load_cached(source, test, request, tmp_path)
+        return None if loaded is None else loaded[0].metric("ssimulacra2")
+
+    store(gpu, 44.47)
+    assert lookup("gpu").values.tolist() == pytest.approx([44.47])
+    assert lookup("cpu") is None, "a CPU selection loaded the GPU score"
+
+    store(cpu, 46.89)
+    assert lookup("cpu").values.tolist() == pytest.approx([46.89])
+    assert lookup("cpu").provenance.compute_backend == "cpu"
+    assert lookup("gpu").provenance.compute_backend == "gpu"
+
+
+def test_a_gpu_choice_still_finds_a_cpu_fallback_score(tmp_path):
+    source, test = _paths(tmp_path)
+    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
+    spec = metric_request_specs(VmafOptions(), ("butteraugli",))[0]
+    cpu = MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1")
+    store_metric(directory, FrameMetricResult("butteraugli", [0], [0.0], [1.5], cpu), spec)
+
+    assert load_metric(directory, spec, "gpu").provenance.compute_backend == "cpu"
+    assert load_metric(directory, spec, "cpu").provenance.compute_backend == "cpu"

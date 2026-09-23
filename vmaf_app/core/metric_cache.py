@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -236,9 +237,16 @@ def _auto_perceptual_candidates(directory: Path, spec: MetricRequestSpec):
     return sorted(candidates, key=lambda item: item[0])
 
 
-def load_metric(directory: Path, spec: MetricRequestSpec):
+def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str = "gpu"):
+    """Load one cached metric. `compute_backend` is the user's GPU/CPU choice
+    for a perceptual metric: "cpu" accepts only a libjxl CPU score, never a
+    Vship GPU one (the two can differ by a few points on the same frames);
+    "gpu" prefers a Vship score and accepts a CPU one, which is what a GPU
+    selection produces on a machine without a supported GPU."""
     if _is_auto_perceptual_spec(spec):
         for _rank, path, concrete in _auto_perceptual_candidates(directory, spec):
+            if compute_backend == "cpu" and "-vship-" in concrete.implementation_compatibility_id:
+                continue
             result = _load_metric_file(path, concrete)
             if result is not None:
                 return result
@@ -246,10 +254,14 @@ def load_metric(directory: Path, spec: MetricRequestSpec):
     return _load_metric_file(metric_path(directory, spec), spec)
 
 
-def load_metrics(directory: Path, specs: tuple[MetricRequestSpec, ...]) -> MetricResultSet:
+def load_metrics(
+    directory: Path, specs: tuple[MetricRequestSpec, ...],
+    compute_backends: Mapping[str, str] | None = None,
+) -> MetricResultSet:
+    backends = compute_backends or {}
     results = MetricResultSet()
     for spec in specs:
-        result = load_metric(directory, spec)
+        result = load_metric(directory, spec, backends.get(spec.key, "gpu"))
         if result is not None:
             results.add(result)
     return results
@@ -287,6 +299,7 @@ def store_result(
 def load_result(
     base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe,
     specs: tuple[MetricRequestSpec, ...], supplemental_specs: tuple[MetricRequestSpec, ...] = (),
+    compute_backends: Mapping[str, str] | None = None,
 ):
     directory = recipe_directory(base, source, distorted, recipe)
     context_path = directory / "context.json"
@@ -298,13 +311,13 @@ def load_result(
             return None
     except (OSError, ValueError, json.JSONDecodeError):
         return None
-    results = load_metrics(directory, specs)
+    results = load_metrics(directory, specs, compute_backends)
     # Extra current metrics are direct lookups too. They preserve the UI
     # behavior of showing every compatible score already cached for a row
     # without an exponential search through metric combinations.
     for spec in supplemental_specs:
         if not results.has(spec.key):
-            extra = load_metric(directory, spec)
+            extra = load_metric(directory, spec, (compute_backends or {}).get(spec.key, "gpu"))
             if extra is not None:
                 results.add(extra)
     if not results:

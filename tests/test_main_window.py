@@ -3961,3 +3961,40 @@ def test_perceptual_metrics_are_unavailable_on_a_resolution_round_trip_row(qapp,
     assert "ssimulacra2" not in job.metric_keys and "vmaf" in job.metric_keys
     win._worker = None
     win.close()
+
+
+
+def test_a_row_set_to_cpu_does_not_show_a_cached_gpu_score(qapp, tmp_path, monkeypatch):
+    """The app's own lookups carry each row's GPU/CPU choice."""
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source, distorted = tmp_path / "source.mp4", tmp_path / "test.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted.write_bytes(b"d" * 50)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    rd = win._rows[row]
+    win._set_row_info(row, _fake_video_info(str(distorted)))
+    for key in ("vmaf", "psnr", "ssim", "xpsnr"):
+        rd.options.set_metric_enabled(key, False)
+    rd.extra_metric_keys = {"ssimulacra2"}
+    rd.metric_backends["ssimulacra2"] = "cpu"
+    gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
+    info = rd.video_info
+    result = ComparisonResult(
+        source=source, distorted=distorted, frames=[], fps=30.0, model="",
+        source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+        compared_frame_count=1,
+        metric_results=MetricResultSet([FrameMetricResult("ssimulacra2", [0], [0.0], [44.47], gpu)]),
+    )
+    result_cache.store(source, distorted, result, "gpu run",
+                       analysis_request_from_vmaf_options(rd.options, ("ssimulacra2",)))
+
+    assert not win._try_load_cached_result(row)
+
+    rd.metric_backends["ssimulacra2"] = "gpu"
+    assert win._try_load_cached_result(row)
+    win.close()
