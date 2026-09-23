@@ -112,3 +112,9 @@ Third-party components retain their own licenses; see
 - Refactored metric execution around a shared registry and backend plan.
 - Added per-metric results, provenance, and cache identities so saved results remain tied to their implementation and settings.
 - Improved generalized metric graph and per-frame readout handling.
+
+## v1.1.1 changelog
+
+- Fixed the metric graph clipping VMAF v1 scores above 100.
+- Show the application version in the window title: VideoMetricsLab 1.1.1.
+- Omit calculation-library version metadata from non-VMAF cache entries

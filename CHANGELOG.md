@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.1
+
+- Fixed the metric graph clipping VMAF v1 scores above 100.
+- Show the application version in the window title: VideoMetricsLab 1.1.1.
+- Omit calculation-library version metadata from non-VMAF cache entries
+
 ## v1.1
 
 - Added bundled Netflix VMAF v1.0 model files, including standard, 4K, phone,
