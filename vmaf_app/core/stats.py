@@ -6,7 +6,7 @@ from itertools import pairwise
 
 import numpy as np
 
-from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation
+from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation, MetricDirection
 from vmaf_app.core.models import ComparisonResult
 
 # Default threshold breakdown requested: >95, >90, >85, <85, <80, <70
@@ -43,10 +43,14 @@ class VmafStats:
     stdev: float
     minimum: float
     maximum: float
-    percentile_10: float  # "10% low" -- the score below which the worst 10% of frames fall
-    percentile_5: float  # "5% low"
-    percentile_1: float  # "1% low"
-    percentile_0_1: float  # "0.1% low" -- needs a lot of frames to be meaningful
+    # The worst-frames tail. For a higher-is-better metric, "10% low": the
+    # score below which the worst 10% of frames fall. For a lower-is-better
+    # one (Butteraugli) the worst frames are the HIGH ones, so these hold the
+    # 90th/95th/99th/99.9th percentiles instead -- see worst_is_high.
+    percentile_10: float
+    percentile_5: float
+    percentile_1: float
+    percentile_0_1: float  # needs a lot of frames to be meaningful
     #: Frames scoring +inf: mathematically identical to the reference. Kept
     #: in the sequence aggregate and counted here too -- see
     #: compute_stats. They still appear per-frame and in the threshold
@@ -54,6 +58,14 @@ class VmafStats:
     identical: int = 0
     thresholds: list[ThresholdStat] = field(default_factory=list)
     histogram: list[HistogramBin] = field(default_factory=list)
+    #: True for a lower-is-better metric: the percentile_* tail fields are
+    #: taken from the top, and are labelled "High" rather than "Low".
+    worst_is_high: bool = False
+
+    @staticmethod
+    def tail_labels(worst_is_high: bool = False) -> list[str]:
+        side = "High" if worst_is_high else "Low"
+        return [f"{share} {side}" for share in ("10%", "5%", "1%", "0.1%")]
 
     @property
     def values(self) -> list[tuple[str, float]]:
@@ -73,10 +85,11 @@ class VmafStats:
             ("StDev", self.stdev),
             ("Min", self.minimum),
             ("Max", self.maximum),
-            ("10% Low", self.percentile_10),
-            ("5% Low", self.percentile_5),
-            ("1% Low", self.percentile_1),
-            ("0.1% Low", self.percentile_0_1),
+            *zip(
+                self.tail_labels(self.worst_is_high),
+                (self.percentile_10, self.percentile_5, self.percentile_1, self.percentile_0_1),
+                strict=True,
+            ),
         ]
 
     def summary(self, value_format: str = "{:.2f}") -> list[tuple[str, str]]:
@@ -155,11 +168,16 @@ def compute_stats(
     values,
     thresholds: list[tuple[str, float]] | None = None,
     aggregate: MetricAggregation | str = ARITHMETIC,
+    direction: MetricDirection | str = MetricDirection.HIGHER_IS_BETTER,
 ) -> VmafStats:
     """Despite the name (kept for the VMAF-specific callers/tests that exist
     already), this works over any sequence of per-frame float scores -- PSNR,
     SSIM and XPSNR reuse it with their own threshold bands and aggregation.
     Pass an empty threshold list to omit bands entirely.
+
+    `direction` decides which end is the worst-frames tail: the low end for
+    VMAF and friends, the high end for Butteraugli, where 0 is identical and
+    a bigger number is a more visible difference.
 
     Accepts a numpy array or a plain list. Computed vectorised: a run is
     hundreds of thousands of frames and this is called once per metric per
@@ -168,6 +186,7 @@ def compute_stats(
     than poisoning every statistic.
     """
     thresholds = thresholds if thresholds is not None else DEFAULT_THRESHOLDS
+    worst_is_high = MetricDirection(direction) is MetricDirection.LOWER_IS_BETTER
     data = np.asarray(values, dtype=np.float64)
     data = data[~np.isnan(data)]
     n = int(data.size)
@@ -175,7 +194,7 @@ def compute_stats(
         return VmafStats(
             count=0, mean=0, median=0, stdev=0, minimum=0, maximum=0,
             percentile_10=0, percentile_5=0, percentile_1=0, percentile_0_1=0,
-            thresholds=[], histogram=[],
+            thresholds=[], histogram=[], worst_is_high=worst_is_high,
         )
 
     # A frame identical to the reference scores +inf, which XPSNR reports
@@ -210,7 +229,8 @@ def compute_stats(
                 return float(a if np.isinf(a) else b)
             return float(a + (b - a) * (position - lower))
 
-        p10, p5, p1, p01 = (percentile(q) for q in (10, 5, 1, 0.1))
+        tails = (10, 5, 1, 0.1)
+        p10, p5, p1, p01 = (percentile(100 - q if worst_is_high else q) for q in tails)
 
     threshold_stats = []
     for cmp_op, thresh in thresholds:
@@ -246,6 +266,7 @@ def compute_stats(
         percentile_0_1=p01,
         thresholds=threshold_stats,
         histogram=histogram,
+        worst_is_high=worst_is_high,
     )
 
 

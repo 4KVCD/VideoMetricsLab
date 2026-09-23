@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition
+from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition, MetricDirection
 from vmaf_app.core.models import ComparisonResult
 from vmaf_app.core.run_io import (
     RESULT_FILE_FILTER,
@@ -163,6 +163,16 @@ _HOVER_PLACEHOLDER = (
     "your cursor, so dips are easy to land on).\n"
     "Scroll to zoom, drag to pan, double-click to reset."
 )
+#: The same, for a metric where a bigger number is worse (Butteraugli).
+_HOVER_PLACEHOLDER_LOWER_IS_BETTER = (
+    "Hover to inspect a point (locks onto the highest nearby score at or above "
+    "your cursor, so spikes are easy to land on).\n"
+    "Scroll to zoom, drag to pan, double-click to reset."
+)
+
+
+def _worst_is_high(metric: MetricDefinition) -> bool:
+    return metric.direction is MetricDirection.LOWER_IS_BETTER
 
 
 @dataclass
@@ -186,6 +196,11 @@ class _MetricPage(QWidget):
     def __init__(self, metric: MetricDefinition, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.metric = metric
+        # Hover snaps to the worst nearby frame: a dip for VMAF, a spike for
+        # Butteraugli. The search works on sign * value, so "lowest" in it
+        # always means "worst".
+        self._sign = -1.0 if _worst_is_high(metric) else 1.0
+        self._placeholder = _HOVER_PLACEHOLDER_LOWER_IS_BETTER if _worst_is_high(metric) else _HOVER_PLACEHOLDER
         self._curves: dict[int, _MetricCurve] = {}  # series_id -> stats/values, only entries with data
         self._hover_text = ""
 
@@ -204,7 +219,7 @@ class _MetricPage(QWidget):
         self.no_data_label.setVisible(False)
         layout.addWidget(self.no_data_label)
 
-        self.hover_label = QLabel(_HOVER_PLACEHOLDER)
+        self.hover_label = QLabel(self._placeholder)
         self.hover_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         # The font goes through setFont, not the stylesheet: _fit_hover_label
         # measures with QFontMetrics(self.hover_label.font()), and a
@@ -259,7 +274,7 @@ class _MetricPage(QWidget):
             times=result.time, values=plot_values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
-            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation),
+            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation, self.metric.direction),
             values=values,
             frames=result.frame,
             times=result.time,
@@ -317,7 +332,7 @@ class _MetricPage(QWidget):
         # once it leaves. Sizing to only the readout meant a series named "a"
         # produced a box too small for the placeholder that comes back the
         # moment the pointer moves away, clipping it.
-        placeholder_lines = _HOVER_PLACEHOLDER.splitlines()
+        placeholder_lines = self._placeholder.splitlines()
 
         # 6px of stylesheet padding top AND bottom come out of the fixed
         # height, so the allowance has to cover both plus a little slack --
@@ -392,7 +407,9 @@ class _MetricPage(QWidget):
         prefers the one closest in time that's at or below the cursor's Y
         position -- so hovering anywhere near a dip "grabs" it; and falls
         back to the single lowest-value point in that neighbourhood if
-        nothing there is at or below the cursor's Y.
+        nothing there is at or below the cursor's Y. For a lower-is-better
+        metric (Butteraugli) all of this is mirrored: at or ABOVE the cursor,
+        falling back to the highest point -- the worst frame either way.
 
         Vectorised: zoomed out over a long run this window spans thousands
         of frames, and it runs on every mouse move.
@@ -403,7 +420,10 @@ class _MetricPage(QWidget):
         if lo >= hi:
             return self._nearest_index_by_time(times, x)
 
-        window = values[lo:hi]
+        # Only the window is flipped, not the whole run: this runs on every
+        # mouse move. NaN stays NaN.
+        window = values[lo:hi] * self._sign
+        y = y * self._sign
         # NaN compares False against everything, so a missing value can never
         # be picked as "at or below the cursor" -- that part needs no guard.
         at_or_below = np.flatnonzero(window <= y)
@@ -425,8 +445,10 @@ class _MetricPage(QWidget):
         time using the same dip-snap rule (nearest-in-time among points
         at/below the cursor's Y across ALL visible series pooled together,
         falling back to the single lowest point if none qualify) so every
-        series' readout refers to the exact same moment.
+        series' readout refers to the exact same moment. Mirrored for a
+        lower-is-better metric, as there.
         """
+        y = y * self._sign
         best_below_time: float | None = None
         best_below_dist = 0.0
         fallback_time: float | None = None
@@ -440,7 +462,7 @@ class _MetricPage(QWidget):
             hi = int(np.searchsorted(times, x + half_window, side="right"))
             if lo >= hi:
                 continue
-            window_times, window_values = times[lo:hi], values[lo:hi]
+            window_times, window_values = times[lo:hi], values[lo:hi] * self._sign
 
             finite = np.flatnonzero(np.isfinite(window_values))
             if finite.size:
@@ -814,8 +836,13 @@ class GraphPanel(QWidget):
         return METRICS[self.tabs.currentIndex()] if self.tabs.currentIndex() >= 0 else METRICS[0]
 
     #: The statistics shown for the selected metric. "Mean" is deliberately
-    #: absent: every metric's mean already has a column of its own.
-    _DETAIL_LABELS = ["Median", "StDev", "Min", "Max", "10% Low", "5% Low", "1% Low", "0.1% Low"]
+    #: absent: every metric's mean already has a column of its own. The
+    #: worst-frames tail follows, "Low" or "High" by the metric's direction.
+    _DETAIL_LABELS = ["Median", "StDev", "Min", "Max"]
+
+    @classmethod
+    def _detail_labels(cls, metric: MetricDefinition) -> list[str]:
+        return cls._DETAIL_LABELS + VmafStats.tail_labels(_worst_is_high(metric))
 
     def _setup_stats_table(self) -> None:
         """Columns: the series, every metric's mean, then the selected
@@ -828,7 +855,7 @@ class GraphPanel(QWidget):
         and because the deeper statistics are only asked about one at a time.
         """
         metric = self._current_metric()
-        headers = ["Series"] + [m.label for m in METRICS] + list(self._DETAIL_LABELS)
+        headers = ["Series"] + [m.label for m in METRICS] + self._detail_labels(metric)
         headers += [f"{cmp_op} {thresh:g}" for cmp_op, thresh in metric.thresholds]
         headers.append("")  # the per-row remove button
         self.stats_table.setColumnCount(len(headers))

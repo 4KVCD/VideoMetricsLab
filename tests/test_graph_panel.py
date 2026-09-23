@@ -1245,3 +1245,61 @@ def test_the_exported_png_is_written_and_readable(qapp, tmp_path, monkeypatch):
 
     assert out.exists() and out.stat().st_size > 0
     assert not QPixmap(str(out)).isNull(), "the file is not a readable image"
+
+
+# ------------------------------------------------------------------ lower-is-better (Butteraugli)
+
+def _butteraugli_result(name: str, values: list[float]) -> ComparisonResult:
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    result = _values_result(name, [90.0] * len(values))
+    provenance = MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1")
+    result.metric_results = MetricResultSet([FrameMetricResult(
+        "butteraugli", list(range(len(values))), [i / 30.0 for i in range(len(values))], values, provenance,
+    )])
+    return result
+
+
+def _butteraugli_page(win: GraphPanel):
+    win.tabs.setCurrentIndex(next(i for i, m in enumerate(METRICS) if m.key == "butteraugli"))
+    return win._pages["butteraugli"]
+
+
+def test_butteraugli_hover_snaps_to_the_spike_not_the_zeros_beside_it(qapp):
+    """Butteraugli is 0 for an identical frame and grows with the visible
+    difference, so its bad frames are spikes. Hovering near frame 1 of
+    [0, 5, 0] picked frame 0: the dip-snap rule, meant for VMAF, went for
+    the best frame beside the worst one."""
+    win = GraphPanel()
+    win.add_run(_butteraugli_result("a.mp4", [0.0, 5.0, 0.0]))
+    entry = next(iter(win._entries.values()))
+    page = _butteraugli_page(win)
+    curve = page._curves[next(iter(page._curves))]
+
+    for y in (2.5, 6.0):  # under the spike, and above everything (the fallback)
+        idx = page._find_hover_index(curve, curve.values, x=1 / 30.0 + 0.004, y=y, half_window=0.05)
+        assert idx == 1, y
+
+    # The shared-time path used with several series follows the same rule.
+    win.add_run(_butteraugli_result("b.mp4", [0.0, 4.0, 0.0]))
+    page.on_hover(1 / 30.0 + 0.004, 2.5, win._entries)
+    readout = page.hover_label.text()
+    assert re.search(rf"\[{entry.label}\]\s+frame\s+1\s.*Butteraugli=5\.0000", readout), readout
+    assert re.search(r"\[b\]\s+frame\s+1\s.*Butteraugli=4\.0000", readout), readout
+    assert "highest nearby score" in page._placeholder
+
+
+def test_butteraugli_detail_columns_are_the_high_tail(qapp):
+    win = GraphPanel()
+    values = [float(v) for v in range(100)]  # 0 is best, 99 worst
+    win.add_run(_butteraugli_result("a.mp4", values))
+    _butteraugli_page(win)
+    headers = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
+    assert "10% High" in headers and "0.1% High" in headers
+    assert "10% Low" not in headers
+    cell = win.stats_table.item(0, headers.index("10% High")).text()
+    assert float(cell) == pytest.approx(89.1)  # the 90th percentile, not the 10th
+
+    win.tabs.setCurrentIndex(0)  # VMAF keeps its low tail
+    headers = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
+    assert "10% Low" in headers and "10% High" not in headers

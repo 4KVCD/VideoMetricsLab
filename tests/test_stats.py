@@ -175,3 +175,15 @@ def test_aggregate_scores_edge_cases():
     assert aggregate_scores([1.0, float("nan"), 3.0]) == pytest.approx(2.0)
     assert aggregate_scores([float("nan")] * 3) is None
     assert aggregate_scores([]) is None
+
+
+def test_a_lower_is_better_metric_takes_its_worst_frames_from_the_top():
+    from vmaf_app.core.metrics import MetricDirection
+
+    values = list(range(1001))
+    low = compute_stats(values, [])
+    high = compute_stats(values, [], direction=MetricDirection.LOWER_IS_BETTER)
+    assert (low.percentile_10, low.percentile_0_1) == (100.0, 1.0)
+    assert (high.percentile_10, high.percentile_5, high.percentile_1, high.percentile_0_1) == (900.0, 950.0, 990.0, 999.0)
+    assert [label for label, _ in high.values][5:] == ["10% High", "5% High", "1% High", "0.1% High"]
+    assert [label for label, _ in low.values][5:] == ["10% Low", "5% Low", "1% Low", "0.1% Low"]
