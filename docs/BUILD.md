@@ -51,7 +51,7 @@ case anyone overrides that.
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.
   In the current build they add about 12 MB installed and 7 MB compressed.
-- **Vship 4.0.2 GPU libraries** for SSIMULACRA2 and Butteraugli. The app first
+- **Vship 5.1.1 GPU libraries** for SSIMULACRA2 and Butteraugli. The app first
   tries the matching NVIDIA CUDA or AMD HIP library and falls back to the
   bundled CPU tools if the GPU, driver/runtime, input format, or GPU processing
   is unavailable. The Vship CLI and FFMS2 decoder are not included; video

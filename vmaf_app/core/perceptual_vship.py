@@ -78,6 +78,9 @@ class _DeviceInfo(ctypes.Structure):
         ("name", ctypes.c_char * 256), ("VRAMSize", ctypes.c_uint64),
         ("integrated", ctypes.c_int), ("MultiProcessorCount", ctypes.c_int),
         ("WarpSize", ctypes.c_int),
+        # Added in Vship 5.0. GetDeviceInfo writes this trailing feature matrix
+        # even for backends where it is unused; reserve the full native struct.
+        ("vulkanFeatureMatrix", ctypes.c_bool * 26),
     ]
 
 

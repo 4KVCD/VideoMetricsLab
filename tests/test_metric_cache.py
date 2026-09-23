@@ -226,7 +226,7 @@ def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
         spec.key, spec.backend_id, spec.parameters, FrameCoverage("sampled", 2), spec.implementation_compatibility_id,
     )
     cpu_provenance = MetricProvenance("SSIMULACRA2", "libjxl 0.12.0", "cpu", cpu_id)
-    gpu_provenance = MetricProvenance("Vship/SSIMULACRA2", "Vship 4.0.2", "gpu", gpu_id)
+    gpu_provenance = MetricProvenance("Vship/SSIMULACRA2", "Vship 5.1.1", "gpu", gpu_id)
     store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [82.0], cpu_provenance), spec)
     assert load_metric(directory, spec).provenance.compute_backend == "cpu"
     store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [91.0], gpu_provenance), spec)

@@ -34,9 +34,10 @@ def _cpu_output() -> PerceptualTaskOutput:
 
 
 def test_vship_device_info_matches_c_api_layout():
-    assert ctypes.sizeof(vship._DeviceInfo) == 280
+    assert ctypes.sizeof(vship._DeviceInfo) == 304
     assert [name for name, _kind in vship._DeviceInfo._fields_] == [
         "name", "VRAMSize", "integrated", "MultiProcessorCount", "WarpSize",
+        "vulkanFeatureMatrix",
     ]
 
 
