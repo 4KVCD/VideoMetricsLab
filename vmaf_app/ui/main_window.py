@@ -187,9 +187,19 @@ _PARTLY_FAILED = "Partly failed"
 
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
-#: Bytes of lossless 16-bit RGB PNG per pixel, as written by the CPU backend:
-#: 10.2 MB for a 3840x1608 frame of The Beekeeper, 0.27 of the raw 6 bytes.
-_CPU_PERCEPTUAL_PNG_BYTES_PER_PIXEL = 6 * 0.275
+#: CPU tool seconds per megapixel of a compared frame pair, measured with the
+#: bundled libjxl 0.12.0 tools on a 3840x1608 (6.17 MP) Beekeeper pair:
+#: SSIMULACRA2 1.1 s, Butteraugli 2.0 s. A rough guide -- CPUs differ.
+_CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL = {"ssimulacra2": 1.1 / 6.17, "butteraugli": 2.0 / 6.17}
+
+
+def _rough_duration(seconds: float) -> str:
+    """"about 3 days", "about 5 hours", "about 40 minutes"."""
+    if seconds >= 2 * 86400:
+        return f"about {seconds / 86400:.0f} days"
+    if seconds >= 2 * 3600:
+        return f"about {seconds / 3600:.0f} hours"
+    return f"about {max(1, round(seconds / 60))} minutes"
 
 
 class CompletedRun:
@@ -2399,11 +2409,9 @@ class MainWindow(QMainWindow):
     def _confirm_long_cpu_perceptual(self, job_rows: list[RowData]) -> bool:
         """Asks before CPU SSIMULACRA2/Butteraugli on videos over ten minutes.
 
-        The CPU tools score still images: the backend first writes every
-        compared frame of both videos to the temp folder as lossless 16-bit
-        PNG (10 MB a frame at 4K, terabytes for a film), then scores them one
-        process per frame at well under a frame per second. Only metrics this
-        run will actually calculate count -- one already cached is not rerun.
+        The CPU tools score one still-image pair at a time, 1-2 s per tool
+        for a 4K pair: days for a film. Only metrics this run will actually
+        calculate count -- one already cached is not rerun.
 
         A metric set to GPU counts too when no supported GPU was found: it
         will run on the CPU just the same, and used to do so without a word.
@@ -2421,11 +2429,14 @@ class MainWindow(QMainWindow):
             ]
             if any(row_data.metric_backends.get(key) != "cpu" for key in pending) and gpu_missing is None:
                 gpu_missing = not self._vship_available()
+            cpu_keys = [
+                key for key in pending
+                if row_data.metric_backends.get(key) == "cpu" or gpu_missing
+            ]
             cpu_metrics = [
                 metric_definition(key).label + ("" if row_data.metric_backends.get(key) == "cpu"
                                                 else " (set to GPU, but no supported GPU was found)")
-                for key in pending
-                if row_data.metric_backends.get(key) == "cpu" or gpu_missing
+                for key in cpu_keys
             ]
             if not cpu_metrics:
                 continue
@@ -2435,11 +2446,11 @@ class MainWindow(QMainWindow):
             if seconds <= _CPU_PERCEPTUAL_WARNING_SECONDS:
                 continue
             frames = seconds * (info.fps or 24.0) / max(1, row_data.options.n_subsample)
-            disk = frames * 2 * info.width * info.height * _CPU_PERCEPTUAL_PNG_BYTES_PER_PIXEL
-            size = f"{disk / 1e12:.1f} TB" if disk >= 1e12 else f"{disk / 1e9:.0f} GB"
+            megapixels = info.width * info.height / 1e6
+            scoring = frames * megapixels * sum(_CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL[key] for key in cpu_keys)
             lines.append(
                 f"\u2022 {row_data.path.name}: {format_hms(seconds)}, {' and '.join(cpu_metrics)} "
-                f"on CPU \u2014 roughly {size} of temporary disk space"
+                f"on CPU \u2014 {_rough_duration(scoring)} of scoring"
             )
         if not lines:
             return True
@@ -2447,10 +2458,10 @@ class MainWindow(QMainWindow):
             self, "CPU perceptual metrics on long videos",
             "Calculating SSIMULACRA2 or Butteraugli on the CPU is not recommended for "
             "videos longer than 10 minutes:\n\n" + "\n".join(lines) + "\n\n"
-            "The CPU tools can only score still images, so every compared frame of both "
-            "videos is first written to the temporary folder as a lossless image, and "
-            "scoring then runs at well under one frame per second at 4K -- hours to days "
-            "for a film. Choose GPU for these metrics, or set a duration limit.\n\n"
+            "The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 "
+            "and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates "
+            "above assume a CPU like the one they were measured on). Choose GPU for these "
+            "metrics, or set a duration limit.\n\n"
             "Calculate anyway?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )

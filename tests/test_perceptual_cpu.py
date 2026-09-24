@@ -64,7 +64,10 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     references = [tmp_path / f"r-{i}.png" for i in range(3)]
     tests = [tmp_path / f"t-{i}.png" for i in range(3)]
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu.find_metric_executable", lambda key: key)
-    monkeypatch.setattr("vmaf_app.core.perceptual_cpu._extract_png_pairs", lambda *args: (references, tests))
+    def fake_pairs(*_args):
+        yield from zip(references, tests, strict=True)
+
+    monkeypatch.setattr("vmaf_app.core.perceptual_cpu._png_pairs", fake_pairs)
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu._tool_version", lambda executable: "test-tool 1")
     monkeypatch.setattr(
         "vmaf_app.core.perceptual_cpu._run_metric",
@@ -80,7 +83,7 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
 def test_cpu_frame_extraction_applies_duration_limit_to_both_outputs(tmp_path, monkeypatch):
     from dataclasses import replace
 
-    from vmaf_app.core.perceptual_cpu import _extract_png_pairs
+    from vmaf_app.core.perceptual_cpu import _png_pairs
 
     request = _request()
     recipe = replace(request.recipe, duration_limit=1.0)
@@ -102,16 +105,16 @@ def test_cpu_frame_extraction_applies_duration_limit_to_both_outputs(tmp_path, m
 
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
 
-    _extract_png_pairs(
+    list(_png_pairs(
         _info("source.mp4"), _info("test.mp4"), recipe, None, None, 1,
         tmp_path, None, None,
-    )
+    ))
 
     assert command.count("-t") == 2
     for pattern in ("test-%08d.png", "reference-%08d.png"):
         output_index = next(i for i, value in enumerate(command) if value.endswith(pattern))
-        assert command[output_index - 6:output_index] == [
-            "-t", "1.000", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le",
+        assert command[output_index - 8:output_index] == [
+            "-t", "1.000", "-fps_mode", "passthrough", "-pix_fmt", "rgb48le", "-atomic_writing", "1",
         ]
 
 
@@ -183,9 +186,9 @@ def test_ui_selects_cpu_metric_without_extending_vmaf_options(tmp_path):
 def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path, monkeypatch):
     """Each FFmpeg output runs to its own input's end. Unequal counts were
     rejected as "unmatched frame pairs" after the whole video had been
-    extracted; the overlap is now scored, as libvmaf does, and the extra
-    images are deleted."""
-    from vmaf_app.core.perceptual_cpu import _extract_png_pairs
+    extracted; the overlap is now scored, as libvmaf does. (The extra images
+    go with the task's temporary folder.)"""
+    from vmaf_app.core.perceptual_cpu import _png_pairs
 
     class FinishedProcess:
         pid = 123
@@ -203,12 +206,12 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
         return FinishedProcess()
 
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
-    references, tests = _extract_png_pairs(
+    pairs = list(_png_pairs(
         _info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1, tmp_path, None, None,
-    )
-    assert [p.name for p in references] == [f"reference-{i:08d}.png" for i in range(1, 4)]
-    assert [p.name for p in tests] == [f"test-{i:08d}.png" for i in range(1, 4)]
-    assert sorted(p.name for p in tmp_path.glob("test-*.png")) == [f"test-{i:08d}.png" for i in range(1, 4)]
+    ))
+    assert [(r.name, t.name) for r, t in pairs] == [
+        (f"reference-{i:08d}.png", f"test-{i:08d}.png") for i in range(1, 4)
+    ]
 
 
 def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
@@ -274,3 +277,107 @@ def test_time_paused_does_not_count_towards_the_tool_timeout(tmp_path, monkeypat
     slow, script, other = _slow_tool(tmp_path, 5)
     with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame"):
         perceptual_cpu._run_metric(slow, "ssimulacra2", script, other, ProcessHandle())
+
+
+def test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch):
+    """With real FFmpeg: frames are scored while extraction is still going,
+    FFmpeg is held to a small backlog instead of writing the whole video
+    out first, and progress moves from the first pair."""
+    import subprocess
+    import tempfile
+    import threading
+    import time
+
+    from vmaf_app.core import perceptual_cpu
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+
+    exe = ffmpeg_path()
+    clip = tmp_path / "clip.mkv"
+    subprocess.run([exe, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=24",
+                    "-frames:v", "240", "-c:v", "ffv1", str(clip)], check=True, capture_output=True, timeout=120)
+    info = probe_video(clip)
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(work))
+    monkeypatch.setattr(perceptual_cpu, "_BACKLOG_PAIRS", 6)
+    monkeypatch.setattr(perceptual_cpu, "find_metric_executable", lambda key: key)
+    monkeypatch.setattr(perceptual_cpu, "_tool_version", lambda executable: "test")
+
+    def slow_score(*_args):
+        time.sleep(0.02)
+        return 50.0
+
+    monkeypatch.setattr(perceptual_cpu, "_run_metric", slow_score)
+    most_images, stop = [0], threading.Event()
+
+    def watch():
+        while not stop.is_set():
+            most_images[0] = max(most_images[0], sum(1 for _ in work.rglob("*.png")))
+            time.sleep(0.005)
+
+    watcher = threading.Thread(target=watch)
+    watcher.start()
+    progress = []
+    request = _request("ssimulacra2")
+    try:
+        output = perceptual_cpu.run_perceptual_task(
+            info, info, request, request.metrics, resolved_crops=(None, None),
+            on_progress=lambda done, total, rate: progress.append((done, total, rate)),
+        )
+    finally:
+        stop.set()
+        watcher.join()
+
+    assert output.compared_frame_count == 240
+    assert len(output.metrics.get("ssimulacra2").values) == 240
+    # The backlog limit (6 pairs) plus the frames FFmpeg already has in its
+    # queues when it resumes -- traced at 7-10 at 720p, arriving within
+    # ~10 ms, before the next check can suspend it again. Bounded by that,
+    # not by the video's length: writing everything first meant 480 images.
+    assert most_images[0] <= 2 * (6 + 20), most_images[0]
+    assert [done for done, _total, _rate in progress[:3]] == [1, 2, 3]
+    assert progress[0][1] == 240 and progress[0][2] > 0
+
+
+def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, monkeypatch):
+    """The two image sequences come from two decoders; a fast one can run
+    well ahead (a 4K AV1 test ran 24 frames ahead of its HEVC reference).
+    Throttling on either side alone suspended FFmpeg while the side the
+    scorer was waiting for still lagged: a deadlock. A real child process
+    stands in for FFmpeg: all test images first, then the references
+    slowly, each written atomically."""
+    import subprocess
+    import sys
+    import threading
+
+    from vmaf_app.core import perceptual_cpu
+
+    monkeypatch.setattr(perceptual_cpu, "_BACKLOG_PAIRS", 6)
+    writer = (
+        "import os, sys, time\n"
+        "d = sys.argv[1]\n"
+        "def put(name):\n"
+        "    open(os.path.join(d, name + '.tmp'), 'wb').close()\n"
+        "    os.replace(os.path.join(d, name + '.tmp'), os.path.join(d, name))\n"
+        "for i in range(1, 41): put(f'test-{i:08d}.png')\n"
+        "for i in range(1, 41):\n"
+        "    put(f'reference-{i:08d}.png'); time.sleep(0.02)\n"
+    )
+    monkeypatch.setattr(perceptual_cpu.proc_util, "popen",
+                        lambda _cmd, **kwargs: subprocess.Popen([sys.executable, "-c", writer, str(tmp_path)], **kwargs))
+    pairs = []
+
+    def consume():
+        for reference, test in perceptual_cpu._png_pairs(
+            _info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1, tmp_path, None, None,
+        ):
+            pairs.append(reference.name)
+            reference.unlink()
+            test.unlink()
+
+    consumer = threading.Thread(target=consume, daemon=True)
+    consumer.start()
+    consumer.join(30)
+    assert not consumer.is_alive(), f"the extraction stalled after {len(pairs)} pairs"
+    assert len(pairs) == 40

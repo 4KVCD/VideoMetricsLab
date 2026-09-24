@@ -3798,7 +3798,7 @@ def test_cpu_perceptual_on_a_long_video_asks_first_and_no_means_no_run(qapp, mon
     assert win._worker is None
     (_title, text), = shown
     assert "not recommended" in text and "film.mkv" in text and "SSIMULACRA2" in text
-    assert "TB" in text, "a 105-minute 4K film is terabytes of temporary images"
+    assert "days of scoring" in text, "a 105-minute 4K film takes days on the CPU"
     win.close()
 
 

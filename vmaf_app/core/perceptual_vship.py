@@ -1134,7 +1134,7 @@ def apply_vship_cpu_fallback(
             labels = " and ".join(metric_definition(spec.key).label for spec in gpu_specs)
             raise PerceptualRunError(
                 f"GPU scoring failed ({error}). It was not retried on the CPU, which would take "
-                "hours to days and a lot of temporary disk space for a video over 10 minutes. "
+                "hours to days for a video over 10 minutes. "
                 f"Choose CPU for {labels} to calculate it on the CPU anyway."
             ) from error
         if on_status:
