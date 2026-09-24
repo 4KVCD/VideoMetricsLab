@@ -689,7 +689,7 @@ class _FrameStream:
             process = self._process
         if process is not None and process.poll() is None:
             with contextlib.suppress(OSError):
-                process.terminate()
+                proc_util.terminate(process)
         self._thread.join(timeout=10)
         # Pinned memory is freed only once the reader cannot be writing to it.
         if not self._thread.is_alive():

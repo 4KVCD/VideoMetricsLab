@@ -61,7 +61,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
     try:
         stdout, stderr = proc.communicate(timeout=60)
     except subprocess.TimeoutExpired as e:
-        proc.kill()
+        proc_util.kill(proc)
         proc.communicate()
         raise ProbeError(f"ffprobe timed out while reading {path}") from e
     finally:

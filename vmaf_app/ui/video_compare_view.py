@@ -163,7 +163,7 @@ class _PairDecodeWorker(QThread):
                         break
             finally:
                 if process.poll() is None:
-                    process.terminate()
+                    proc_util.terminate(process)
                 process.wait()
                 self._process.detach()
                 process.stdout.close()
@@ -652,4 +652,4 @@ class VideoCompareView(QWidget):
             handle.terminate()
             handle.detach()
         if process is not None and process.poll() is None:
-            process.terminate()
+            proc_util.terminate(process)

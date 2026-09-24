@@ -132,7 +132,7 @@ def _launch_window(
         active_seconds = 0.0
         while True:
             if cancel_event is not None and cancel_event.is_set():
-                proc.terminate()
+                proc_util.terminate(proc)
             started = time.monotonic()
             try:
                 _stdout, stderr = proc.communicate(timeout=0.2)
@@ -141,7 +141,7 @@ def _launch_window(
                 if process_handle is None or not process_handle.is_pause_requested:
                     active_seconds += time.monotonic() - started
                 if active_seconds >= 60:
-                    proc.terminate()
+                    proc_util.terminate(proc)
                     proc.communicate(timeout=5)
                     raise CropDetectError("Crop detection timed out") from e
         if cancel_event is not None and cancel_event.is_set():

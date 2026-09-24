@@ -554,7 +554,7 @@ def _run_ffmpeg(
         assert proc.stdout is not None
         for line in proc.stdout:
             if cancel_event is not None and cancel_event.is_set():
-                proc.terminate()
+                proc_util.terminate(proc)
                 break
             fps_match = _PROGRESS_FPS_RE.match(line)
             if fps_match:
@@ -597,13 +597,13 @@ def _reap(proc: subprocess.Popen, drain_thread: threading.Thread | None) -> None
     """
     with contextlib.suppress(Exception):  # see the docstring
         if proc.poll() is None:
-            proc.terminate()
+            proc_util.terminate(proc)
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 # terminate() is a polite request that a wedged decoder can
                 # ignore; kill() is not refusable.
-                proc.kill()
+                proc_util.kill(proc)
                 proc.wait(timeout=5)
     if drain_thread is not None:
         drain_thread.join(timeout=5)

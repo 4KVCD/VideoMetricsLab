@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-import psutil
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
@@ -275,16 +274,29 @@ def _png_pairs(
     consumed = [1]  # the pair the caller is on; read by the regulator
     stop = threading.Event()
 
+    # FFmpeg and anything under it -- the real ffmpeg.exe when the one
+    # started is a launcher (see proc.process_tree). Listed once, as soon
+    # as the first pair exists (so the real FFmpeg does too), and kept:
+    # listing takes 13-40 ms on Windows. Listed at the moment FFmpeg had to
+    # stop, that delay let it write 75-86 images against a limit of 52.
+    tree: list = []
+
+    def list_tree() -> None:
+        if tree:
+            return
+        found = proc_util.process_tree(process.pid)
+        with throttle_lock:
+            if not tree:
+                tree.extend(found)
+
     def throttle(on: bool) -> None:
         nonlocal throttled
+        if on:
+            list_tree()
         with throttle_lock:
             if on == throttled:
                 return
-            with contextlib.suppress(psutil.Error):
-                if on:
-                    psutil.Process(process.pid).suspend()
-                else:
-                    psutil.Process(process.pid).resume()
+            proc_util.signal_processes(tree, "suspend" if on else "resume")
             throttled = on
 
     def pair(number: int) -> tuple[Path, Path]:
@@ -296,6 +308,8 @@ def _png_pairs(
 
     def regulate() -> None:
         while not stop.wait(0.01):
+            if not tree and complete(1):
+                list_tree()
             index = consumed[0]
             if complete(index + _BACKLOG_PAIRS):
                 throttle(True)
@@ -330,7 +344,7 @@ def _png_pairs(
         regulator.join()
         throttle(False)
         if process.poll() is None:
-            process.terminate()
+            proc_util.terminate(process)
             with contextlib.suppress(subprocess.TimeoutExpired):
                 process.wait(timeout=5)
         if process_handle is not None:
@@ -386,11 +400,11 @@ def _run_metric(
                     running += now - last
                 last = now
                 if cancel_event is not None and cancel_event.is_set():
-                    process.kill()
+                    proc_util.kill(process)
                     process.communicate()
                     raise PerceptualCancelled("Cancelled by user") from None
                 if running > _TOOL_TIMEOUT_SECONDS:
-                    process.kill()
+                    proc_util.kill(process)
                     process.communicate()
                     raise PerceptualRunError(
                         f"{metric} did not finish a frame within {_TOOL_TIMEOUT_SECONDS:.0f} s."

@@ -381,3 +381,19 @@ def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, 
     consumer.join(30)
     assert not consumer.is_alive(), f"the extraction stalled after {len(pairs)} pairs"
     assert len(pairs) == 40
+
+
+def test_the_backlog_holds_when_ffmpeg_is_started_through_a_launcher(tmp_path, monkeypatch):
+    """GitHub's runner installs FFmpeg with Chocolatey, whose ffmpeg.exe is a
+    launcher that starts the real one as a child. Suspending the launcher
+    left FFmpeg writing: the runner saw 364 images waiting where the limit
+    is 52 (444 here). The throttle now suspends the whole process tree."""
+    import sys
+
+    from vmaf_app.core import proc as proc_util
+
+    real = proc_util.popen
+    launcher = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
+    monkeypatch.setattr(proc_util, "popen",
+                        lambda command, **kwargs: real([sys.executable, "-c", launcher, *command], **kwargs))
+    test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch)

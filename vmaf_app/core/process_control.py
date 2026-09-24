@@ -19,6 +19,8 @@ import threading
 
 import psutil
 
+from vmaf_app.core.proc import signal_tree
+
 
 class ProcessHandle:
     def __init__(self) -> None:
@@ -94,5 +96,8 @@ class ProcessHandle:
     def _try(pid: int, action: str) -> None:
         # The process finishing on its own between the check and the call
         # is normal, not an error -- pausing/resuming a dead process is a no-op.
+        # The whole tree: FFmpeg can be a child of the process started, when
+        # ffmpeg.exe is a launcher such as a Chocolatey shim (see
+        # proc.process_tree), and pausing only the launcher paused nothing.
         with contextlib.suppress(psutil.NoSuchProcess):
-            getattr(psutil.Process(pid), action)()
+            signal_tree(pid, action)

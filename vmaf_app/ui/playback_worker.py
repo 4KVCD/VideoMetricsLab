@@ -127,7 +127,7 @@ class StreamDecodeWorker(QThread):
             finally:
                 if process is not None:
                     if process.poll() is None:
-                        process.terminate()
+                        proc.terminate(process)
                     process.wait()
                     self._handle.detach()
                     if reader is not None:

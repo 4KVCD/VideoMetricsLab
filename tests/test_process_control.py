@@ -31,6 +31,9 @@ class FakeProcess:
     def terminate(self):
         self.calls.append("terminate")
 
+    def children(self, recursive=False):
+        return []
+
 
 @pytest.fixture(autouse=True)
 def _reset_fakes():
@@ -172,3 +175,50 @@ def test_a_handle_reaches_every_attached_process(monkeypatch):
     actions.clear()
     handle.resume()
     assert actions == []
+
+
+# ------------------------------------------------ FFmpeg behind a launcher
+#
+# Chocolatey installs ffmpeg.exe as a shim: a launcher that starts the real
+# ffmpeg.exe as its child. Real processes here, not the fake above.
+
+_LAUNCHER = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
+
+
+def _launcher_with_child():
+    """A launcher process and the long-running child it started."""
+    import subprocess
+    import sys
+    import time
+
+    launcher = subprocess.Popen([sys.executable, "-c", _LAUNCHER, sys.executable, "-c",
+                                 "import time; time.sleep(60)"])
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        children = psutil.Process(launcher.pid).children()
+        if children:
+            return launcher, children[0]
+        time.sleep(0.05)
+    launcher.kill()
+    raise AssertionError("the launcher did not start its child")
+
+
+def test_pause_resume_and_cancel_reach_a_process_started_by_a_launcher():
+    launcher, child = _launcher_with_child()
+    handle = ProcessHandle()
+    try:
+        handle.attach(launcher.pid)
+        handle.pause()
+        assert child.status() == psutil.STATUS_STOPPED, "the real process kept running while paused"
+        handle.resume()
+        assert child.status() != psutil.STATUS_STOPPED
+        handle.terminate()
+        child.wait(timeout=10)
+        launcher.wait(timeout=10)
+        assert not child.is_running()
+    finally:
+        for process in (child,):
+            if process.is_running():
+                process.kill()
+        if launcher.poll() is None:
+            launcher.kill()
