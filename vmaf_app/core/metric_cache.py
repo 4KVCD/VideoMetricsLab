@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core.analysis_request import MetricRequestSpec
-from vmaf_app.core.comparison_recipe import ComparisonRecipe
+from vmaf_app.core.comparison_recipe import ComparisonRecipe, upscaled_inputs
 from vmaf_app.core.metric_results import (
     FrameMetricResult,
     MetricResultSet,
@@ -176,6 +176,7 @@ def _auto_perceptual_compatibility(spec: MetricRequestSpec, compatibility: objec
     value = str(compatibility or "")
     return (
         value == f"{spec.key}-vship-gpu-v1"
+        or value == f"{spec.key}-vship-gpu-v2"
         or value == f"{spec.key}-libjxl-cpu-v1"
         # Accept existing cache entries written before implementation-library
         # versions were removed from compatibility IDs. The implementation
@@ -228,7 +229,7 @@ def _auto_perceptual_candidates(directory: Path, spec: MetricRequestSpec):
                     continue
                 # Prefer a prior GPU run, while still allowing CPU-only
                 # machines to reuse the bundled libjxl result.
-                rank = 0 if "-vship-" in compatibility else 1
+                rank = 0 if compatibility.endswith("-vship-gpu-v2") else 1 if "-vship-" in compatibility else 2
                 candidates.append((rank, path, concrete))
             except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
                 continue
@@ -244,14 +245,36 @@ def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str =
     "gpu" prefers a Vship score and accepts a CPU one, which is what a GPU
     selection produces on a machine without a supported GPU."""
     if _is_auto_perceptual_spec(spec):
+        upscaled = _pair_is_upscaled(directory)
         for _rank, path, concrete in _auto_perceptual_candidates(directory, spec):
-            if compute_backend == "cpu" and "-vship-" in concrete.implementation_compatibility_id:
+            compatibility = concrete.implementation_compatibility_id
+            if compute_backend == "cpu" and "-vship-" in compatibility:
+                continue
+            if upscaled and "-vship-" in compatibility and not compatibility.endswith("-vship-gpu-v2"):
+                # Scaled by FFmpeg before Vship did its own enlarging: a
+                # different resize, so a fresh GPU run replaces it rather
+                # than mixing the two methods across a comparison.
                 continue
             result = _load_metric_file(path, concrete)
             if result is not None:
                 return result
         return None
     return _load_metric_file(metric_path(directory, spec), spec)
+
+
+def _pair_is_upscaled(directory: Path) -> bool:
+    """Whether this comparison enlarges one input, per its context.json."""
+    try:
+        context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
+        sizes = []
+        for side in ("source", "distorted"):
+            crop = context.get(f"{side}_crop")
+            info = context[f"{side}_info"]
+            sizes.append((crop["w"], crop["h"]) if crop else (info["width"], info["height"]))
+        direction = ScaleDirection(context.get("scale_direction", ScaleDirection.SOURCE_TO_DISTORTED.value))
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return False
+    return any(upscaled_inputs(sizes[0], sizes[1], direction))
 
 
 def load_metrics(

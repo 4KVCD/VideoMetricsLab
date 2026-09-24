@@ -16,7 +16,7 @@ from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
-from vmaf_app.core.models import CropMode, GpuVendor, VideoInfo, VmafOptions
+from vmaf_app.core.models import CropMode, GpuVendor, ScaleDirection, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualTaskOutput
 
 
@@ -237,7 +237,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None):
+         inspect=None, scale_direction=ScaleDirection.SOURCE_TO_DISTORTED):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -276,7 +276,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     monkeypatch.setattr(vship, "_spawn_raw_ffmpeg", fake_spawn)
     monkeypatch.setattr(vship, "_compute_metric", fake_compute)
     request = analysis_request_from_vmaf_options(
-        VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode), metrics)
+        VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode, scale_direction=scale_direction), metrics)
     output = vship.run_vship_task(source or _hevc("source.mkv"), test or _hevc("test.mkv"), request,
                                   request.metrics, _fake_device(), None, None, cancel_event=cancel)
     return output, spawned
@@ -525,3 +525,53 @@ def test_a_scoring_failure_on_the_first_frames_ends_the_run(monkeypatch):
     assert not runner.is_alive(), "the run deadlocked after its scoring lanes failed"
     assert isinstance(outcome[0], vship.VshipUnavailableError)
     assert "simulated GPU fault" in str(outcome[0])
+
+
+def _small(name: str) -> VideoInfo:
+    return VideoInfo(Path(name), 32, 24, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p10le")
+
+
+@pytest.mark.parametrize("direction", [ScaleDirection.DISTORTED_TO_SOURCE, ScaleDirection.SOURCE_TO_DISTORTED])
+def test_enlarging_is_left_to_vship_and_reducing_to_ffmpeg(monkeypatch, direction):
+    """A 32x24 test against a 64x48 reference. Enlarged: FFmpeg pipes the
+    small original and Vship scales it on the GPU (its colorspace carries the
+    target size), under the v2 ID. Reduced: FFmpeg scales the reference down
+    before the pipe, exactly as before, under the unchanged v1 ID."""
+    colorspaces = []
+    real = vship._vship_colorspace
+
+    def record(info, image, width, height, target=None):
+        colorspaces.append((info.path.name, width, height, target))
+        return real(info, image, width, height, target)
+
+    monkeypatch.setattr(vship, "_vship_colorspace", record)
+    small_bytes = vship._image_format(_small("x.mkv")).frame_layout(32, 24)[0]
+    enlarging = direction is ScaleDirection.DISTORTED_TO_SOURCE
+    output, spawned = _run(
+        monkeypatch, metrics=("ssimulacra2",), test=_small("test.mkv"), scale_direction=direction,
+        children={"source": [_frames_command(3, _FRAME_BYTES if enlarging else small_bytes)],
+                  "test": [_frames_command(3, small_bytes)]},
+    )
+
+    source_vf = spawned["source"][0][spawned["source"][0].index("-vf") + 1]
+    test_vf = spawned["test"][0][spawned["test"][0].index("-vf") + 1]
+    provenance = output.metrics.get("ssimulacra2").provenance
+    assert "scale=" not in test_vf
+    if enlarging:
+        assert "scale=" not in source_vf
+        assert colorspaces == [("source.mkv", 64, 48, None), ("test.mkv", 32, 24, (64, 48))]
+        assert provenance.implementation_compatibility_id == "ssimulacra2-vship-gpu-v2"
+        assert provenance.parameters["upscaled"] == "test video"
+    else:
+        assert "scale=32:24" in source_vf
+        assert colorspaces == [("source.mkv", 32, 24, None), ("test.mkv", 32, 24, None)]
+        assert provenance.implementation_compatibility_id == "ssimulacra2-vship-gpu-v1"
+        assert "upscale" not in provenance.parameters
+
+
+def test_the_colorspace_asks_vship_to_resize_only_when_given_a_target():
+    image = vship._image_format(_small("x.mkv"))
+    plain = vship._vship_colorspace(_small("x.mkv"), image, 32, 24)
+    enlarged = vship._vship_colorspace(_small("x.mkv"), image, 32, 24, (64, 48))
+    assert (plain.target_width, plain.target_height) == (-1, -1)
+    assert (enlarged.width, enlarged.height, enlarged.target_width, enlarged.target_height) == (32, 24, 64, 48)
