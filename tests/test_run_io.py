@@ -104,7 +104,7 @@ def test_export_csv_writes_header_and_all_rows(tmp_path):
     export_csv(result, out_path)
 
     lines = out_path.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr"
+    assert lines[0] == "frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr,ssimulacra2,butteraugli"
     assert len(lines) == 1 + len(result.frames)
 
 
@@ -298,3 +298,49 @@ def test_two_labels_that_sanitise_to_the_same_stem_do_not_collide(tmp_path):
     second = unique_output_path(tmp_path, "a/b", ".csv", reserved)
 
     assert (first.name, second.name) == ("a_b.csv", "a_b_2.csv")
+
+
+
+def test_csv_export_includes_ssimulacra2_and_butteraugli_on_their_own_frames(tmp_path):
+    """The export had the five FFmpeg metrics hard-coded, so SSIMULACRA2 and
+    Butteraugli were never written. Here SSIMULACRA2 covers every second
+    frame: its cells are blank in between, never borrowed."""
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    result = _sample_result()
+    n = len(result.frames)
+    provenance = MetricProvenance("Vship/ssimulacra2", "5", "gpu", "ssimulacra2-vship-gpu-v1")
+    every_second = np.arange(0, n, 2, dtype=np.int32)
+    result.merge_metric_results(MetricResultSet([
+        FrameMetricResult("ssimulacra2", every_second, every_second / 24.0,
+                          np.full(len(every_second), 71.5, dtype=np.float32), provenance),
+        FrameMetricResult("butteraugli", result.frames.frame, result.frames.time,
+                          np.full(n, 0.0, dtype=np.float32), provenance),
+    ]))
+    out_path = tmp_path / "run.csv"
+    export_csv(result, out_path)
+
+    rows = [line.split(",") for line in out_path.read_text(encoding="utf-8").splitlines()]
+    header = rows[0]
+    assert header[-2:] == ["ssimulacra2", "butteraugli"]
+    assert len(rows) == 1 + n
+    s2, ba = header.index("ssimulacra2"), header.index("butteraugli")
+    assert rows[1][s2] == "71.5" and rows[2][s2] == ""
+    assert all(row[ba] == "0.0" for row in rows[1:])  # a genuine 0 is not blank
+
+
+def test_csv_export_of_a_perceptual_only_result_has_its_values(tmp_path):
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+    from vmaf_app.core.models import FrameScores
+
+    result = _sample_result()
+    result.frames = FrameScores.empty()
+    result.metric_results = MetricResultSet([FrameMetricResult(
+        "ssimulacra2", np.arange(3, dtype=np.int32), np.arange(3) / 24.0, np.array([80.0, 81.0, 82.0], dtype=np.float32),
+        MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1"),
+    )])
+    out_path = tmp_path / "run.csv"
+    export_csv(result, out_path)
+    rows = [line.split(",") for line in out_path.read_text(encoding="utf-8").splitlines()]
+    assert [row[rows[0].index("ssimulacra2")] for row in rows[1:]] == ["80.0", "81.0", "82.0"]
+    assert rows[1][2:7] == ["", "", "", "", ""]  # no FFmpeg metrics in this result

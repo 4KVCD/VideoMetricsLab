@@ -16,6 +16,7 @@ from vmaf_app.core.metric_results import (
     provenance_from_dict,
     provenance_to_dict,
 )
+from vmaf_app.core.metrics import FRAME_METRICS
 from vmaf_app.core.models import (
     ComparisonResult,
     CropBox,
@@ -252,14 +253,40 @@ def load_run(path: Path) -> tuple[ComparisonResult, str]:
 
 
 def export_csv(result: ComparisonResult, path: Path) -> None:
-    # CSV remains the current shared-frame UI export. Portable `.metrics.json`
-    # carries the complete generic result set, including sequence metrics and
-    # independently sampled frame metrics.
-    def cell(value: float | None) -> float | str:
-        return "" if value is None else value
+    """One row per frame, one column per frame metric.
+
+    The first seven columns are what the export always had (frame, time_s,
+    vmaf, vmaf_neg, psnr, ssim, xpsnr), so existing scripts keep working;
+    every other frame metric follows in registry order (ssimulacra2,
+    butteraugli). The export used to read only the shared frame table with
+    those five columns hard-coded, so SSIMULACRA2 and Butteraugli were never
+    written -- a SSIMULACRA2-only result exported rows of empty cells.
+
+    Metrics need not share a frame axis (a subsampled perceptual metric
+    scores every n-th frame), so rows are every frame any metric scored,
+    and a metric with no score for a frame leaves its cell blank. A genuine
+    0.0 is written as 0.0, never blank.
+    """
+    metrics = _portable_metric_results(result)
+    columns = [(metric.key, metrics.frame(metric.key)) for metric in FRAME_METRICS]
+    present = [frame for _key, frame in columns if frame is not None and len(frame.frame)]
+    frames = (np.unique(np.concatenate([frame.frame for frame in present]))
+              if present else np.empty(0, dtype=np.int64))
+    times = np.full(len(frames), np.nan)
+    values: dict[str, np.ndarray] = {}
+    for key, frame in columns:
+        column = np.full(len(frames), np.nan)
+        if frame is not None and len(frame.frame):
+            at = np.searchsorted(frames, frame.frame)
+            column[at] = frame.values
+            times[at] = np.where(np.isnan(times[at]), frame.time, times[at])
+        values[key] = column
 
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["frame", "time_s", "vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr"])
-        for fr in result.frames:
-            writer.writerow([fr.frame, f"{fr.time:.6f}", fr.vmaf, cell(fr.vmaf_neg), cell(fr.psnr), cell(fr.ssim), cell(fr.xpsnr)])
+        writer.writerow(["frame", "time_s", *(key for key, _frame in columns)])
+        for row, frame_number in enumerate(frames):
+            writer.writerow([
+                int(frame_number), f"{times[row]:.6f}",
+                *("" if np.isnan(values[key][row]) else float(values[key][row]) for key, _frame in columns),
+            ])
