@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition, MetricDirection
+from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricDirection, MetricKind
 from vmaf_app.core.models import ComparisonResult
 from vmaf_app.core.run_io import (
     RESULT_FILE_FILTER,
@@ -81,8 +81,9 @@ _EXPORT_SWATCH = 12
 _EXPORT_ROW_PADDING = 6
 
 
-# Graph ordering comes directly from the headless core registry.
-METRICS = FRAME_METRICS
+# Graph ordering comes directly from the headless core registry: every
+# metric, per-frame ones and then CVVDP, whose tab plots the JOD of each
+# second (see _MetricPage.set_curve).
 
 #: Column 0 is the series; then one mean per metric; then the selected
 #: metric's detail; then the remove button.
@@ -108,6 +109,12 @@ _XPSNR_INFINITY_PLOT_DB = 123.0
 _XPSNR_INFINITY_NOTE = (
     f"XPSNR: ∞ is plotted at {_XPSNR_INFINITY_PLOT_DB:g} dB; "
     "stored scores and statistics retain infinity."
+)
+
+_CVVDP_NOTE = (
+    "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; "
+    "the CVVDP column is the whole video's JOD, which is not the mean of its seconds. "
+    "Median to Max describe the seconds."
 )
 
 
@@ -148,8 +155,14 @@ def _identical_frame_count(result: ComparisonResult, key: str) -> int:
 
 
 def _metric_means(result: ComparisonResult) -> dict[str, float | None]:
+    """Each metric's figure for the whole run: the mean of its frames, or,
+    for a metric scored per video (CVVDP), that score."""
     means: dict[str, float | None] = {}
     for metric in METRICS:
+        sequence = result.sequence_metric(metric.key)
+        if sequence is not None:
+            means[metric.key] = sequence.score
+            continue
         frame_result = result.frame_metric(metric.key)
         if frame_result is None or len(frame_result.values) == 0:
             means[metric.key] = None
@@ -186,6 +199,10 @@ class _MetricCurve:
     times: np.ndarray
     label: str = ""  # the series' display name, for sizing the hover readout
     visible: bool = True
+    # A per-second curve (CVVDP): each point is the second starting at
+    # frames[i] / starts[i], plotted at the middle of that second, and the
+    # readout names the second rather than a frame. None for frame metrics.
+    starts: np.ndarray | None = None
     # The series' other frame metrics that have any data, in display order:
     # (definition, frame numbers, values, same axis). Shown after the "|" in
     # the readout. "Same axis" -- the same frame numbers as this curve, the
@@ -292,6 +309,9 @@ class _MetricPage(QWidget):
         """(Re)builds this series' curve on this page from its current data,
         or removes it if the run has no data for this metric."""
         self.remove_curve(series_id)
+        if self.metric.kind is MetricKind.SEQUENCE:
+            self._set_timeline_curve(series_id, entry, color)
+            return
         # PSNR/SSIM/XPSNR are computed for a whole run or not at all -- it's
         # a per-run option, never a per-frame one -- so the array is either
         # present or None, and lines up index-for-index with entry.times.
@@ -324,6 +344,35 @@ class _MetricPage(QWidget):
             times=result.time,
             label=entry.label, visible=entry.visible,
             others=tuple(others),
+        )
+        self._update_no_data_label()
+        self._fit_hover_label()
+
+    def _set_timeline_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
+        """A per-video metric's timeline -- CVVDP's JOD for each second.
+
+        Each value describes a whole second, so it is plotted at the middle
+        of that second: hovering anywhere over the second then lands on it,
+        which plotting at its first frame did not (the cursor half a second
+        in picked the next second). The statistics are of the seconds; the
+        whole video's score is the stats table's CVVDP column.
+        """
+        result = entry.result.sequence_metric(self.metric.key)
+        if result is None or not result.has_timeline:
+            self._update_no_data_label()
+            return
+        starts = np.asarray(result.time, dtype=np.float64)
+        lengths = np.diff(starts)
+        typical = float(np.median(lengths)) if len(lengths) else 1.0
+        middles = starts + np.append(lengths, typical) / 2
+        values = np.asarray(result.values, dtype=np.float32)
+        self.chart.set_series(series_id, ChartSeries(
+            times=middles, values=values, color=color, visible=entry.visible,
+        ))
+        self._curves[series_id] = _MetricCurve(
+            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation, self.metric.direction),
+            values=values, frames=np.asarray(result.frame), times=middles,
+            label=entry.label, visible=entry.visible, starts=starts,
         )
         self._update_no_data_label()
         self._fit_hover_label()
@@ -368,7 +417,7 @@ class _MetricPage(QWidget):
         widest = {metric.key: _WIDEST_SAMPLE for metric, _width in self._columns}
         for label in labels:
             lines.append(self._readout_row(
-                f"[{label}]  frame {'8' * 7}   t=0:00:00.00   ", _WIDEST_SAMPLE, widest,
+                self._readout_prefix(label, 8_888_888, 0.0), _WIDEST_SAMPLE, widest,
             ))
         if len(labels) == 2:
             lines.append(f"Δ ({labels[0]} − {labels[1]}) = -88.88")
@@ -413,12 +462,23 @@ class _MetricPage(QWidget):
         return max((len(f"[{label}]") for label in self._visible_labels()), default=0)
 
     def _readout_prefix(self, label: str, frame: int, time: float) -> str:
-        """Format the aligned, shared fields preceding a per-frame value."""
+        """Format the aligned, shared fields preceding a per-frame value.
+        On a per-second curve, `frame`/`time` are where the second starts."""
         series = f"[{label}]"
+        if self.metric.kind is MetricKind.SEQUENCE:
+            return (
+                f"{series:<{self._series_width}}  "
+                f"second from frame {frame:>6}   t={format_hms(time, decimals=2)}   "
+            )
         return (
             f"{series:<{self._series_width}}  "
             f"frame {frame:>6}   t={format_hms(time, decimals=2)}   "
         )
+
+    @staticmethod
+    def _start_time(curve: _MetricCurve, idx: int) -> float:
+        """When point `idx` begins: its frame's time, or its second's start."""
+        return float(curve.starts[idx] if curve.starts is not None else curve.times[idx])
 
     def _extra_columns(self) -> list[MetricDefinition]:
         """The other metrics that at least one visible series has, in display
@@ -617,7 +677,7 @@ class _MetricPage(QWidget):
         for entry, curve, idx in picks:
             value = float(curve.values[idx])
             frame = int(curve.frames[idx])
-            time = float(curve.times[idx])
+            time = self._start_time(curve, idx)
             prefix = self._readout_prefix(entry.label, frame, time)
             others = self._other_values(curve, frame, idx)
             if not _is_reportable(value):
@@ -659,15 +719,24 @@ class _MetricPage(QWidget):
         cursor_time: float | None = None
 
         for entry, curve in visible:
-            idx = int(np.searchsorted(curve.frames, frame))
-            # A run can be shorter than another, or subsampled, so the frame
-            # may not exist in it -- that is reported rather than silently
-            # showing a neighbouring frame's score.
-            if idx >= len(curve.frames) or int(curve.frames[idx]) != frame:
-                lines.append(self._readout_missing_frame(entry.label, frame))
-                continue
+            if curve.starts is not None:
+                # A per-second curve: the second the frame is in. Past the
+                # last second's start the frame may be beyond the run, which
+                # the second's own readout makes plain enough.
+                idx = int(np.searchsorted(curve.frames, frame, side="right")) - 1
+                if idx < 0:
+                    lines.append(self._readout_missing_frame(entry.label, frame))
+                    continue
+            else:
+                idx = int(np.searchsorted(curve.frames, frame))
+                # A run can be shorter than another, or subsampled, so the frame
+                # may not exist in it -- that is reported rather than silently
+                # showing a neighbouring frame's score.
+                if idx >= len(curve.frames) or int(curve.frames[idx]) != frame:
+                    lines.append(self._readout_missing_frame(entry.label, frame))
+                    continue
             value = float(curve.values[idx])
-            prefix = self._readout_prefix(entry.label, int(curve.frames[idx]), float(curve.times[idx]))
+            prefix = self._readout_prefix(entry.label, int(curve.frames[idx]), self._start_time(curve, idx))
             others = self._other_values(curve, frame, idx)
             if not _is_reportable(value):
                 lines.append(self._readout_row(prefix, None, others))
@@ -850,6 +919,8 @@ class GraphPanel(QWidget):
         self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Tick it in the {metric.label} column in Videos, or load results containing it.")
         if available and metric.key == "xpsnr":
             self.metric_hint.setText(_XPSNR_INFINITY_NOTE)
+        if available and metric.kind is MetricKind.SEQUENCE:
+            self.metric_hint.setText(_CVVDP_NOTE)
         self.metric_hint.setVisible(bool(self.metric_hint.text()))
         for i, spec in enumerate(METRICS):
             self.tabs.setTabToolTip(i, "" if any(e.result.has_metric(spec.key) for e in self._entries.values()) else "Not calculated")
@@ -968,7 +1039,9 @@ class GraphPanel(QWidget):
             # axis_label rather than label: it carries the unit ("PSNR (dB)"),
             # which the heading itself leaves off to keep the column narrow.
             head.setToolTip(
-                f"Mean {spec.axis_label} over all scored frames.\n"
+                (f"{spec.axis_label} of the whole video (not the mean of its seconds).\n"
+                 if spec.kind is MetricKind.SEQUENCE else
+                 f"Mean {spec.axis_label} over all scored frames.\n")
                 + ("Showing its detailed statistics." if selected
                    else f"Click this column to show detailed {spec.label} statistics.")
             )
@@ -1186,9 +1259,17 @@ class GraphPanel(QWidget):
         headers = ["Series"] + [label for label, _ in first.values]
         headers += [t.label for t in first.thresholds]
 
+        per_video = metric.kind is MetricKind.SEQUENCE
+        if per_video:
+            # The first statistic is the mean of the seconds, which is not
+            # CVVDP's score; the whole video's JOD takes its place.
+            headers[1] = "Whole video"
         rows = []
         for entry, curve in series:
             cells = [v for _, v in curve.stats.summary(metric.value_format)]
+            if per_video:
+                overall = entry.means.get(metric.key)
+                cells[0] = "\u2014" if overall is None else metric.format_value(overall)
             cells += [f"{t.percentage:.1f}%" for t in curve.stats.thresholds]
             rows.append((entry.label, entry.color, cells))
         return headers, rows

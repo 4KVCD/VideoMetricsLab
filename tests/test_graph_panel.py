@@ -219,7 +219,7 @@ def test_active_metric_tab_has_visible_highlight_on_every_page(qapp):
 def test_graph_has_one_tab_per_metric(qapp):
     win = GraphPanel()
     labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert labels == ["VMAF", "VMAF NEG", "PSNR", "SSIM", "XPSNR", "SSIMULACRA2", "Butteraugli"]
+    assert labels == ["VMAF", "VMAF NEG", "PSNR", "SSIM", "XPSNR", "SSIMULACRA2", "Butteraugli", "CVVDP"]
 
 
 def test_non_default_tabs_are_not_built_until_first_visited(qapp):
