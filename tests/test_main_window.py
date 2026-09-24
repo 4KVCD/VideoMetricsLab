@@ -4160,20 +4160,22 @@ def test_a_gpu_row_shows_and_redoes_a_cpu_score_only_when_a_gpu_exists(qapp, mon
     win._set_row_metrics(row)
     cell = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
 
-    assert "Calculated on the CPU with the libjxl tools." in cell.toolTip()
     if gpu_present:
         assert cell.text() == "46.89 (CPU)"
+        assert "Calculated on the CPU, but this row is set to GPU" in cell.toolTip()
         assert "recalculates it on the GPU" in cell.toolTip()
         assert not win._has_requested_results(rd)
         assert win._reusable_results(rd).keys() == ("vmaf",)
     else:
         assert cell.text() == "46.89"
-        assert "No supported GPU was found" in cell.toolTip()
+        assert "Calculated on" not in cell.toolTip()
         assert win._has_requested_results(rd)
     win.close()
 
 
-def test_a_gpu_score_says_which_gpu_calculated_it(qapp, monkeypatch):
+def test_a_score_calculated_the_chosen_way_has_no_implementation_note(qapp, monkeypatch):
+    """Nearly every SSIMULACRA2/Butteraugli score is a GPU score on a GPU
+    row, so the tooltip does not say how it was calculated."""
     from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
 
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
@@ -4184,5 +4186,5 @@ def test_a_gpu_score_says_which_gpu_calculated_it(qapp, monkeypatch):
     win._set_row_metrics(row)
     cell = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
     assert cell.text() == "44.47"
-    assert "Calculated on the GPU with Vship (NVIDIA GeForce RTX 5090)." in cell.toolTip()
+    assert "Calculated on" not in cell.toolTip()
     win.close()

@@ -2671,24 +2671,17 @@ class MainWindow(QMainWindow):
         return True
 
     def _backend_note(self, row_data: RowData, key: str, metric) -> str:
-        """Tooltip text saying what produced a SSIMULACRA2/Butteraugli score,
-        and what happens to one produced differently from the row's choice."""
+        """Tooltip text for a SSIMULACRA2/Butteraugli score produced the
+        other way from the row's GPU/CPU choice -- the rare case marked
+        "(CPU)"/"(GPU)" in the cell. A score produced the chosen way needs
+        no note: nearly all of them are GPU scores on GPU rows."""
         choice = row_data.metric_backends.get(key)
-        if choice is None or metric is None:
+        if choice is None or metric is None or self._backend_matches(row_data, key, metric):
             return ""
-        provenance = metric.provenance
-        if provenance.compute_backend == "gpu":
-            gpu = provenance.parameters.get("gpu_name")
-            note = "\n\nCalculated on the GPU with Vship" + (f" ({gpu})." if gpu else ".")
-        else:
-            note = "\n\nCalculated on the CPU with the libjxl tools."
-        if self._backend_matches(row_data, key, metric):
-            if choice == "gpu" and provenance.compute_backend == "cpu":
-                note += " No supported GPU was found, so the CPU is the only way to calculate it here."
-            return note
+        produced = metric.provenance.compute_backend.upper()
         wanted = "GPU" if choice == "gpu" else "CPU"
-        return (note + f" This row is set to {wanted}, and the two give different numbers; "
-                f"the next run recalculates it on the {wanted}.")
+        return (f"\n\nCalculated on the {produced}, but this row is set to {wanted}; the two give "
+                f"different numbers, so the next run recalculates it on the {wanted}.")
 
     def _has_requested_results(self, row_data: RowData) -> bool:
         requested = self._requested_metrics(row_data)
