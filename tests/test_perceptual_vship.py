@@ -236,7 +236,8 @@ def _both(command):
 
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
-         source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None):
+         source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
+         inspect=None):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -266,6 +267,8 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         index = source_planes[0][0]
         assert test_planes[0][0] == index, "a lane paired frames from different positions"
         scored.append(index)
+        if inspect is not None:
+            inspect(index, source_planes, test_planes)
         if cancel_after is not None and len(scored) >= cancel_after:
             cancel.set()
         return float(index) + (0.5 if key == "butteraugli" else 0.0)
@@ -427,3 +430,72 @@ def test_cancel_while_waiting_for_the_gpu(monkeypatch):
             vship.run_vship_task(None, None, None, (), None, None, None, cancel_event=cancel)
     finally:
         vship._gpu_pass.release()
+
+
+@pytest.mark.parametrize(("pix_fmt", "color_range", "hwaccel", "expected"), [
+    ("yuv420p10le", "tv", "cuda", ("yuv420p16le", "p010le")),
+    ("yuv420p10le", "", "d3d11va", ("yuv420p16le", "p010le")),
+    ("yuv420p", "tv", "cuda", ("yuv420p", "nv12")),
+    ("yuv420p", "pc", "cuda", ("yuv420p", "nv12")),       # 8-bit is exact in either range
+    ("yuv420p10le", "pc", "cuda", None),                   # full range: 16-bit would scale differently
+    ("yuv420p10le", "tv", None, None),                     # software decode is planar already
+    ("yuv420p12le", "tv", "cuda", None),
+    ("yuv422p10le", "tv", "cuda", None),
+])
+def test_which_hardware_decoded_formats_cross_the_pipe_as_is(pix_fmt, color_range, hwaccel, expected):
+    info = VideoInfo(Path("x.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt=pix_fmt, color_range=color_range)
+    result = vship._passthrough_format(info, hwaccel)
+    assert (None if result is None else (result[0].pixel_format, result[1])) == expected
+    if result is not None and result[1] == "p010le":
+        assert result[0].sample == vship._VSHIP_ENUMS[16]
+
+
+def _interleaved_command(count: int, width: int, height: int, sample_bytes: int) -> list[str]:
+    """A child writing NV12/P010-layout frames: luma whose first byte is the
+    frame index, then U/V pairs holding 100 + index and 200 + index."""
+    script = (
+        "import struct, sys\n"
+        f"n, w, h, b = {count}, {width}, {height}, {sample_bytes}\n"
+        "fmt = '<HH' if b == 2 else 'BB'\n"
+        "out = sys.stdout.buffer\n"
+        "for i in range(n):\n"
+        "    out.write(bytes([i]) + bytes(w * h * b - 1))\n"
+        "    out.write(struct.pack(fmt, 100 + i, 200 + i) * ((w // 2) * (h // 2)))\n"
+        "out.flush()\n"
+    )
+    return [sys.executable, "-c", script]
+
+
+@pytest.mark.parametrize(("pix_fmt", "sample_type", "sample_bytes", "piped"), [
+    ("yuv420p10le", ctypes.c_uint16, 2, "p010le"),
+    ("yuv420p", ctypes.c_uint8, 1, "nv12"),
+])
+def test_interleaved_chroma_is_split_into_the_u_and_v_planes(monkeypatch, pix_fmt, sample_type, sample_bytes, piped):
+    """NVDEC's NV12/P010 frame is piped as-is and only its U/V pairs are
+    separated in the app. Every chroma sample must land in its own plane, for
+    every slot of the ring."""
+    chroma_samples = 32 * 24
+    checked = []
+
+    def inspect(index, source_planes, test_planes):
+        for planes in (source_planes, test_planes):
+            u = ctypes.cast(planes[1], ctypes.POINTER(sample_type))
+            v = ctypes.cast(planes[2], ctypes.POINTER(sample_type))
+            assert [u[0], u[chroma_samples - 1]] == [100 + index] * 2
+            assert [v[0], v[chroma_samples - 1]] == [200 + index] * 2
+        checked.append(index)
+
+    count = vship._RING_SLOTS * 2 + 1
+    info = VideoInfo(Path("source.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt=pix_fmt, color_range="tv")
+    test = VideoInfo(Path("test.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt=pix_fmt, color_range="tv")
+    output, spawned = _run(
+        monkeypatch, gpu_decode=True, metrics=("ssimulacra2",), source=info, test=test,
+        hwaccel=lambda _v, _c: "cuda", inspect=inspect,
+        children=_both(_interleaved_command(count, 64, 48, sample_bytes)),
+    )
+
+    assert sorted(checked) == list(range(count))
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    command = spawned["source"][0]
+    assert command[command.index("-pix_fmt") + 1] == piped
+    assert command[command.index("-vf") + 1].endswith(f"format={piped}")

@@ -1,9 +1,11 @@
 """GPU implementation of the frame-based perceptual metrics via Vship's C API.
 
 FFmpeg remains responsible for decoding, cropping, sampling, and scaling. It
-streams tightly packed planar frames into rings of pinned host buffers (see
+streams tightly packed frames into rings of pinned host buffers (see
 _FrameStream); Vship only does the metric computation on a supported NVIDIA
-CUDA or AMD HIP device. Because FFmpeg decodes, every codec it supports works,
+CUDA or AMD HIP device. A hardware-decoded frame crosses the pipe in the
+decoder's own NV12/P010 layout and only its chroma is split into planes here
+(see _passthrough_format). Because FFmpeg decodes, every codec it supports works,
 VVC included, and hardware decode is used per input where the GPU has one.
 This avoids bundling FFVship/FFMS2 executables and keeps video decode behavior
 under the same FFmpeg installation used by the rest of the app.
@@ -297,6 +299,37 @@ def _image_format(info: VideoInfo) -> _ImageFormat:
     raise VshipUnavailableError(f"Vship does not support the decoded pixel format {info.pix_fmt or '(unknown)'}.")
 
 
+def _passthrough_format(info: VideoInfo, hwaccel: str | None) -> tuple[_ImageFormat, str] | None:
+    """The planar layout Vship is given, and the layout FFmpeg pipes, when a
+    hardware-decoded 4:2:0 frame can cross the pipe exactly as it downloads.
+
+    NVDEC (and D3D11VA/QSV) hand back NV12 or P010: a luma plane, then U and
+    V interleaved in one plane. Vship only takes separate planes, and having
+    FFmpeg rearrange the whole frame cost 10-12 ms of CPU per 4K frame --
+    about half of what feeding Vship cost. Piped as-is, the luma plane is
+    read straight into pinned memory and only the chroma is split, which
+    numpy does in under 1 ms (_FrameStream._fill).
+
+    P010 keeps each 10-bit sample in the top bits of 16. Declared to Vship as
+    16-bit, limited range, that is the same picture exactly: Vship brings
+    limited-range samples to 8-bit scale by dividing by 2^(depth-8), so
+    (v << 6) / 256 and v / 4 are the same float. Full range divides by
+    2^depth - 1 instead, where the two differ, so full-range 10-bit keeps
+    FFmpeg's conversion. 8-bit NV12 is exact in either range.
+    """
+    if not hwaccel:
+        return None
+    image = _image_format(info)
+    native = hw_native_format(info.pix_fmt)
+    if image.pixel_format == "yuv420p" and native == "nv12":
+        return image, "nv12"
+    range_name = (info.color_range or "").casefold()
+    if (image.pixel_format == "yuv420p10le" and native == "p010le" and not image.full_range
+            and range_name not in {"pc", "jpeg", "full"}):
+        return _ImageFormat("yuv420p16le", 0, _VSHIP_ENUMS[16], 1, 1), "p010le"
+    return None
+
+
 def _format_yuv(sampling: str, depth: int) -> _ImageFormat:
     if depth not in _YUV_LAYOUTS.get(sampling, set()):
         raise VshipUnavailableError(f"Vship does not support {sampling} {depth}-bit YUV video.")
@@ -475,9 +508,25 @@ class _FrameStream:
     def __init__(
         self, lib: ctypes.CDLL, frame_bytes: int, commands: list[list[str]],
         process_handle: ProcessHandle | None, label: str,
+        interleaved_chroma: tuple[int, int, type[np.integer]] | None = None,
     ) -> None:
         self.buffers = [_PinnedBuffer(lib, frame_bytes) for _ in range(_RING_SLOTS)]
         self.views = [memoryview(buffer.array).cast("B") for buffer in self.buffers]
+        # (luma bytes, bytes of one chroma plane, sample type) when FFmpeg
+        # pipes NV12/P010: the luma goes straight into the slot, the U/V pairs
+        # into one staging buffer, and are then split into the slot's U and
+        # V planes. None when the frame arrives already planar.
+        self._split = None
+        if interleaved_chroma is not None:
+            luma, plane, dtype = interleaved_chroma
+            staging = np.empty(2 * plane, dtype=np.uint8)
+            count = plane // np.dtype(dtype).itemsize
+            self._split = (
+                luma, memoryview(staging),
+                staging.view(dtype).reshape(-1, 2),
+                [(np.frombuffer(view, dtype, count, luma), np.frombuffer(view, dtype, count, luma + plane))
+                 for view in self.views],
+            )
         self._commands = commands
         self._process_handle = process_handle
         self._label = label
@@ -535,7 +584,7 @@ class _FrameStream:
                 slot = self._free.get()
                 if slot == _EOF:
                     break
-                received = _read_exact(reader, self.views[slot])
+                received = self._fill(reader, slot)
                 if received == len(self.views[slot]):
                     self._filled.put(slot)
                     frames += 1
@@ -553,6 +602,23 @@ class _FrameStream:
                 self._process_handle.detach(process.pid)
         message = b"".join(stderr_tail).decode("utf-8", errors="replace").strip()
         return frames, code, message
+
+    def _fill(self, reader, slot: int) -> int:
+        """Read one frame into `slot`; returns the bytes read."""
+        if self._split is None:
+            return _read_exact(reader, self.views[slot])
+        luma, staging, pairs, planes = self._split
+        received = _read_exact(reader, self.views[slot][:luma])
+        if received < luma:
+            return received
+        chroma = _read_exact(reader, staging)
+        if chroma == len(staging):
+            # Strided copies; numpy releases the GIL for them, so the other
+            # input's reader and the scoring lanes keep going meanwhile.
+            u, v = planes[slot]
+            u[:] = pairs[:, 0]
+            v[:] = pairs[:, 1]
+        return received + chroma
 
     def next(self, cancel_event: threading.Event | None) -> int:
         """The next filled slot, or _EOF. Raises the reader's error or on cancel."""
@@ -800,7 +866,16 @@ def _run_vship_pass(
     if error != 0:
         raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
 
-    src_format, dist_format = _image_format(source), _image_format(distorted)
+    # Decode follows the row's GPU-decode setting, per input and per codec:
+    # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
+    # decoder (VVC). Hardware decode is bit-exact, so it changes speed only.
+    vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
+    src_hwaccel = pick_hwaccel(vendor, source.codec_name)
+    dist_hwaccel = pick_hwaccel(vendor, distorted.codec_name)
+    src_passthrough = _passthrough_format(source, src_hwaccel)
+    dist_passthrough = _passthrough_format(distorted, dist_hwaccel)
+    src_format = src_passthrough[0] if src_passthrough else _image_format(source)
+    dist_format = dist_passthrough[0] if dist_passthrough else _image_format(distorted)
     src_size, dist_size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)
     src_color = _vship_colorspace(source, src_format, *src_size)
     dist_color = _vship_colorspace(distorted, dist_format, *dist_size)
@@ -828,18 +903,15 @@ def _run_vship_pass(
         expected_frames = min(expected_frames, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
     expected_samples = max(1, math.ceil(expected_frames / step))
     total_units = expected_samples * step
-    # Decode follows the row's GPU-decode setting, per input and per codec:
-    # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
-    # decoder (VVC). Hardware decode is bit-exact, so it changes speed only.
-    vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
 
     def commands(info: VideoInfo, crop: CropBox | None, target: tuple[int, int],
-                 image_format: _ImageFormat) -> list[list[str]]:
-        hwaccel = pick_hwaccel(vendor, info.codec_name)
+                 hwaccel: str | None, pixel_format: str) -> list[list[str]]:
+        # The software retry pipes the same layout as the hardware attempt:
+        # Vship's handlers are set up for one layout per input.
         attempts = []
         for accel in ([hwaccel, None] if hwaccel else [None]):
             filter_chain = _filter_chain(
-                info, crop, target, image_format.pixel_format, step,
+                info, crop, target, pixel_format, step,
                 request.recipe.scale_algorithm, accel,
             )
             command = [
@@ -850,7 +922,7 @@ def _run_vship_pass(
             ]
             if request.recipe.duration_limit > 0:
                 command += ["-t", f"{request.recipe.duration_limit:.6f}"]
-            command += ["-fps_mode", "passthrough", "-pix_fmt", image_format.pixel_format,
+            command += ["-fps_mode", "passthrough", "-pix_fmt", pixel_format,
                         "-f", "rawvideo", "pipe:1"]
             attempts.append(command)
         return attempts
@@ -860,11 +932,20 @@ def _run_vship_pass(
         abort.set()
 
     try:
+        def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label):
+            split = None
+            if passthrough is not None:
+                dtype = np.uint16 if image_format.sample != _VSHIP_ENUMS[8] else np.uint8
+                split = (plane_sizes[0], plane_sizes[1], dtype)
+            pixel_format = passthrough[1] if passthrough else image_format.pixel_format
+            return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format),
+                                process_handle, label, split)
+
         streams = [
-            _FrameStream(lib, src_frame_bytes, commands(source, source_crop, src_size, src_format),
-                         process_handle, "reference"),
-            _FrameStream(lib, dist_frame_bytes, commands(distorted, distorted_crop, dist_size, dist_format),
-                         process_handle, "test video"),
+            stream(source, source_crop, src_size, src_hwaccel, src_format, src_passthrough,
+                   src_frame_bytes, src_plane_sizes, "reference"),
+            stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format, dist_passthrough,
+                   dist_frame_bytes, dist_plane_sizes, "test video"),
         ]
         for stream in streams:
             stream.start()
@@ -928,7 +1009,8 @@ def _run_vship_pass(
         parameters = {
             "gpu_vendor": device.vendor,
             "gpu_name": device.name,
-            "input": "ffmpeg planar frames; native range/transfer and primaries",
+            "input": "ffmpeg frames (hardware-decoded NV12/P010 split into planes); "
+                     "native range/transfer and primaries",
             "coverage_step": step,
             "butteraugli_norm": "3-norm",
         }
