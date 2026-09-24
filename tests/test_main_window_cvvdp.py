@@ -248,3 +248,14 @@ def test_a_loaded_result_file_brings_the_display_its_cvvdp_was_scored_for(qapp, 
     assert "cvvdp" in row_data.extra_metric_keys
     assert win.distorted_table.item(len(win._rows) - 1, COL_CVVDP).text() == "8.500"
     win.close()
+
+
+def test_the_display_editor_stops_at_8k(qapp):
+    """Scaled to fill, Vship works at the display's resolution: an 8K display
+    took CVVDP to +7.3 GB of VRAM on a 4K video, and 16384x16384 to +15.9 GB."""
+    dialog = CvvdpDisplayDialog(DEFAULT_PRESET.settings.display)
+    dialog.width_spin.setValue(16384)
+    dialog.height_spin.setValue(16384)
+    assert (dialog.display().width, dialog.display().height) == (8192, 8192)
+    dialog.width_spin.setValue(7680)
+    assert dialog.display().width == 7680

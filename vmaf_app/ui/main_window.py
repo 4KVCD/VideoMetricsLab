@@ -196,6 +196,10 @@ class _StayOpenMenu(QMenu):
         super().mouseReleaseEvent(event)
 
 
+#: The largest display resolution the CVVDP display editor accepts (8K).
+_CVVDP_MAX_DISPLAY_PIXELS = 8192
+
+
 class CvvdpDisplayDialog(QDialog):
     """Edits the display CVVDP models. Every value changes the score."""
 
@@ -223,7 +227,12 @@ class CvvdpDisplayDialog(QDialog):
 
         self.width_spin, self.height_spin = QSpinBox(), QSpinBox()
         for box, value in ((self.width_spin, display.width), (self.height_spin, display.height)):
-            box.setRange(16, 16384)
+            # Up to 8K. With "Scale the video to fill the display", Vship
+            # works at the display's resolution: an 8K display took CVVDP
+            # alone to +7.3 GB of VRAM on a 4K video, a 16384x16384 one to
+            # +15.9 GB -- a display that does not exist, costing more than
+            # most GPUs have.
+            box.setRange(16, _CVVDP_MAX_DISPLAY_PIXELS)
             box.setValue(value)
             box.setToolTip("The display's own resolution in pixels (not the video's).")
         resolution = QHBoxLayout()
