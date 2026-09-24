@@ -11,6 +11,7 @@ from vmaf_app.core.analysis_request import (
     MetricRequestSpec,
 )
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
+from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 from vmaf_app.core.models import CropBox, ResampleTarget, VmafOptions, clone_options
 
@@ -39,6 +40,7 @@ def comparison_recipe_from_vmaf_options(options: VmafOptions) -> ComparisonRecip
 def metric_request_specs(
     options: VmafOptions,
     metric_keys: tuple[str, ...] | None = None,
+    cvvdp: CvvdpSettings | None = None,
 ) -> tuple[MetricRequestSpec, ...]:
     """Translate current FFmpeg metric choices into backend-neutral specs."""
     requested = options.requested_metrics() if metric_keys is None else metric_keys
@@ -50,6 +52,18 @@ def metric_request_specs(
         if definition.ffmpeg_binding is None:
             if definition.backend_id is None:
                 raise ValueError(f"No executable backend is registered for metric {key!r}")
+            if key == "cvvdp":
+                # GPU only (Vship), and always every frame: CVVDP models
+                # motion over time, so it is not offered with subsampling.
+                # The display and resize setting are part of what the score
+                # means, so they are part of its identity.
+                specs.append(MetricRequestSpec(
+                    key=key, backend_id=definition.backend_id,
+                    parameters=(cvvdp or CvvdpSettings()).spec_parameters(),
+                    coverage=FrameCoverage("full", 1),
+                    implementation_compatibility_id="cvvdp-vship-gpu-v1",
+                ))
+                continue
             specs.append(MetricRequestSpec(
                 key=key,
                 backend_id=definition.backend_id,
@@ -95,6 +109,7 @@ def metric_request_specs(
 def analysis_request_from_vmaf_options(
     options: VmafOptions, metric_keys: tuple[str, ...] | None = None,
     perceptual_backends: Mapping[str, str] | None = None,
+    cvvdp: CvvdpSettings | None = None,
 ) -> AnalysisRequest:
     """Freeze one mutable UI/backend option object into a generic request."""
     backend_choices = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
@@ -107,7 +122,7 @@ def analysis_request_from_vmaf_options(
             backend_choices[key] = backend
     return AnalysisRequest(
         recipe=comparison_recipe_from_vmaf_options(options),
-        metrics=metric_request_specs(options, metric_keys),
+        metrics=metric_request_specs(options, metric_keys, cvvdp),
         execution=ExecutionPreferences(
             gpu_decode=options.gpu_decode,
             gpu_vendor=options.gpu_vendor,

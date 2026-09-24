@@ -110,10 +110,17 @@ METRICS = (
     MetricDefinition("butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "Butteraugli", "{:.4f}", "", MetricKind.FRAME,
                      MetricDirection.LOWER_IS_BETTER, MetricAggregation.ARITHMETIC, None,
                      (), backend_id="perceptual"),
+    # ColorVideoVDP: one score per video in JOD (just-objectionable
+    # differences; 10 = no visible difference). Its per-second curve is a
+    # timeline on the sequence result, not per-frame scores. GPU only.
+    MetricDefinition("cvvdp", "CVVDP", "CVVDP", "CVVDP", "CVVDP (JOD)", "{:.3f}", "", MetricKind.SEQUENCE,
+                     MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 10.0,
+                     (), backend_id="perceptual"),
 )
 
 METRIC_BY_KEY = MappingProxyType({metric.key: metric for metric in METRICS})
 FRAME_METRICS = tuple(metric for metric in METRICS if metric.kind is MetricKind.FRAME)
+SEQUENCE_METRICS = tuple(metric for metric in METRICS if metric.kind is MetricKind.SEQUENCE)
 
 
 def metric_definition(key: str) -> MetricDefinition:

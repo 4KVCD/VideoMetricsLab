@@ -111,12 +111,37 @@ class FrameMetricResult:
 
 @dataclass(slots=True)
 class SequenceMetricResult:
+    """One score for the whole comparison.
+
+    `frame`/`time`/`values` optionally carry a timeline -- for CVVDP, the JOD
+    of each one-second window, at the window's first frame. The timeline is
+    for finding bad stretches; `score` is the metric (it is not the mean of
+    the timeline).
+    """
+
     key: str
     score: float
     provenance: MetricProvenance
+    frame: np.ndarray | None = None
+    time: np.ndarray | None = None
+    values: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         self.score = float(self.score)
+        if self.values is not None:
+            self.frame = np.asarray(self.frame, dtype=np.int32)
+            self.time = np.asarray(self.time, dtype=np.float64)
+            self.values = np.asarray(self.values, dtype=np.float32)
+            if not (len(self.frame) == len(self.time) == len(self.values)):
+                raise ValueError("timeline frame, time, and values must have equal lengths")
+
+    @property
+    def has_timeline(self) -> bool:
+        return self.values is not None and len(self.values) > 0
+
+    @property
+    def aggregate(self) -> float:
+        return self.score
 
 
 MetricResult = FrameMetricResult | SequenceMetricResult

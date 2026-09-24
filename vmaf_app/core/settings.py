@@ -57,6 +57,7 @@ class Settings:
     # shared libvmaf decode above.
     default_compute_ssimulacra2: bool = False
     default_compute_butteraugli: bool = False
+    default_compute_cvvdp: bool = False
     # "gpu" (Vship, falling back to the CPU tools without a supported GPU)
     # or "cpu" (libjxl's tools). Set from the Options panel's GPU/CPU
     # choice, which is also what a newly added video starts with.
@@ -98,6 +99,13 @@ class Settings:
     # one, so a metric added in a later version appears instead of being
     # silently off for everyone who already has a settings file.
     hidden_metrics: list[str] = field(default_factory=list)
+
+    # CVVDP presets the user saved: [{"name": ..., "settings":
+    # CvvdpSettings.to_dict()}], and the preset new videos start with ("" is
+    # the built-in default). Saving a preset makes it the default, since a
+    # user who tunes CVVDP will keep using their own settings.
+    cvvdp_presets: list[dict] = field(default_factory=list)
+    cvvdp_default_preset: str = ""
 
     @staticmethod
     def path() -> Path:

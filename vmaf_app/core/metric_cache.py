@@ -158,6 +158,8 @@ def store_metric(directory: Path, result, spec: MetricRequestSpec) -> Path:
         arrays.update(frame=result.frame, time=result.time, values=result.values)
     elif isinstance(result, SequenceMetricResult):
         arrays["score"] = np.array(result.score, dtype=np.float64)
+        if result.has_timeline:
+            arrays.update(frame=result.frame, time=result.time, values=result.values)
     else:
         raise TypeError("unsupported metric result")
     path = metric_path(directory, spec)
@@ -199,7 +201,8 @@ def _load_metric_file(path: Path, spec: MetricRequestSpec):
             if metadata["kind"] == "frame":
                 return FrameMetricResult(spec.key, data["frame"], data["time"], data["values"], provenance)
             if metadata["kind"] == "sequence":
-                return SequenceMetricResult(spec.key, float(data["score"].item()), provenance)
+                timeline = (data["frame"], data["time"], data["values"]) if "values" in data else (None, None, None)
+                return SequenceMetricResult(spec.key, float(data["score"].item()), provenance, *timeline)
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
         return None
     return None

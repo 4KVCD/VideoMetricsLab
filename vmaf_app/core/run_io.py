@@ -155,7 +155,14 @@ def _metric_to_dict(metric) -> dict:
             "values": [_json_float(value) for value in metric.values],
         }
     if isinstance(metric, SequenceMetricResult):
-        return {**common, "kind": "sequence", "score": _json_float(metric.score)}
+        data = {**common, "kind": "sequence", "score": _json_float(metric.score)}
+        if metric.has_timeline:
+            data["timeline"] = {
+                "frame": [int(value) for value in metric.frame],
+                "time": [_json_float(value) for value in metric.time],
+                "values": [_json_float(value) for value in metric.values],
+            }
+        return data
     raise TypeError(f"Unsupported metric result type: {type(metric).__name__}")
 
 
@@ -182,6 +189,14 @@ def _metric_from_dict(data: dict):
             provenance,
         )
     if kind == "sequence":
+        timeline = data.get("timeline")
+        if isinstance(timeline, dict):
+            return SequenceMetricResult(
+                key, _float_from_json(data["score"]), provenance,
+                np.asarray(timeline["frame"], dtype=np.int32),
+                np.asarray([_float_from_json(value) for value in timeline["time"]], dtype=np.float64),
+                np.asarray([_float_from_json(value) for value in timeline["values"]], dtype=np.float32),
+            )
         return SequenceMetricResult(key, _float_from_json(data["score"]), provenance)
     raise ValueError(f"Unsupported metric result kind: {kind!r}")
 
