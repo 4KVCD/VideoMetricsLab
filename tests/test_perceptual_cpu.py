@@ -397,3 +397,23 @@ def test_the_backlog_holds_when_ffmpeg_is_started_through_a_launcher(tmp_path, m
     monkeypatch.setattr(proc_util, "popen",
                         lambda command, **kwargs: real([sys.executable, "-c", launcher, *command], **kwargs))
     test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch)
+
+
+def test_a_saved_perceptual_metric_is_not_recalculated_beside_a_new_one():
+    """Ticking CVVDP on a video whose SSIMULACRA2 was already scored on the
+    CPU recalculated SSIMULACRA2 too (days for a film, with no warning):
+    the three perceptual metrics ran as one all-or-nothing group."""
+    from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    request = analysis_request_from_vmaf_options(
+        VmafOptions(), ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"), {"ssimulacra2": "cpu"})
+    provenance = MetricProvenance("libjxl", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1")
+    cached = MetricResultSet([FrameMetricResult(key, [0], [0.0], [1.0], provenance)
+                              for key in ("vmaf", "ssimulacra2")])
+    plan = build_execution_plan(request, cached)
+    assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
+        ("perceptual", ("butteraugli", "cvvdp")),
+    ]
+    assert [spec.key for spec in plan.tasks[0].requested_specs] == ["butteraugli", "cvvdp"]
+
