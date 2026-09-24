@@ -3817,6 +3817,7 @@ def test_accepting_the_warning_starts_the_run(qapp, monkeypatch):
 
 @pytest.mark.parametrize(("minutes", "backend"), [(105, "gpu"), (9, "cpu")])
 def test_no_warning_on_the_gpu_or_under_ten_minutes(qapp, monkeypatch, minutes, backend):
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
     win = MainWindow()
     _long_row(win, "clip.mkv", minutes=minutes, backend=backend)
     shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
@@ -4113,4 +4114,29 @@ def test_a_partly_failed_job_shows_and_caches_the_metrics_that_finished(qapp, tm
     assert "SSIMULACRA2 failed: unsupported input" in rd.status_detail
     assert win._run_failed_count == 1
     assert _load_cached(source, distorted, rd.options) is not None
+    win.close()
+
+
+
+@pytest.mark.parametrize(("minutes", "warned"), [(105, True), (9, False)])
+def test_gpu_choice_without_a_supported_gpu_is_warned_like_cpu(qapp, monkeypatch, minutes, warned):
+    """Set to GPU on a machine with no supported GPU, SSIMULACRA2 runs on the
+    CPU all the same -- days and terabytes for a film -- and used to start
+    without a word. It is now in the same long-video warning, saying why."""
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
+                        lambda: (None, "No supported NVIDIA CUDA or AMD HIP GPU was detected."))
+    win = MainWindow()
+    _long_row(win, "film.mkv", minutes=minutes, backend="gpu")
+    shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+
+    win._on_run_clicked()
+
+    if warned:
+        (_title, text), = shown
+        assert "film.mkv" in text and "set to GPU, but no supported GPU was found" in text
+        assert win._worker is None
+    else:
+        assert shown == [] and win._worker is not None
+    win._worker = None
     win.close()

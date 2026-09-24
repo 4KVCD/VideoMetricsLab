@@ -34,13 +34,16 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import hw_native_format, hwaccel_args, pick_hwaccel
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import CropBox, GpuVendor, ScaleDirection, VideoInfo
 from vmaf_app.core.perceptual_cpu import (
+    LONG_CPU_RUN_SECONDS,
     PerceptualCancelled,
     PerceptualRunError,
     PerceptualTaskOutput,
     _content_size,
     _validate_pair,
+    compared_seconds,
 )
 from vmaf_app.core.process_control import ProcessHandle
 
@@ -1122,6 +1125,18 @@ def apply_vship_cpu_fallback(
     except Exception as error:
         if cancel_event is not None and cancel_event.is_set():
             raise PerceptualCancelled("Cancelled by user") from error
+        if compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
+            # Nobody agreed to a CPU run of this length: the Videos tab asks
+            # before one, but a GPU failure mid-run cannot. Falling back
+            # silently meant days of CPU work and terabytes of temporary
+            # images for a film. The metric fails instead, with the reason;
+            # the video keeps its other metrics.
+            labels = " and ".join(metric_definition(spec.key).label for spec in gpu_specs)
+            raise PerceptualRunError(
+                f"GPU scoring failed ({error}). It was not retried on the CPU, which would take "
+                "hours to days and a lot of temporary disk space for a video over 10 minutes. "
+                f"Choose CPU for {labels} to calculate it on the CPU anyway."
+            ) from error
         if on_status:
             on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
         # Run all metrics together after a GPU failure so CPU frame extraction

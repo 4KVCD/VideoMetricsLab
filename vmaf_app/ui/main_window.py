@@ -49,7 +49,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__
-from vmaf_app.core import result_cache
+from vmaf_app.core import perceptual_vship, result_cache
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.ffmpeg_request import (
@@ -74,6 +74,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
     synthetic_scale_direction_variant_path,
 )
+from vmaf_app.core.perceptual_cpu import LONG_CPU_RUN_SECONDS
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import aggregate_scores
@@ -185,7 +186,7 @@ _PERCEPTUAL_METRIC_KEYS = ("ssimulacra2", "butteraugli")
 _PARTLY_FAILED = "Partly failed"
 
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
-_CPU_PERCEPTUAL_WARNING_SECONDS = 10 * 60
+_CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
 #: Bytes of lossless 16-bit RGB PNG per pixel, as written by the CPU backend:
 #: 10.2 MB for a 3840x1608 frame of The Beekeeper, 0.27 of the raw 6 bytes.
 _CPU_PERCEPTUAL_PNG_BYTES_PER_PIXEL = 6 * 0.275
@@ -2395,18 +2396,28 @@ class MainWindow(QMainWindow):
         PNG (10 MB a frame at 4K, terabytes for a film), then scores them one
         process per frame at well under a frame per second. Only metrics this
         run will actually calculate count -- one already cached is not rerun.
+
+        A metric set to GPU counts too when no supported GPU was found: it
+        will run on the CPU just the same, and used to do so without a word.
         """
         lines = []
+        gpu_missing: bool | None = None  # probed once, and only if needed
         for row_data in job_rows:
             info = row_data.video_info
             if info is None:
                 continue
             reusable = self._reusable_results(row_data)
+            pending = [
+                key for key in ("ssimulacra2", "butteraugli")
+                if key in self._requested_metrics(row_data) and not reusable.has(key)
+            ]
+            if any(row_data.metric_backends.get(key) != "cpu" for key in pending) and gpu_missing is None:
+                gpu_missing = not self._vship_available()
             cpu_metrics = [
-                metric_definition(key).label for key in ("ssimulacra2", "butteraugli")
-                if key in self._requested_metrics(row_data)
-                and row_data.metric_backends.get(key) == "cpu"
-                and not reusable.has(key)
+                metric_definition(key).label + ("" if row_data.metric_backends.get(key) == "cpu"
+                                                else " (set to GPU, but no supported GPU was found)")
+                for key in pending
+                if row_data.metric_backends.get(key) == "cpu" or gpu_missing
             ]
             if not cpu_metrics:
                 continue
@@ -2436,6 +2447,12 @@ class MainWindow(QMainWindow):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         return answer == QMessageBox.Yes
+
+    @staticmethod
+    def _vship_available() -> bool:
+        """Whether GPU SSIMULACRA2/Butteraugli can run here. The probe is
+        cached by perceptual_vship, so only the first call loads anything."""
+        return perceptual_vship.detect_vship_device()[0] is not None
 
     @staticmethod
     def _selected_metrics(row_data: RowData) -> tuple[str, ...]:

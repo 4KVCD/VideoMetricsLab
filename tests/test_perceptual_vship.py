@@ -531,3 +531,24 @@ def test_a_scoring_failure_on_the_first_frames_ends_the_run(monkeypatch):
     assert not runner.is_alive(), "the run deadlocked after its scoring lanes failed"
     assert isinstance(outcome[0], vship.VshipUnavailableError)
     assert "simulated GPU fault" in str(outcome[0])
+
+
+
+def test_a_gpu_failure_on_a_long_video_is_not_retried_on_the_cpu(monkeypatch):
+    """Nobody agreed to a CPU run of a film: the fallback would write every
+    frame out as PNG and score for days. The metric fails with the reason;
+    the worker keeps the video's other metrics."""
+    source = VideoInfo(Path("source.mkv"), 3840, 2160, 24.0, 7200.0, 172800, "hevc", pix_fmt="yuv420p10le")
+    test = VideoInfo(Path("test.mkv"), 3840, 2160, 24.0, 7200.0, 172800, "hevc", pix_fmt="yuv420p10le")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: (_ for _ in ()).throw(
+        vship.VshipUnavailableError("CUDA error: an illegal memory access was encountered")))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: pytest.fail("a long video must not fall back to the CPU"))
+
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="not retried on the CPU") as raised:
+        vship.apply_vship_cpu_fallback(source, test, _request(), _request().metrics)
+    assert "illegal memory access" in str(raised.value)
+    assert "Choose CPU for SSIMULACRA2 and Butteraugli" in str(raised.value)

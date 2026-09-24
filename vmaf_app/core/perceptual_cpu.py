@@ -135,6 +135,25 @@ def _resolve_crops(
         raise PerceptualCancelled("Cancelled by user") from exc
 
 
+#: Longer than this, SSIMULACRA2/Butteraugli run on the CPU only when the
+#: user has agreed to it: the CPU tools score still images, so every compared
+#: frame of both videos is first written out as lossless 16-bit PNG (about
+#: 10 MB a 4K frame) and each pair then takes 1-2 s per tool at 4K -- days
+#: and terabytes for a film. The Videos tab asks before such a run
+#: (MainWindow._confirm_long_cpu_perceptual) and the GPU path does not fall
+#: back to the CPU on its own past it (perceptual_vship.apply_vship_cpu_fallback).
+LONG_CPU_RUN_SECONDS = 10 * 60
+
+
+def compared_seconds(source: VideoInfo, distorted: VideoInfo, duration_limit: float) -> float:
+    """How much video a comparison scores: the shorter input, capped by the
+    duration limit when one is set."""
+    seconds = min(source.duration, distorted.duration)
+    if duration_limit > 0:
+        seconds = min(seconds, duration_limit)
+    return seconds
+
+
 def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
     return (crop.w, crop.h) if crop else (info.width, info.height)
 
