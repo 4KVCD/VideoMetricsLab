@@ -362,3 +362,76 @@ def test_cached_ssimulacra2_appears_while_cvvdp_is_ticked_but_never_calculated(q
     assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).text() == "80.00"
     assert win.distorted_table.item(row, COL_CVVDP).text() == ""  # still to calculate
     win.close()
+
+
+def _row_with_cached_scores(win, tmp_path, *keys):
+    """A row whose recipe has VMAF plus `keys` saved, none of `keys` ticked."""
+    from vmaf_app.core.metric_results import FrameMetricResult
+
+    source, distorted = tmp_path / "source.mp4", tmp_path / "test.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted.write_bytes(b"d" * 50)
+    win._source_info = fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    row_data = win._rows[row]
+    row_data.video_info = fake_video_info(str(distorted))
+    stored = fake_run_result(distorted, source=source)
+    extra = []
+    for key, value in (("ssimulacra2", 80.0), ("butteraugli", 1.5)):
+        if key in keys:
+            extra.append(FrameMetricResult(
+                key, list(range(10)), [i / 30 for i in range(10)], [value] * 10,
+                MetricProvenance(f"Vship/{key}", "5.1.1", "gpu", f"{key}-vship-gpu-v1")))
+    if "cvvdp" in keys:
+        extra.append(_cvvdp(row_data.cvvdp, 9.42))
+    stored.merge_metric_results(MetricResultSet(extra))
+    ticked = set(row_data.extra_metric_keys)
+    row_data.extra_metric_keys |= set(keys)  # store as a run that calculated them would
+    result_cache.store(source, distorted, stored, "test", win._analysis_request(row_data), tmp_path)
+    row_data.extra_metric_keys = ticked
+    return row, row_data, source, distorted
+
+
+def test_saved_scores_show_even_when_their_column_is_not_ticked(qapp, tmp_path, monkeypatch):
+    """Brian: saved scores should show whether or not their metric is ticked.
+    The lookup used to ask only for ticked metrics, so a saved SSIMULACRA2,
+    Butteraugli or CVVDP stayed hidden behind an empty tick box."""
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    win = MainWindow()
+    row, row_data, *_ = _row_with_cached_scores(win, tmp_path, "ssimulacra2", "butteraugli", "cvvdp")
+    assert not {"ssimulacra2", "butteraugli", "cvvdp"} & set(win._requested_metrics(row_data))
+    assert win._try_load_cached_result(row)
+    assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).text() == "80.00"
+    assert win.distorted_table.item(row, main_window_module.COL_BUTTERAUGLI).text() == "1.5000"
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.420"
+    # Shown, but not asked for: the next run does not calculate them.
+    assert not {"ssimulacra2", "butteraugli", "cvvdp"} & set(win._requested_metrics(row_data))
+    win.close()
+
+
+def test_a_saved_unticked_score_is_added_to_a_row_already_showing_others(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    win = MainWindow()
+    row, row_data, source, distorted = _row_with_cached_scores(win, tmp_path, "ssimulacra2")
+    row_data.completed_run = CompletedRun(fake_run_result(distorted, source=source), "test")
+    cached, _label = result_cache.load_cached(
+        source, distorted, win._analysis_request(row_data), tmp_path,
+        main_window_module.displayable_metric_specs(row_data.options, row_data.cvvdp))
+    win._on_cached_found(distorted, cached, "test")
+    assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).text() == "80.00"
+    win.close()
+
+
+def test_recalculating_does_not_delete_saved_scores_of_unticked_metrics(qapp, tmp_path, monkeypatch):
+    """Showing unticked saved scores must not widen "Recalculate selected
+    metrics": it still clears only what the row asks for."""
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    win = MainWindow()
+    row, _row_data, *_ = _row_with_cached_scores(win, tmp_path, "ssimulacra2")
+    win._recompute_rows([row])
+    win._file_writes.wait_until_idle(10)
+    assert list(tmp_path.rglob("ssimulacra2_*.npz")), "an unticked metric's saved score was deleted"
+    assert not list(tmp_path.rglob("vmaf_*.npz"))
+    win.close()
+

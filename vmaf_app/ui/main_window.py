@@ -70,6 +70,7 @@ from vmaf_app.core.cvvdp import presets as cvvdp_presets
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
+    displayable_metric_specs,
     supplemental_metric_specs,
 )
 from vmaf_app.core.frame_extract import FrameComparison
@@ -2277,7 +2278,7 @@ class MainWindow(QMainWindow):
             },
             cache_paths={rd.path: rd.identity_path for rd in cache_rows},
             cache_supplemental={
-                rd.path: supplemental_metric_specs(clone_options(rd.options))
+                rd.path: displayable_metric_specs(clone_options(rd.options), rd.cvvdp)
                 for rd in cache_rows
             },
             probe_media=False,
@@ -2329,15 +2330,15 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         if row_data.completed_run is not None:
             # The cached answer replaces what the row shows when it has
-            # everything the row already shows and more. It used to have to
+            # everything the row already shows and more -- ticked or not,
+            # since saved scores show whatever is ticked. It used to have to
             # hold every requested metric, so one never calculated (CVVDP
             # ticked beside cached SSIMULACRA2) threw away the rest of it:
             # the row kept showing VMAF only and SSIMULACRA2/Butteraugli
             # never appeared.
             existing = row_data.completed_run.result
-            requested = self._requested_metrics(row_data)
-            shown = {m for m in requested if existing.has_metric(m)}
-            cached = {m for m in requested if result.has_metric(m)}
+            shown = set(existing.metric_results.keys())
+            cached = set(result.metric_results.keys())
             if not cached > shown:
                 return
             self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
@@ -2431,7 +2432,7 @@ class MainWindow(QMainWindow):
         cached = result_cache.load_cached(
             self._source_info.path, row_data.identity_path,
             self._analysis_request(row_data),
-            supplemental_specs=supplemental_metric_specs(row_data.options),
+            supplemental_specs=displayable_metric_specs(row_data.options, row_data.cvvdp),
         )
         if cached is None:
             return False

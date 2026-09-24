@@ -12,7 +12,7 @@ from vmaf_app.core.analysis_request import (
 )
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import CvvdpSettings
-from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
+from vmaf_app.core.metrics import FRAME_METRICS, METRICS, metric_definition
 from vmaf_app.core.models import CropBox, ResampleTarget, VmafOptions, clone_options
 
 
@@ -146,3 +146,35 @@ def supplemental_metric_specs(options: VmafOptions) -> tuple[MetricRequestSpec, 
         if metric.ffmpeg_binding is not None:
             fuller.set_metric_enabled(metric.key, True)
     return metric_request_specs(fuller)
+
+
+def displayable_metric_specs(
+    options: VmafOptions, cvvdp: CvvdpSettings | None = None,
+) -> tuple[MetricRequestSpec, ...]:
+    """Every saved score a row can show for its recipe, ticked or not.
+
+    A row shows a saved score whether or not its metric is ticked: the tick
+    says what the next run calculates, not what may be displayed. So a
+    lookup probes every metric, not only the ticked ones:
+    - the FFmpeg metrics as a combined libvmaf run stores them, and XPSNR
+      as an XPSNR-only run stores it (full coverage even when libvmaf is
+      subsampled);
+    - SSIMULACRA2 and Butteraugli at the row's coverage;
+    - CVVDP for the row's display.
+    Only for finding scores: "Recalculate" still clears just the selected
+    metrics, and runs still calculate just the ticked ones.
+    """
+    fuller = clone_options(options)
+    for metric in FRAME_METRICS:
+        if metric.ffmpeg_binding is not None:
+            fuller.set_metric_enabled(metric.key, True)
+    xpsnr_only = clone_options(options)
+    for metric in FRAME_METRICS:
+        if metric.ffmpeg_binding is not None:
+            xpsnr_only.set_metric_enabled(metric.key, metric.key == "xpsnr")
+    perceptual = tuple(metric.key for metric in METRICS if metric.backend_id == "perceptual")
+    specs: dict[str, MetricRequestSpec] = {}
+    for spec in (*metric_request_specs(fuller), *metric_request_specs(xpsnr_only, ("xpsnr",)),
+                 *metric_request_specs(options, perceptual, cvvdp)):
+        specs.setdefault(repr(spec.identity_dict()), spec)
+    return tuple(specs.values())
