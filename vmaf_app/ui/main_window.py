@@ -74,7 +74,7 @@ from vmaf_app.core.ffmpeg_request import (
 )
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
-from vmaf_app.core.metric_results import MetricResultSet
+from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
@@ -2515,11 +2515,11 @@ class MainWindow(QMainWindow):
         recomputed = {self._rows[row].path for row in rows}
         for row in rows:
             row_data = self._rows[row]
-            if row_data.completed_run is not None:
-                self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
-            row_data.completed_run = None
+            # Only the metrics being recalculated leave the row: saved scores
+            # of unticked metrics are neither recalculated nor deleted, and
+            # clearing the whole row hid them until the video was re-added.
             row_data.analysis_status = ""
-            self._set_row_metrics(row)
+            self._drop_metric_results(row, set(self._requested_metrics(row_data)))
             row_data.status_detail = ""
             if self._source_info is not None:
                 self._file_writes.submit(
@@ -3210,17 +3210,21 @@ class MainWindow(QMainWindow):
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
 
     def _drop_cvvdp_result(self, row: int) -> None:
-        """Removes the row's CVVDP score, keeping its other scores on screen
-        and on the graph. The result is copied, not edited: the graph and
-        Video Compare hold the old one."""
+        """Removes the row's CVVDP score, keeping its other scores."""
+        self._drop_metric_results(row, {"cvvdp"})
+
+    def _drop_metric_results(self, row: int, keys: set[str]) -> None:
+        """Removes some of the row's scores, keeping the rest on screen and
+        on the graph. The result is copied, not edited: the graph and Video
+        Compare hold the old one."""
         row_data = self._rows[row]
         run = row_data.completed_run
-        if run is None or not run.result.has_metric("cvvdp"):
+        if run is None or not any(run.result.has_metric(key) for key in keys):
             self._set_row_metrics(row)
             return
         kept = MetricResultSet(
             value for key in run.result.metric_results
-            if key != "cvvdp" and (value := run.result.metric_results.get(key)) is not None
+            if key not in keys and (value := run.result.metric_results.get(key)) is not None
         )
         if not self.graph_panel.remove_by_identity(run.graph_identity):
             self.graph_panel.remove_by_path(row_data.path)
@@ -3228,6 +3232,7 @@ class MainWindow(QMainWindow):
         if kept:
             result = copy.copy(run.result)
             result.metric_results = kept
+            result.frames = frame_scores_from_results(kept)
             row_data.completed_run = CompletedRun(result, run.label)
             self.graph_panel.add_run(result, run.label, identity=row_data.completed_run.graph_identity)
         else:
@@ -3790,6 +3795,18 @@ class MainWindow(QMainWindow):
             return None
         if row_data.completed_run is not None:
             previous = row_data.completed_run
+            # Saved scores the row was showing for metrics this run did not
+            # calculate (unticked ones) stay on show; the run's result held
+            # only what it calculated, so they used to vanish. Merged into a
+            # copy: the cache write queued above holds this result object.
+            carried = MetricResultSet(
+                value for key in previous.result.metric_results
+                if not result.has_metric(key) and key not in self._requested_metrics(row_data)
+                and (value := previous.result.metric(key)) is not None
+            )
+            if carried:
+                result = copy.copy(result)
+                result.merge_metric_results(carried)
             if not self.graph_panel.remove_by_identity(previous.graph_identity):
                 self.graph_panel.remove_by_path(row_data.path)
         run = CompletedRun(result, label)

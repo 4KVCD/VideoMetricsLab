@@ -536,3 +536,34 @@ def test_recalculating_keeps_the_saved_scores_of_unticked_ffmpeg_metrics(qapp, t
     assert list(tmp_path.rglob("psnr_*.npz")), "the unticked PSNR's saved score was deleted"
     assert not list(tmp_path.rglob("vmaf_*.npz"))
     win.close()
+
+
+def test_a_run_keeps_showing_saved_scores_of_unticked_metrics(qapp):
+    """A row showing VMAF and an unticked saved CVVDP: after running PSNR,
+    the result held only what the run calculated and CVVDP went back to a
+    tick box, although its score was still saved."""
+    from vmaf_app.core.models import clone_options
+
+    win, row, row_data = _window_with_row(cvvdp_score=9.42)
+    win._source_info.path = row_data.completed_run.result.source
+    row_data.extra_metric_keys.discard("cvvdp")
+    fresh = fake_run_result("test.mp4", vmaf=91.0)
+    win._job_rows = [row_data]
+    win._job_cache_options = [clone_options(row_data.options)]
+    win._job_cvvdp = [row_data.cvvdp]
+    win._on_job_finished(0, fresh)
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.420"
+    assert win.distorted_table.item(row, COL_VMAF).text() == "91.00"
+    assert not fresh.has_metric("cvvdp"), "the result handed to the cache write must not change"
+    win.close()
+
+
+def test_recalculating_keeps_unticked_saved_scores_on_show(qapp):
+    win, row, row_data = _window_with_row(cvvdp_score=9.42)
+    row_data.extra_metric_keys.discard("cvvdp")
+    win._recompute_rows([row])
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.420"
+    assert not row_data.completed_run.result.has_metric("vmaf")
+    assert not row_data.completed_run.result.frames.has("vmaf")
+    win._file_writes.wait_until_idle(10)
+    win.close()
