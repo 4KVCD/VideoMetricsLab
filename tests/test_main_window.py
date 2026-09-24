@@ -227,7 +227,7 @@ def test_the_table_has_no_status_column(qapp):
         for c in range(win.distorted_table.columnCount())
     ]
     assert "Status" not in headers
-    assert win.distorted_table.columnCount() == 13
+    assert win.distorted_table.columnCount() == 14
 
 
 def test_metrics_have_consistent_visual_order(qapp):
@@ -238,7 +238,7 @@ def test_metrics_have_consistent_visual_order(qapp):
               for i in range(header.count()) if header.logicalIndex(i) in columns]
     assert labels == [
         "VMAF", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)",
-        "SSIMULACRA2", "Butteraugli",
+        "SSIMULACRA2", "Butteraugli", "CVVDP",
     ]
     win.settings_default_vmaf_neg.setChecked(True)
     assert win._options_from_settings().compute_vmaf_neg

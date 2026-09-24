@@ -14,6 +14,8 @@ give a single video its own crop/model/etc. independent of the rest).
 """
 from __future__ import annotations
 
+import contextlib
+import copy
 import os
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -26,6 +28,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -51,6 +56,17 @@ from PySide6.QtWidgets import (
 from vmaf_app import APP_NAME, __version__
 from vmaf_app.core import perceptual_vship, result_cache
 from vmaf_app.core.builtin_models import builtin_choice
+from vmaf_app.core.cvvdp import (
+    DEFAULT_PRESET,
+    CvvdpDisplay,
+    CvvdpSettings,
+    default_settings,
+    matching_preset,
+    preset_named,
+    with_user_preset,
+    without_user_preset,
+)
+from vmaf_app.core.cvvdp import presets as cvvdp_presets
 from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
@@ -59,7 +75,7 @@ from vmaf_app.core.ffmpeg_request import (
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.metric_results import MetricResultSet
-from vmaf_app.core.metrics import FRAME_METRICS, MetricDefinition, metric_definition
+from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
 from vmaf_app.core.models import (
     RESAMPLE_TARGET_CHOICES,
@@ -129,7 +145,8 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_VMAF_NEG,
     COL_SSIMULACRA2,
     COL_BUTTERAUGLI,
-) = range(13)
+    COL_CVVDP,
+) = range(14)
 
 #: Row states worth colouring the file name for. Everything else the old
 #: Status column reported is now visible in the metric columns themselves --
@@ -162,6 +179,7 @@ _METRIC_COLUMNS = (
     MetricColumn(COL_PSNR, "psnr"), MetricColumn(COL_SSIM, "ssim"),
     MetricColumn(COL_XPSNR, "xpsnr"),
     MetricColumn(COL_SSIMULACRA2, "ssimulacra2"), MetricColumn(COL_BUTTERAUGLI, "butteraugli"),
+    MetricColumn(COL_CVVDP, "cvvdp"),
 )
 _METRIC_COLUMN_BY_INDEX = {item.column: item for item in _METRIC_COLUMNS}
 _METRIC_COLUMN_SET = frozenset(_METRIC_COLUMN_BY_INDEX)
@@ -178,8 +196,112 @@ class _StayOpenMenu(QMenu):
         super().mouseReleaseEvent(event)
 
 
+class CvvdpDisplayDialog(QDialog):
+    """Edits the display CVVDP models. Every value changes the score."""
+
+    def __init__(self, display: CvvdpDisplay, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("CVVDP display")
+        form = QFormLayout(self)
+        intro = QLabel(
+            "CVVDP predicts how visible the differences are to someone watching this "
+            "display, from this distance, in this light. Each value below changes the score, "
+            "so compare videos scored for the same display."
+        )
+        intro.setWordWrap(True)
+        form.addRow(intro)
+
+        def spin(low, high, value, decimals, suffix, step, tip):
+            box = QDoubleSpinBox()
+            box.setRange(low, high)
+            box.setDecimals(decimals)
+            box.setSingleStep(step)
+            box.setSuffix(suffix)
+            box.setValue(value)
+            box.setToolTip(tip)
+            return box
+
+        self.width_spin, self.height_spin = QSpinBox(), QSpinBox()
+        for box, value in ((self.width_spin, display.width), (self.height_spin, display.height)):
+            box.setRange(16, 16384)
+            box.setValue(value)
+            box.setToolTip("The display's own resolution in pixels (not the video's).")
+        resolution = QHBoxLayout()
+        resolution.addWidget(self.width_spin)
+        resolution.addWidget(QLabel("x"))
+        resolution.addWidget(self.height_spin)
+        resolution.addStretch(1)
+        form.addRow("Resolution:", resolution)
+        self.diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, " in", 1,
+                                  "The screen's diagonal size.")
+        form.addRow("Screen size:", self.diagonal_spin)
+        self.distance_spin = spin(0.05, 50, display.viewing_distance_m, 3, " m", 0.05,
+                                  "How far the viewer's eyes are from the screen. Closer makes "
+                                  "small artifacts easier to see.")
+        self.distance_note = QLabel()
+        self.distance_note.setStyleSheet("color: #666;")
+        distance = QHBoxLayout()
+        distance.addWidget(self.distance_spin)
+        distance.addWidget(self.distance_note)
+        distance.addStretch(1)
+        form.addRow("Viewing distance:", distance)
+        self.peak_spin = spin(1, 10000, display.peak_luminance, 0, " cd/m\u00b2", 50,
+                              "The display's peak brightness (nits): about 200 for an office "
+                              "monitor, 600-1500 for an HDR monitor, 1000-4000 for an HDR TV.")
+        form.addRow("Peak brightness:", self.peak_spin)
+        self.contrast_spin = spin(1, 10_000_000, display.contrast, 0, " : 1", 100,
+                                  "Peak to black: about 1000:1 for a typical LCD, 1,000,000:1 "
+                                  "for OLED or the official HDR displays.")
+        form.addRow("Contrast:", self.contrast_spin)
+        self.ambient_spin = spin(0, 100_000, display.ambient_lux, 1, " lux", 10,
+                                 "Light falling on the screen: about 250 lux in an office, 50 in a "
+                                 "lit living room, 5-10 watching a film with the lights low, 0 in the dark.")
+        form.addRow("Room light:", self.ambient_spin)
+        self.reflectivity_spin = spin(0, 99.9, display.reflectivity * 100, 2, " %", 0.1,
+                                      "How much of the room light the screen reflects back at the "
+                                      "viewer; 0.5% is the official models' value.")
+        form.addRow("Screen reflectivity:", self.reflectivity_spin)
+        self.exposure_spin = spin(0.01, 100, display.exposure, 2, "", 0.1,
+                                  "Brightness multiplier for the pictures; 1 shows them as encoded.")
+        form.addRow("Exposure:", self.exposure_spin)
+        self.hdr_check = QCheckBox("HDR display")
+        self.hdr_check.setChecked(display.hdr)
+        self.hdr_check.setToolTip("An HDR display, as in the official HDR display models. Off: an SDR one.")
+        form.addRow("", self.hdr_check)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+        for box in (self.width_spin, self.height_spin, self.diagonal_spin, self.distance_spin):
+            box.valueChanged.connect(self._update_distance_note)
+        self._update_distance_note()
+
+    def display(self) -> CvvdpDisplay:
+        return CvvdpDisplay(
+            width=self.width_spin.value(), height=self.height_spin.value(),
+            diagonal_inches=self.diagonal_spin.value(), viewing_distance_m=self.distance_spin.value(),
+            peak_luminance=self.peak_spin.value(), contrast=self.contrast_spin.value(),
+            ambient_lux=self.ambient_spin.value(), reflectivity=self.reflectivity_spin.value() / 100,
+            exposure=self.exposure_spin.value(), hdr=self.hdr_check.isChecked(),
+        )
+
+    def _update_distance_note(self, *_args) -> None:
+        self.distance_note.setText(f"= {self.display().distance_in_heights:.2f} x screen height")
+
+    def accept(self) -> None:
+        try:
+            self.display().validated()
+        except ValueError as error:
+            QMessageBox.warning(self, "CVVDP display", str(error))
+            return
+        super().accept()
+
+
 #: The metrics with their own pass and a GPU/CPU choice, not a libvmaf feature.
 _PERCEPTUAL_METRIC_KEYS = ("ssimulacra2", "butteraugli")
+#: Every metric ticked outside VmafOptions (see RowData.extra_metric_keys).
+#: CVVDP runs in the same GPU pass but has no CPU choice.
+_EXTRA_METRIC_KEYS = (*_PERCEPTUAL_METRIC_KEYS, "cvvdp")
 
 #: A row whose job finished some metrics and failed others (see
 #: MainWindow._on_job_partially_failed).
@@ -240,6 +362,9 @@ class RowData:
     metric_backends: dict[str, str] = field(default_factory=lambda: {
         "ssimulacra2": "gpu", "butteraugli": "gpu",
     })
+    # The display CVVDP models for this row. Part of what a CVVDP score
+    # means, so part of its cache identity; no other metric depends on it.
+    cvvdp: CvvdpSettings = field(default_factory=CvvdpSettings)
     analysis_status: str = ""
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
@@ -312,6 +437,7 @@ class MainWindow(QMainWindow):
         self._job_rows: list[RowData] = []  # job index -> the row that job belongs to
         self._job_total_frames: list[int] = []  # job index -> estimated frame count, for queue ETA
         self._job_cache_options: list[VmafOptions] = []
+        self._job_cvvdp: list[CvvdpSettings] = []
         self._checked_rows_for_run: list[RowData] = []  # rows checked when Run was clicked, incl. already-scored ones
         # Live per-job figures, keyed by job index. With several videos in
         # flight the bar can no longer track "the" running job -- there is
@@ -343,6 +469,7 @@ class MainWindow(QMainWindow):
             key: "cpu" if getattr(self._settings, f"default_{key}_backend", "gpu") == "cpu" else "gpu"
             for key in _PERCEPTUAL_METRIC_KEYS
         }
+        self._default_cvvdp = self._cvvdp_from_settings()
         known = {item.key for item in _METRIC_COLUMNS}
         self._hidden_metrics: set[str] = {key for key in self._settings.hidden_metrics if key in known}
         if len(self._hidden_metrics) >= len(known):
@@ -490,9 +617,16 @@ class MainWindow(QMainWindow):
     def _extra_metrics_from_settings(self) -> set[str]:
         """The perceptual metrics a newly added video starts with ticked."""
         return {
-            key for key in _PERCEPTUAL_METRIC_KEYS
+            key for key in _EXTRA_METRIC_KEYS
             if getattr(self._settings, f"default_compute_{key}", False) is True
         }
+
+    def _cvvdp_from_settings(self) -> CvvdpSettings:
+        """The CVVDP display a newly added video starts with: the preset
+        chosen in Settings -- the user's own, once they have saved one --
+        or the built-in default. The same for every video, whatever its
+        format."""
+        return default_settings(self._settings.cvvdp_presets, self._settings.cvvdp_default_preset)
 
     def _apply_ffmpeg_setting(self) -> None:
         """Points the finder at the configured folder, or clears the override
@@ -584,6 +718,7 @@ class MainWindow(QMainWindow):
         self.settings_default_xpsnr = QCheckBox("XPSNR")
         self.settings_default_ssimulacra2 = QCheckBox("SSIMULACRA2")
         self.settings_default_butteraugli = QCheckBox("Butteraugli")
+        self.settings_default_cvvdp = QCheckBox("CVVDP")
         for box, value in (
             (self.settings_default_vmaf, self._settings.default_compute_vmaf),
             (self.settings_default_vmaf_neg, self._settings.default_compute_vmaf_neg),
@@ -592,12 +727,28 @@ class MainWindow(QMainWindow):
             (self.settings_default_xpsnr, self._settings.default_compute_xpsnr),
             (self.settings_default_ssimulacra2, self._settings.default_compute_ssimulacra2),
             (self.settings_default_butteraugli, self._settings.default_compute_butteraugli),
+            (self.settings_default_cvvdp, self._settings.default_compute_cvvdp),
         ):
             box.setChecked(value)
             box.toggled.connect(self._on_settings_edited)
             metrics_row.addWidget(box)
         metrics_row.addStretch(1)
         defaults_layout.addLayout(metrics_row)
+
+        cvvdp_row = QHBoxLayout()
+        cvvdp_row.addWidget(QLabel("CVVDP display:"))
+        self.settings_cvvdp_default = QComboBox()
+        self.settings_cvvdp_default.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.settings_cvvdp_default.setToolTip(
+            "The display CVVDP models for newly added videos, whatever their format. "
+            "Saving a preset of your own in the Options panel makes it the default; "
+            "choose here to change that."
+        )
+        self._fill_cvvdp_default_combo()
+        self.settings_cvvdp_default.currentIndexChanged.connect(self._on_settings_edited)
+        cvvdp_row.addWidget(self.settings_cvvdp_default)
+        cvvdp_row.addStretch(1)
+        defaults_layout.addLayout(cvvdp_row)
         outer.addWidget(defaults_box)
 
         compare_box = QGroupBox("Video Compare")
@@ -683,6 +834,9 @@ class MainWindow(QMainWindow):
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
         self._settings.default_compute_ssimulacra2 = self.settings_default_ssimulacra2.isChecked()
         self._settings.default_compute_butteraugli = self.settings_default_butteraugli.isChecked()
+        self._settings.default_compute_cvvdp = self.settings_default_cvvdp.isChecked()
+        chosen = self.settings_cvvdp_default.currentData()
+        self._settings.cvvdp_default_preset = "" if chosen in (None, DEFAULT_PRESET.name) else chosen
         self._settings.compare_decoded_videos = int(self.settings_decoded_videos.currentData())
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
@@ -697,9 +851,23 @@ class MainWindow(QMainWindow):
         # they were given.
         self._default_options = self._options_from_settings()
         self._default_extra_metric_keys = self._extra_metrics_from_settings()
+        self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
         self.settings_status.setText(error or "Settings saved.")
         self._refresh_settings_status()
+
+    def _fill_cvvdp_default_combo(self) -> None:
+        """Lists every CVVDP preset in Settings, the default selected."""
+        combo = self.settings_cvvdp_default
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            for preset in cvvdp_presets(self._settings.cvvdp_presets):
+                combo.addItem(preset.name, preset.name)
+            chosen = self._settings.cvvdp_default_preset or DEFAULT_PRESET.name
+            combo.setCurrentIndex(max(0, combo.findData(chosen)))
+        finally:
+            combo.blockSignals(False)
 
     def _on_frame_color_mode_changed(self, mode: str) -> None:
         self._settings.frame_preview_color_mode = mode
@@ -831,6 +999,7 @@ class MainWindow(QMainWindow):
                 f"   {metric_definition('vmaf_neg').table_header}",
                 f"   {metric_definition('ssimulacra2').table_header}",
                 f"   {metric_definition('butteraugli').table_header}",
+                f"   {metric_definition('cvvdp').table_header}",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -1052,6 +1221,48 @@ class MainWindow(QMainWindow):
         )
         metric_options_form.addRow("libvmaf frame subsample:", self.subsample_spin)
         self.subsample_spin.setToolTip("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain values at libvmaf's sampled frames.")
+
+        # CVVDP's display: a preset, the display itself, and whether the
+        # video is scaled to fill it (see vmaf_app.core.cvvdp).
+        self.cvvdp_preset_combo = QComboBox()
+        self.cvvdp_preset_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.cvvdp_preset_combo.setToolTip(
+            "The display CVVDP predicts visible differences on. The score depends on the "
+            "display as much as on the videos, so compare videos scored for the same one.\n\n"
+            "New videos start with the preset chosen in Settings. Saving a preset of your "
+            "own makes it that default."
+        )
+        self.cvvdp_preset_combo.currentIndexChanged.connect(self._on_cvvdp_preset_chosen)
+        metric_options_form.addRow("CVVDP display:", self.cvvdp_preset_combo)
+        self.cvvdp_display_label = QLabel()
+        self.cvvdp_display_label.setStyleSheet("color: #666;")
+        self.cvvdp_display_label.setWordWrap(True)
+        metric_options_form.addRow("", self.cvvdp_display_label)
+        cvvdp_buttons = QHBoxLayout()
+        self.cvvdp_edit_btn = QPushButton("Edit display...")
+        self.cvvdp_edit_btn.setToolTip("Change the display's size, distance, brightness, room light and more.")
+        self.cvvdp_edit_btn.clicked.connect(self._on_cvvdp_edit_display)
+        self.cvvdp_save_btn = QPushButton("Save as preset...")
+        self.cvvdp_save_btn.setToolTip(
+            "Keep these CVVDP settings as a preset of your own. It becomes the display "
+            "newly added videos start with."
+        )
+        self.cvvdp_save_btn.clicked.connect(self._on_cvvdp_save_preset)
+        self.cvvdp_delete_btn = QPushButton("Delete preset")
+        self.cvvdp_delete_btn.setToolTip("Delete this preset of yours. Built-in presets cannot be deleted.")
+        self.cvvdp_delete_btn.clicked.connect(self._on_cvvdp_delete_preset)
+        for button in (self.cvvdp_edit_btn, self.cvvdp_save_btn, self.cvvdp_delete_btn):
+            cvvdp_buttons.addWidget(button)
+        cvvdp_buttons.addStretch(1)
+        metric_options_form.addRow("", cvvdp_buttons)
+        self.cvvdp_resize_check = QCheckBox("Scale the video to fill the display")
+        self.cvvdp_resize_check.setToolTip(
+            "Off (the official default): the video is shown pixel for pixel, so a 1080p "
+            "video covers a quarter of a 4K display. On: it is scaled, keeping its shape, "
+            "to fill the display."
+        )
+        self.cvvdp_resize_check.toggled.connect(self._on_cvvdp_resize_toggled)
+        metric_options_form.addRow("", self.cvvdp_resize_check)
 
         self.duration_edit = QTimeEdit()
         self.duration_edit.setDisplayFormat("HH:mm:ss.zzz")
@@ -1430,6 +1641,7 @@ class MainWindow(QMainWindow):
             path=path, options=clone_options(self._default_options),
             extra_metric_keys=set(self._default_extra_metric_keys),
             metric_backends=dict(self._default_metric_backends),
+            cvvdp=self._default_cvvdp,
         ))
         self._set_row_metrics(row)
         return row
@@ -1461,16 +1673,17 @@ class MainWindow(QMainWindow):
                     continue
                 enabled = self._row_metric_enabled(row_data, col)
                 value = self._metric_mean(run, col) if run is not None else None
-                if value is None and not self._metric_supported(row_data, metric_column.key):
+                unavailable = (
+                    self._metric_unavailable_reason(row_data, metric_column.key)
+                    if value is None else None
+                )
+                if unavailable is not None:
                     # No tick box: there is nothing to choose. The row's own
                     # selection is left alone for when it applies again.
                     item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                     item.setData(Qt.CheckStateRole, None)
                     item.setText("n/a")
-                    item.setToolTip(
-                        f"{metric_column.metric.label} is not available for resolution "
-                        "round-trip tests; the other selected metrics are still calculated."
-                    )
+                    item.setToolTip(unavailable)
                     item.setForeground(QColor("#888"))
                     item.setBackground(QColor(0, 0, 0, 0))
                     item.setFont(QFont())
@@ -1508,11 +1721,14 @@ class MainWindow(QMainWindow):
                     # implementation is on a different scale from the rest.
                     text += f" ({frame_metric.provenance.compute_backend.upper()})"
                 item.setText(text)
-                item.setToolTip(
-                    "Mean of calculated frame scores."
-                    + self._identical_frames_note(run, col)
-                    + self._backend_note(row_data, metric_column.key, frame_metric)
-                )
+                if metric_column.metric.kind is MetricKind.SEQUENCE:
+                    item.setToolTip(self._cvvdp_note(row_data))
+                else:
+                    item.setToolTip(
+                        "Mean of calculated frame scores."
+                        + self._identical_frames_note(run, col)
+                        + self._backend_note(row_data, metric_column.key, frame_metric)
+                    )
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
@@ -1586,9 +1802,25 @@ class MainWindow(QMainWindow):
             "in the frame count for the XPSNR sequence average."
         )
 
+    def _cvvdp_note(self, row_data: RowData) -> str:
+        """Tooltip for a CVVDP score: what the number means and which display it is for."""
+        preset = matching_preset(row_data.cvvdp, self._settings.cvvdp_presets)
+        display = row_data.cvvdp.display.describe()
+        return (
+            "CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no "
+            "visible difference, and one JOD lower means 75% of viewers would pick the "
+            "reference as better.\n\n"
+            f"For the display {preset.name if preset else '(custom)'}: {display}"
+            + (", video scaled to fill it" if row_data.cvvdp.resize_to_display else "")
+            + ".\n\nThe JOD of each second is plotted in Metric Graphs."
+        )
+
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
         metric = _METRIC_COLUMN_BY_INDEX[column].metric
+        sequence = run.result.sequence_metric(metric.key)
+        if sequence is not None:
+            return sequence.score  # one score for the video, not a mean
         result = run.result.frame_metric(metric.key)
         values = result.values if result is not None else run.result.frames.values(metric.key)
         if values is None or len(values) == 0:
@@ -1967,9 +2199,7 @@ class MainWindow(QMainWindow):
         worker = ProbeWorker(
             paths, self._source_info.path, True,
             {
-                rd.path: analysis_request_from_vmaf_options(
-                    clone_options(rd.options), self._requested_metrics(rd), rd.metric_backends,
-                )
+                rd.path: self._analysis_request(rd, clone_options(rd.options))
                 for rd in cache_rows
             },
             cache_paths={rd.path: rd.identity_path for rd in cache_rows},
@@ -2005,10 +2235,7 @@ class MainWindow(QMainWindow):
             return
         current_key = result_cache.cache_key(
             self._source_info.path, self._rows[row].identity_path,
-            analysis_request_from_vmaf_options(
-                self._rows[row].options, self._requested_metrics(self._rows[row]),
-                self._rows[row].metric_backends,
-            ),
+            self._analysis_request(self._rows[row]),
         )
         if key == current_key:
             self._on_cached_found(path, result, label)
@@ -2028,8 +2255,8 @@ class MainWindow(QMainWindow):
             return
         row_data = self._rows[row]
         if row_data.completed_run is not None:
-            existing = row_data.completed_run.result.frames
-            if all(existing.has(m) for m in self._requested_metrics(row_data)):
+            existing = row_data.completed_run.result
+            if all(existing.has_metric(m) for m in self._requested_metrics(row_data)):
                 return
             if not all(result.has_metric(m) for m in self._requested_metrics(row_data)):
                 return
@@ -2123,9 +2350,7 @@ class MainWindow(QMainWindow):
             return False
         cached = result_cache.load_cached(
             self._source_info.path, row_data.identity_path,
-            analysis_request_from_vmaf_options(
-                row_data.options, self._requested_metrics(row_data), row_data.metric_backends,
-            ),
+            self._analysis_request(row_data),
             supplemental_specs=supplemental_metric_specs(row_data.options),
         )
         if cached is None:
@@ -2143,7 +2368,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(metric.label for metric in FRAME_METRICS if result.has_metric(metric.key))
+            + ", ".join(metric.label for metric in METRICS if result.has_metric(metric.key))
             + "\nLoaded from a previous run (matching files and calculation settings) -- "
             "right-click to recompute."
         )
@@ -2188,10 +2413,7 @@ class MainWindow(QMainWindow):
                     partial(
                         result_cache.clear,
                         self._source_info.path, row_data.identity_path,
-                        analysis_request_from_vmaf_options(
-                            clone_options(row_data.options), self._requested_metrics(row_data),
-                            row_data.metric_backends,
-                        ),
+                        self._analysis_request(row_data, clone_options(row_data.options)),
                         cache_directory,
                         supplemental_metric_specs(clone_options(row_data.options)),
                     ),
@@ -2246,6 +2468,7 @@ class MainWindow(QMainWindow):
             new_row_data = self._rows[new_row]
             new_row_data.options = clone_options(row_data.options)
             new_row_data.options.scale_direction = opposite
+            new_row_data.cvvdp = row_data.cvvdp
             new_row_data.scale_direction_pinned = True
             # The companion decodes the SAME file as the row it came from;
             # only the scale direction differs, and that is already part of
@@ -2354,9 +2577,42 @@ class MainWindow(QMainWindow):
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
             uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.extra_features for o in selected_options)
             self.threads_spin.setEnabled(uses_libvmaf)
-            self.subsample_spin.setEnabled(uses_libvmaf)
+            # Also while it is above 1: CVVDP is unavailable then, and the
+            # way back to it must not be a disabled control.
+            self.subsample_spin.setEnabled(uses_libvmaf or any(o.n_subsample > 1 for o in selected_options))
+            self._show_cvvdp_settings(
+                self._rows[self._panel_target_rows[0]].cvvdp if self._panel_target_rows
+                else self._default_cvvdp
+            )
         finally:
             self._syncing_panel = False
+
+    def _show_cvvdp_settings(self, settings: CvvdpSettings) -> None:
+        """Shows one row's CVVDP settings in the Options panel: the preset
+        they match (or "Custom"), the display in one line, and the resize box."""
+        combo = self.cvvdp_preset_combo
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            user_presets = self._settings.cvvdp_presets
+            for preset in cvvdp_presets(user_presets):
+                combo.addItem(preset.name, preset.name)
+                combo.setItemData(
+                    combo.count() - 1, preset.description or "Your saved preset.", Qt.ToolTipRole
+                )
+            match = matching_preset(settings, user_presets)
+            if match is None:
+                combo.addItem("Custom (not saved as a preset)", None)
+                combo.setCurrentIndex(combo.count() - 1)
+            else:
+                combo.setCurrentIndex(combo.findData(match.name))
+        finally:
+            combo.blockSignals(False)
+        self.cvvdp_delete_btn.setEnabled(match is not None and not match.builtin)
+        self.cvvdp_display_label.setText(settings.display.describe())
+        self.cvvdp_resize_check.blockSignals(True)
+        self.cvvdp_resize_check.setChecked(settings.resize_to_display)
+        self.cvvdp_resize_check.blockSignals(False)
 
     def _read_panel_options(self) -> VmafOptions:
         extra_features = [
@@ -2392,6 +2648,17 @@ class MainWindow(QMainWindow):
             gpu_decode=self.gpu_checkbox.isChecked(),
             gpu_vendor=vendor,
             crop_mode=crop_mode,
+        )
+
+    def _analysis_request(self, row_data: RowData, options: VmafOptions | None = None,
+                          cvvdp: CvvdpSettings | None = None):
+        """The row's request, as runs and every cache lookup see it. One
+        place, so the cache can never be asked with different settings from
+        the ones a run is stored under."""
+        return analysis_request_from_vmaf_options(
+            options if options is not None else row_data.options,
+            self._requested_metrics(row_data), row_data.metric_backends,
+            cvvdp if cvvdp is not None else row_data.cvvdp,
         )
 
     @staticmethod
@@ -2477,7 +2744,7 @@ class MainWindow(QMainWindow):
     def _selected_metrics(row_data: RowData) -> tuple[str, ...]:
         """The row's tick boxes, including metrics whose column is hidden."""
         requested = set(row_data.options.requested_metrics()) | row_data.extra_metric_keys
-        return tuple(metric.key for metric in FRAME_METRICS if metric.key in requested)
+        return tuple(metric.key for metric in METRICS if metric.key in requested)
 
     def _requested_metrics(self, row_data: RowData) -> tuple[str, ...]:
         """What a run of this row calculates: its ticks, less hidden metrics
@@ -2494,17 +2761,36 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_supported(row_data: RowData, key: str) -> bool:
-        """Whether this row's comparison can produce `key` at all.
+        """Whether this row's comparison can produce `key` at all."""
+        return MainWindow._metric_unavailable_reason(row_data, key) is None
+
+    @staticmethod
+    def _metric_unavailable_reason(row_data: RowData, key: str) -> str | None:
+        """Why this row cannot produce `key`, for its "n/a" cell; None if it can.
 
         Neither perceptual backend (Vship, libjxl CPU tools) implements the
         resolution round-trip test, which derives both sides from the source
         at run time. Requesting SSIMULACRA2/Butteraugli on such a row failed
         the whole job -- VMAF included -- with "do not support resolution
         round-trip tests yet".
+
+        CVVDP also needs every frame (it judges each one together with the
+        frames before it) and a supported GPU (it has no CPU implementation
+        here).
         """
-        if row_data.options.resample_test is None:
-            return True
-        return metric_definition(key).backend_id != "perceptual"
+        label = metric_definition(key).label
+        if row_data.options.resample_test is not None and metric_definition(key).backend_id == "perceptual":
+            return (f"{label} is not available for resolution round-trip tests; the other "
+                    "selected metrics are still calculated.")
+        if key == "cvvdp":
+            if row_data.options.n_subsample > 1:
+                return ("CVVDP judges each frame together with the frames before it, so it "
+                        "needs every frame: it is not available while libvmaf frame subsample "
+                        "is above 1.")
+            if not MainWindow._vship_available():
+                return ("CVVDP is calculated on the GPU only, and no supported NVIDIA or AMD "
+                        "GPU was found.")
+        return None
 
     @classmethod
     def _row_metric_enabled(cls, row_data: RowData, column: int) -> bool:
@@ -2651,6 +2937,13 @@ class MainWindow(QMainWindow):
             return reusable
         result = row_data.completed_run.result
         for key in self._requested_metrics(row_data):
+            sequence = result.sequence_metric(key)
+            if sequence is not None:
+                # One score for the video. It is always the row's own:
+                # changing the CVVDP display drops it (_drop_cvvdp_result).
+                if np.isfinite(sequence.score):
+                    reusable.add(sequence)
+                continue
             metric = result.frame_metric(key)
             if metric is None or not np.any(~np.isnan(metric.values)):
                 continue
@@ -2773,6 +3066,129 @@ class MainWindow(QMainWindow):
         if error:
             self.status_label.setText(error)
 
+    # ------------------------------------------------------------------ CVVDP display
+    def _apply_cvvdp(self, change) -> None:
+        """Gives the selected rows new CVVDP settings: `change(old) -> new`.
+
+        Only CVVDP's score depends on them. A row keeps every other score,
+        loses a CVVDP score made for the old settings, and gets back one
+        already cached for the new settings, if there is one.
+        """
+        if self._syncing_panel or self._run_active:
+            return
+        changed = []
+        for row in self._panel_target_rows:
+            row_data = self._rows[row]
+            new = change(row_data.cvvdp)
+            if new.same_as(row_data.cvvdp):
+                continue
+            row_data.cvvdp = new
+            self._drop_cvvdp_result(row)
+            changed.append(row)
+        self._reload_cached_for_rows(changed)
+        if self._panel_target_rows:
+            self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
+
+    def _drop_cvvdp_result(self, row: int) -> None:
+        """Removes the row's CVVDP score, keeping its other scores on screen
+        and on the graph. The result is copied, not edited: the graph and
+        Video Compare hold the old one."""
+        row_data = self._rows[row]
+        run = row_data.completed_run
+        if run is None or not run.result.has_metric("cvvdp"):
+            self._set_row_metrics(row)
+            return
+        kept = MetricResultSet(
+            value for key in run.result.metric_results
+            if key != "cvvdp" and (value := run.result.metric_results.get(key)) is not None
+        )
+        if not self.graph_panel.remove_by_identity(run.graph_identity):
+            self.graph_panel.remove_by_path(row_data.path)
+        row_data.analysis_status = ""
+        if kept:
+            result = copy.copy(run.result)
+            result.metric_results = kept
+            row_data.completed_run = CompletedRun(result, run.label)
+            self.graph_panel.add_run(result, run.label, identity=row_data.completed_run.graph_identity)
+        else:
+            row_data.completed_run = None
+            row_data.status_detail = ""
+        self._set_row_metrics(row)
+        self._sync_frame_compare()
+
+    def _on_cvvdp_preset_chosen(self, index: int) -> None:
+        if self._syncing_panel:
+            return
+        name = self.cvvdp_preset_combo.itemData(index)
+        preset = preset_named(name, self._settings.cvvdp_presets) if name else None
+        if preset is not None:
+            self._apply_cvvdp(lambda _old: preset.settings)
+
+    def _on_cvvdp_resize_toggled(self, checked: bool) -> None:
+        self._apply_cvvdp(lambda old: replace(old, resize_to_display=checked))
+
+    def _on_cvvdp_edit_display(self) -> None:
+        if not self._panel_target_rows or self._run_active:
+            return
+        dialog = CvvdpDisplayDialog(self._rows[self._panel_target_rows[0]].cvvdp.display, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        display = dialog.display()
+        self._apply_cvvdp(lambda old: replace(old, display=display))
+
+    def _on_cvvdp_save_preset(self) -> None:
+        """Saves the first selected row's CVVDP settings as a preset of the
+        user's own and makes it the default for new videos: someone who has
+        tuned CVVDP to their display will go on using it."""
+        if not self._panel_target_rows:
+            return
+        settings = self._rows[self._panel_target_rows[0]].cvvdp
+        current = matching_preset(settings, self._settings.cvvdp_presets)
+        suggestion = current.name if current is not None and not current.builtin else ""
+        name, ok = QInputDialog.getText(self, "Save CVVDP preset", "Preset name:", text=suggestion)
+        name = name.strip()
+        if not ok:
+            return
+        if name and any(data.get("name") == name for data in self._settings.cvvdp_presets):
+            answer = QMessageBox.question(self, "Save CVVDP preset", f'Replace your preset "{name}"?')
+            if answer != QMessageBox.Yes:
+                return
+        try:
+            self._settings.cvvdp_presets = with_user_preset(self._settings.cvvdp_presets, name, settings)
+        except ValueError as error:
+            QMessageBox.warning(self, "Save CVVDP preset", str(error))
+            return
+        self._settings.cvvdp_default_preset = name
+        self._default_cvvdp = self._cvvdp_from_settings()
+        error = self._settings.save()
+        self._fill_cvvdp_default_combo()
+        self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
+        self.status_label.setText(
+            error or f'Saved the CVVDP preset "{name}". Videos added from now on use it '
+                     "(change that in Settings)."
+        )
+
+    def _on_cvvdp_delete_preset(self) -> None:
+        name = self.cvvdp_preset_combo.currentData()
+        preset = preset_named(name, self._settings.cvvdp_presets) if name else None
+        if preset is None or preset.builtin:
+            return
+        answer = QMessageBox.question(
+            self, "Delete CVVDP preset",
+            f'Delete your preset "{name}"?\n\nVideos using it keep their settings.',
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._settings.cvvdp_presets = without_user_preset(self._settings.cvvdp_presets, name)
+        if self._settings.cvvdp_default_preset == name:
+            self._settings.cvvdp_default_preset = ""
+        self._default_cvvdp = self._cvvdp_from_settings()
+        error = self._settings.save()
+        self._fill_cvvdp_default_combo()
+        if self._panel_target_rows:
+            self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
+        self.status_label.setText(error or f'Deleted the CVVDP preset "{name}".')
+
     def _on_scale_direction_combo_changed(self, index: int) -> None:
         if self._syncing_panel:
             return
@@ -2887,6 +3303,7 @@ class MainWindow(QMainWindow):
                 self._source_info, dist_info, job_options, label=row_data.path.stem,
                 result_distorted_path=row_data.path, metric_keys=self._requested_metrics(row_data),
                 metric_backends=dict(row_data.metric_backends),
+                cvvdp=row_data.cvvdp,
                 # Only a result for the row's current settings is ever
                 # attached (a settings change clears completed_run), so its
                 # scores belong to this exact recipe.
@@ -2909,6 +3326,7 @@ class MainWindow(QMainWindow):
             self._set_row_status(self._row_index_of(rd), "Queued")
         self._job_total_frames = job_total_frames
         self._job_cache_options = [clone_options(rd.options) for rd in job_rows]
+        self._job_cvvdp = [rd.cvvdp for rd in job_rows]
         # Held as RowData, not indices, so removing a row mid-run can't
         # silently repoint these at a different row.
         self._checked_rows_for_run = [self._rows[r] for r in checked_rows]
@@ -3184,6 +3602,7 @@ class MainWindow(QMainWindow):
             self._job_cache_options[index]
             if index < len(self._job_cache_options) else row_data.options
         )
+        cache_cvvdp = self._job_cvvdp[index] if index < len(self._job_cvvdp) else row_data.cvvdp
         # Off the UI thread: this is the ~9MB JSON write that used to
         # stall the window every time a run finished. Every argument is
         # plain data, so nothing the worker touches is a widget.
@@ -3195,9 +3614,7 @@ class MainWindow(QMainWindow):
                 # which for a synthetic row is a path that does not exist and
                 # so carries no size or mtime to notice a replacement by.
                 result.source, row_data.identity_path, result, label,
-                analysis_request_from_vmaf_options(
-                    cache_options, self._requested_metrics(row_data), row_data.metric_backends,
-                ),
+                self._analysis_request(row_data, cache_options, cache_cvvdp),
                 result_cache.cache_dir(),
             ),
         )
@@ -3213,7 +3630,7 @@ class MainWindow(QMainWindow):
         if self._source_info is None or self._source_info.path != result.source:
             self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
             return None
-        if cache_options != row_data.options:
+        if cache_options != row_data.options or not cache_cvvdp.same_as(row_data.cvvdp):
             # The row's settings changed after this job was launched, so the
             # result does not describe what the row now says. It is still
             # cached above under the options it really used -- returning to
@@ -3235,7 +3652,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         row_data.status_detail = (
             f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(metric.label for metric in FRAME_METRICS if result.has_metric(metric.key))
+            + ", ".join(metric.label for metric in METRICS if result.has_metric(metric.key))
         )
         self._set_row_metrics(row)
         # Straight onto the graph: a run that has finished is a curve, and
@@ -3378,6 +3795,13 @@ class MainWindow(QMainWindow):
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm
         row_data.options.resample_test = result.resample_target
+        # A CVVDP score is only meaningful with the display it was made for;
+        # the row takes that display, so the score and the row agree.
+        cvvdp_result = result.sequence_metric("cvvdp")
+        if cvvdp_result is not None:
+            row_data.extra_metric_keys.add("cvvdp")
+            with contextlib.suppress(KeyError, TypeError, ValueError):
+                row_data.cvvdp = CvvdpSettings.from_spec_parameters(cvvdp_result.provenance.parameters)
         if result.resample_target is not None:
             row_data.media_path = result.source_info.path
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
