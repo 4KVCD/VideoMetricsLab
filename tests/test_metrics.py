@@ -22,7 +22,7 @@ def test_registry_has_the_established_logical_order_and_metadata():
         "vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp",
     )
     # CVVDP scores the whole video (with a per-second curve), not each frame.
-    assert FRAME_METRICS == METRICS[:-1]
+    assert METRICS[:-1] == FRAME_METRICS
     assert metric_definition("cvvdp").kind is MetricKind.SEQUENCE
     assert metric_definition("xpsnr").aggregation is MetricAggregation.SQUARE_MEAN_ROOT_DB
     assert metric_definition("ssim").value_format == "{:.4f}"

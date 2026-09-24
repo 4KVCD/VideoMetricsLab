@@ -115,6 +115,16 @@ class CvvdpSettings:
     def same_as(self, other: CvvdpSettings) -> bool:
         return self.spec_parameters() == other.spec_parameters()
 
+    @classmethod
+    def from_spec_parameters(cls, parameters) -> CvvdpSettings:
+        """The settings a CVVDP request was made with -- the rounded values
+        of its identity, so what is scored is exactly what is cached."""
+        values = dict(parameters)
+        display = dict(values["display"])
+        width, height = display.pop("resolution")
+        return cls(CvvdpDisplay(width=width, height=height, **display).validated(),
+                   bool(values["resize_to_display"]))
+
 
 def write_vship_config(display: CvvdpDisplay, path: Path) -> Path:
     """Vship reads a custom display from a JSON file (not a string), in the

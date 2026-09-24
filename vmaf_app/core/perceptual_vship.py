@@ -1,4 +1,7 @@
-"""GPU implementation of the frame-based perceptual metrics via Vship's C API.
+"""GPU implementation of the perceptual metrics via Vship's C API.
+
+SSIMULACRA2 and Butteraugli score each frame pair on its own; CVVDP is
+temporal and scores the video (see _CvvdpLane).
 
 FFmpeg remains responsible for decoding, cropping, sampling, and scaling. It
 streams tightly packed frames into rings of pinned host buffers (see
@@ -19,6 +22,7 @@ import os
 import queue
 import re
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -31,9 +35,15 @@ import numpy as np
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
+from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, write_vship_config
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import hw_native_format, hwaccel_args, pick_hwaccel
-from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+from vmaf_app.core.metric_results import (
+    FrameMetricResult,
+    MetricProvenance,
+    MetricResultSet,
+    SequenceMetricResult,
+)
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import CropBox, GpuVendor, ScaleDirection, VideoInfo
 from vmaf_app.core.perceptual_cpu import (
@@ -48,7 +58,10 @@ from vmaf_app.core.perceptual_cpu import (
 from vmaf_app.core.process_control import ProcessHandle
 
 BACKEND_ID = "perceptual"
-_METRICS = {"ssimulacra2", "butteraugli"}
+_METRICS = {"ssimulacra2", "butteraugli", "cvvdp"}
+#: Scored on the GPU only: the official CPU implementation needs PyTorch
+#: (almost 1 GB) and takes seconds per 4K frame.
+GPU_ONLY_METRICS = frozenset({"cvvdp"})
 
 
 class VshipUnavailableError(PerceptualRunError):
@@ -207,6 +220,23 @@ def _configure_api(lib: ctypes.CDLL) -> None:
     lib.Vship_ComputeButteraugli.restype = ctypes.c_int
     lib.Vship_ButteraugliGetDetailedLastError.argtypes = [_Handler, ctypes.c_char_p, ctypes.c_int]
     lib.Vship_ButteraugliGetDetailedLastError.restype = ctypes.c_int
+    # Init3 takes the display as a JSON file path (not text) and the GPU id.
+    lib.Vship_CVVDPInit3.argtypes = [
+        ctypes.POINTER(_Handler), _Colorspace, _Colorspace, ctypes.c_float, ctypes.c_bool,
+        ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
+    ]
+    lib.Vship_CVVDPInit3.restype = ctypes.c_int
+    lib.Vship_CVVDPFree.argtypes = [_Handler]
+    lib.Vship_CVVDPFree.restype = ctypes.c_int
+    lib.Vship_ComputeCVVDP.argtypes = [
+        _Handler, ctypes.POINTER(ctypes.c_double), ctypes.c_void_p, ctypes.c_int64,
+        _PLANES, _PLANES, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
+    ]
+    lib.Vship_ComputeCVVDP.restype = ctypes.c_int
+    lib.Vship_ResetScoreCVVDP.argtypes = [_Handler]
+    lib.Vship_ResetScoreCVVDP.restype = ctypes.c_int
+    lib.Vship_CVVDPGetDetailedLastError.argtypes = [_Handler, ctypes.c_char_p, ctypes.c_int]
+    lib.Vship_CVVDPGetDetailedLastError.restype = ctypes.c_int
 
 
 def _message(lib: ctypes.CDLL, code: int | None = None) -> str:
@@ -824,6 +854,197 @@ def _compute_metric(
     return value
 
 
+# ------------------------------------------------------------------ CVVDP
+#
+# Vship pools CVVDP's per-frame quality q the way ColorVideoVDP does: a
+# running sum of q^2 over the n frames scored since the last reset, reported
+# as JOD(sqrt(sum / n)) -- except for a single frame, reported as
+# JOD(q * IMAGE_INT). ResetScoreCVVDP clears only that sum (the temporal
+# filters keep their history), so resetting it at each second gives a JOD
+# per second, and inverting each second's JOD back to its sum rebuilds the
+# score of the whole video. On 2 s of the Beekeeper 4K AV1 encode the
+# rebuilt score matched an unreset handler's to 6e-7 JOD. The constants are
+# Vship's (and ColorVideoVDP's) jod_a, jod_exp and image_int.
+_JOD_A = 0.0439569391310215
+_JOD_EXP = 0.9302042722702026
+_IMAGE_INT = 0.577918291091919
+_JOD_LINEAR_A = _JOD_A * 0.1 ** (_JOD_EXP - 1.0)
+
+
+def _jod_from_quality(q: float) -> float:
+    return 10.0 - (_JOD_A * q ** _JOD_EXP if q > 0.1 else _JOD_LINEAR_A * q)
+
+
+def _quality_from_jod(jod: float) -> float:
+    gap = max(0.0, 10.0 - jod)
+    linear = gap / _JOD_LINEAR_A
+    return linear if linear <= 0.1 else (gap / _JOD_A) ** (1.0 / _JOD_EXP)
+
+
+def pool_cvvdp_windows(windows: list[tuple[int, int, float]]) -> float:
+    """The whole video's JOD from (first frame, frames, JOD) windows."""
+    total = sum(frames for _first, frames, _jod in windows)
+    if total == 1:
+        return windows[0][2]
+    squares = 0.0
+    for _first, frames, jod in windows:
+        q = _quality_from_jod(jod)
+        squares += (q / _IMAGE_INT) ** 2 if frames == 1 else frames * q * q
+    return _jod_from_quality(math.sqrt(squares / total))
+
+
+def _native_path(path: Path) -> bytes:
+    """A path Vship's narrow-character file open can use: the ANSI code page
+    on Windows, or the 8.3 short name if the path has characters it lacks
+    (a user name in another script, say)."""
+    if os.name != "nt":
+        return os.fsencode(path)
+    try:
+        return str(path).encode("mbcs", errors="strict")
+    except UnicodeEncodeError:
+        buffer = ctypes.create_unicode_buffer(1024)
+        if ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, len(buffer)):
+            return buffer.value.encode("mbcs", errors="replace")
+        raise VshipUnavailableError(f"Vship cannot open the CVVDP display file at {path}.") from None
+
+
+def _cvvdp_error(lib: ctypes.CDLL, handler: _Handler | None, code: int) -> str:
+    if handler is not None:
+        detail = ctypes.create_string_buffer(1024)
+        with contextlib.suppress(Exception):
+            lib.Vship_CVVDPGetDetailedLastError(handler, detail, len(detail))
+            if detail.value:
+                return detail.value.decode(errors="replace").strip()
+    return _message(lib, None if handler is None else code)
+
+
+def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
+                settings: CvvdpSettings, fps: float) -> _Handler:
+    lib = device.loaded.library
+    if not hasattr(lib, "Vship_CVVDPInit3"):
+        raise VshipUnavailableError(f"This Vship ({device.version}) has no CVVDP.")
+    handler = _Handler()
+    handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json")
+    os.close(handle)
+    config = Path(name)
+    try:
+        write_vship_config(settings.display, config)
+        error = lib.Vship_CVVDPInit3(
+            ctypes.byref(handler), src, dist, ctypes.c_float(fps), bool(settings.resize_to_display),
+            VSHIP_MODEL_KEY.encode(), _native_path(config), device.gpu_id,
+        )
+    finally:
+        with contextlib.suppress(OSError):
+            config.unlink()
+    if error != 0:
+        raise VshipUnavailableError(f"Could not initialize Vship CVVDP: {_cvvdp_error(lib, None, error)}")
+    return handler
+
+
+def _compute_cvvdp(device: VshipDevice, handler: _Handler, source_planes: _PLANES,
+                   distorted_planes: _PLANES, source_strides: _I64_3, distorted_strides: _I64_3) -> float:
+    """Scores the next frame pair; returns the JOD of the frames since the last reset."""
+    lib = device.loaded.library
+    score = ctypes.c_double()
+    error = lib.Vship_ComputeCVVDP(handler, ctypes.byref(score), None, 0, source_planes,
+                                   distorted_planes, source_strides, distorted_strides)
+    if error != 0:
+        raise VshipUnavailableError(f"Vship CVVDP failed: {_cvvdp_error(lib, handler, error)}")
+    value = float(score.value)
+    if not math.isfinite(value):
+        raise VshipUnavailableError("Vship CVVDP returned a non-finite value.")
+    return value
+
+
+def _reset_cvvdp_score(device: VshipDevice, handler: _Handler) -> None:
+    lib = device.loaded.library
+    error = lib.Vship_ResetScoreCVVDP(handler)
+    if error != 0:
+        raise VshipUnavailableError(f"Vship CVVDP failed: {_cvvdp_error(lib, handler, error)}")
+
+
+def _free_cvvdp(device: VshipDevice, handler: _Handler) -> None:
+    device.loaded.library.Vship_CVVDPFree(handler)
+
+
+class _CvvdpLane:
+    """CVVDP's one Vship handler, fed every frame pair in order.
+
+    CVVDP judges each frame together with the ones before it, so its frames
+    cannot be dealt round-robin to two handlers like SSIMULACRA2's. The
+    score is reset at each new second of video, giving the JOD of every
+    second (the per-second curve); the overall JOD is pooled from those
+    seconds (pool_cvvdp_windows).
+
+    A CVVDP failure does not end the pass for SSIMULACRA2/Butteraugli: the
+    lane keeps the error, keeps handing each frame back so its ring slots
+    are freed, and the pass reports CVVDP as failed.
+    """
+
+    def __init__(self, device: VshipDevice, src: _Colorspace, dist: _Colorspace,
+                 settings: CvvdpSettings, fps: float, source_planes, distorted_planes,
+                 src_strides: _I64_3, dist_strides: _I64_3,
+                 finished: Callable[[int], None], abort: threading.Event) -> None:
+        self._args = (device, src, dist, settings, fps)
+        self._planes = (source_planes, distorted_planes)
+        self._strides = (src_strides, dist_strides)
+        self._finished, self._abort = finished, abort
+        self.jobs: queue.Queue[tuple[int, int, int] | None] = queue.Queue()
+        self.error: BaseException | None = None
+        #: (first frame index, frames, JOD) for each second scored.
+        self.windows: list[tuple[int, int, float]] = []
+        self._thread = threading.Thread(target=self._run, name="vship-cvvdp", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def _run(self) -> None:
+        device, src, dist, settings, fps = self._args
+        lib = device.loaded.library
+        handler = None
+        try:
+            error = lib.Vship_SetDevice(device.gpu_id)
+            if error != 0:
+                raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
+            handler = _init_cvvdp(device, src, dist, settings, fps)
+        except BaseException as error:
+            self.error = error
+        start = count = second = 0
+        jod = math.nan
+        try:
+            while True:
+                job = self.jobs.get()
+                if job is None or self._abort.is_set():
+                    return
+                index, source_slot, distorted_slot = job
+                if self.error is None:
+                    try:
+                        this_second = int(index / fps)
+                        if count and this_second != second:
+                            self.windows.append((start, count, jod))
+                            _reset_cvvdp_score(device, handler)
+                            start, count = index, 0
+                        second = this_second
+                        jod = _compute_cvvdp(device, handler, self._planes[0][source_slot],
+                                             self._planes[1][distorted_slot], *self._strides)
+                        count += 1
+                    except BaseException as error:
+                        self.error = error
+                self._finished(index)
+        finally:
+            if self.error is None and count:
+                self.windows.append((start, count, jod))
+            if handler is not None:
+                with contextlib.suppress(Exception):
+                    _free_cvvdp(device, handler)
+
+    def stop(self) -> None:
+        self.jobs.put(None)
+
+    def join(self) -> None:
+        self._thread.join()
+
+
 #: One Vship pass at a time in the whole app. A pass already fills the GPU:
 #: at 4K two passes at once scored no faster than one after the other (84.5
 #: vs 83.6 pairs/s) while holding twice the VRAM (9.1 vs 4.5 GB, more than
@@ -843,19 +1064,48 @@ def run_vship_task(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
-    """Scores `specs` on the GPU once no other Vship pass is running."""
+    """Scores `specs` on the GPU once no other Vship pass is running.
+
+    Metrics sharing a frame coverage share one pass. CVVDP always scores
+    every frame, so with subsampled SSIMULACRA2/Butteraugli (which the
+    Videos tab does not offer together) it gets a pass of its own.
+    """
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
-            on_status("Waiting for the GPU: another video's SSIMULACRA2/Butteraugli pass is running…")
+            on_status("Waiting for the GPU: another video's Vship pass is running…")
         while not _gpu_pass.acquire(timeout=0.1):
             if cancel_event is not None and cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")
     try:
-        return _run_vship_pass(
-            source, distorted, request, specs, device, source_crop, distorted_crop,
-            on_progress=on_progress, on_status=on_status,
-            cancel_event=cancel_event, process_handle=process_handle,
-        )
+        groups: dict[int, list[MetricRequestSpec]] = {}
+        for spec in specs:
+            groups.setdefault(spec.coverage.step if spec.coverage is not None else 1, []).append(spec)
+        if len(groups) <= 1:
+            return _run_vship_pass(
+                source, distorted, request, specs, device, source_crop, distorted_crop,
+                on_progress=on_progress, on_status=on_status,
+                cancel_event=cancel_event, process_handle=process_handle,
+            )
+        outputs = []
+        parts = len(groups)
+        for number, group in enumerate(groups.values()):
+            progress = None
+            if on_progress is not None:
+                progress = (lambda cur, total, fps, n=number, parts=parts:
+                            on_progress(n * total + cur, parts * total, fps))
+            outputs.append(_run_vship_pass(
+                source, distorted, request, tuple(group), device, source_crop, distorted_crop,
+                on_progress=progress, on_status=on_status,
+                cancel_event=cancel_event, process_handle=process_handle,
+            ))
+        metrics = MetricResultSet()
+        failures: dict[str, str] = {}
+        for output in outputs:
+            for key in output.metrics:
+                metrics.add(output.metrics.get(key))
+            failures.update(output.failures)
+        return PerceptualTaskOutput(metrics, source_crop, distorted_crop,
+                                    max(output.compared_frame_count for output in outputs), failures)
     finally:
         _gpu_pass.release()
 
@@ -903,13 +1153,19 @@ def _run_vship_pass(
     step = specs[0].coverage.step if specs[0].coverage is not None else 1
     if any((spec.coverage.step if spec.coverage is not None else 1) != step for spec in specs):
         raise VshipUnavailableError("Perceptual metrics in one task must use the same frame coverage.")
+    cvvdp_spec = next((spec for spec in specs if spec.key == "cvvdp"), None)
+    frame_specs = tuple(spec for spec in specs if spec.key != "cvvdp")
+    if cvvdp_spec is not None and step != 1:
+        raise VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.")
     if on_status:
-        on_status(f"Vship GPU ({device.name}): calculating {', '.join(spec.key.upper() for spec in specs)}…")
+        labels = ", ".join(metric_definition(spec.key).label for spec in specs)
+        on_status(f"Vship GPU ({device.name}): calculating {labels}…")
 
     streams: list[_FrameStream] = []
-    lanes: list[_MetricLane] = []
+    lanes: list[_MetricLane | _CvvdpLane] = []
+    cvvdp_lane: _CvvdpLane | None = None
     started = time.perf_counter()
-    scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in specs}
+    scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in frame_specs}
     abort = threading.Event()
     failures: list[BaseException] = []
     pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
@@ -980,7 +1236,13 @@ def _run_vship_pass(
             distorted_stream.release(entry[2])
 
         by_metric: dict[str, list[_MetricLane]] = {}
-        for spec in specs:
+        if cvvdp_spec is not None:
+            cvvdp_lane = _CvvdpLane(
+                device, src_color, dist_color, CvvdpSettings.from_spec_parameters(cvvdp_spec.parameters),
+                max(source.fps, 1.0), source_planes, distorted_planes, src_strides, dist_strides, finished, abort,
+            )
+            lanes.append(cvvdp_lane)
+        for spec in frame_specs:
             by_metric[spec.key] = [
                 _MetricLane(device, spec.key, src_color, dist_color, source_planes, distorted_planes,
                             src_strides, dist_strides, scores[spec.key], finished, failed, abort)
@@ -1011,10 +1273,12 @@ def _run_vship_pass(
                 break
             with pending_lock:
                 pending[frame] = [len(specs), source_slot, distorted_slot]
-            for spec in specs:
+            for spec in frame_specs:
                 scores[spec.key].reserve(frame)
-            for spec in specs:
+            for spec in frame_specs:
                 by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put((frame, source_slot, distorted_slot))
+            if cvvdp_lane is not None:
+                cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
             frame += 1
             if on_progress:
                 elapsed = max(time.perf_counter() - started, 1e-6)
@@ -1027,6 +1291,11 @@ def _run_vship_pass(
             raise failures[0]
         if frame == 0:
             raise VshipUnavailableError("FFmpeg produced no frame pairs for Vship.")
+        metric_failures: dict[str, str] = {}
+        if cvvdp_lane is not None and cvvdp_lane.error is not None:
+            if not frame_specs:
+                raise cvvdp_lane.error
+            metric_failures["cvvdp"] = str(cvvdp_lane.error)
 
         frame_numbers = np.arange(frame, dtype=np.int32) * step
         times = frame_numbers.astype(np.float64) / max(source.fps, 1.0)
@@ -1039,7 +1308,7 @@ def _run_vship_pass(
             "coverage_step": step,
             "butteraugli_norm": "3-norm",
         }
-        for spec in specs:
+        for spec in frame_specs:
             results.add(FrameMetricResult(
                 spec.key, frame_numbers, times,
                 scores[spec.key].values(frame),
@@ -1051,10 +1320,30 @@ def _run_vship_pass(
                     parameters=parameters,
                 ),
             ))
+        if cvvdp_lane is not None and cvvdp_lane.error is None:
+            windows = cvvdp_lane.windows
+            first = np.array([start for start, _count, _jod in windows], dtype=np.int32)
+            results.add(SequenceMetricResult(
+                "cvvdp", pool_cvvdp_windows(windows),
+                MetricProvenance(
+                    implementation="Vship/cvvdp",
+                    implementation_version=f"Vship {device.version}",
+                    compute_backend="gpu",
+                    implementation_compatibility_id=cvvdp_spec.implementation_compatibility_id,
+                    parameters={
+                        "gpu_vendor": device.vendor, "gpu_name": device.name,
+                        "display": dict(cvvdp_spec.parameters)["display"],
+                        "resize_to_display": dict(cvvdp_spec.parameters)["resize_to_display"],
+                        "timeline": "JOD of each second of video",
+                    },
+                ),
+                frame=first, time=first.astype(np.float64) / max(source.fps, 1.0),
+                values=[jod for _start, _count, jod in windows],
+            ))
         elapsed = max(time.perf_counter() - started, 1e-6)
         if on_progress:
             on_progress(frame * step, frame * step, frame / elapsed)
-        return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step)
+        return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
     except PerceptualCancelled:
         raise
     except VshipUnavailableError:
@@ -1081,13 +1370,35 @@ def apply_vship_cpu_fallback(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
-    """Run selected backends, with a per-metric GPU-to-CPU fallback."""
+    """Run selected backends, with a per-metric GPU-to-CPU fallback.
+
+    CVVDP runs on the GPU only. Without a usable GPU it fails on its own --
+    reported in the output's `failures` -- and the other metrics are scored
+    as they would have been without it.
+    """
     from vmaf_app.core.perceptual_cpu import _resolve_crops, run_perceptual_task
 
-    cpu_specs = tuple(spec for spec in specs if request.execution.perceptual_backend(spec.key) == "cpu")
-    gpu_specs = tuple(spec for spec in specs if request.execution.perceptual_backend(spec.key) == "gpu")
+    def backend(spec: MetricRequestSpec) -> str:
+        return "gpu" if spec.key in GPU_ONLY_METRICS else request.execution.perceptual_backend(spec.key)
+
+    cpu_specs = tuple(spec for spec in specs if backend(spec) == "cpu")
+    gpu_specs = tuple(spec for spec in specs if backend(spec) == "gpu")
     if len(cpu_specs) + len(gpu_specs) != len(specs):
         raise ValueError("perceptual metric backend must be either GPU or CPU")
+    gpu_only = tuple(spec for spec in gpu_specs if spec.key in GPU_ONLY_METRICS)
+    # What may be retried on the CPU if the GPU cannot be used.
+    retryable = tuple(spec for spec in specs if spec.key not in GPU_ONLY_METRICS)
+
+    def gpu_only_failed(reason: str, error: BaseException | None = None) -> dict[str, str]:
+        """The failures for the GPU-only metrics; raises if nothing else was asked for."""
+        labels = " and ".join(metric_definition(spec.key).label for spec in gpu_only)
+        message = f"{labels} needs a supported NVIDIA or AMD GPU and could not use it: {reason}"
+        if not retryable:
+            raise PerceptualRunError(message) from error
+        return {spec.key: message for spec in gpu_only}
+
+    def with_failures(output: PerceptualTaskOutput, failures: dict[str, str]) -> PerceptualTaskOutput:
+        return replace(output, failures={**output.failures, **failures}) if failures else output
 
     # An explicit CPU selection must not probe Vship or touch a compute GPU.
     if not gpu_specs:
@@ -1099,13 +1410,14 @@ def apply_vship_cpu_fallback(
 
     device, reason = detect_vship_device()
     if device is None:
+        failures = gpu_only_failed(reason) if gpu_only else {}
         if on_status:
             on_status(f"Vship GPU unavailable ({reason}); using CPU reference metrics…")
-        return run_perceptual_task(
-            source, distorted, request, specs,
+        return with_failures(run_perceptual_task(
+            source, distorted, request, retryable,
             on_progress=on_progress, on_status=on_status,
             cancel_event=cancel_event, process_handle=process_handle,
-        )
+        ), failures)
 
     crops = _resolve_crops(
         source, distorted, request.recipe, cancel_event, process_handle, on_status,
@@ -1125,13 +1437,15 @@ def apply_vship_cpu_fallback(
     except Exception as error:
         if cancel_event is not None and cancel_event.is_set():
             raise PerceptualCancelled("Cancelled by user") from error
-        if compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
+        failures = gpu_only_failed(f"GPU scoring failed ({error})", error) if gpu_only else {}
+        gpu_retry = tuple(spec for spec in gpu_specs if spec.key not in GPU_ONLY_METRICS)
+        if gpu_retry and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
             # Nobody agreed to a CPU run of this length: the Videos tab asks
             # before one, but a GPU failure mid-run cannot. Falling back
             # silently meant days of CPU work and terabytes of temporary
             # images for a film. The metric fails instead, with the reason;
             # the video keeps its other metrics.
-            labels = " and ".join(metric_definition(spec.key).label for spec in gpu_specs)
+            labels = " and ".join(metric_definition(spec.key).label for spec in gpu_retry)
             raise PerceptualRunError(
                 f"GPU scoring failed ({error}). It was not retried on the CPU, which would take "
                 "hours to days for a video over 10 minutes. "
@@ -1141,12 +1455,12 @@ def apply_vship_cpu_fallback(
             on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
         # Run all metrics together after a GPU failure so CPU frame extraction
         # happens only once, and the returned result remains atomic.
-        return run_perceptual_task(
-            source, distorted, request, specs,
+        return with_failures(run_perceptual_task(
+            source, distorted, request, retryable,
             on_progress=on_progress, on_status=on_status,
             cancel_event=cancel_event, process_handle=process_handle,
             resolved_crops=crops,
-        )
+        ), failures)
 
     if not cpu_specs:
         return gpu_output
@@ -1168,6 +1482,8 @@ def apply_vship_cpu_fallback(
         raise PerceptualRunError("GPU and CPU perceptual metrics produced different frame counts.")
     combined = MetricResultSet()
     for spec in specs:
+        if spec.key in gpu_output.failures:
+            continue
         value = gpu_output.metrics.get(spec.key) or cpu_output.metrics.get(spec.key)
         if value is None:
             raise PerceptualRunError(f"Selected backend did not produce {spec.key}.")
@@ -1175,5 +1491,5 @@ def apply_vship_cpu_fallback(
         combined.add(value)
     return PerceptualTaskOutput(
         combined, gpu_output.source_crop, gpu_output.distorted_crop,
-        gpu_output.compared_frame_count,
+        gpu_output.compared_frame_count, dict(gpu_output.failures),
     )

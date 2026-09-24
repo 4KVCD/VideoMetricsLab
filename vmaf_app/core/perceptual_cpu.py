@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -55,6 +55,10 @@ class PerceptualTaskOutput:
     source_crop: CropBox | None
     distorted_crop: CropBox | None
     compared_frame_count: int
+    #: Metrics that could not be scored while the others were, by key, with
+    #: the reason -- CVVDP, which only runs on the GPU, failing beside
+    #: SSIMULACRA2/Butteraugli. The worker reports these as a partial failure.
+    failures: dict[str, str] = field(default_factory=dict)
 
 
 def find_metric_executable(metric: str) -> str | None:

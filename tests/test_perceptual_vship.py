@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 import subprocess
 import sys
 import threading
@@ -552,3 +553,198 @@ def test_a_gpu_failure_on_a_long_video_is_not_retried_on_the_cpu(monkeypatch):
         vship.apply_vship_cpu_fallback(source, test, _request(), _request().metrics)
     assert "illegal memory access" in str(raised.value)
     assert "Choose CPU for SSIMULACRA2 and Butteraugli" in str(raised.value)
+
+
+
+# ------------------------------------------------------------------ CVVDP
+
+class _FakeCvvdp:
+    """Vship's CVVDP pooling, in Python: a running sum of q^2 since the last
+    score reset, reported as JOD -- the first frame after a reset as
+    JOD(q * image_int). Each frame's q comes from its index, read out of the
+    pinned buffer, so frames scored out of order or mispaired show up."""
+
+    def __init__(self, fail_at=None):
+        self.squares, self.count, self.order, self.resets = 0.0, 0, [], []
+        self.fail_at = fail_at
+        self.freed = False
+
+    @staticmethod
+    def quality(index):
+        return 0.05 + 0.37 * (index % 7)  # both sides of the 0.1 linear/power switch
+
+    def install(self, monkeypatch):
+        monkeypatch.setattr(vship, "_init_cvvdp", lambda *_args: vship._Handler())
+        monkeypatch.setattr(vship, "_compute_cvvdp", self.compute)
+        monkeypatch.setattr(vship, "_reset_cvvdp_score", lambda *_args: self.reset())
+        monkeypatch.setattr(vship, "_free_cvvdp", lambda *_args: setattr(self, "freed", True))
+        return self
+
+    def reset(self):
+        self.resets.append(self.order[-1] + 1)
+        self.squares, self.count = 0.0, 0
+
+    def compute(self, _device, _handler, source_planes, test_planes, *_strides):
+        index = source_planes[0][0]
+        assert test_planes[0][0] == index
+        if self.fail_at is not None and index == self.fail_at:
+            raise vship.VshipUnavailableError("Vship CVVDP failed: out of memory")
+        self.order.append(index)
+        q = self.quality(index)
+        self.squares += q * q
+        self.count += 1
+        if self.count == 1:
+            return vship._jod_from_quality(q * vship._IMAGE_INT)
+        return vship._jod_from_quality(math.sqrt(self.squares / self.count))
+
+
+def _whole_video_jod(count):
+    """What Vship reports for `count` frames scored without any reset."""
+    if count == 1:
+        return vship._jod_from_quality(_FakeCvvdp.quality(0) * vship._IMAGE_INT)
+    squares = sum(_FakeCvvdp.quality(i) ** 2 for i in range(count))
+    return vship._jod_from_quality(math.sqrt(squares / count))
+
+
+@pytest.mark.parametrize("count", [1, 5, 24, 25, 49, 24 * 3 + 7])
+def test_cvvdp_scores_every_frame_in_order_with_a_jod_per_second(monkeypatch, count):
+    """One handler sees every frame in order (CVVDP is temporal); its score
+    is reset at each second, and the overall JOD pooled from the seconds is
+    what an unreset handler reports -- including a last second of one frame
+    (49 frames at 24 fps), which Vship pools differently."""
+    fake = _FakeCvvdp().install(monkeypatch)
+    output, _ = _run(monkeypatch, metrics=("cvvdp",), children=_both(_frames_command(count, _FRAME_BYTES)))
+
+    result = output.metrics.sequence("cvvdp")
+    assert fake.order == list(range(count)) and fake.freed
+    assert fake.resets == list(range(24, count, 24))
+    assert result.score == pytest.approx(_whole_video_jod(count), abs=1e-9)
+    assert list(result.frame) == list(range(0, count, 24))
+    np.testing.assert_allclose(result.time, np.arange(0, count, 24) / 24.0)
+    assert len(result.values) == math.ceil(count / 24)
+    assert result.provenance.compute_backend == "gpu"
+    assert result.provenance.implementation_compatibility_id == "cvvdp-vship-gpu-v1"
+    assert output.failures == {}
+
+
+def test_cvvdp_runs_beside_ssimulacra2_in_one_decode(monkeypatch):
+    fake = _FakeCvvdp().install(monkeypatch)
+    count = vship._RING_SLOTS * 5 + 2
+    output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "cvvdp"),
+                           children=_both(_frames_command(count, _FRAME_BYTES)))
+    assert len(spawned["source"]) == 1 and len(spawned["test"]) == 1
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert fake.order == list(range(count))
+    assert output.metrics.sequence("cvvdp").score == pytest.approx(_whole_video_jod(count), abs=1e-9)
+
+
+def test_a_cvvdp_failure_keeps_ssimulacra2_and_frees_the_ring(monkeypatch):
+    """CVVDP (GPU only, and the largest VRAM user) failing part-way must not
+    take SSIMULACRA2 down with it, nor hold ring slots so the pass hangs."""
+    _FakeCvvdp(fail_at=3).install(monkeypatch)
+    count = vship._RING_SLOTS * 6
+    outcome = []
+    runner = threading.Thread(target=lambda: outcome.append(_run(
+        monkeypatch, metrics=("ssimulacra2", "cvvdp"),
+        children=_both(_frames_command(count, _FRAME_BYTES)))[0]), daemon=True)
+    runner.start()
+    runner.join(timeout=20)
+    assert not runner.is_alive(), "the pass hung after CVVDP failed"
+    output = outcome[0]
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert not output.metrics.has("cvvdp")
+    assert "out of memory" in output.failures["cvvdp"]
+
+
+def test_cvvdp_alone_failing_fails_the_pass(monkeypatch):
+    _FakeCvvdp(fail_at=0).install(monkeypatch)
+    with pytest.raises(vship.VshipUnavailableError, match="out of memory"):
+        _run(monkeypatch, metrics=("cvvdp",), children=_both(_frames_command(10, _FRAME_BYTES)))
+
+
+def test_pooling_one_window_gives_back_its_own_jod():
+    for jod in (9.99, 9.5, 7.25, 3.0):
+        assert vship.pool_cvvdp_windows([(0, 24, jod)]) == pytest.approx(jod, abs=1e-9)
+
+
+def test_subsampled_ssimulacra2_and_cvvdp_get_a_pass_each(monkeypatch):
+    request = analysis_request_from_vmaf_options(
+        VmafOptions(crop_mode=CropMode.NONE, n_subsample=3), ("ssimulacra2", "cvvdp"))
+    passes, progress = [], []
+
+    def pass_(_s, _t, _r, specs, *_a, on_progress=None, **_k):
+        passes.append([(spec.key, spec.coverage.step) for spec in specs])
+        on_progress(10, 10, 1.0)
+        key = specs[0].key
+        provenance = MetricProvenance("t", "1", "gpu", "t")
+        metric = (vship.SequenceMetricResult(key, 9.0, provenance) if key == "cvvdp"
+                  else FrameMetricResult(key, [0], [0.0], [80.0], provenance))
+        return PerceptualTaskOutput(MetricResultSet([metric]), None, None, 10)
+
+    monkeypatch.setattr(vship, "_run_vship_pass", pass_)
+    output = vship.run_vship_task(_hevc("s.mkv"), _hevc("t.mkv"), request, request.metrics,
+                                  _fake_device(), None, None,
+                                  on_progress=lambda *args: progress.append(args))
+    assert passes == [[("ssimulacra2", 3)], [("cvvdp", 1)]]
+    assert output.metrics.keys() == ("ssimulacra2", "cvvdp")
+    assert progress == [(10, 20, 1.0), (20, 20, 1.0)]
+
+
+def _cvvdp_request(*keys, backends=None):
+    return analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), keys, backends)
+
+
+def test_without_a_gpu_cvvdp_fails_and_ssimulacra2_runs_on_the_cpu(monkeypatch):
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    cpu_keys = []
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (None, "no supported GPU"))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: cpu_keys.extend(s.key for s in a[3]) or _single_metric_output(
+                            "ssimulacra2", 80.0, "cpu"))
+    output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+    assert cpu_keys == ["ssimulacra2"]
+    assert output.metrics.has("ssimulacra2")
+    assert "no supported GPU" in output.failures["cvvdp"]
+
+
+def test_without_a_gpu_cvvdp_alone_is_an_error(monkeypatch):
+    request = _cvvdp_request("cvvdp")
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (None, "no supported GPU"))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", lambda *a, **k: pytest.fail("no CPU CVVDP"))
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="CVVDP needs a supported NVIDIA or AMD GPU"):
+        vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+
+
+def test_cvvdp_has_no_backend_choice():
+    with pytest.raises(ValueError, match="cvvdp"):
+        _cvvdp_request("cvvdp", backends={"cvvdp": "cpu"})
+
+
+def test_a_gpu_failure_retries_the_others_on_the_cpu_and_reports_cvvdp(monkeypatch):
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    cpu_keys = []
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: (_ for _ in ()).throw(
+        vship.VshipUnavailableError("CUDA error: out of memory")))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: cpu_keys.extend(s.key for s in a[3]) or _single_metric_output(
+                            "ssimulacra2", 80.0, "cpu"))
+    output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+    assert cpu_keys == ["ssimulacra2"]
+    assert "out of memory" in output.failures["cvvdp"]
+
+
+def test_cvvdp_on_the_gpu_beside_butteraugli_on_the_cpu(monkeypatch):
+    request = _cvvdp_request("butteraugli", "cvvdp", backends={"butteraugli": "cpu"})
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    cvvdp = vship.SequenceMetricResult("cvvdp", 9.1, MetricProvenance("t", "1", "gpu", "t"))
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: PerceptualTaskOutput(
+        MetricResultSet([cvvdp]), None, None, 1))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: _single_metric_output("butteraugli", 0.3, "cpu"))
+    output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+    assert output.metrics.keys() == ("butteraugli", "cvvdp")

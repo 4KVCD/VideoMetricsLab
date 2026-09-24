@@ -727,3 +727,37 @@ def test_a_row_with_a_saved_perceptual_score_runs_only_ffmpeg(qapp, monkeypatch)
     result, = finished
     assert result.frame_metric("butteraugli").values.tolist() == [1.5, 2.5]
     assert result.has_metric("vmaf")
+
+
+
+def test_cvvdp_failing_beside_ssimulacra2_is_a_partial_failure(qapp, monkeypatch):
+    """CVVDP runs on the GPU only. When it fails while SSIMULACRA2 in the
+    same pass finishes, the video keeps VMAF and SSIMULACRA2 and says that
+    CVVDP failed and why, rather than looking fully scored."""
+    def vship(*args, **kwargs):
+        output = _perceptual_output()
+        return PerceptualTaskOutput(output.metrics, None, None, 10, {"cvvdp": "out of GPU memory"})
+
+    events = _run_one(qapp, monkeypatch, lambda *a, **k: _fake_result("d.mp4"), vship,
+                      keys=("vmaf", "ssimulacra2", "cvvdp"))
+    (kind, result, message, _tail), = events
+    assert kind == "partly"
+    assert result.has_metric("vmaf") and result.has_metric("ssimulacra2") and not result.has_metric("cvvdp")
+    assert message == "CVVDP failed: out of GPU memory"
+
+
+def test_the_jobs_cvvdp_settings_reach_the_request(qapp, monkeypatch):
+    from vmaf_app.core.cvvdp import DEFAULT_PRESET, with_display
+
+    seen = []
+
+    def vship(_source, _test, request, specs, **kwargs):
+        seen.append(dict(specs[0].parameters)["display"]["peak_luminance"])
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=("cvvdp",),
+                  cvvdp=with_display(DEFAULT_PRESET.settings, peak_luminance=321))
+    VmafWorker([job]).run()
+    _drain(qapp)
+    assert seen == [321]

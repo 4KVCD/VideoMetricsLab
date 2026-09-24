@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import MetricResultSet
@@ -47,6 +48,8 @@ class VmafJob:
     # metrics are not FFmpeg adapter configuration.
     metric_keys: tuple[str, ...] | None = None
     metric_backends: dict[str, str] = field(default_factory=dict)
+    # The display CVVDP models for this video; None is the built-in default.
+    cvvdp: CvvdpSettings | None = None
     # What the row already shows for this exact recipe, and which of its
     # metrics can stand as they are. A backend group whose metrics are all
     # in cached_metrics is not run; the rest are merged back into the
@@ -239,7 +242,7 @@ class VmafWorker(QThread):
         nothing was produced.
         """
         request = analysis_request_from_vmaf_options(
-            options, job.metric_keys, job.metric_backends,
+            options, job.metric_keys, job.metric_backends, job.cvvdp,
         )
         cached = job.cached_metrics if job.cached_result is not None and job.cached_metrics else None
         plan = build_execution_plan(request, cached)
@@ -386,11 +389,20 @@ class VmafWorker(QThread):
             )
             if carried:
                 result.merge_metric_results(carried)
-        if not task_errors:
+        # A metric that failed while the rest of its group finished (CVVDP,
+        # GPU only, beside SSIMULACRA2/Butteraugli) is reported like a
+        # failed group.
+        metric_failures = dict(perceptual.failures) if perceptual is not None else {}
+        if not task_errors and not metric_failures:
             return result, None
-        task, error = task_errors[0]
-        labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
-        return result, (f"{labels} failed: {error}", getattr(error, "stderr_tail", "") or "")
+        messages, stderr_tail = [], ""
+        for task, error in task_errors:
+            labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
+            messages.append(f"{labels} failed: {error}")
+            stderr_tail = stderr_tail or getattr(error, "stderr_tail", "") or ""
+        for key, message in metric_failures.items():
+            messages.append(f"{metric_definition(key).label} failed: {message}")
+        return result, ("\n".join(messages), stderr_tail)
 
     # ------------------------------------------------------------------ run
     def run(self) -> None:
