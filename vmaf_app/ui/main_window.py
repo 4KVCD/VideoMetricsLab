@@ -1490,10 +1490,18 @@ class MainWindow(QMainWindow):
                 # Qt draws one for any item that merely *has* the role set.
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 item.setData(Qt.CheckStateRole, None)
-                item.setText(metric_column.metric.format_value(value))
+                frame_metric = run.result.frame_metric(metric_column.key)
+                text = metric_column.metric.format_value(value)
+                if (frame_metric is not None and metric_column.key in row_data.metric_backends
+                        and not self._backend_matches(row_data, metric_column.key, frame_metric)):
+                    # Visible without hovering: a score from the other
+                    # implementation is on a different scale from the rest.
+                    text += f" ({frame_metric.provenance.compute_backend.upper()})"
+                item.setText(text)
                 item.setToolTip(
                     "Mean of calculated frame scores."
                     + self._identical_frames_note(run, col)
+                    + self._backend_note(row_data, metric_column.key, frame_metric)
                 )
                 font = QFont()
                 font.setBold(True)
@@ -2616,11 +2624,16 @@ class MainWindow(QMainWindow):
     def _reusable_results(self, row_data: RowData) -> MetricResultSet:
         """The requested metrics the row already has and a run can keep.
 
-        A metric counts when it has at least one score and, for a metric
-        set to CPU, when that score came from the CPU tool: a GPU (Vship)
-        score does not stand in for a CPU one. The GPU choice accepts
-        either, as the cache lookup does, because a GPU choice runs on the
-        CPU when no supported GPU is present.
+        A metric counts when it has at least one score, produced the way
+        the row asks for. SSIMULACRA2/Butteraugli on the GPU (Vship) and on
+        the CPU (libjxl) differ by a few points on the same frames (44.47 vs
+        46.89 in one 640x360 test), so a comparison mixing them ranks
+        encodes on different scales:
+        - set to CPU, only a CPU score counts;
+        - set to GPU, a CPU score -- left by a fallback, or by the CPU
+          choice earlier -- counts only when no supported GPU is present,
+          where the CPU is the only way it can be calculated. With a GPU,
+          the next run recalculates it there.
         """
         reusable = MetricResultSet()
         if row_data.completed_run is None:
@@ -2630,10 +2643,41 @@ class MainWindow(QMainWindow):
             metric = result.frame_metric(key)
             if metric is None or not np.any(~np.isnan(metric.values)):
                 continue
-            if row_data.metric_backends.get(key) == "cpu" and metric.provenance.compute_backend != "cpu":
+            if not self._backend_matches(row_data, key, metric):
                 continue
             reusable.add(metric)
         return reusable
+
+    def _backend_matches(self, row_data: RowData, key: str, metric) -> bool:
+        """Whether `metric`'s score was produced the way the row asks for it
+        (see _reusable_results). Metrics without a GPU/CPU choice always do."""
+        choice = row_data.metric_backends.get(key)
+        produced = metric.provenance.compute_backend
+        if choice == "cpu":
+            return produced == "cpu"
+        if choice == "gpu" and produced == "cpu":
+            return not self._vship_available()
+        return True
+
+    def _backend_note(self, row_data: RowData, key: str, metric) -> str:
+        """Tooltip text saying what produced a SSIMULACRA2/Butteraugli score,
+        and what happens to one produced differently from the row's choice."""
+        choice = row_data.metric_backends.get(key)
+        if choice is None or metric is None:
+            return ""
+        provenance = metric.provenance
+        if provenance.compute_backend == "gpu":
+            gpu = provenance.parameters.get("gpu_name")
+            note = "\n\nCalculated on the GPU with Vship" + (f" ({gpu})." if gpu else ".")
+        else:
+            note = "\n\nCalculated on the CPU with the libjxl tools."
+        if self._backend_matches(row_data, key, metric):
+            if choice == "gpu" and provenance.compute_backend == "cpu":
+                note += " No supported GPU was found, so the CPU is the only way to calculate it here."
+            return note
+        wanted = "GPU" if choice == "gpu" else "CPU"
+        return (note + f" This row is set to {wanted}, and the two give different numbers; "
+                f"the next run recalculates it on the {wanted}.")
 
     def _has_requested_results(self, row_data: RowData) -> bool:
         requested = self._requested_metrics(row_data)

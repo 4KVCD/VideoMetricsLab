@@ -4140,3 +4140,49 @@ def test_gpu_choice_without_a_supported_gpu_is_warned_like_cpu(qapp, monkeypatch
         assert shown == [] and win._worker is not None
     win._worker = None
     win.close()
+
+
+@pytest.mark.parametrize("gpu_present", [True, False])
+def test_a_gpu_row_shows_and_redoes_a_cpu_score_only_when_a_gpu_exists(qapp, monkeypatch, gpu_present):
+    """GPU and CPU SSIMULACRA2 differ by a few points on the same frames. A
+    CPU score on a row set to GPU used to count as done, invisibly. With a
+    GPU present it is marked "(CPU)" and recalculated on the next run;
+    without one, the CPU is the only way, so it counts and says why."""
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
+
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
+                        lambda: ((object(), "") if gpu_present else (None, "no GPU")))
+    cpu = FrameMetricResult("ssimulacra2", [0], [0.0], [46.89],
+                            MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1"))
+    win = MainWindow()
+    row = _perceptual_row_with_saved_run(win, "gpu", cpu)
+    rd = win._rows[row]
+    win._set_row_metrics(row)
+    cell = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
+
+    assert "Calculated on the CPU with the libjxl tools." in cell.toolTip()
+    if gpu_present:
+        assert cell.text() == "46.89 (CPU)"
+        assert "recalculates it on the GPU" in cell.toolTip()
+        assert not win._has_requested_results(rd)
+        assert win._reusable_results(rd).keys() == ("vmaf",)
+    else:
+        assert cell.text() == "46.89"
+        assert "No supported GPU was found" in cell.toolTip()
+        assert win._has_requested_results(rd)
+    win.close()
+
+
+def test_a_gpu_score_says_which_gpu_calculated_it(qapp, monkeypatch):
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
+
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    gpu = FrameMetricResult("ssimulacra2", [0], [0.0], [44.47], MetricProvenance(
+        "Vship/ssimulacra2", "", "gpu", "ssimulacra2-vship-gpu-v1", {"gpu_name": "NVIDIA GeForce RTX 5090"}))
+    win = MainWindow()
+    row = _perceptual_row_with_saved_run(win, "gpu", gpu)
+    win._set_row_metrics(row)
+    cell = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
+    assert cell.text() == "44.47"
+    assert "Calculated on the GPU with Vship (NVIDIA GeForce RTX 5090)." in cell.toolTip()
+    win.close()
