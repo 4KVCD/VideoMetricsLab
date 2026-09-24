@@ -435,3 +435,54 @@ def test_recalculating_does_not_delete_saved_scores_of_unticked_metrics(qapp, tm
     assert not list(tmp_path.rglob("vmaf_*.npz"))
     win.close()
 
+
+
+class _PendingLookup:
+    """Stands in for ProbeWorker: records what each cache lookup was asked
+    about, and stays "running" so the next lookup has to replace it."""
+
+    started: list = []
+
+    def __init__(self, paths, *args, **kwargs):
+        self.paths = list(paths)
+        self.cancelled = False
+        _PendingLookup.started.append(self)
+        self.cached_found = self.finished_all = self
+        self.probed = self
+
+    def connect(self, *_args):
+        pass
+
+    def start(self):
+        pass
+
+    def isRunning(self):
+        return not self.cancelled
+
+    def cancel(self):
+        self.cancelled = True
+
+    def deleteLater(self):
+        pass
+
+
+def test_editing_one_row_while_saved_results_load_keeps_asking_for_the_others(qapp, monkeypatch):
+    """Editing one row while saved results were still loading cancelled the
+    lookup for every row but re-asked only for the edited one: the others
+    stayed empty and the next run recalculated them in full."""
+    _PendingLookup.started = []
+    monkeypatch.setattr(main_window_module, "ProbeWorker", _PendingLookup)
+    win = MainWindow()
+    win._source_info = fake_video_info("source.mp4")
+    paths = [Path(f"{name}.mp4") for name in "abc"]
+    for path in paths:
+        win._add_table_row(path)
+    win._start_cache_lookup(paths)
+    win._start_cache_lookup([paths[2]])  # c's display changed while loading
+    assert _PendingLookup.started[0].cancelled
+    assert _PendingLookup.started[-1].paths == paths
+    # Recalculate drops its own rows' pending answers but re-asks for the rest.
+    win._recompute_rows([0])
+    assert _PendingLookup.started[-1].paths == paths[1:]
+    win._probe_workers.clear()
+    win.close()

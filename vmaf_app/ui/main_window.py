@@ -497,6 +497,7 @@ class MainWindow(QMainWindow):
         # because a cache lookup does not read media info. Rows were left
         # permanently on "Reading..." with nothing outstanding to fill them.
         self._cache_worker: ProbeWorker | None = None
+        self._cache_lookup_paths: list[Path] = []  # the rows the running lookup was asked about
         self._cache_generation = 0
         self._source_probe_worker: ProbeWorker | None = None
         self._probe_workers: list[ProbeWorker] = []
@@ -2263,13 +2264,19 @@ class MainWindow(QMainWindow):
         """
         if not paths or self._source_info is None or not self._settings.use_cache:
             return
-        if self._cache_worker is not None and self._cache_worker.isRunning():
-            # Keep the old QThread alive until it exits. Replacing the only
-            # reference could destroy a still-running worker and crash Qt.
-            self._cache_worker.cancel()
+        # The lookup being replaced may not have answered for all its rows
+        # yet, and its answers are about to be ignored: those rows are asked
+        # again here. Only the changed rows used to be, so editing one row
+        # while saved results were loading left the others empty, to be
+        # recalculated in full by the next run.
+        paths = list(dict.fromkeys([*self._cancel_cache_lookup(), *paths]))
         self._cache_generation += 1
         generation = self._cache_generation
         cache_rows = [rd for rd in self._rows if rd.path in paths]
+        paths = [rd.path for rd in cache_rows]  # rows removed meanwhile are not asked about
+        if not paths:
+            return
+        self._cache_lookup_paths = paths
         worker = ProbeWorker(
             paths, self._source_info.path, True,
             {
@@ -2293,6 +2300,16 @@ class MainWindow(QMainWindow):
             lambda g=generation, w=worker: self._on_cache_lookup_finished(g, w)
         )
         worker.start()
+
+    def _cancel_cache_lookup(self) -> list[Path]:
+        """Stops the running cache lookup, if any; returns the rows it was
+        asked about, whose answers will now be ignored."""
+        if self._cache_worker is None or not self._cache_worker.isRunning():
+            return []
+        # Keep the old QThread alive until it exits. Replacing the only
+        # reference could destroy a still-running worker and crash Qt.
+        self._cache_worker.cancel()
+        return list(self._cache_lookup_paths)
 
     def _on_cache_lookup_finished(self, generation: int, worker: ProbeWorker) -> None:
         if worker is self._cache_worker:
@@ -2476,10 +2493,11 @@ class MainWindow(QMainWindow):
         # result_cache.store's note on why the folder cannot be resolved late.
         cache_directory = result_cache.cache_dir()
         # A cache read already in flight must not put back the exact result
-        # the user just asked to ignore.
-        if self._cache_worker is not None and self._cache_worker.isRunning():
-            self._cache_worker.cancel()
+        # the user just asked to ignore -- but the other rows it was loading
+        # are asked about again below.
+        interrupted = self._cancel_cache_lookup()
         self._cache_generation += 1
+        recomputed = {self._rows[row].path for row in rows}
         for row in rows:
             row_data = self._rows[row]
             if row_data.completed_run is not None:
@@ -2509,6 +2527,9 @@ class MainWindow(QMainWindow):
             f"Cleared {len(rows)} result(s) -- make sure they're checked, then click Calculate metrics to recompute."
         )
         self._sync_frame_compare()
+        others = [path for path in interrupted if path not in recomputed]
+        if others:
+            self._start_cache_lookup(others)
 
     def _add_opposite_scale_direction_rows(self, rows: list[int]) -> None:
         """For each selected row with a mismatched resolution, adds a second
