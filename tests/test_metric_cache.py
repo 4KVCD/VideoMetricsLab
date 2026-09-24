@@ -38,15 +38,7 @@ from vmaf_app.core.metric_results import (
     frame_scores_from_results,
     merge_metric_results,
 )
-from vmaf_app.core.models import (
-    ComparisonResult,
-    CropMode,
-    FrameScores,
-    GpuVendor,
-    ScaleDirection,
-    VideoInfo,
-    VmafOptions,
-)
+from vmaf_app.core.models import ComparisonResult, CropMode, FrameScores, GpuVendor, VideoInfo, VmafOptions
 
 
 def _request(options: VmafOptions) -> AnalysisRequest:
@@ -498,39 +490,3 @@ def test_a_gpu_choice_still_finds_a_cpu_fallback_score(tmp_path):
 
     assert load_metric(directory, spec, "gpu").provenance.compute_backend == "cpu"
     assert load_metric(directory, spec, "cpu").provenance.compute_backend == "cpu"
-
-
-
-@pytest.mark.parametrize(("direction", "old_score_usable"), [
-    (ScaleDirection.DISTORTED_TO_SOURCE, False),  # the 320x180 test is enlarged
-    (ScaleDirection.SOURCE_TO_DISTORTED, True),   # the reference is reduced, by FFmpeg as before
-])
-def test_gpu_scores_scaled_by_ffmpeg_are_not_mixed_with_vship_enlarged_ones(tmp_path, direction, old_score_usable):
-    """Vship now enlarges an input itself, in linear light: on the Beekeeper
-    1080p encode against the 4K reference that moved SSIMULACRA2 by +2.1 on
-    average. A GPU score saved when FFmpeg did the enlarging is a different
-    method, so it is not reused for such a pair; a reduction is unchanged."""
-    source, test = _paths(tmp_path)
-    options = VmafOptions(scale_direction=direction)
-    big = VideoInfo(source, 640, 360, 24.0, 1.0, 24, "h264")
-    small = VideoInfo(test, 320, 180, 24.0, 1.0, 24, "h264")
-
-    def store(compatibility, value):
-        provenance = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", compatibility)
-        result = ComparisonResult(
-            source=source, distorted=test, frames=FrameScores.empty(), fps=24.0, model="",
-            source_crop=None, distorted_crop=None, source_info=big, distorted_info=small,
-            scale_direction=direction, compared_frame_count=1,
-            metric_results=MetricResultSet([FrameMetricResult("ssimulacra2", [0], [0.0], [value], provenance)]),
-        )
-        result_cache.store(source, test, result, "run", analysis_request_from_vmaf_options(options, ("ssimulacra2",)), tmp_path)
-
-    def lookup():
-        loaded = result_cache.load_cached(source, test, analysis_request_from_vmaf_options(options, ("ssimulacra2",)), tmp_path)
-        return None if loaded is None else loaded[0].metric("ssimulacra2").values.tolist()
-
-    store("ssimulacra2-vship-gpu-v1", 46.17)
-    assert lookup() == (pytest.approx([46.17]) if old_score_usable else None)
-
-    store("ssimulacra2-vship-gpu-v2", 48.29)
-    assert lookup() == pytest.approx([48.29])

@@ -30,11 +30,11 @@ import numpy as np
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
-from vmaf_app.core.comparison_recipe import comparison_sizes, upscaled_inputs
+from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import hw_native_format, hwaccel_args, pick_hwaccel
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
-from vmaf_app.core.models import CropBox, GpuVendor, VideoInfo
+from vmaf_app.core.models import CropBox, GpuVendor, ScaleDirection, VideoInfo
 from vmaf_app.core.perceptual_cpu import (
     PerceptualCancelled,
     PerceptualRunError,
@@ -341,12 +341,7 @@ def _format_yuv(sampling: str, depth: int) -> _ImageFormat:
     return _ImageFormat(f"yuv{sampling}p{suffix}", 0, _VSHIP_ENUMS[depth], subw, subh)
 
 
-def _vship_colorspace(
-    info: VideoInfo, image: _ImageFormat, width: int, height: int,
-    target: tuple[int, int] | None = None,
-) -> _Colorspace:
-    """How Vship should read one input's frames: `width` x `height` as piped,
-    enlarged by Vship to `target` when given (see upscaled_inputs)."""
+def _vship_colorspace(info: VideoInfo, image: _ImageFormat, width: int, height: int) -> _Colorspace:
     matrix_name = (info.color_space or "").casefold().replace(".", "")
     matrix_values = {
         "rgb": 0, "bt709": 1, "bt470bg": 5, "smpte170m": 6,
@@ -399,20 +394,24 @@ def _vship_colorspace(
     if location not in locations:
         raise VshipUnavailableError(f"Vship does not support {info.chroma_location} chroma siting.")
 
-    target_width, target_height = target or (-1, -1)
     return _Colorspace(
-        width, height, target_width, target_height, image.sample, value_range,
+        width, height, -1, -1, image.sample, value_range,
         _Subsampling(image.subw, image.subh), locations[location], image.family,
         matrix, transfer, primaries, _Crop(0, 0, 0, 0),
     )
 
 
-#: Vship's own resize, for the record in each result's provenance: it scales
-#: in linear light after its colour conversion, with a Catmull-Rom cubic
-#: (Vship gpuColorToLinear/resize.hpp). FFmpeg scales the YUV values with the
-#: row's chosen algorithm, so an upscaled comparison scores slightly
-#: differently from one scaled by FFmpeg, and is cached under its own ID.
-_VSHIP_RESIZE = "Vship GPU, linear light, Catmull-Rom cubic"
+def _scaled_sizes(
+    source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe,
+    source_crop: CropBox | None, distorted_crop: CropBox | None,
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    source_size = _content_size(source, source_crop)
+    distorted_size = _content_size(distorted, distorted_crop)
+    if source_size == distorted_size:
+        return source_size, distorted_size
+    if recipe.scale_direction is ScaleDirection.DISTORTED_TO_SOURCE:
+        return source_size, source_size
+    return distorted_size, distorted_size
 
 
 def _filter_chain(
@@ -890,21 +889,9 @@ def _run_vship_pass(
     dist_passthrough = _passthrough_format(distorted, dist_hwaccel)
     src_format = src_passthrough[0] if src_passthrough else _image_format(source)
     dist_format = dist_passthrough[0] if dist_passthrough else _image_format(distorted)
-    # Enlarging happens on the GPU: FFmpeg pipes the original size and Vship
-    # scales it (target_width/height). Measured on the Beekeeper 1080p VVC
-    # encode against the 4K reference, bringing the test up to 3840x1608:
-    # 50.3 ms of CPU a frame when FFmpeg scaled it and piped 18.5 MB, 29.4 ms
-    # piping the 4.7 MB original. Reducing stays in FFmpeg, where it makes
-    # the piped frame smaller: the 4K reference brought down to 1920x808
-    # cost 10.4 ms scaled on the CPU, 14.6 ms piped whole for Vship to scale.
-    src_content = _content_size(source, source_crop)
-    dist_content = _content_size(distorted, distorted_crop)
-    src_target, dist_target = comparison_sizes(src_content, dist_content, request.recipe.scale_direction)
-    src_up, dist_up = upscaled_inputs(src_content, dist_content, request.recipe.scale_direction)
-    src_size = src_content if src_up else src_target
-    dist_size = dist_content if dist_up else dist_target
-    src_color = _vship_colorspace(source, src_format, *src_size, src_target if src_up else None)
-    dist_color = _vship_colorspace(distorted, dist_format, *dist_size, dist_target if dist_up else None)
+    src_size, dist_size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)
+    src_color = _vship_colorspace(source, src_format, *src_size)
+    dist_color = _vship_colorspace(distorted, dist_format, *dist_size)
     src_layout = src_format.frame_layout(*src_size)
     dist_layout = dist_format.frame_layout(*dist_size)
     src_frame_bytes, src_plane_sizes, src_strides, _ = src_layout
@@ -1043,9 +1030,6 @@ def _run_vship_pass(
             "coverage_step": step,
             "butteraugli_norm": "3-norm",
         }
-        if src_up or dist_up:
-            parameters["upscale"] = _VSHIP_RESIZE
-            parameters["upscaled"] = "reference" if src_up else "test video"
         for spec in specs:
             results.add(FrameMetricResult(
                 spec.key, frame_numbers, times,
@@ -1054,7 +1038,7 @@ def _run_vship_pass(
                     implementation=f"Vship/{spec.key}",
                     implementation_version=f"Vship {device.version}",
                     compute_backend="gpu",
-                    implementation_compatibility_id=_vship_compatibility_id(spec.key, src_up or dist_up),
+                    implementation_compatibility_id=f"{spec.key}-vship-gpu-v1",
                     parameters=parameters,
                 ),
             ))
@@ -1078,13 +1062,6 @@ def _run_vship_pass(
             lane.join()
         for stream in streams:
             stream.close()
-
-
-def _vship_compatibility_id(key: str, upscaled: bool) -> str:
-    """v1: no scaling, or FFmpeg reduced one input -- unchanged since before
-    Vship did any scaling, so those cached scores stay valid. v2: Vship
-    enlarged one input itself, a different resize from FFmpeg's."""
-    return f"{key}-vship-gpu-v2" if upscaled else f"{key}-vship-gpu-v1"
 
 
 def apply_vship_cpu_fallback(
