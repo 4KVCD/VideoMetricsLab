@@ -213,6 +213,22 @@ class ChartWidget(QWidget):
             tick += step
         return labels
 
+    def value_ticks(self, rect: QRect | None = None) -> list[tuple[int, str]]:
+        """The Y-axis gridlines for the current range: (pixel row, label),
+        bottom to top -- the same ones drawn by _draw_axes."""
+        rect = rect or self.plot_rect()
+        y0, y1 = self._y_range
+        step = _nice_value_step(y1 - y0)
+        value = np.ceil(y0 / step) * step
+        ticks = []
+        while value <= y1:
+            frac = (value - y0) / max(1e-9, y1 - y0)
+            # "+ 0.0" turns the -0.0 that ceil() gives for a range starting
+            # just below zero (Butteraugli's padding) into 0, not "-0".
+            ticks.append((rect.bottom() - int(frac * rect.height()), f"{float(value) + 0.0:g}"))
+            value += step
+        return ticks
+
     def seconds_per_pixel(self) -> float:
         x0, x1 = self.x_range()
         return (x1 - x0) / max(1, self.plot_rect().width())
@@ -268,7 +284,6 @@ class ChartWidget(QWidget):
 
     def _draw_axes(self, painter: QPainter, rect: QRect) -> None:
         x0, x1 = self.x_range()
-        y0, y1 = self._y_range
         metrics = QFontMetrics(painter.font())
 
         painter.setPen(QPen(_GRID_COLOR, 1))
@@ -281,23 +296,16 @@ class ChartWidget(QWidget):
             time_ticks.append((px, float(tick)))
             tick += step
 
-        value_step = _nice_value_step(y1 - y0)
-        value = np.ceil(y0 / value_step) * value_step
-        value_ticks = []
-        while value <= y1:
-            frac = (value - y0) / max(1e-9, y1 - y0)
-            py = rect.bottom() - int(frac * rect.height())
+        value_ticks = self.value_ticks(rect)
+        for py, _label in value_ticks:
             painter.drawLine(rect.left(), py, rect.right(), py)
-            value_ticks.append((py, float(value)))
-            value += value_step
 
         painter.setPen(QPen(_TEXT_COLOR, 1))
         for px, tick_time in time_ticks:
             label = format_hms(tick_time)
             painter.drawText(px - metrics.horizontalAdvance(label) // 2,
                              rect.bottom() + metrics.height() + 2, label)
-        for py, tick_value in value_ticks:
-            label = f"{tick_value:g}"
+        for py, label in value_ticks:
             painter.drawText(rect.left() - metrics.horizontalAdvance(label) - 6,
                              py + metrics.ascent() // 2, label)
 

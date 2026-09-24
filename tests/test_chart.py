@@ -261,3 +261,14 @@ def test_zoom_keeps_the_view_inside_the_data(qapp):
     chart._view_x = (data_lo, data_lo + (data_hi - data_lo) / 4)
     lo, hi = chart.x_range()
     assert lo >= data_lo and hi <= data_hi
+
+
+def test_an_axis_starting_just_below_zero_labels_its_first_tick_0_not_minus_0(qapp):
+    """Butteraugli is never negative, but the axis is padded below its
+    lowest score, so the first tick came out of ceil() as -0.0 -> "-0"."""
+    chart = _chart(qapp, fixed_y_max=None)
+    chart.set_series(1, _series([0.0, 1.5, 3.0]))
+    assert chart.y_range()[0] < 0
+    labels = [label for _py, label in chart.value_ticks()]
+    assert labels[0] == "0"
+    assert not any(label.startswith("-0") for label in labels)
