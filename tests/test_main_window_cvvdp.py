@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from tests.factories import fake_run_result, fake_video_info
 from vmaf_app.core import result_cache
-from vmaf_app.core.cvvdp import BUILTIN_PRESETS, DEFAULT_PRESET, CvvdpSettings, with_display
+from vmaf_app.core.cvvdp import BUILTIN_PRESETS, DEFAULT_PRESET, CvvdpSettings
 from vmaf_app.core.metric_results import MetricProvenance, MetricResultSet, SequenceMetricResult
 from vmaf_app.core.models import ResampleTarget
 from vmaf_app.core.settings import Settings
@@ -113,23 +113,43 @@ def test_choosing_another_display_drops_only_the_cvvdp_score(qapp):
     win.close()
 
 
-def test_the_resize_box_and_display_editor_change_the_selected_rows(qapp, monkeypatch):
+def _dialog_answers(monkeypatch, action, *, name=None, ambient_lux=None, peak=None):
+    """Makes the display dialog behave as if the user edited it and clicked
+    `action`'s button ("save", "save_new" or "apply"), through its own
+    validation. Returns the list of warnings it raised."""
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: warnings.append(args[2]))
+
+    def exec_(dialog):
+        if name is not None:
+            dialog.name_edit.setText(name)
+        if ambient_lux is not None:
+            dialog.ambient_spin.setValue(ambient_lux)
+        if peak is not None:
+            dialog.peak_spin.setValue(peak)
+        dialog._finish(action)
+        return dialog.result()
+
+    monkeypatch.setattr(CvvdpDisplayDialog, "exec", exec_)
+    return warnings
+
+
+def test_the_resize_box_and_apply_without_saving_change_the_selected_rows(qapp, monkeypatch):
     win, row, row_data = _window_with_row()
     _select(win, row)
     win.cvvdp_resize_check.setChecked(True)
     assert row_data.cvvdp.resize_to_display
     assert win.cvvdp_preset_combo.currentData() is None  # no preset has resize on: "Custom"
 
-    edited = with_display(DEFAULT_PRESET.settings, ambient_lux=15.0).display
-    monkeypatch.setattr(CvvdpDisplayDialog, "exec", lambda self: QDialog.Accepted)
-    monkeypatch.setattr(CvvdpDisplayDialog, "display", lambda self: edited)
+    _dialog_answers(monkeypatch, "apply", ambient_lux=15.0)
     win._on_cvvdp_edit_display()
     assert row_data.cvvdp.display.ambient_lux == 15.0 and row_data.cvvdp.resize_to_display
     assert "15 lux" in win.cvvdp_display_label.text()
+    assert win._settings.cvvdp_presets == []  # nothing saved
     win.close()
 
 
-def test_the_display_dialog_reads_back_what_it_was_given(qapp, monkeypatch):
+def test_the_display_dialog_reads_back_what_it_was_given(qapp):
     display = BUILTIN_PRESETS[4].settings.display  # the 65-inch TV
     dialog = CvvdpDisplayDialog(display)
     assert dialog.display() == display
@@ -137,19 +157,27 @@ def test_the_display_dialog_reads_back_what_it_was_given(qapp, monkeypatch):
     assert dialog.distance_note.text() == "= 2.45 x screen height"
     dialog.distance_spin.setValue(1.0)
     assert dialog.distance_note.text() == "= 1.24 x screen height"
-    warnings = []
-    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: warnings.append(args))
-    dialog.accept()
-    assert dialog.result() == QDialog.Accepted and warnings == []
+    # A built-in display offers saving as new and applying, not renaming.
+    assert dialog.save_button is None and dialog.apply_button is not None
+    assert dialog.name_edit.text() == ""
 
 
-def test_saving_a_preset_makes_it_the_default_for_new_videos(qapp, monkeypatch):
+def test_the_panel_has_add_preset_and_no_save_as_preset_button(qapp):
+    win, _row, _row_data = _window_with_row()
+    assert win.cvvdp_add_btn.text() == "Add preset..."
+    assert not hasattr(win, "cvvdp_save_btn")
+    new_form = CvvdpDisplayDialog(DEFAULT_PRESET.settings.display, new_preset=True)
+    assert new_form.apply_button is None and new_form.save_button is None
+    win.close()
+
+
+def test_adding_a_preset_makes_it_the_default_for_new_videos(qapp, monkeypatch):
     win, row, row_data = _window_with_row()
     _select(win, row)
-    row_data.cvvdp = with_display(DEFAULT_PRESET.settings, peak_luminance=350)
-    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: ("My monitor", True))
-    win._on_cvvdp_save_preset()
+    _dialog_answers(monkeypatch, "save_new", name="My monitor", peak=350)
+    win._on_cvvdp_add_preset()
 
+    assert row_data.cvvdp.display.peak_luminance == 350
     assert win._settings.cvvdp_default_preset == "My monitor"
     assert win.cvvdp_preset_combo.currentData() == "My monitor"
     assert win.settings_cvvdp_default.currentData() == "My monitor"
@@ -168,6 +196,49 @@ def test_saving_a_preset_makes_it_the_default_for_new_videos(qapp, monkeypatch):
     assert win._default_cvvdp == DEFAULT_PRESET.settings
     assert row_data.cvvdp.display.peak_luminance == 350
     assert win.cvvdp_preset_combo.currentData() is None  # now "Custom"
+    win.close()
+
+
+def test_the_display_editor_renames_and_updates_your_preset(qapp, monkeypatch):
+    win, row, row_data = _window_with_row()
+    _select(win, row)
+    _dialog_answers(monkeypatch, "save_new", name="Desk", peak=300)
+    win._on_cvvdp_add_preset()
+
+    _dialog_answers(monkeypatch, "save", name="Desk monitor", peak=320)
+    win._on_cvvdp_edit_display()
+    assert [p["name"] for p in win._settings.cvvdp_presets] == ["Desk monitor"]
+    assert win._settings.cvvdp_default_preset == "Desk monitor"  # the default follows the rename
+    assert row_data.cvvdp.display.peak_luminance == 320
+    assert win.cvvdp_preset_combo.currentData() == "Desk monitor"
+    assert "Renamed" in win.status_label.text()
+    win.close()
+
+
+def test_the_display_editor_saves_a_copy_as_a_new_preset(qapp, monkeypatch):
+    win, row, row_data = _window_with_row()
+    _select(win, row)
+    _dialog_answers(monkeypatch, "save_new", name="Desk", peak=300)
+    win._on_cvvdp_add_preset()
+    _dialog_answers(monkeypatch, "save_new", name="Desk, dark room", ambient_lux=0)
+    win._on_cvvdp_edit_display()
+    assert [p["name"] for p in win._settings.cvvdp_presets] == ["Desk", "Desk, dark room"]
+    assert row_data.cvvdp.display.ambient_lux == 0 and row_data.cvvdp.display.peak_luminance == 300
+    assert win.cvvdp_preset_combo.currentData() == "Desk, dark room"
+    win.close()
+
+
+@pytest.mark.parametrize("name", ["", "  ", BUILTIN_PRESETS[0].name, "Desk"])
+def test_a_preset_needs_a_new_name(qapp, monkeypatch, name):
+    win, row, row_data = _window_with_row()
+    _select(win, row)
+    _dialog_answers(monkeypatch, "save_new", name="Desk")
+    win._on_cvvdp_add_preset()
+    warnings = _dialog_answers(monkeypatch, "save_new", name=name, peak=999)
+    win._on_cvvdp_add_preset()
+    assert warnings, "the dialog should refuse the name and stay open"
+    assert [p["name"] for p in win._settings.cvvdp_presets] == ["Desk"]
+    assert row_data.cvvdp.display.peak_luminance != 999
     win.close()
 
 

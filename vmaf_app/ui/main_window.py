@@ -201,11 +201,26 @@ _CVVDP_MAX_DISPLAY_PIXELS = 8192
 
 
 class CvvdpDisplayDialog(QDialog):
-    """Edits the display CVVDP models. Every value changes the score."""
+    """Edits the display CVVDP models, and saves it as a preset. Every value
+    changes the score.
 
-    def __init__(self, display: CvvdpDisplay, parent=None):
+    `own_preset` is the name of the user's preset being edited, if the
+    display is one: its name can then be changed ("Save preset" renames and
+    updates it). `new_preset` is the "Add preset..." form, which can only
+    save a new preset. `taken_names` are every preset name in use, which a
+    new name may not repeat.
+
+    After exec(), `action` says which button closed it: "save" (update or
+    rename `own_preset`), "save_new", or "apply" (use without saving).
+    """
+
+    def __init__(self, display: CvvdpDisplay, parent=None, *, own_preset: str | None = None,
+                 new_preset: bool = False, taken_names: frozenset[str] = frozenset()):
         super().__init__(parent)
-        self.setWindowTitle("CVVDP display")
+        self.setWindowTitle("New CVVDP preset" if new_preset else "CVVDP display")
+        self.action = ""
+        self._own_preset = own_preset
+        self._taken_names = taken_names
         form = QFormLayout(self)
         intro = QLabel(
             "CVVDP predicts how visible the differences are to someone watching this "
@@ -214,6 +229,16 @@ class CvvdpDisplayDialog(QDialog):
         )
         intro.setWordWrap(True)
         form.addRow(intro)
+
+        self.name_edit = QLineEdit(own_preset or "")
+        self.name_edit.setPlaceholderText(
+            "Name for the new preset" if new_preset or own_preset is None else ""
+        )
+        self.name_edit.setToolTip(
+            "Change it and click Save preset to rename this preset." if own_preset
+            else "Type a name and click Save as new preset to keep this display as a preset."
+        )
+        form.addRow("Preset name:", self.name_edit)
 
         def spin(low, high, value, decimals, suffix, step, tip):
             box = QDoubleSpinBox()
@@ -277,9 +302,25 @@ class CvvdpDisplayDialog(QDialog):
         self.hdr_check.setChecked(display.hdr)
         self.hdr_check.setToolTip("An HDR display, as in the official HDR display models. Off: an SDR one.")
         form.addRow("", self.hdr_check)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
+        buttons = QDialogButtonBox()
+        self.save_button = None
+        if own_preset is not None and not new_preset:
+            self.save_button = buttons.addButton("Save preset", QDialogButtonBox.AcceptRole)
+            self.save_button.setToolTip(f'Save these values (and the name above) as your preset "{own_preset}".')
+            self.save_button.clicked.connect(lambda: self._finish("save"))
+        self.save_new_button = buttons.addButton("Save as new preset", QDialogButtonBox.AcceptRole)
+        self.save_new_button.setToolTip(
+            "Keep this display as a preset of your own under the name above. It becomes "
+            "the display newly added videos start with."
+        )
+        self.save_new_button.clicked.connect(lambda: self._finish("save_new"))
+        self.apply_button = None
+        if not new_preset:
+            self.apply_button = buttons.addButton("Apply without saving", QDialogButtonBox.AcceptRole)
+            self.apply_button.setToolTip("Use this display for the selected videos without saving a preset.")
+            self.apply_button.clicked.connect(lambda: self._finish("apply"))
+        cancel = buttons.addButton(QDialogButtonBox.Cancel)
+        cancel.clicked.connect(self.reject)
         form.addRow(buttons)
         for box in (self.width_spin, self.height_spin, self.diagonal_spin, self.distance_spin):
             box.valueChanged.connect(self._update_distance_note)
@@ -297,13 +338,33 @@ class CvvdpDisplayDialog(QDialog):
     def _update_distance_note(self, *_args) -> None:
         self.distance_note.setText(f"= {self.display().distance_in_heights:.2f} x screen height")
 
-    def accept(self) -> None:
-        try:
-            self.display().validated()
-        except ValueError as error:
-            QMessageBox.warning(self, "CVVDP display", str(error))
+    def preset_name(self) -> str:
+        return self.name_edit.text().strip()
+
+    def _name_problem(self, action: str) -> str | None:
+        """Why the typed name cannot be saved with `action`, or None."""
+        name = self.preset_name()
+        if action == "apply":
+            return None
+        if not name:
+            return "Type a name for the preset."
+        renaming_own = action == "save" and name == self._own_preset
+        if name in self._taken_names and not renaming_own:
+            return f'There is already a preset called "{name}". Choose another name.'
+        return None
+
+    def _finish(self, action: str) -> None:
+        problem = self._name_problem(action)
+        if problem is None:
+            try:
+                self.display().validated()
+            except ValueError as error:
+                problem = str(error)
+        if problem is not None:
+            QMessageBox.warning(self, self.windowTitle(), problem)
             return
-        super().accept()
+        self.action = action
+        self.accept()
 
 
 #: The metrics with their own pass and a GPU/CPU choice, not a libvmaf feature.
@@ -1248,19 +1309,22 @@ class MainWindow(QMainWindow):
         self.cvvdp_display_label.setWordWrap(True)
         metric_options_form.addRow("", self.cvvdp_display_label)
         cvvdp_buttons = QHBoxLayout()
-        self.cvvdp_edit_btn = QPushButton("Edit display...")
-        self.cvvdp_edit_btn.setToolTip("Change the display's size, distance, brightness, room light and more.")
-        self.cvvdp_edit_btn.clicked.connect(self._on_cvvdp_edit_display)
-        self.cvvdp_save_btn = QPushButton("Save as preset...")
-        self.cvvdp_save_btn.setToolTip(
-            "Keep these CVVDP settings as a preset of your own. It becomes the display "
-            "newly added videos start with."
+        self.cvvdp_add_btn = QPushButton("Add preset...")
+        self.cvvdp_add_btn.setToolTip(
+            "Make a new preset of your own, starting from the display shown here. "
+            "It becomes the display newly added videos start with."
         )
-        self.cvvdp_save_btn.clicked.connect(self._on_cvvdp_save_preset)
+        self.cvvdp_add_btn.clicked.connect(self._on_cvvdp_add_preset)
+        self.cvvdp_edit_btn = QPushButton("Edit display...")
+        self.cvvdp_edit_btn.setToolTip(
+            "Change the display's size, distance, brightness, room light and more; "
+            "rename your preset or save the display as a new one."
+        )
+        self.cvvdp_edit_btn.clicked.connect(self._on_cvvdp_edit_display)
         self.cvvdp_delete_btn = QPushButton("Delete preset")
         self.cvvdp_delete_btn.setToolTip("Delete this preset of yours. Built-in presets cannot be deleted.")
         self.cvvdp_delete_btn.clicked.connect(self._on_cvvdp_delete_preset)
-        for button in (self.cvvdp_edit_btn, self.cvvdp_save_btn, self.cvvdp_delete_btn):
+        for button in (self.cvvdp_add_btn, self.cvvdp_edit_btn, self.cvvdp_delete_btn):
             cvvdp_buttons.addWidget(button)
         cvvdp_buttons.addStretch(1)
         metric_options_form.addRow("", cvvdp_buttons)
@@ -3143,46 +3207,73 @@ class MainWindow(QMainWindow):
     def _on_cvvdp_resize_toggled(self, checked: bool) -> None:
         self._apply_cvvdp(lambda old: replace(old, resize_to_display=checked))
 
-    def _on_cvvdp_edit_display(self) -> None:
+    def _cvvdp_preset_names(self) -> frozenset[str]:
+        return frozenset(preset.name for preset in cvvdp_presets(self._settings.cvvdp_presets))
+
+    def _on_cvvdp_add_preset(self) -> None:
+        """A new preset of the user's own, starting from the first selected
+        row's display. Like every preset they save, it becomes the default
+        for new videos: someone who tunes CVVDP will keep using it."""
         if not self._panel_target_rows or self._run_active:
             return
-        dialog = CvvdpDisplayDialog(self._rows[self._panel_target_rows[0]].cvvdp.display, self)
+        settings = self._rows[self._panel_target_rows[0]].cvvdp
+        dialog = CvvdpDisplayDialog(settings.display, self, new_preset=True,
+                                    taken_names=self._cvvdp_preset_names())
         if dialog.exec() != QDialog.Accepted:
             return
-        display = dialog.display()
-        self._apply_cvvdp(lambda old: replace(old, display=display))
+        self._save_cvvdp_preset(dialog, settings, replacing=None)
 
-    def _on_cvvdp_save_preset(self) -> None:
-        """Saves the first selected row's CVVDP settings as a preset of the
-        user's own and makes it the default for new videos: someone who has
-        tuned CVVDP to their display will go on using it."""
-        if not self._panel_target_rows:
+    def _on_cvvdp_edit_display(self) -> None:
+        """Edits the first selected row's display. Saving can rename and
+        update the user's preset it came from, or keep it as a new one;
+        "Apply without saving" only changes the selected rows."""
+        if not self._panel_target_rows or self._run_active:
             return
         settings = self._rows[self._panel_target_rows[0]].cvvdp
-        current = matching_preset(settings, self._settings.cvvdp_presets)
-        suggestion = current.name if current is not None and not current.builtin else ""
-        name, ok = QInputDialog.getText(self, "Save CVVDP preset", "Preset name:", text=suggestion)
-        name = name.strip()
-        if not ok:
+        match = matching_preset(settings, self._settings.cvvdp_presets)
+        own = match.name if match is not None and not match.builtin else None
+        dialog = CvvdpDisplayDialog(settings.display, self, own_preset=own,
+                                    taken_names=self._cvvdp_preset_names())
+        if dialog.exec() != QDialog.Accepted:
             return
-        if name and any(data.get("name") == name for data in self._settings.cvvdp_presets):
-            answer = QMessageBox.question(self, "Save CVVDP preset", f'Replace your preset "{name}"?')
-            if answer != QMessageBox.Yes:
-                return
+        if dialog.action == "apply":
+            display = dialog.display()
+            self._apply_cvvdp(lambda old: replace(old, display=display))
+            return
+        self._save_cvvdp_preset(dialog, settings, replacing=own if dialog.action == "save" else None)
+
+    def _save_cvvdp_preset(self, dialog: CvvdpDisplayDialog, settings: CvvdpSettings,
+                           replacing: str | None) -> None:
+        """Saves the dialog's display as a user preset -- replacing (and so
+        renaming) the preset `replacing` if given -- and gives it to the
+        selected rows. A new preset becomes the default for new videos; a
+        renamed default stays the default under its new name."""
+        name = dialog.preset_name()
+        saved = replace(settings, display=dialog.display())
+        presets = self._settings.cvvdp_presets
+        if replacing is not None:
+            presets = without_user_preset(presets, replacing)
         try:
-            self._settings.cvvdp_presets = with_user_preset(self._settings.cvvdp_presets, name, settings)
+            self._settings.cvvdp_presets = with_user_preset(presets, name, saved)
         except ValueError as error:
-            QMessageBox.warning(self, "Save CVVDP preset", str(error))
+            QMessageBox.warning(self, "CVVDP preset", str(error))
             return
-        self._settings.cvvdp_default_preset = name
+        if replacing is None or self._settings.cvvdp_default_preset == replacing:
+            self._settings.cvvdp_default_preset = name
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
         self._fill_cvvdp_default_combo()
-        self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
-        self.status_label.setText(
-            error or f'Saved the CVVDP preset "{name}". Videos added from now on use it '
-                     "(change that in Settings)."
-        )
+        self._apply_cvvdp(lambda old: replace(old, display=saved.display))
+        # _apply_cvvdp redraws the panel only when a row changed; a rename
+        # changes no row but does change the dropdown.
+        if self._panel_target_rows:
+            self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
+        if replacing is not None:
+            done = (f'Saved your CVVDP preset "{name}"' if name == replacing
+                    else f'Renamed your CVVDP preset "{replacing}" to "{name}" and saved it')
+        else:
+            done = f'Saved the CVVDP preset "{name}". Videos added from now on use it (change that in Settings)'
+        self.status_label.setText(error or done + ".")
 
     def _on_cvvdp_delete_preset(self) -> None:
         name = self.cvvdp_preset_combo.currentData()
