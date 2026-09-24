@@ -4079,3 +4079,38 @@ def test_an_unknown_saved_backend_falls_back_to_gpu(qapp):
     win = MainWindow()
     assert win._default_metric_backends["ssimulacra2"] == "gpu"
     win.close()
+
+
+
+def test_a_partly_failed_job_shows_and_caches_the_metrics_that_finished(qapp, tmp_path, monkeypatch):
+    """VMAF finished, SSIMULACRA2 failed: the row shows VMAF, its
+    SSIMULACRA2 cell says Failed with the reason on the row, VMAF is cached,
+    and the run counts the video as failed."""
+    from vmaf_app.core import result_cache
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "distorted.mp4"
+    distorted.write_bytes(b"d" * 500)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    rd = win._rows[row]
+    rd.extra_metric_keys.add("ssimulacra2")
+    win._job_rows = [rd]
+    win._run_failed_count = 0
+    result = _fake_completed_run(str(distorted)).result
+    result.source, result.distorted = source, distorted
+
+    win._on_job_partially_failed(0, result, "SSIMULACRA2 failed: unsupported input", "tail")
+
+    assert win._file_writes.wait_until_idle(10.0)
+    assert rd.completed_run is not None and rd.completed_run.result.has_metric("vmaf")
+    assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).text() == "Failed"
+    assert win.distorted_table.item(row, main_window_module.COL_VMAF).text() != "Failed"
+    assert rd.analysis_status == "Partly failed"
+    assert "SSIMULACRA2 failed: unsupported input" in rd.status_detail
+    assert win._run_failed_count == 1
+    assert _load_cached(source, distorted, rd.options) is not None
+    win.close()

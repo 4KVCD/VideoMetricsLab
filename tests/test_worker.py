@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import ComparisonResult, FrameScore, ResampleTarget, VideoInfo, VmafOptions
-from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualTaskOutput
+from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError
 from vmaf_app.ui import worker as worker_module
 from vmaf_app.ui.worker import VmafJob, VmafWorker
@@ -123,34 +123,64 @@ def test_ffmpeg_and_vship_run_at_the_same_time_and_merge(qapp, monkeypatch):
     assert finished[0].has_metric("ssimulacra2")
 
 
-def test_one_backend_failure_stops_its_sibling_without_cancelling_other_jobs(qapp, monkeypatch):
-    sibling_entered = threading.Event()
+def _run_one(qapp, monkeypatch, ffmpeg, vship, keys=("vmaf", "ssimulacra2")):
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=keys)])
+    events = []
+    worker.job_finished.connect(lambda _, result: events.append(("finished", result)))
+    worker.job_partially_failed.connect(lambda _, result, message, tail: events.append(("partly", result, message, tail)))
+    worker.job_failed.connect(lambda _, message, tail: events.append(("failed", message, tail)))
+    worker.cancelled.connect(lambda: events.append(("cancelled",)))
+    worker.run()
+    _drain(qapp)
+    return events
+
+
+def test_a_perceptual_failure_keeps_the_ffmpeg_metrics(qapp, monkeypatch):
+    """SSIMULACRA2 failing (an unsupported input, a tool error) used to
+    cancel the libvmaf pass and fail the video, discarding VMAF. The FFmpeg
+    task now finishes and its metrics are the result."""
+    ffmpeg_saw_cancel = []
 
     def ffmpeg(*args, **kwargs):
-        assert sibling_entered.wait(5)
+        time.sleep(0.2)  # still running when the perceptual task fails
+        ffmpeg_saw_cancel.append(kwargs["cancel_event"].is_set())
+        return _fake_result("d.mp4")
+
+    def vship(*args, **kwargs):
+        raise PerceptualRunError("Variable-frame-rate video is not supported safely yet.", "tail")
+
+    events = _run_one(qapp, monkeypatch, ffmpeg, vship)
+    (kind, result, message, tail), = events
+    assert kind == "partly"
+    assert result.has_metric("vmaf") and not result.has_metric("ssimulacra2")
+    assert message == "SSIMULACRA2 failed: Variable-frame-rate video is not supported safely yet."
+    assert tail == "tail"
+    assert ffmpeg_saw_cancel == [False]
+
+
+def test_an_ffmpeg_failure_keeps_the_perceptual_metrics(qapp, monkeypatch):
+    def ffmpeg(*args, **kwargs):
+        raise VmafRunError("FFmpeg failed", "stderr tail")
+
+    events = _run_one(qapp, monkeypatch, ffmpeg, lambda *a, **k: _perceptual_output())
+    (kind, result, message, tail), = events
+    assert kind == "partly"
+    assert result.has_metric("ssimulacra2") and not result.has_metric("vmaf")
+    assert message == "VMAF failed: FFmpeg failed" and tail == "stderr tail"
+
+
+def test_both_groups_failing_fails_the_video_without_cancelling_the_run(qapp, monkeypatch):
+    def ffmpeg(*args, **kwargs):
+        time.sleep(0.1)
         raise VmafRunError("FFmpeg failed", "stderr tail")
 
     def vship(*args, **kwargs):
-        sibling_entered.set()
-        token = kwargs["cancel_event"]
-        deadline = time.monotonic() + 5
-        while not token.is_set() and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert token.is_set()
-        raise PerceptualCancelled("sibling failed")
+        raise PerceptualRunError("Vship failed")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
-    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d",
-                  metric_keys=("vmaf", "ssimulacra2"))
-    worker = VmafWorker([job])
-    failed, cancelled = [], []
-    worker.job_failed.connect(lambda _, message, tail: failed.append((message, tail)))
-    worker.cancelled.connect(lambda: cancelled.append(True))
-    worker.run()
-    _drain(qapp)
-    assert failed == [("FFmpeg failed", "stderr tail")]
-    assert not cancelled
+    events = _run_one(qapp, monkeypatch, ffmpeg, vship)
+    assert events == [("failed", "Vship failed", "")]
 
 
 def test_user_cancel_reaches_both_concurrent_backends(qapp, monkeypatch):

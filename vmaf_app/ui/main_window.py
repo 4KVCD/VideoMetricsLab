@@ -180,6 +180,10 @@ class _StayOpenMenu(QMenu):
 #: The metrics with their own pass and a GPU/CPU choice, not a libvmaf feature.
 _PERCEPTUAL_METRIC_KEYS = ("ssimulacra2", "butteraugli")
 
+#: A row whose job finished some metrics and failed others (see
+#: MainWindow._on_job_partially_failed).
+_PARTLY_FAILED = "Partly failed"
+
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = 10 * 60
 #: Bytes of lossless 16-bit RGB PNG per pixel, as written by the CPU backend:
@@ -1465,7 +1469,7 @@ class MainWindow(QMainWindow):
                         Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
                     )
                     item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
-                    failed = enabled and row_data.analysis_status == "Failed"
+                    failed = enabled and row_data.analysis_status in {"Failed", _PARTLY_FAILED}
                     item.setText("Failed" if failed else "")
                     item.setToolTip(
                         "This metric failed on the last run. Untick to skip it."
@@ -2869,6 +2873,7 @@ class MainWindow(QMainWindow):
         self._worker.status.connect(self._on_job_status)
         self._worker.job_finished.connect(self._on_job_finished)
         self._worker.job_failed.connect(self._on_job_failed)
+        self._worker.job_partially_failed.connect(self._on_job_partially_failed)
         self._worker.cancelled.connect(self._on_run_cancelled)
         self._worker.all_finished.connect(self._on_all_finished)
         self._worker.start()
@@ -3097,12 +3102,15 @@ class MainWindow(QMainWindow):
                 return i
         return None
 
-    def _on_job_finished(self, index: int, result) -> None:
+    def _on_job_finished(self, index: int, result) -> int | None:
+        """Shows and caches a finished job. Returns the row it was shown on,
+        or None when it was not shown (row removed, source or settings
+        changed since the job started)."""
         self._mark_job_over(index)
         row_data = self._job_rows[index]
         row = self._row_index_of(row_data)
         if row is None:
-            return  # the row was removed mid-run; nothing to write the result to
+            return None  # the row was removed mid-run; nothing to write the result to
         label = row_data.path.stem
         # The job owns the reference/distorted identities it was launched with.
         # Never key a result from an old in-flight job using whatever source
@@ -3139,7 +3147,7 @@ class MainWindow(QMainWindow):
         self.bitrate_panel.add_and_analyze(bitrate_infos)
         if self._source_info is None or self._source_info.path != result.source:
             self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
-            return
+            return None
         if cache_options != row_data.options:
             # The row's settings changed after this job was launched, so the
             # result does not describe what the row now says. It is still
@@ -3150,7 +3158,7 @@ class MainWindow(QMainWindow):
                 row,
                 "Finished with the previous settings; change them back to see the result.",
             )
-            return
+            return None
         if row_data.completed_run is not None:
             previous = row_data.completed_run
             if not self.graph_panel.remove_by_identity(previous.graph_identity):
@@ -3171,6 +3179,20 @@ class MainWindow(QMainWindow):
             result, label, identity=run.graph_identity
         )
         self._sync_frame_compare()
+        return row
+
+    def _on_job_partially_failed(self, index: int, result, message: str, stderr_tail: str) -> None:
+        """One metric group failed, the other finished: the finished scores
+        are shown and cached like any result, and the metrics that failed
+        say so in their own cells."""
+        self._run_failed_count += 1
+        row = self._on_job_finished(index, result)
+        if row is None:
+            return
+        self._set_row_status(
+            row, _PARTLY_FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
+        )
+        self._set_row_metrics(row)
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
         self._mark_job_over(index)

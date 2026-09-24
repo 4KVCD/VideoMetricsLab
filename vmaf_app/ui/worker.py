@@ -11,6 +11,7 @@ from PySide6.QtCore import QThread, Signal
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import MetricResultSet
+from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
 from vmaf_app.core.perceptual_vship import apply_vship_cpu_fallback
@@ -68,6 +69,9 @@ class VmafWorker(QThread):
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, ComparisonResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
+    # One metric group failed, the other finished: the finished metrics are
+    # the result (job_index, ComparisonResult, message, stderr_tail).
+    job_partially_failed = Signal(int, object, str, str)
     cancelled = Signal()
     all_finished = Signal()
 
@@ -227,7 +231,13 @@ class VmafWorker(QThread):
 
     def _execute_plan(self, index: int, job: VmafJob, options: VmafOptions,
                       handle: ProcessHandle):
-        """Run independent backends together and publish one atomic result."""
+        """Run independent backends together and publish one result.
+
+        Returns (result, failure): failure is None when every task finished,
+        or (message, stderr tail) when one metric group failed and the other
+        finished -- the finished metrics are still the result. Raises when
+        nothing was produced.
+        """
         request = analysis_request_from_vmaf_options(
             options, job.metric_keys, job.metric_backends,
         )
@@ -235,7 +245,7 @@ class VmafWorker(QThread):
         plan = build_execution_plan(request, cached)
         token = _TaskCancelToken(self._cancel_event)
         task_results: dict[str, object] = {}
-        task_errors: list[Exception] = []
+        task_errors: list[tuple[object, Exception]] = []
         task_lock = threading.Lock()
         task_progress: dict[str, tuple[int, int, float]] = {}
 
@@ -311,12 +321,11 @@ class VmafWorker(QThread):
                 if len(plan.tasks) > 1:
                     report_progress(task.backend_id, *last_progress)
             except Exception as error:
+                # The sibling is left to finish: a SSIMULACRA2/Butteraugli
+                # failure (an unsupported input, a tool error) used to cancel
+                # the libvmaf pass and discard VMAF/PSNR/SSIM/XPSNR with it.
                 with task_lock:
-                    task_errors.append(error)
-                if len(plan.tasks) > 1:
-                    token.cancel_job()
-                    # A paused sibling cannot observe the cancellation flag.
-                    handle.terminate()
+                    task_errors.append((task, error))
 
         if len(plan.tasks) > 1:
             threads = [
@@ -334,8 +343,8 @@ class VmafWorker(QThread):
 
         if self._cancel_event.is_set():
             raise Cancelled("Cancelled by user")
-        if task_errors:
-            raise task_errors[0]
+        if task_errors and not task_results and cached is None:
+            raise task_errors[0][1]
 
         result = task_results.get("ffmpeg")
         if result is None and cached is not None:
@@ -365,6 +374,8 @@ class VmafWorker(QThread):
                 combined.add(value)
             result.merge_metric_results(combined)
         if result is None:
+            if task_errors:
+                raise task_errors[0][1]
             raise VmafRunError("No executable metric task was planned.")
         if cached is not None:
             # Saved metrics fill only what this run did not calculate: a
@@ -375,7 +386,11 @@ class VmafWorker(QThread):
             )
             if carried:
                 result.merge_metric_results(carried)
-        return result
+        if not task_errors:
+            return result, None
+        task, error = task_errors[0]
+        labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
+        return result, (f"{labels} failed: {error}", getattr(error, "stderr_tail", "") or "")
 
     # ------------------------------------------------------------------ run
     def run(self) -> None:
@@ -428,7 +443,7 @@ class VmafWorker(QThread):
             options = self._share_cores(job.options)
             self.job_started.emit(i, job.label)
             try:
-                result = self._execute_plan(i, job, options, handle)
+                result, failure = self._execute_plan(i, job, options, handle)
             except (Cancelled, PerceptualCancelled):
                 self._report_cancelled_once()
                 break
@@ -441,4 +456,7 @@ class VmafWorker(QThread):
             finally:
                 self._release_handle(i)
                 self._release_slot()
-            self.job_finished.emit(i, result)
+            if failure is None:
+                self.job_finished.emit(i, result)
+            else:
+                self.job_partially_failed.emit(i, result, *failure)
