@@ -2264,10 +2264,17 @@ class MainWindow(QMainWindow):
             return
         row_data = self._rows[row]
         if row_data.completed_run is not None:
+            # The cached answer replaces what the row shows when it has
+            # everything the row already shows and more. It used to have to
+            # hold every requested metric, so one never calculated (CVVDP
+            # ticked beside cached SSIMULACRA2) threw away the rest of it:
+            # the row kept showing VMAF only and SSIMULACRA2/Butteraugli
+            # never appeared.
             existing = row_data.completed_run.result
-            if all(existing.has_metric(m) for m in self._requested_metrics(row_data)):
-                return
-            if not all(result.has_metric(m) for m in self._requested_metrics(row_data)):
+            requested = self._requested_metrics(row_data)
+            shown = {m for m in requested if existing.has_metric(m)}
+            cached = {m for m in requested if result.has_metric(m)}
+            if not cached > shown:
                 return
             self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
         run = CompletedRun(result, label)

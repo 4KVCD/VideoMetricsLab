@@ -259,3 +259,35 @@ def test_the_display_editor_stops_at_8k(qapp):
     assert (dialog.display().width, dialog.display().height) == (8192, 8192)
     dialog.width_spin.setValue(7680)
     assert dialog.display().width == 7680
+
+
+def test_cached_ssimulacra2_appears_while_cvvdp_is_ticked_but_never_calculated(qapp, tmp_path, monkeypatch):
+    """Brian's Beekeeper rows: VMAF showed, SSIMULACRA2/Butteraugli ticked but
+    empty. A cached answer had to hold every ticked metric, and CVVDP had
+    never been calculated, so the answer carrying SSIMULACRA2 was dropped."""
+    from vmaf_app.core.metric_results import FrameMetricResult
+
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source, distorted = tmp_path / "source.mp4", tmp_path / "test.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted.write_bytes(b"d" * 50)
+    win = MainWindow()
+    win._source_info = fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    row_data = win._rows[row]
+    row_data.video_info = fake_video_info(str(distorted))
+    row_data.extra_metric_keys |= {"ssimulacra2"}
+    stored = fake_run_result(distorted, source=source)
+    stored.merge_metric_results(MetricResultSet([FrameMetricResult(
+        "ssimulacra2", list(range(10)), [i / 30 for i in range(10)], [80.0] * 10,
+        MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1"))]))
+    result_cache.store(source, distorted, stored, "test", win._analysis_request(row_data), tmp_path)
+    # The row shows VMAF only, as after adding it with SSIMULACRA2 unticked.
+    row_data.completed_run = CompletedRun(fake_run_result(distorted, source=source), "test")
+    row_data.extra_metric_keys |= {"cvvdp"}
+    cached, _label = result_cache.load_cached(source, distorted, win._analysis_request(row_data), tmp_path)
+    win._on_cached_found(distorted, cached, "test")
+    assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).text() == "80.00"
+    assert win.distorted_table.item(row, COL_CVVDP).text() == ""  # still to calculate
+    win.close()
