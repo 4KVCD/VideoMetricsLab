@@ -186,6 +186,30 @@ class _MetricCurve:
     times: np.ndarray
     label: str = ""  # the series' display name, for sizing the hover readout
     visible: bool = True
+    # The series' other frame metrics that have any data, in display order:
+    # (definition, frame numbers, values). Shown after the "|" in the
+    # readout, looked up by frame number because metrics need not share a
+    # frame axis (a perceptual metric can be subsampled).
+    others: tuple[tuple[MetricDefinition, np.ndarray, np.ndarray], ...] = ()
+
+
+#: Stands in for a value when sizing a readout column: digits at their widest,
+#: so a column's width never depends on the value under the cursor.
+_WIDEST_SAMPLE = -88.88
+
+
+def _value_at_frame(frames: np.ndarray, values: np.ndarray, frame: int) -> float | None:
+    """The value recorded for exactly `frame`, or None -- never a neighbour's.
+
+    The needle has the array's own type: searching int32 frame numbers with a
+    Python int made numpy convert the whole array first, 0.2 ms a lookup on a
+    feature-length run -- 7 ms a mouse move with four series' columns.
+    """
+    idx = int(np.searchsorted(frames, frames.dtype.type(frame)))
+    if idx >= len(frames) or int(frames[idx]) != frame:
+        return None
+    value = float(values[idx])
+    return value if _is_reportable(value) else None
 
 
 class _MetricPage(QWidget):
@@ -280,12 +304,18 @@ class _MetricPage(QWidget):
         self.chart.set_series(series_id, ChartSeries(
             times=result.time, values=plot_values, color=color, visible=entry.visible,
         ))
+        others = []
+        for metric in FRAME_METRICS:
+            other = entry.result.frame_metric(metric.key) if metric.key != self.metric.key else None
+            if other is not None and len(other.values) and not np.isnan(other.values).all():
+                others.append((metric, other.frame, other.values))
         self._curves[series_id] = _MetricCurve(
             stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation, self.metric.direction),
             values=values,
             frames=result.frame,
             times=result.time,
             label=entry.label, visible=entry.visible,
+            others=tuple(others),
         )
         self._update_no_data_label()
         self._fit_hover_label()
@@ -326,11 +356,11 @@ class _MetricPage(QWidget):
         # The widest each line can get, with digits standing in at their
         # fattest so the size doesn't shift as the values under the cursor do.
         lines = ["Time: 0:00:00.00"]
+        widest = {metric.key: _WIDEST_SAMPLE for metric in self._extra_columns()}
         for label in labels:
-            lines.append(
-                f"[{label}]  frame {'8' * 7}   t=0:00:00.00   "
-                f"{self.metric.label}={self.metric.value_format.format(-88.88)}"
-            )
+            lines.append(self._readout_row(
+                f"[{label}]  frame {'8' * 7}   t=0:00:00.00   ", _WIDEST_SAMPLE, widest,
+            ))
         if len(labels) == 2:
             lines.append(f"Δ ({labels[0]} − {labels[1]}) = -88.88")
 
@@ -380,6 +410,46 @@ class _MetricPage(QWidget):
             f"{series:<{self._series_readout_column_width()}}  "
             f"frame {frame:>6}   t={format_hms(time, decimals=2)}   "
         )
+
+    def _extra_columns(self) -> list[MetricDefinition]:
+        """The other metrics that at least one visible series has, in display
+        order: the columns after the "|". A metric no visible series has
+        gets no column at all."""
+        present = {metric.key for curve in self._curves.values() if curve.visible
+                   for metric, _frames, _values in curve.others}
+        return [metric for metric in FRAME_METRICS if metric.key in present]
+
+    @staticmethod
+    def _field_width(metric: MetricDefinition) -> int:
+        return len(f"{metric.label}={metric.value_format.format(_WIDEST_SAMPLE)}")
+
+    def _readout_row(self, prefix: str, value: float | None, others: dict[str, float | None]) -> str:
+        """One series' readout line: the shared prefix, this page's metric,
+        then "|" and the other metrics in fixed-width columns.
+
+        Every field is padded to a width derived from the metric, never from
+        the value, so the "|" and each column line up across series whatever
+        their names or scores. A series without a value for a column --
+        the metric not calculated for it, or not for this frame -- leaves
+        that column blank instead of shifting the rest along.
+        """
+        main = (f"no {self.metric.label}" if value is None
+                else f"{self.metric.label}={self.metric.format_value(value)}")
+        columns = self._extra_columns()
+        if not columns:
+            return prefix + main
+        fields = []
+        for metric in columns:
+            other = others.get(metric.key)
+            text = "" if other is None else f"{metric.label}={metric.format_value(other)}"
+            fields.append(f"{text:<{self._field_width(metric)}}")
+        width = max(self._field_width(self.metric), len(f"no {self.metric.label}"))
+        return f"{prefix}{main:<{width}}  |  {'  '.join(fields)}".rstrip()
+
+    @staticmethod
+    def _other_values(curve: _MetricCurve, frame: int) -> dict[str, float | None]:
+        return {metric.key: _value_at_frame(frames, values, frame)
+                for metric, frames, values in curve.others}
 
     def _readout_missing_frame(self, label: str, frame: int) -> str:
         """Format a missing-frame notice in the same series column."""
@@ -524,13 +594,14 @@ class _MetricPage(QWidget):
             frame = int(curve.frames[idx])
             time = float(curve.times[idx])
             prefix = self._readout_prefix(entry.label, frame, time)
+            others = self._other_values(curve, frame)
             if not _is_reportable(value):
                 # A run can carry the column while individual frames have no
                 # score (libvmaf's n_subsample, or a metric that failed on
                 # some frames). Formatting None here raised TypeError.
-                lines.append(f"{prefix}no {self.metric.label}")
+                lines.append(self._readout_row(prefix, None, others))
                 continue
-            lines.append(f"{prefix}{self.metric.label}={self.metric.format_value(value)}")
+            lines.append(self._readout_row(prefix, value, others))
             found.append((entry.label, float(value)))
 
         if len(found) == 2:
@@ -571,18 +642,12 @@ class _MetricPage(QWidget):
                 lines.append(self._readout_missing_frame(entry.label, frame))
                 continue
             value = float(curve.values[idx])
+            prefix = self._readout_prefix(entry.label, int(curve.frames[idx]), float(curve.times[idx]))
+            others = self._other_values(curve, frame)
             if not _is_reportable(value):
-                lines.append(
-                    self._readout_prefix(
-                        entry.label, int(curve.frames[idx]), float(curve.times[idx])
-                    ) + f"no {self.metric.label}"
-                )
+                lines.append(self._readout_row(prefix, None, others))
                 continue
-            lines.append(
-                self._readout_prefix(
-                    entry.label, int(curve.frames[idx]), float(curve.times[idx])
-                ) + f"{self.metric.label}={self.metric.format_value(value)}"
-            )
+            lines.append(self._readout_row(prefix, value, others))
             found.append((entry.label, float(value)))
             if cursor_time is None:
                 cursor_time = float(curve.times[idx])

@@ -471,8 +471,10 @@ def test_hover_on_psnr_tab_reports_psnr_not_vmaf(qapp):
     page = win._pages["psnr"]
     _hover_middle(win, "psnr")
 
-    assert "PSNR=45.00" in page.hover_label.text()
-    assert "VMAF=" not in page.hover_label.text()
+    row = page.hover_label.text().splitlines()[1]
+    main, _bar, others = row.partition("  |  ")
+    assert "PSNR=45.00" in main and "VMAF=" not in main
+    assert "VMAF=90.00" in others  # the rest come after the separator
 
 
 # ------------------------------------------------------------------ step-based hover radius
@@ -1313,3 +1315,88 @@ def test_butteraugli_is_drawn_with_0_at_the_top(qapp):
     assert "lower is better" in page.chart.y_axis_label
     win.tabs.setCurrentIndex(0)
     assert not win._pages["vmaf"].chart.invert_y
+
+
+
+# ------------------------------------------------------------------ other metrics beside the selected one
+
+def _with_perceptual(result: ComparisonResult, ssimulacra2: list[float] | None, step: int = 1) -> ComparisonResult:
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    if ssimulacra2 is not None:
+        frames = list(range(0, len(ssimulacra2) * step, step))
+        provenance = MetricProvenance("Vship/ssimulacra2", "5", "gpu", "ssimulacra2-vship-gpu-v1")
+        result.merge_metric_results(MetricResultSet([FrameMetricResult(
+            "ssimulacra2", frames, [f / 30.0 for f in frames], ssimulacra2, provenance)]))
+    return result
+
+
+def _rows(page) -> list[str]:
+    return [line for line in page.hover_label.text().splitlines() if line.startswith("[")]
+
+
+def test_the_readout_lists_the_other_metrics_in_aligned_columns(qapp):
+    """PSNR selected: each series' line gives PSNR, then "|" and every other
+    metric that was calculated. A long and a short file name, and one series
+    without SSIMULACRA2: the separator and every column still line up, the
+    missing value is a blank column, and metrics nobody has (VMAF NEG,
+    Butteraugli) get no column."""
+    win = GraphPanel()
+    win.show()
+    win.add_run(_with_perceptual(_fake_result("a much longer encode name.mp4", with_other_metrics=True),
+                                 [50.5] * 10))
+    win.add_run(_fake_result("b.mp4", vmaf_value=80.0, with_other_metrics=True))
+    win.tabs.setCurrentIndex(2)  # PSNR
+    page = win._pages["psnr"]
+    page.show_frame(3, win._entries)
+
+    first, second = _rows(page)
+    assert first.index("|") == second.index("|")
+    for column in ("VMAF=", "SSIM=", "XPSNR="):
+        assert first.index(column) == second.index(column), column
+    assert "SSIMULACRA2=50.50" in first and "SSIMULACRA2" not in second
+    assert not re.search(r"(?<!X)PSNR=", first.partition("|")[2]), "the selected metric is not repeated"
+    assert "VMAF NEG" not in first and "Butteraugli" not in first
+
+    # Hovering builds the same lines.
+    _hover_middle(win, "psnr")
+    hovered = _rows(page)
+    assert hovered[0].index("|") == hovered[1].index("|")
+    assert "SSIMULACRA2=50.50" in hovered[0]
+
+
+def test_a_metric_missing_at_this_frame_is_left_blank_not_borrowed(qapp):
+    """SSIMULACRA2 calculated for every second frame only: frame 3 has no
+    score, so its column is blank rather than showing frame 2's or 4's."""
+    win = GraphPanel()
+    win.show()
+    win.add_run(_with_perceptual(_fake_result("a.mp4", with_other_metrics=True), [40.0, 41.0, 42.0, 43.0, 44.0], step=2))
+    page = win._pages["vmaf"]
+    page.show_frame(4, win._entries)
+    assert "SSIMULACRA2=42.00" in _rows(page)[0]
+    page.show_frame(3, win._entries)
+    assert "SSIMULACRA2" not in _rows(page)[0]
+    assert "PSNR=45.00" in _rows(page)[0]
+
+
+def test_with_no_other_metrics_there_is_no_separator(qapp):
+    win = GraphPanel()
+    win.show()
+    win.add_run(_fake_result("a.mp4"))  # VMAF only
+    page = win._pages["vmaf"]
+    page.show_frame(2, win._entries)
+    assert "|" not in page.hover_label.text()
+
+
+def test_the_readout_box_is_wide_enough_for_the_extra_columns(qapp):
+    from PySide6.QtGui import QFontMetrics
+
+    win = GraphPanel()
+    win.show()
+    win.add_run(_with_perceptual(_fake_result("a.mp4", with_other_metrics=True), [50.5] * 10))
+    win.tabs.setCurrentIndex(2)
+    page = win._pages["psnr"]
+    page.show_frame(3, win._entries)
+    fm = QFontMetrics(page.hover_label.font())
+    widest = max(fm.horizontalAdvance(line) for line in page.hover_label.text().splitlines())
+    assert page.hover_label.maximumWidth() >= widest
