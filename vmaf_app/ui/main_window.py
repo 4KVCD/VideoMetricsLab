@@ -220,6 +220,7 @@ class CvvdpDisplayDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("New CVVDP preset" if new_preset else "CVVDP display")
         self.action = ""
+        self._original = display
         self._own_preset = own_preset
         self._taken_names = taken_names
         form = QFormLayout(self)
@@ -270,7 +271,7 @@ class CvvdpDisplayDialog(QDialog):
         self.diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, " in", 1,
                                   "The screen's diagonal size.")
         form.addRow("Screen size:", self.diagonal_spin)
-        self.distance_spin = spin(0.05, 50, display.viewing_distance_m, 3, " m", 0.05,
+        self.distance_spin = spin(0.05, 50, display.viewing_distance_m, 4, " m", 0.05,
                                   "How far the viewer's eyes are from the screen. Closer makes "
                                   "small artifacts easier to see.")
         self.distance_note = QLabel()
@@ -328,12 +329,27 @@ class CvvdpDisplayDialog(QDialog):
         self._update_distance_note()
 
     def display(self) -> CvvdpDisplay:
+        """The edited display. A field the user did not change keeps its
+        exact original value: the boxes show fewer decimals than a display
+        can have, and reading 0.7472 m back as 0.747 made "Apply without
+        saving" with nothing changed drop the CVVDP score and turn the
+        preset into "Custom"."""
+        original = self._original
+
+        def value(box, before: float, scale: float = 1.0) -> float:
+            shown = round(before * scale, box.decimals())
+            return before if abs(box.value() - shown) < 10 ** -(box.decimals() + 2) else box.value() / scale
+
         return CvvdpDisplay(
             width=self.width_spin.value(), height=self.height_spin.value(),
-            diagonal_inches=self.diagonal_spin.value(), viewing_distance_m=self.distance_spin.value(),
-            peak_luminance=self.peak_spin.value(), contrast=self.contrast_spin.value(),
-            ambient_lux=self.ambient_spin.value(), reflectivity=self.reflectivity_spin.value() / 100,
-            exposure=self.exposure_spin.value(), hdr=self.hdr_check.isChecked(),
+            diagonal_inches=value(self.diagonal_spin, original.diagonal_inches),
+            viewing_distance_m=value(self.distance_spin, original.viewing_distance_m),
+            peak_luminance=value(self.peak_spin, original.peak_luminance),
+            contrast=value(self.contrast_spin, original.contrast),
+            ambient_lux=value(self.ambient_spin, original.ambient_lux),
+            reflectivity=value(self.reflectivity_spin, original.reflectivity, 100),
+            exposure=value(self.exposure_spin, original.exposure),
+            hdr=self.hdr_check.isChecked(),
         )
 
     def _update_distance_note(self, *_args) -> None:

@@ -486,3 +486,24 @@ def test_editing_one_row_while_saved_results_load_keeps_asking_for_the_others(qa
     assert _PendingLookup.started[-1].paths == paths[1:]
     win._probe_workers.clear()
     win.close()
+
+
+@pytest.mark.parametrize("preset", BUILTIN_PRESETS, ids=lambda preset: preset.name)
+def test_the_display_editor_changes_nothing_that_was_not_edited(qapp, preset):
+    """0.7472 m (the default display's distance) came back as 0.747: "Apply
+    without saving" with nothing changed dropped the CVVDP score and made
+    the dropdown say "Custom"."""
+    dialog = CvvdpDisplayDialog(preset.settings.display)
+    assert dialog.display() == preset.settings.display
+    dialog.distance_spin.setValue(1.2345)  # an edit is still read as typed
+    assert dialog.display().viewing_distance_m == 1.2345
+
+
+def test_apply_without_saving_and_no_edit_keeps_the_cvvdp_score(qapp, monkeypatch):
+    win, row, row_data = _window_with_row(cvvdp_score=9.81)
+    _select(win, row)
+    _dialog_answers(monkeypatch, "apply")
+    win._on_cvvdp_edit_display()
+    assert row_data.completed_run.result.has_metric("cvvdp")
+    assert win.cvvdp_preset_combo.currentData() == DEFAULT_PRESET.name
+    win.close()
