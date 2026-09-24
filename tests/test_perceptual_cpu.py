@@ -68,7 +68,7 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu._tool_version", lambda executable: "test-tool 1")
     monkeypatch.setattr(
         "vmaf_app.core.perceptual_cpu._run_metric",
-        lambda executable, key, reference, test: 90.0 if key == "ssimulacra2" else 0.25,
+        lambda executable, key, reference, test, *_args: 90.0 if key == "ssimulacra2" else 0.25,
     )
     output = run_perceptual_task(_info("source.mp4"), _info("test.mp4"), request, request.metrics)
     assert output.metrics.keys() == ("ssimulacra2", "butteraugli")
@@ -209,3 +209,68 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
     assert [p.name for p in references] == [f"reference-{i:08d}.png" for i in range(1, 4)]
     assert [p.name for p in tests] == [f"test-{i:08d}.png" for i in range(1, 4)]
     assert sorted(p.name for p in tmp_path.glob("test-*.png")) == [f"test-{i:08d}.png" for i in range(1, 4)]
+
+
+def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
+    """A stand-in for ssimulacra2: sleeps, then prints a score. Returned as
+    (executable, "reference", "test") for _run_metric's argument order."""
+    import sys
+
+    script = tmp_path / "tool.py"
+    script.write_text(f"import time\ntime.sleep({seconds})\nprint('score: 42.5')\n", encoding="utf-8")
+    return sys.executable, script, tmp_path / "unused.png"
+
+
+def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
+    """The tools used to run outside the job's pause handle: Pause left them
+    scoring while the app said Paused."""
+    import threading
+
+    from vmaf_app.core.perceptual_cpu import _run_metric
+    from vmaf_app.core.process_control import ProcessHandle
+
+    executable, script, other = _slow_tool(tmp_path, 0.5)
+    handle = ProcessHandle()
+    handle.pause()
+    out = []
+    worker = threading.Thread(target=lambda: out.append(_run_metric(executable, "ssimulacra2", script, other, handle)))
+    worker.start()
+    worker.join(2.0)
+    assert worker.is_alive(), "the tool ran on while the job was paused"
+    handle.resume()
+    worker.join(10.0)
+    assert out == [42.5]
+
+
+def test_cancel_ends_a_cpu_tool_at_once(tmp_path):
+    import threading
+    import time
+
+    from vmaf_app.core.perceptual_cpu import PerceptualCancelled, _run_metric
+    from vmaf_app.core.process_control import ProcessHandle
+
+    executable, script, other = _slow_tool(tmp_path, 30)
+    cancel = threading.Event()
+    threading.Timer(0.3, cancel.set).start()
+    started = time.monotonic()
+    with pytest.raises(PerceptualCancelled):
+        _run_metric(executable, "ssimulacra2", script, other, ProcessHandle(), cancel)
+    assert time.monotonic() - started < 5
+
+
+def test_time_paused_does_not_count_towards_the_tool_timeout(tmp_path, monkeypatch):
+    import threading
+
+    from vmaf_app.core import perceptual_cpu
+    from vmaf_app.core.process_control import ProcessHandle
+
+    monkeypatch.setattr(perceptual_cpu, "_TOOL_TIMEOUT_SECONDS", 1.0)
+    executable, script, other = _slow_tool(tmp_path, 0.3)
+    handle = ProcessHandle()
+    handle.pause()
+    threading.Timer(2.0, handle.resume).start()  # paused for twice the timeout
+    assert perceptual_cpu._run_metric(executable, "ssimulacra2", script, other, handle) == 42.5
+
+    slow, script, other = _slow_tool(tmp_path, 5)
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame"):
+        perceptual_cpu._run_metric(slow, "ssimulacra2", script, other, ProcessHandle())

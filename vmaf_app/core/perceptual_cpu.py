@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -274,13 +275,58 @@ def parse_score(metric: str, output: str) -> float:
         raise PerceptualRunError(f"Could not parse {metric} score.") from exc
 
 
-def _run_metric(executable: str, metric: str, reference: Path, test: Path) -> float:
+#: Longest one tool may run on one frame pair, counting only time the job is
+#: not paused. The bundled tools take 1-2 s for a 4K pair.
+_TOOL_TIMEOUT_SECONDS = 120.0
+
+
+def _run_metric(
+    executable: str, metric: str, reference: Path, test: Path,
+    process_handle: ProcessHandle | None = None,
+    cancel_event: threading.Event | None = None,
+) -> float:
+    """Score one frame pair with a still-image tool.
+
+    The tool process is attached to the job's handle like FFmpeg is, so
+    Pause suspends it and Cancel ends it at once. It used to run outside the
+    handle: pausing a CPU run left the tools scoring while the app said
+    "Paused", and Cancel waited for the frame in progress.
+    """
     try:
-        completed = proc_util.run([executable, str(reference), str(test)], capture_output=True, text=True, timeout=120)
+        process = proc_util.popen(
+            [executable, str(reference), str(test)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
     except OSError as exc:
         raise PerceptualRunError(f"Could not run {metric}: {exc}") from exc
-    combined = (completed.stdout or "") + "\n" + (completed.stderr or "")
-    if completed.returncode != 0:
+    if process_handle is not None:
+        process_handle.attach(process.pid)
+    try:
+        running, last = 0.0, time.monotonic()
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=0.1)
+                break
+            except subprocess.TimeoutExpired:
+                now = time.monotonic()
+                if not (process_handle is not None and process_handle.is_pause_requested):
+                    running += now - last
+                last = now
+                if cancel_event is not None and cancel_event.is_set():
+                    process.kill()
+                    process.communicate()
+                    raise PerceptualCancelled("Cancelled by user") from None
+                if running > _TOOL_TIMEOUT_SECONDS:
+                    process.kill()
+                    process.communicate()
+                    raise PerceptualRunError(
+                        f"{metric} did not finish a frame within {_TOOL_TIMEOUT_SECONDS:.0f} s."
+                    ) from None
+    finally:
+        if process_handle is not None:
+            process_handle.detach(process.pid)
+    combined = (stdout or "") + "\n" + (stderr or "")
+    if process.returncode != 0:
         raise PerceptualRunError(f"{metric} failed for a frame.", combined[-2000:])
     return parse_score(metric, combined)
 
@@ -330,7 +376,9 @@ def run_perceptual_task(
                 raise PerceptualCancelled("Cancelled by user")
             try:
                 for spec in specs:
-                    values[spec.key].append(_run_metric(executables[spec.key], spec.key, reference, test))
+                    values[spec.key].append(_run_metric(
+                        executables[spec.key], spec.key, reference, test, process_handle, cancel_event,
+                    ))
             finally:
                 # The image pair is no longer useful after every selected
                 # still-image tool consumed it. Keep the temporary peak as
