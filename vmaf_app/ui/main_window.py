@@ -71,7 +71,6 @@ from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, s
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
     displayable_metric_specs,
-    supplemental_metric_specs,
 )
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
@@ -2528,9 +2527,12 @@ class MainWindow(QMainWindow):
                     partial(
                         result_cache.clear,
                         self._source_info.path, row_data.identity_path,
+                        # The ticked metrics only. Unticked ones whose saved
+                        # scores are on show are not being recalculated, so
+                        # their scores are not deleted either; passing every
+                        # FFmpeg metric here deleted a shown, unticked PSNR.
                         self._analysis_request(row_data, clone_options(row_data.options)),
                         cache_directory,
-                        supplemental_metric_specs(clone_options(row_data.options)),
                     ),
                 )
             # Refreshes the resize-mismatch note (Info column) back to the

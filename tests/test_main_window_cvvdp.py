@@ -507,3 +507,32 @@ def test_apply_without_saving_and_no_edit_keeps_the_cvvdp_score(qapp, monkeypatc
     assert row_data.completed_run.result.has_metric("cvvdp")
     assert win.cvvdp_preset_combo.currentData() == DEFAULT_PRESET.name
     win.close()
+
+
+def test_recalculating_keeps_the_saved_scores_of_unticked_ffmpeg_metrics(qapp, tmp_path, monkeypatch):
+    """Recalculate cleared every FFmpeg metric whenever a libvmaf one was
+    ticked: a saved PSNR on show but unticked was deleted with VMAF."""
+    from vmaf_app.core.metric_results import FrameMetricResult
+
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source, distorted = tmp_path / "source.mp4", tmp_path / "test.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted.write_bytes(b"d" * 50)
+    win = MainWindow()
+    win._source_info = fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    row_data = win._rows[row]
+    row_data.video_info = fake_video_info(str(distorted))
+    stored = fake_run_result(distorted, source=source)
+    stored.merge_metric_results(MetricResultSet([FrameMetricResult(
+        "psnr", list(range(10)), [i / 30 for i in range(10)], [40.0] * 10,
+        MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1"))]))
+    result_cache.store(source, distorted, stored, "test", win._analysis_request(row_data), tmp_path)
+    assert list(tmp_path.rglob("psnr_*.npz")), f"setup: PSNR not saved; metrics {stored.metric_results.keys()}"
+    row_data.options.set_metric_enabled("psnr", False)
+    win._recompute_rows([row])
+    win._file_writes.wait_until_idle(10)
+    assert list(tmp_path.rglob("psnr_*.npz")), "the unticked PSNR's saved score was deleted"
+    assert not list(tmp_path.rglob("vmaf_*.npz"))
+    win.close()
