@@ -996,10 +996,16 @@ def _run_vship_pass(
                 distorted_slot = distorted_stream.next(cancel_event, abort)
             except _LaneFailedError:
                 raise failures[0] from None
-            if source_slot == _EOF and distorted_slot == _EOF:
+            if source_slot == _EOF or distorted_slot == _EOF:
+                # The shorter input has ended: the comparison is the frames
+                # both have, exactly as libvmaf scores it (framesync with
+                # shortest=1). Refusing here failed any pair a frame or two
+                # apart -- and with it the whole job, VMAF included. The
+                # longer input's reader is stopped when the streams close.
+                for stream, slot in ((source_stream, source_slot), (distorted_stream, distorted_slot)):
+                    if slot != _EOF:
+                        stream.release(slot)
                 break
-            if (source_slot == _EOF) != (distorted_slot == _EOF):
-                raise VshipUnavailableError("The source and test produced different frame counts for Vship.")
             with pending_lock:
                 pending[frame] = [len(specs), source_slot, distorted_slot]
             for spec in specs:

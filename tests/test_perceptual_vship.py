@@ -320,10 +320,16 @@ def test_a_truncated_frame_is_an_error_not_a_short_result(monkeypatch):
         _run(monkeypatch, metrics=("ssimulacra2",), children=children)
 
 
-def test_different_frame_counts_are_reported(monkeypatch):
-    children = {"source": [_frames_command(4, _FRAME_BYTES)], "test": [_frames_command(6, _FRAME_BYTES)]}
-    with pytest.raises(vship.VshipUnavailableError, match="different frame counts"):
-        _run(monkeypatch, metrics=("ssimulacra2",), children=children)
+@pytest.mark.parametrize(("source_frames", "test_frames"), [(4, 6), (6, 4)])
+def test_different_frame_counts_compare_the_frames_both_have(monkeypatch, source_frames, test_frames):
+    """libvmaf compares the overlap of two inputs of different lengths
+    (shortest=1). Vship refused such a pair, which failed the whole job and
+    took VMAF with it; it now scores the frames both inputs have."""
+    children = {"source": [_frames_command(source_frames, _FRAME_BYTES)],
+                "test": [_frames_command(test_frames, _FRAME_BYTES)]}
+    output, _spawned = _run(monkeypatch, metrics=("ssimulacra2",), children=children)
+    assert output.compared_frame_count == 4
+    assert list(output.metrics.get("ssimulacra2").values) == [0.0, 1.0, 2.0, 3.0]
 
 
 def test_cancelling_mid_run_stops_cleanly(monkeypatch):

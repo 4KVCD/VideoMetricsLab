@@ -233,9 +233,15 @@ def _extract_png_pairs(
         raise PerceptualRunError("FFmpeg could not prepare lossless perceptual-metric frames.")
     references = sorted(directory.glob("reference-*.png"))
     tests = sorted(directory.glob("test-*.png"))
-    if not references or not tests or len(references) != len(tests):
-        raise PerceptualRunError("FFmpeg produced unmatched frame pairs for perceptual metrics.")
-    return references, tests
+    # Each output runs to its own input's end, so a pair a frame or two
+    # apart leaves extra images on one side. The comparison is the frames
+    # both have, as libvmaf scores it (framesync with shortest=1).
+    count = min(len(references), len(tests))
+    if count == 0:
+        raise PerceptualRunError("FFmpeg produced no frame pairs for perceptual metrics.")
+    for extra in references[count:] + tests[count:]:
+        extra.unlink(missing_ok=True)
+    return references[:count], tests[:count]
 
 
 def parse_score(metric: str, output: str) -> float:

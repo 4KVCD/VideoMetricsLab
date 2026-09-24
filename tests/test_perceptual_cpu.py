@@ -177,3 +177,35 @@ def test_ui_selects_cpu_metric_without_extending_vmaf_options(tmp_path):
     window._apply_metric_selection([row], COL_SSIMULACRA2, True, set_default=False)
     assert "ssimulacra2" in window._requested_metrics(window._rows[row])
     assert not hasattr(window._rows[row].options, "compute_ssimulacra2")
+
+
+
+def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path, monkeypatch):
+    """Each FFmpeg output runs to its own input's end. Unequal counts were
+    rejected as "unmatched frame pairs" after the whole video had been
+    extracted; the overlap is now scored, as libvmaf does, and the extra
+    images are deleted."""
+    from vmaf_app.core.perceptual_cpu import _extract_png_pairs
+
+    class FinishedProcess:
+        pid = 123
+        returncode = 0
+
+        @staticmethod
+        def poll():
+            return 0
+
+    def fake_popen(args, **_kwargs):
+        for index in range(1, 4):
+            (tmp_path / f"reference-{index:08d}.png").touch()
+        for index in range(1, 6):
+            (tmp_path / f"test-{index:08d}.png").touch()
+        return FinishedProcess()
+
+    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
+    references, tests = _extract_png_pairs(
+        _info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1, tmp_path, None, None,
+    )
+    assert [p.name for p in references] == [f"reference-{i:08d}.png" for i in range(1, 4)]
+    assert [p.name for p in tests] == [f"test-{i:08d}.png" for i in range(1, 4)]
+    assert sorted(p.name for p in tmp_path.glob("test-*.png")) == [f"test-{i:08d}.png" for i in range(1, 4)]
