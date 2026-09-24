@@ -490,3 +490,21 @@ def test_a_gpu_choice_still_finds_a_cpu_fallback_score(tmp_path):
 
     assert load_metric(directory, spec, "gpu").provenance.compute_backend == "cpu"
     assert load_metric(directory, spec, "cpu").provenance.compute_backend == "cpu"
+
+
+
+def test_metrics_on_the_same_frames_share_the_frame_view_despite_rounded_times():
+    """Times are frame / fps, computed from different frame rates by
+    different backends, so the same frames can carry times a rounding error
+    apart. The shared view matched times exactly and so dropped every metric
+    but VMAF from a real cached film (differences up to 3.3e-7 s)."""
+    frames = np.arange(4, dtype=np.int32)
+    vmaf = FrameMetricResult("vmaf", frames, frames / 23.976023976023978, [90, 91, 92, 93], PROVENANCE)
+    psnr = FrameMetricResult("psnr", frames, frames / 23.976023976023978 + 3.3e-7, [40, 41, 42, 43], PROVENANCE)
+    ssimulacra2 = FrameMetricResult("ssimulacra2", frames, frames / 23.976, [70, 71, 72, 73], PROVENANCE)
+
+    frame_view = frame_scores_from_results(MetricResultSet([vmaf, psnr, ssimulacra2]))
+
+    assert frame_view.psnr.tolist() == [40, 41, 42, 43]
+    assert frame_view.values("ssimulacra2").tolist() == [70, 71, 72, 73]
+    np.testing.assert_array_equal(frame_view.time, vmaf.time)

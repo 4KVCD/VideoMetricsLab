@@ -191,12 +191,18 @@ def frame_scores_from_results(results: MetricResultSet):
     # with their own sampling axis stay authoritative in MetricResultSet and
     # are simply omitted from this shared-axis projection. One independent
     # metric must never make otherwise-displayable scores disappear.
+    #
+    # Alignment is by frame number alone, which identifies the frame. Times
+    # are derived -- frame / fps, from the reference's or the test's frame
+    # rate depending on the backend -- and can differ by rounding for the
+    # same frames. Requiring them to be bit-identical dropped every metric
+    # but VMAF from real results: on a cached 151,919-frame film PSNR, SSIM,
+    # XPSNR, SSIMULACRA2 and Butteraugli all had VMAF's frame numbers but
+    # times up to 3.3e-7 s apart, so the CSV export, the "scored frames"
+    # text and Video Compare lost them. The table uses the first metric's
+    # times.
     reference = present[0]
-    aligned = [
-        result for result in present
-        if np.array_equal(reference.frame, result.frame)
-        and np.array_equal(reference.time, result.time)
-    ]
+    aligned = [result for result in present if np.array_equal(reference.frame, result.frame)]
     return FrameScores(reference.frame, reference.time, metrics={
         result.key: result.values for result in aligned
     })
