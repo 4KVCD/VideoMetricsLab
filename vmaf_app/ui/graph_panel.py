@@ -163,10 +163,11 @@ _HOVER_PLACEHOLDER = (
     "your cursor, so dips are easy to land on).\n"
     "Scroll to zoom, drag to pan, double-click to reset."
 )
-#: The same, for a metric where a bigger number is worse (Butteraugli).
+#: The same, for a metric where a bigger number is worse (Butteraugli). Its
+#: axis is inverted, so the worst frames still hang down as dips on screen.
 _HOVER_PLACEHOLDER_LOWER_IS_BETTER = (
-    "Hover to inspect a point (locks onto the highest nearby score at or above "
-    "your cursor, so spikes are easy to land on).\n"
+    "Hover to inspect a point (locks onto the worst nearby score at or below "
+    "your cursor, so dips are easy to land on).\n"
     "Scroll to zoom, drag to pan, double-click to reset."
 )
 
@@ -207,7 +208,13 @@ class _MetricPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.chart = ChartWidget(y_axis_label=metric.axis_label, fixed_y_max=metric.fixed_y_max)
+        # A lower-is-better metric is drawn upside down -- 0 at the top -- so
+        # a better encode sits higher on every tab, and its bad frames hang
+        # down as dips the way VMAF's do.
+        self.chart = ChartWidget(
+            y_axis_label=f"{metric.axis_label} (lower is better)" if _worst_is_high(metric) else metric.axis_label,
+            fixed_y_max=metric.fixed_y_max, invert_y=_worst_is_high(metric),
+        )
         layout.addWidget(self.chart, stretch=1)
 
         self.no_data_label = QLabel(

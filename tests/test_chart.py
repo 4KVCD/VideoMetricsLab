@@ -272,3 +272,42 @@ def test_an_axis_starting_just_below_zero_labels_its_first_tick_0_not_minus_0(qa
     labels = [label for _py, label in chart.value_ticks()]
     assert labels[0] == "0"
     assert not any(label.startswith("-0") for label in labels)
+
+
+def test_an_inverted_axis_puts_the_lowest_value_at_the_top(qapp):
+    """For Butteraugli, where 0 is best: 0 at the top, so a better encode is
+    higher on screen like on every other graph. Drawing, gridlines and the
+    value reported under the pointer all follow the same flip."""
+    upright, inverted = _chart(qapp, fixed_y_max=None), ChartWidget(invert_y=True)
+    inverted.resize(800, 400)
+    for chart in (upright, inverted):
+        chart.set_series(1, _series([0.0, 1.5, 3.0]))
+    rect = inverted.plot_rect()
+    y0, y1 = inverted.y_range()
+
+    pixel = 1.5 * (y1 - y0) / rect.height()  # QRect.bottom() is top + height - 1
+    assert inverted.value_at(rect.top()) == pytest.approx(y0, abs=pixel)
+    assert inverted.value_at(rect.bottom()) == pytest.approx(y1, abs=pixel)
+    assert upright.value_at(rect.top()) == pytest.approx(y1, abs=pixel)
+
+    ticks = inverted.value_ticks()
+    assert ticks[0][1] == "0"
+    rows = [py for py, _label in ticks]
+    assert rows == sorted(rows), "rising values must run down the inverted axis"
+    assert ticks[0][0] < ticks[-1][0]
+
+
+def test_an_inverted_chart_draws_its_best_values_at_the_top(qapp):
+    """Rendered pixels, not just the mapping: a flat 0 series on an inverted
+    axis is drawn near the top of the plot."""
+    chart = ChartWidget(invert_y=True)
+    chart.resize(400, 300)
+    chart.set_series(1, _series([0.0] * 50 + [4.0] * 50, color="#ff0000"))
+    image = chart.render_to_pixmap().toImage()
+    rect = chart.plot_rect()
+    ratio = chart.devicePixelRatioF()
+    x = int((rect.left() + rect.width() // 4) * ratio)
+    red_rows = [y for y in range(image.height()) if image.pixelColor(x, y).red() > 200
+                and image.pixelColor(x, y).green() < 80]
+    assert red_rows, "the series was not drawn"
+    assert max(red_rows) < (rect.top() + rect.height() / 3) * ratio

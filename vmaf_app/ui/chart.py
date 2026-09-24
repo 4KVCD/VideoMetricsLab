@@ -90,10 +90,14 @@ class ChartWidget(QWidget):
     left = Signal()                  # pointer left the plotting area
     view_changed = Signal()          # zoom/pan happened
 
-    def __init__(self, y_axis_label: str = "", fixed_y_max: float | None = None, parent=None):
+    def __init__(self, y_axis_label: str = "", fixed_y_max: float | None = None, parent=None,
+                 invert_y: bool = False):
         super().__init__(parent)
         self.y_axis_label = y_axis_label
         self.fixed_y_max = fixed_y_max
+        # Lowest value at the top, for a metric where lower is better
+        # (Butteraugli: 0 is identical), so "up is better" on every graph.
+        self.invert_y = invert_y
         self._series: dict[int, ChartSeries] = {}
         self._cache: QPixmap | None = None
         self._cursor_x: int | None = None
@@ -190,10 +194,17 @@ class ChartWidget(QWidget):
         frac = (px - rect.left()) / max(1, rect.width())
         return x0 + frac * (x1 - x0)
 
+    def _height_fraction(self, value_fraction):
+        """Where a value sits, as a fraction of the plot's height from the
+        bottom: its fraction of the Y range, flipped when invert_y. The same
+        flip maps a height back to a value, so it serves both directions.
+        Works on floats and numpy arrays alike."""
+        return 1.0 - value_fraction if self.invert_y else value_fraction
+
     def value_at(self, py: int) -> float:
         rect = self.plot_rect()
         y0, y1 = self._y_range
-        frac = (rect.bottom() - py) / max(1, rect.height())
+        frac = self._height_fraction((rect.bottom() - py) / max(1, rect.height()))
         return y0 + frac * (y1 - y0)
 
     def pixel_for_time(self, t: float) -> int:
@@ -215,14 +226,14 @@ class ChartWidget(QWidget):
 
     def value_ticks(self, rect: QRect | None = None) -> list[tuple[int, str]]:
         """The Y-axis gridlines for the current range: (pixel row, label),
-        bottom to top -- the same ones drawn by _draw_axes."""
+        lowest value first -- the same ones drawn by _draw_axes."""
         rect = rect or self.plot_rect()
         y0, y1 = self._y_range
         step = _nice_value_step(y1 - y0)
         value = np.ceil(y0 / step) * step
         ticks = []
         while value <= y1:
-            frac = (value - y0) / max(1e-9, y1 - y0)
+            frac = self._height_fraction((value - y0) / max(1e-9, y1 - y0))
             # "+ 0.0" turns the -0.0 that ceil() gives for a range starting
             # just below zero (Butteraugli's padding) into 0, not "-0".
             ticks.append((rect.bottom() - int(frac * rect.height()), f"{float(value) + 0.0:g}"))
@@ -333,7 +344,7 @@ class ChartWidget(QWidget):
         y_span = max(1e-9, y1 - y0)
 
         def to_py(v: np.ndarray) -> np.ndarray:
-            frac = (v - y0) / y_span
+            frac = self._height_fraction((v - y0) / y_span)
             return rect.bottom() - frac * rect.height()
 
         count = hi - lo

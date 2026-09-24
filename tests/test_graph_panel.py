@@ -1286,7 +1286,7 @@ def test_butteraugli_hover_snaps_to_the_spike_not_the_zeros_beside_it(qapp):
     readout = page.hover_label.text()
     assert re.search(rf"\[{entry.label}\]\s+frame\s+1\s.*Butteraugli=5\.0000", readout), readout
     assert re.search(r"\[b\]\s+frame\s+1\s.*Butteraugli=4\.0000", readout), readout
-    assert "highest nearby score" in page._placeholder
+    assert "worst nearby score" in page._placeholder
 
 
 def test_butteraugli_detail_columns_are_the_high_tail(qapp):
@@ -1303,3 +1303,13 @@ def test_butteraugli_detail_columns_are_the_high_tail(qapp):
     win.tabs.setCurrentIndex(0)  # VMAF keeps its low tail
     headers = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
     assert "10% Low" in headers and "10% High" not in headers
+
+
+def test_butteraugli_is_drawn_with_0_at_the_top(qapp):
+    win = GraphPanel()
+    win.add_run(_butteraugli_result("a.mp4", [0.0, 5.0, 0.0]))
+    page = _butteraugli_page(win)
+    assert page.chart.invert_y
+    assert "lower is better" in page.chart.y_axis_label
+    win.tabs.setCurrentIndex(0)
+    assert not win._pages["vmaf"].chart.invert_y
