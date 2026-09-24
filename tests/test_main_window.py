@@ -90,7 +90,7 @@ def qapp():
 def test_main_window_title_includes_release_version(qapp):
     win = MainWindow()
     try:
-        assert win.windowTitle() == "VideoMetricsLab 1.1.1"
+        assert win.windowTitle() == "VideoMetricsLab 1.2"
     finally:
         win.close()
 
