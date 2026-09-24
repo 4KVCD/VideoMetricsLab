@@ -499,3 +499,29 @@ def test_interleaved_chroma_is_split_into_the_u_and_v_planes(monkeypatch, pix_fm
     command = spawned["source"][0]
     assert command[command.index("-pix_fmt") + 1] == piped
     assert command[command.index("-vf") + 1].endswith(f"format={piped}")
+
+
+def test_a_scoring_failure_on_the_first_frames_ends_the_run(monkeypatch):
+    """A lane that fails keeps the pinned slots of the frames it was given.
+    When every lane failed on its first frames the ring filled with slots
+    nobody would release: both readers waited for a free slot and the
+    dispatcher waited for a frame from them, so the job hung on
+    "calculating" instead of failing over to the CPU."""
+    def inspect(_index, *_planes):
+        raise RuntimeError("simulated GPU fault")
+
+    outcome: list[BaseException] = []
+
+    def run():
+        try:
+            _run(monkeypatch, inspect=inspect,
+                 children=_both(_frames_command(vship._RING_SLOTS * 4, _FRAME_BYTES)))
+        except BaseException as error:  # the error is the result
+            outcome.append(error)
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    runner.join(timeout=20)
+    assert not runner.is_alive(), "the run deadlocked after its scoring lanes failed"
+    assert isinstance(outcome[0], vship.VshipUnavailableError)
+    assert "simulated GPU fault" in str(outcome[0])

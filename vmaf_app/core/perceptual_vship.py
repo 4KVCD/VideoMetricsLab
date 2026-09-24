@@ -495,6 +495,10 @@ def _read_exact(reader, view: memoryview) -> int:
     return offset
 
 
+class _LaneFailedError(Exception):
+    """A scoring lane stopped; its error is in the pass's failure list."""
+
+
 class _FrameStream:
     """One input's FFmpeg decode, feeding a ring of pinned frame buffers.
 
@@ -620,11 +624,20 @@ class _FrameStream:
             v[:] = pairs[:, 1]
         return received + chroma
 
-    def next(self, cancel_event: threading.Event | None) -> int:
-        """The next filled slot, or _EOF. Raises the reader's error or on cancel."""
+    def next(self, cancel_event: threading.Event | None, abort: threading.Event | None = None) -> int:
+        """The next filled slot, or _EOF. Raises the reader's error, on
+        cancel, or with _LaneFailedError once `abort` is set.
+
+        A lane that fails keeps the slots of the frames it was handed, so
+        after a failure the ring can fill with slots nobody will release: the
+        reader then waits for a free slot and no frame ever comes. Waiting on
+        `abort` as well is what lets the pass end with the lane's error.
+        """
         while True:
             if cancel_event is not None and cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")
+            if abort is not None and abort.is_set():
+                raise _LaneFailedError
             try:
                 item = self._filled.get(timeout=0.1)
             except queue.Empty:
@@ -978,8 +991,11 @@ def _run_vship_pass(
         while True:
             if failures:
                 raise failures[0]
-            source_slot = source_stream.next(cancel_event)
-            distorted_slot = distorted_stream.next(cancel_event)
+            try:
+                source_slot = source_stream.next(cancel_event, abort)
+                distorted_slot = distorted_stream.next(cancel_event, abort)
+            except _LaneFailedError:
+                raise failures[0] from None
             if source_slot == _EOF and distorted_slot == _EOF:
                 break
             if (source_slot == _EOF) != (distorted_slot == _EOF):
