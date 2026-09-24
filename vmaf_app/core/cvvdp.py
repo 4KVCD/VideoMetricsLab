@@ -149,6 +149,10 @@ def write_vship_config(display: CvvdpDisplay, path: Path) -> Path:
 
 @dataclass(frozen=True, slots=True)
 class CvvdpPreset:
+    """A named display. Only `settings.display` is the preset: whether the
+    video is scaled to fill the display is each video's own setting, which
+    choosing or saving a preset leaves alone."""
+
     name: str
     settings: CvvdpSettings
     builtin: bool = False
@@ -209,10 +213,10 @@ def preset_named(name: str, user_presets: list[dict]) -> CvvdpPreset | None:
 
 
 def matching_preset(settings: CvvdpSettings, user_presets: list[dict]) -> CvvdpPreset | None:
-    """The preset these settings are, if any -- user presets first, since a
+    """The preset whose display these settings use, if any -- user presets first, since a
     user preset saved from a built-in should show under the user's name."""
     for preset in reversed(presets(user_presets)):
-        if preset.settings.same_as(settings):
+        if preset.settings.display.identity() == settings.display.identity():
             return preset
     return None
 
@@ -225,7 +229,9 @@ def default_settings(user_presets: list[dict], default_name: str) -> CvvdpSettin
     """The settings a newly added video starts with: the preset chosen in
     Settings, or the built-in default if that preset is gone or unset."""
     preset = preset_named(default_name, user_presets) if default_name else None
-    return (preset or DEFAULT_PRESET).settings
+    # A preset is a display; scaling to fill it is each video's own choice
+    # and starts off, the official default.
+    return CvvdpSettings((preset or DEFAULT_PRESET).settings.display)
 
 
 def with_user_preset(user_presets: list[dict], name: str, settings: CvvdpSettings) -> list[dict]:
@@ -238,7 +244,7 @@ def with_user_preset(user_presets: list[dict], name: str, settings: CvvdpSetting
         raise ValueError(f"\"{name}\" is a built-in preset; choose another name.")
     settings.display.validated()
     kept = [data for data in user_presets if data.get("name") != name]
-    return [*kept, {"name": name, "settings": settings.to_dict()}]
+    return [*kept, {"name": name, "settings": CvvdpSettings(settings.display).to_dict()}]
 
 
 def without_user_preset(user_presets: list[dict], name: str) -> list[dict]:

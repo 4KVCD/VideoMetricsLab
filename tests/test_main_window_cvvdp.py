@@ -139,7 +139,8 @@ def test_the_resize_box_and_apply_without_saving_change_the_selected_rows(qapp, 
     _select(win, row)
     win.cvvdp_resize_check.setChecked(True)
     assert row_data.cvvdp.resize_to_display
-    assert win.cvvdp_preset_combo.currentData() is None  # no preset has resize on: "Custom"
+    # Scaling is the video's own setting, not part of the preset.
+    assert win.cvvdp_preset_combo.currentData() == DEFAULT_PRESET.name
 
     _dialog_answers(monkeypatch, "apply", ambient_lux=15.0)
     win._on_cvvdp_edit_display()
@@ -567,3 +568,26 @@ def test_recalculating_keeps_unticked_saved_scores_on_show(qapp):
     assert not row_data.completed_run.result.frames.has("vmaf")
     win._file_writes.wait_until_idle(10)
     win.close()
+
+
+def test_choosing_a_preset_leaves_scale_to_fill_alone_and_saving_one_does_not_store_it(qapp, monkeypatch):
+    """Presets used to carry "Scale the video to fill the display": choosing
+    a built-in switched it off without a word, and "Add preset..." saved the
+    selected video's setting invisibly -- then turned it on for every new
+    video once that preset became the default."""
+    win, row, row_data = _window_with_row()
+    _select(win, row)
+    win.cvvdp_resize_check.setChecked(True)
+    tv = BUILTIN_PRESETS[4]
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(tv.name))
+    assert row_data.cvvdp.display == tv.settings.display and row_data.cvvdp.resize_to_display
+    assert win.cvvdp_resize_check.isChecked()
+
+    _dialog_answers(monkeypatch, "save_new", name="Scaled TV", peak=900)
+    win._on_cvvdp_add_preset()
+    assert win._settings.cvvdp_presets[0]["settings"]["resize_to_display"] is False
+    new_row = win._add_table_row(Path("next.mp4"))
+    assert win._rows[new_row].cvvdp.display.peak_luminance == 900
+    assert not win._rows[new_row].cvvdp.resize_to_display
+    win.close()
+

@@ -1349,7 +1349,8 @@ class MainWindow(QMainWindow):
         self.cvvdp_resize_check.setToolTip(
             "Off (the official default): the video is shown pixel for pixel, so a 1080p "
             "video covers a quarter of a 4K display. On: it is scaled, keeping its shape, "
-            "to fill the display."
+            "to fill the display.\n\nSet per video: choosing or saving a display preset "
+            "does not change it."
         )
         self.cvvdp_resize_check.toggled.connect(self._on_cvvdp_resize_toggled)
         metric_options_form.addRow("", self.cvvdp_resize_check)
@@ -3247,7 +3248,10 @@ class MainWindow(QMainWindow):
         name = self.cvvdp_preset_combo.itemData(index)
         preset = preset_named(name, self._settings.cvvdp_presets) if name else None
         if preset is not None:
-            self._apply_cvvdp(lambda _old: preset.settings)
+            # The display only: "Scale the video to fill the display" is
+            # the video's own setting, and choosing a built-in preset used to
+            # switch it off without a word.
+            self._apply_cvvdp(lambda old: replace(old, display=preset.settings.display))
 
     def _on_cvvdp_resize_toggled(self, checked: bool) -> None:
         self._apply_cvvdp(lambda old: replace(old, resize_to_display=checked))
@@ -3294,7 +3298,7 @@ class MainWindow(QMainWindow):
         selected rows. A new preset becomes the default for new videos; a
         renamed default stays the default under its new name."""
         name = dialog.preset_name()
-        saved = replace(settings, display=dialog.display())
+        saved = CvvdpSettings(dialog.display())  # a preset is a display, not the resize choice
         presets = self._settings.cvvdp_presets
         if replacing is not None:
             presets = without_user_preset(presets, replacing)
