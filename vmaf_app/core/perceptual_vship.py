@@ -908,7 +908,9 @@ def _compute_metric(
 # filters keep their history), so resetting it at each second gives a JOD
 # per second, and inverting each second's JOD back to its sum rebuilds the
 # score of the whole video. On 2 s of the Beekeeper 4K AV1 encode the
-# rebuilt score matched an unreset handler's to 6e-7 JOD. The constants are
+# rebuilt score matched an unreset handler's to 6e-7 JOD; on 49 and 73
+# frames at 23.976 fps, which end in a one-frame second, to 2e-7 and 3e-7
+# (pooling that frame like any other would be off by 0.01). The constants are
 # Vship's (and ColorVideoVDP's) jod_a, jod_exp and image_int.
 _JOD_A = 0.0439569391310215
 _JOD_EXP = 0.9302042722702026

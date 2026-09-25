@@ -673,6 +673,16 @@ def test_pooling_one_window_gives_back_its_own_jod():
         assert vship.pool_cvvdp_windows([(0, 24, jod)]) == pytest.approx(jod, abs=1e-9)
 
 
+
+def test_pooling_a_final_one_frame_second_matches_vship():
+    """Measured with the real Vship 5.1.1 on the first 49 frames (23.976 fps)
+    of the Beekeeper AV1 encode: one handler never reset gave 9.9112921; the
+    per-second JODs below (rounded to 3 decimals) are what the reset handler
+    gave. Vship reports a single frame as JOD(q * IMAGE_INT), so the last
+    second must be pooled differently -- pooled like the others it gives 9.921."""
+    windows = [(0, 24, 10.0), (24, 24, 9.898), (48, 1, 9.802)]
+    assert vship.pool_cvvdp_windows(windows) == pytest.approx(9.9112921, abs=5e-4)
+
 def test_subsampled_ssimulacra2_and_cvvdp_get_a_pass_each(monkeypatch):
     request = analysis_request_from_vmaf_options(
         VmafOptions(crop_mode=CropMode.NONE, n_subsample=3), ("ssimulacra2", "cvvdp"))
