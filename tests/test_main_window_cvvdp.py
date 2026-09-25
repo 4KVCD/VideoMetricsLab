@@ -699,3 +699,22 @@ def test_a_test_both_companion_row_copies_the_metric_choices(qapp):
     assert "butteraugli" not in original.extra_metric_keys  # copies, not shared
     win.close()
 
+
+def test_changing_the_display_keeps_the_graph_series_colour_and_visibility(qapp):
+    win, row, row_data = _window_with_row(cvvdp_score=9.5)
+    graph = win.graph_panel
+    graph.add_run(row_data.completed_run.result, "test", identity=row_data.completed_run.graph_identity)
+    (series_id, entry), = graph._entries.items()
+    colour = entry.color
+    graph.set_series_visible(series_id, False)
+    _select(win, row)
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(BUILTIN_PRESETS[2].name))
+    (series_id_after, entry_after), = graph._entries.items()
+    assert series_id_after == series_id and entry_after.color == colour and not entry_after.visible
+    assert not entry_after.result.has_metric("cvvdp")
+
+    graph.remove_run(series_id)  # removed with the x: stays removed
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(DEFAULT_PRESET.name))
+    assert graph._entries == {}
+    win.close()
+

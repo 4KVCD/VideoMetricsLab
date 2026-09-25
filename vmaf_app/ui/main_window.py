@@ -3281,16 +3281,20 @@ class MainWindow(QMainWindow):
             value for key in run.result.metric_results
             if key not in keys and (value := run.result.metric_results.get(key)) is not None
         )
-        if not self.graph_panel.remove_by_identity(run.graph_identity):
-            self.graph_panel.remove_by_path(row_data.path)
         row_data.analysis_status = ""
         if kept:
             result = copy.copy(run.result)
             result.metric_results = kept
             result.frames = frame_scores_from_results(kept)
             row_data.completed_run = CompletedRun(result, run.label)
-            self.graph_panel.add_run(result, run.label, identity=row_data.completed_run.graph_identity)
+            # The same graph series, updated in place: re-adding it under a
+            # new identity gave it a new colour and brought it back even if
+            # it had been hidden or removed from the graph.
+            row_data.completed_run.graph_identity = run.graph_identity
+            self.graph_panel.add_run(result, run.label, identity=run.graph_identity, restore=False)
         else:
+            if not self.graph_panel.remove_by_identity(run.graph_identity):
+                self.graph_panel.remove_by_path(row_data.path)
             row_data.completed_run = None
             row_data.status_detail = ""
         self._set_row_metrics(row)
