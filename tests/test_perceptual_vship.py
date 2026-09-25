@@ -933,3 +933,41 @@ def test_when_every_gpu_pass_fails_cvvdp_keeps_its_own_reason(monkeypatch, long_
         assert output.failures["cvvdp"] == "CVVDP could not be calculated: This Vship (4.0.2) has no CVVDP."
         assert output.metrics.has("ssimulacra2")
 
+
+def _gpu_failed_ssimulacra2(monkeypatch, cpu):
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    cvvdp = vship.SequenceMetricResult("cvvdp", 9.4, MetricProvenance("t", "1", "gpu", "t"))
+
+    def gpu(*_a, on_progress=None, **_k):
+        for done in (5, 50, 100):
+            if on_progress is not None:
+                on_progress(done, 100, 10.0)
+        return PerceptualTaskOutput(MetricResultSet([cvvdp]), None, None, 100,
+                                    {"ssimulacra2": "Vship SSIMULACRA2 failed: out of memory"})
+
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", gpu)
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", cpu)
+    return request
+
+
+def test_a_cpu_retry_after_a_gpu_failure_is_announced_and_its_progress_runs_0_to_100(monkeypatch):
+    """The retry was mapped onto the second half of a progress bar the GPU
+    had already filled: 100% fell back to 55%."""
+    def cpu(*_a, on_progress=None, **_k):
+        for done in (10, 60, 100):
+            on_progress(done, 100, 2.0)
+        output = _single_metric_output("ssimulacra2", 80.0, "cpu")
+        return PerceptualTaskOutput(output.metrics, None, None, 100)
+
+    request = _gpu_failed_ssimulacra2(monkeypatch, cpu)
+    progress, statuses = [], []
+    output = vship.apply_vship_cpu_fallback(
+        _info("s.mkv"), _info("t.mkv"), request, request.metrics,
+        on_progress=lambda cur, total, fps: progress.append(round(100 * cur / total)),
+        on_status=statuses.append)
+    assert progress == [5, 50, 100, 10, 60, 100]
+    assert "SSIMULACRA2 failed on the GPU; calculating it on the CPU" in statuses[-1]
+    assert output.metrics.has("ssimulacra2") and output.failures == {}

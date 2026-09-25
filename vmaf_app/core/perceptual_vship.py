@@ -1550,6 +1550,7 @@ def apply_vship_cpu_fallback(
     # on the CPU on the same terms as a failed pass: only for videos up to
     # ten minutes, which nobody has to agree to.
     failures = dict(gpu_output.failures)
+    planned_cpu = bool(cpu_specs)
     gpu_failed = tuple(spec for spec in gpu_specs if spec.key in failures and spec.key not in GPU_ONLY_METRICS)
     if gpu_failed and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
         for spec in gpu_failed:
@@ -1566,11 +1567,22 @@ def apply_vship_cpu_fallback(
         return replace(gpu_output, failures=failures) if failures != gpu_output.failures else gpu_output
 
     if on_status:
-        on_status("Calculating selected perceptual metric(s) on CPU…")
+        if gpu_failed:
+            labels = " and ".join(metric_definition(spec.key).label for spec in gpu_failed)
+            on_status(f"{labels} failed on the GPU; calculating it on the CPU…")
+        else:
+            on_status("Calculating selected perceptual metric(s) on CPU…")
 
     def report_cpu_progress(cur: int, total: int, fps: float) -> None:
-        if on_progress:
-            on_progress(total + cur, total * 2, fps)
+        if not on_progress:
+            return
+        if planned_cpu:
+            on_progress(total + cur, total * 2, fps)  # the second half, after the GPU's
+        else:
+            # An unplanned retry after the GPU had already reported 100%:
+            # a stage of its own, announced above. Mapped onto the second
+            # half, progress jumped from 100% back to 55%.
+            on_progress(cur, total, fps)
 
     # The GPU pass has finished: a CPU failure from here on fails only the
     # CPU metrics. It used to raise out of here and throw away what the GPU
