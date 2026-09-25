@@ -281,10 +281,20 @@ def export_csv(result: ComparisonResult, path: Path) -> None:
     scores every n-th frame), so rows are every frame any metric scored,
     and a metric with no score for a frame leaves its cell blank. A genuine
     0.0 is written as 0.0, never blank.
+
+    A result with a CVVDP score gets two more columns at the end:
+    cvvdp_second_jod, the JOD of the second starting at that row's frame,
+    and cvvdp_video_jod, the whole video's JOD (not the mean of the
+    seconds), on the same rows. Rows for those seconds' first frames are
+    included, so a CVVDP-only result exports one row per second rather than
+    only a header. Results without CVVDP export exactly as before.
     """
     metrics = _portable_metric_results(result)
     columns = [(metric.key, metrics.frame(metric.key)) for metric in FRAME_METRICS]
     present = [frame for _key, frame in columns if frame is not None and len(frame.frame)]
+    cvvdp = metrics.sequence("cvvdp")
+    if cvvdp is not None and cvvdp.has_timeline:
+        present.append(cvvdp)
     frames = (np.unique(np.concatenate([frame.frame for frame in present]))
               if present else np.empty(0, dtype=np.int64))
     times = np.full(len(frames), np.nan)
@@ -296,12 +306,23 @@ def export_csv(result: ComparisonResult, path: Path) -> None:
             column[at] = frame.values
             times[at] = np.where(np.isnan(times[at]), frame.time, times[at])
         values[key] = column
+    names = [key for key, _frame in columns]
+    if cvvdp is not None:
+        second = np.full(len(frames), np.nan)
+        video = np.full(len(frames), np.nan)
+        if cvvdp.has_timeline:
+            at = np.searchsorted(frames, cvvdp.frame)
+            second[at] = cvvdp.values
+            video[at] = cvvdp.score
+            times[at] = np.where(np.isnan(times[at]), cvvdp.time, times[at])
+        values["cvvdp_second_jod"], values["cvvdp_video_jod"] = second, video
+        names += ["cvvdp_second_jod", "cvvdp_video_jod"]
 
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["frame", "time_s", *(key for key, _frame in columns)])
+        writer.writerow(["frame", "time_s", *names])
         for row, frame_number in enumerate(frames):
             writer.writerow([
                 int(frame_number), f"{times[row]:.6f}",
-                *("" if np.isnan(values[key][row]) else float(values[key][row]) for key, _frame in columns),
+                *("" if np.isnan(values[key][row]) else float(values[key][row]) for key in names),
             ])

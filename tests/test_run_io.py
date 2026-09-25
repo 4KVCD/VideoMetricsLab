@@ -344,3 +344,36 @@ def test_csv_export_of_a_perceptual_only_result_has_its_values(tmp_path):
     rows = [line.split(",") for line in out_path.read_text(encoding="utf-8").splitlines()]
     assert [row[rows[0].index("ssimulacra2")] for row in rows[1:]] == ["80.0", "81.0", "82.0"]
     assert rows[1][2:7] == ["", "", "", "", ""]  # no FFmpeg metrics in this result
+
+
+def test_csv_export_writes_cvvdp_per_second_and_for_the_whole_video(tmp_path):
+    """CSV export had no CVVDP at all: a CVVDP-only video exported a file
+    with just a header, and still reported "Export complete"."""
+    from vmaf_app.core.metric_results import MetricProvenance, MetricResultSet, SequenceMetricResult
+    from vmaf_app.core.models import FrameScores
+
+    cvvdp = SequenceMetricResult(
+        "cvvdp", 9.61, MetricProvenance("Vship/cvvdp", "5", "gpu", "cvvdp-vship-gpu-v1"),
+        frame=[0, 24, 48], time=[0.0, 1.001, 2.002], values=[10.0, 9.5, 9.25],
+    )
+    result = _sample_result()
+    result.merge_metric_results(MetricResultSet([cvvdp]))
+    out_path = tmp_path / "with_vmaf.csv"
+    export_csv(result, out_path)
+    rows = [line.split(",") for line in out_path.read_text(encoding="utf-8").splitlines()]
+    assert rows[0][-2:] == ["cvvdp_second_jod", "cvvdp_video_jod"]
+    second, video = rows[0].index("cvvdp_second_jod"), rows[0].index("cvvdp_video_jod")
+    by_frame = {row[0]: row for row in rows[1:]}
+    assert (by_frame["24"][second], by_frame["24"][video]) == ("9.5", "9.61")
+    assert by_frame["1"][second] == "" and by_frame["1"][video] == ""
+    assert len(rows) == 1 + len(result.frames)  # its seconds start on frames the table has
+
+    alone = _sample_result()
+    alone.frames = FrameScores.empty()
+    alone.metric_results = MetricResultSet([cvvdp])
+    export_csv(alone, tmp_path / "cvvdp_only.csv")
+    rows = [line.split(",") for line in (tmp_path / "cvvdp_only.csv").read_text(encoding="utf-8").splitlines()]
+    assert [row[0] for row in rows[1:]] == ["0", "24", "48"]
+    assert [row[1] for row in rows[1:]] == ["0.000000", "1.001000", "2.002000"]
+    assert [row[-2] for row in rows[1:]] == ["10.0", "9.5", "9.25"]
+
