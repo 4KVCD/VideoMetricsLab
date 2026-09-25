@@ -677,3 +677,25 @@ def test_the_header_ticks_show_the_settings_defaults_for_cvvdp(qapp):
     assert not win.metric_header.is_checked(main_window_module.COL_BUTTERAUGLI)
     win.close()
 
+
+def test_a_test_both_companion_row_copies_the_metric_choices(qapp):
+    from vmaf_app.core.models import VideoInfo
+
+    win = MainWindow()
+    win._source_info = fake_video_info("source.mp4")
+    row = win._add_table_row(Path("test.mp4"))
+    original = win._rows[row]
+    original.video_info = VideoInfo(Path("test.mp4"), 1280, 720, 30.0, 5.0, 150, "h264")
+    original.extra_metric_keys = {"ssimulacra2", "cvvdp"}
+    original.metric_backends["ssimulacra2"] = "cpu"
+    original.cvvdp = BUILTIN_PRESETS[1].settings
+    win._add_opposite_scale_direction_rows([row])
+    companion = win._rows[-1]
+    assert companion.scale_direction_pinned
+    assert companion.extra_metric_keys == {"ssimulacra2", "cvvdp"}
+    assert companion.metric_backends["ssimulacra2"] == "cpu"
+    assert companion.cvvdp == BUILTIN_PRESETS[1].settings
+    companion.extra_metric_keys.add("butteraugli")
+    assert "butteraugli" not in original.extra_metric_keys  # copies, not shared
+    win.close()
+

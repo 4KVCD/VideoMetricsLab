@@ -2609,6 +2609,13 @@ class MainWindow(QMainWindow):
             new_row_data = self._rows[new_row]
             new_row_data.options = clone_options(row_data.options)
             new_row_data.options.scale_direction = opposite
+            # The same comparison in the other direction: the same metric
+            # ticks, GPU/CPU choices and CVVDP display. It used to take the
+            # defaults for the ticks and choices, so a video set to CPU
+            # SSIMULACRA2 with CVVDP ticked got a companion without CVVDP
+            # and with SSIMULACRA2 on the GPU.
+            new_row_data.extra_metric_keys = set(row_data.extra_metric_keys)
+            new_row_data.metric_backends = dict(row_data.metric_backends)
             new_row_data.cvvdp = row_data.cvvdp
             new_row_data.scale_direction_pinned = True
             # The companion decodes the SAME file as the row it came from;
