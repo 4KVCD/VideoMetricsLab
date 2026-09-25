@@ -51,13 +51,15 @@ class Settings:
     default_compute_ssim: bool = True
     default_compute_xpsnr: bool = True
     default_compute_vmaf: bool = True
-    default_compute_vmaf_neg: bool = False
-    # The perceptual metrics start off: each is its own pass over both
-    # videos (Vship on the GPU, far slower on the CPU), not a feature of the
-    # shared libvmaf decode above.
-    default_compute_ssimulacra2: bool = False
-    default_compute_butteraugli: bool = False
-    default_compute_cvvdp: bool = False
+    default_compute_vmaf_neg: bool = True
+    # Every metric starts ticked (Brian, 2026-09-25): the table is for
+    # comparing encodes on all of them. The perceptual metrics are passes
+    # of their own (Vship on the GPU; SSIMULACRA2/Butteraugli far slower on
+    # the CPU, where long videos ask first), and CVVDP shows n/a without a
+    # supported GPU. Saved settings keep what the user chose.
+    default_compute_ssimulacra2: bool = True
+    default_compute_butteraugli: bool = True
+    default_compute_cvvdp: bool = True
     # "gpu" (Vship, falling back to the CPU tools without a supported GPU)
     # or "cpu" (libjxl's tools). Set from the Options panel's GPU/CPU
     # choice, which is also what a newly added video starts with.

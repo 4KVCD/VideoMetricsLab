@@ -718,3 +718,20 @@ def test_changing_the_display_keeps_the_graph_series_colour_and_visibility(qapp)
     assert graph._entries == {}
     win.close()
 
+
+def test_a_fresh_install_ticks_every_metric(qapp):
+    """Every metric starts ticked, for new videos and in the column headers
+    (the suite's settings file pins the older four-metric default)."""
+    from vmaf_app.core.metrics import METRICS
+
+    Settings.path().unlink()
+    fresh = Settings()
+    assert all(getattr(fresh, f"default_compute_{metric.key}") for metric in METRICS)
+    win = MainWindow()
+    win._source_info = fake_video_info("source.mp4")
+    row = win._add_table_row(Path("test.mp4"))
+    assert set(win._selected_metrics(win._rows[row])) == {metric.key for metric in METRICS}
+    for item in main_window_module._METRIC_COLUMNS:
+        assert win.metric_header.is_checked(item.column), item.key
+    win.close()
+

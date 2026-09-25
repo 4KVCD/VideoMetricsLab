@@ -202,12 +202,12 @@ def test_mismatched_timeline_lengths_are_refused():
 def test_settings_file_keeps_cvvdp_presets_and_default(tmp_path, monkeypatch):
     monkeypatch.setattr("vmaf_app.core.settings.settings_file", lambda: tmp_path / "settings.json")
     settings = Settings()
-    assert settings.default_compute_cvvdp is False and settings.cvvdp_default_preset == ""
+    assert settings.default_compute_cvvdp is True and settings.cvvdp_default_preset == ""
     settings.cvvdp_presets = with_user_preset([], "Mine", DEFAULT_PRESET.settings)
     settings.cvvdp_default_preset = "Mine"
-    settings.default_compute_cvvdp = True
+    settings.default_compute_cvvdp = False
     assert settings.save() is None
     loaded = Settings.load()
     assert asdict(loaded)["cvvdp_presets"] == settings.cvvdp_presets
     assert default_settings(loaded.cvvdp_presets, loaded.cvvdp_default_preset) == DEFAULT_PRESET.settings
-    assert loaded.default_compute_cvvdp is True
+    assert loaded.default_compute_cvvdp is False  # what was saved, not the default

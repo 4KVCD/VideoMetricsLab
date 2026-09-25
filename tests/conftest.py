@@ -47,10 +47,18 @@ def isolate_user_state(tmp_path, monkeypatch):
     #
     # parallel_jobs is pinned because its default depends on the core count
     # of the machine running the suite (see default_parallel_jobs).
+    #
+    # The metric ticks are pinned to VMAF, PSNR, SSIM and XPSNR, which most
+    # window tests were written around. The shipped defaults tick every
+    # metric; test_a_fresh_install_ticks_every_metric covers those.
     settings_file.write_text(
         json.dumps({
             "cache_dir": str(cache),
             "parallel_jobs": 1,
+            "default_compute_vmaf_neg": False,
+            "default_compute_ssimulacra2": False,
+            "default_compute_butteraugli": False,
+            "default_compute_cvvdp": False,
         }),
         encoding="utf-8",
     )
