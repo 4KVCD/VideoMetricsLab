@@ -740,3 +740,28 @@ def test_a_fresh_install_ticks_every_metric(qapp):
         assert win.metric_header.is_checked(item.column), item.key
     win.close()
 
+
+def test_a_lookup_whose_thread_ended_but_whose_answers_are_queued_is_still_asked_again(qapp, monkeypatch):
+    """The thread can exit while its answers still wait in the UI thread's
+    queue; an edit then discarded them without asking again."""
+    class _Exited(_PendingLookup):
+        def isRunning(self):
+            return False
+
+    _PendingLookup.started = []
+    monkeypatch.setattr(main_window_module, "ProbeWorker", _Exited)
+    win = MainWindow()
+    win._source_info = fake_video_info("source.mp4")
+    paths = [Path(f"{name}.mp4") for name in "abc"]
+    for path in paths:
+        win._add_table_row(path)
+    win._start_cache_lookup(paths)
+    win._start_cache_lookup([paths[2]])
+    assert _PendingLookup.started[-1].paths == paths
+    # Once its finished signal has been handled, nothing is pending.
+    win._on_cache_lookup_finished(win._cache_generation, win._cache_worker)
+    win._start_cache_lookup([paths[0]])
+    assert _PendingLookup.started[-1].paths == [paths[0]]
+    win._probe_workers.clear()
+    win.close()
+

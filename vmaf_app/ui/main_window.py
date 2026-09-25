@@ -2339,13 +2339,22 @@ class MainWindow(QMainWindow):
 
     def _cancel_cache_lookup(self) -> list[Path]:
         """Stops the running cache lookup, if any; returns the rows it was
-        asked about, whose answers will now be ignored."""
-        if self._cache_worker is None or not self._cache_worker.isRunning():
+        asked about, whose answers will now be ignored.
+
+        "Running" lasts until its finished_all signal has been handled
+        (_on_cache_lookup_finished clears _cache_worker), not until its
+        thread exits: answers it already sent can still be queued for this
+        thread, and bumping the generation discards them. Checking only
+        isRunning() lost those rows' saved scores when a row was edited in
+        that window."""
+        if self._cache_worker is None:
             return []
-        # Keep the old QThread alive until it exits. Replacing the only
-        # reference could destroy a still-running worker and crash Qt.
+        # The thread stays referenced in _probe_workers until it exits;
+        # dropping the only reference could destroy a running QThread.
         self._cache_worker.cancel()
-        return list(self._cache_lookup_paths)
+        interrupted = list(self._cache_lookup_paths)
+        self._cache_worker, self._cache_lookup_paths = None, []
+        return interrupted
 
     def _on_cache_lookup_finished(self, generation: int, worker: ProbeWorker) -> None:
         if worker is self._cache_worker:
