@@ -573,7 +573,18 @@ class _FrameStream:
         process_handle: ProcessHandle | None, label: str,
         interleaved_chroma: tuple[int, int, type[np.integer]] | None = None,
     ) -> None:
-        self.buffers = [_PinnedBuffer(lib, frame_bytes) for _ in range(_RING_SLOTS)]
+        # Allocated one by one so a failure part-way frees what was already
+        # allocated: a list comprehension left those buffers -- page-locked
+        # RAM, 25 MB each for 4K 10-bit -- allocated for the rest of the
+        # session, once per failed attempt.
+        self.buffers: list[_PinnedBuffer] = []
+        try:
+            for _ in range(_RING_SLOTS):
+                self.buffers.append(_PinnedBuffer(lib, frame_bytes))
+        except BaseException:
+            for buffer in self.buffers:
+                buffer.close()
+            raise
         self.views = [memoryview(buffer.array).cast("B") for buffer in self.buffers]
         # (luma bytes, bytes of one chroma plane, sample type) when FFmpeg
         # pipes NV12/P010: the luma goes straight into the slot, the U/V pairs
@@ -716,7 +727,8 @@ class _FrameStream:
         if process is not None and process.poll() is None:
             with contextlib.suppress(OSError):
                 proc_util.terminate(process)
-        self._thread.join(timeout=10)
+        if self._thread.ident is not None:  # never started: nothing to wait for
+            self._thread.join(timeout=10)
         # Pinned memory is freed only once the reader cannot be writing to it.
         if not self._thread.is_alive():
             for buffer in self.buffers:
@@ -1267,12 +1279,13 @@ def _run_vship_pass(
             return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format),
                                 process_handle, label, split)
 
-        streams = [
-            stream(source, source_crop, src_size, src_hwaccel, src_format, src_passthrough,
-                   src_frame_bytes, src_plane_sizes, "reference"),
-            stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format, dist_passthrough,
-                   dist_frame_bytes, dist_plane_sizes, "test video"),
-        ]
+        # Appended one at a time: if the test video's buffers cannot be
+        # allocated, the reference's stream is already in `streams`, so the
+        # finally block below frees it. Built as one list, it leaked.
+        streams.append(stream(source, source_crop, src_size, src_hwaccel, src_format, src_passthrough,
+                              src_frame_bytes, src_plane_sizes, "reference"))
+        streams.append(stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format,
+                              dist_passthrough, dist_frame_bytes, dist_plane_sizes, "test video"))
         for stream in streams:
             stream.start()
         source_stream, distorted_stream = streams

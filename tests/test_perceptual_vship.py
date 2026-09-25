@@ -984,3 +984,29 @@ def test_a_cpu_retry_that_fails_too_keeps_the_gpu_reason(monkeypatch):
         "GPU scoring failed (Vship SSIMULACRA2 failed: out of memory); "
         "the CPU retry failed too: ssimulacra2 is not installed.")
 
+
+def test_pinned_memory_is_freed_when_allocation_fails_part_way(monkeypatch):
+    """A failed allocation left the buffers already allocated -- in its own
+    ring, and the reference's whole ring when the test video's failed --
+    pinned for the rest of the session."""
+    allocated, freed = [], []
+
+    class _Pinned(_FakePinned):
+        def __init__(self, lib, size):
+            if len(allocated) == vship._RING_SLOTS + 2:  # the test video's 3rd buffer
+                raise vship.VshipUnavailableError("Could not allocate Vship pinned frame memory")
+            super().__init__(lib, size)
+            allocated.append(self)
+
+        def close(self):
+            freed.append(self)
+
+    monkeypatch.setattr(vship, "_PinnedBuffer", _Pinned)
+    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handler())
+    request = analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2",))
+    with pytest.raises(vship.VshipUnavailableError, match="pinned frame memory"):
+        vship.run_vship_task(_hevc("source.mkv"), _hevc("test.mkv"), request, request.metrics,
+                             _fake_device(), None, None)
+    assert len(allocated) == vship._RING_SLOTS + 2
+    assert sorted(map(id, freed)) == sorted(map(id, allocated)), "pinned buffers were left allocated"
+
