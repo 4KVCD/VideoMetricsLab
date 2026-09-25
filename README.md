@@ -14,7 +14,7 @@ A Windows desktop app for measuring and comparing video encode quality.
 - Detect black bars and handle resolution mismatches automatically.
 - Use GPU decoding with independent software fallback per input.
 - Calculate two test videos in parallel on many-core CPUs.
-- Cache completed results and restore them when matching videos are loaded again.
+- Auto cache completed results and auto restore results when matching videos are loaded again.
 
 ## Videos
 
