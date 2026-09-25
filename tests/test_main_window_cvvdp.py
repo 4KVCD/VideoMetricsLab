@@ -765,3 +765,36 @@ def test_a_lookup_whose_thread_ended_but_whose_answers_are_queued_is_still_asked
     win._probe_workers.clear()
     win.close()
 
+
+def test_switching_back_to_a_display_with_a_saved_score_keeps_the_graph_series(qapp, tmp_path, monkeypatch):
+    """Switching A -> B -> A: the saved CVVDP score for A comes back from
+    the cache, and that replaced the graph series under a new identity --
+    new colour, visible again, back even after being removed."""
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    win = MainWindow()
+    row, row_data, source, distorted = _row_with_cached_scores(win, tmp_path, "cvvdp")
+    row_data.extra_metric_keys.add("cvvdp")
+    assert win._try_load_cached_result(row)
+    graph = win.graph_panel
+    graph.add_run(row_data.completed_run.result, "test", identity=row_data.completed_run.graph_identity)
+    (series_id, entry), = graph._entries.items()
+    colour = entry.color
+    graph.set_series_visible(series_id, False)
+
+    _select(win, row)
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(BUILTIN_PRESETS[2].name))
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(DEFAULT_PRESET.name))
+    cached, _label = result_cache.load_cached(
+        source, distorted, win._analysis_request(row_data), tmp_path,
+        main_window_module.displayable_metric_specs(row_data.options, row_data.cvvdp))
+    win._on_cached_found(distorted, cached, "test")  # the lookup's answer for the display switched back to
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.420"
+    (series_after, entry_after), = graph._entries.items()
+    assert series_after == series_id and entry_after.color == colour and not entry_after.visible
+
+    graph.remove_run(series_id)
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(BUILTIN_PRESETS[2].name))
+    win._on_cached_found(distorted, cached, "test")
+    assert graph._entries == {}
+    win.close()
+

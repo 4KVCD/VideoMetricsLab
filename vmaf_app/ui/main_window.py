@@ -2403,8 +2403,14 @@ class MainWindow(QMainWindow):
             cached = set(result.metric_results.keys())
             if not cached > shown:
                 return
-            self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
+        previous = row_data.completed_run
         run = CompletedRun(result, label)
+        if previous is not None:
+            # The row's graph series is updated in place: its colour and
+            # its hidden or removed state stay. Replacing it under a new
+            # identity reset them whenever a display switched back to had a
+            # saved CVVDP score.
+            run.graph_identity = previous.graph_identity
         row_data.completed_run = run
         row_data.analysis_status = ""
         row_data.analysis_status = "Complete (cached)" if self._has_requested_results(row_data) else ""
@@ -2421,7 +2427,7 @@ class MainWindow(QMainWindow):
         # Keep the graph in step as results land, so opening the tab shows
         # everything without any further action.
         self.graph_panel.add_run(
-            result, label, identity=run.graph_identity
+            result, label, identity=run.graph_identity, restore=previous is None
         )
         self._sync_frame_compare()
 
