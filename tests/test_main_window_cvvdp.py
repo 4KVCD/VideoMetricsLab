@@ -665,3 +665,15 @@ def test_a_finished_lookup_does_not_overwrite_a_message_with_ready(qapp):
     assert win.status_label.text() == "Ready."
     win.close()
 
+
+def test_the_header_ticks_show_the_settings_defaults_for_cvvdp(qapp):
+    settings = Settings.load()
+    settings.default_compute_cvvdp = True
+    settings.default_compute_ssimulacra2 = True
+    settings.save()
+    win = MainWindow()
+    assert win.metric_header.is_checked(COL_CVVDP)
+    assert win.metric_header.is_checked(main_window_module.COL_SSIMULACRA2)
+    assert not win.metric_header.is_checked(main_window_module.COL_BUTTERAUGLI)
+    win.close()
+

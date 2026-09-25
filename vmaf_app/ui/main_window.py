@@ -1069,7 +1069,7 @@ class MainWindow(QMainWindow):
         # moment either was changed.
         self.metric_header = CheckableHeaderView(
             {
-                col: self._metric_enabled(self._default_options, col)
+                col: self._default_metric_ticked(col)
                 for item in _METRIC_COLUMNS for col in (item.column,)
             },
             self.distorted_table,
@@ -2711,7 +2711,7 @@ class MainWindow(QMainWindow):
             for metric_column in _METRIC_COLUMNS:
                 enabled = (
                     metric_column.key in self._requested_metrics(self._rows[self._panel_target_rows[0]])
-                    if self._panel_target_rows else self._metric_enabled(opts, metric_column.column)
+                    if self._panel_target_rows else self._default_metric_ticked(metric_column.column)
                 )
                 self.metric_header.set_checked(metric_column.column, enabled)
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
@@ -2819,6 +2819,15 @@ class MainWindow(QMainWindow):
             self._requested_metrics(row_data), row_data.metric_backends,
             cvvdp if cvvdp is not None else row_data.cvvdp,
         )
+
+    def _default_metric_ticked(self, column: int) -> bool:
+        """Whether new rows start with this metric ticked -- the header's
+        tick when no row is selected. SSIMULACRA2, Butteraugli and CVVDP
+        live outside VmafOptions, so reading only the options showed their
+        header unticked even with the metric on by default, and the first
+        header click did nothing visible."""
+        key = _METRIC_COLUMN_BY_INDEX[column].key
+        return self._metric_enabled(self._default_options, column) or key in self._default_extra_metric_keys
 
     @staticmethod
     def _metric_enabled(options: VmafOptions, column: int) -> bool:
