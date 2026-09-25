@@ -211,3 +211,21 @@ def test_settings_file_keeps_cvvdp_presets_and_default(tmp_path, monkeypatch):
     assert asdict(loaded)["cvvdp_presets"] == settings.cvvdp_presets
     assert default_settings(loaded.cvvdp_presets, loaded.cvvdp_default_preset) == DEFAULT_PRESET.settings
     assert loaded.default_compute_cvvdp is False  # what was saved, not the default
+
+
+@pytest.mark.parametrize("broken", [
+    {"name": "list", "settings": [1]},
+    {"name": "text", "settings": "4K"},
+    {"name": "infinite", "settings": {"display": {"peak_luminance": float("inf")}}},
+    {"name": "nan", "settings": {"display": {"viewing_distance_m": float("nan")}}},
+    {"name": "string value", "settings": {"display": {"contrast": "1000"}}},
+    "not a dict",
+])
+def test_a_hand_edited_broken_preset_is_skipped_not_fatal(broken):
+    """Such a preset in settings.json used to stop the app at startup, or
+    reach the cache key and raise there."""
+    found = presets([broken, {"name": "ok", "settings": CvvdpSettings().to_dict()}])
+    assert [p.name for p in found][len(BUILTIN_PRESETS):] == ["ok"]
+    assert default_settings([broken], broken.get("name", "") if isinstance(broken, dict) else "") \
+        == DEFAULT_PRESET.settings
+

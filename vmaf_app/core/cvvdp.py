@@ -21,6 +21,7 @@ official implementation to 0.016 JOD on the Beekeeper pair.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -46,6 +47,14 @@ class CvvdpDisplay:
 
     def validated(self) -> CvvdpDisplay:
         """Raises ValueError for a display CVVDP cannot model."""
+        numbers = (self.width, self.height, self.diagonal_inches, self.viewing_distance_m,
+                   self.peak_luminance, self.contrast, self.ambient_lux, self.reflectivity, self.exposure)
+        # Only reachable from a hand-edited settings file. Infinity passed
+        # the checks below and then made the cache key's JSON encoding
+        # raise; text or a list raised TypeError.
+        if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+                   for value in numbers):
+            raise ValueError("Every display value must be a finite number.")
         if self.width < 16 or self.height < 16:
             raise ValueError("The display resolution must be at least 16 x 16.")
         for label, value in (("screen size", self.diagonal_inches), ("viewing distance", self.viewing_distance_m),
@@ -203,7 +212,9 @@ def presets(user_presets: list[dict]) -> list[CvvdpPreset]:
     for data in user_presets:
         try:
             found.append(CvvdpPreset(str(data["name"]), CvvdpSettings.from_dict(data["settings"])))
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, AttributeError):
+            # AttributeError: "settings" not a mapping, e.g. {"settings": [1]},
+            # which used to escape and stop the app at startup.
             continue
     return found
 
