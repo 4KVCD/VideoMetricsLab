@@ -869,3 +869,24 @@ def test_cvvdp_failure_messages_name_the_real_cause(monkeypatch):
     assert "not retried on the CPU" in str(raised.value)
     assert "CVVDP could not be calculated: Frame rates do not match" in str(raised.value)
 
+
+def test_a_vship_without_cvvdp_still_configures_and_only_cvvdp_fails():
+    """Looking CVVDP's functions up unconditionally made a Vship without
+    them fail detection, and with it GPU SSIMULACRA2 and Butteraugli."""
+    class _Function:
+        pass
+
+    class _OlderVship:
+        def __getattr__(self, name):
+            if "CVVDP" in name:
+                raise AttributeError(name)
+            function = _Function()
+            setattr(self, name, function)
+            return function
+
+    lib = _OlderVship()
+    vship._configure_api(lib)  # must not raise
+    device = vship.VshipDevice("nvidia", "old GPU", 0, "4.0.2", SimpleNamespace(library=lib))
+    with pytest.raises(vship.VshipUnavailableError, match="has no CVVDP"):
+        vship._init_cvvdp(device, None, None, None, 24.0)
+

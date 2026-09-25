@@ -177,6 +177,16 @@ class VshipDevice:
     loaded: _LoadedVship
 
 
+_CVVDP_FUNCTIONS = (
+    "Vship_CVVDPInit3", "Vship_CVVDPFree", "Vship_ComputeCVVDP", "Vship_ResetScoreCVVDP",
+    "Vship_CVVDPGetDetailedLastError",
+)
+
+
+def _has_cvvdp(lib) -> bool:
+    return all(hasattr(lib, name) for name in _CVVDP_FUNCTIONS)
+
+
 def _configure_api(lib: ctypes.CDLL) -> None:
     lib.Vship_GetVersion.argtypes = []
     lib.Vship_GetVersion.restype = _Version
@@ -220,6 +230,12 @@ def _configure_api(lib: ctypes.CDLL) -> None:
     lib.Vship_ComputeButteraugli.restype = ctypes.c_int
     lib.Vship_ButteraugliGetDetailedLastError.argtypes = [_Handler, ctypes.c_char_p, ctypes.c_int]
     lib.Vship_ButteraugliGetDetailedLastError.restype = ctypes.c_int
+    # CVVDP only if this Vship has it. Looking its functions up
+    # unconditionally made a Vship without CVVDP (an older build) fail
+    # detection altogether, taking GPU SSIMULACRA2/Butteraugli with it;
+    # without them CVVDP alone fails (_init_cvvdp).
+    if not _has_cvvdp(lib):
+        return
     # Init3 takes the display as a JSON file path (not text) and the GPU id.
     lib.Vship_CVVDPInit3.argtypes = [
         ctypes.POINTER(_Handler), _Colorspace, _Colorspace, ctypes.c_float, ctypes.c_bool,
@@ -928,7 +944,7 @@ def _cvvdp_error(lib: ctypes.CDLL, handler: _Handler | None, code: int) -> str:
 def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
                 settings: CvvdpSettings, fps: float) -> _Handler:
     lib = device.loaded.library
-    if not hasattr(lib, "Vship_CVVDPInit3"):
+    if not _has_cvvdp(lib):
         raise VshipUnavailableError(f"This Vship ({device.version}) has no CVVDP.")
     handler = _Handler()
     handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json")
