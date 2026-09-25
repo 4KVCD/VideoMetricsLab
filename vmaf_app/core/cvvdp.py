@@ -223,10 +223,20 @@ def preset_named(name: str, user_presets: list[dict]) -> CvvdpPreset | None:
     return next((preset for preset in presets(user_presets) if preset.name == name), None)
 
 
-def matching_preset(settings: CvvdpSettings, user_presets: list[dict]) -> CvvdpPreset | None:
+def matching_preset(settings: CvvdpSettings, user_presets: list[dict],
+                    preferred: str = "") -> CvvdpPreset | None:
     """The preset whose display these settings use, if any -- user presets first, since a
-    user preset saved from a built-in should show under the user's name."""
-    for preset in reversed(presets(user_presets)):
+    user preset saved from a built-in should show under the user's name.
+
+    `preferred` is the preset the video was given. It wins while its display
+    still matches: of two presets with the same values, the later one's name
+    was shown, whichever the user had chosen."""
+    candidates = presets(user_presets)
+    if preferred:
+        for preset in candidates:
+            if preset.name == preferred and preset.settings.display.identity() == settings.display.identity():
+                return preset
+    for preset in reversed(candidates):
         if preset.settings.display.identity() == settings.display.identity():
             return preset
     return None

@@ -798,3 +798,57 @@ def test_switching_back_to_a_display_with_a_saved_score_keeps_the_graph_series(q
     assert graph._entries == {}
     win.close()
 
+
+def _two_rows_on_desk(monkeypatch):
+    win, first, first_data = _window_with_row("a.mp4")
+    second = win._add_table_row(Path("b.mp4"))
+    second_data = win._rows[second]
+    second_data.video_info = fake_video_info("b.mp4")
+    _select(win, first)
+    _dialog_answers(monkeypatch, "save_new", name="Desk", peak=300)
+    win._on_cvvdp_add_preset()
+    win.distorted_table.selectAll()
+    win._on_table_selection_changed()
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData("Desk"))
+    _select(win, first)
+    return win, first_data, second_data
+
+
+@pytest.mark.parametrize("answer", [QMessageBox.Yes, QMessageBox.No])
+def test_saving_a_preset_asks_whether_other_videos_using_it_follow(qapp, monkeypatch, answer):
+    """Only the selected videos were updated; the others kept the old
+    values and turned into "Custom" without a word."""
+    win, first_data, second_data = _two_rows_on_desk(monkeypatch)
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: asked.append(args[2]) or answer)
+    _dialog_answers(monkeypatch, "save", name="Desk", peak=320)
+    win._on_cvvdp_edit_display()
+    assert len(asked) == 1 and '1 other video uses your preset "Desk"' in asked[0]
+    assert first_data.cvvdp.display.peak_luminance == 320
+    assert second_data.cvvdp.display.peak_luminance == (320 if answer == QMessageBox.Yes else 300)
+    win.close()
+
+
+def test_renaming_a_preset_keeps_other_videos_on_it_without_asking(qapp, monkeypatch):
+    win, _first, second_data = _two_rows_on_desk(monkeypatch)
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: pytest.fail("nothing to ask"))
+    _dialog_answers(monkeypatch, "save", name="Desk monitor")
+    win._on_cvvdp_edit_display()
+    assert second_data.cvvdp_preset == "Desk monitor"
+    assert second_data.cvvdp.display.peak_luminance == 300
+    win.close()
+
+
+def test_of_two_presets_with_the_same_values_the_chosen_one_is_shown(qapp, monkeypatch):
+    """The dropdown jumped to the later of the two names."""
+    win, row, _row_data = _window_with_row()
+    _select(win, row)
+    for name in ("Desk", "Desk copy"):
+        _dialog_answers(monkeypatch, "save_new", name=name, peak=300)
+        win._on_cvvdp_add_preset()
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData("Desk"))
+    assert win.cvvdp_preset_combo.currentData() == "Desk"
+    _select(win, row)  # redrawn from the row
+    assert win.cvvdp_preset_combo.currentData() == "Desk"
+    win.close()
+

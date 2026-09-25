@@ -451,6 +451,9 @@ class RowData:
     # The display CVVDP models for this row. Part of what a CVVDP score
     # means, so part of its cache identity; no other metric depends on it.
     cvvdp: CvvdpSettings = field(default_factory=CvvdpSettings)
+    # The CVVDP preset the row was given, if any: only to tell apart presets
+    # with the same display (see matching_preset), never part of a score.
+    cvvdp_preset: str = ""
     analysis_status: str = ""
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
@@ -1749,6 +1752,7 @@ class MainWindow(QMainWindow):
             extra_metric_keys=set(self._default_extra_metric_keys),
             metric_backends=dict(self._default_metric_backends),
             cvvdp=self._default_cvvdp,
+            cvvdp_preset=self._settings.cvvdp_default_preset,
         ))
         self._set_row_metrics(row)
         return row
@@ -1911,7 +1915,7 @@ class MainWindow(QMainWindow):
 
     def _cvvdp_note(self, row_data: RowData) -> str:
         """Tooltip for a CVVDP score: what the number means and which display it is for."""
-        preset = matching_preset(row_data.cvvdp, self._settings.cvvdp_presets)
+        preset = matching_preset(row_data.cvvdp, self._settings.cvvdp_presets, row_data.cvvdp_preset)
         display = row_data.cvvdp.display.describe()
         return (
             "CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no "
@@ -2632,6 +2636,7 @@ class MainWindow(QMainWindow):
             new_row_data.extra_metric_keys = set(row_data.extra_metric_keys)
             new_row_data.metric_backends = dict(row_data.metric_backends)
             new_row_data.cvvdp = row_data.cvvdp
+            new_row_data.cvvdp_preset = row_data.cvvdp_preset
             new_row_data.scale_direction_pinned = True
             # The companion decodes the SAME file as the row it came from;
             # only the scale direction differs, and that is already part of
@@ -2748,12 +2753,14 @@ class MainWindow(QMainWindow):
             # way back to it must not be a disabled control.
             self.subsample_spin.setEnabled(uses_libvmaf or any(o.n_subsample > 1 for o in selected_options))
             self._show_cvvdp_settings(
-                [self._rows[r].cvvdp for r in self._panel_target_rows] or [self._default_cvvdp]
+                [self._rows[r].cvvdp for r in self._panel_target_rows] or [self._default_cvvdp],
+                self._rows[self._panel_target_rows[0]].cvvdp_preset if self._panel_target_rows
+                else self._settings.cvvdp_default_preset,
             )
         finally:
             self._syncing_panel = False
 
-    def _show_cvvdp_settings(self, selected: list[CvvdpSettings]) -> None:
+    def _show_cvvdp_settings(self, selected: list[CvvdpSettings], preferred: str = "") -> None:
         """Shows the selected rows' CVVDP settings in the Options panel: the
         preset they match (or "Custom"), the display in one line, and the
         resize box.
@@ -2776,7 +2783,7 @@ class MainWindow(QMainWindow):
                 combo.setItemData(
                     combo.count() - 1, preset.description or "Your saved preset.", Qt.ToolTipRole
                 )
-            match = None if mixed_display else matching_preset(settings, user_presets)
+            match = None if mixed_display else matching_preset(settings, user_presets, preferred)
             if mixed_display:
                 combo.addItem("Mixed (the selected videos use different displays)", None)
                 combo.setCurrentIndex(combo.count() - 1)
@@ -3261,8 +3268,9 @@ class MainWindow(QMainWindow):
             self.status_label.setText(error)
 
     # ------------------------------------------------------------------ CVVDP display
-    def _apply_cvvdp(self, change) -> None:
-        """Gives the selected rows new CVVDP settings: `change(old) -> new`.
+    def _apply_cvvdp(self, change, rows: list[int] | None = None, preset_name: str | None = None) -> None:
+        """Gives the selected rows (or `rows`) new CVVDP settings:
+        `change(old) -> new`, and `preset_name` as the preset they were given.
 
         Only CVVDP's score depends on them. A row keeps every other score,
         loses a CVVDP score made for the old settings, and gets back one
@@ -3271,9 +3279,12 @@ class MainWindow(QMainWindow):
         if self._syncing_panel or self._run_active:
             return
         changed = []
-        for row in self._panel_target_rows:
+        for row in self._panel_target_rows if rows is None else rows:
             row_data = self._rows[row]
             new = change(row_data.cvvdp)
+            if preset_name is not None and preset_name != row_data.cvvdp_preset:
+                row_data.cvvdp_preset = preset_name
+                self._set_row_metrics(row)  # the score's tooltip names the preset
             if new.same_as(row_data.cvvdp):
                 continue
             row_data.cvvdp = new
@@ -3328,7 +3339,8 @@ class MainWindow(QMainWindow):
             # The display only: "Scale the video to fill the display" is
             # the video's own setting, and choosing a built-in preset used to
             # switch it off without a word.
-            self._apply_cvvdp(lambda old: replace(old, display=preset.settings.display))
+            self._apply_cvvdp(lambda old: replace(old, display=preset.settings.display),
+                              preset_name=preset.name)
 
     def _on_cvvdp_resize_toggled(self, checked: bool) -> None:
         self._apply_cvvdp(lambda old: replace(old, resize_to_display=checked))
@@ -3355,8 +3367,9 @@ class MainWindow(QMainWindow):
         "Apply without saving" only changes the selected rows."""
         if not self._panel_target_rows or self._run_active:
             return
-        settings = self._rows[self._panel_target_rows[0]].cvvdp
-        match = matching_preset(settings, self._settings.cvvdp_presets)
+        first = self._rows[self._panel_target_rows[0]]
+        settings = first.cvvdp
+        match = matching_preset(settings, self._settings.cvvdp_presets, first.cvvdp_preset)
         own = match.name if match is not None and not match.builtin else None
         dialog = CvvdpDisplayDialog(settings.display, self, own_preset=own,
                                     taken_names=self._cvvdp_preset_names())
@@ -3383,6 +3396,15 @@ class MainWindow(QMainWindow):
         name = dialog.preset_name()
         saved = CvvdpSettings(dialog.display())  # a preset is a display, not the resize choice
         presets = self._settings.cvvdp_presets
+        # The other videos using the preset being replaced, found before it
+        # changes. Only the selected ones used to be updated: the rest were
+        # left with the old values and shown as "Custom", unasked.
+        others = [] if replacing is None or not apply_to_rows else [
+            row for row, row_data in enumerate(self._rows)
+            if row not in self._panel_target_rows
+            and (match := matching_preset(row_data.cvvdp, presets, row_data.cvvdp_preset)) is not None
+            and match.name == replacing
+        ]
         if replacing is not None:
             presets = without_user_preset(presets, replacing)
         try:
@@ -3396,7 +3418,19 @@ class MainWindow(QMainWindow):
         error = self._settings.save()
         self._fill_cvvdp_default_combo()
         if apply_to_rows:
-            self._apply_cvvdp(lambda old: replace(old, display=saved.display))
+            self._apply_cvvdp(lambda old: replace(old, display=saved.display), preset_name=name)
+        if others:
+            if saved.display.identity() == settings.display.identity():
+                # Renamed only: the videos keep their values, and the name.
+                self._apply_cvvdp(lambda old: old, rows=others, preset_name=name)
+            elif QMessageBox.question(
+                self, "CVVDP preset",
+                f'{len(others)} other video{"s" if len(others) != 1 else ""} use{"" if len(others) != 1 else "s"} '
+                f'your preset "{replacing}". Update {"them" if len(others) != 1 else "it"} to the saved '
+                "values too?\n\nA CVVDP score made for the old values is cleared; one already saved for "
+                "the new values is shown instead. Choose No to keep the old values (shown as Custom).",
+            ) == QMessageBox.Yes:
+                self._apply_cvvdp(lambda old: replace(old, display=saved.display), rows=others, preset_name=name)
         # _apply_cvvdp redraws the panel only when a row changed; a rename
         # changes no row but does change the dropdown.
         if self._panel_target_rows:
