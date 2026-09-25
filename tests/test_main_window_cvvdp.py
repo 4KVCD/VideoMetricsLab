@@ -178,10 +178,14 @@ def test_adding_a_preset_makes_it_the_default_for_new_videos(qapp, monkeypatch):
     _dialog_answers(monkeypatch, "save_new", name="My monitor", peak=350)
     win._on_cvvdp_add_preset()
 
-    assert row_data.cvvdp.display.peak_luminance == 350
+    # Making a preset is not choosing it: the selected video keeps its display.
+    assert row_data.cvvdp == DEFAULT_PRESET.settings
+    assert win.cvvdp_preset_combo.currentData() == DEFAULT_PRESET.name
+    assert win.cvvdp_preset_combo.findData("My monitor") >= 0
     assert win._settings.cvvdp_default_preset == "My monitor"
-    assert win.cvvdp_preset_combo.currentData() == "My monitor"
     assert win.settings_cvvdp_default.currentData() == "My monitor"
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData("My monitor"))
+    assert row_data.cvvdp.display.peak_luminance == 350
     new_row = win._add_table_row(Path("next.mp4"))
     assert win._rows[new_row].cvvdp.display.peak_luminance == 350
     # It survives a restart.
@@ -205,6 +209,7 @@ def test_the_display_editor_renames_and_updates_your_preset(qapp, monkeypatch):
     _select(win, row)
     _dialog_answers(monkeypatch, "save_new", name="Desk", peak=300)
     win._on_cvvdp_add_preset()
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData("Desk"))
 
     _dialog_answers(monkeypatch, "save", name="Desk monitor", peak=320)
     win._on_cvvdp_edit_display()
@@ -221,6 +226,7 @@ def test_the_display_editor_saves_a_copy_as_a_new_preset(qapp, monkeypatch):
     _select(win, row)
     _dialog_answers(monkeypatch, "save_new", name="Desk", peak=300)
     win._on_cvvdp_add_preset()
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData("Desk"))
     _dialog_answers(monkeypatch, "save_new", name="Desk, dark room", ambient_lux=0)
     win._on_cvvdp_edit_display()
     assert [p["name"] for p in win._settings.cvvdp_presets] == ["Desk", "Desk, dark room"]
@@ -632,3 +638,17 @@ def test_a_new_resolution_test_row_shows_n_a_for_the_perceptual_metrics(qapp, mo
     for column in (main_window_module.COL_SSIMULACRA2, main_window_module.COL_BUTTERAUGLI, COL_CVVDP):
         assert win.distorted_table.item(row, column).text() == "n/a"
     win.close()
+
+
+def test_adding_a_preset_keeps_the_selected_videos_cvvdp_score(qapp, monkeypatch):
+    """"Add preset..." gave the new display to the selected video too,
+    silently dropping its CVVDP score."""
+    win, row, row_data = _window_with_row(cvvdp_score=9.81)
+    _select(win, row)
+    _dialog_answers(monkeypatch, "save_new", name="Dark room", ambient_lux=0)
+    win._on_cvvdp_add_preset()
+    assert row_data.completed_run.result.has_metric("cvvdp")
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.810"
+    assert "choose it" in win.status_label.text()
+    win.close()
+

@@ -1329,7 +1329,8 @@ class MainWindow(QMainWindow):
         self.cvvdp_add_btn = QPushButton("Add preset...")
         self.cvvdp_add_btn.setToolTip(
             "Make a new preset of your own, starting from the display shown here. "
-            "It becomes the display newly added videos start with."
+            "It becomes the display newly added videos start with; the selected "
+            "videos keep theirs until you choose it for them."
         )
         self.cvvdp_add_btn.clicked.connect(self._on_cvvdp_add_preset)
         self.cvvdp_edit_btn = QPushButton("Edit display...")
@@ -3298,7 +3299,7 @@ class MainWindow(QMainWindow):
                                     taken_names=self._cvvdp_preset_names())
         if dialog.exec() != QDialog.Accepted:
             return
-        self._save_cvvdp_preset(dialog, settings, replacing=None)
+        self._save_cvvdp_preset(dialog, settings, replacing=None, apply_to_rows=False)
 
     def _on_cvvdp_edit_display(self) -> None:
         """Edits the first selected row's display. Saving can rename and
@@ -3320,11 +3321,17 @@ class MainWindow(QMainWindow):
         self._save_cvvdp_preset(dialog, settings, replacing=own if dialog.action == "save" else None)
 
     def _save_cvvdp_preset(self, dialog: CvvdpDisplayDialog, settings: CvvdpSettings,
-                           replacing: str | None) -> None:
+                           replacing: str | None, apply_to_rows: bool = True) -> None:
         """Saves the dialog's display as a user preset -- replacing (and so
-        renaming) the preset `replacing` if given -- and gives it to the
-        selected rows. A new preset becomes the default for new videos; a
-        renamed default stays the default under its new name."""
+        renaming) the preset `replacing` if given -- and, from the display
+        editor, gives it to the selected rows. A new preset becomes the
+        default for new videos; a renamed default stays the default under
+        its new name.
+
+        "Add preset..." does not touch the rows (apply_to_rows=False):
+        making a preset is not choosing it, and applying it there dropped
+        the selected video's CVVDP score.
+        """
         name = dialog.preset_name()
         saved = CvvdpSettings(dialog.display())  # a preset is a display, not the resize choice
         presets = self._settings.cvvdp_presets
@@ -3340,7 +3347,8 @@ class MainWindow(QMainWindow):
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
         self._fill_cvvdp_default_combo()
-        self._apply_cvvdp(lambda old: replace(old, display=saved.display))
+        if apply_to_rows:
+            self._apply_cvvdp(lambda old: replace(old, display=saved.display))
         # _apply_cvvdp redraws the panel only when a row changed; a rename
         # changes no row but does change the dropdown.
         if self._panel_target_rows:
@@ -3348,8 +3356,11 @@ class MainWindow(QMainWindow):
         if replacing is not None:
             done = (f'Saved your CVVDP preset "{name}"' if name == replacing
                     else f'Renamed your CVVDP preset "{replacing}" to "{name}" and saved it')
-        else:
+        elif apply_to_rows:
             done = f'Saved the CVVDP preset "{name}". Videos added from now on use it (change that in Settings)'
+        else:
+            done = (f'Saved the CVVDP preset "{name}". Videos added from now on use it (change that in '
+                    "Settings); choose it in the CVVDP display list to use it for the selected videos")
         self.status_label.setText(error or done + ".")
 
     def _on_cvvdp_delete_preset(self) -> None:
