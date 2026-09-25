@@ -68,6 +68,16 @@ class VshipUnavailableError(PerceptualRunError):
     """The GPU implementation could not be loaded or run; CPU fallback is safe."""
 
 
+class VshipPassesFailedError(VshipUnavailableError):
+    """Every metric's GPU pass failed. Raised with the first error's text,
+    and `failures` holds each metric's own reason, so a metric is never
+    reported with another's (CVVDP given SSIMULACRA2's out-of-memory)."""
+
+    def __init__(self, message: str, failures: dict[str, str]) -> None:
+        super().__init__(message)
+        self.failures = dict(failures)
+
+
 class _Subsampling(ctypes.Structure):
     _fields_ = [("subw", ctypes.c_int), ("subh", ctypes.c_int)]
 
@@ -1151,7 +1161,9 @@ def run_vship_task(
             failures.update(output.failures)
             frames = max(frames, output.compared_frame_count)
         if not metrics:
-            raise errors[0] if errors else VshipUnavailableError("Vship produced no scores.")
+            if not errors:
+                raise VshipUnavailableError("Vship produced no scores.")
+            raise VshipPassesFailedError(str(errors[0]), failures) from errors[0]
         return PerceptualTaskOutput(metrics, source_crop, distorted_crop, frames, failures)
     finally:
         _gpu_pass.release()
@@ -1447,18 +1459,22 @@ def apply_vship_cpu_fallback(
     retryable = tuple(spec for spec in specs if spec.key not in GPU_ONLY_METRICS)
 
     def gpu_only_failed(reason: str, error: BaseException | None = None, *,
-                        no_gpu: bool = True) -> dict[str, str]:
+                        no_gpu: bool = True, reasons: dict[str, str] | None = None) -> dict[str, str]:
         """The failures for the GPU-only metrics; raises if nothing else was
         asked for. `no_gpu` is for when no usable GPU was found; otherwise
         the GPU pass itself failed, possibly for a reason that has nothing to
         do with the GPU (the two videos' frame rates differing, say), and
         blaming the GPU sent people looking for the wrong problem."""
-        labels = " and ".join(metric_definition(spec.key).label for spec in gpu_only)
-        message = (f"{labels} needs a supported NVIDIA or AMD GPU and could not use it: {reason}"
-                   if no_gpu else f"{labels} could not be calculated: {reason}")
+        def message(spec: MetricRequestSpec) -> str:
+            label = metric_definition(spec.key).label
+            own = (reasons or {}).get(spec.key, reason)
+            return (f"{label} needs a supported NVIDIA or AMD GPU and could not use it: {own}"
+                    if no_gpu else f"{label} could not be calculated: {own}")
+
+        messages = {spec.key: message(spec) for spec in gpu_only}
         if not retryable:
-            raise PerceptualRunError(message) from error
-        return {spec.key: message for spec in gpu_only}
+            raise PerceptualRunError("\n".join(messages.values())) from error
+        return messages
 
     def with_failures(output: PerceptualTaskOutput, failures: dict[str, str]) -> PerceptualTaskOutput:
         return replace(output, failures={**output.failures, **failures}) if failures else output
@@ -1500,7 +1516,8 @@ def apply_vship_cpu_fallback(
     except Exception as error:
         if cancel_event is not None and cancel_event.is_set():
             raise PerceptualCancelled("Cancelled by user") from error
-        failures = gpu_only_failed(str(error), error, no_gpu=False) if gpu_only else {}
+        failures = (gpu_only_failed(str(error), error, no_gpu=False,
+                                    reasons=getattr(error, "failures", None)) if gpu_only else {})
         gpu_retry = tuple(spec for spec in gpu_specs if spec.key not in GPU_ONLY_METRICS)
         if gpu_retry and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
             # Nobody agreed to a CPU run of this length: the Videos tab asks

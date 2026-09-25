@@ -903,3 +903,33 @@ def test_cvvdp_refuses_a_video_without_a_frame_rate(fps):
     with pytest.raises(vship.VshipUnavailableError, match="frame rate"):
         vship._init_cvvdp(device, None, None, None, fps)
 
+
+@pytest.mark.parametrize("long_video", [False, True])
+def test_when_every_gpu_pass_fails_cvvdp_keeps_its_own_reason(monkeypatch, long_video):
+    """With one pass per metric, all failing raised only the first error:
+    CVVDP was reported with SSIMULACRA2's out-of-memory, and its own reason
+    appeared nowhere."""
+    seconds = 7200.0 if long_video else 60.0
+    source = VideoInfo(Path("s.mkv"), 64, 48, 24.0, seconds, int(seconds * 24), "h264", pix_fmt="yuv420p")
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    reasons = {"ssimulacra2": "Could not initialize Vship ssimulacra2: out of memory",
+               "cvvdp": "This Vship (4.0.2) has no CVVDP."}
+
+    def one_pass(_s, _t, _r, specs, *_a, **_k):
+        raise vship.VshipUnavailableError(reasons[specs[0].key])
+
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "_run_vship_pass", one_pass)
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: _single_metric_output("ssimulacra2", 80.0, "cpu"))
+    if long_video:
+        with pytest.raises(perceptual_cpu.PerceptualRunError) as raised:
+            vship.apply_vship_cpu_fallback(source, source, request, request.metrics)
+        assert "CVVDP could not be calculated: This Vship (4.0.2) has no CVVDP." in str(raised.value)
+    else:
+        output = vship.apply_vship_cpu_fallback(source, source, request, request.metrics)
+        assert output.failures["cvvdp"] == "CVVDP could not be calculated: This Vship (4.0.2) has no CVVDP."
+        assert output.metrics.has("ssimulacra2")
+
