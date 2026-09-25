@@ -1505,14 +1505,29 @@ def apply_vship_cpu_fallback(
         if on_progress:
             on_progress(total + cur, total * 2, fps)
 
-    cpu_output = run_perceptual_task(
-        source, distorted, request, cpu_specs,
-        on_progress=report_cpu_progress,
-        on_status=on_status, cancel_event=cancel_event,
-        process_handle=process_handle, resolved_crops=crops,
-    )
+    # The GPU pass has finished: a CPU failure from here on fails only the
+    # CPU metrics. It used to raise out of here and throw away what the GPU
+    # had scored -- a finished CVVDP pass lost to a missing libjxl tool.
+    try:
+        cpu_output = run_perceptual_task(
+            source, distorted, request, cpu_specs,
+            on_progress=report_cpu_progress,
+            on_status=on_status, cancel_event=cancel_event,
+            process_handle=process_handle, resolved_crops=crops,
+        )
+    except PerceptualCancelled:
+        raise
+    except Exception as error:
+        if cancel_event is not None and cancel_event.is_set():
+            raise PerceptualCancelled("Cancelled by user") from error
+        if not gpu_output.metrics:
+            raise
+        failures.update({spec.key: str(error) for spec in cpu_specs})
+        return replace(gpu_output, failures=failures)
     if gpu_output.compared_frame_count != cpu_output.compared_frame_count:
-        raise PerceptualRunError("GPU and CPU perceptual metrics produced different frame counts.")
+        mismatch = (f"calculated over {cpu_output.compared_frame_count} frames on the CPU but "
+                    f"{gpu_output.compared_frame_count} on the GPU, so it was not kept")
+        failures.update({spec.key: mismatch for spec in cpu_specs})
     combined = MetricResultSet()
     for spec in specs:
         if spec.key in failures:

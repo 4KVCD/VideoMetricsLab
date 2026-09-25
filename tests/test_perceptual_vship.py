@@ -823,3 +823,28 @@ def test_a_metric_that_failed_on_the_gpu_is_retried_on_the_cpu_only_for_short_vi
         assert cpu_keys == ["ssimulacra2"] and output.failures == {}
         assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
 
+
+@pytest.mark.parametrize("cpu_problem", ["tool missing", "frame count"])
+def test_a_cpu_side_failure_keeps_the_finished_gpu_scores(monkeypatch, cpu_problem):
+    """CVVDP on the GPU beside Butteraugli set to CPU: a missing libjxl tool
+    (or differing frame counts) after the GPU pass raised out of the
+    fallback and threw away the finished CVVDP score."""
+    request = _cvvdp_request("butteraugli", "cvvdp", backends={"butteraugli": "cpu"})
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    cvvdp = vship.SequenceMetricResult("cvvdp", 9.1, MetricProvenance("t", "1", "gpu", "t"))
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: PerceptualTaskOutput(
+        MetricResultSet([cvvdp]), None, None, 1))
+
+    def cpu(*_args, **_kwargs):
+        if cpu_problem == "tool missing":
+            raise perceptual_cpu.PerceptualRunError("butteraugli_main is not installed")
+        output = _single_metric_output("butteraugli", 0.3, "cpu")
+        return PerceptualTaskOutput(output.metrics, None, None, 2)
+
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", cpu)
+    output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+    assert output.metrics.keys() == ("cvvdp",)
+    assert ("not installed" if cpu_problem == "tool missing" else "frames on the CPU") in output.failures["butteraugli"]
+
