@@ -946,6 +946,13 @@ def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
     lib = device.loaded.library
     if not _has_cvvdp(lib):
         raise VshipUnavailableError(f"This Vship ({device.version}) has no CVVDP.")
+    if not (math.isfinite(fps) and fps > 0):
+        # CVVDP models how the eye integrates over time, so the frame rate
+        # is part of the score; it used to be replaced by 1 fps silently.
+        raise VshipUnavailableError(
+            "CVVDP needs the video's frame rate, and none was found (it was read as "
+            f"{fps:g} fps)."
+        )
     handler = _Handler()
     handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json")
     os.close(handle)
@@ -1257,7 +1264,7 @@ def _run_vship_pass(
         if cvvdp_spec is not None:
             cvvdp_lane = _CvvdpLane(
                 device, src_color, dist_color, CvvdpSettings.from_spec_parameters(cvvdp_spec.parameters),
-                max(source.fps, 1.0), source_planes, distorted_planes, src_strides, dist_strides, finished, abort,
+                source.fps, source_planes, distorted_planes, src_strides, dist_strides, finished, abort,
             )
             lanes.append(cvvdp_lane)
         for spec in frame_specs:

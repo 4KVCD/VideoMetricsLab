@@ -890,3 +890,12 @@ def test_a_vship_without_cvvdp_still_configures_and_only_cvvdp_fails():
     with pytest.raises(vship.VshipUnavailableError, match="has no CVVDP"):
         vship._init_cvvdp(device, None, None, None, 24.0)
 
+
+@pytest.mark.parametrize("fps", [0.0, float("nan")])
+def test_cvvdp_refuses_a_video_without_a_frame_rate(fps):
+    """A 0 fps video was scored as if it ran at 1 fps."""
+    lib = SimpleNamespace(**{name: None for name in vship._CVVDP_FUNCTIONS})
+    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=lib))
+    with pytest.raises(vship.VshipUnavailableError, match="frame rate"):
+        vship._init_cvvdp(device, None, None, None, fps)
+
