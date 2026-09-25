@@ -1696,6 +1696,15 @@ class MainWindow(QMainWindow):
             self._sync_frame_compare()
         return list(reversed(removed))
 
+    def _show_ready(self) -> None:
+        """Says "Ready." once reading videos or saved results is done -- in
+        place of the "Reading..." message only. Anything else on the status
+        line is a message for the user (a preset saved, results cleared),
+        and a lookup finishing a moment later used to overwrite it."""
+        text = self.status_label.text()
+        if not text or text.startswith("Reading"):
+            self.status_label.setText("Ready.")
+
     def _on_source_probe_finished(self, generation: int, worker: ProbeWorker) -> None:
         if worker in self._probe_workers:
             self._probe_workers.remove(worker)
@@ -1703,7 +1712,7 @@ class MainWindow(QMainWindow):
         if generation == self._source_probe_generation:
             self._source_probe_worker = None
             if not self._run_active:
-                self.status_label.setText("Ready.")
+                self._show_ready()
             self._on_table_selection_changed()
 
     # ------------------------------------------------------------------ distorted-file table
@@ -2419,7 +2428,7 @@ class MainWindow(QMainWindow):
         if not self._run_active:
             # A run owns the status line while it lasts; overwriting it with
             # "Ready." made a live job look finished.
-            self.status_label.setText("Ready.")
+            self._show_ready()
         self._on_table_selection_changed()
 
     def _row_index_of_path(self, path: Path) -> int | None:

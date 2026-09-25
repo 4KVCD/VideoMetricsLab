@@ -2854,6 +2854,9 @@ def test_the_options_unlock_again_once_the_run_ends(qapp, tmp_path):
     _start_fake_run(win, row)
 
     win._set_run_ui_active(False)
+    # A lookup started after the run: "Ready." replaces its "Reading..."
+    # (and never a message such as the run's "Done.").
+    win.status_label.setText("Reading 1 video(s)...")
     win._on_probe_finished()
 
     assert win.options_box.isEnabled()

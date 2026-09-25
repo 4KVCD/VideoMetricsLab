@@ -652,3 +652,16 @@ def test_adding_a_preset_keeps_the_selected_videos_cvvdp_score(qapp, monkeypatch
     assert "choose it" in win.status_label.text()
     win.close()
 
+
+def test_a_finished_lookup_does_not_overwrite_a_message_with_ready(qapp):
+    """The confirmation after "Add preset..." was replaced by "Ready." as
+    soon as the cache lookup it started finished."""
+    win = MainWindow()
+    win.status_label.setText('Saved the CVVDP preset "Mine".')
+    win._on_probe_finished()
+    assert win.status_label.text() == 'Saved the CVVDP preset "Mine".'
+    win.status_label.setText("Reading 2 video(s)...")
+    win._on_probe_finished()
+    assert win.status_label.text() == "Ready."
+    win.close()
+
