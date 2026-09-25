@@ -258,7 +258,9 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     def fake_spawn(command):
         side = "source" if source_path in command else "test"
         spawned[side].append(command)
-        process = vship.proc_util.popen(queues[side].pop(0), stdout=subprocess.PIPE,
+        # The last command is reused: each metric has a pass (and a decode) of its own.
+        queue = queues[side]
+        process = vship.proc_util.popen(queue.pop(0) if len(queue) > 1 else queue[0], stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, bufsize=0)
         return process, process.stdout
 
@@ -629,12 +631,14 @@ def test_cvvdp_scores_every_frame_in_order_with_a_jod_per_second(monkeypatch, co
     assert output.failures == {}
 
 
-def test_cvvdp_runs_beside_ssimulacra2_in_one_decode(monkeypatch):
+def test_each_metric_gets_a_pass_and_a_decode_of_its_own(monkeypatch):
+    """One metric at a time keeps the GPU memory to the largest single
+    metric's: all three in one pass needed 7.3 GB at 4K."""
     fake = _FakeCvvdp().install(monkeypatch)
     count = vship._RING_SLOTS * 5 + 2
     output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "cvvdp"),
                            children=_both(_frames_command(count, _FRAME_BYTES)))
-    assert len(spawned["source"]) == 1 and len(spawned["test"]) == 1
+    assert len(spawned["source"]) == 2 and len(spawned["test"]) == 2
     assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
     assert fake.order == list(range(count))
     assert output.metrics.sequence("cvvdp").score == pytest.approx(_whole_video_jod(count), abs=1e-9)

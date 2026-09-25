@@ -1096,9 +1096,18 @@ def run_vship_task(
 ) -> PerceptualTaskOutput:
     """Scores `specs` on the GPU once no other Vship pass is running.
 
-    Metrics sharing a frame coverage share one pass. CVVDP always scores
-    every frame, so with subsampled SSIMULACRA2/Butteraugli (which the
-    Videos tab does not offer together) it gets a pass of its own.
+    One metric at a time: each gets a pass of its own, and the video is
+    decoded again for each. Scoring them in one pass held every metric's
+    GPU memory at once -- 7.3 GB for SSIMULACRA2, Butteraugli and CVVDP
+    together on a full 3840x2160 frame, more than an 8 GB card has free --
+    for little speed: 34 fps together against about 31.5 fps one after the
+    other at 4K, and 91 against 90.5 fps at 1080p (RTX 5090, Beekeeper AV1
+    and a synthetic SDR clip). One at a time, the peak is the largest
+    single metric: SSIMULACRA2 2.7 GB, Butteraugli 4.4 GB, CVVDP 4.8 GB.
+
+    A metric whose pass fails is reported in the output's `failures` while
+    the others still run; only when every pass fails is the first error
+    raised (and the caller may retry on the CPU).
     """
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
@@ -1107,35 +1116,43 @@ def run_vship_task(
             if cancel_event is not None and cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")
     try:
-        groups: dict[int, list[MetricRequestSpec]] = {}
-        for spec in specs:
-            groups.setdefault(spec.coverage.step if spec.coverage is not None else 1, []).append(spec)
-        if len(groups) <= 1:
+        if len(specs) <= 1:
             return _run_vship_pass(
                 source, distorted, request, specs, device, source_crop, distorted_crop,
                 on_progress=on_progress, on_status=on_status,
                 cancel_event=cancel_event, process_handle=process_handle,
             )
-        outputs = []
-        parts = len(groups)
-        for number, group in enumerate(groups.values()):
-            progress = None
-            if on_progress is not None:
-                progress = (lambda cur, total, fps, n=number, parts=parts:
-                            on_progress(n * total + cur, parts * total, fps))
-            outputs.append(_run_vship_pass(
-                source, distorted, request, tuple(group), device, source_crop, distorted_crop,
-                on_progress=progress, on_status=on_status,
-                cancel_event=cancel_event, process_handle=process_handle,
-            ))
         metrics = MetricResultSet()
         failures: dict[str, str] = {}
-        for output in outputs:
+        errors: list[BaseException] = []
+        frames = 0
+        parts = len(specs)
+        for number, spec in enumerate(specs):
+            progress = None
+            if on_progress is not None:
+                progress = (lambda cur, total, fps, n=number:
+                            on_progress(n * total + cur, parts * total, fps))
+            try:
+                output = _run_vship_pass(
+                    source, distorted, request, (spec,), device, source_crop, distorted_crop,
+                    on_progress=progress, on_status=on_status,
+                    cancel_event=cancel_event, process_handle=process_handle,
+                )
+            except PerceptualCancelled:
+                raise
+            except Exception as error:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise PerceptualCancelled("Cancelled by user") from error
+                errors.append(error)
+                failures[spec.key] = str(error)
+                continue
             for key in output.metrics:
                 metrics.add(output.metrics.get(key))
             failures.update(output.failures)
-        return PerceptualTaskOutput(metrics, source_crop, distorted_crop,
-                                    max(output.compared_frame_count for output in outputs), failures)
+            frames = max(frames, output.compared_frame_count)
+        if not metrics:
+            raise errors[0] if errors else VshipUnavailableError("Vship produced no scores.")
+        return PerceptualTaskOutput(metrics, source_crop, distorted_crop, frames, failures)
     finally:
         _gpu_pass.release()
 
