@@ -2442,8 +2442,20 @@ class MainWindow(QMainWindow):
             existing = row_data.completed_run.result
             shown = set(existing.metric_results.keys())
             cached = set(result.metric_results.keys())
-            if not cached > shown:
+            if not cached - shown:
                 return
+            # Scores the row shows that the answer lacks are kept beside it.
+            # It used to have to hold them all, and a row showing a GPU
+            # SSIMULACRA2 score, then set to CPU, is never given that score
+            # back by the cache: every later answer was thrown away, such as
+            # the saved CVVDP score of a display switched to.
+            if missing := shown - cached:
+                result = copy.copy(result)
+                result.metric_results = MetricResultSet([
+                    *(result.metric_results.get(key) for key in result.metric_results),
+                    *(existing.metric_results.get(key) for key in missing),
+                ])
+                result.frames = frame_scores_from_results(result.metric_results)
         previous = row_data.completed_run
         run = CompletedRun(result, label)
         if previous is not None:

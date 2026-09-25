@@ -14,7 +14,7 @@ from vmaf_app.core.metric_results import MetricProvenance, MetricResultSet, Sequ
 from vmaf_app.core.models import ResampleTarget
 from vmaf_app.core.settings import Settings
 from vmaf_app.ui import main_window as main_window_module
-from vmaf_app.ui.main_window import COL_CVVDP, COL_VMAF, CompletedRun, CvvdpDisplayDialog, MainWindow
+from vmaf_app.ui.main_window import COL_CVVDP, COL_SSIMULACRA2, COL_VMAF, CompletedRun, CvvdpDisplayDialog, MainWindow
 
 
 @pytest.fixture(scope="module")
@@ -889,5 +889,47 @@ def test_an_empty_cvvdp_cell_names_the_scores_saved_for_other_displays(qapp, tmp
     row_data.completed_run = None
     win._set_row_metrics(row)
     assert "Saved for other displays" not in win.distorted_table.item(row, COL_CVVDP).toolTip()
+    win.close()
+
+
+def test_a_cvvdp_score_found_for_a_new_display_shows_beside_a_gpu_score_on_a_cpu_row(qapp, tmp_path, monkeypatch):
+    """A row showing a GPU SSIMULACRA2 score, then set to CPU, rejected
+    every later cached answer: a CPU row is never given the GPU score, so
+    the answer lacked a metric the row showed. Switching the display to one
+    with a saved CVVDP score then showed no CVVDP."""
+    from vmaf_app.core.metric_results import FrameMetricResult
+
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_window_module.ProbeWorker, "start", lambda worker: worker.run())
+    source, distorted = tmp_path / "source.mp4", tmp_path / "test.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted.write_bytes(b"d" * 50)
+    win = MainWindow()
+    win._settings.use_cache = True
+    win._source_info = fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    row_data = win._rows[row]
+    row_data.video_info = fake_video_info(str(distorted))
+    row_data.extra_metric_keys |= {"ssimulacra2", "cvvdp"}
+    row_data.metric_backends["ssimulacra2"] = "gpu"
+    other = BUILTIN_PRESETS[3].settings
+    gpu = MetricProvenance("Vship/ssimulacra2", "", "gpu", "ssimulacra2-vship-gpu-v1")
+    result = fake_run_result(distorted, source=source)
+    result.merge_metric_results(MetricResultSet([FrameMetricResult("ssimulacra2", [0], [0.0], [80.0], gpu)]))
+    result_cache.store(source, distorted, result, "test", win._analysis_request(row_data), tmp_path)
+    scored = fake_run_result(distorted, source=source)
+    scored.merge_metric_results(MetricResultSet([_cvvdp(other, 9.25)]))
+    row_data.cvvdp = other
+    result_cache.store(source, distorted, scored, "test", win._analysis_request(row_data), tmp_path)
+    row_data.cvvdp = DEFAULT_PRESET.settings
+
+    win._start_cache_lookup([distorted])
+    assert win.distorted_table.item(row, COL_SSIMULACRA2).text().startswith("80")
+    row_data.metric_backends["ssimulacra2"] = "cpu"
+    _select(win, row)
+    win._apply_cvvdp(lambda old: other)
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.250"
+    assert win.distorted_table.item(row, COL_SSIMULACRA2).text().startswith("80")  # still shown
     win.close()
 
