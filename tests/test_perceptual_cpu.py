@@ -420,3 +420,53 @@ def test_a_saved_perceptual_metric_is_not_recalculated_beside_a_new_one():
     ]
     assert [spec.key for spec in plan.tasks[0].requested_specs] == ["butteraugli", "cvvdp"]
 
+
+def test_the_process_tree_stops_being_listed_once_the_first_pair_is_taken(tmp_path, monkeypatch):
+    """The lister stopped when it saw pair 1 on disk. If pair 1 was written,
+    scored and deleted between two of its checks, it never saw it and
+    listed FFmpeg's process tree every 50 ms until the extraction ended."""
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    from vmaf_app.core import perceptual_cpu
+
+    real_tree = perceptual_cpu.proc_util.process_tree
+    calls = []
+
+    def slow_first_tree(pid):
+        calls.append(time.monotonic())
+        if len(calls) == 1:
+            time.sleep(0.3)  # pair 1 comes and goes meanwhile
+        return real_tree(pid)
+
+    writer = (
+        "import os, sys, time\n"
+        "d = sys.argv[1]\n"
+        "def put(name):\n"
+        "    open(os.path.join(d, name + '.tmp'), 'wb').close()\n"
+        "    os.replace(os.path.join(d, name + '.tmp'), os.path.join(d, name))\n"
+        "for i in (1, 2): put(f'reference-{i:08d}.png'); put(f'test-{i:08d}.png')\n"
+        "time.sleep(1.5)\n"
+        "put('reference-00000003.png'); put('test-00000003.png')\n"
+    )
+    monkeypatch.setattr(perceptual_cpu.proc_util, "process_tree", slow_first_tree)
+    monkeypatch.setattr(perceptual_cpu.proc_util, "popen",
+                        lambda _cmd, **kwargs: subprocess.Popen([sys.executable, "-c", writer, str(tmp_path)], **kwargs))
+    pairs = []
+
+    def consume():
+        for reference, test in perceptual_cpu._png_pairs(
+            _info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1, tmp_path, None, None,
+        ):
+            pairs.append(reference.name)
+            reference.unlink()
+            test.unlink()
+
+    consumer = threading.Thread(target=consume, daemon=True)
+    consumer.start()
+    consumer.join(30)
+    assert len(pairs) == 3
+    assert len(calls) <= 3, f"the tree was listed {len(calls)} times"
+

@@ -307,7 +307,11 @@ def _png_pairs(
         # the first child found need not be FFmpeg.
         proc_util.raise_current_thread_priority()
         while True:
-            written = complete(1)  # checked first: a list taken after it includes FFmpeg
+            # Checked first: a list taken after it includes FFmpeg. The caller
+            # moving on counts too: it deletes each pair once scored, so a
+            # pair written and taken between two checks left this polling
+            # every 50 ms until FFmpeg ended.
+            written = consumed[0] > 1 or complete(1)
             found = proc_util.process_tree(process.pid)
             adopt(found)
             if not found or written or stop.wait(0.05):
