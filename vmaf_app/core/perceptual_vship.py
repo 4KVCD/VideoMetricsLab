@@ -1406,10 +1406,16 @@ def apply_vship_cpu_fallback(
     # What may be retried on the CPU if the GPU cannot be used.
     retryable = tuple(spec for spec in specs if spec.key not in GPU_ONLY_METRICS)
 
-    def gpu_only_failed(reason: str, error: BaseException | None = None) -> dict[str, str]:
-        """The failures for the GPU-only metrics; raises if nothing else was asked for."""
+    def gpu_only_failed(reason: str, error: BaseException | None = None, *,
+                        no_gpu: bool = True) -> dict[str, str]:
+        """The failures for the GPU-only metrics; raises if nothing else was
+        asked for. `no_gpu` is for when no usable GPU was found; otherwise
+        the GPU pass itself failed, possibly for a reason that has nothing to
+        do with the GPU (the two videos' frame rates differing, say), and
+        blaming the GPU sent people looking for the wrong problem."""
         labels = " and ".join(metric_definition(spec.key).label for spec in gpu_only)
-        message = f"{labels} needs a supported NVIDIA or AMD GPU and could not use it: {reason}"
+        message = (f"{labels} needs a supported NVIDIA or AMD GPU and could not use it: {reason}"
+                   if no_gpu else f"{labels} could not be calculated: {reason}")
         if not retryable:
             raise PerceptualRunError(message) from error
         return {spec.key: message for spec in gpu_only}
@@ -1454,7 +1460,7 @@ def apply_vship_cpu_fallback(
     except Exception as error:
         if cancel_event is not None and cancel_event.is_set():
             raise PerceptualCancelled("Cancelled by user") from error
-        failures = gpu_only_failed(f"GPU scoring failed ({error})", error) if gpu_only else {}
+        failures = gpu_only_failed(str(error), error, no_gpu=False) if gpu_only else {}
         gpu_retry = tuple(spec for spec in gpu_specs if spec.key not in GPU_ONLY_METRICS)
         if gpu_retry and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
             # Nobody agreed to a CPU run of this length: the Videos tab asks
@@ -1463,10 +1469,14 @@ def apply_vship_cpu_fallback(
             # images for a film. The metric fails instead, with the reason;
             # the video keeps its other metrics.
             labels = " and ".join(metric_definition(spec.key).label for spec in gpu_retry)
+            # CVVDP's own failure goes into the same message: raising here
+            # used to drop it, leaving only advice about the CPU that does
+            # not apply to a GPU-only metric.
             raise PerceptualRunError(
                 f"GPU scoring failed ({error}). It was not retried on the CPU, which would take "
                 "hours to days for a video over 10 minutes. "
                 f"Choose CPU for {labels} to calculate it on the CPU anyway."
+                + "".join(f"\n{message}" for message in dict.fromkeys(failures.values()))
             ) from error
         if on_status:
             on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")

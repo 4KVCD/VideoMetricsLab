@@ -848,3 +848,24 @@ def test_a_cpu_side_failure_keeps_the_finished_gpu_scores(monkeypatch, cpu_probl
     assert output.metrics.keys() == ("cvvdp",)
     assert ("not installed" if cpu_problem == "tool missing" else "frames on the CPU") in output.failures["butteraugli"]
 
+
+def test_cvvdp_failure_messages_name_the_real_cause(monkeypatch):
+    """A problem with the videos was reported as CVVDP needing a GPU, and on
+    a long video CVVDP's failure was dropped from the message altogether."""
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: (_ for _ in ()).throw(
+        perceptual_cpu.PerceptualRunError("Frame rates do not match: 24 vs 25 fps")))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: _single_metric_output("ssimulacra2", 80.0, "cpu"))
+    output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+    assert output.failures["cvvdp"] == "CVVDP could not be calculated: Frame rates do not match: 24 vs 25 fps"
+
+    film = VideoInfo(Path("film.mkv"), 64, 48, 24.0, 7200.0, 172800, "h264", pix_fmt="yuv420p")
+    with pytest.raises(perceptual_cpu.PerceptualRunError) as raised:
+        vship.apply_vship_cpu_fallback(film, film, request, request.metrics)
+    assert "not retried on the CPU" in str(raised.value)
+    assert "CVVDP could not be calculated: Frame rates do not match" in str(raised.value)
+
