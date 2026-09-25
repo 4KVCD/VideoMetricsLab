@@ -761,14 +761,16 @@ class _MetricLane:
 
     def __init__(self, device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace,
                  source_planes, distorted_planes, src_strides: _I64_3, dist_strides: _I64_3,
-                 scores: _ScoreArray, finished: Callable[[int], None],
-                 failed: Callable[[BaseException], None], abort: threading.Event) -> None:
+                 scores: _ScoreArray, finished: Callable[[int], None], abort: threading.Event) -> None:
         self.key = key
         self._args = (device, src, dist)
         self._planes = (source_planes, distorted_planes)
         self._strides = (src_strides, dist_strides)
-        self._scores, self._finished, self._failed, self._abort = scores, finished, failed, abort
+        self._scores, self._finished, self._abort = scores, finished, abort
         self.jobs: queue.Queue[tuple[int, int, int] | None] = queue.Queue()
+        #: Set when the handler failed; the lane then hands frames back
+        #: unscored, like _CvvdpLane, so the other metrics can finish.
+        self.error: BaseException | None = None
         self._thread = threading.Thread(target=self._run, name=f"vship-{key}", daemon=True)
 
     def start(self) -> None:
@@ -785,18 +787,23 @@ class _MetricLane:
             if error != 0:
                 raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
             handler = _init_handler(device, self.key, src, dist)
+        except BaseException as error:
+            self.error = error
+        try:
             while True:
                 job = self.jobs.get()
                 if job is None or self._abort.is_set():
                     return
                 index, source_slot, distorted_slot = job
-                self._scores[index] = _compute_metric(
-                    device, self.key, handler, self._planes[0][source_slot],
-                    self._planes[1][distorted_slot], *self._strides,
-                )
+                if self.error is None:
+                    try:
+                        self._scores[index] = _compute_metric(
+                            device, self.key, handler, self._planes[0][source_slot],
+                            self._planes[1][distorted_slot], *self._strides,
+                        )
+                    except BaseException as error:
+                        self.error = error
                 self._finished(index)
-        except BaseException as error:
-            self._failed(error)
         finally:
             if handler is not None:
                 with contextlib.suppress(Exception):
@@ -1167,7 +1174,6 @@ def _run_vship_pass(
     started = time.perf_counter()
     scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in frame_specs}
     abort = threading.Event()
-    failures: list[BaseException] = []
     pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
     pending_lock = threading.Lock()
     expected_frames = min(source.estimated_frame_count, distorted.estimated_frame_count)
@@ -1198,10 +1204,6 @@ def _run_vship_pass(
                         "-f", "rawvideo", "pipe:1"]
             attempts.append(command)
         return attempts
-
-    def failed(error: BaseException) -> None:
-        failures.append(error)
-        abort.set()
 
     try:
         def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label):
@@ -1245,27 +1247,35 @@ def _run_vship_pass(
         for spec in frame_specs:
             by_metric[spec.key] = [
                 _MetricLane(device, spec.key, src_color, dist_color, source_planes, distorted_planes,
-                            src_strides, dist_strides, scores[spec.key], finished, failed, abort)
+                            src_strides, dist_strides, scores[spec.key], finished, abort)
                 for _ in range(_LANES_PER_METRIC)
             ]
             lanes.extend(by_metric[spec.key])
         for lane in lanes:
             lane.start()
 
+        def lane_errors() -> dict[str, BaseException]:
+            """Each failed metric's first error. One failed lane fails its
+            metric: the other lane's frames alone would leave holes."""
+            errors = {key: next((lane.error for lane in metric_lanes if lane.error is not None), None)
+                      for key, metric_lanes in by_metric.items()}
+            if cvvdp_lane is not None:
+                errors["cvvdp"] = cvvdp_lane.error
+            return {key: error for key, error in errors.items() if error is not None}
+
         frame = 0
         while True:
-            if failures:
-                raise failures[0]
-            if not frame_specs and cvvdp_lane is not None and cvvdp_lane.error is not None:
+            errors = lane_errors()
+            if len(errors) == len(specs):
                 # Nothing left to score: stop now rather than decode the
                 # rest of the video (a film took ~30 minutes to report a
                 # CVVDP handler that had failed to start).
-                raise cvvdp_lane.error
-            try:
-                source_slot = source_stream.next(cancel_event, abort)
-                distorted_slot = distorted_stream.next(cancel_event, abort)
-            except _LaneFailedError:
-                raise failures[0] from None
+                raise next(iter(errors.values()))
+            # No abort here: a failed lane keeps handing its frames back, so
+            # the ring never fills with slots nobody will release, and the
+            # check above ends the pass once no metric is left.
+            source_slot = source_stream.next(cancel_event)
+            distorted_slot = distorted_stream.next(cancel_event)
             if source_slot == _EOF or distorted_slot == _EOF:
                 # The shorter input has ended: the comparison is the frames
                 # both have, exactly as libvmaf scores it (framesync with
@@ -1292,15 +1302,15 @@ def _run_vship_pass(
             lane.stop()
         for lane in lanes:
             lane.join()
-        if failures:
-            raise failures[0]
         if frame == 0:
             raise VshipUnavailableError("FFmpeg produced no frame pairs for Vship.")
-        metric_failures: dict[str, str] = {}
-        if cvvdp_lane is not None and cvvdp_lane.error is not None:
-            if not frame_specs:
-                raise cvvdp_lane.error
-            metric_failures["cvvdp"] = str(cvvdp_lane.error)
+        # A metric whose handler failed (out of VRAM on a smaller card, say)
+        # is reported on its own; the others keep their scores. A SSIMULACRA2
+        # or Butteraugli failure used to end the pass and take CVVDP with it.
+        errors = lane_errors()
+        if len(errors) == len(specs):
+            raise next(iter(errors.values()))
+        metric_failures = {key: str(error) for key, error in errors.items()}
 
         frame_numbers = np.arange(frame, dtype=np.int32) * step
         times = frame_numbers.astype(np.float64) / max(source.fps, 1.0)
@@ -1314,6 +1324,8 @@ def _run_vship_pass(
             "butteraugli_norm": "3-norm",
         }
         for spec in frame_specs:
+            if spec.key in metric_failures:
+                continue
             results.add(FrameMetricResult(
                 spec.key, frame_numbers, times,
                 scores[spec.key].values(frame),
@@ -1467,8 +1479,24 @@ def apply_vship_cpu_fallback(
             resolved_crops=crops,
         ), failures)
 
+    # A metric that failed on the GPU while the others finished is retried
+    # on the CPU on the same terms as a failed pass: only for videos up to
+    # ten minutes, which nobody has to agree to.
+    failures = dict(gpu_output.failures)
+    gpu_failed = tuple(spec for spec in gpu_specs if spec.key in failures and spec.key not in GPU_ONLY_METRICS)
+    if gpu_failed and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
+        for spec in gpu_failed:
+            failures[spec.key] = (
+                f"GPU scoring failed ({failures[spec.key]}). It was not retried on the CPU, which would "
+                "take hours to days for a video over 10 minutes. Choose CPU for "
+                f"{metric_definition(spec.key).label} to calculate it on the CPU anyway."
+            )
+        gpu_failed = ()
+    for spec in gpu_failed:
+        del failures[spec.key]
+    cpu_specs = cpu_specs + gpu_failed
     if not cpu_specs:
-        return gpu_output
+        return replace(gpu_output, failures=failures) if failures != gpu_output.failures else gpu_output
 
     if on_status:
         on_status("Calculating selected perceptual metric(s) on CPU…")
@@ -1487,7 +1515,7 @@ def apply_vship_cpu_fallback(
         raise PerceptualRunError("GPU and CPU perceptual metrics produced different frame counts.")
     combined = MetricResultSet()
     for spec in specs:
-        if spec.key in gpu_output.failures:
+        if spec.key in failures:
             continue
         value = gpu_output.metrics.get(spec.key) or cpu_output.metrics.get(spec.key)
         if value is None:
@@ -1496,5 +1524,5 @@ def apply_vship_cpu_fallback(
         combined.add(value)
     return PerceptualTaskOutput(
         combined, gpu_output.source_crop, gpu_output.distorted_crop,
-        gpu_output.compared_frame_count, dict(gpu_output.failures),
+        gpu_output.compared_frame_count, failures,
     )

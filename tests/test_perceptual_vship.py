@@ -238,7 +238,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None):
+         inspect=None, fail=None):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -270,6 +270,8 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         scored.append(index)
         if inspect is not None:
             inspect(index, source_planes, test_planes)
+        if fail is not None and key == fail[0] and index >= fail[1]:
+            raise vship.VshipUnavailableError(f"Vship {key} failed: out of memory")
         if cancel_after is not None and len(scored) >= cancel_after:
             cancel.set()
         return float(index) + (0.5 if key == "butteraugli" else 0.0)
@@ -765,3 +767,59 @@ def test_cvvdp_alone_failing_to_start_stops_the_pass_at_once(monkeypatch):
     with pytest.raises(vship.VshipUnavailableError, match="out of memory"):
         _run(monkeypatch, metrics=("cvvdp",), children=_both(slow))
     assert time.monotonic() - started < 4, "the pass decoded the rest of the video first"
+
+
+def test_a_ssimulacra2_failure_keeps_butteraugli_and_cvvdp(monkeypatch):
+    """A SSIMULACRA2 or Butteraugli lane failing (out of VRAM on a smaller
+    card, say) ended the whole pass: CVVDP was lost and reported as
+    needing a GPU, and Butteraugli had to be redone. Now only SSIMULACRA2
+    is reported failed; the rest of the pass finishes, without hanging."""
+    fake = _FakeCvvdp().install(monkeypatch)
+    count = vship._RING_SLOTS * 6
+    outcome = []
+    runner = threading.Thread(target=lambda: outcome.append(_run(
+        monkeypatch, metrics=("ssimulacra2", "butteraugli", "cvvdp"), fail=("ssimulacra2", 3),
+        children=_both(_frames_command(count, _FRAME_BYTES)))[0]), daemon=True)
+    runner.start()
+    runner.join(timeout=20)
+    assert not runner.is_alive(), "the pass hung after a lane failed"
+    output = outcome[0]
+    assert not output.metrics.has("ssimulacra2")
+    assert "out of memory" in output.failures["ssimulacra2"]
+    assert list(output.metrics.get("butteraugli").values) == [i + 0.5 for i in range(count)]
+    assert output.metrics.sequence("cvvdp").score == pytest.approx(_whole_video_jod(count), abs=1e-9)
+    assert fake.order == list(range(count))
+
+
+def test_every_metric_failing_still_fails_the_pass(monkeypatch):
+    _FakeCvvdp(fail_at=2).install(monkeypatch)
+    with pytest.raises(vship.VshipUnavailableError):
+        _run(monkeypatch, metrics=("ssimulacra2", "cvvdp"), fail=("ssimulacra2", 1),
+             children=_both(_frames_command(40, _FRAME_BYTES)))
+
+
+@pytest.mark.parametrize("long_video", [False, True])
+def test_a_metric_that_failed_on_the_gpu_is_retried_on_the_cpu_only_for_short_videos(monkeypatch, long_video):
+    seconds = 7200.0 if long_video else 60.0
+    source = VideoInfo(Path("source.mkv"), 64, 48, 24.0, seconds, int(seconds * 24), "h264", pix_fmt="yuv420p")
+    test = VideoInfo(Path("test.mkv"), 64, 48, 24.0, seconds, int(seconds * 24), "h264", pix_fmt="yuv420p")
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    cvvdp = vship.SequenceMetricResult("cvvdp", 9.4, MetricProvenance("t", "1", "gpu", "t"))
+    cpu_keys = []
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
+    monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: PerceptualTaskOutput(
+        MetricResultSet([cvvdp]), None, None, 1, {"ssimulacra2": "Vship SSIMULACRA2 failed: out of memory"}))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *a, **k: cpu_keys.extend(s.key for s in a[3]) or _single_metric_output(
+                            "ssimulacra2", 80.0, "cpu"))
+    output = vship.apply_vship_cpu_fallback(source, test, request, request.metrics)
+    assert output.metrics.has("cvvdp")
+    if long_video:
+        assert cpu_keys == [] and "not retried on the CPU" in output.failures["ssimulacra2"]
+        assert not output.metrics.has("ssimulacra2")
+    else:
+        assert cpu_keys == ["ssimulacra2"] and output.failures == {}
+        assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
+
