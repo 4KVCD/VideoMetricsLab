@@ -1560,8 +1560,9 @@ def apply_vship_cpu_fallback(
                 f"{metric_definition(spec.key).label} to calculate it on the CPU anyway."
             )
         gpu_failed = ()
-    for spec in gpu_failed:
-        del failures[spec.key]
+    # Kept for the message if the CPU retry fails too: the GPU failure is
+    # the first cause, and dropping it sent a GPU user to fix a CPU tool.
+    gpu_reasons = {spec.key: failures.pop(spec.key) for spec in gpu_failed}
     cpu_specs = cpu_specs + gpu_failed
     if not cpu_specs:
         return replace(gpu_output, failures=failures) if failures != gpu_output.failures else gpu_output
@@ -1584,6 +1585,11 @@ def apply_vship_cpu_fallback(
             # half, progress jumped from 100% back to 55%.
             on_progress(cur, total, fps)
 
+    def failed_on_cpu(key: str, reason: str) -> str:
+        if key in gpu_reasons:
+            return f"GPU scoring failed ({gpu_reasons[key]}); the CPU retry failed too: {reason}"
+        return reason
+
     # The GPU pass has finished: a CPU failure from here on fails only the
     # CPU metrics. It used to raise out of here and throw away what the GPU
     # had scored -- a finished CVVDP pass lost to a missing libjxl tool.
@@ -1600,13 +1606,15 @@ def apply_vship_cpu_fallback(
         if cancel_event is not None and cancel_event.is_set():
             raise PerceptualCancelled("Cancelled by user") from error
         if not gpu_output.metrics:
+            if gpu_reasons:
+                raise PerceptualRunError(failed_on_cpu(cpu_specs[-1].key, str(error))) from error
             raise
-        failures.update({spec.key: str(error) for spec in cpu_specs})
+        failures.update({spec.key: failed_on_cpu(spec.key, str(error)) for spec in cpu_specs})
         return replace(gpu_output, failures=failures)
     if gpu_output.compared_frame_count != cpu_output.compared_frame_count:
         mismatch = (f"calculated over {cpu_output.compared_frame_count} frames on the CPU but "
                     f"{gpu_output.compared_frame_count} on the GPU, so it was not kept")
-        failures.update({spec.key: mismatch for spec in cpu_specs})
+        failures.update({spec.key: failed_on_cpu(spec.key, mismatch) for spec in cpu_specs})
     combined = MetricResultSet()
     for spec in specs:
         if spec.key in failures:

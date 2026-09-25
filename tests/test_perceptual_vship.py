@@ -971,3 +971,16 @@ def test_a_cpu_retry_after_a_gpu_failure_is_announced_and_its_progress_runs_0_to
     assert progress == [5, 50, 100, 10, 60, 100]
     assert "SSIMULACRA2 failed on the GPU; calculating it on the CPU" in statuses[-1]
     assert output.metrics.has("ssimulacra2") and output.failures == {}
+
+
+def test_a_cpu_retry_that_fails_too_keeps_the_gpu_reason(monkeypatch):
+    def cpu(*_a, **_k):
+        raise perceptual_cpu.PerceptualRunError("ssimulacra2 is not installed.")
+
+    request = _gpu_failed_ssimulacra2(monkeypatch, cpu)
+    output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
+    assert output.metrics.has("cvvdp")
+    assert output.failures["ssimulacra2"] == (
+        "GPU scoring failed (Vship SSIMULACRA2 failed: out of memory); "
+        "the CPU retry failed too: ssimulacra2 is not installed.")
+
