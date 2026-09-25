@@ -4,19 +4,15 @@ A Windows desktop app for measuring and comparing video encode quality.
 
 ## Features
 
-- Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli, and
-  CVVDP for multiple test videos.
-- Accelerate SSIMULACRA2 and Butteraugli with Vship on supported NVIDIA/AMD
-  GPUs; automatically use the bundled libjxl CPU tools when GPU scoring is
-  unavailable.
-- Calculate CVVDP on the GPU and configure the modeled display and viewing
-  conditions; inspect its per-second JOD curve and whole-video score.
-- VMAF v0.61 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
-- Compare metric curves, statistics, and per-frame scores.
-- Instantly switch between source and encoded video for visual A/B comparisons, both frame by frame and during playback.
-- Inspect bitrate by frame, second, or GOP without running quality metrics.
+- Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli, and ColorVideo VDP for multiple test videos.
+- VShip integration for GPU acceleration for ColorVideo VDP, SSIMULACRA2, and Butteraugli
+- libjxl integration for CPU fallback for SSIMULACRA2, and Butteraugli (no CPU support for ColorVideo VDP)
+- VMAF v0.6.1 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
+- Compare metric curves, statistics, and per-frame scores (per second for ColorVideo VDP).
+- Switch instantly between the source and test videos during playback, hold **S** to show the source, or inspect exact frames.
+- Inspect bitrate independently by frame, second, or GOP.
 - Detect black bars and handle resolution mismatches automatically.
-- Use GPU decoding when supported, with independent software fallback per input.
+- Use GPU decoding with independent software fallback per input.
 - Calculate two test videos in parallel on many-core CPUs.
 - Cache completed results and restore them when matching videos are loaded again.
 
