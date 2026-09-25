@@ -100,10 +100,16 @@ class ProbeWorker(QThread):
                 if cached is not None:
                     result, label = cached
                     self.cached_found.emit(path, result, label, key)
-                parameters, others = result_cache.other_cvvdp_scores(
-                    self._source, identity, request,
-                    supplemental_specs=self._cache_supplemental.get(path, ()),
-                )
+                try:
+                    parameters, others = result_cache.other_cvvdp_scores(
+                        self._source, identity, request,
+                        supplemental_specs=self._cache_supplemental.get(path, ()),
+                    )
+                except Exception:
+                    # Only a hint for a tooltip: a damaged cache file must
+                    # not end this loop and leave the videos after this one
+                    # without their saved scores.
+                    continue
                 if parameters:
                     self.other_cvvdp_found.emit(path, others, parameters)
         finally:

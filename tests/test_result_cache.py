@@ -415,3 +415,29 @@ def test_other_cvvdp_scores_are_those_of_other_displays_of_the_same_comparison(t
         == [True]
     assert result_cache.other_cvvdp_scores(
         source, distorted, analysis_request_from_vmaf_options(OPTIONS, ("vmaf",))) == ((), [])
+
+
+@pytest.mark.parametrize("parameters", ["abc", 5, None, [1, 2]])
+def test_a_damaged_saved_cvvdp_score_is_skipped_when_listing_other_displays(tmp_path, parameters):
+    """Its parameters were read outside the error handling: one damaged file
+    raised out of the background lookup, and the videos after it lost their
+    saved scores."""
+    import json
+
+    import numpy as np
+
+    from vmaf_app.core import metric_cache
+    from vmaf_app.core.cvvdp import BUILTIN_PRESETS
+
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    request = analysis_request_from_vmaf_options(OPTIONS, ("vmaf", "cvvdp"), cvvdp=BUILTIN_PRESETS[0].settings)
+    spec = next(s for s in request.metrics if s.key == "cvvdp")
+    directory = metric_cache.recipe_directory(result_cache.cache_dir(), source, distorted, request.recipe)
+    directory.mkdir(parents=True)
+    identity = {**spec.identity_dict(), "parameters": parameters}
+    metadata = {"format_version": metric_cache.METRIC_CACHE_FORMAT_VERSION, "kind": "sequence",
+                "key": "cvvdp", "request": identity, "provenance": {}}
+    np.savez(directory / "cvvdp_damaged.npz", metadata=np.array(json.dumps(metadata)), score=np.array(9.0))
+    assert result_cache.other_cvvdp_scores(source, distorted, request)[1] == []
+

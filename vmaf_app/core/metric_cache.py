@@ -264,10 +264,11 @@ def load_other_parameters(directory: Path, spec: MetricRequestSpec) -> list[tupl
                         or _canonical(request.get("parameters")) == _canonical(wanted["parameters"])):
                     continue
                 score = float(data["score"].item())
+                parameters = dict(request["parameters"])
         except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
             continue
         if math.isfinite(score):
-            found.append((dict(request["parameters"]), score))
+            found.append((parameters, score))
     return found
 
 
