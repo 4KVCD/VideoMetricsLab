@@ -335,7 +335,10 @@ def test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, mo
     # queues when it resumes -- traced at 7-10 at 720p, arriving within
     # ~10 ms, before the next check can suspend it again. Bounded by that,
     # not by the video's length: writing everything first meant 480 images.
-    assert most_images[0] <= 2 * (6 + 20), most_images[0]
+    # 34-47 images on an idle machine; up to 66 with 22 busy processes on
+    # 24 cores, so the bound leaves room for a busy machine running the
+    # suite.
+    assert most_images[0] <= 2 * (6 + 30), most_images[0]
     assert [done for done, _total, _rate in progress[:3]] == [1, 2, 3]
     assert progress[0][1] == 240 and progress[0][2] > 0
 

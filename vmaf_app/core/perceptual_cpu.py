@@ -275,28 +275,57 @@ def _png_pairs(
     stop = threading.Event()
 
     # FFmpeg and anything under it -- the real ffmpeg.exe when the one
-    # started is a launcher (see proc.process_tree). Listed once, as soon
-    # as the first pair exists (so the real FFmpeg does too), and kept:
-    # listing takes 13-40 ms on Windows. Listed at the moment FFmpeg had to
-    # stop, that delay let it write 75-86 images against a limit of 52.
+    # started is a launcher (see proc.process_tree). Listing it takes 13-40
+    # ms on Windows, far longer on a loaded machine, so it happens on a
+    # thread of its own and the regulator never waits for it: until the
+    # list is there, the regulator suspends the process it started.
+    #
+    # The list is looked for from the moment FFmpeg starts, until a child
+    # appears (a launcher's real FFmpeg) or the first pair is written (by
+    # then any child exists). Listing only once the first pair existed left
+    # a launcher's FFmpeg unthrottled for as long as that took: with every
+    # core busy, 80 pairs were on disk after 2 had been scored.
     tree: list = []
+    root = proc_util.process_root(process.pid)
+    suspended: list = []  # exactly what is suspended now, to resume the same
+
+    def adopt(found: list) -> None:
+        """Adds newly found processes to the tree, suspending them at once
+        if FFmpeg is meant to be suspended: suspended before they were
+        known, only the process started was, and behind a launcher that
+        left FFmpeg writing every frame (450 of 480 images on disk)."""
+        with throttle_lock:
+            new = [p for p in found if all(p.pid != q.pid for q in tree)]
+            tree.extend(new)
+            if throttled and new:
+                proc_util.signal_processes(new, "suspend")
+                suspended.extend(new)
 
     def list_tree() -> None:
-        if tree:
-            return
-        found = proc_util.process_tree(process.pid)
-        with throttle_lock:
-            if not tree:
-                tree.extend(found)
+        # Until the first pair is written, not until the first child shows:
+        # launchers can nest (a venv's python.exe starts the real one), so
+        # the first child found need not be FFmpeg.
+        proc_util.raise_current_thread_priority()
+        while True:
+            written = complete(1)  # checked first: a list taken after it includes FFmpeg
+            found = proc_util.process_tree(process.pid)
+            adopt(found)
+            if not found or written or stop.wait(0.05):
+                return
+
+    lister = threading.Thread(target=list_tree, name="png-backlog-tree", daemon=True)
 
     def throttle(on: bool) -> None:
         nonlocal throttled
-        if on:
-            list_tree()
         with throttle_lock:
             if on == throttled:
                 return
-            proc_util.signal_processes(tree, "suspend" if on else "resume")
+            if on:
+                suspended[:] = tree or root
+                proc_util.signal_processes(suspended, "suspend")
+            else:
+                proc_util.signal_processes(suspended, "resume")
+                suspended.clear()
             throttled = on
 
     def pair(number: int) -> tuple[Path, Path]:
@@ -307,9 +336,12 @@ def _png_pairs(
         return reference.exists() and test.exists()
 
     def regulate() -> None:
+        # This thread does next to nothing, but must do it on time: with
+        # every core busy it woke late and FFmpeg wrote far past the limit
+        # (median ~70-125 images against 52 with 22 busy processes on 24
+        # cores). A higher priority lets it preempt the load.
+        proc_util.raise_current_thread_priority()
         while not stop.wait(0.01):
-            if not tree and complete(1):
-                list_tree()
             index = consumed[0]
             if complete(index + _BACKLOG_PAIRS):
                 throttle(True)
@@ -318,6 +350,7 @@ def _png_pairs(
 
     regulator = threading.Thread(target=regulate, name="png-backlog", daemon=True)
     regulator.start()
+    lister.start()
     try:
         index = 1
         while True:

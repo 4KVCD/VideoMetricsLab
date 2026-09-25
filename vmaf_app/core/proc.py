@@ -61,6 +61,17 @@ def process_tree(pid: int) -> list:
     return tree
 
 
+def process_root(pid: int) -> list:
+    """Just the process, as a one-item tree: quick, for when its children
+    have not been listed yet."""
+    import psutil
+
+    try:
+        return [psutil.Process(pid)]
+    except psutil.Error:
+        return []
+
+
 def signal_tree(pid: int, action: str) -> None:
     """Applies "suspend", "resume", "terminate" or "kill" to a process and
     its children (see process_tree). Suspending starts at the top, so the
@@ -92,3 +103,19 @@ def kill(process) -> None:
     """Popen.kill(), after killing anything the process started."""
     signal_processes(process_tree(process.pid)[1:], "kill")
     process.kill()
+
+
+def raise_current_thread_priority() -> None:
+    """Makes the calling thread preempt ordinary work (Windows
+    THREAD_PRIORITY_HIGHEST). For light, timing-critical threads only.
+    Does nothing elsewhere or if Windows refuses."""
+    if os.name != "nt":
+        return
+    with contextlib.suppress(Exception):
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentThread.restype = ctypes.c_void_p
+        kernel32.SetThreadPriority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        kernel32.SetThreadPriority(kernel32.GetCurrentThread(), 2)  # THREAD_PRIORITY_HIGHEST
+
