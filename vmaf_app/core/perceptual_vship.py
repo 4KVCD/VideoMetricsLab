@@ -1256,6 +1256,11 @@ def _run_vship_pass(
         while True:
             if failures:
                 raise failures[0]
+            if not frame_specs and cvvdp_lane is not None and cvvdp_lane.error is not None:
+                # Nothing left to score: stop now rather than decode the
+                # rest of the video (a film took ~30 minutes to report a
+                # CVVDP handler that had failed to start).
+                raise cvvdp_lane.error
             try:
                 source_slot = source_stream.next(cancel_event, abort)
                 distorted_slot = distorted_stream.next(cancel_event, abort)

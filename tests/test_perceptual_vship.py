@@ -748,3 +748,20 @@ def test_cvvdp_on_the_gpu_beside_butteraugli_on_the_cpu(monkeypatch):
                         lambda *a, **k: _single_metric_output("butteraugli", 0.3, "cpu"))
     output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
     assert output.metrics.keys() == ("butteraugli", "cvvdp")
+
+
+def test_cvvdp_alone_failing_to_start_stops_the_pass_at_once(monkeypatch):
+    """With nothing else to score, a CVVDP handler that failed to start used
+    to be reported only after the whole video had been decoded."""
+    def cannot_start(*_args):
+        raise vship.VshipUnavailableError("Could not initialize Vship CVVDP: out of memory")
+
+    _FakeCvvdp().install(monkeypatch)
+    monkeypatch.setattr(vship, "_init_cvvdp", cannot_start)
+    slow = [sys.executable, "-c",
+            f"import sys, time\nfor i in range(600):\n    sys.stdout.buffer.write(bytes({_FRAME_BYTES})); "
+            "sys.stdout.buffer.flush(); time.sleep(0.01)\n"]
+    started = time.monotonic()
+    with pytest.raises(vship.VshipUnavailableError, match="out of memory"):
+        _run(monkeypatch, metrics=("cvvdp",), children=_both(slow))
+    assert time.monotonic() - started < 4, "the pass decoded the rest of the video first"
