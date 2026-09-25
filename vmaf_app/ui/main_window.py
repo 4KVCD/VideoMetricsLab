@@ -1352,7 +1352,13 @@ class MainWindow(QMainWindow):
             "to fill the display.\n\nSet per video: choosing or saving a display preset "
             "does not change it."
         )
-        self.cvvdp_resize_check.toggled.connect(self._on_cvvdp_resize_toggled)
+        # checkStateChanged, not toggled: a partly ticked box (a mixed
+        # selection) already counts as checked, so ticking it fully would not
+        # toggle anything.
+        self.cvvdp_resize_check.checkStateChanged.connect(
+            lambda state: None if state == Qt.PartiallyChecked
+            else self._on_cvvdp_resize_toggled(state == Qt.Checked)
+        )
         metric_options_form.addRow("", self.cvvdp_resize_check)
 
         self.duration_edit = QTimeEdit()
@@ -2702,15 +2708,24 @@ class MainWindow(QMainWindow):
             # way back to it must not be a disabled control.
             self.subsample_spin.setEnabled(uses_libvmaf or any(o.n_subsample > 1 for o in selected_options))
             self._show_cvvdp_settings(
-                self._rows[self._panel_target_rows[0]].cvvdp if self._panel_target_rows
-                else self._default_cvvdp
+                [self._rows[r].cvvdp for r in self._panel_target_rows] or [self._default_cvvdp]
             )
         finally:
             self._syncing_panel = False
 
-    def _show_cvvdp_settings(self, settings: CvvdpSettings) -> None:
-        """Shows one row's CVVDP settings in the Options panel: the preset
-        they match (or "Custom"), the display in one line, and the resize box."""
+    def _show_cvvdp_settings(self, selected: list[CvvdpSettings]) -> None:
+        """Shows the selected rows' CVVDP settings in the Options panel: the
+        preset they match (or "Custom"), the display in one line, and the
+        resize box.
+
+        Rows that differ show as "Mixed" in the dropdown and a partly ticked
+        box. Showing only the first row's values made re-choosing the preset
+        it already had (or clicking the box) do nothing for the other rows,
+        or set them the wrong way round.
+        """
+        settings = selected[0]
+        mixed_display = len({repr(s.display.identity()) for s in selected}) > 1
+        mixed_resize = len({s.resize_to_display for s in selected}) > 1
         combo = self.cvvdp_preset_combo
         combo.blockSignals(True)
         try:
@@ -2721,8 +2736,11 @@ class MainWindow(QMainWindow):
                 combo.setItemData(
                     combo.count() - 1, preset.description or "Your saved preset.", Qt.ToolTipRole
                 )
-            match = matching_preset(settings, user_presets)
-            if match is None:
+            match = None if mixed_display else matching_preset(settings, user_presets)
+            if mixed_display:
+                combo.addItem("Mixed (the selected videos use different displays)", None)
+                combo.setCurrentIndex(combo.count() - 1)
+            elif match is None:
                 combo.addItem("Custom (not saved as a preset)", None)
                 combo.setCurrentIndex(combo.count() - 1)
             else:
@@ -2730,10 +2748,16 @@ class MainWindow(QMainWindow):
         finally:
             combo.blockSignals(False)
         self.cvvdp_delete_btn.setEnabled(match is not None and not match.builtin)
-        self.cvvdp_display_label.setText(settings.display.describe())
-        self.cvvdp_resize_check.blockSignals(True)
-        self.cvvdp_resize_check.setChecked(settings.resize_to_display)
-        self.cvvdp_resize_check.blockSignals(False)
+        self.cvvdp_display_label.setText(
+            "The selected videos use different displays; choosing a preset sets them all."
+            if mixed_display else settings.display.describe()
+        )
+        box = self.cvvdp_resize_check
+        box.blockSignals(True)
+        box.setTristate(mixed_resize)
+        box.setCheckState(Qt.PartiallyChecked if mixed_resize
+                          else Qt.Checked if settings.resize_to_display else Qt.Unchecked)
+        box.blockSignals(False)
 
     def _read_panel_options(self) -> VmafOptions:
         extra_features = [

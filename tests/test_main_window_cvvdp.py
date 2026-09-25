@@ -591,3 +591,30 @@ def test_choosing_a_preset_leaves_scale_to_fill_alone_and_saving_one_does_not_st
     assert not win._rows[new_row].cvvdp.resize_to_display
     win.close()
 
+
+
+def test_a_mixed_selection_shows_as_mixed_and_one_choice_sets_every_row(qapp):
+    """With A on the default display and B on HDR, selecting both showed A's
+    preset: re-choosing it fired nothing and B kept HDR. The resize box
+    likewise showed A's state, so a click set both rows to the opposite of
+    A's value."""
+    from PySide6.QtWidgets import QTableWidgetSelectionRange
+
+    win, _row_a, a = _window_with_row("a.mp4")
+    row_b = win._add_table_row(Path("b.mp4"))
+    b = win._rows[row_b]
+    b.cvvdp = BUILTIN_PRESETS[2].settings
+    b.cvvdp = type(b.cvvdp)(b.cvvdp.display, True)
+    win.distorted_table.setRangeSelected(
+        QTableWidgetSelectionRange(0, 0, 1, win.distorted_table.columnCount() - 1), True)
+    win._on_table_selection_changed()
+    assert win.cvvdp_preset_combo.currentData() is None
+    assert "Mixed" in win.cvvdp_preset_combo.currentText()
+    assert win.cvvdp_resize_check.checkState() == Qt.PartiallyChecked
+
+    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(DEFAULT_PRESET.name))
+    assert a.cvvdp.display == b.cvvdp.display == DEFAULT_PRESET.settings.display
+    win.cvvdp_resize_check.click()  # from partly ticked to ticked: every row
+    assert a.cvvdp.resize_to_display and b.cvvdp.resize_to_display
+    assert win.cvvdp_resize_check.checkState() == Qt.Checked and not win.cvvdp_resize_check.isTristate()
+    win.close()
