@@ -119,6 +119,9 @@ def main() -> int:
             box.exec()
         return 0 if "FAIL" not in report else 1
 
+    from vmaf_app.core.perceptual_vship import start_vship_probe
+
+    start_vship_probe()  # done by the time the first video is added
     window = MainWindow()
     window.show()
     return app.exec()

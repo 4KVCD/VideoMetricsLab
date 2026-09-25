@@ -27,7 +27,6 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -278,9 +277,46 @@ def _message(lib: ctypes.CDLL, code: int | None = None) -> str:
         return f"Vship error {code}"
 
 
-@lru_cache(maxsize=1)
+# The probe's result and when it was made. One probe serves the whole
+# session: callers that arrive while it runs wait for it rather than
+# starting their own.
+_PROBE_LOCK = threading.Lock()
+_probed: tuple[tuple[VshipDevice | None, str], float] | None = None
+#: A failed probe older than this is made again before the next GPU run.
+FAILED_PROBE_RETRY_SECONDS = 60.0
+
+
 def detect_vship_device() -> tuple[VshipDevice | None, str]:
-    """Return a fully verified NVIDIA/AMD device, or a user-readable reason."""
+    """Return a fully verified NVIDIA/AMD device, or a user-readable reason.
+
+    Probed once and cached; see start_vship_probe and forget_failed_vship_probe."""
+    global _probed
+    with _PROBE_LOCK:
+        if _probed is None:
+            _probed = (_probe_vship_device(), time.monotonic())
+        return _probed[0]
+
+
+def start_vship_probe() -> None:
+    """Probe in the background, at startup. The first probe loads the Vship
+    library and initializes the GPU driver, and ran on the UI thread when the
+    first video was added, freezing the window for that long."""
+    threading.Thread(target=detect_vship_device, name="vship-probe", daemon=True).start()
+
+
+def forget_failed_vship_probe() -> None:
+    """Before a GPU run, off the UI thread: redo a probe that failed a while
+    ago. The failure may have been passing -- a driver being updated or
+    restarted, a GPU briefly unavailable -- and was kept for the whole
+    session, running every GPU metric on the CPU until the app restarted."""
+    global _probed
+    with _PROBE_LOCK:
+        if (_probed is not None and _probed[0][0] is None
+                and time.monotonic() - _probed[1] >= FAILED_PROBE_RETRY_SECONDS):
+            _probed = None
+
+
+def _probe_vship_device() -> tuple[VshipDevice | None, str]:
     if os.name != "nt":
         return None, "Vship GPU acceleration is only bundled for Windows."
     tools = Path(__file__).resolve().parents[1] / "tools" / "vship"
@@ -1534,6 +1570,7 @@ def apply_vship_cpu_fallback(
             cancel_event=cancel_event, process_handle=process_handle,
         )
 
+    forget_failed_vship_probe()
     device, reason = detect_vship_device()
     if device is None:
         failures = gpu_only_failed(reason) if gpu_only else {}

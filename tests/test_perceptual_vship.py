@@ -1047,3 +1047,43 @@ def test_cvvdp_display_config_avoids_a_temp_folder_vship_cannot_open(monkeypatch
     assert folder == public
     assert text.strip().startswith("{")
     assert list(public.iterdir()) == [], "the config file was left behind"
+
+
+def _counting_probe(monkeypatch, *results, delay=0.0):
+    calls = []
+
+    def probe():
+        calls.append(threading.current_thread().name)
+        time.sleep(delay)
+        return results[min(len(calls), len(results)) - 1]
+
+    monkeypatch.setattr(vship, "_probed", None)
+    monkeypatch.setattr(vship, "_probe_vship_device", probe)
+    return calls
+
+
+def test_the_gpu_probe_runs_in_the_background_once(monkeypatch):
+    """The probe ran on the UI thread when the first video was added; a
+    caller arriving while the background probe runs waits for it."""
+    calls = _counting_probe(monkeypatch, (None, "no GPU"), delay=0.2)
+    vship.start_vship_probe()
+    time.sleep(0.05)
+    assert vship.detect_vship_device() == (None, "no GPU")
+    assert vship.detect_vship_device() == (None, "no GPU")
+    assert calls == ["vship-probe"]
+
+
+def test_a_failed_gpu_probe_is_redone_after_a_while_but_a_found_gpu_is_kept(monkeypatch):
+    """A failure was cached for the whole session."""
+    device = _fake_device()
+    calls = _counting_probe(monkeypatch, (None, "driver restarting"), (device, ""))
+    assert vship.detect_vship_device()[0] is None
+    vship.forget_failed_vship_probe()  # too soon: kept
+    assert vship.detect_vship_device()[0] is None and len(calls) == 1
+    (result, when) = vship._probed
+    monkeypatch.setattr(vship, "_probed", (result, when - vship.FAILED_PROBE_RETRY_SECONDS))
+    vship.forget_failed_vship_probe()
+    assert vship.detect_vship_device()[0] is device and len(calls) == 2
+    monkeypatch.setattr(vship, "_probed", (vship._probed[0], 0.0))
+    vship.forget_failed_vship_probe()
+    assert vship.detect_vship_device()[0] is device and len(calls) == 2
