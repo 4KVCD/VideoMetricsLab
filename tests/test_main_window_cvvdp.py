@@ -682,6 +682,7 @@ def test_a_test_both_companion_row_copies_the_metric_choices(qapp):
     from vmaf_app.core.models import VideoInfo
 
     win = MainWindow()
+    win._default_extra_metric_keys = {"ssimulacra2", "butteraugli", "cvvdp"}  # the new defaults
     win._source_info = fake_video_info("source.mp4")
     row = win._add_table_row(Path("test.mp4"))
     original = win._rows[row]
@@ -695,6 +696,10 @@ def test_a_test_both_companion_row_copies_the_metric_choices(qapp):
     assert companion.extra_metric_keys == {"ssimulacra2", "cvvdp"}
     assert companion.metric_backends["ssimulacra2"] == "cpu"
     assert companion.cvvdp == BUILTIN_PRESETS[1].settings
+    companion_row = len(win._rows) - 1
+    # The cells show the copied choices, not the defaults it was drawn with.
+    assert win.distorted_table.item(companion_row, main_window_module.COL_BUTTERAUGLI).checkState() == Qt.Unchecked
+    assert win.distorted_table.item(companion_row, COL_CVVDP).checkState() == Qt.Checked
     companion.extra_metric_keys.add("butteraugli")
     assert "butteraugli" not in original.extra_metric_keys  # copies, not shared
     win.close()

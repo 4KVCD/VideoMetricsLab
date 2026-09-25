@@ -2624,6 +2624,10 @@ class MainWindow(QMainWindow):
             new_row_data.media_path = row_data.identity_path
             new_row_data.video_info = info
             self._set_row_info(new_row, info)
+            # Redrawn with the copied choices: the row was drawn with the
+            # defaults when added, and its cells kept showing those (every
+            # metric ticked) while a run followed the copied ones.
+            self._set_row_metrics(new_row)
             self._try_load_cached_result(new_row)
             added += 1
 
