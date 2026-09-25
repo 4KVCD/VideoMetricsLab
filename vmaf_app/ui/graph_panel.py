@@ -476,6 +476,12 @@ class _MetricPage(QWidget):
         )
 
     @staticmethod
+    def _second_at(curve: _MetricCurve, x: float) -> int:
+        """The index of the second containing time `x` on a per-second curve."""
+        idx = int(np.searchsorted(curve.starts, x, side="right")) - 1
+        return min(max(idx, 0), len(curve.starts) - 1)
+
+    @staticmethod
     def _start_time(curve: _MetricCurve, idx: int) -> float:
         """When point `idx` begins: its frame's time, or its second's start."""
         return float(curve.starts[idx] if curve.starts is not None else curve.times[idx])
@@ -663,7 +669,13 @@ class _MetricPage(QWidget):
         lines = [f"Time: {format_hms(x, decimals=2)}"]
         found: list[tuple[str, float]] = []
 
-        if len(visible) > 1:
+        if self.metric.kind is MetricKind.SEQUENCE:
+            # A per-second curve: the second under the cursor. The dip snap
+            # searches five points either side, which is five frames on the
+            # other tabs but five whole seconds here -- it reported a dip at
+            # 14 s with the cursor at 10.5 s.
+            picks = [(entry, curve, self._second_at(curve, x)) for entry, curve in visible]
+        elif len(visible) > 1:
             # Every series reports the SAME moment -- snapping each to its own
             # nearest dip would compare different frames against each other.
             target_time = self._find_shared_hover_time(visible, x, y, x_per_pixel)

@@ -83,3 +83,23 @@ def test_a_run_without_cvvdp_leaves_its_tab_empty_and_its_cell_blank(qapp):
     column = _MEAN_COLUMNS[[m.key for m in METRICS].index("cvvdp")]
     assert panel.stats_table.item(0, column).text() == "—"
     panel.close()
+
+
+def test_hovering_reports_the_second_under_the_cursor_not_a_nearby_dip(qapp):
+    """The dip snap looks five points either side: five seconds on this tab.
+    With a dip at 14 s, the cursor at 10.5 s (below the curve) reported 14 s."""
+    seconds = [9.9] * 20
+    seconds[14] = 8.0
+    panel = GraphPanel()
+    panel.add_run(_result("a.mkv", 9.8, seconds), "a")
+    panel.add_run(_result("b.mkv", 9.7, seconds), "b")
+    page = _cvvdp_page(panel)
+    page.on_hover(10.5, 5.0, panel._entries)
+    assert page._hover_text.count("second from frame    240") == 2  # the second from 10 s, both series
+    single = GraphPanel()
+    single.add_run(_result("a.mkv", 9.8, seconds), "a")
+    page = _cvvdp_page(single)
+    page.on_hover(10.5, 5.0, single._entries)
+    assert "second from frame    240" in page._hover_text
+    panel.close()
+    single.close()
