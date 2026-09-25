@@ -1020,3 +1020,30 @@ def test_pinned_memory_is_freed_when_allocation_fails_part_way(monkeypatch):
     assert len(allocated) == vship._RING_SLOTS + 2
     assert sorted(map(id, freed)) == sorted(map(id, allocated)), "pinned buffers were left allocated"
 
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the ANSI code page is Windows'")
+def test_cvvdp_display_config_avoids_a_temp_folder_vship_cannot_open(monkeypatch, tmp_path):
+    """Vship opens the display config with a narrow-character path, so a
+    temp folder under a user name outside the ANSI code page (Cyrillic on a
+    Western Windows here) could not be opened unless 8.3 short names exist."""
+    from vmaf_app.core.cvvdp import CvvdpSettings
+
+    unopenable, public = tmp_path / "Пользователь", tmp_path / "public"
+    unopenable.mkdir()
+    public.mkdir()
+    monkeypatch.setattr(vship.tempfile, "gettempdir", lambda: str(unopenable))
+    monkeypatch.setenv("PUBLIC", str(public))
+    seen = []
+
+    def init(_handler, _src, _dist, _fps, _resize, _model, config, _gpu):
+        path = Path(config.decode("mbcs"))
+        seen.append((path.parent, path.read_text(encoding="utf-8")))
+        return 0
+
+    lib = SimpleNamespace(**{name: None for name in vship._CVVDP_FUNCTIONS} | {"Vship_CVVDPInit3": init})
+    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=lib))
+    vship._init_cvvdp(device, None, None, CvvdpSettings(), 24.0)
+    [(folder, text)] = seen
+    assert folder == public
+    assert text.strip().startswith("{")
+    assert list(public.iterdir()) == [], "the config file was left behind"

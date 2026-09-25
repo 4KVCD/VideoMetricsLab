@@ -955,6 +955,40 @@ def _native_path(path: Path) -> bytes:
         raise VshipUnavailableError(f"Vship cannot open the CVVDP display file at {path}.") from None
 
 
+def _narrow_encodable(path: str) -> bool:
+    if os.name != "nt":
+        return True
+    try:
+        path.encode("mbcs", errors="strict")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _cvvdp_config_file() -> Path:
+    """A new empty file for the display config, in a folder whose path Vship
+    can open. The temp folder sits under the user's profile, so a user name
+    outside the ANSI code page made it unopenable -- and the 8.3 short name
+    that _native_path falls back to does not exist where short names are
+    turned off (the default on non-system drives and many new installs):
+    CVVDP then could not start for that user at all. The shared Public and
+    ProgramData folders have no user name in their path."""
+    candidates = [tempfile.gettempdir(), os.environ.get("PUBLIC"), os.environ.get("PROGRAMDATA")]
+    for directory in filter(None, candidates):
+        if not _narrow_encodable(directory):
+            continue
+        try:
+            handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json", dir=directory)
+        except OSError:
+            continue
+        os.close(handle)
+        return Path(name)
+    # None usable: the temp folder, relying on its short name.
+    handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json")
+    os.close(handle)
+    return Path(name)
+
+
 def _cvvdp_error(lib: ctypes.CDLL, handler: _Handler | None, code: int) -> str:
     if handler is not None:
         detail = ctypes.create_string_buffer(1024)
@@ -978,9 +1012,7 @@ def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
             f"{fps:g} fps)."
         )
     handler = _Handler()
-    handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json")
-    os.close(handle)
-    config = Path(name)
+    config = _cvvdp_config_file()
     try:
         write_vship_config(settings.display, config)
         error = lib.Vship_CVVDPInit3(
