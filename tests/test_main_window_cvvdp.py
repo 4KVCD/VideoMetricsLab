@@ -618,3 +618,17 @@ def test_a_mixed_selection_shows_as_mixed_and_one_choice_sets_every_row(qapp):
     assert a.cvvdp.resize_to_display and b.cvvdp.resize_to_display
     assert win.cvvdp_resize_check.checkState() == Qt.Checked and not win.cvvdp_resize_check.isTristate()
     win.close()
+
+
+def test_a_new_resolution_test_row_shows_n_a_for_the_perceptual_metrics(qapp, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+
+    win = MainWindow()
+    win._source_info = fake_video_info("source.mp4")
+    win._default_extra_metric_keys |= {"ssimulacra2", "cvvdp"}
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("720p", True))
+    win._on_add_resample_test()
+    row = len(win._rows) - 1
+    for column in (main_window_module.COL_SSIMULACRA2, main_window_module.COL_BUTTERAUGLI, COL_CVVDP):
+        assert win.distorted_table.item(row, column).text() == "n/a"
+    win.close()

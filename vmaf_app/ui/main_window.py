@@ -2204,6 +2204,10 @@ class MainWindow(QMainWindow):
         self._rows[row].options.resample_test = target
         self._rows[row].video_info = self._source_info
         self._set_resample_row_info(row, target)
+        # Redrawn now it is a resolution test: drawn when added, its
+        # SSIMULACRA2/Butteraugli/CVVDP cells showed tick boxes instead of
+        # n/a until something else happened to redraw the row.
+        self._set_row_metrics(row)
         self._try_load_cached_result(row)
 
     def _on_add_distorted(self) -> None:
