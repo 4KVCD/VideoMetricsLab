@@ -173,14 +173,18 @@ def test_an_ffmpeg_failure_keeps_the_perceptual_metrics(qapp, monkeypatch):
 
 def test_both_groups_failing_fails_the_video_without_cancelling_the_run(qapp, monkeypatch):
     def ffmpeg(*args, **kwargs):
-        time.sleep(0.1)
         raise VmafRunError("FFmpeg failed", "stderr tail")
 
     def vship(*args, **kwargs):
         raise PerceptualRunError("Vship failed")
 
     events = _run_one(qapp, monkeypatch, ffmpeg, vship)
-    assert events == [("failed", "Vship failed", "")]
+    # One failure for the video, reported with whichever error came first:
+    # the two groups run on their own threads. This used to expect the
+    # Vship error, relying on a 0.1 s sleep in the FFmpeg stand-in, and
+    # failed on a busy machine that started the Vship thread later.
+    assert len(events) == 1 and events[0][0] == "failed"
+    assert events[0][1:] in {("Vship failed", ""), ("FFmpeg failed", "stderr tail")}
 
 
 def test_user_cancel_reaches_both_concurrent_backends(qapp, monkeypatch):
