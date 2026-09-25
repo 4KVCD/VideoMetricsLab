@@ -386,3 +386,32 @@ def test_reuse_across_metrics_still_respects_how_frames_were_compared(tmp_path):
         n_subsample=5, extra_features=["name=psnr"], compute_xpsnr=True
     )
     assert _load_cached(source, distorted, asked) is None
+
+
+def test_other_cvvdp_scores_are_those_of_other_displays_of_the_same_comparison(tmp_path):
+    from vmaf_app.core.cvvdp import BUILTIN_PRESETS, CvvdpSettings
+    from vmaf_app.core.metric_results import MetricProvenance, MetricResultSet, SequenceMetricResult
+
+    source = _make_file(tmp_path / "source.mp4", 1000)
+    distorted = _make_file(tmp_path / "distorted.mp4", 500)
+    other = _make_file(tmp_path / "other.mp4", 400)
+    scored, unscored = BUILTIN_PRESETS[3].settings, BUILTIN_PRESETS[0].settings
+
+    def request(settings):
+        return analysis_request_from_vmaf_options(OPTIONS, ("vmaf", "cvvdp"), cvvdp=settings)
+
+    provenance = MetricProvenance("Vship/cvvdp", "", "gpu", "cvvdp-vship-gpu-v1", dict(scored.spec_parameters()))
+    result = _fake_result(source, distorted)
+    result.merge_metric_results(MetricResultSet([SequenceMetricResult("cvvdp", 9.25, provenance)]))
+    result_cache.store(source, distorted, result, "run", request(scored))
+
+    parameters, found = result_cache.other_cvvdp_scores(source, distorted, request(unscored))
+    assert parameters == tuple(unscored.spec_parameters())
+    assert [(settings.same_as(scored), score) for settings, score in found] == [(True, 9.25)]
+    assert result_cache.other_cvvdp_scores(source, distorted, request(scored))[1] == []  # its own is no "other"
+    assert result_cache.other_cvvdp_scores(source, other, request(unscored))[1] == []  # another video's
+    resized = CvvdpSettings(scored.display, resize_to_display=not scored.resize_to_display)
+    assert [s.same_as(scored) for s, _ in result_cache.other_cvvdp_scores(source, distorted, request(resized))[1]] \
+        == [True]
+    assert result_cache.other_cvvdp_scores(
+        source, distorted, analysis_request_from_vmaf_options(OPTIONS, ("vmaf",))) == ((), [])

@@ -28,6 +28,10 @@ class ProbeWorker(QThread):
     # cached result. The key lets the UI reject a result if the row's options
     # changed while this background read was in flight.
     cached_found = Signal(object, object, str, str)
+    # (path, CVVDP scores saved for other displays as [(CvvdpSettings, JOD)],
+    # the CVVDP request parameters they were looked up for) -- for every
+    # video whose lookup includes CVVDP, so an empty list clears old ones.
+    other_cvvdp_found = Signal(object, object, object)
     finished_all = Signal()
 
     def __init__(self, paths: list[Path], source: Path | None, use_cache: bool,
@@ -96,6 +100,12 @@ class ProbeWorker(QThread):
                 if cached is not None:
                     result, label = cached
                     self.cached_found.emit(path, result, label, key)
+                parameters, others = result_cache.other_cvvdp_scores(
+                    self._source, identity, request,
+                    supplemental_specs=self._cache_supplemental.get(path, ()),
+                )
+                if parameters:
+                    self.other_cvvdp_found.emit(path, others, parameters)
         finally:
             self.finished_all.emit()
 

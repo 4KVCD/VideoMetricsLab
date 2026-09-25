@@ -454,7 +454,7 @@ class _PendingLookup:
         self.paths = list(paths)
         self.cancelled = False
         _PendingLookup.started.append(self)
-        self.cached_found = self.finished_all = self
+        self.cached_found = self.other_cvvdp_found = self.finished_all = self
         self.probed = self
 
     def connect(self, *_args):
@@ -850,5 +850,44 @@ def test_of_two_presets_with_the_same_values_the_chosen_one_is_shown(qapp, monke
     assert win.cvvdp_preset_combo.currentData() == "Desk"
     _select(win, row)  # redrawn from the row
     assert win.cvvdp_preset_combo.currentData() == "Desk"
+    win.close()
+
+
+def test_an_empty_cvvdp_cell_names_the_scores_saved_for_other_displays(qapp, tmp_path, monkeypatch):
+    """A video whose display differed from its earlier run showed no CVVDP
+    score and no hint that one had been saved, or for which display."""
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_window_module.ProbeWorker, "start", lambda worker: worker.run())
+    source, distorted = tmp_path / "source.mp4", tmp_path / "test.mp4"
+    source.write_bytes(b"s" * 100)
+    distorted.write_bytes(b"d" * 50)
+    win = MainWindow()
+    win._settings.use_cache = True
+    win._source_info = fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    row_data = win._rows[row]
+    row_data.video_info = fake_video_info(str(distorted))
+    row_data.extra_metric_keys.add("cvvdp")
+    scored_on = BUILTIN_PRESETS[3]
+    row_data.cvvdp = scored_on.settings
+    result = fake_run_result(distorted, source=source)
+    result.merge_metric_results(MetricResultSet([_cvvdp(row_data.cvvdp, 9.25)]))
+    result_cache.store(source, distorted, result, "test", win._analysis_request(row_data), tmp_path)
+
+    row_data.cvvdp = DEFAULT_PRESET.settings
+    win._start_cache_lookup([distorted])
+    item = win.distorted_table.item(row, COL_CVVDP)
+    assert item.text() == ""  # never shown as this display's score
+    assert f"{scored_on.name}: 9.250 JOD" in item.toolTip()
+    assert win.distorted_table.item(row, COL_VMAF).text() != ""  # the rest of the saved run came back
+
+    row_data.completed_run = None
+    row_data.cvvdp = scored_on.settings
+    win._start_cache_lookup([distorted])
+    assert win.distorted_table.item(row, COL_CVVDP).text() == "9.250"
+    row_data.completed_run = None
+    win._set_row_metrics(row)
+    assert "Saved for other displays" not in win.distorted_table.item(row, COL_CVVDP).toolTip()
     win.close()
 

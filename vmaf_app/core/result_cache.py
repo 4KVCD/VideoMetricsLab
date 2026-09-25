@@ -8,6 +8,7 @@ from pathlib import Path
 from vmaf_app.core import metric_cache
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.app_paths import user_data_dir
+from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.models import ComparisonResult
 
 _dir_override: Path | None = None
@@ -78,6 +79,30 @@ def load_cached(
         base, source, distorted, request.recipe, request.metrics, supplemental_specs,
         compute_backends=dict(request.execution.perceptual_backends),
     )
+
+
+def other_cvvdp_scores(
+    source: Path,
+    distorted: Path,
+    request: AnalysisRequest,
+    directory: Path | None = None,
+    supplemental_specs: tuple[MetricRequestSpec, ...] = (),
+) -> tuple[tuple[tuple, ...], list[tuple[CvvdpSettings, float]]]:
+    """CVVDP scores saved for this comparison with other display settings,
+    as (settings, JOD), and the parameters of the CVVDP request they are
+    "other" to; nothing if the request has no CVVDP."""
+    spec = next((s for s in (*request.metrics, *supplemental_specs) if s.key == "cvvdp"), None)
+    if spec is None:
+        return (), []
+    base = directory if directory is not None else _cache_dir()
+    found = []
+    for parameters, score in metric_cache.load_other_parameters(
+            metric_cache.recipe_directory(base, source, distorted, request.recipe), spec):
+        try:
+            found.append((CvvdpSettings.from_spec_parameters(parameters), score))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return tuple(spec.parameters), found
 
 
 def store(

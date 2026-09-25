@@ -454,6 +454,10 @@ class RowData:
     # The CVVDP preset the row was given, if any: only to tell apart presets
     # with the same display (see matching_preset), never part of a score.
     cvvdp_preset: str = ""
+    # CVVDP scores saved for this comparison with other displays, as
+    # [(CvvdpSettings, JOD)]: named in the tooltip of an empty CVVDP cell,
+    # never shown as the row's score.
+    cvvdp_elsewhere: list = field(default_factory=list)
     analysis_status: str = ""
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
@@ -1806,13 +1810,13 @@ class MainWindow(QMainWindow):
                     item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
                     failed = enabled and row_data.analysis_status in {"Failed", _PARTLY_FAILED}
                     item.setText("Failed" if failed else "")
-                    item.setToolTip(
+                    item.setToolTip((
                         "This metric failed on the last run. Untick to skip it."
                         if failed else
                         "Ticked: calculated on the next run. Untick to skip it."
                         if enabled else
                         "Not selected. Tick to calculate this metric."
-                    )
+                    ) + (self._cvvdp_elsewhere_note(row_data) if metric_column.key == "cvvdp" else ""))
                     item.setForeground(
                         QColor("#a03030") if failed else self.distorted_table.palette().text()
                     )
@@ -1912,6 +1916,26 @@ class MainWindow(QMainWindow):
             "and scored infinity; they contribute zero distortion and are included "
             "in the frame count for the XPSNR sequence average."
         )
+
+    def _cvvdp_elsewhere_note(self, row_data: RowData) -> str:
+        """For an empty CVVDP cell: the scores saved for other displays. A
+        CVVDP score is only valid for the display it was made for, so a
+        video whose display differs from its earlier run showed no score at
+        all, with no hint that one existed or which display to choose to
+        see it again."""
+        others = [(settings, score) for settings, score in row_data.cvvdp_elsewhere
+                  if not settings.same_as(row_data.cvvdp)]
+        if not others:
+            return ""
+        lines = []
+        for settings, score in sorted(others, key=lambda item: -item[1]):
+            preset = matching_preset(settings, self._settings.cvvdp_presets)
+            name = preset.name if preset else f"Custom ({settings.display.describe()})"
+            scaled = ", video scaled to fill it" if settings.resize_to_display else ""
+            lines.append(f"\u2022 {name}{scaled}: {score:.3f} JOD")
+        return ("\n\nNo CVVDP score for this video's display yet. Saved for other displays "
+                "(choose one in CVVDP display to show it; they are not scores for this display):\n"
+                + "\n".join(lines))
 
     def _cvvdp_note(self, row_data: RowData) -> str:
         """Tooltip for a CVVDP score: what the number means and which display it is for."""
@@ -2336,10 +2360,23 @@ class MainWindow(QMainWindow):
             lambda path, result, label, key, g=generation:
             self._on_cached_if_current(g, path, result, label, key)
         )
+        worker.other_cvvdp_found.connect(
+            lambda path, others, parameters, g=generation:
+            self._on_other_cvvdp_found(g, path, others, parameters)
+        )
         worker.finished_all.connect(
             lambda g=generation, w=worker: self._on_cache_lookup_finished(g, w)
         )
         worker.start()
+
+    def _on_other_cvvdp_found(self, generation: int, path: Path, others: list, parameters) -> None:
+        if generation != self._cache_generation:
+            return
+        row = self._row_index_of_path(path)
+        if row is None or tuple(self._rows[row].cvvdp.spec_parameters()) != tuple(parameters):
+            return  # the row's display changed meanwhile; its own lookup follows
+        self._rows[row].cvvdp_elsewhere = list(others)
+        self._set_row_metrics(row)
 
     def _cancel_cache_lookup(self) -> list[Path]:
         """Stops the running cache lookup, if any; returns the rows it was

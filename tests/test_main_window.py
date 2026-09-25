@@ -1904,6 +1904,7 @@ def test_replacing_a_slow_probe_keeps_the_old_thread_alive_and_ignores_it(qapp, 
         def __init__(self, *args, **kwargs):
             self.probed = FakeSignal()
             self.cached_found = FakeSignal()
+            self.other_cvvdp_found = FakeSignal()
             self.finished_all = FakeSignal()
             self.cancelled = False
             self.running = False

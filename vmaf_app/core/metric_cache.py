@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -238,6 +239,36 @@ def _auto_perceptual_candidates(directory: Path, spec: MetricRequestSpec):
     except OSError:
         return []
     return sorted(candidates, key=lambda item: item[0])
+
+
+def load_other_parameters(directory: Path, spec: MetricRequestSpec) -> list[tuple[dict, float]]:
+    """(parameters, score) of each whole-video score saved for `spec`'s
+    metric with other parameters -- CVVDP's other displays -- and otherwise
+    the same request. Never an answer for `spec` itself: a score is only
+    valid for the parameters it was made with."""
+    wanted = spec.identity_dict()
+    rest = {name: value for name, value in wanted.items() if name != "parameters"}
+    found: list[tuple[dict, float]] = []
+    try:
+        paths = sorted(directory.glob(f"{spec.key}_*.npz"))
+    except OSError:
+        return []
+    for path in paths:
+        try:
+            with np.load(path, allow_pickle=False) as data:
+                metadata = json.loads(str(data["metadata"].item()))
+                request = metadata.get("request", {})
+                if (metadata.get("format_version") != METRIC_CACHE_FORMAT_VERSION
+                        or metadata.get("key") != spec.key or metadata.get("kind") != "sequence"
+                        or {name: value for name, value in request.items() if name != "parameters"} != rest
+                        or _canonical(request.get("parameters")) == _canonical(wanted["parameters"])):
+                    continue
+                score = float(data["score"].item())
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
+            continue
+        if math.isfinite(score):
+            found.append((dict(request["parameters"]), score))
+    return found
 
 
 def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str = "gpu"):
