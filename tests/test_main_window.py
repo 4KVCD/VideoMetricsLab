@@ -1545,6 +1545,19 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     assert "GPU metric passes are sequential" in win.status_label.text()
 
 
+def test_run_status_includes_elapsed_time(qapp):
+    import time
+
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [1000]
+    win._run_started_at = time.monotonic() - 61
+    win._on_job_started(0, "a")
+
+    assert "Elapsed: 0:01:01" in win.status_label.text()
+
+
 def test_gpu_fallback_changes_status_label_to_cpu(qapp, monkeypatch):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))

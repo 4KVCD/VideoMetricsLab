@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import os
+import time
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -559,6 +560,10 @@ class MainWindow(QMainWindow):
         # Whether a run owns the window's settings right now. Read by
         # every background handler that would otherwise re-enable them.
         self._run_active = False
+        self._run_started_at: float | None = None
+        self._run_elapsed_timer = QTimer(self)
+        self._run_elapsed_timer.setInterval(1000)
+        self._run_elapsed_timer.timeout.connect(self._update_run_status)
         self._cache_clear_result: list[int] | None = None
         # Set once the user has asked to close: background work has been
         # told to stop and the window closes itself when it actually has.
@@ -3687,6 +3692,8 @@ class MainWindow(QMainWindow):
             line.clear()
         self._run_failed_count = 0
         self._run_was_cancelled = False
+        self._run_started_at = time.monotonic()
+        self._run_elapsed_timer.start()
         if already_scored_rows:
             self.status_label.setText(
                 f"Skipping {len(already_scored_rows)} already-scored video(s); running {len(jobs)}..."
@@ -3826,7 +3833,16 @@ class MainWindow(QMainWindow):
         """
         running = [i for i in self._running_jobs if i not in self._finished_jobs]
         total = len(self._job_rows)
+        elapsed_text = (
+            f"Elapsed: {format_hms(time.monotonic() - self._run_started_at)}"
+            if self._run_started_at is not None else ""
+        )
         if not running:
+            if self._run_active and total:
+                self.status_label.setText(
+                    f"Queued {total} video(s)"
+                    + (f"   ·   {elapsed_text}" if elapsed_text else "")
+                )
             return
         if len(running) == 1:
             summary = f"Running {running[0] + 1} of {total}"
@@ -3834,12 +3850,18 @@ class MainWindow(QMainWindow):
             summary = f"Running {len(running)} of {total} together"
         if self._gpu_metrics_in_run():
             self.status_label.setText(
-                f"{summary}   ·   CPU metrics may run in parallel; GPU metric passes are sequential"
+                f"{summary}"
+                + (f"   ·   {elapsed_text}" if elapsed_text else "")
+                + "   ·   CPU metrics may run in parallel; GPU metric passes are sequential"
             )
             return
         seconds = self._queue_eta_seconds()
         eta = "calculating..." if seconds is None else format_hms(seconds)
-        self.status_label.setText(f"{summary}   ·   Queue ETA: {eta}")
+        self.status_label.setText(
+            f"{summary}"
+            + (f"   ·   {elapsed_text}" if elapsed_text else "")
+            + f"   ·   Queue ETA: {eta}"
+        )
 
     def _gpu_metrics_in_run(self) -> bool:
         """Whether this run includes work serialized through the GPU pass."""
@@ -4181,6 +4203,7 @@ class MainWindow(QMainWindow):
             if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
                 rd.analysis_status = "Cancelled" if self._run_was_cancelled else ""
                 self._set_row_metrics(row)
+        self._run_elapsed_timer.stop()
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
