@@ -4423,3 +4423,27 @@ def test_the_queue_eta_times_cpu_and_gpu_lanes_separately(qapp, monkeypatch, par
     assert f"Queue ETA: {expected}" in win.status_label.text()
     win.close()
 
+
+def test_elapsed_leaves_out_paused_time(qapp):
+    """"Elapsed" kept counting while a run was paused."""
+    from types import SimpleNamespace
+
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [1000]
+    win._run_started_at = time.monotonic() - 100
+    win._on_job_started(0, "a")
+    win._worker = SimpleNamespace(pause=lambda: None, resume=lambda: None)
+    win.pause_btn.setChecked(True)
+    win._on_pause_clicked()
+    win._paused_since -= 40  # paused 40 s ago
+    assert 59 <= win._run_elapsed() <= 61
+    win.pause_btn.setChecked(False)
+    win._on_pause_clicked()
+    assert 59 <= win._run_elapsed() <= 61
+    win._update_run_status()
+    assert "Elapsed: 0:01:0" in win.status_label.text()
+    win._worker = None
+    win.close()
+

@@ -573,6 +573,10 @@ class MainWindow(QMainWindow):
         self._run_elapsed_timer.setInterval(1000)
         self._run_elapsed_timer.timeout.connect(self._on_run_tick)
         self._run_skipped = 0  # videos a run left out because they were already scored
+        # Paused time, left out of "Elapsed": it is how long the run has
+        # been calculating, and a paused run is not.
+        self._paused_total = 0.0
+        self._paused_since: float | None = None
         # Progress arrives with every frame a GPU pass scores -- 40 to 60
         # times a second -- and redrawing the per-video lines (and the queue
         # ETA) on each made their numbers flicker. Numbers now wait for the
@@ -3749,6 +3753,7 @@ class MainWindow(QMainWindow):
         self._run_was_cancelled = False
         self._run_skipped = len(already_scored_rows)
         self._run_started_at = time.monotonic()
+        self._paused_total, self._paused_since = 0.0, None
         self._run_hold = ""
         self._job_lines_due.clear()
         self._job_line_shape.clear()
@@ -3827,11 +3832,15 @@ class MainWindow(QMainWindow):
         if self.pause_btn.isChecked():
             self._worker.pause()
             self.pause_btn.setText("Resume")
+            self._paused_since = time.monotonic()
             self._run_hold = _PAUSED
             self._update_run_status()
         else:
             self._worker.resume()
             self.pause_btn.setText("Pause")
+            if self._paused_since is not None:
+                self._paused_total += time.monotonic() - self._paused_since
+                self._paused_since = None
             if self._run_hold == _PAUSED:
                 self._run_hold = ""
             self._update_run_status()
@@ -3900,10 +3909,8 @@ class MainWindow(QMainWindow):
             return
         running = [i for i in self._running_jobs if i not in self._finished_jobs]
         total = len(self._job_rows)
-        elapsed_text = (
-            f"Elapsed: {format_hms(time.monotonic() - self._run_started_at)}"
-            if self._run_started_at is not None else ""
-        )
+        elapsed = self._run_elapsed()
+        elapsed_text = f"Elapsed: {format_hms(elapsed)}" if elapsed is not None else ""
         summary = self._run_summary(running, total)
         if self._run_hold == _PAUSED:
             # No ETA: nothing moves until Resume.
@@ -3921,6 +3928,14 @@ class MainWindow(QMainWindow):
             + (f"   ·   {elapsed_text}" if elapsed_text else "")
             + f"   ·   Queue ETA: {eta}"
         )
+
+    def _run_elapsed(self) -> float | None:
+        """Seconds the run has been calculating: paused time left out."""
+        if self._run_started_at is None:
+            return None
+        now = time.monotonic()
+        paused = self._paused_total + (now - self._paused_since if self._paused_since is not None else 0.0)
+        return max(0.0, now - self._run_started_at - paused)
 
     def _run_summary(self, running: list[int], total: int) -> str:
         """The queue in counts, e.g. "3 videos: 1 done, 2 in progress".
