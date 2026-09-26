@@ -4159,15 +4159,16 @@ class MainWindow(QMainWindow):
         then its rate and time remaining, or what it is waiting for. `kind`
         is the half's name on the line, e.g. "CPU metrics".
 
-        The GPU half's percentage covers all its passes (Vship reports
-        them as one run of passes x frames). Its time remaining is the
-        whole half's, next to that percentage, and the metric under way has
-        its own rate and time remaining: "GPU metrics 48.0%, 0:01:27
-        remaining (Butteraugli 2 of 3: 13.3 fps, 0:00:42 remaining)". The
-        whole half's time used to be all its passes at the current one's
-        rate, when the metrics run at very different rates (SSIMULACRA2
-        about 3x Butteraugli's). A later metric not yet run in this run
-        has no rate to go by, and the whole half's time is left out.
+        A GPU half with several metrics, one pass each, says which pass is
+        under way and the whole half's percentage and time remaining, then
+        the metric under way with its own percentage, rate and time
+        remaining: "GPU metrics 2 of 3 (48.0%, 0:01:27 remaining)
+        (Butteraugli 44.0%, 13.3 fps, 0:00:42 remaining)". The whole half's
+        time used to be all its passes at the current one's rate, when the
+        metrics run at very different rates (SSIMULACRA2 about 3x
+        Butteraugli's). A later metric not yet run in this run has no rate
+        to go by, and the whole half's time is left out; on the last
+        metric the time is shown once, with the whole half's percentage.
         """
         state = task.get("state")
         if state == "waiting":
@@ -4183,17 +4184,24 @@ class MainWindow(QMainWindow):
         fps = float(task.get("fps", 0.0) or 0.0)
         # Rounded down: 99.96% must not read "100.0%" while work remains.
         pct = min(1000, 1000 * current // total) / 10 if total > 0 else 0.0
-        if gpu and not paused and fps > 0 and total > 0:
-            if (passes := self._gpu_passes(task)) is not None:
-                _number, count, name = task["phase"]
+        if gpu and (passes := self._gpu_passes(task)) is not None:
+            _number, count, name = task["phase"]
+            frames = total // count
+            done = frames - passes.frames_left[passes.number - 1]
+            now = [f"{name} {min(1000, 1000 * done // frames) / 10 if frames > 0 else 0.0:.1f}%"]
+            whole = None
+            if paused:
+                now.append("paused")
+            elif fps > 0:
+                now.append(f"{fps:.1f} fps")
                 whole = None if None in passes.seconds else sum(passes.seconds)
-                now = f"{name} {passes.number} of {count}: {fps:.1f} fps"
                 if passes.number < count:  # on the last, the whole half's time is its own
-                    now += f", {format_hms(passes.seconds[passes.number - 1])} remaining"
-                return (f"{kind} {pct:.1f}%" + (f", {format_hms(whole)} remaining" if whole is not None else "")
-                        + f" ({now})")
-            if not task.get("phase") and len(task.get("metric_keys", ())) == 1:
-                return f"{kind} {pct:.1f}%, {format_hms(max(0, total - current) / fps)} remaining ({fps:.1f} fps)"
+                    now.append(f"{format_hms(passes.seconds[passes.number - 1])} remaining")
+            overall = f"{pct:.1f}%" + (f", {format_hms(whole)} remaining" if whole is not None else "")
+            return f"{kind} {passes.number} of {count} ({overall}) ({', '.join(now)})"
+        if gpu and not paused and fps > 0 and total > 0 and not task.get("phase") \
+                and len(task.get("metric_keys", ())) == 1:
+            return f"{kind} {pct:.1f}%, {format_hms(max(0, total - current) / fps)} remaining ({fps:.1f} fps)"
         details = []
         if phase := task.get("phase"):
             number, count, name = phase
