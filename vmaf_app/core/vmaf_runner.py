@@ -351,11 +351,21 @@ def analysis_dimensions(
     compared at 4K. Cropping moves it too. Shared with _build_filtergraph so
     the two cannot disagree about what the run does.
     """
+    return compared_dimensions(source_info, distorted_info, options.scale_direction, source_crop, distorted_crop)
+
+
+def compared_dimensions(
+    source_info: VideoInfo, distorted_info: VideoInfo, scale_direction: ScaleDirection,
+    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
+) -> tuple[int, int]:
+    """analysis_dimensions for code that has the scale direction but no
+    options -- the saved-score cache, which works out from a comparison's
+    recorded sizes which model Auto picks for it."""
     dist_content = _content_size(distorted_info, distorted_crop)
     ref_content = _content_size(source_info, source_crop)
     if ref_content == dist_content:
         return dist_content
-    if options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
+    if scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
         return ref_content
     return dist_content
 

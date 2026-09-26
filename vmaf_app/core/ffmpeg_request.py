@@ -13,6 +13,7 @@ from vmaf_app.core.analysis_request import (
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, metric_definition
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE
 from vmaf_app.core.models import CropBox, ResampleTarget, VmafOptions, clone_options
 
 
@@ -78,7 +79,15 @@ def metric_request_specs(
         )
         parameters: tuple[tuple[str, object], ...] = ()
         if key == "vmaf":
-            model = options.model or options.model_choice
+            # Only what decides the score. An explicit or bundled choice is
+            # the model that runs. Auto's model depends on the size compared
+            # at, known for certain only once black bars are detected, and is
+            # recorded in the score's provenance instead. This used to be
+            # `options.model`, a field that is not the model on a row set to
+            # Auto -- empty, a leftover default or a loaded result's -- so the
+            # same row was saved and looked up under different keys.
+            choice = options.model_choice
+            model = "" if choice in (AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE) else choice
             custom_identity = ""
             if options.custom_model_path:
                 path = Path(options.custom_model_path).resolve()

@@ -23,6 +23,7 @@ from vmaf_app.core.metric_results import (
     provenance_from_dict,
     provenance_to_dict,
 )
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, model_for_resolution
 from vmaf_app.core.models import ComparisonResult, CropBox, ResampleTarget, ScaleDirection, VideoInfo
 
 METRIC_CACHE_FORMAT_VERSION = 2
@@ -272,6 +273,105 @@ def load_other_parameters(directory: Path, spec: MetricRequestSpec) -> list[tupl
     return found
 
 
+def _vmaf_model_ran(request: dict, provenance: dict) -> str | None:
+    """The model a saved VMAF score was calculated with, when that is certain.
+
+    An explicit or bundled choice is the model. For Auto, a score calculated
+    by this app records the model in its provenance; one migrated from the
+    first cache format was stored under the model that ran. A score re-saved
+    from an older result can carry neither -- its key's model was the row's
+    leftover default, "vmaf_v0.6.1" on 4K-model scores -- so it is unknown.
+    """
+    parameters = request.get("parameters") or {}
+    choice = parameters.get("model_choice")
+    if isinstance(choice, str) and choice not in ("", AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE):
+        return choice
+    if choice != AUTO_MODEL_CHOICE:
+        return None
+    ran = (provenance.get("parameters") or {}).get("model")
+    if isinstance(ran, str) and ran.startswith("version="):
+        return ran
+    model = parameters.get("model")
+    if provenance.get("implementation") == "legacy-v1-cache" and isinstance(model, str) and model.startswith("version="):
+        return model
+    return None
+
+
+def _auto_model_for(directory: Path) -> str | None:
+    """The model Auto runs for this comparison, from the sizes and black bars
+    its saved context records: the size compared at, as the run decides it."""
+    from vmaf_app.core.vmaf_runner import compared_dimensions, resample_analysis_dimensions
+
+    try:
+        context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
+        source = _info_from_dict(context["source_info"])
+        distorted = _info_from_dict(context["distorted_info"])
+        source_crop = _crop_from_dict(context.get("source_crop"))
+        if context.get("resample_target"):
+            return model_for_resolution(*resample_analysis_dimensions(source, source_crop))
+        return model_for_resolution(*compared_dimensions(
+            source, distorted, ScaleDirection(context["scale_direction"]),
+            source_crop, _crop_from_dict(context.get("distorted_crop"))))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
+        return None
+
+
+def _vmaf_equivalents(directory: Path, spec: MetricRequestSpec) -> list[tuple[int, Path, MetricRequestSpec]]:
+    """Saved VMAF scores for the same comparison under another key that are
+    scores of the same model: an Auto row's for any Auto score, or one for
+    the model Auto picks here; an explicit row's for an Auto score that
+    certainly ran that model. The key used to have to match exactly, so a
+    row on Auto found nothing saved with "VMAF 4K v0.6.1" chosen, though
+    Auto picks that model for the same comparison, and a row's own score
+    could be missed when its key's leftover model field differed."""
+    wanted = spec.identity_dict()
+    parameters = wanted["parameters"]
+    choice = parameters.get("model_choice")
+    rest = {name: value for name, value in wanted.items() if name != "parameters"}
+    exact = metric_path(directory, spec)
+    auto_model: list[str | None] = []  # worked out once, only if needed
+    found: list[tuple[int, Path, MetricRequestSpec]] = []
+    try:
+        paths = sorted(directory.glob("vmaf_*.npz"))
+    except OSError:
+        return []
+    for path in paths:
+        if path == exact:
+            continue
+        try:
+            with np.load(path, allow_pickle=False) as data:
+                metadata = json.loads(str(data["metadata"].item()))
+            request = metadata.get("request") or {}
+            stored = request.get("parameters") or {}
+            if (metadata.get("format_version") != METRIC_CACHE_FORMAT_VERSION or metadata.get("key") != "vmaf"
+                    or {name: value for name, value in request.items() if name != "parameters"} != rest
+                    or stored.get("custom_model", "") != parameters.get("custom_model", "")):
+                continue
+            if stored.get("model_choice") == choice:
+                rank = 1
+            else:
+                ran = _vmaf_model_ran(request, metadata.get("provenance") or {})
+                if ran is None:
+                    continue
+                if choice == AUTO_MODEL_CHOICE:
+                    if not auto_model:
+                        auto_model.append(_auto_model_for(directory))
+                    if ran != auto_model[0]:
+                        continue
+                elif not (isinstance(choice, str) and choice.startswith("version=")
+                          and stored.get("model_choice") == AUTO_MODEL_CHOICE and ran == choice):
+                    continue
+                rank = 2
+            found.append((rank, path, replace(spec, parameters=tuple(stored.items()))))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
+            continue
+    return sorted(found, key=lambda item: item[0])
+
+
+def _is_vmaf_spec(spec: MetricRequestSpec) -> bool:
+    return spec.key == "vmaf" and spec.backend_id == "ffmpeg"
+
+
 def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str = "gpu"):
     """Load one cached metric. `compute_backend` is the user's GPU/CPU choice
     for a perceptual metric: "cpu" accepts only a libjxl CPU score, never a
@@ -286,7 +386,13 @@ def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str =
             if result is not None:
                 return result
         return None
-    return _load_metric_file(metric_path(directory, spec), spec)
+    result = _load_metric_file(metric_path(directory, spec), spec)
+    if result is None and _is_vmaf_spec(spec):
+        for _rank, path, concrete in _vmaf_equivalents(directory, spec):
+            result = _load_metric_file(path, concrete)
+            if result is not None:
+                break
+    return result
 
 
 def load_metrics(
@@ -420,6 +526,14 @@ def clear_metrics(
                 except OSError:
                     continue
             continue
+        if _is_vmaf_spec(spec):
+            # Recalculating must not leave an equivalent score to come back.
+            for _rank, path, _concrete in _vmaf_equivalents(directory, spec):
+                try:
+                    path.unlink()
+                    removed += 1
+                except OSError:
+                    continue
         path = metric_path(directory, spec)
         try:
             path.unlink()
