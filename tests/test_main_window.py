@@ -323,7 +323,7 @@ def test_run_clicked_only_queues_unscored_rows(qapp):
 
     assert win._worker is not None
     assert win._job_rows == [win._rows[unscored_row]]  # jobs track RowData identity, not row index
-    assert "Skipping 1 already-scored" in win.status_label.text()
+    assert "(1 already scored, not recalculated)" in win.status_label.text()
 
     win._worker.cancel()
     win._worker.wait(5000)
@@ -1541,9 +1541,7 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     assert "CPU 20.0% (20.0 fps, 0:00:40 left)" in text
     # The GPU half's share of all three passes, with the pass under way named.
     assert "GPU 6.6% (SSIMULACRA2 1 of 3, 47.7 fps, 0:00:58 left)" in text
-    assert "Queue ETA" not in win.status_label.text()
-    assert "CPU metrics may run in parallel" in win.status_label.text()
-    assert "GPU metric passes are sequential" in win.status_label.text()
+    assert win.status_label.text().startswith("1 video: 1 in progress")
 
 
 def test_run_status_includes_elapsed_time(qapp):
@@ -1666,7 +1664,7 @@ def test_two_running_jobs_drain_the_queue_at_their_combined_rate(qapp):
 
     # Each has 500 frames left at 25fps, and they run side by side, so the
     # queue ends in 20s rather than the 40s one after another would take.
-    assert win.status_label.text() == "Running 2 of 2 together   ·   Queue ETA: 0:00:20"
+    assert win.status_label.text() == "2 videos: 2 in progress   ·   Queue ETA: 0:00:20"
 
 
 def test_a_finished_job_stops_counting_towards_the_combined_rate(qapp):
@@ -1698,18 +1696,18 @@ def test_the_status_line_does_not_repeat_the_names_below_it(qapp):
     win._job_total_frames = [1000, 1000]
 
     win._on_job_started(0, "encode-a")
-    assert win.status_label.text().startswith("Running 1 of 2")
+    assert win.status_label.text().startswith("2 videos: 1 in progress, 1 queued")
 
     win._on_job_started(1, "encode-b")
     text = win.status_label.text()
-    assert text.startswith("Running 2 of 2 together")
+    assert text.startswith("2 videos: 2 in progress")
     assert "encode-a" not in text and "encode-b" not in text
     # The names are on the lines below, where they are not duplicated.
     assert "encode-a" in win.job_progress_labels[0].text()
     assert "encode-b" in win.job_progress_labels[1].text()
 
     win._mark_job_over(0)
-    assert win.status_label.text().startswith("Running 2 of 2")
+    assert win.status_label.text().startswith("2 videos: 1 done, 1 in progress")
 
 
 def test_job_progress_with_zero_fps_promises_no_time(qapp):
@@ -1723,7 +1721,7 @@ def test_job_progress_with_zero_fps_promises_no_time(qapp):
     win._on_job_progress(0, current=5, total=3000, fps=0.0)
 
     assert "left" not in win.job_progress_labels[0].text()
-    assert win.status_label.text() == "Running 1 of 1   ·   Queue ETA: calculating..."
+    assert win.status_label.text() == "1 video: 1 in progress   ·   Queue ETA: calculating..."
 
 
 def test_cancelled_run_does_not_claim_done(qapp):
@@ -3632,7 +3630,7 @@ def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
     assert "Detecting black bars" in win.job_progress_labels[1].text()
     assert "encode-b" in win.job_progress_labels[1].text()
     # And it does not take over the shared line.
-    assert win.status_label.text().startswith("Running 2 of 2 together")
+    assert win.status_label.text().startswith("2 videos: 2 in progress")
 
 
 @pytest.mark.parametrize("job_count", [1, 2])
@@ -3683,7 +3681,7 @@ def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
     win._on_job_status(0, "Running ffmpeg (GPU decode: off)...")
 
     assert "GPU decode" in win.job_progress_labels[0].text()
-    assert win.status_label.text().startswith("Running 1 of 1")
+    assert win.status_label.text().startswith("1 video: 1 in progress")
 
 
 # ------------------------------------------------- queue ETA is a makespan
@@ -3803,11 +3801,11 @@ def test_the_queue_eta_rides_on_the_status_line(qapp):
     second = win.status_label.text()
 
     for text in (first, second):
-        assert text.startswith("Running 2 of 2 together")
+        assert text.startswith("2 videos: 2 in progress")
         assert "Queue ETA:" in text
         assert "fps" not in text
         assert "encode-a" not in text and "encode-b" not in text
-    assert second == "Running 2 of 2 together   ·   Queue ETA: 0:00:20"
+    assert second == "2 videos: 2 in progress   ·   Queue ETA: 0:00:20"
     assert not hasattr(win, "progress_detail_label")
 
 
@@ -4308,7 +4306,7 @@ def test_paused_and_cancelling_stay_on_the_status_line(qapp):
     win._on_pause_clicked()
     win._on_job_progress(0, current=100, total=3000, fps=20.0)  # a late update
     win._update_run_status()  # the timer's tick
-    assert win.status_label.text().startswith("Paused   ·   Running 1 of 1   ·   Elapsed: 0:01:0")
+    assert win.status_label.text().startswith("Paused   ·   1 video: 1 in progress   ·   Elapsed: 0:01:0")
     assert "ETA" not in win.status_label.text()
 
     win.pause_btn.setChecked(False)
@@ -4377,5 +4375,27 @@ def test_each_half_of_a_video_has_its_own_percentage(qapp):
     assert "CPU 46.6%" in second and "GPU queued (another video is using the GPU)" in second
     assert " 0%" not in second
     assert "CPU: VMAF v0.6.1" in win.job_progress_labels[0].toolTip()
+    win.close()
+
+
+def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
+    """"Running 3 of 3" named a position for one video in progress, "Running
+    2 of 3 together" a count for two; and the start's "Skipping N
+    already-scored" was replaced within a second."""
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4", "c.mp4"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000, 1000]
+    win._run_skipped = 2
+    win._update_run_status()
+    win._on_job_started(2, "c")
+    assert win.status_label.text().startswith(
+        "3 videos: 1 in progress, 2 queued (2 already scored, not recalculated)")
+    win._mark_job_over(2)
+    win._on_job_started(0, "a")
+    win._on_job_started(1, "b")
+    assert win.status_label.text().startswith("3 videos: 1 done, 2 in progress (2 already")
+    assert "may run in parallel" not in win.status_label.text()
     win.close()
 

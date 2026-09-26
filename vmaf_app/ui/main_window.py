@@ -573,6 +573,7 @@ class MainWindow(QMainWindow):
         self._run_elapsed_timer = QTimer(self)
         self._run_elapsed_timer.setInterval(1000)
         self._run_elapsed_timer.timeout.connect(self._on_run_tick)
+        self._run_skipped = 0  # videos a run left out because they were already scored
         # Progress arrives with every frame a GPU pass scores -- 40 to 60
         # times a second -- and redrawing the per-video lines (and the queue
         # ETA) on each made their numbers flicker. Numbers now wait for the
@@ -3752,16 +3753,14 @@ class MainWindow(QMainWindow):
             line.clear()
         self._run_failed_count = 0
         self._run_was_cancelled = False
+        self._run_skipped = len(already_scored_rows)
         self._run_started_at = time.monotonic()
         self._run_hold = ""
         self._job_lines_due.clear()
         self._job_line_shape.clear()
         self._run_elapsed_timer.start()
-        if already_scored_rows:
-            self.status_label.setText(
-                f"Skipping {len(already_scored_rows)} already-scored video(s); running {len(jobs)}..."
-            )
         self._set_run_ui_active(True)
+        self._update_run_status()  # the counts, the skipped included, before any video starts
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         self.cancel_btn.setEnabled(True)
@@ -3910,29 +3909,15 @@ class MainWindow(QMainWindow):
             f"Elapsed: {format_hms(time.monotonic() - self._run_started_at)}"
             if self._run_started_at is not None else ""
         )
+        summary = self._run_summary(running, total)
         if self._run_hold == _PAUSED:
-            # No ETA or scheduling note: nothing moves until Resume.
-            summary = (f"Running {len(running)} of {total}" if running else f"Queued {total} video(s)")
+            # No ETA: nothing moves until Resume.
             self.status_label.setText(
                 "Paused   ·   " + summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
             return
         if not running:
             if self._run_active and total:
-                self.status_label.setText(
-                    f"Queued {total} video(s)"
-                    + (f"   ·   {elapsed_text}" if elapsed_text else "")
-                )
-            return
-        if len(running) == 1:
-            summary = f"Running {running[0] + 1} of {total}"
-        else:
-            summary = f"Running {len(running)} of {total} together"
-        if self._gpu_metrics_in_run():
-            self.status_label.setText(
-                f"{summary}"
-                + (f"   ·   {elapsed_text}" if elapsed_text else "")
-                + "   ·   CPU metrics may run in parallel; GPU metric passes are sequential"
-            )
+                self.status_label.setText(summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
             return
         seconds = self._queue_eta_seconds()
         eta = "calculating..." if seconds is None else format_hms(seconds)
@@ -3941,6 +3926,25 @@ class MainWindow(QMainWindow):
             + (f"   ·   {elapsed_text}" if elapsed_text else "")
             + f"   ·   Queue ETA: {eta}"
         )
+
+    def _run_summary(self, running: list[int], total: int) -> str:
+        """The queue in counts, e.g. "3 videos: 1 done, 2 in progress".
+
+        It used to be "Running 3 of 3" for one video in progress -- its
+        position in the queue -- but "Running 2 of 3 together" for two, a
+        count; and "in progress" is what a video waiting for the GPU while
+        its CPU metrics are done is, not "running". Videos skipped because
+        they were already scored are counted here too: the message saying
+        so at the start was replaced within a second.
+        """
+        done = len(self._finished_jobs)
+        queued = max(0, total - done - len(running))
+        counts = [f"{done} done" if done else "", f"{len(running)} in progress" if running else "",
+                  f"{queued} queued" if queued else ""]
+        summary = f"{total} video{'s' if total != 1 else ''}: " + ", ".join(c for c in counts if c)
+        if self._run_skipped:
+            summary += f" ({self._run_skipped} already scored, not recalculated)"
+        return summary
 
     def _gpu_metrics_in_run(self) -> bool:
         """Whether this run includes work serialized through the GPU pass."""
