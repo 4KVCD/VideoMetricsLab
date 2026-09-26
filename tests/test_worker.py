@@ -880,3 +880,20 @@ def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch)
     _drain(qapp)
     assert plans == [{0: [("cpu", 1), ("gpu", 2)], 1: [("cpu", 1)]}]
 
+
+def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):
+    def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
+        on_status("Detecting black bars in source...")
+        on_progress(10, 100, 5.0)
+        return _fake_result(d.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4")])
+    steps = []
+    worker.task_progress.connect(
+        lambda _index, snapshot: steps.extend((t["backend"], t["state"], t["step"]) for t in snapshot))
+    worker.run()
+    _drain(qapp)
+    assert ("ffmpeg", "starting", "Detecting black bars in source...") in steps
+

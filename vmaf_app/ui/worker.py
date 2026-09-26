@@ -389,6 +389,9 @@ class _JobRun:
         self.task_phases: dict[str, tuple[int, int, str]] = {}
         # Halves not running yet, and what they wait for: "GPU" or "CPU".
         self.task_waiting: dict[str, str] = {}
+        # Each half's latest status message: what a half not yet reporting
+        # figures is doing (black-bar detection, say).
+        self.task_steps: dict[str, str] = {}
         self._finished_tasks = 0
 
     def pool_of(self, task) -> str:
@@ -452,12 +455,14 @@ class _JobRun:
                 "fps": fps,
                 "state": self._state(task),
                 "waiting_for": self.task_waiting.get(task.backend_id),
+                "step": self.task_steps.get(task.backend_id, ""),
                 "phase": self.task_phases.get(task.backend_id),
             })
         return found
 
     def report_status(self, backend: str, message: str) -> None:
         with self.lock:
+            self.task_steps[backend] = message
             if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                 self.task_waiting[backend] = "GPU"
             phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
@@ -518,7 +523,7 @@ class _JobRun:
         worker.progress.emit(index, overall_cur, known_total, overall_fps)
 
     def execute_task(self, task) -> object:
-        job, options, index = self.job, self.options, self.index
+        job, options = self.job, self.options
 
         def progress(cur, tot, fps):
             self.report_progress(task.backend_id, cur, tot, fps)
@@ -531,13 +536,13 @@ class _JobRun:
                 return run_resample_test(
                     job.source_info, task_options,
                     on_progress=progress,
-                    on_status=lambda msg: self.worker.status.emit(index, msg),
+                    on_status=lambda msg: self.report_status(task.backend_id, msg),
                     cancel_event=self.token, process_handle=self.handle,
                 )
             return run_vmaf(
                 job.source_info, job.distorted_info, task_options,
                 on_progress=progress,
-                on_status=lambda msg: self.worker.status.emit(index, msg),
+                on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
                 result_distorted_path=job.result_distorted_path,
             )

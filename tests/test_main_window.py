@@ -4533,3 +4533,27 @@ def test_the_counts_show_a_failure_when_it_happens(qapp):
     assert win.status_label.text().startswith("3 videos: 1 done (1 failed), 1 in progress, 1 queued")
     win.close()
 
+
+@pytest.mark.parametrize(("step", "shown"), [
+    ("Detecting black bars in source...", "CPU: Detecting black bars in source"),
+    ("Running ffmpeg (GPU decode: source cuda, distorted cpu)...", "CPU starting"),
+    ("GPU decode failed, retrying (GPU decode: off)...", "CPU: GPU decode failed, retrying"),
+])
+def test_a_starting_half_names_its_step(qapp, step, shown):
+    """"CPU starting" was all a two-half video said while black bars on a
+    4K source were being looked for."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [
+        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 0, "total": 0, "fps": 0.0,
+         "state": "starting", "phase": None, "waiting_for": None, "step": step},
+        {"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": 0, "total": 0, "fps": 0.0,
+         "state": "starting", "phase": None, "waiting_for": None, "step": ""},
+    ])
+    text = win.job_progress_labels[0].text()
+    assert f"a — {shown}   ·   GPU starting" in text
+    win.close()
+

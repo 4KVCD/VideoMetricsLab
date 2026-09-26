@@ -3870,6 +3870,20 @@ class MainWindow(QMainWindow):
         self._job_line_text[index] = (f"{label} — starting…", "")
         self._arrange_job_lines()
 
+    @staticmethod
+    def _step_text(message: str) -> str:
+        """A half's status message as its step before figures arrive, e.g.
+        "Detecting black bars in source" -- "" for the message that only
+        says FFmpeg is starting (its decode plan is shown on its own).
+        Before, a video with CPU and GPU halves said only "CPU starting" for
+        as long as black bars on a 4K source were being looked for."""
+        text = message.strip().rstrip(".\u2026").strip().replace("distorted", "test")
+        if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
+            return ""
+        if text.startswith("GPU decode failed, retrying"):
+            return "GPU decode failed, retrying"
+        return text
+
     def _redraw_job_lines(self) -> None:
         """Every video line with figures, now: on Pause and Resume."""
         for index in list(self._job_line_text):
@@ -4063,7 +4077,8 @@ class MainWindow(QMainWindow):
             return (f"{kind} queued (waiting for a free CPU slot)" if task.get("waiting_for") == "CPU"
                     else f"{kind} queued (another video is using the GPU)")
         if state == "starting":
-            return f"{kind} starting"
+            step = self._step_text(str(task.get("step") or ""))
+            return f"{kind}: {step}" if step else f"{kind} starting"
         if state == "done":
             return f"{kind} done"
         current = int(task.get("current", 0) or 0)
