@@ -290,6 +290,38 @@ def test_pending_auto_crop_is_disclosed_rather_than_implied(qapp):
     panel.close()
 
 
+def test_unscored_auto_crop_is_detected_once_in_the_background(qapp, tmp_path, monkeypatch):
+    from dataclasses import replace as dc_replace
+
+    from vmaf_app.core.models import CropBox
+
+    entry = _physical_entry(tmp_path)
+    entry = dc_replace(
+        entry, comparison=dc_replace(entry.comparison, auto_crop_pending=True)
+    )
+    calls = []
+
+    def fake_detect(info, **_kwargs):
+        calls.append(info.path)
+        return CropBox(1920, 816, 0, 132)
+
+    monkeypatch.setattr("vmaf_app.ui.crop_detect_worker.detect_crop", fake_detect)
+    panel = FrameComparePanel()
+    panel.set_runs([entry])
+    panel._ensure_auto_crop(panel.current_entry)
+    for _ in range(100):
+        qapp.processEvents()
+        if not panel._crop_workers:
+            break
+        QTest.qWait(5)
+
+    assert panel.current_entry.comparison.auto_crop_pending is False
+    assert panel.current_entry.comparison.source_crop == CropBox(1920, 816, 0, 132)
+    assert panel.current_entry.comparison.distorted_crop == CropBox(1920, 816, 0, 132)
+    assert set(calls) == {tmp_path / "source.mkv", tmp_path / "encode.mkv"}
+    panel.close()
+
+
 def test_a_scored_entry_never_claims_a_pending_crop(qapp):
     panel = FrameComparePanel()
     panel.set_runs([_entry("measured")])
