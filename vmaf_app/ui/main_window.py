@@ -3840,6 +3840,7 @@ class MainWindow(QMainWindow):
             self.pause_btn.setText("Resume")
             self._paused_since = time.monotonic()
             self._run_hold = _PAUSED
+            self._redraw_job_lines()
             self._update_run_status()
         else:
             self._worker.resume()
@@ -3849,6 +3850,7 @@ class MainWindow(QMainWindow):
                 self._paused_since = None
             if self._run_hold == _PAUSED:
                 self._run_hold = ""
+            self._redraw_job_lines()
             self._update_run_status()
 
     def _on_job_started(self, index: int, label: str) -> None:
@@ -3867,6 +3869,12 @@ class MainWindow(QMainWindow):
             return
         self._job_line_text[index] = (f"{label} — starting…", "")
         self._arrange_job_lines()
+
+    def _redraw_job_lines(self) -> None:
+        """Every video line with figures, now: on Pause and Resume."""
+        for index in list(self._job_line_text):
+            if index in self._job_task_progress or index in self._job_progress_total:
+                self._render_job_progress(index)
 
     def _set_job_line(self, index: int, text: str, tooltip: str = "") -> None:
         """What a video's line says; kept, so the lines can be laid out again."""
@@ -4036,7 +4044,7 @@ class MainWindow(QMainWindow):
                      for key in task.get("metric_keys", ()))
         return "GPU" if on_gpu else "CPU"
 
-    def _task_detail(self, kind: str, task: dict[str, object]) -> str:
+    def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False) -> str:
         """One half of a video's line: its own percentage of its whole job,
         then its rate and time left, or what it is waiting for.
 
@@ -4061,7 +4069,10 @@ class MainWindow(QMainWindow):
         if phase := task.get("phase"):
             number, count, name = phase
             details.append(f"{name} {number} of {count}")
-        if fps > 0:
+        if paused:
+            # Its last rate and time left would read as if it were running.
+            details.append("paused")
+        elif fps > 0:
             details.append(f"{fps:.1f} fps")
             if total > 0:
                 details.append(f"{format_hms(max(0, total - current) / fps)} left")
@@ -4073,6 +4084,7 @@ class MainWindow(QMainWindow):
         snapshots = self._job_task_progress.get(index, ())
         parts = []
         tooltip = ""
+        paused = self._run_hold == _PAUSED
         if snapshots:
             # A percentage per half. One figure for the video mixed the two:
             # the GPU half's frames over all its passes against one pass's
@@ -4083,7 +4095,7 @@ class MainWindow(QMainWindow):
             if kinds.count("CPU") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
                 kinds = [kind if task.get("backend") == "ffmpeg" else "CPU tools"
                          for kind, task in zip(kinds, snapshots, strict=True)]
-            parts += [self._task_detail(kind, task) for kind, task in zip(kinds, snapshots, strict=True)]
+            parts += [self._task_detail(kind, task, paused) for kind, task in zip(kinds, snapshots, strict=True)]
             tooltip = "\n".join(
                 f"{kind}: " + ", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
                 for kind, task in zip(kinds, snapshots, strict=True))
@@ -4092,7 +4104,9 @@ class MainWindow(QMainWindow):
             current = self._job_frames_done.get(index, 0)
             fps = self._job_fps.get(index, 0.0)
             parts.append(f"{min(100, 100 * current // total) if total > 0 else 0}%")
-            if fps > 0:
+            if paused:
+                parts.append("paused")
+            elif fps > 0:
                 parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} left"]
             else:
                 parts += self._halves_detail(index)

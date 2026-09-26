@@ -4491,3 +4491,31 @@ def test_the_run_lines_stay_in_list_order_and_a_reused_line_starts_clean(qapp):
     assert all(label.toolTip() == "" for label in win.job_progress_labels)
     win.close()
 
+
+def test_video_lines_say_paused_instead_of_their_last_rate(qapp):
+    """Paused, the lines kept "7.8 fps, 2:55:08 left" as if running."""
+    from types import SimpleNamespace
+
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [
+        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 460, "total": 1000, "fps": 7.8,
+         "state": "running", "phase": None, "waiting_for": None},
+        {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 1440,
+         "total": 3000, "fps": 24.2, "state": "running", "phase": (2, 2, "Butteraugli"), "waiting_for": None},
+    ])
+    win._worker = SimpleNamespace(pause=lambda: None, resume=lambda: None)
+    win.pause_btn.setChecked(True)
+    win._on_pause_clicked()
+    text = win.job_progress_labels[0].text()
+    assert "CPU 46.0% (paused)" in text and "GPU 48.0% (Butteraugli 2 of 2, paused)" in text
+    assert "fps" not in text and "left" not in text
+    win.pause_btn.setChecked(False)
+    win._on_pause_clicked()
+    assert "7.8 fps" in win.job_progress_labels[0].text()
+    win._worker = None
+    win.close()
+
