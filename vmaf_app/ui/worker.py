@@ -477,6 +477,13 @@ class _JobRun:
             phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
             if phase:
                 self.task_phases[backend] = (int(phase.group(1)), int(phase.group(2)), phase.group(3))
+                if backend in self.task_progress:
+                    # The new pass has no rate yet. The last pass's stayed
+                    # until the new one reported, shown (and timed) as the
+                    # new metric's: "Butteraugli 2 of 3, 13.3 fps" was
+                    # SSIMULACRA2's last rate.
+                    current, total, _fps = self.task_progress[backend]
+                    self.task_progress[backend] = (current, total, 0.0)
             elif "on CPU" in message or "using CPU" in message:
                 # A GPU pass has handed work to the CPU fallback (or a
                 # planned CPU perceptual pass has begun); don't leave a

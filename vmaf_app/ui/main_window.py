@@ -420,6 +420,18 @@ def _rough_duration(seconds: float) -> str:
     return f"about {max(1, round(seconds / 60))} minutes"
 
 
+@dataclass(frozen=True)
+class _GpuPasses:
+    """A GPU half scored one metric per pass, as its run line times it."""
+
+    number: int  # the pass under way, from 1
+    keys: tuple[str, ...]  # the metrics, in pass order
+    # The seconds each metric still needs: 0 for the ones done, the one under
+    # way at its current rate, the later ones at the rate each ran at earlier
+    # in the run -- None where there is no rate to go by.
+    seconds: tuple[float | None, ...]
+
+
 class CompletedRun:
     """A finished run, its display label, and its graph identity.
 
@@ -596,6 +608,9 @@ class MainWindow(QMainWindow):
         # The last rate seen this run on the CPU and on the GPU lane, for
         # the queue ETA while a lane has no current rate.
         self._lane_rates: dict[str, float] = {}
+        # Each GPU metric's last rate this run: what its pass will take on
+        # the next video, for the GPU half's total time remaining.
+        self._metric_rates: dict[str, float] = {}
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
@@ -3750,6 +3765,7 @@ class MainWindow(QMainWindow):
         self._job_task_progress.clear()
         self._job_plan = {}
         self._lane_rates = {}
+        self._metric_rates = {}
         self._job_gpu_fallback.clear()
         self._running_jobs = []
         self._finished_jobs = set()
@@ -4041,7 +4057,15 @@ class MainWindow(QMainWindow):
         for task in snapshots:
             fps = float(task.get("fps") or 0.0)
             if task.get("state") == "running" and fps > 0:
-                self._lane_rates[self._task_kind(index, task)] = fps
+                kind = self._task_kind(index, task)
+                self._lane_rates[kind] = fps
+                keys = tuple(task.get("metric_keys", ()))
+                if kind != "GPU":
+                    continue
+                if (passes := self._gpu_passes(task)) is not None:
+                    self._metric_rates[passes.keys[passes.number - 1]] = fps
+                elif not task.get("phase") and len(keys) == 1:
+                    self._metric_rates[keys[0]] = fps
         shape = tuple((task.get("state"), task.get("phase"), task.get("waiting_for")) for task in snapshots)
         if self._job_line_shape.get(index) != shape:
             self._job_line_shape[index] = shape
@@ -4069,14 +4093,44 @@ class MainWindow(QMainWindow):
                      for key in task.get("metric_keys", ()))
         return "GPU" if on_gpu else "CPU"
 
-    def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False) -> str:
+    def _gpu_passes(self, task: dict[str, object]) -> _GpuPasses | None:
+        """A GPU half's passes, one metric each, and the time each still
+        needs -- None when its figures do not split that way (one metric,
+        no pass under way, or SSIMULACRA2/Butteraugli on the CPU after the
+        GPU's passes)."""
+        phase = task.get("phase")
+        keys = tuple(task.get("metric_keys", ()))
+        total = int(task.get("total") or 0)
+        if not phase or total <= 0:
+            return None
+        number, count, name = phase
+        if count != len(keys) or not 1 <= number <= count or metric_definition(keys[number - 1]).label != name:
+            return None
+        frames = total // count  # Vship reports the passes as passes x frames
+        done = min(frames, max(0, int(task.get("current") or 0) - (number - 1) * frames))
+        fps = float(task.get("fps") or 0.0)
+        seconds: list[float | None] = [0.0] * (number - 1)
+        seconds.append((frames - done) / fps if fps > 0 else None)
+        for key in keys[number:]:
+            rate = self._metric_rates.get(key, 0.0)
+            seconds.append(frames / rate if rate > 0 else None)
+        return _GpuPasses(number, keys, tuple(seconds))
+
+    def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False,
+                     gpu: bool = False) -> str:
         """One half of a video's line: its own percentage of its whole job,
-        then its rate and time left, or what it is waiting for. `kind` is
-        the half's name on the line, e.g. "CPU metrics".
+        then its rate and time remaining, or what it is waiting for. `kind`
+        is the half's name on the line, e.g. "CPU metrics".
 
         The GPU half's percentage covers all its passes (Vship reports
-        them as one run of passes x frames), and its time left is for all
-        of them at the current pass's rate; the pass under way is named.
+        them as one run of passes x frames). Its time remaining is the
+        whole half's, next to that percentage, and the metric under way has
+        its own rate and time remaining: "GPU metrics 48.0%, 0:01:27
+        remaining (Butteraugli 2 of 3: 13.3 fps, 0:00:42 remaining)". The
+        whole half's time used to be all its passes at the current one's
+        rate, when the metrics run at very different rates (SSIMULACRA2
+        about 3x Butteraugli's). A later metric not yet run in this run
+        has no rate to go by, and the whole half's time is left out.
         """
         state = task.get("state")
         if state == "waiting":
@@ -4092,6 +4146,17 @@ class MainWindow(QMainWindow):
         fps = float(task.get("fps", 0.0) or 0.0)
         # Rounded down: 99.96% must not read "100.0%" while work remains.
         pct = min(1000, 1000 * current // total) / 10 if total > 0 else 0.0
+        if gpu and not paused and fps > 0 and total > 0:
+            if (passes := self._gpu_passes(task)) is not None:
+                _number, count, name = task["phase"]
+                whole = None if None in passes.seconds else sum(passes.seconds)
+                now = f"{name} {passes.number} of {count}: {fps:.1f} fps"
+                if passes.number < count:  # on the last, the whole half's time is its own
+                    now += f", {format_hms(passes.seconds[passes.number - 1])} remaining"
+                return (f"{kind} {pct:.1f}%" + (f", {format_hms(whole)} remaining" if whole is not None else "")
+                        + f" ({now})")
+            if not task.get("phase") and len(task.get("metric_keys", ())) == 1:
+                return f"{kind} {pct:.1f}%, {format_hms(max(0, total - current) / fps)} remaining ({fps:.1f} fps)"
         details = []
         if phase := task.get("phase"):
             number, count, name = phase
@@ -4102,8 +4167,26 @@ class MainWindow(QMainWindow):
         elif fps > 0:
             details.append(f"{fps:.1f} fps")
             if total > 0:
-                details.append(f"{format_hms(max(0, total - current) / fps)} left")
+                details.append(f"{format_hms(max(0, total - current) / fps)} remaining")
         return f"{kind} {pct:.1f}%" + (f" ({', '.join(details)})" if details else "")
+
+    def _task_tooltip(self, kind: str, task: dict[str, object], labels: str, paused: bool, gpu: bool) -> str:
+        """A half's line in its video's tooltip: its metrics, and for a GPU
+        half under way each one's state -- "GPU metrics: SSIMULACRA2 (done),
+        Butteraugli (0:00:42 remaining), CVVDP (0:00:45 remaining)"."""
+        passes = self._gpu_passes(task) if gpu and task.get("state") == "running" else None
+        if passes is None:
+            return f"{kind}: {labels}"
+        states = []
+        for position, (key, seconds) in enumerate(zip(passes.keys, passes.seconds, strict=True)):
+            label = metric_definition(key).label
+            if position < passes.number - 1:
+                states.append(f"{label} (done)")
+            elif seconds is None or paused:
+                states.append(label)
+            else:
+                states.append(f"{label} ({format_hms(seconds)} remaining)")
+        return f"{kind}: " + ", ".join(states)
 
     def _render_job_progress(self, index: int) -> None:
         if index not in self._job_line_text:
@@ -4120,15 +4203,18 @@ class MainWindow(QMainWindow):
             # half was half done.
             # "CPU metrics", not "CPU": the bare word read as the processor's
             # load, "CPU 46.0%" like Task Manager's figure.
-            kinds = [f"{self._task_kind(index, task)} metrics" for task in snapshots]
+            on_gpu = [self._task_kind(index, task) == "GPU" for task in snapshots]
+            kinds = [f"{'GPU' if gpu else 'CPU'} metrics" for gpu in on_gpu]
             labels = [", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
                       for task in snapshots]
             names = kinds
             if kinds.count("CPU metrics") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
                 names = [kind if task.get("backend") == "ffmpeg" else f"{kind} ({label})"
                          for kind, task, label in zip(kinds, snapshots, labels, strict=True)]
-            parts += [self._task_detail(name, task, paused) for name, task in zip(names, snapshots, strict=True)]
-            tooltip = "\n".join(f"{kind}: {label}" for kind, label in zip(kinds, labels, strict=True))
+            parts += [self._task_detail(name, task, paused, gpu)
+                      for name, task, gpu in zip(names, snapshots, on_gpu, strict=True)]
+            tooltip = "\n".join(self._task_tooltip(kind, task, label, paused, gpu)
+                                for kind, task, label, gpu in zip(kinds, snapshots, labels, on_gpu, strict=True))
         else:
             total = self._job_progress_total.get(index, 0)
             current = self._job_frames_done.get(index, 0)
@@ -4137,7 +4223,7 @@ class MainWindow(QMainWindow):
             if paused:
                 parts.append("paused")
             elif fps > 0:
-                parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} left"]
+                parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} remaining"]
             else:
                 parts += self._halves_detail(index)
         if decode_status := self._job_decode_status.get(index):

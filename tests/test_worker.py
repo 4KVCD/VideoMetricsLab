@@ -969,3 +969,26 @@ def test_cancelling_keeps_the_gpu_metrics_of_a_video_whose_cpu_half_never_starte
     _drain(qapp)
     assert sorted(index for index, _ in finished) == [0, 1]
     assert all(result.has_metric("ssimulacra2") and not result.has_metric("vmaf") for _, result in finished)
+
+
+def test_a_new_gpu_pass_does_not_carry_the_last_passs_rate(qapp, monkeypatch):
+    """"Butteraugli 2 of 3, 13.3 fps" was SSIMULACRA2's last rate, shown
+    until Butteraugli's first figures arrived."""
+    def vship(s, d, *a, on_progress=None, on_status=None, **k):
+        on_status("GPU metric 1/2: SSIMULACRA2")
+        on_progress(100, 200, 50.0)
+        on_status("GPU metric 2/2: Butteraugli")
+        on_progress(150, 200, 20.0)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4")])
+    seen = []
+    worker.task_progress.connect(lambda _index, snapshot: seen.extend(
+        (t["phase"], t["fps"]) for t in snapshot if t["backend"] == "perceptual" and t["phase"]))
+    worker.run()
+    _drain(qapp)
+    assert ((2, 2, "Butteraugli"), 50.0) not in seen
+    assert ((2, 2, "Butteraugli"), 0.0) in seen and ((2, 2, "Butteraugli"), 20.0) in seen
+
