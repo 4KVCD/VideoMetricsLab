@@ -129,7 +129,10 @@ def _resolve_crops(
         return recipe.manual_source_crop, recipe.manual_distorted_crop
     try:
         if on_status:
-            on_status("Detecting black bars for perceptual metrics…")
+            # Worded as the FFmpeg metrics' detection is: the two halves of a
+            # video share one detection (crop_detect waits for the other's
+            # answer), and their lines sit side by side.
+            on_status("Detecting black bars in source and distorted…")
         # Crop detection samples representative windows across the whole
         # file. A short score-duration limit may land entirely in a dark
         # intro and must not define the crop used for the comparison.

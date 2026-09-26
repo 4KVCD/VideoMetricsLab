@@ -3881,7 +3881,7 @@ class MainWindow(QMainWindow):
         says FFmpeg is starting (its decode plan is shown on its own).
         Before, a video with CPU and GPU halves said only "CPU starting" for
         as long as black bars on a 4K source were being looked for."""
-        text = message.strip().rstrip(".\u2026").strip().replace("distorted", "test")
+        text = message.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
         if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
             return ""
         if text.startswith("GPU decode failed, retrying"):

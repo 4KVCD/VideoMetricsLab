@@ -4661,3 +4661,23 @@ def test_the_queue_eta_keeps_a_lanes_last_rate_while_it_has_none(qapp, monkeypat
     assert "Queue ETA: 0:02:13" in win.status_label.text()
     win.close()
 
+
+def test_both_halves_name_their_black_bar_detection_alike(qapp, monkeypatch):
+    """A video's CPU half said "Detecting black bars in source and test"
+    while its GPU half said "Detecting black bars for perceptual metrics",
+    side by side on one line, for the one detection they share."""
+    from types import SimpleNamespace
+
+    from vmaf_app.core import perceptual_cpu, vmaf_runner
+    from vmaf_app.core.models import CropMode, VideoInfo, VmafOptions
+
+    monkeypatch.setattr(vmaf_runner, "detect_pair", lambda *detectors: (None, None))
+    monkeypatch.setattr(perceptual_cpu, "detect_pair", lambda *detectors: (None, None))
+    info = VideoInfo(path=Path("a.mkv"), width=3840, height=2160, fps=24.0, duration=10.0,
+                     nb_frames=240, codec_name="hevc", pix_fmt="yuv420p10le")
+    cpu, gpu = [], []
+    vmaf_runner._resolve_crops(info, info, VmafOptions(crop_mode=CropMode.AUTO), cpu.append)
+    perceptual_cpu._resolve_crops(info, info, SimpleNamespace(crop_mode=CropMode.AUTO), None, None, gpu.append)
+    assert MainWindow._step_text(cpu[0]) == MainWindow._step_text(gpu[0]) == \
+        "Detecting black bars in source and test video"
+
