@@ -1099,3 +1099,12 @@ def test_a_passs_rate_is_timed_from_its_first_frame_not_its_start():
     assert rate.frames_per_second(13) == pytest.approx(20.0)  # 12 more frames in 0.6 s
     assert rate.frames_per_second(21) == pytest.approx(20.0)  # 20 in 1.0 s
 
+
+def test_a_sampled_passs_rate_is_in_the_videos_frames_like_its_progress():
+    """Every 5th frame compared: the progress counts the video's frames, and
+    the rate counted pairs, so the time left was 5 times too long."""
+    clock = iter([10.0, 11.0])
+    rate = vship._PassRate(5, clock=lambda: next(clock))
+    rate.frames_per_second(1)
+    assert rate.frames_per_second(21) == pytest.approx(100.0)  # 20 pairs = 100 frames in 1 s
+
