@@ -3141,6 +3141,18 @@ class MainWindow(QMainWindow):
                     self._default_extra_metric_keys.discard(key)
             else:
                 self._set_metric_option(self._default_options, column, checked)
+            # Saved as the default too, the same setting as Settings >
+            # Default metrics. The header changed the defaults for this
+            # session only, so metrics ticked there came back unticked
+            # after a restart.
+            setattr(self._settings, f"default_compute_{key}", checked)
+            box = getattr(self, f"settings_default_{key}", None)
+            if box is not None:
+                box.blockSignals(True)
+                box.setChecked(checked)
+                box.blockSignals(False)
+            if error := self._settings.save():
+                self.status_label.setText(error)
         self._reload_cached_for_rows(rows)
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)

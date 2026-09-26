@@ -933,3 +933,40 @@ def test_a_cvvdp_score_found_for_a_new_display_shows_beside_a_gpu_score_on_a_cpu
     assert win.distorted_table.item(row, COL_SSIMULACRA2).text().startswith("80")  # still shown
     win.close()
 
+
+@pytest.mark.parametrize("key", ["ssimulacra2", "butteraugli", "cvvdp", "vmaf_neg", "psnr"])
+def test_a_metric_ticked_in_its_column_header_is_still_ticked_after_a_restart(qapp, key):
+    """The header changed the defaults for the session only: SSIMULACRA2,
+    Butteraugli and CVVDP ticked there were unticked again after a restart."""
+    from vmaf_app.ui.main_window import _METRIC_COLUMNS
+
+    column = next(item.column for item in _METRIC_COLUMNS if item.key == key)
+    settings = Settings.load()
+    setattr(settings, f"default_compute_{key}", False)
+    settings.save()
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._apply_metric_selection([0], column, True)
+    assert getattr(Settings.load(), f"default_compute_{key}") is True
+    assert getattr(win, f"settings_default_{key}").isChecked()
+    win.close()
+
+    restarted = MainWindow()
+    row = restarted._add_table_row(Path("b.mp4"))
+    assert restarted._row_metric_enabled(restarted._rows[row], column)
+    restarted.close()
+
+
+def test_ticking_one_rows_cell_does_not_change_the_saved_default(qapp):
+    from vmaf_app.ui.main_window import _METRIC_COLUMNS
+
+    column = next(item.column for item in _METRIC_COLUMNS if item.key == "cvvdp")
+    settings = Settings.load()
+    settings.default_compute_cvvdp = False
+    settings.save()
+    win = MainWindow()
+    win._add_table_row(Path("a.mp4"))
+    win._apply_metric_selection([0], column, True, set_default=False)
+    assert Settings.load().default_compute_cvvdp is False
+    win.close()
+
