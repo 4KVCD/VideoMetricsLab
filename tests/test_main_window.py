@@ -4740,3 +4740,26 @@ def test_a_single_gpu_metric_shows_its_time_next_to_its_percentage(qapp):
     assert "a — GPU metrics 46.0%, 0:00:12 remaining (45.0 fps)" in win.job_progress_labels[0].text()
     win.close()
 
+
+@pytest.mark.parametrize("second_started", [False, True])
+def test_the_queue_eta_times_gpu_work_per_metric(qapp, second_started):
+    """All GPU work was timed at the rate of the metric under way:
+    Butteraugli's 20 fps for SSIMULACRA2 and CVVDP too."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    win._job_plan = {0: [("gpu", 3)], 1: [("gpu", 3)]}
+    win._on_job_started(0, "a")
+    win._metric_rates = {"ssimulacra2": 50.0, "cvvdp": 40.0}  # from an earlier video
+    win._on_task_progress(0, [_gpu_half(1500, 20.0, (2, 3, "Butteraugli"))])
+    if second_started:  # b admitted, its GPU half waiting for a's
+        win._on_job_started(1, "b")
+        win._on_task_progress(1, [{**_gpu_half(0, 0.0, None, state="waiting"), "total": 0}])
+    win._on_run_tick()
+    # a: Butteraugli 500/20 + CVVDP 1000/40 = 50 s. b: 1000/50 + 1000/20
+    # + 1000/40 = 95 s, or three passes at the metrics' average time.
+    assert "Queue ETA: 0:02:25" in win.status_label.text()
+    win.close()
+

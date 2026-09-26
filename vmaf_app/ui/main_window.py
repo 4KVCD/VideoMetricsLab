@@ -430,6 +430,7 @@ class _GpuPasses:
     # way at its current rate, the later ones at the rate each ran at earlier
     # in the run -- None where there is no rate to go by.
     seconds: tuple[float | None, ...]
+    frames_left: tuple[int, ...]  # each metric's frames still to score
 
 
 class CompletedRun:
@@ -4108,13 +4109,49 @@ class MainWindow(QMainWindow):
             return None
         frames = total // count  # Vship reports the passes as passes x frames
         done = min(frames, max(0, int(task.get("current") or 0) - (number - 1) * frames))
-        fps = float(task.get("fps") or 0.0)
+        # The pass under way before its first rate: the rate it had earlier.
+        fps = float(task.get("fps") or 0.0) or self._metric_rates.get(keys[number - 1], 0.0)
         seconds: list[float | None] = [0.0] * (number - 1)
         seconds.append((frames - done) / fps if fps > 0 else None)
         for key in keys[number:]:
             rate = self._metric_rates.get(key, 0.0)
             seconds.append(frames / rate if rate > 0 else None)
-        return _GpuPasses(number, keys, tuple(seconds))
+        frames_left = (0,) * (number - 1) + (frames - done,) + (frames,) * (count - number)
+        return _GpuPasses(number, keys, tuple(seconds), frames_left)
+
+    def _gpu_work(self, task: dict[str, object] | None, frames: int, passes: int) -> tuple[float, float]:
+        """A GPU half's remaining work for the queue ETA, timed per metric as
+        its run line times it: (seconds for the metrics with a rate this
+        run, frames of the ones without -- timed by the caller at the GPU's
+        rate). `task` is None for a video not started: its metrics are not
+        known yet, and each pass counts at the metrics' average time.
+
+        All GPU work used to be timed at the rate of the metric under way,
+        and the metrics run at very different rates."""
+        if task is not None and (running := self._gpu_passes(task)) is not None:
+            known = sum(seconds for seconds in running.seconds if seconds is not None)
+            unknown = sum(left for seconds, left in zip(running.seconds, running.frames_left, strict=True)
+                          if seconds is None)
+            return known, float(unknown)
+        total = int(task.get("total") or 0) if task is not None else 0
+        if task is not None and total > 0:  # one metric, or not one metric per pass
+            left = max(0, total - int(task.get("current") or 0))
+            fps = float(task.get("fps") or 0.0)
+            return (left / fps, 0.0) if fps > 0 else (0.0, float(left))
+        keys = tuple(task.get("metric_keys", ())) if task is not None else ()
+        if keys and len(keys) == passes:  # not running yet: its metrics, each at its own rate
+            known = unknown = 0.0
+            for key in keys:
+                rate = self._metric_rates.get(key, 0.0)
+                if rate > 0:
+                    known += frames / rate
+                else:
+                    unknown += frames
+            return known, unknown
+        if self._metric_rates:
+            per_frame = sum(1 / rate for rate in self._metric_rates.values()) / len(self._metric_rates)
+            return frames * passes * per_frame, 0.0
+        return 0.0, float(frames * passes)
 
     def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False,
                      gpu: bool = False) -> str:
@@ -4316,7 +4353,8 @@ class MainWindow(QMainWindow):
         setting allows, GPU metrics one video at a time), so each lane's
         remaining work is timed at its own rate, and the queue ends when
         the later lane does. Videos not started count by their planned
-        halves: their frames, times the GPU half's passes.
+        halves: their frames, times the GPU half's passes. GPU work is
+        timed per metric (_gpu_work).
 
         A lane with no rate right now -- the next video's CPU half looking
         for black bars, a GPU pass's first frames -- is timed at the last
@@ -4331,31 +4369,32 @@ class MainWindow(QMainWindow):
         cpu_running: list[float] = []  # seconds left, each at its own rate
         cpu_waiting: list[float] = []  # frames left, no rate of their own yet
         cpu_rates: list[float] = []
-        gpu_frames, gpu_rate = 0.0, 0.0
+        gpu_seconds, gpu_frames, gpu_rate = 0.0, 0.0, 0.0  # gpu_frames: no rate of their own yet
         for job, frames in enumerate(self._job_total_frames):
             if job in self._finished_jobs:
                 continue
             planned = self._job_plan.get(job) or [("cpu", 1)]
             snapshots = self._job_task_progress.get(job)
-            halves = []
+            halves: list[tuple[str, dict[str, object] | None, int]] = []
             if snapshots:
                 for position, task in enumerate(snapshots):
                     if task.get("state") == "done":
                         continue
-                    kind = self._task_kind(job, task)
-                    total, current = int(task.get("total") or 0), int(task.get("current") or 0)
-                    if total > 0:
-                        halves.append((kind, max(0, total - current), float(task.get("fps") or 0.0)))
-                    else:
-                        passes = planned[position][1] if position < len(planned) else 1
-                        halves.append((kind, frames * passes, 0.0))
+                    passes = planned[position][1] if position < len(planned) else 1
+                    halves.append((self._task_kind(job, task), task, passes))
             else:
-                halves = [(pool.upper(), frames * passes, 0.0) for pool, passes in planned]
-            for kind, left, fps in halves:
+                halves = [(pool.upper(), None, passes) for pool, passes in planned]
+            for kind, task, passes in halves:
+                fps = float(task.get("fps") or 0.0) if task is not None else 0.0
                 if kind == "GPU":
-                    gpu_frames += left
+                    seconds, unknown = self._gpu_work(task, frames, passes)
+                    gpu_seconds += seconds
+                    gpu_frames += unknown
                     gpu_rate = fps or gpu_rate
-                elif fps > 0:
+                    continue
+                total = int(task.get("total") or 0) if task is not None else 0
+                left = max(0, total - int(task.get("current") or 0)) if total > 0 else frames * passes
+                if total > 0 and fps > 0:
                     cpu_running.append(left / fps)
                     cpu_rates.append(fps)
                 else:
@@ -4370,12 +4409,11 @@ class MainWindow(QMainWindow):
                 lanes.sort()
                 lanes[0] += seconds
             cpu_seconds = max(lanes, default=0.0)
-        gpu_seconds = 0.0
         if gpu_frames > 0:
             gpu_rate = gpu_rate or self._lane_rates.get("GPU", 0.0)
             if gpu_rate <= 0:
                 return None
-            gpu_seconds = gpu_frames / gpu_rate
+            gpu_seconds += gpu_frames / gpu_rate
         return max(cpu_seconds, gpu_seconds)
 
     def _on_job_status(self, index: int, message: str) -> None:
