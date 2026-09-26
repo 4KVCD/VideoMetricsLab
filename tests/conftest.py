@@ -59,6 +59,7 @@ def isolate_user_state(tmp_path, monkeypatch):
             "default_compute_ssimulacra2": False,
             "default_compute_butteraugli": False,
             "default_compute_cvvdp": False,
+            "default_compute_vmaf_v1": False,
         }),
         encoding="utf-8",
     )

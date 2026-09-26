@@ -101,6 +101,12 @@ def metric_request_specs(
                 ("model_choice", options.model_choice),
                 ("custom_model", custom_identity),
             )
+        elif key == "vmaf_v1":
+            choice = options.model_choice_v1
+            parameters = (
+                ("model", "" if choice == AUTO_MODEL_CHOICE else choice),
+                ("model_choice", choice),
+            )
         elif key == "vmaf_neg":
             parameters = (("model", "version=vmaf_v0.6.1neg"),)
         compatibility = "ffmpeg-xpsnr-v1" if key == "xpsnr" else "ffmpeg-libvmaf-v1"

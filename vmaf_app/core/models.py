@@ -156,6 +156,12 @@ class VmafOptions:
     compute_xpsnr: bool = False
     compute_vmaf: bool = True
     compute_vmaf_neg: bool = False
+    # VMAF v1, a column of its own beside VMAF v0.6.1 ("vmaf"), with its own
+    # model: model_choice_v1 is the UI selection ("__auto__" or a bundled v1
+    # model), model_v1 what a run resolved it to.
+    compute_vmaf_v1: bool = False
+    model_choice_v1: str = "__auto__"
+    model_v1: str = ""
 
     duration_limit: float = 0.0  # seconds; 0 = no limit, process the full video
 
@@ -430,6 +436,9 @@ class ComparisonResult:
     # The UI choice that produced ``model`` (for example a bundled VMAF v1
     # model). Programmatically-created results may leave it unset.
     model_choice: str | None = None
+    # The same for VMAF v1 (a bundled model's path, and the UI choice).
+    model_v1: str = ""
+    model_choice_v1: str | None = None
     # Generic results are authoritative. ``frames`` is the shared-axis view
     # consumed by the current UI and established frame-oriented tools.
     metric_results: MetricResultSet = field(default_factory=MetricResultSet)

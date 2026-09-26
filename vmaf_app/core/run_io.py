@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,7 @@ from vmaf_app.core.metric_results import (
     provenance_to_dict,
 )
 from vmaf_app.core.metrics import FRAME_METRICS
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, is_v1_choice
 from vmaf_app.core.models import (
     ComparisonResult,
     CropBox,
@@ -211,6 +213,8 @@ def save_run(result: ComparisonResult, path: Path, label: str | None = None) -> 
         "fps": result.fps,
         "model": result.model,
         "model_choice": result.model_choice,
+        "model_v1": result.model_v1,
+        "model_choice_v1": result.model_choice_v1,
         "source_crop": _crop_to_dict(result.source_crop),
         "distorted_crop": _crop_to_dict(result.distorted_crop),
         "source_info": _info_to_dict(result.source_info),
@@ -262,9 +266,34 @@ def load_run(path: Path) -> tuple[ComparisonResult, str]:
         ),
         compared_frame_count=data["compared_frame_count"],
         model_choice=data["model_choice"],
+        model_v1=data.get("model_v1") or "",
+        model_choice_v1=data.get("model_choice_v1"),
         metric_results=metrics,
     )
-    return result, data["label"]
+    return _v1_from_old_vmaf_column(result), data["label"]
+
+
+def _v1_from_old_vmaf_column(result: ComparisonResult) -> ComparisonResult:
+    """A file saved while VMAF v1 was a model of the one VMAF column holds
+    its v1 scores as "vmaf": they become VMAF v1's, so they show in the
+    VMAF v1 column and are never taken for VMAF v0.6.1 scores."""
+    vmaf = result.metric_results.get("vmaf")
+    if not is_v1_choice(result.model_choice) or vmaf is None or result.metric_results.has("vmaf_v1"):
+        return result
+    moved = FrameMetricResult("vmaf_v1", vmaf.frame, vmaf.time, vmaf.values, vmaf.provenance)
+    metrics = MetricResultSet(
+        moved if key == "vmaf" else value
+        for key in result.metric_results
+        if (value := result.metric_results.get(key)) is not None
+    )
+    return replace(
+        result, frames=FrameScores.empty(), metric_results=metrics,
+        model="", model_choice=AUTO_MODEL_CHOICE,
+        model_v1=result.model, model_choice_v1=result.model_choice,
+    )
+
+
+_CSV_FIRST_COLUMNS = ("vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr")
 
 
 def export_csv(result: ComparisonResult, path: Path) -> None:
@@ -290,7 +319,12 @@ def export_csv(result: ComparisonResult, path: Path) -> None:
     only a header. Results without CVVDP export exactly as before.
     """
     metrics = _portable_metric_results(result)
-    columns = [(metric.key, metrics.frame(metric.key)) for metric in FRAME_METRICS]
+    # The columns the export always had come first, in their old order, so
+    # a new metric (VMAF v1, after VMAF v0.6.1 in the registry) never moves
+    # them; every other frame metric follows in registry order.
+    ordered = sorted(FRAME_METRICS, key=lambda metric: (
+        _CSV_FIRST_COLUMNS.index(metric.key) if metric.key in _CSV_FIRST_COLUMNS else len(_CSV_FIRST_COLUMNS)))
+    columns = [(metric.key, metrics.frame(metric.key)) for metric in ordered]
     present = [frame for _key, frame in columns if frame is not None and len(frame.frame)]
     cvvdp = metrics.sequence("cvvdp")
     if cvvdp is not None and cvvdp.has_timeline:

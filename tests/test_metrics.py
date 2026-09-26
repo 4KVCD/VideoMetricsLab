@@ -19,8 +19,13 @@ from vmaf_app.core.models import FrameScores, VmafOptions
 
 def test_registry_has_the_established_logical_order_and_metadata():
     assert tuple(metric.key for metric in METRICS) == (
-        "vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp",
+        "vmaf", "vmaf_v1", "vmaf_neg", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp",
     )
+    # "vmaf" keeps its key (saved scores and settings) and is labelled with
+    # its version now that VMAF v1 has a column of its own.
+    assert metric_definition("vmaf").label == "VMAF v0.6.1"
+    assert metric_definition("vmaf_v1").label == "VMAF v1"
+    assert metric_definition("vmaf_v1").ffmpeg_binding.bool_option == "compute_vmaf_v1"
     # CVVDP scores the whole video (with a per-second curve), not each frame.
     assert METRICS[:-1] == FRAME_METRICS
     assert metric_definition("cvvdp").kind is MetricKind.SEQUENCE

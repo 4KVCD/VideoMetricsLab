@@ -77,7 +77,7 @@ from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
-from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, is_v1_choice, resolve_model
 from vmaf_app.core.models import (
     RESAMPLE_TARGET_CHOICES,
     CropBox,
@@ -112,10 +112,17 @@ from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
 from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
 
+# The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
+# own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
 _MODEL_CHOICES = [
-    ("Auto (analysis resolution, VMAF v0.6.1)", AUTO_MODEL_CHOICE),
-    ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
+    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
+    ("VMAF v0.6.1 (standard viewing)", "version=vmaf_v0.6.1"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
+    ("Custom model file...", CUSTOM_MODEL_CHOICE),
+]
+
+_V1_MODEL_CHOICES = [
+    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
     ("VMAF v1 (1080p / 3H)", builtin_choice("vmaf_v1_3d0h")),
     ("VMAF v1 (1080p phone / 5H)", builtin_choice("vmaf_v1_5d0h")),
     ("VMAF v1 (4K / 1.5H)", builtin_choice("vmaf_v1_1d5h_2160")),
@@ -124,7 +131,6 @@ _MODEL_CHOICES = [
     ("VMAF v1 HFR (1080p phone / 5H)", builtin_choice("vmaf_v1_hfr_5d0h")),
     ("VMAF v1 HFR (4K / 1.5H)", builtin_choice("vmaf_v1_hfr_1d5h_2160")),
     ("VMAF v1 HFR (4K / 3H, up to 110)", builtin_choice("vmaf_v1_hfr_3d0h_2160")),
-    ("Custom model file...", CUSTOM_MODEL_CHOICE),
 ]
 
 _SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
@@ -147,7 +153,8 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_SSIMULACRA2,
     COL_BUTTERAUGLI,
     COL_CVVDP,
-) = range(14)
+    COL_VMAF_V1,  # added last so every older column keeps its index; shown after VMAF v0.6.1
+) = range(15)
 
 #: Row states worth colouring the file name for. Everything else the old
 #: Status column reported is now visible in the metric columns themselves --
@@ -176,7 +183,7 @@ class MetricColumn:
 
 # Keep these physical indices and visual order exactly as the established UI.
 _METRIC_COLUMNS = (
-    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
+    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_V1, "vmaf_v1"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
     MetricColumn(COL_PSNR, "psnr"), MetricColumn(COL_SSIM, "ssim"),
     MetricColumn(COL_XPSNR, "xpsnr"),
     MetricColumn(COL_SSIMULACRA2, "ssimulacra2"), MetricColumn(COL_BUTTERAUGLI, "butteraugli"),
@@ -720,6 +727,7 @@ class MainWindow(QMainWindow):
             compute_xpsnr=self._settings.default_compute_xpsnr,
             compute_vmaf=self._settings.default_compute_vmaf,
             compute_vmaf_neg=self._settings.default_compute_vmaf_neg,
+            compute_vmaf_v1=self._settings.default_compute_vmaf_v1,
         )
 
     def _extra_metrics_from_settings(self) -> set[str]:
@@ -820,7 +828,8 @@ class MainWindow(QMainWindow):
         metrics_row = QHBoxLayout()
         metrics_row.addWidget(QLabel("Default metrics:"))
         self.settings_default_psnr = QCheckBox("PSNR")
-        self.settings_default_vmaf = QCheckBox("VMAF")
+        self.settings_default_vmaf = QCheckBox("VMAF v0.6.1")
+        self.settings_default_vmaf_v1 = QCheckBox("VMAF v1")
         self.settings_default_vmaf_neg = QCheckBox("VMAF NEG")
         self.settings_default_ssim = QCheckBox("SSIM")
         self.settings_default_xpsnr = QCheckBox("XPSNR")
@@ -829,6 +838,7 @@ class MainWindow(QMainWindow):
         self.settings_default_cvvdp = QCheckBox("CVVDP")
         for box, value in (
             (self.settings_default_vmaf, self._settings.default_compute_vmaf),
+            (self.settings_default_vmaf_v1, self._settings.default_compute_vmaf_v1),
             (self.settings_default_vmaf_neg, self._settings.default_compute_vmaf_neg),
             (self.settings_default_psnr, self._settings.default_compute_psnr),
             (self.settings_default_ssim, self._settings.default_compute_ssim),
@@ -938,6 +948,7 @@ class MainWindow(QMainWindow):
         self._settings.default_compute_psnr = self.settings_default_psnr.isChecked()
         self._settings.default_compute_vmaf = self.settings_default_vmaf.isChecked()
         self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
+        self._settings.default_compute_vmaf_v1 = self.settings_default_vmaf_v1.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
         self._settings.default_compute_ssimulacra2 = self.settings_default_ssimulacra2.isChecked()
@@ -1108,6 +1119,7 @@ class MainWindow(QMainWindow):
                 f"   {metric_definition('ssimulacra2').table_header}",
                 f"   {metric_definition('butteraugli').table_header}",
                 f"   {metric_definition('cvvdp').table_header}",
+                f"   {metric_definition('vmaf_v1').table_header}",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -1228,11 +1240,21 @@ class MainWindow(QMainWindow):
             self.model_combo.addItem(name)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         self.model_combo.setToolTip(
-            "VMAF only. Auto selects the v0 model using the resolution after "
-            "calculation cropping and scaling. Bundled v1 models require a "
-            "recent libvmaf-capable FFmpeg build."
+            "The VMAF v0.6.1 column's model. Auto picks the standard or the 4K "
+            "model from the size frames are compared at, after black bars are "
+            "removed and one video is scaled to the other."
         )
-        metric_options_form.addRow("VMAF model:", self.model_combo)
+        metric_options_form.addRow("VMAF v0.6.1 model:", self.model_combo)
+        self.model_v1_combo = QComboBox()
+        for name, _ in _V1_MODEL_CHOICES:
+            self.model_v1_combo.addItem(name)
+        self.model_v1_combo.currentIndexChanged.connect(lambda _index: self._on_panel_field_edited("model_v1"))
+        self.model_v1_combo.setToolTip(
+            "The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto "
+            "picks the 1080p model at three screen heights, or the 4K model at "
+            "one and a half for 4K comparisons, as for VMAF v0.6.1."
+        )
+        metric_options_form.addRow("VMAF v1 model:", self.model_v1_combo)
 
         self.gpu_checkbox = QCheckBox("Use GPU decoding")
         self.gpu_checkbox.setToolTip(
@@ -2772,6 +2794,9 @@ class MainWindow(QMainWindow):
             )
             self.model_combo.setCurrentIndex(model_index)
             self._panel_custom_model_path = opts.custom_model_path
+            self.model_v1_combo.setCurrentIndex(next(
+                (i for i, (_, key) in enumerate(_V1_MODEL_CHOICES) if key == opts.model_choice_v1), 0
+            ))
 
             self.gpu_checkbox.setChecked(opts.gpu_decode)
             self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
@@ -2811,7 +2836,9 @@ class MainWindow(QMainWindow):
                 self.metric_header.set_checked(metric_column.column, enabled)
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
-            uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.extra_features for o in selected_options)
+            self.model_v1_combo.setEnabled(any(o.compute_vmaf_v1 for o in selected_options))
+            uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.compute_vmaf_v1 or o.extra_features
+                               for o in selected_options)
             self.threads_spin.setEnabled(uses_libvmaf)
             # Also while it is above 1: CVVDP is unavailable then, and the
             # way back to it must not be a disabled control.
@@ -2891,6 +2918,8 @@ class MainWindow(QMainWindow):
         return VmafOptions(
             model="",  # resolved per-job at run time via resolve_model(), once each row's distorted video is known
             model_choice=model_choice,
+            model_choice_v1=_V1_MODEL_CHOICES[self.model_v1_combo.currentIndex()][1],
+            compute_vmaf_v1=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF_V1].column),
             custom_model_path=self._panel_custom_model_path,
             extra_features=extra_features,
             n_threads=self.threads_spin.value(),
@@ -3301,6 +3330,7 @@ class MainWindow(QMainWindow):
         fields = {
             "gpu": ("gpu_decode", "gpu_vendor"),
             "model": ("model", "model_choice", "custom_model_path"),
+            "model_v1": ("model_v1", "model_choice_v1"),
         }.get(field_name, (field_name,))
 
         def apply(target: VmafOptions) -> bool:
@@ -4300,6 +4330,9 @@ class MainWindow(QMainWindow):
         row_data.options.compute_xpsnr = result.frames.has("xpsnr")
         row_data.options.compute_vmaf = result.frames.has("vmaf")
         row_data.options.compute_vmaf_neg = result.frames.has("vmaf_neg")
+        row_data.options.compute_vmaf_v1 = result.frames.has("vmaf_v1")
+        if result.model_choice_v1:
+            row_data.options.model_choice_v1 = result.model_choice_v1
         row_data.options.model = result.model
         # Preserve the model selection when a saved run is reopened.  Without
         # this, a bundled VMAF v1 result would appear in the table correctly
@@ -4315,6 +4348,11 @@ class MainWindow(QMainWindow):
         elif result.model.startswith("path="):
             row_data.options.model_choice = CUSTOM_MODEL_CHOICE
             row_data.options.custom_model_path = result.model.removeprefix("path=")
+        if is_v1_choice(row_data.options.model_choice):
+            # A v1 model as the VMAF model: from before VMAF v1 had its own
+            # column. It is VMAF v1's choice now; VMAF v0.6.1 is on Auto.
+            row_data.options.model_choice_v1 = row_data.options.model_choice
+            row_data.options.model_choice = AUTO_MODEL_CHOICE
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm
         row_data.options.resample_test = result.resample_target

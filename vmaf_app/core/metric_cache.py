@@ -23,7 +23,13 @@ from vmaf_app.core.metric_results import (
     provenance_from_dict,
     provenance_to_dict,
 )
-from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, model_for_resolution
+from vmaf_app.core.model_select import (
+    AUTO_MODEL_CHOICE,
+    CUSTOM_MODEL_CHOICE,
+    is_v1_choice,
+    model_for_resolution,
+    v1_model_for_resolution,
+)
 from vmaf_app.core.models import ComparisonResult, CropBox, ResampleTarget, ScaleDirection, VideoInfo
 
 METRIC_CACHE_FORMAT_VERSION = 2
@@ -297,9 +303,10 @@ def _vmaf_model_ran(request: dict, provenance: dict) -> str | None:
     return None
 
 
-def _auto_model_for(directory: Path) -> str | None:
-    """The model Auto runs for this comparison, from the sizes and black bars
-    its saved context records: the size compared at, as the run decides it."""
+def _compared_size(directory: Path) -> tuple[int, int] | None:
+    """The size this comparison's frames are compared at, from the sizes and
+    black bars its saved context records, as the run decides it -- what
+    Auto picks a VMAF model from."""
     from vmaf_app.core.vmaf_runner import compared_dimensions, resample_analysis_dimensions
 
     try:
@@ -308,12 +315,18 @@ def _auto_model_for(directory: Path) -> str | None:
         distorted = _info_from_dict(context["distorted_info"])
         source_crop = _crop_from_dict(context.get("source_crop"))
         if context.get("resample_target"):
-            return model_for_resolution(*resample_analysis_dimensions(source, source_crop))
-        return model_for_resolution(*compared_dimensions(
+            return resample_analysis_dimensions(source, source_crop)
+        return compared_dimensions(
             source, distorted, ScaleDirection(context["scale_direction"]),
-            source_crop, _crop_from_dict(context.get("distorted_crop"))))
+            source_crop, _crop_from_dict(context.get("distorted_crop")))
     except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
         return None
+
+
+def _auto_model_for(directory: Path) -> str | None:
+    """The VMAF v0.6.1 model Auto runs for this comparison."""
+    size = _compared_size(directory)
+    return None if size is None else model_for_resolution(*size)
 
 
 def _vmaf_equivalents(directory: Path, spec: MetricRequestSpec) -> list[tuple[int, Path, MetricRequestSpec]]:
@@ -368,6 +381,49 @@ def _vmaf_equivalents(directory: Path, spec: MetricRequestSpec) -> list[tuple[in
     return sorted(found, key=lambda item: item[0])
 
 
+def _old_v1_scores(directory: Path, spec: MetricRequestSpec) -> list[tuple[Path, MetricRequestSpec]]:
+    """VMAF v1 scores saved before VMAF v1 had a column of its own: under
+    the key "vmaf", with a bundled v1 model as the VMAF model choice. Taken
+    for a VMAF v1 request with that model, or on Auto if it is the model
+    Auto picks for this comparison."""
+    wanted = spec.identity_dict()
+    choice = wanted["parameters"].get("model_choice")
+    rest = {name: value for name, value in wanted.items() if name not in ("key", "parameters")}
+    auto: list[str | None] = []
+    found = []
+    try:
+        paths = sorted(directory.glob("vmaf_*.npz"))
+    except OSError:
+        return []
+    for path in paths:
+        try:
+            with np.load(path, allow_pickle=False) as data:
+                metadata = json.loads(str(data["metadata"].item()))
+            request = metadata.get("request") or {}
+            stored = request.get("parameters") or {}
+            stored_choice = stored.get("model_choice")
+            if (metadata.get("format_version") != METRIC_CACHE_FORMAT_VERSION or metadata.get("key") != "vmaf"
+                    or not is_v1_choice(stored_choice)
+                    or {name: value for name, value in request.items() if name not in ("key", "parameters")} != rest):
+                continue
+            if choice == AUTO_MODEL_CHOICE:
+                if not auto:
+                    size = _compared_size(directory)
+                    auto.append(None if size is None else v1_model_for_resolution(*size))
+                if stored_choice != auto[0]:
+                    continue
+            elif stored_choice != choice:
+                continue
+            found.append((path, replace(spec, key="vmaf", parameters=tuple(stored.items()))))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
+            continue
+    return found
+
+
+def _is_v1_spec(spec: MetricRequestSpec) -> bool:
+    return spec.key == "vmaf_v1" and spec.backend_id == "ffmpeg"
+
+
 def _is_vmaf_spec(spec: MetricRequestSpec) -> bool:
     return spec.key == "vmaf" and spec.backend_id == "ffmpeg"
 
@@ -392,6 +448,11 @@ def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str =
             result = _load_metric_file(path, concrete)
             if result is not None:
                 break
+    if result is None and _is_v1_spec(spec):
+        for path, concrete in _old_v1_scores(directory, spec):
+            old = _load_metric_file(path, concrete)
+            if isinstance(old, FrameMetricResult):
+                return FrameMetricResult("vmaf_v1", old.frame, old.time, old.values, old.provenance)
     return result
 
 
@@ -526,14 +587,18 @@ def clear_metrics(
                 except OSError:
                     continue
             continue
-        if _is_vmaf_spec(spec):
-            # Recalculating must not leave an equivalent score to come back.
-            for _rank, path, _concrete in _vmaf_equivalents(directory, spec):
-                try:
-                    path.unlink()
-                    removed += 1
-                except OSError:
-                    continue
+        # Recalculating must not leave an equivalent score to come back.
+        equivalents = (
+            [path for _rank, path, _concrete in _vmaf_equivalents(directory, spec)] if _is_vmaf_spec(spec)
+            else [path for path, _concrete in _old_v1_scores(directory, spec)] if _is_v1_spec(spec)
+            else []
+        )
+        for path in equivalents:
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                continue
         path = metric_path(directory, spec)
         try:
             path.unlink()

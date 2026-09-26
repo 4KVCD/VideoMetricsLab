@@ -227,7 +227,7 @@ def test_the_table_has_no_status_column(qapp):
         for c in range(win.distorted_table.columnCount())
     ]
     assert "Status" not in headers
-    assert win.distorted_table.columnCount() == 14
+    assert win.distorted_table.columnCount() == 15
 
 
 def test_metrics_have_consistent_visual_order(qapp):
@@ -237,7 +237,7 @@ def test_metrics_have_consistent_visual_order(qapp):
     labels = [win.distorted_table.horizontalHeaderItem(header.logicalIndex(i)).text().strip()
               for i in range(header.count()) if header.logicalIndex(i) in columns]
     assert labels == [
-        "VMAF", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)",
+        "VMAF v0.6.1", "VMAF v1", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)",
         "SSIMULACRA2", "Butteraugli", "CVVDP",
     ]
     win.settings_default_vmaf_neg.setChecked(True)
@@ -1538,7 +1538,7 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     win._on_job_progress(0, current=200, total=1000, fps=18.1)
 
     text = win.job_progress_labels[0].text()
-    assert "CPU metrics: VMAF 20.0% 20.0 fps" in text
+    assert "CPU metrics: VMAF v0.6.1 20.0% 20.0 fps" in text
     assert "GPU metric 1/3: SSIMULACRA2 20.0% 47.7 fps" in text
     assert "Queue ETA" not in win.status_label.text()
     assert "CPU metrics may run in parallel" in win.status_label.text()
@@ -1610,7 +1610,7 @@ def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
          "fps": 40.0, "state": "running", "waiting_for": None, "phase": None},
     ])
     text = win.job_progress_labels[0].text()
-    assert "VMAF waiting for a CPU slot" in text and "waiting for the GPU" not in text
+    assert "VMAF v0.6.1 waiting for a CPU slot" in text and "waiting for the GPU" not in text
     assert len(win.job_progress_labels) == 3  # a video on the GPU beside two on the CPU
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):

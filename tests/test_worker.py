@@ -169,7 +169,7 @@ def test_an_ffmpeg_failure_keeps_the_perceptual_metrics(qapp, monkeypatch):
     (kind, result, message, tail), = events
     assert kind == "partly"
     assert result.has_metric("ssimulacra2") and not result.has_metric("vmaf")
-    assert message == "VMAF failed: FFmpeg failed" and tail == "stderr tail"
+    assert message == "VMAF v0.6.1 failed: FFmpeg failed" and tail == "stderr tail"
 
 
 def test_both_groups_failing_fails_the_video_without_cancelling_the_run(qapp, monkeypatch):
@@ -797,8 +797,8 @@ def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, mo
     worker.halves.connect(lambda _index, halves: seen.append([(labels, state) for labels, *_x, state in halves]))
     worker.run()
     _drain(qapp)
-    assert [("VMAF", "running"), ("SSIMULACRA2", "waiting")] in seen
-    assert [("VMAF", "running"), ("SSIMULACRA2", "running")] in seen
+    assert [("VMAF v0.6.1", "running"), ("SSIMULACRA2", "waiting")] in seen
+    assert [("VMAF v0.6.1", "running"), ("SSIMULACRA2", "running")] in seen
 
 
 def _split_job(name: str, keys=("vmaf", "ssimulacra2")) -> VmafJob:

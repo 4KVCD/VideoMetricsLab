@@ -300,7 +300,7 @@ def test_jumping_to_a_frame_reports_every_visible_series(qapp):
     win.graph_panel.frame_spin.setValue(120)
     text = win.graph_panel._pages["vmaf"].hover_label.text()
     assert "Frame 120" in text
-    assert "VMAF=95.00" in text and "VMAF=85.00" in text
+    assert "VMAF v0.6.1=95.00" in text and "VMAF v0.6.1=85.00" in text
 
 
 def test_curves_appear_as_each_job_finishes_not_only_at_the_end(qapp):

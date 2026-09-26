@@ -52,6 +52,7 @@ class Settings:
     default_compute_xpsnr: bool = True
     default_compute_vmaf: bool = True
     default_compute_vmaf_neg: bool = True
+    default_compute_vmaf_v1: bool = True
     # Every metric starts ticked (Brian, 2026-09-25): the table is for
     # comparing encodes on all of them. The perceptual metrics are passes
     # of their own (Vship on the GPU; SSIMULACRA2/Butteraugli far slower on
