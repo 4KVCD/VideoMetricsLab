@@ -593,6 +593,9 @@ class MainWindow(QMainWindow):
         self._job_progress_total: dict[int, int] = {}
         # Each video's halves as the worker planned them (VmafWorker.planned).
         self._job_plan: dict[int, list[tuple[str, int]]] = {}
+        # The last rate seen this run on the CPU and on the GPU lane, for
+        # the queue ETA while a lane has no current rate.
+        self._lane_rates: dict[str, float] = {}
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
@@ -3746,6 +3749,7 @@ class MainWindow(QMainWindow):
         self._job_halves.clear()
         self._job_task_progress.clear()
         self._job_plan = {}
+        self._lane_rates = {}
         self._job_gpu_fallback.clear()
         self._running_jobs = []
         self._finished_jobs = set()
@@ -4034,6 +4038,10 @@ class MainWindow(QMainWindow):
         """Store backend-specific progress; the line is redrawn at once only
         when what it says changes, its numbers on the next tick."""
         self._job_task_progress[index] = snapshots
+        for task in snapshots:
+            fps = float(task.get("fps") or 0.0)
+            if task.get("state") == "running" and fps > 0:
+                self._lane_rates[self._task_kind(index, task)] = fps
         shape = tuple((task.get("state"), task.get("phase"), task.get("waiting_for")) for task in snapshots)
         if self._job_line_shape.get(index) != shape:
             self._job_line_shape[index] = shape
@@ -4224,6 +4232,11 @@ class MainWindow(QMainWindow):
         the later lane does. Videos not started count by their planned
         halves: their frames, times the GPU half's passes.
 
+        A lane with no rate right now -- the next video's CPU half looking
+        for black bars, a GPU pass's first frames -- is timed at the last
+        rate seen on it this run. The ETA went back to "calculating..." for
+        several seconds each time one video handed a lane to the next.
+
         It used to show nothing for any run with GPU metrics -- a fixed
         note in its place for hours -- because one rate per video cannot
         describe two lanes. None while a lane with work left has no rate
@@ -4263,9 +4276,9 @@ class MainWindow(QMainWindow):
                     cpu_waiting.append(left)
         cpu_seconds = 0.0
         if cpu_running or cpu_waiting:
-            if cpu_waiting and not cpu_rates:
+            reference = sum(cpu_rates) / len(cpu_rates) if cpu_rates else self._lane_rates.get("CPU", 0.0)
+            if cpu_waiting and reference <= 0:
                 return None
-            reference = sum(cpu_rates) / len(cpu_rates) if cpu_rates else 1.0
             lanes = list(cpu_running) + [0.0] * max(0, self._parallel_jobs() - len(cpu_running))
             for seconds in sorted((left / reference for left in cpu_waiting), reverse=True):
                 lanes.sort()
@@ -4273,6 +4286,7 @@ class MainWindow(QMainWindow):
             cpu_seconds = max(lanes, default=0.0)
         gpu_seconds = 0.0
         if gpu_frames > 0:
+            gpu_rate = gpu_rate or self._lane_rates.get("GPU", 0.0)
             if gpu_rate <= 0:
                 return None
             gpu_seconds = gpu_frames / gpu_rate

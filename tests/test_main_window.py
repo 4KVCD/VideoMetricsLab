@@ -4624,3 +4624,40 @@ def test_a_resolution_tests_decoder_names_only_the_source(qapp):
     assert text.endswith("   ·   Decoder: Source: GPU")
     win.close()
 
+
+def test_the_queue_eta_keeps_a_lanes_last_rate_while_it_has_none(qapp, monkeypatch):
+    """While the next video's CPU half looked for black bars, and at the
+    start of each GPU pass, a lane had no rate and the queue ETA went back
+    to "calculating..." for several seconds."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    monkeypatch.setattr(win, "_parallel_jobs", lambda: 1)
+    win._job_plan = {0: [("cpu", 1), ("gpu", 3)], 1: [("cpu", 1), ("gpu", 3)]}
+    cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "waiting_for": None, "phase": None, "step": ""}
+    gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"),
+           "waiting_for": None, "step": ""}
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [{**cpu, "current": 500, "total": 1000, "fps": 10.0, "state": "running"},
+                              {**gpu, "current": 1000, "total": 3000, "fps": 30.0, "state": "running",
+                               "phase": (2, 3, "Butteraugli")}])
+    win._on_run_tick()
+    assert "Queue ETA: calculating" not in win.status_label.text()
+    # a's CPU half is done and its last GPU pass has just started; b's CPU
+    # half is looking for black bars. Neither lane has a rate right now.
+    win._on_job_started(1, "b")
+    win._on_task_progress(0, [{**cpu, "current": 1000, "total": 1000, "fps": 10.0, "state": "done"},
+                              {**gpu, "current": 2000, "total": 3000, "fps": 0.0, "state": "running",
+                               "phase": (3, 3, "CVVDP")}])
+    win._on_task_progress(1, [{**cpu, "current": 0, "total": 0, "fps": 0.0, "state": "starting",
+                               "step": "Detecting black bars in source"},
+                              {**gpu, "current": 0, "total": 0, "fps": 0.0, "state": "waiting",
+                               "waiting_for": "GPU", "phase": None}])
+    win._on_run_tick()
+    # CPU: b's 1000 frames at the last 10 fps, 100 s. GPU: a's last 1000
+    # frames and b's 3 x 1000 at the last 30 fps, 133 s.
+    assert "Queue ETA: 0:02:13" in win.status_label.text()
+    win.close()
+
