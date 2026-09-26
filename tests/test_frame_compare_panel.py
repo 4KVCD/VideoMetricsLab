@@ -322,6 +322,47 @@ def test_unscored_auto_crop_is_detected_once_in_the_background(qapp, tmp_path, m
     panel.close()
 
 
+def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, monkeypatch):
+    from dataclasses import replace as dc_replace
+
+    from vmaf_app.core.models import CropBox
+
+    first = _physical_entry(tmp_path, "first")
+    second = _physical_entry(tmp_path, "second")
+    entries = [
+        dc_replace(item, comparison=dc_replace(item.comparison, auto_crop_pending=True))
+        for item in (first, second)
+    ]
+    calls = []
+
+    def fake_detect(info, **_kwargs):
+        calls.append(info.path)
+        return CropBox(1920, 816, 0, 132)
+
+    monkeypatch.setattr("vmaf_app.ui.crop_detect_worker.detect_crop", fake_detect)
+    panel = FrameComparePanel()
+    panel.set_runs(entries)
+    panel._ensure_auto_crop(panel.current_entry)
+    for _ in range(100):
+        qapp.processEvents()
+        if not panel._crop_workers:
+            break
+        QTest.qWait(5)
+    panel.cycle_distorted(1)
+    panel._ensure_auto_crop(panel.current_entry)
+    for _ in range(100):
+        qapp.processEvents()
+        if not panel._crop_workers:
+            break
+        QTest.qWait(5)
+
+    assert calls.count(tmp_path / "source.mkv") == 1
+    assert set(calls) == {
+        tmp_path / "source.mkv", tmp_path / "first.mkv", tmp_path / "second.mkv"
+    }
+    panel.close()
+
+
 def test_a_scored_entry_never_claims_a_pending_crop(qapp):
     panel = FrameComparePanel()
     panel.set_runs([_entry("measured")])

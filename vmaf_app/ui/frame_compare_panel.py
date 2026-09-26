@@ -39,7 +39,7 @@ from vmaf_app.core.frame_extract import (
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
-from vmaf_app.ui.crop_detect_worker import CropDetectWorker
+from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.rolling_video_view import RollingVideoCompareView as VideoCompareView
 
@@ -178,6 +178,7 @@ class FrameComparePanel(QWidget):
         self._workers: set[FrameExtractWorker] = set()
         self._crop_workers: dict[object, CropDetectWorker] = {}
         self._auto_crops: dict[object, tuple[object, object]] = {}
+        self._auto_crop_files: dict[tuple, object] = {}
         self._window_filters_installed = False
         try:
             self._color_mode = PreviewColorMode(color_mode)
@@ -979,7 +980,19 @@ class FrameComparePanel(QWidget):
         distorted = entry.comparison.distorted_info
         if not source.path.is_file() or not distorted.path.is_file():
             return
-        worker = CropDetectWorker(source, distorted, parent=self)
+        source_key = self._crop_file_key(source.path)
+        distorted_key = self._crop_file_key(distorted.path)
+        source_crop = self._auto_crop_files.get(source_key, _MISSING)
+        distorted_crop = self._auto_crop_files.get(distorted_key, _MISSING)
+        if source_crop is not _MISSING and distorted_crop is not _MISSING:
+            self._auto_crops[identity] = (source_crop, distorted_crop)
+            self._entries = [self._apply_auto_crop(item) for item in self._entries]
+            self._update_labels()
+            return
+        worker = CropDetectWorker(
+            source, distorted, parent=self,
+            source_crop=source_crop, distorted_crop=distorted_crop,
+        )
         worker.ready.connect(
             lambda source_crop, distorted_crop, identity=identity, worker=worker:
                 self._on_auto_crop_ready(identity, worker, source_crop, distorted_crop)
@@ -989,8 +1002,21 @@ class FrameComparePanel(QWidget):
         self._update_labels()
         worker.start()
 
+    @staticmethod
+    def _crop_file_key(path) -> tuple:
+        try:
+            resolved = path.resolve()
+            stat = resolved.stat()
+            return (str(resolved), stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            return (str(path),)
+
     def _on_auto_crop_ready(self, identity, worker, source_crop, distorted_crop) -> None:
         self._auto_crops[identity] = (source_crop, distorted_crop)
+        entry = next((item for item in self._entries if item.identity is identity), None)
+        if entry is not None:
+            self._auto_crop_files[self._crop_file_key(entry.comparison.source_info.path)] = source_crop
+            self._auto_crop_files[self._crop_file_key(entry.comparison.distorted_info.path)] = distorted_crop
         for index, entry in enumerate(self._entries):
             if entry.identity is identity:
                 self._entries[index] = self._apply_auto_crop(entry)
