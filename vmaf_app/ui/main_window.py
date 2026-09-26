@@ -4063,7 +4063,8 @@ class MainWindow(QMainWindow):
 
     def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False) -> str:
         """One half of a video's line: its own percentage of its whole job,
-        then its rate and time left, or what it is waiting for.
+        then its rate and time left, or what it is waiting for. `kind` is
+        the half's name on the line, e.g. "CPU metrics".
 
         The GPU half's percentage covers all its passes (Vship reports
         them as one run of passes x frames), and its time left is for all
@@ -4109,14 +4110,17 @@ class MainWindow(QMainWindow):
             # frame count read 100% while both halves were under way, and
             # a GPU half still waiting held the video at 0% while its CPU
             # half was half done.
-            kinds = [self._task_kind(index, task) for task in snapshots]
-            if kinds.count("CPU") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
-                kinds = [kind if task.get("backend") == "ffmpeg" else "CPU tools"
-                         for kind, task in zip(kinds, snapshots, strict=True)]
-            parts += [self._task_detail(kind, task, paused) for kind, task in zip(kinds, snapshots, strict=True)]
-            tooltip = "\n".join(
-                f"{kind}: " + ", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
-                for kind, task in zip(kinds, snapshots, strict=True))
+            # "CPU metrics", not "CPU": the bare word read as the processor's
+            # load, "CPU 46.0%" like Task Manager's figure.
+            kinds = [f"{self._task_kind(index, task)} metrics" for task in snapshots]
+            labels = [", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
+                      for task in snapshots]
+            names = kinds
+            if kinds.count("CPU metrics") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
+                names = [kind if task.get("backend") == "ffmpeg" else f"{kind} ({label})"
+                         for kind, task, label in zip(kinds, snapshots, labels, strict=True)]
+            parts += [self._task_detail(name, task, paused) for name, task in zip(names, snapshots, strict=True)]
+            tooltip = "\n".join(f"{kind}: {label}" for kind, label in zip(kinds, labels, strict=True))
         else:
             total = self._job_progress_total.get(index, 0)
             current = self._job_frames_done.get(index, 0)

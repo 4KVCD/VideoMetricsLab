@@ -1537,9 +1537,9 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     win._on_job_progress(0, current=200, total=1000, fps=18.1)
 
     text = win.job_progress_labels[0].text()
-    assert "CPU 20.0% (20.0 fps, 0:00:40 left)" in text
+    assert "CPU metrics 20.0% (20.0 fps, 0:00:40 left)" in text
     # The GPU half's share of all three passes, with the pass under way named.
-    assert "GPU 6.6% (SSIMULACRA2 1 of 3, 47.7 fps, 0:00:58 left)" in text
+    assert "GPU metrics 6.6% (SSIMULACRA2 1 of 3, 47.7 fps, 0:00:58 left)" in text
     assert win.status_label.text().startswith("1 video: 1 in progress")
 
 
@@ -1608,7 +1608,7 @@ def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
          "fps": 40.0, "state": "running", "waiting_for": None, "phase": None},
     ])
     text = win.job_progress_labels[0].text()
-    assert "CPU queued (waiting for a free CPU slot)" in text and "using the GPU" not in text
+    assert "CPU metrics queued (waiting for a free CPU slot)" in text and "using the GPU" not in text
     assert len(win.job_progress_labels) == 3  # a video on the GPU beside two on the CPU
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
@@ -4339,11 +4339,11 @@ def test_progress_figures_are_redrawn_once_a_second_but_changes_at_once(qapp):
 
     win._on_task_progress(0, gpu(30))
     first = win.job_progress_labels[0].text()
-    assert "GPU 1.0% (SSIMULACRA2 1 of 3" in first  # the first figures show at once
+    assert "GPU metrics 1.0% (SSIMULACRA2 1 of 3" in first  # the first figures show at once
     win._on_task_progress(0, gpu(60))
     assert win.job_progress_labels[0].text() == first, "redrawn between ticks"
     win._on_run_tick()
-    assert "GPU 2.0% (SSIMULACRA2 1 of 3" in win.job_progress_labels[0].text()
+    assert "GPU metrics 2.0% (SSIMULACRA2 1 of 3" in win.job_progress_labels[0].text()
     win._on_task_progress(0, gpu(10, phase=(2, 3, "Butteraugli")))
     assert "(Butteraugli 2 of 3" in win.job_progress_labels[0].text()  # a change: at once
     win.close()
@@ -4372,10 +4372,10 @@ def test_each_half_of_a_video_has_its_own_percentage(qapp):
                                "phase": None, "waiting_for": "GPU"}])
     win._on_job_progress(1, current=0, total=150000, fps=0.0)
     first, second = (label.text() for label in win.job_progress_labels[:2])
-    assert "100" not in first and "CPU 46.0%" in first and "GPU 48.0% (Butteraugli 2 of 3" in first
-    assert "CPU 46.6%" in second and "GPU queued (another video is using the GPU)" in second
+    assert "100" not in first and "CPU metrics 46.0%" in first and "GPU metrics 48.0% (Butteraugli 2 of 3" in first
+    assert "CPU metrics 46.6%" in second and "GPU metrics queued (another video is using the GPU)" in second
     assert " 0%" not in second
-    assert "CPU: VMAF v0.6.1" in win.job_progress_labels[0].toolTip()
+    assert "CPU metrics: VMAF v0.6.1" in win.job_progress_labels[0].toolTip()
     win.close()
 
 
@@ -4483,7 +4483,7 @@ def test_the_run_lines_stay_in_list_order_and_a_reused_line_starts_clean(qapp):
     snapshot = [{"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 10, "total": 1000, "fps": 5.0,
                  "state": "running", "phase": None, "waiting_for": None}]
     win._on_task_progress(1, snapshot)
-    assert win.job_progress_labels[1].toolTip() == "CPU: VMAF v0.6.1"
+    assert win.job_progress_labels[1].toolTip() == "CPU metrics: VMAF v0.6.1"
     win._mark_job_over(1)
     win._on_job_started(3, "v3")
     lines = [label.text().split(" — ")[0] for label in win.job_progress_labels if not label.isHidden()]
@@ -4511,7 +4511,7 @@ def test_video_lines_say_paused_instead_of_their_last_rate(qapp):
     win.pause_btn.setChecked(True)
     win._on_pause_clicked()
     text = win.job_progress_labels[0].text()
-    assert "CPU 46.0% (paused)" in text and "GPU 48.0% (Butteraugli 2 of 2, paused)" in text
+    assert "CPU metrics 46.0% (paused)" in text and "GPU metrics 48.0% (Butteraugli 2 of 2, paused)" in text
     assert "fps" not in text and "left" not in text
     win.pause_btn.setChecked(False)
     win._on_pause_clicked()
@@ -4535,9 +4535,9 @@ def test_the_counts_show_a_failure_when_it_happens(qapp):
 
 
 @pytest.mark.parametrize(("step", "shown"), [
-    ("Detecting black bars in source...", "CPU: Detecting black bars in source"),
-    ("Running ffmpeg (GPU decode: source cuda, distorted cpu)...", "CPU starting"),
-    ("GPU decode failed, retrying (GPU decode: off)...", "CPU: GPU decode failed, retrying"),
+    ("Detecting black bars in source...", "CPU metrics: Detecting black bars in source"),
+    ("Running ffmpeg (GPU decode: source cuda, distorted cpu)...", "CPU metrics starting"),
+    ("GPU decode failed, retrying (GPU decode: off)...", "CPU metrics: GPU decode failed, retrying"),
 ])
 def test_a_starting_half_names_its_step(qapp, step, shown):
     """"CPU starting" was all a two-half video said while black bars on a
@@ -4554,7 +4554,7 @@ def test_a_starting_half_names_its_step(qapp, step, shown):
          "state": "starting", "phase": None, "waiting_for": None, "step": ""},
     ])
     text = win.job_progress_labels[0].text()
-    assert f"a — {shown}   ·   GPU starting" in text
+    assert f"a — {shown}   ·   GPU metrics starting" in text
     win.close()
 
 
@@ -4580,5 +4580,28 @@ def test_a_long_run_line_is_cut_to_the_window_not_widening_it(qapp):
     qapp.processEvents()
     assert label.text() == long_text and label.toolTip() == "CPU: VMAF v0.6.1"
     label.close()
+    win.close()
+
+
+def test_each_half_is_named_as_metrics_not_bare_cpu_or_gpu(qapp):
+    """"CPU 46.0%" read as the processor's load; with SSIMULACRA2 and
+    Butteraugli on the CPU too, each CPU half says which metrics it runs."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._rows[0].metric_backends.update(ssimulacra2="cpu", butteraugli="cpu")
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [
+        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 460, "total": 1000, "fps": 7.8,
+         "state": "running", "phase": None, "waiting_for": None, "step": ""},
+        {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 0, "total": 0,
+         "fps": 0.0, "state": "waiting", "phase": None, "waiting_for": "CPU", "step": ""},
+    ])
+    text = win.job_progress_labels[0].text()
+    assert "a — CPU metrics 46.0% (7.8 fps, 0:01:09 left)" in text
+    assert "CPU metrics (SSIMULACRA2, Butteraugli) queued (waiting for a free CPU slot)" in text
+    assert win.job_progress_labels[0].toolTip() == \
+        "CPU metrics: VMAF v0.6.1\nCPU metrics: SSIMULACRA2, Butteraugli"
     win.close()
 
