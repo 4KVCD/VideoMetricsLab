@@ -549,6 +549,40 @@ _PIPE_BYTES = 64 * 1024 * 1024
 _EOF = -1
 
 
+class _PassRate:
+    """A pass's frame rate for its progress reports, timed from its first
+    frame pair rather than from the pass's start.
+
+    The start -- FFmpeg opening both inputs, the first 4K frames decoded,
+    Vship's handlers set up -- takes a second or more that is not the rate
+    the pass runs at. Counted in, it put "1.7 fps, 0:05:39 left" on the run
+    line at the start of a pass over an 8-second clip, and the queue ETA
+    jumped with it. No rate until there is some time to measure over.
+
+    The rate is in the video's frames, as the progress is: with frame
+    subsampling each compared pair covers `step` frames. Pairs per second
+    against frames left made a sampled pass's time left `step` times too
+    long (the CPU tools already counted frames).
+    """
+
+    WARMUP_SECONDS = 0.5
+
+    def __init__(self, step: int = 1, clock: Callable[[], float] = time.perf_counter) -> None:
+        self._step = step
+        self._clock = clock
+        self._first_at: float | None = None
+        self._first_pairs = 0
+
+    def frames_per_second(self, pairs: int) -> float:
+        """The rate after `pairs` frame pairs have been handed to Vship."""
+        now = self._clock()
+        if self._first_at is None:
+            self._first_at, self._first_pairs = now, pairs
+            return 0.0
+        span = now - self._first_at
+        return (pairs - self._first_pairs) * self._step / span if span >= self.WARMUP_SECONDS else 0.0
+
+
 def _spawn_raw_ffmpeg(command: list[str]) -> tuple[subprocess.Popen, object]:
     """Start FFmpeg writing raw frames to a large pipe; returns (process, reader)."""
     if os.name == "nt":
@@ -1175,6 +1209,9 @@ class _CvvdpLane:
 #: work, overlaps the other's Vship pass; only this GPU pass is serialized,
 #: never crop detection or the FFmpeg metrics.
 _gpu_pass = threading.Lock()
+#: Sent through on_status while a pass waits for another video's to end; the
+#: worker recognises it to say which half of a video is waiting.
+GPU_WAIT_MESSAGE = "Waiting for the GPU: another video's Vship pass is running…"
 
 
 def run_vship_task(
@@ -1203,7 +1240,7 @@ def run_vship_task(
     """
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
-            on_status("Waiting for the GPU: another video's Vship pass is running…")
+            on_status(GPU_WAIT_MESSAGE)
         while not _gpu_pass.acquire(timeout=0.1):
             if cancel_event is not None and cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")
@@ -1220,6 +1257,11 @@ def run_vship_task(
         frames = 0
         parts = len(specs)
         for number, spec in enumerate(specs):
+            if on_status:
+                on_status(
+                    f"GPU metric {number + 1}/{parts}: "
+                    f"{metric_definition(spec.key).label}"
+                )
             progress = None
             if on_progress is not None:
                 progress = (lambda cur, total, fps, n=number:
@@ -1399,6 +1441,7 @@ def _run_vship_pass(
             return {key: error for key, error in errors.items() if error is not None}
 
         frame = 0
+        rate = _PassRate(step)
         while True:
             errors = lane_errors()
             if len(errors) == len(specs):
@@ -1431,8 +1474,7 @@ def _run_vship_pass(
                 cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
             frame += 1
             if on_progress:
-                elapsed = max(time.perf_counter() - started, 1e-6)
-                on_progress(min(frame * step, total_units), total_units, frame / elapsed)
+                on_progress(min(frame * step, total_units), total_units, rate.frames_per_second(frame))
         for lane in lanes:
             lane.stop()
         for lane in lanes:
@@ -1494,7 +1536,9 @@ def _run_vship_pass(
             ))
         elapsed = max(time.perf_counter() - started, 1e-6)
         if on_progress:
-            on_progress(frame * step, frame * step, frame / elapsed)
+            # A pass too short to time from its first frame keeps the old
+            # figure: its whole length.
+            on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame * step / elapsed)
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
     except PerceptualCancelled:
         raise

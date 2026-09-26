@@ -6,7 +6,7 @@ for 4K auto-selection had to import a private name out of a UI module.
 """
 from __future__ import annotations
 
-from vmaf_app.core.builtin_models import builtin_model_path, is_builtin_model_choice
+from vmaf_app.core.builtin_models import builtin_choice, builtin_model_path, is_builtin_model_choice
 from vmaf_app.core.models import VmafOptions
 
 # A distorted video at or above this resolution is considered UHD/4K for the
@@ -54,3 +54,35 @@ def resolve_model(options: VmafOptions, width: int, height: int) -> str:
     if options.model_choice == AUTO_MODEL_CHOICE:
         return model_for_resolution(width, height)
     return options.model_choice
+
+
+# VMAF v1's Auto: the 1080p model at three screen heights below 4K, the 4K
+# model at one and a half above -- the viewing conditions v0.6.1's standard
+# and 4K models were made for, so Auto means the same in both columns.
+V1_DEFAULT_MODEL = builtin_choice("vmaf_v1_3d0h")
+V1_UHD_MODEL = builtin_choice("vmaf_v1_1d5h_2160")
+
+
+def v1_model_for_resolution(width: int, height: int) -> str:
+    """The bundled VMAF v1 model Auto picks for frames compared at this size."""
+    if width >= UHD_WIDTH_THRESHOLD or height >= UHD_HEIGHT_THRESHOLD:
+        return V1_UHD_MODEL
+    return V1_DEFAULT_MODEL
+
+
+def resolve_v1_model(options: VmafOptions, width: int, height: int) -> str:
+    """The ffmpeg model= value for the row's VMAF v1 choice ("path=<file>")."""
+    choice = options.model_choice_v1
+    if choice == AUTO_MODEL_CHOICE:
+        choice = v1_model_for_resolution(width, height)
+    if not is_builtin_model_choice(choice):
+        raise ValueError(f"Not a VMAF v1 model: {choice}")
+    return f"path={builtin_model_path(choice.removeprefix('__builtin:'))}"
+
+
+def is_v1_choice(choice: str | None) -> bool:
+    """A bundled VMAF v1 model. Before VMAF v1 had its own column these were
+    choices for the one VMAF column, so old rows, results and saved scores
+    can carry one as their VMAF model."""
+    return bool(choice) and is_builtin_model_choice(choice)
+

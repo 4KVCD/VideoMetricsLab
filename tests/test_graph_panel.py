@@ -38,7 +38,7 @@ def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
         result.frames.xpsnr[1] = np.nan
     try:
         panel.add_run(result, "test")
-        panel.tabs.setCurrentIndex(4)
+        panel.tabs.setCurrentIndex(5)
         page = panel._pages["xpsnr"]
         plotted = next(iter(page.chart._series.values())).values
         assert (plotted[2:] == _XPSNR_INFINITY_PLOT_DB).all()
@@ -219,7 +219,7 @@ def test_active_metric_tab_has_visible_highlight_on_every_page(qapp):
 def test_graph_has_one_tab_per_metric(qapp):
     win = GraphPanel()
     labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
-    assert labels == ["VMAF", "VMAF NEG", "PSNR", "SSIM", "XPSNR", "SSIMULACRA2", "Butteraugli", "CVVDP"]
+    assert labels == ["VMAF v0.6.1", "VMAF v1", "VMAF NEG", "PSNR", "SSIM", "XPSNR", "SSIMULACRA2", "Butteraugli", "CVVDP"]
 
 
 def test_non_default_tabs_are_not_built_until_first_visited(qapp):
@@ -233,7 +233,7 @@ def test_non_default_tabs_are_not_built_until_first_visited(qapp):
     assert "ssim" not in win._pages
     assert "xpsnr" not in win._pages
 
-    win.tabs.setCurrentIndex(2)  # PSNR
+    win.tabs.setCurrentIndex(3)  # PSNR
     assert "psnr" in win._pages
     assert "ssim" not in win._pages  # still untouched
 
@@ -245,7 +245,7 @@ def test_run_without_extra_metrics_only_gets_a_vmaf_curve(qapp):
     sid = next(iter(win._entries))
     for i in range(1, win.tabs.count()):  # visit PSNR/SSIM/XPSNR so their (lazy) pages exist
         win.tabs.setCurrentIndex(i)
-    win.tabs.setCurrentIndex(2)  # back to PSNR -- isVisible() below needs it to be the active tab
+    win.tabs.setCurrentIndex(3)  # back to PSNR -- isVisible() below needs it to be the active tab
 
     assert sid in win._pages["vmaf"]._curves
     assert sid not in win._pages["psnr"]._curves
@@ -294,7 +294,7 @@ def test_stats_table_reflects_the_currently_active_tab(qapp):
     # comparison being made is between encodes, not between tabs.
     assert [m.label for m in METRICS] == headers_vmaf[1:1 + len(METRICS)]
 
-    win.tabs.setCurrentIndex(2)  # PSNR
+    win.tabs.setCurrentIndex(3)  # PSNR
     assert win.stats_table.rowCount() == 1
     headers_psnr = [win.stats_table.horizontalHeaderItem(c).text() for c in range(win.stats_table.columnCount())]
     assert "> 95" not in headers_psnr  # each metric brings its own bands
@@ -313,7 +313,7 @@ def test_stats_table_blanks_series_with_no_data_for_the_active_metric(qapp):
     win.tabs.setCurrentIndex(0)  # VMAF -- both series have it
     assert win.stats_table.rowCount() == 2
 
-    win.tabs.setCurrentIndex(2)  # PSNR -- only "a" has it
+    win.tabs.setCurrentIndex(3)  # PSNR -- only "a" has it
     # Both rows stay -- the table is the series list, so dropping "b" here
     # would make it un-removable and un-toggleable from this tab. "b" just
     # has no statistics to show.
@@ -366,12 +366,12 @@ def test_clicking_a_detail_column_does_not_change_the_metric(qapp):
     # switch what is being looked at.
     win = GraphPanel()
     win.add_run(_fake_result("a.mp4", with_other_metrics=True))
-    win.tabs.setCurrentIndex(2)  # PSNR
+    win.tabs.setCurrentIndex(3)  # PSNR
 
     win.stats_table.horizontalHeader().sectionClicked.emit(1 + len(METRICS))
     win.stats_table.cellClicked.emit(0, 1 + len(METRICS))
 
-    assert win.tabs.currentIndex() == 2
+    assert win.tabs.currentIndex() == 3
 
 
 def test_metric_bands_are_calibrated_for_every_metric(qapp):
@@ -466,15 +466,15 @@ def test_hover_on_psnr_tab_reports_psnr_not_vmaf(qapp):
     win = GraphPanel()
     win.show()
     win.add_run(_fake_result("a.mp4", vmaf_value=90.0, with_other_metrics=True))
-    win.tabs.setCurrentIndex(2)  # PSNR -- lazily builds its page
+    win.tabs.setCurrentIndex(3)  # PSNR -- lazily builds its page
 
     page = win._pages["psnr"]
     _hover_middle(win, "psnr")
 
     row = page.hover_label.text().splitlines()[1]
     main, _bar, others = row.partition("  |  ")
-    assert "PSNR=45.00" in main and "VMAF=" not in main
-    assert "VMAF=90.00" in others  # the rest come after the separator
+    assert "PSNR=45.00" in main and "VMAF v0.6.1=" not in main
+    assert "VMAF v0.6.1=90.00" in others  # the rest come after the separator
 
 
 # ------------------------------------------------------------------ step-based hover radius
@@ -516,7 +516,7 @@ def test_hover_finds_a_narrow_dip_even_when_zoomed_out_over_a_long_run(qapp):
     dip_time = (dip_start + 5) / fps
     _hover(win, "vmaf", dip_time, 90)  # over the dip's X, well above its Y
 
-    assert "VMAF=30.00" in page.hover_label.text()
+    assert "VMAF v0.6.1=30.00" in page.hover_label.text()
 
 
 # ------------------------------------------------------------------ H:M:S time formatting
@@ -700,7 +700,7 @@ def test_a_series_with_no_data_for_this_metric_keeps_its_row(qapp):
     # no way to see or remove it from that tab.
     win = GraphPanel()
     win.add_run(_fake_result("a.mp4"))
-    win.tabs.setCurrentIndex(2)  # PSNR
+    win.tabs.setCurrentIndex(3)  # PSNR
 
     assert win.stats_table.rowCount() == 1
     assert _row_for(win, "a").text() == "a"
@@ -824,8 +824,8 @@ def test_going_to_a_frame_reports_every_visible_series_at_that_exact_frame(qapp)
 
     text = page.hover_label.text()
     assert text.startswith("Frame 1")
-    assert "VMAF=91.00" in text and "VMAF=81.00" in text
-    assert "VMAF=20.00" not in text, "must not snap to the nearby dip"
+    assert "VMAF v0.6.1=91.00" in text and "VMAF v0.6.1=81.00" in text
+    assert "VMAF v0.6.1=20.00" not in text, "must not snap to the nearby dip"
 
 
 def test_going_to_a_frame_shows_the_difference_for_exactly_two_series(qapp):
@@ -853,7 +853,7 @@ def test_frame_readout_aligns_fields_for_different_length_series_names(qapp):
     assert len(series_lines) == 2
     # The fixed series column is followed by frame, time, and metric columns.
     # Their exact positions must be independent of the individual label length.
-    for field in ("frame", "t=", "VMAF="):
+    for field in ("frame", "t=", "VMAF v0.6.1="):
         assert series_lines[0].index(field) == series_lines[1].index(field)
 
 
@@ -868,7 +868,7 @@ def test_a_frame_missing_from_one_run_is_reported_not_faked(qapp):
     assert page.show_frame(7, win._entries) is True  # the long one has it
     text = page.hover_label.text()
     assert "not in this run" in text
-    assert "VMAF=90.00" in text
+    assert "VMAF v0.6.1=90.00" in text
 
 
 def test_the_frame_control_is_bounded_by_what_is_plotted(qapp):
@@ -1346,13 +1346,13 @@ def test_the_readout_lists_the_other_metrics_in_aligned_columns(qapp):
     win.add_run(_with_perceptual(_fake_result("a much longer encode name.mp4", with_other_metrics=True),
                                  [50.5] * 10))
     win.add_run(_fake_result("b.mp4", vmaf_value=80.0, with_other_metrics=True))
-    win.tabs.setCurrentIndex(2)  # PSNR
+    win.tabs.setCurrentIndex(3)  # PSNR
     page = win._pages["psnr"]
     page.show_frame(3, win._entries)
 
     first, second = _rows(page)
     assert first.index("|") == second.index("|")
-    for column in ("VMAF=", "SSIM=", "XPSNR="):
+    for column in ("VMAF v0.6.1=", "SSIM=", "XPSNR="):
         assert first.index(column) == second.index(column), column
     assert "SSIMULACRA2=50.50" in first and "SSIMULACRA2" not in second
     assert not re.search(r"(?<!X)PSNR=", first.partition("|")[2]), "the selected metric is not repeated"
@@ -1394,7 +1394,7 @@ def test_the_readout_box_is_wide_enough_for_the_extra_columns(qapp):
     win = GraphPanel()
     win.show()
     win.add_run(_with_perceptual(_fake_result("a.mp4", with_other_metrics=True), [50.5] * 10))
-    win.tabs.setCurrentIndex(2)
+    win.tabs.setCurrentIndex(3)
     page = win._pages["psnr"]
     page.show_frame(3, win._entries)
     fm = QFontMetrics(page.hover_label.font())

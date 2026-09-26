@@ -3,6 +3,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -168,7 +169,7 @@ def test_an_ffmpeg_failure_keeps_the_perceptual_metrics(qapp, monkeypatch):
     (kind, result, message, tail), = events
     assert kind == "partly"
     assert result.has_metric("ssimulacra2") and not result.has_metric("vmaf")
-    assert message == "VMAF failed: FFmpeg failed" and tail == "stderr tail"
+    assert message == "VMAF v0.6.1 failed: FFmpeg failed" and tail == "stderr tail"
 
 
 def test_both_groups_failing_fails_the_video_without_cancelling_the_run(qapp, monkeypatch):
@@ -619,16 +620,17 @@ def test_a_lane_blocked_on_a_slot_is_released_by_cancel(qapp):
     import threading
 
     worker = VmafWorker(_jobs(4), parallel_jobs=1)
-    worker._active = 1  # pretend the single slot is taken
+    worker._busy["cpu"] = 1  # pretend the single slot is taken
+    worker._queues["cpu"].append((SimpleNamespace(started=True, admitted=set()), None))
     outcome = []
-    waiter = threading.Thread(target=lambda: outcome.append(worker._acquire_slot()))
+    waiter = threading.Thread(target=lambda: outcome.append(worker._next_task("cpu")))
     waiter.start()
     try:
         worker.cancel()
         waiter.join(timeout=5)
     finally:
         assert not waiter.is_alive(), "a lane stayed blocked after cancel"
-    assert outcome == [False]
+    assert outcome == [None]
 
 
 def test_the_lane_count_can_be_raised_while_running(qapp):
@@ -765,3 +767,228 @@ def test_the_jobs_cvvdp_settings_reach_the_request(qapp, monkeypatch):
     VmafWorker([job]).run()
     _drain(qapp)
     assert seen == [321]
+
+
+def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, monkeypatch):
+    from vmaf_app.core.perceptual_vship import GPU_WAIT_MESSAGE
+
+    ffmpeg_reported, gpu_waiting = threading.Event(), threading.Event()
+
+    def ffmpeg(*args, on_progress=None, **kwargs):
+        gpu_waiting.wait(5)
+        on_progress(10, 100, 11.0)
+        ffmpeg_reported.set()
+        time.sleep(0.2)
+        return _fake_result("d.mp4")
+
+    def vship(*args, on_status=None, on_progress=None, **kwargs):
+        on_status(GPU_WAIT_MESSAGE)
+        gpu_waiting.set()
+        ffmpeg_reported.wait(5)
+        time.sleep(0.05)
+        on_progress(50, 100, 40.0)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d",
+                                 metric_keys=("vmaf", "ssimulacra2"))])
+    seen = []
+    worker.halves.connect(lambda _index, halves: seen.append([(labels, state) for labels, *_x, state in halves]))
+    worker.run()
+    _drain(qapp)
+    assert [("VMAF v0.6.1", "running"), ("SSIMULACRA2", "waiting")] in seen
+    assert [("VMAF v0.6.1", "running"), ("SSIMULACRA2", "running")] in seen
+
+
+def _split_job(name: str, keys=("vmaf", "ssimulacra2")) -> VmafJob:
+    return VmafJob(_info("s.mp4"), _info(name), VmafOptions(), label=name, metric_keys=keys)
+
+
+def test_cpu_lanes_take_the_next_cpu_work_and_the_gpu_goes_in_list_order(qapp, monkeypatch):
+    """The user's queue: a video needing both halves, one whose FFmpeg
+    metrics were saved (GPU only), and another needing both. A lane took a
+    whole video, so the second lane went to the GPU-only video, which took
+    the GPU ahead of the first video while the third video's FFmpeg metrics
+    never started. Now the two CPU lanes run the first and third videos'
+    FFmpeg metrics while the first video has the GPU."""
+    overlap = threading.Barrier(3, timeout=5)
+    gpu_order, lock = [], threading.Lock()
+
+    def ffmpeg(source, distorted, *a, **k):
+        if distorted.path.name in ("d0.mp4", "d2.mp4"):
+            overlap.wait()
+        return _fake_result(distorted.path.name)
+
+    def vship(source, distorted, *a, **k):
+        with lock:
+            gpu_order.append(distorted.path.name)
+        if distorted.path.name == "d0.mp4":
+            overlap.wait()
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4", ("ssimulacra2",)), _split_job("d2.mp4")],
+                        parallel_jobs=2)
+    finished = []
+    worker.job_finished.connect(lambda index, _result: finished.append(index))
+    worker.run()
+    _drain(qapp)
+    assert not overlap.broken, "the first and third videos' FFmpeg metrics did not run beside the first's GPU half"
+    assert gpu_order == ["d0.mp4", "d1.mp4", "d2.mp4"]
+    assert sorted(finished) == [0, 1, 2]
+
+
+def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
+    """The CPU lanes may run ahead of a slow GPU half, but not without limit:
+    each video in progress has a line in the window."""
+    release = threading.Event()
+    started = []
+
+    def vship(source, distorted, *a, **k):
+        if distorted.path.name == "d0.mp4":
+            release.wait(5)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job(f"d{n}.mp4") for n in range(6)], parallel_jobs=2)
+    worker.job_started.connect(lambda index, _label: started.append(index))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.02)
+    in_progress_while_blocked = sorted(started)
+    release.set()
+    runner.join(10)
+    _drain(qapp)
+    assert in_progress_while_blocked == [0, 1, 2]
+    assert sorted(started) == list(range(6))
+
+
+def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch):
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d0.mp4", ("vmaf", "ssimulacra2", "butteraugli")),
+                         _split_job("d1.mp4", ("vmaf",))])
+    plans = []
+    worker.planned.connect(plans.append)
+    worker.run()
+    _drain(qapp)
+    assert plans == [{0: [("cpu", 1), ("gpu", 2)], 1: [("cpu", 1)]}]
+
+
+def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):
+    def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
+        on_status("Detecting black bars in source...")
+        on_progress(10, 100, 5.0)
+        return _fake_result(d.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4")])
+    steps = []
+    worker.task_progress.connect(
+        lambda _index, snapshot: steps.extend((t["backend"], t["state"], t["step"]) for t in snapshot))
+    worker.run()
+    _drain(qapp)
+    assert ("ffmpeg", "starting", "Detecting black bars in source...") in steps
+
+
+def test_cancelling_keeps_a_videos_finished_gpu_metrics(qapp, monkeypatch):
+    """Two videos in parallel: the first's GPU metrics finished, the GPU went
+    on to the second, and Cancel dropped the first video whole -- its
+    finished GPU scores were neither shown nor saved."""
+    second_gpu_started = threading.Event()
+
+    def ffmpeg(s, d, *a, cancel_event=None, **k):
+        while not cancel_event.is_set():  # the CPU half, still running at Cancel
+            time.sleep(0.01)
+        raise Cancelled("Cancelled by user")
+
+    def vship(s, d, *a, cancel_event=None, **k):
+        if d.path.name == "d0.mp4":
+            return _perceptual_output()  # the first video's GPU half finishes
+        second_gpu_started.set()
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        raise PerceptualCancelled("Cancelled by user")
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4")], parallel_jobs=2)
+    finished, failed, cancelled = [], [], []
+    worker.job_finished.connect(lambda index, result: finished.append((index, result)))
+    worker.job_partially_failed.connect(lambda *args: failed.append(args))
+    worker.job_failed.connect(lambda *args: failed.append(args))
+    worker.cancelled.connect(lambda: cancelled.append(True))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    assert second_gpu_started.wait(10)
+    worker.cancel()
+    runner.join(10)
+    _drain(qapp)
+    assert [index for index, _ in finished] == [0]
+    result = finished[0][1]
+    assert result.has_metric("ssimulacra2") and not result.has_metric("vmaf")
+    assert failed == [], "a cancelled half is not a failure"
+    assert cancelled == [True]
+
+
+
+def test_cancelling_keeps_the_gpu_metrics_of_a_video_whose_cpu_half_never_started(qapp, monkeypatch):
+    """One CPU lane, busy with the first video; the second video's GPU half
+    finished while its CPU half was still queued. Its lanes never finished
+    it, so Cancel lost its GPU scores."""
+    second_gpu_done = threading.Event()
+
+    def ffmpeg(s, d, *a, cancel_event=None, **k):
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        raise Cancelled("Cancelled by user")
+
+    def vship(s, d, *a, cancel_event=None, **k):
+        if d.path.name == "d1.mp4":
+            second_gpu_done.set()
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4")], parallel_jobs=1)
+    finished = []
+    worker.job_finished.connect(lambda index, result: finished.append((index, result)))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    assert second_gpu_done.wait(10)
+    time.sleep(0.2)  # let the GPU lane record it
+    worker.cancel()
+    runner.join(10)
+    _drain(qapp)
+    assert sorted(index for index, _ in finished) == [0, 1]
+    assert all(result.has_metric("ssimulacra2") and not result.has_metric("vmaf") for _, result in finished)
+
+
+def test_a_new_gpu_pass_does_not_carry_the_last_passs_rate(qapp, monkeypatch):
+    """"Butteraugli 2 of 3, 13.3 fps" was SSIMULACRA2's last rate, shown
+    until Butteraugli's first figures arrived."""
+    def vship(s, d, *a, on_progress=None, on_status=None, **k):
+        on_status("GPU metric 1/2: SSIMULACRA2")
+        on_progress(100, 200, 50.0)
+        on_status("GPU metric 2/2: Butteraugli")
+        on_progress(150, 200, 20.0)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4")])
+    seen = []
+    worker.task_progress.connect(lambda _index, snapshot: seen.extend(
+        (t["phase"], t["fps"]) for t in snapshot if t["backend"] == "perceptual" and t["phase"]))
+    worker.run()
+    _drain(qapp)
+    assert ((2, 2, "Butteraugli"), 50.0) not in seen
+    assert ((2, 2, "Butteraugli"), 0.0) in seen and ((2, 2, "Butteraugli"), 20.0) in seen
+

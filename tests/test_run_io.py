@@ -41,7 +41,7 @@ def _sample_result() -> ComparisonResult:
 
 def test_save_and_load_round_trips_frames(tmp_path):
     result = _sample_result()
-    result.model_choice = "__builtin:vmaf_v1_3d0h"
+    result.model_choice = "version=vmaf_4k_v0.6.1"
     result.distorted_info.color_range = "tv"
     result.distorted_info.color_space = "bt2020nc"
     result.distorted_info.color_transfer = "smpte2084"
@@ -104,7 +104,8 @@ def test_export_csv_writes_header_and_all_rows(tmp_path):
     export_csv(result, out_path)
 
     lines = out_path.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr,ssimulacra2,butteraugli"
+    # The first seven columns never move; VMAF v1 comes after them.
+    assert lines[0] == "frame,time_s,vmaf,vmaf_neg,psnr,ssim,xpsnr,vmaf_v1,ssimulacra2,butteraugli"
     assert len(lines) == 1 + len(result.frames)
 
 

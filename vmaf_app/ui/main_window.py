@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import os
+import time
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -76,7 +77,7 @@ from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
-from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, resolve_model
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, is_v1_choice, resolve_model
 from vmaf_app.core.models import (
     RESAMPLE_TARGET_CHOICES,
     CropBox,
@@ -108,13 +109,20 @@ from vmaf_app.ui.formatting import bitrate_string, media_info_string
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
-from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
-from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, VmafJob, VmafWorker
+from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
+from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
 
+# The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
+# own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
 _MODEL_CHOICES = [
     ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
-    ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
+    ("VMAF v0.6.1 (standard viewing)", "version=vmaf_v0.6.1"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
+    ("Custom model file...", CUSTOM_MODEL_CHOICE),
+]
+
+_V1_MODEL_CHOICES = [
+    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
     ("VMAF v1 (1080p / 3H)", builtin_choice("vmaf_v1_3d0h")),
     ("VMAF v1 (1080p phone / 5H)", builtin_choice("vmaf_v1_5d0h")),
     ("VMAF v1 (4K / 1.5H)", builtin_choice("vmaf_v1_1d5h_2160")),
@@ -123,7 +131,6 @@ _MODEL_CHOICES = [
     ("VMAF v1 HFR (1080p phone / 5H)", builtin_choice("vmaf_v1_hfr_5d0h")),
     ("VMAF v1 HFR (4K / 1.5H)", builtin_choice("vmaf_v1_hfr_1d5h_2160")),
     ("VMAF v1 HFR (4K / 3H, up to 110)", builtin_choice("vmaf_v1_hfr_3d0h_2160")),
-    ("Custom model file...", CUSTOM_MODEL_CHOICE),
 ]
 
 _SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
@@ -146,7 +153,8 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_SSIMULACRA2,
     COL_BUTTERAUGLI,
     COL_CVVDP,
-) = range(14)
+    COL_VMAF_V1,  # added last so every older column keeps its index; shown after VMAF v0.6.1
+) = range(15)
 
 #: Row states worth colouring the file name for. Everything else the old
 #: Status column reported is now visible in the metric columns themselves --
@@ -162,6 +170,8 @@ _STATE_COLOURS = {
 # independently of calculation. Settings remains the final page.
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
+_PAUSED = "Paused"  # MainWindow._run_hold while a run is paused
+
 @dataclass(frozen=True)
 class MetricColumn:
     """A stable physical table column bound to one registry metric."""
@@ -175,7 +185,7 @@ class MetricColumn:
 
 # Keep these physical indices and visual order exactly as the established UI.
 _METRIC_COLUMNS = (
-    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
+    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_V1, "vmaf_v1"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
     MetricColumn(COL_PSNR, "psnr"), MetricColumn(COL_SSIM, "ssim"),
     MetricColumn(COL_XPSNR, "xpsnr"),
     MetricColumn(COL_SSIMULACRA2, "ssimulacra2"), MetricColumn(COL_BUTTERAUGLI, "butteraugli"),
@@ -410,6 +420,19 @@ def _rough_duration(seconds: float) -> str:
     return f"about {max(1, round(seconds / 60))} minutes"
 
 
+@dataclass(frozen=True)
+class _GpuPasses:
+    """A GPU half scored one metric per pass, as its run line times it."""
+
+    number: int  # the pass under way, from 1
+    keys: tuple[str, ...]  # the metrics, in pass order
+    # The seconds each metric still needs: 0 for the ones done, the one under
+    # way at its current rate, the later ones at the rate each ran at earlier
+    # in the run -- None where there is no rate to go by.
+    seconds: tuple[float | None, ...]
+    frames_left: tuple[int, ...]  # each metric's frames still to score
+
+
 class CompletedRun:
     """A finished run, its display label, and its graph identity.
 
@@ -540,16 +563,61 @@ class MainWindow(QMainWindow):
         self._job_frames_done: dict[int, int] = {}
         self._job_fps: dict[int, float] = {}
         self._job_decode_status: dict[int, str] = {}
+        # Each half's progress for a video scored in two halves; see
+        # VmafWorker.halves.
+        self._job_halves: dict[int, list] = {}
+        # Backend-aware task progress.  This is deliberately separate from
+        # the legacy combined progress value: CPU and perceptual work have
+        # different clocks, and GPU perceptual metrics may be serialized.
+        self._job_task_progress: dict[int, list[dict[str, object]]] = {}
+        self._job_gpu_fallback: set[int] = set()
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
         # job index -> which of the per-video lines it owns. Held for the
         # life of the job so a line never jumps to a different video.
         self._job_line_slot: dict[int, int] = {}
+        # Each video in progress: its line's text and tooltip. The lines are
+        # laid out from this in list order (_arrange_job_lines).
+        self._job_line_text: dict[int, tuple[str, str]] = {}
         self._run_failed_count = 0
+        self._run_partial_count = 0  # videos with some metrics failed, the rest scored
         self._run_was_cancelled = False
         # Whether a run owns the window's settings right now. Read by
         # every background handler that would otherwise re-enable them.
         self._run_active = False
+        self._run_started_at: float | None = None
+        self._run_elapsed_timer = QTimer(self)
+        self._run_elapsed_timer.setInterval(1000)
+        self._run_elapsed_timer.timeout.connect(self._on_run_tick)
+        self._run_skipped = 0  # videos a run left out because they were already scored
+        # Paused time, left out of "Elapsed": it is how long the run has
+        # been calculating, and a paused run is not.
+        self._paused_total = 0.0
+        self._paused_since: float | None = None
+        # Progress arrives with every frame a GPU pass scores -- 40 to 60
+        # times a second -- and redrawing the per-video lines (and the queue
+        # ETA) on each made their numbers flicker. Numbers now wait for the
+        # once-a-second tick that also moves "Elapsed"; a line whose content
+        # changes (a video starting, a half waiting, starting, finishing, the
+        # next GPU metric pass) is still redrawn at once.
+        self._job_lines_due: set[int] = set()
+        # The total each video's figures are out of, as reported with them:
+        # not the video's frame count, which a GPU half's passes exceed.
+        self._job_progress_total: dict[int, int] = {}
+        # Each video's halves as the worker planned them (VmafWorker.planned).
+        self._job_plan: dict[int, list[tuple[str, int]]] = {}
+        # The last rate seen this run on the CPU and on the GPU lane, for
+        # the queue ETA while a lane has no current rate.
+        self._lane_rates: dict[str, float] = {}
+        # Each GPU metric's last rate this run: what its pass will take on
+        # the next video, for the GPU half's total time remaining.
+        self._metric_rates: dict[str, float] = {}
+        self._job_line_shape: dict[int, tuple] = {}
+        # A state the run's status line must keep saying while it lasts:
+        # "Paused", "Cancelling...", or the closing message. The line is
+        # rebuilt every second (the elapsed time) and on every progress
+        # update, which replaced "Paused." within a second.
+        self._run_hold = ""
         self._cache_clear_result: list[int] | None = None
         # Set once the user has asked to close: background work has been
         # told to stop and the window closes itself when it actually has.
@@ -613,9 +681,8 @@ class MainWindow(QMainWindow):
         writes_finished = self._file_writes.wait_until_idle(0.5)
         graph_writes_finished = self.graph_panel.wait_until_file_writes_idle(0.5)
         if pending or not writes_finished or not graph_writes_finished:
-            self.status_label.setText(
-                "Finishing up; the window will close on its own."
-            )
+            self._run_hold = "Finishing up; the window will close on its own."
+            self.status_label.setText(self._run_hold)
             # Re-check shortly. Each cancelled worker also calls back here as
             # it finishes, so this timer is only a backstop for the write
             # queues, which have no completion signal of their own.
@@ -706,6 +773,7 @@ class MainWindow(QMainWindow):
             compute_xpsnr=self._settings.default_compute_xpsnr,
             compute_vmaf=self._settings.default_compute_vmaf,
             compute_vmaf_neg=self._settings.default_compute_vmaf_neg,
+            compute_vmaf_v1=self._settings.default_compute_vmaf_v1,
         )
 
     def _extra_metrics_from_settings(self) -> set[str]:
@@ -806,7 +874,8 @@ class MainWindow(QMainWindow):
         metrics_row = QHBoxLayout()
         metrics_row.addWidget(QLabel("Default metrics:"))
         self.settings_default_psnr = QCheckBox("PSNR")
-        self.settings_default_vmaf = QCheckBox("VMAF")
+        self.settings_default_vmaf = QCheckBox("VMAF v0.6.1")
+        self.settings_default_vmaf_v1 = QCheckBox("VMAF v1")
         self.settings_default_vmaf_neg = QCheckBox("VMAF NEG")
         self.settings_default_ssim = QCheckBox("SSIM")
         self.settings_default_xpsnr = QCheckBox("XPSNR")
@@ -815,6 +884,7 @@ class MainWindow(QMainWindow):
         self.settings_default_cvvdp = QCheckBox("CVVDP")
         for box, value in (
             (self.settings_default_vmaf, self._settings.default_compute_vmaf),
+            (self.settings_default_vmaf_v1, self._settings.default_compute_vmaf_v1),
             (self.settings_default_vmaf_neg, self._settings.default_compute_vmaf_neg),
             (self.settings_default_psnr, self._settings.default_compute_psnr),
             (self.settings_default_ssim, self._settings.default_compute_ssim),
@@ -924,6 +994,7 @@ class MainWindow(QMainWindow):
         self._settings.default_compute_psnr = self.settings_default_psnr.isChecked()
         self._settings.default_compute_vmaf = self.settings_default_vmaf.isChecked()
         self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
+        self._settings.default_compute_vmaf_v1 = self.settings_default_vmaf_v1.isChecked()
         self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
         self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
         self._settings.default_compute_ssimulacra2 = self.settings_default_ssimulacra2.isChecked()
@@ -1094,6 +1165,7 @@ class MainWindow(QMainWindow):
                 f"   {metric_definition('ssimulacra2').table_header}",
                 f"   {metric_definition('butteraugli').table_header}",
                 f"   {metric_definition('cvvdp').table_header}",
+                f"   {metric_definition('vmaf_v1').table_header}",
             ]
         )
         self.distorted_table.verticalHeader().setVisible(False)
@@ -1214,11 +1286,21 @@ class MainWindow(QMainWindow):
             self.model_combo.addItem(name)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         self.model_combo.setToolTip(
-            "VMAF only. Auto selects the v0 model using the resolution after "
-            "calculation cropping and scaling. Bundled v1 models require a "
-            "recent libvmaf-capable FFmpeg build."
+            "The VMAF v0.6.1 column's model. Auto picks the standard or the 4K "
+            "model from the size frames are compared at, after black bars are "
+            "removed and one video is scaled to the other."
         )
-        metric_options_form.addRow("VMAF model:", self.model_combo)
+        metric_options_form.addRow("VMAF v0.6.1 model:", self.model_combo)
+        self.model_v1_combo = QComboBox()
+        for name, _ in _V1_MODEL_CHOICES:
+            self.model_v1_combo.addItem(name)
+        self.model_v1_combo.currentIndexChanged.connect(lambda _index: self._on_panel_field_edited("model_v1"))
+        self.model_v1_combo.setToolTip(
+            "The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto "
+            "picks the 1080p model at three screen heights, or the 4K model at "
+            "one and a half for 4K comparisons, as for VMAF v0.6.1."
+        )
+        metric_options_form.addRow("VMAF v1 model:", self.model_v1_combo)
 
         self.gpu_checkbox = QCheckBox("Use GPU decoding")
         self.gpu_checkbox.setToolTip(
@@ -1440,13 +1522,13 @@ class MainWindow(QMainWindow):
         # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
         # what it was counting.
         self.parallel_jobs_check = QCheckBox(
-            "Calculate 2 videos in parallel"
+            "Calculate CPU metrics for 2 videos in parallel"
         )
         self.parallel_jobs_check.setChecked(
             self._settings.parallel_jobs >= MAX_PARALLEL_JOBS
         )
         self.parallel_jobs_check.setToolTip(
-            f"Scores two videos simultaneously on this {cores}-core "
+            f"Runs CPU metric work for two videos simultaneously on this {cores}-core "
             "machine. libvmaf does not keep a many-core CPU busy on its "
             "own, so a second video largely fills the idle capacity "
             "rather than competing for it. libvmaf threads left on Auto "
@@ -1487,9 +1569,10 @@ class MainWindow(QMainWindow):
         # only thing a bar was conveying, it says it exactly rather than
         # approximately, and two bars stacked above a third read as a block
         # of chrome rather than as a status.
-        self.job_progress_labels: list[QLabel] = []
-        for _ in range(MAX_PARALLEL_JOBS):
-            line = QLabel()
+        self.job_progress_labels: list[ElidedLabel] = []
+        # One more than the CPU lanes: the video on the GPU can be a third.
+        for _ in range(MAX_VIDEOS_IN_FLIGHT):
+            line = ElidedLabel()
             line.setStyleSheet("color: #444;")
             line.setVisible(False)
             layout.addWidget(line)
@@ -2757,6 +2840,9 @@ class MainWindow(QMainWindow):
             )
             self.model_combo.setCurrentIndex(model_index)
             self._panel_custom_model_path = opts.custom_model_path
+            self.model_v1_combo.setCurrentIndex(next(
+                (i for i, (_, key) in enumerate(_V1_MODEL_CHOICES) if key == opts.model_choice_v1), 0
+            ))
 
             self.gpu_checkbox.setChecked(opts.gpu_decode)
             self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
@@ -2796,7 +2882,9 @@ class MainWindow(QMainWindow):
                 self.metric_header.set_checked(metric_column.column, enabled)
             selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
             self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
-            uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.extra_features for o in selected_options)
+            self.model_v1_combo.setEnabled(any(o.compute_vmaf_v1 for o in selected_options))
+            uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.compute_vmaf_v1 or o.extra_features
+                               for o in selected_options)
             self.threads_spin.setEnabled(uses_libvmaf)
             # Also while it is above 1: CVVDP is unavailable then, and the
             # way back to it must not be a disabled control.
@@ -2876,6 +2964,8 @@ class MainWindow(QMainWindow):
         return VmafOptions(
             model="",  # resolved per-job at run time via resolve_model(), once each row's distorted video is known
             model_choice=model_choice,
+            model_choice_v1=_V1_MODEL_CHOICES[self.model_v1_combo.currentIndex()][1],
+            compute_vmaf_v1=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF_V1].column),
             custom_model_path=self._panel_custom_model_path,
             extra_features=extra_features,
             n_threads=self.threads_spin.value(),
@@ -3127,6 +3217,18 @@ class MainWindow(QMainWindow):
                     self._default_extra_metric_keys.discard(key)
             else:
                 self._set_metric_option(self._default_options, column, checked)
+            # Saved as the default too, the same setting as Settings >
+            # Default metrics. The header changed the defaults for this
+            # session only, so metrics ticked there came back unticked
+            # after a restart.
+            setattr(self._settings, f"default_compute_{key}", checked)
+            box = getattr(self, f"settings_default_{key}", None)
+            if box is not None:
+                box.blockSignals(True)
+                box.setChecked(checked)
+                box.blockSignals(False)
+            if error := self._settings.save():
+                self.status_label.setText(error)
         self._reload_cached_for_rows(rows)
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
@@ -3274,6 +3376,7 @@ class MainWindow(QMainWindow):
         fields = {
             "gpu": ("gpu_decode", "gpu_vendor"),
             "model": ("model", "model_choice", "custom_model_path"),
+            "model_v1": ("model_v1", "model_choice_v1"),
         }.get(field_name, (field_name,))
 
         def apply(target: VmafOptions) -> bool:
@@ -3659,25 +3762,40 @@ class MainWindow(QMainWindow):
         self._job_frames_done = {}
         self._job_fps = {}
         self._job_decode_status.clear()
+        self._job_halves.clear()
+        self._job_task_progress.clear()
+        self._job_plan = {}
+        self._lane_rates = {}
+        self._metric_rates = {}
+        self._job_gpu_fallback.clear()
         self._running_jobs = []
         self._finished_jobs = set()
         self._job_line_slot = {}
+        self._job_line_text = {}
         for line in self.job_progress_labels:
             line.setVisible(False)
             line.clear()
         self._run_failed_count = 0
+        self._run_partial_count = 0  # videos with some metrics failed, the rest scored
         self._run_was_cancelled = False
-        if already_scored_rows:
-            self.status_label.setText(
-                f"Skipping {len(already_scored_rows)} already-scored video(s); running {len(jobs)}..."
-            )
+        self._run_skipped = len(already_scored_rows)
+        self._run_started_at = time.monotonic()
+        self._paused_total, self._paused_since = 0.0, None
+        self._run_hold = ""
+        self._job_lines_due.clear()
+        self._job_line_shape.clear()
+        self._run_elapsed_timer.start()
         self._set_run_ui_active(True)
+        self._update_run_status()  # the counts, the skipped included, before any video starts
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         self.cancel_btn.setEnabled(True)
 
         self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
         self._worker.job_started.connect(self._on_job_started)
+        self._worker.halves.connect(self._job_halves.__setitem__)
+        self._worker.task_progress.connect(self._on_task_progress)
+        self._worker.planned.connect(lambda plan: setattr(self, "_job_plan", dict(plan)))
         self._worker.progress.connect(self._on_job_progress)
         self._worker.status.connect(self._on_job_status)
         self._worker.job_finished.connect(self._on_job_finished)
@@ -3731,6 +3849,8 @@ class MainWindow(QMainWindow):
     def _on_cancel_clicked(self) -> None:
         if self._worker is not None:
             self._worker.cancel()
+            if not self._closing:
+                self._run_hold = "Cancelling..."
             self.status_label.setText("Cancelling...")
 
     def _on_pause_clicked(self) -> None:
@@ -3739,11 +3859,20 @@ class MainWindow(QMainWindow):
         if self.pause_btn.isChecked():
             self._worker.pause()
             self.pause_btn.setText("Resume")
-            self.status_label.setText("Paused.")
+            self._paused_since = time.monotonic()
+            self._run_hold = _PAUSED
+            self._redraw_job_lines()
+            self._update_run_status()
         else:
             self._worker.resume()
             self.pause_btn.setText("Pause")
-            self.status_label.setText("Resumed.")
+            if self._paused_since is not None:
+                self._paused_total += time.monotonic() - self._paused_since
+                self._paused_since = None
+            if self._run_hold == _PAUSED:
+                self._run_hold = ""
+            self._redraw_job_lines()
+            self._update_run_status()
 
     def _on_job_started(self, index: int, label: str) -> None:
         row = self._row_index_of(self._job_rows[index])
@@ -3756,17 +3885,57 @@ class MainWindow(QMainWindow):
         self._update_run_status()
 
     def _assign_progress_line(self, index: int, label: str) -> None:
-        """Gives this job a line of its own, reusing one a finished job left."""
-        if index in self._job_line_slot:
+        """Gives this job a line of its own."""
+        if index in self._job_line_text:
             return
-        taken = set(self._job_line_slot.values())
+        self._job_line_text[index] = (f"{label} — starting…", "")
+        self._arrange_job_lines()
+
+    @staticmethod
+    def _step_text(message: str) -> str:
+        """A half's status message as its step before figures arrive, e.g.
+        "Detecting black bars in source" -- "" for the message that only
+        says FFmpeg is starting (its decode plan is shown on its own).
+        Before, a video with CPU and GPU halves said only "CPU starting" for
+        as long as black bars on a 4K source were being looked for."""
+        text = message.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
+        if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
+            return ""
+        if text.startswith("GPU decode failed, retrying"):
+            return "GPU decode failed, retrying"
+        return text
+
+    def _redraw_job_lines(self) -> None:
+        """Every video line with figures, now: on Pause and Resume."""
+        for index in list(self._job_line_text):
+            if index in self._job_task_progress or index in self._job_progress_total:
+                self._render_job_progress(index)
+
+    def _set_job_line(self, index: int, text: str, tooltip: str = "") -> None:
+        """What a video's line says; kept, so the lines can be laid out again."""
+        if index not in self._job_line_text:
+            return
+        self._job_line_text[index] = (text, tooltip)
+        slot = self._job_line_slot.get(index)
+        if slot is not None:
+            self.job_progress_labels[slot].set_text(text, tooltip)
+
+    def _arrange_job_lines(self) -> None:
+        """The videos in progress, one line each, in list order.
+
+        A video used to take the first free line, so a later video could
+        sit above an earlier one and the lines changed places as videos
+        finished; and a reused line kept the previous video's tooltip."""
+        order = sorted(self._job_line_text)[:len(self.job_progress_labels)]
+        self._job_line_slot = {index: slot for slot, index in enumerate(order)}
         for slot, line in enumerate(self.job_progress_labels):
-            if slot in taken:
-                continue
-            self._job_line_slot[index] = slot
-            line.setText(f"{label} — starting…")
-            line.setVisible(True)
-            return
+            if slot < len(order):
+                text, tooltip = self._job_line_text[order[slot]]
+                line.setVisible(True)
+                line.set_text(text, tooltip)
+            else:
+                line.setVisible(False)
+                line.clear()
 
     def _mark_job_over(self, index: int) -> None:
         """Retires a job from the live figures.
@@ -3779,9 +3948,13 @@ class MainWindow(QMainWindow):
         self._finished_jobs.add(index)
         self._job_fps.pop(index, None)
         self._job_decode_status.pop(index, None)
-        slot = self._job_line_slot.pop(index, None)
-        if slot is not None:
-            self.job_progress_labels[slot].setVisible(False)
+        self._job_halves.pop(index, None)
+        self._job_task_progress.pop(index, None)
+        self._job_gpu_fallback.discard(index)
+        self._job_lines_due.discard(index)
+        self._job_line_shape.pop(index, None)
+        if self._job_line_text.pop(index, None) is not None:
+            self._arrange_job_lines()
         if 0 <= index < len(self._job_total_frames):
             self._job_frames_done[index] = self._job_total_frames[index]
         self._update_run_status()
@@ -3799,17 +3972,308 @@ class MainWindow(QMainWindow):
         the names here said the same thing twice -- and with two long file
         names it was the longest line on screen for no information.
         """
+        if self._run_hold and self._run_hold != _PAUSED:
+            self.status_label.setText(self._run_hold)
+            return
         running = [i for i in self._running_jobs if i not in self._finished_jobs]
         total = len(self._job_rows)
-        if not running:
+        elapsed = self._run_elapsed()
+        elapsed_text = f"Elapsed: {format_hms(elapsed)}" if elapsed is not None else ""
+        summary = self._run_summary(running, total)
+        if self._run_hold == _PAUSED:
+            # No ETA: nothing moves until Resume.
+            self.status_label.setText(
+                "Paused   ·   " + summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
             return
-        if len(running) == 1:
-            summary = f"Running {running[0] + 1} of {total}"
-        else:
-            summary = f"Running {len(running)} of {total} together"
+        if not running:
+            if self._run_active and total:
+                self.status_label.setText(summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
+            return
         seconds = self._queue_eta_seconds()
         eta = "calculating..." if seconds is None else format_hms(seconds)
-        self.status_label.setText(f"{summary}   ·   Queue ETA: {eta}")
+        self.status_label.setText(
+            f"{summary}"
+            + (f"   ·   {elapsed_text}" if elapsed_text else "")
+            + f"   ·   Queue ETA: {eta}"
+        )
+
+    def _run_elapsed(self) -> float | None:
+        """Seconds the run has been calculating: paused time left out."""
+        if self._run_started_at is None:
+            return None
+        now = time.monotonic()
+        paused = self._paused_total + (now - self._paused_since if self._paused_since is not None else 0.0)
+        return max(0.0, now - self._run_started_at - paused)
+
+    def _run_end_message(self) -> str:
+        """How the run ended and how long it took, e.g. "Finished in
+        2:29:51: 1 video failed, 1 with some metrics failed (hover over
+        their names for why)." It used to be "Done." -- the time gone with
+        the elapsed figure -- or "Finished with N failed video(s).", which
+        counted a video with one failed metric among scored ones as failed."""
+        elapsed = self._run_elapsed()
+        took = f" in {format_hms(elapsed)}" if elapsed is not None else ""
+        if self._run_was_cancelled:
+            return f"Cancelled after {format_hms(elapsed)}." if elapsed is not None else "Cancelled."
+        issues = []
+        if self._run_failed_count:
+            issues.append(f"{self._run_failed_count} video{'s' if self._run_failed_count != 1 else ''} failed")
+        if self._run_partial_count:
+            issues.append(f"{self._run_partial_count} with some metrics failed")
+        if not issues:
+            return f"Done{took}."
+        count = self._run_failed_count + self._run_partial_count
+        return (f"Finished{took}: " + ", ".join(issues)
+                + f" (hover over {'its name' if count == 1 else 'their names'} for why).")
+
+    def _run_summary(self, running: list[int], total: int) -> str:
+        """The queue in counts, e.g. "3 videos: 1 done, 2 in progress".
+
+        It used to be "Running 3 of 3" for one video in progress -- its
+        position in the queue -- but "Running 2 of 3 together" for two, a
+        count; and "in progress" is what a video waiting for the GPU while
+        its CPU metrics are done is, not "running". Videos skipped because
+        they were already scored are counted here too: the message saying
+        so at the start was replaced within a second.
+        """
+        done = len(self._finished_jobs)
+        queued = max(0, total - done - len(running))
+        # Failures as they happen: a video that failed left the lines below
+        # and was counted as done until the run's end message said otherwise.
+        failures = [f"{self._run_failed_count} failed" if self._run_failed_count else "",
+                    f"{self._run_partial_count} with failed metrics" if self._run_partial_count else ""]
+        failures_text = ", ".join(f for f in failures if f)
+        counts = [f"{done} done" + (f" ({failures_text})" if failures_text else "") if done else "",
+                  f"{len(running)} in progress" if running else "",
+                  f"{queued} queued" if queued else ""]
+        summary = f"{total} video{'s' if total != 1 else ''}: " + ", ".join(c for c in counts if c)
+        if self._run_skipped:
+            summary += f" ({self._run_skipped} already scored, not recalculated)"
+        return summary
+
+    def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
+        """Store backend-specific progress; the line is redrawn at once only
+        when what it says changes, its numbers on the next tick."""
+        self._job_task_progress[index] = snapshots
+        for task in snapshots:
+            fps = float(task.get("fps") or 0.0)
+            if task.get("state") == "running" and fps > 0:
+                kind = self._task_kind(index, task)
+                self._lane_rates[kind] = fps
+                keys = tuple(task.get("metric_keys", ()))
+                if kind != "GPU":
+                    continue
+                if (passes := self._gpu_passes(task)) is not None:
+                    self._metric_rates[passes.keys[passes.number - 1]] = fps
+                elif not task.get("phase") and len(keys) == 1:
+                    self._metric_rates[keys[0]] = fps
+        shape = tuple((task.get("state"), task.get("phase"), task.get("waiting_for")) for task in snapshots)
+        if self._job_line_shape.get(index) != shape:
+            self._job_line_shape[index] = shape
+            self._render_job_progress(index)
+            self._job_lines_due.discard(index)
+        else:
+            self._job_lines_due.add(index)
+
+    def _on_run_tick(self) -> None:
+        """Once a second during a run: the lines with new numbers, then the
+        status line (elapsed time, queue ETA)."""
+        for index in sorted(self._job_lines_due):
+            self._render_job_progress(index)
+        self._job_lines_due.clear()
+        self._update_run_status()
+
+    def _task_kind(self, index: int, task: dict[str, object]) -> str:
+        """"CPU" or "GPU": where a half of a video's work runs."""
+        if task.get("backend") == "ffmpeg":
+            return "CPU"
+        if index in self._job_gpu_fallback:
+            return "CPU"
+        row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
+        on_gpu = any(key == "cvvdp" or (row.metric_backends.get(key, "gpu") if row else "gpu") == "gpu"
+                     for key in task.get("metric_keys", ()))
+        return "GPU" if on_gpu else "CPU"
+
+    def _gpu_passes(self, task: dict[str, object]) -> _GpuPasses | None:
+        """A GPU half's passes, one metric each, and the time each still
+        needs -- None when its figures do not split that way (one metric,
+        no pass under way, or SSIMULACRA2/Butteraugli on the CPU after the
+        GPU's passes)."""
+        phase = task.get("phase")
+        keys = tuple(task.get("metric_keys", ()))
+        total = int(task.get("total") or 0)
+        if not phase or total <= 0:
+            return None
+        number, count, name = phase
+        if count != len(keys) or not 1 <= number <= count or metric_definition(keys[number - 1]).label != name:
+            return None
+        frames = total // count  # Vship reports the passes as passes x frames
+        done = min(frames, max(0, int(task.get("current") or 0) - (number - 1) * frames))
+        # The pass under way before its first rate: the rate it had earlier.
+        fps = float(task.get("fps") or 0.0) or self._metric_rates.get(keys[number - 1], 0.0)
+        seconds: list[float | None] = [0.0] * (number - 1)
+        seconds.append((frames - done) / fps if fps > 0 else None)
+        for key in keys[number:]:
+            rate = self._metric_rates.get(key, 0.0)
+            seconds.append(frames / rate if rate > 0 else None)
+        frames_left = (0,) * (number - 1) + (frames - done,) + (frames,) * (count - number)
+        return _GpuPasses(number, keys, tuple(seconds), frames_left)
+
+    def _gpu_work(self, task: dict[str, object] | None, frames: int, passes: int) -> tuple[float, float]:
+        """A GPU half's remaining work for the queue ETA, timed per metric as
+        its run line times it: (seconds for the metrics with a rate this
+        run, frames of the ones without -- timed by the caller at the GPU's
+        rate). `task` is None for a video not started: its metrics are not
+        known yet, and each pass counts at the metrics' average time.
+
+        All GPU work used to be timed at the rate of the metric under way,
+        and the metrics run at very different rates."""
+        if task is not None and (running := self._gpu_passes(task)) is not None:
+            known = sum(seconds for seconds in running.seconds if seconds is not None)
+            unknown = sum(left for seconds, left in zip(running.seconds, running.frames_left, strict=True)
+                          if seconds is None)
+            return known, float(unknown)
+        total = int(task.get("total") or 0) if task is not None else 0
+        if task is not None and total > 0:  # one metric, or not one metric per pass
+            left = max(0, total - int(task.get("current") or 0))
+            fps = float(task.get("fps") or 0.0)
+            return (left / fps, 0.0) if fps > 0 else (0.0, float(left))
+        keys = tuple(task.get("metric_keys", ())) if task is not None else ()
+        if keys and len(keys) == passes:  # not running yet: its metrics, each at its own rate
+            known = unknown = 0.0
+            for key in keys:
+                rate = self._metric_rates.get(key, 0.0)
+                if rate > 0:
+                    known += frames / rate
+                else:
+                    unknown += frames
+            return known, unknown
+        if self._metric_rates:
+            per_frame = sum(1 / rate for rate in self._metric_rates.values()) / len(self._metric_rates)
+            return frames * passes * per_frame, 0.0
+        return 0.0, float(frames * passes)
+
+    def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False,
+                     gpu: bool = False) -> str:
+        """One half of a video's line: its own percentage of its whole job,
+        then its rate and time remaining, or what it is waiting for. `kind`
+        is the half's name on the line, e.g. "CPU metrics".
+
+        A GPU half with several metrics, one pass each, says which pass is
+        under way and the whole half's percentage and time remaining, then
+        the metric under way with its own percentage, rate and time
+        remaining: "GPU metrics 2 of 3 (48.0%, 0:01:27 remaining)
+        (Butteraugli 44.0%, 13.3 fps, 0:00:42 remaining)". The whole half's
+        time used to be all its passes at the current one's rate, when the
+        metrics run at very different rates (SSIMULACRA2 about 3x
+        Butteraugli's). A later metric not yet run in this run has no rate
+        to go by, and the whole half's time is left out; on the last
+        metric the time is shown once, with the whole half's percentage.
+        """
+        state = task.get("state")
+        if state == "waiting":
+            return (f"{kind} queued (waiting for a free CPU slot)" if task.get("waiting_for") == "CPU"
+                    else f"{kind} queued (another video is using the GPU)")
+        if state == "starting":
+            step = self._step_text(str(task.get("step") or ""))
+            return f"{kind}: {step}" if step else f"{kind} starting"
+        if state == "done":
+            return f"{kind} done"
+        current = int(task.get("current", 0) or 0)
+        total = int(task.get("total", 0) or 0)
+        fps = float(task.get("fps", 0.0) or 0.0)
+        # Rounded down: 99.96% must not read "100.0%" while work remains.
+        pct = min(1000, 1000 * current // total) / 10 if total > 0 else 0.0
+        if gpu and (passes := self._gpu_passes(task)) is not None:
+            _number, count, name = task["phase"]
+            frames = total // count
+            done = frames - passes.frames_left[passes.number - 1]
+            now = [f"{name} {min(1000, 1000 * done // frames) / 10 if frames > 0 else 0.0:.1f}%"]
+            whole = None
+            if paused:
+                now.append("paused")
+            elif fps > 0:
+                now.append(f"{fps:.1f} fps")
+                whole = None if None in passes.seconds else sum(passes.seconds)
+                if passes.number < count:  # on the last, the whole half's time is its own
+                    now.append(f"{format_hms(passes.seconds[passes.number - 1])} remaining")
+            overall = f"{pct:.1f}%" + (f", {format_hms(whole)} remaining" if whole is not None else "")
+            return f"{kind} {passes.number} of {count} ({overall}) ({', '.join(now)})"
+        if gpu and not paused and fps > 0 and total > 0 and not task.get("phase") \
+                and len(task.get("metric_keys", ())) == 1:
+            return f"{kind} {pct:.1f}%, {format_hms(max(0, total - current) / fps)} remaining ({fps:.1f} fps)"
+        details = []
+        if phase := task.get("phase"):
+            number, count, name = phase
+            details.append(f"{name} {number} of {count}")
+        if paused:
+            # Its last rate and time left would read as if it were running.
+            details.append("paused")
+        elif fps > 0:
+            details.append(f"{fps:.1f} fps")
+            if total > 0:
+                details.append(f"{format_hms(max(0, total - current) / fps)} remaining")
+        return f"{kind} {pct:.1f}%" + (f" ({', '.join(details)})" if details else "")
+
+    def _task_tooltip(self, kind: str, task: dict[str, object], labels: str, paused: bool, gpu: bool) -> str:
+        """A half's line in its video's tooltip: its metrics, and for a GPU
+        half under way each one's state -- "GPU metrics: SSIMULACRA2 (done),
+        Butteraugli (0:00:42 remaining), CVVDP (0:00:45 remaining)"."""
+        passes = self._gpu_passes(task) if gpu and task.get("state") == "running" else None
+        if passes is None:
+            return f"{kind}: {labels}"
+        states = []
+        for position, (key, seconds) in enumerate(zip(passes.keys, passes.seconds, strict=True)):
+            label = metric_definition(key).label
+            if position < passes.number - 1:
+                states.append(f"{label} (done)")
+            elif seconds is None or paused:
+                states.append(label)
+            else:
+                states.append(f"{label} ({format_hms(seconds)} remaining)")
+        return f"{kind}: " + ", ".join(states)
+
+    def _render_job_progress(self, index: int) -> None:
+        if index not in self._job_line_text:
+            return
+        snapshots = self._job_task_progress.get(index, ())
+        parts = []
+        tooltip = ""
+        paused = self._run_hold == _PAUSED
+        if snapshots:
+            # A percentage per half. One figure for the video mixed the two:
+            # the GPU half's frames over all its passes against one pass's
+            # frame count read 100% while both halves were under way, and
+            # a GPU half still waiting held the video at 0% while its CPU
+            # half was half done.
+            # "CPU metrics", not "CPU": the bare word read as the processor's
+            # load, "CPU 46.0%" like Task Manager's figure.
+            on_gpu = [self._task_kind(index, task) == "GPU" for task in snapshots]
+            kinds = [f"{'GPU' if gpu else 'CPU'} metrics" for gpu in on_gpu]
+            labels = [", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
+                      for task in snapshots]
+            names = kinds
+            if kinds.count("CPU metrics") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
+                names = [kind if task.get("backend") == "ffmpeg" else f"{kind} ({label})"
+                         for kind, task, label in zip(kinds, snapshots, labels, strict=True)]
+            parts += [self._task_detail(name, task, paused, gpu)
+                      for name, task, gpu in zip(names, snapshots, on_gpu, strict=True)]
+            tooltip = "\n".join(self._task_tooltip(kind, task, label, paused, gpu)
+                                for kind, task, label, gpu in zip(kinds, snapshots, labels, on_gpu, strict=True))
+        else:
+            total = self._job_progress_total.get(index, 0)
+            current = self._job_frames_done.get(index, 0)
+            fps = self._job_fps.get(index, 0.0)
+            parts.append(f"{min(100, 100 * current // total) if total > 0 else 0}%")
+            if paused:
+                parts.append("paused")
+            elif fps > 0:
+                parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} remaining"]
+            else:
+                parts += self._halves_detail(index)
+        if decode_status := self._job_decode_status.get(index):
+            parts.append(decode_status)
+        self._set_job_line(index, f"{self._job_label(index)} — " + "   ·   ".join(parts), tooltip)
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs in the
@@ -3817,19 +4281,31 @@ class MainWindow(QMainWindow):
         # -- not the VMAF column, which is for the final score.
         self._job_frames_done[index] = current
         self._job_fps[index] = fps
+        self._job_progress_total[index] = total
+        if index not in self._job_line_shape:  # its first figures show at once
+            self._job_line_shape[index] = ()
+            self._render_job_progress(index)
+            self._update_run_status()
+        else:
+            self._job_lines_due.add(index)  # see _on_run_tick
 
-        slot = self._job_line_slot.get(index)
-        if slot is not None:
-            pct = min(100, int(100 * current / total)) if total > 0 else 0
-            parts = [f"{self._job_label(index)} — {pct}%"]
-            if decode_status := self._job_decode_status.get(index):
-                parts.append(decode_status)
-            if fps > 0:
-                parts.append(f"{fps:.1f} fps")
-                parts.append(f"{format_hms(max(0, total - current) / fps)} left")
-            self.job_progress_labels[slot].setText("   ·   ".join(parts))
-
-        self._update_run_status()
+    def _halves_detail(self, index: int) -> list[str]:
+        """For a video scored in two halves when one has not started: each
+        half on its own. The video's percentage is the slower half's, and
+        its rate and time left are unknown until both run, so the line said
+        only "0%" -- for hours when the SSIMULACRA2/Butteraugli/CVVDP half
+        waited for another video's GPU pass while VMAF was being calculated."""
+        detail = []
+        for labels, current, total, fps, state in self._job_halves.get(index, ()):
+            if state == "waiting":
+                detail.append(f"{labels} waiting for the GPU (another video is using it)")
+            elif state == "starting":
+                detail.append(f"{labels} starting")
+            elif state == "running" and total > 0:
+                pct = min(100.0, 100 * current / total)
+                detail.append(f"{labels} {pct:.1f}%" + (f" at {fps:.1f} fps" if fps > 0 else ""))
+        return detail if any(state in ("waiting", "starting") for *_rest, state in
+                             self._job_halves.get(index, ())) else []
 
     def _queue_eta_seconds(self) -> float | None:
         """When the LAST video will finish, not when the work would be done
@@ -3844,6 +4320,8 @@ class MainWindow(QMainWindow):
         None while nothing has reported a rate yet -- there is no basis for a
         guess, and a wrong number is worse than none.
         """
+        if self._job_plan or self._job_task_progress:
+            return self._queue_eta_by_lane()
         observed = [rate for rate in self._job_fps.values() if rate > 0]
         if not observed:
             return None
@@ -3877,6 +4355,75 @@ class MainWindow(QMainWindow):
             lanes[0] += seconds
         return max(lanes)
 
+    def _queue_eta_by_lane(self) -> float | None:
+        """The queue ETA when videos have CPU and GPU halves: they run in
+        separate lanes (CPU metrics on as many lanes as the parallel
+        setting allows, GPU metrics one video at a time), so each lane's
+        remaining work is timed at its own rate, and the queue ends when
+        the later lane does. Videos not started count by their planned
+        halves: their frames, times the GPU half's passes. GPU work is
+        timed per metric (_gpu_work).
+
+        A lane with no rate right now -- the next video's CPU half looking
+        for black bars, a GPU pass's first frames -- is timed at the last
+        rate seen on it this run. The ETA went back to "calculating..." for
+        several seconds each time one video handed a lane to the next.
+
+        It used to show nothing for any run with GPU metrics -- a fixed
+        note in its place for hours -- because one rate per video cannot
+        describe two lanes. None while a lane with work left has no rate
+        yet.
+        """
+        cpu_running: list[float] = []  # seconds left, each at its own rate
+        cpu_waiting: list[float] = []  # frames left, no rate of their own yet
+        cpu_rates: list[float] = []
+        gpu_seconds, gpu_frames, gpu_rate = 0.0, 0.0, 0.0  # gpu_frames: no rate of their own yet
+        for job, frames in enumerate(self._job_total_frames):
+            if job in self._finished_jobs:
+                continue
+            planned = self._job_plan.get(job) or [("cpu", 1)]
+            snapshots = self._job_task_progress.get(job)
+            halves: list[tuple[str, dict[str, object] | None, int]] = []
+            if snapshots:
+                for position, task in enumerate(snapshots):
+                    if task.get("state") == "done":
+                        continue
+                    passes = planned[position][1] if position < len(planned) else 1
+                    halves.append((self._task_kind(job, task), task, passes))
+            else:
+                halves = [(pool.upper(), None, passes) for pool, passes in planned]
+            for kind, task, passes in halves:
+                fps = float(task.get("fps") or 0.0) if task is not None else 0.0
+                if kind == "GPU":
+                    seconds, unknown = self._gpu_work(task, frames, passes)
+                    gpu_seconds += seconds
+                    gpu_frames += unknown
+                    gpu_rate = fps or gpu_rate
+                    continue
+                total = int(task.get("total") or 0) if task is not None else 0
+                left = max(0, total - int(task.get("current") or 0)) if total > 0 else frames * passes
+                if total > 0 and fps > 0:
+                    cpu_running.append(left / fps)
+                    cpu_rates.append(fps)
+                else:
+                    cpu_waiting.append(left)
+        cpu_seconds = 0.0
+        if cpu_running or cpu_waiting:
+            reference = sum(cpu_rates) / len(cpu_rates) if cpu_rates else self._lane_rates.get("CPU", 0.0)
+            if cpu_waiting and reference <= 0:
+                return None
+            lanes = list(cpu_running) + [0.0] * max(0, self._parallel_jobs() - len(cpu_running))
+            for seconds in sorted((left / reference for left in cpu_waiting), reverse=True):
+                lanes.sort()
+                lanes[0] += seconds
+            cpu_seconds = max(lanes, default=0.0)
+        if gpu_frames > 0:
+            gpu_rate = gpu_rate or self._lane_rates.get("GPU", 0.0)
+            if gpu_rate <= 0:
+                return None
+            gpu_seconds += gpu_frames / gpu_rate
+        return max(cpu_seconds, gpu_seconds)
+
     def _on_job_status(self, index: int, message: str) -> None:
         """Phase messages belong to the video they came from.
 
@@ -3886,20 +4433,46 @@ class MainWindow(QMainWindow):
         to tell which file it was about, and it erased the line naming what
         was running.
         """
-        slot = self._job_line_slot.get(index)
-        if slot is not None:
+        if (
+            "using CPU" in message
+            or "calculating it on the CPU" in message
+            or "on CPU" in message
+        ):
+            self._job_gpu_fallback.add(index)
+        if index in self._job_line_text:
             # The runner sends the active plan on each attempt, including
             # software fallbacks. Keep it when progress replaces this phase
             # message; each parallel job owns its own decode plan.
             marker = "(GPU decode: "
             if marker in message:
                 plan = message.split(marker, 1)[1].split(")", 1)[0]
-                self._job_decode_status[index] = (
-                    "Decode: source CPU, test CPU" if plan == "off" else
-                    "Decode: " + plan.replace("distorted", "test").replace("cpu", "CPU")
-                )
-            self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message.replace('distorted', 'test')}")
+                self._job_decode_status[index] = self._decoder_text(index, plan)
+            if index in self._job_task_progress:
+                # Keep backend-specific rates and pass progress visible. A
+                # generic phase message must not replace the useful task
+                # snapshot, especially while a GPU pass is waiting.
+                self._render_job_progress(index)
+            else:
+                self._set_job_line(index, f"{self._job_label(index)} — {message.replace('distorted', 'test')}")
+                # The line no longer shows figures: the next ones show at once.
+                self._job_line_shape.pop(index, None)
         self._update_run_status()
+
+    def _decoder_text(self, index: int, plan: str) -> str:
+        """Where each video is decoded, as the run line shows it: "Decoder:
+        Source: GPU, test video: CPU".
+
+        `plan` is FFmpeg's decode plan, "source cuda, distorted cpu" or
+        "off". The line showed it nearly as it came, "Decode: source cuda,
+        test cuda": the decoder API's name where the question is only
+        whether the GPU or the CPU decodes each video.
+        """
+        sides = dict(part.split(" ", 1) for part in plan.split(", ") if " " in part)
+        where = {side: "CPU" if sides.get(side, "cpu") == "cpu" else "GPU" for side in ("source", "distorted")}
+        row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
+        if row is not None and row.options.resample_test is not None:
+            return f"Decoder: Source: {where['source']}"  # a resolution test decodes only the source
+        return f"Decoder: Source: {where['source']}, test video: {where['distorted']}"
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was
@@ -4005,7 +4578,7 @@ class MainWindow(QMainWindow):
         """One metric group failed, the other finished: the finished scores
         are shown and cached like any result, and the metrics that failed
         say so in their own cells."""
-        self._run_failed_count += 1
+        self._run_partial_count += 1
         row = self._on_job_finished(index, result)
         if row is None:
             return
@@ -4015,8 +4588,8 @@ class MainWindow(QMainWindow):
         self._set_row_metrics(row)
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
+        self._run_failed_count += 1  # first: _mark_job_over redraws the counts
         self._mark_job_over(index)
-        self._run_failed_count += 1
         row = self._row_index_of(self._job_rows[index])
         if row is None:
             return  # the row was removed mid-run
@@ -4034,19 +4607,14 @@ class MainWindow(QMainWindow):
             if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
                 rd.analysis_status = "Cancelled" if self._run_was_cancelled else ""
                 self._set_row_metrics(row)
+        self._run_elapsed_timer.stop()
+        self._run_hold = ""
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")
         for line in self.job_progress_labels:
             line.setVisible(False)
-        if self._run_was_cancelled:
-            self.status_label.setText("Cancelled.")
-        elif self._run_failed_count:
-            self.status_label.setText(
-                f"Finished with {self._run_failed_count} failed video(s)."
-            )
-        else:
-            self.status_label.setText("Done.")
+        self.status_label.setText(self._run_end_message())
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
         # Rows removed mid-run are skipped rather than indexed into.
@@ -4055,7 +4623,10 @@ class MainWindow(QMainWindow):
             if rd.completed_run and self._row_index_of(rd) is not None
         ]
         if finished_runs:
-            self._open_or_update_graph(finished_runs)
+            # A cancelled run stays on the Videos tab, where Cancel was
+            # pressed and the unfinished rows are; what it did finish is
+            # still added to the graph. It used to jump to Metric Graphs.
+            self._open_or_update_graph(finished_runs, show=not self._run_was_cancelled)
 
     # ------------------------------------------------------------------ results actions
     def _selected_runs(self) -> list[CompletedRun]:
@@ -4115,6 +4686,9 @@ class MainWindow(QMainWindow):
         row_data.options.compute_xpsnr = result.frames.has("xpsnr")
         row_data.options.compute_vmaf = result.frames.has("vmaf")
         row_data.options.compute_vmaf_neg = result.frames.has("vmaf_neg")
+        row_data.options.compute_vmaf_v1 = result.frames.has("vmaf_v1")
+        if result.model_choice_v1:
+            row_data.options.model_choice_v1 = result.model_choice_v1
         row_data.options.model = result.model
         # Preserve the model selection when a saved run is reopened.  Without
         # this, a bundled VMAF v1 result would appear in the table correctly
@@ -4130,6 +4704,11 @@ class MainWindow(QMainWindow):
         elif result.model.startswith("path="):
             row_data.options.model_choice = CUSTOM_MODEL_CHOICE
             row_data.options.custom_model_path = result.model.removeprefix("path=")
+        if is_v1_choice(row_data.options.model_choice):
+            # A v1 model as the VMAF model: from before VMAF v1 had its own
+            # column. It is VMAF v1's choice now; VMAF v0.6.1 is on Auto.
+            row_data.options.model_choice_v1 = row_data.options.model_choice
+            row_data.options.model_choice = AUTO_MODEL_CHOICE
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm
         row_data.options.resample_test = result.resample_target
@@ -4333,10 +4912,11 @@ class MainWindow(QMainWindow):
             ),
         )
 
-    def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
-        """Adds runs to the graph tab and brings it to the front."""
+    def _open_or_update_graph(self, runs: list[CompletedRun], show: bool = True) -> None:
+        """Adds runs to the graph tab and, with `show`, brings it to the front."""
         for run in runs:
             self.graph_panel.add_run(
                 run.result, run.label, identity=run.graph_identity
             )
-        self.tabs.setCurrentIndex(TAB_GRAPH)
+        if show:
+            self.tabs.setCurrentIndex(TAB_GRAPH)

@@ -6,8 +6,8 @@ that module about *this app's* window and these about Qt.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Qt, Signal
-from PySide6.QtWidgets import QHeaderView, QStyle, QStyleOptionButton, QTableWidget
+from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtWidgets import QHeaderView, QLabel, QSizePolicy, QStyle, QStyleOptionButton, QTableWidget
 
 _INDICATOR_MARGIN = 4
 _MIN_FILL_WIDTH = 60
@@ -152,3 +152,54 @@ class FillColumnTable(QTableWidget):
             self.setColumnWidth(self._fill_column, target)
         finally:
             self._recalculating = False
+
+
+class ElidedLabel(QLabel):
+    """One line of text cut to the width it is given, ending in "\u2026",
+    with the whole text in the tooltip when it is cut.
+
+    A plain QLabel asks for its text's full width, so one long line -- a
+    run line with a long file name, both halves' figures and the decode
+    plan -- set the window's minimum width, forcing it wider than the
+    screen on a smaller display. This one asks for no width at all.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._full = ""
+        self._tooltip = ""
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+
+    def set_text(self, text: str, tooltip: str = "") -> None:
+        self._full, self._tooltip = text, tooltip
+        self._fit()
+
+    def full_text(self) -> str:
+        return self._full
+
+    def clear(self) -> None:
+        self._full = self._tooltip = ""
+        super().clear()
+        self.setToolTip("")
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._fit()
+
+    def _fit(self) -> None:
+        width = self.contentsRect().width()
+        # Not cut until shown and laid out: before that the width is a
+        # placeholder, not the room the line will have.
+        shown = self._full if not self.isVisible() or width <= 0 else \
+            self.fontMetrics().elidedText(self._full, Qt.ElideRight, width)
+        super().setText(shown)
+        cut = shown != self._full
+        self.setToolTip(self._full + (f"\n\n{self._tooltip}" if self._tooltip else "") if cut else self._tooltip)
+

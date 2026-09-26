@@ -89,9 +89,17 @@ _SSIMULACRA2_THRESHOLDS = ((">", 90.0), (">", 80.0), (">", 70.0), ("<", 70.0), (
 # This is the logical/display order.  The version-1 result-file row order is
 # intentionally represented separately in run_io, where it remains frozen.
 METRICS = (
-    MetricDefinition("vmaf", "VMAF", "VMAF", "VMAF", "VMAF", "{:.2f}", "", MetricKind.FRAME,
-                     MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
+    # Key "vmaf" is the v0.6.1 family (its standard and 4K models), as it
+    # always was: saved scores, settings and exports keep the key; only the
+    # label names the version now that VMAF v1 has a column of its own.
+    MetricDefinition("vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "{:.2f}", "",
+                     MetricKind.FRAME, MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
                      _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf")),
+    # Netflix's VMAF v1 models (bundled), calculated in the same libvmaf
+    # pass. No fixed axis: the 4K/3H model scores up to 110.
+    MetricDefinition("vmaf_v1", "VMAF v1", "VMAF v1", "VMAF v1", "VMAF v1", "{:.2f}", "", MetricKind.FRAME,
+                     MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, None,
+                     _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf_v1")),
     MetricDefinition("vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", "{:.2f}", "", MetricKind.FRAME,
                      MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
                      _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf_neg")),

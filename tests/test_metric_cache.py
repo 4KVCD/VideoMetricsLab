@@ -111,7 +111,7 @@ def test_frame_and_sequence_metric_round_trip_with_special_values(tmp_path):
 
 def test_cache_omits_library_versions_except_for_vmaf(tmp_path):
     source, test = _paths(tmp_path)
-    options = VmafOptions()
+    options = VmafOptions(model_choice="version=vmaf_v0.6.1")
     directory = recipe_directory(
         tmp_path, source, test, comparison_recipe_from_vmaf_options(options)
     )
@@ -168,9 +168,9 @@ def test_coverage_and_compatibility_id_produce_independent_direct_entries(tmp_pa
     store_metric(directory, _frame("xpsnr"), full)
     assert load_metric(directory, sampled) is None
     assert load_metric(directory, other_impl) is None
-    assert metric_request_specs(VmafOptions(model="version=vmaf_v0.6.1"))[0] != metric_request_specs(VmafOptions(model="version=vmaf_4k_v0.6.1"))[0]
-    neg_a = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model="version=vmaf_v0.6.1"))[0]
-    neg_b = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model="version=vmaf_4k_v0.6.1"))[0]
+    assert metric_request_specs(VmafOptions(model_choice="version=vmaf_v0.6.1"))[0] != metric_request_specs(VmafOptions(model_choice="version=vmaf_4k_v0.6.1"))[0]
+    neg_a = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model_choice="version=vmaf_v0.6.1"))[0]
+    neg_b = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model_choice="version=vmaf_4k_v0.6.1"))[0]
     assert neg_a == neg_b, "standard VMAF model choice must not invalidate fixed-model NEG"
 
 

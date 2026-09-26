@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +34,7 @@ from vmaf_app.core.gpu import (
     hwaccel_args as _hwaccel_args,
 )
 from vmaf_app.core.metric_results import current_ffmpeg_provenance, results_from_frame_scores
-from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution
+from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution, resolve_v1_model
 from vmaf_app.core.models import (
     ComparisonResult,
     CropBox,
@@ -49,7 +50,7 @@ from vmaf_app.core.process_control import ProcessHandle
 ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_frames, fps)
 
 
-def _metric_results_for_current_run(frames: FrameScores, model: str):
+def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: str = ""):
     """Adapt one FFmpeg parse into generic results without re-parsing it."""
     status = check_tools()
     version = format_version(status.ffmpeg.version) if status.ffmpeg.runnable else "unknown"
@@ -59,7 +60,8 @@ def _metric_results_for_current_run(frames: FrameScores, model: str):
             key: current_ffmpeg_provenance(
                 key, version,
                 ({"model": "version=vmaf_v0.6.1neg"} if key == "vmaf_neg"
-                 else {"model": model} if key == "vmaf" else None),
+                 else {"model": model} if key == "vmaf"
+                 else {"model": model_v1} if key == "vmaf_v1" else None),
             )
             for key in frames.metric_keys
         },
@@ -261,15 +263,20 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
     # quoted -- so ffmpeg is always launched with cwd=log_path.parent and we
     # reference the log (and any custom model file) by bare filename here.
     model_value = model if model is not None else options.model
-    if options.compute_vmaf_neg:
-        # Explicit names keep the two output score arrays independent.
+    v1_file = _v1_model_file(options)
+    if options.compute_vmaf_neg or v1_file is not None:
+        # Explicit names keep the output score arrays independent. The v1
+        # model file is copied next to the log by _execute_run.
         models = ([model_value + r"\\:name=vmaf"] if options.compute_vmaf else [])
-        models.append(r"version=vmaf_v0.6.1neg\\:name=vmaf_neg")
+        if v1_file is not None:
+            models.append(f"path={v1_file.name}" + r"\\:name=vmaf_v1")
+        if options.compute_vmaf_neg:
+            models.append(r"version=vmaf_v0.6.1neg\\:name=vmaf_neg")
         model_value = "|".join(models)
     opts = [
         f"log_path={log_path.name}",
         "log_fmt=json",
-        f"model={model_value}" if options.compute_vmaf or options.compute_vmaf_neg else "model=''",
+        f"model={model_value}" if _uses_vmaf_model(options) else "model=''",
     ]
     # libvmaf 2.0+ defaults to single-threaded (n_threads=1) unless told
     # otherwise -- omitting this option here does NOT mean "use all cores",
@@ -284,6 +291,17 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
         opts.append("feature=" + "|".join(options.extra_features))
     opts += _FRAMESYNC_OPTS
     return opts
+
+
+def _uses_vmaf_model(options: VmafOptions) -> bool:
+    return options.compute_vmaf or options.compute_vmaf_neg or options.compute_vmaf_v1
+
+
+def _v1_model_file(options: VmafOptions) -> Path | None:
+    """The VMAF v1 model file a run uses, once the run has resolved it."""
+    if options.compute_vmaf_v1 and options.model_v1.startswith("path="):
+        return Path(options.model_v1.removeprefix("path="))
+    return None
 
 
 #: Both libvmaf and xpsnr are framesync filters, and framesync's defaults are
@@ -309,7 +327,7 @@ def _build_libvmaf_stage(
     if not options.requested_metrics():
         raise VmafRunError("Select at least one metric to calculate.")
     # XPSNR-only needs no libvmaf filter or model at all.
-    if not options.compute_vmaf and not options.compute_vmaf_neg and not options.extra_features:
+    if not _uses_vmaf_model(options) and not options.extra_features:
         assert xpsnr_log_path is not None
         return f"[main][ref]xpsnr=stats_file={xpsnr_log_path.name}:" + ":".join(_FRAMESYNC_OPTS)
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
@@ -351,11 +369,21 @@ def analysis_dimensions(
     compared at 4K. Cropping moves it too. Shared with _build_filtergraph so
     the two cannot disagree about what the run does.
     """
+    return compared_dimensions(source_info, distorted_info, options.scale_direction, source_crop, distorted_crop)
+
+
+def compared_dimensions(
+    source_info: VideoInfo, distorted_info: VideoInfo, scale_direction: ScaleDirection,
+    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
+) -> tuple[int, int]:
+    """analysis_dimensions for code that has the scale direction but no
+    options -- the saved-score cache, which works out from a comparison's
+    recorded sizes which model Auto picks for it."""
     dist_content = _content_size(distorted_info, distorted_crop)
     ref_content = _content_size(source_info, source_crop)
     if ref_content == dist_content:
         return dist_content
-    if options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
+    if scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
         return ref_content
     return dist_content
 
@@ -664,6 +692,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
     frame_nums: list[int] = []
     vmafs: list[float | None] = []
     negs: list[float | None] = []
+    v1s: list[float | None] = []
     psnrs: list[float | None] = []
     ssims: list[float | None] = []
     xpsnrs: list[float | None] = []
@@ -672,7 +701,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         metrics = fr.get("metrics", {})
         frame_num = int(fr.get("frameNum", len(frame_nums)))
         vmaf = metrics.get("vmaf")
-        if not any(k in metrics for k in ("vmaf", "vmaf_neg", "psnr_y", "psnr", "float_ssim", "ssim")):
+        if not any(k in metrics for k in ("vmaf", "vmaf_neg", "vmaf_v1", "psnr_y", "psnr", "float_ssim", "ssim")):
             continue
         # `a if a is not None else b`, not `a or b`: libvmaf reports a real
         # 0.0 for badly degraded frames, and `or` would discard it and fall
@@ -686,6 +715,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         frame_nums.append(frame_num)
         vmafs.append(None if vmaf is None else float(vmaf))
         negs.append(metrics.get("vmaf_neg"))
+        v1s.append(metrics.get("vmaf_v1"))
         psnrs.append(psnr)
         ssims.append(ssim)
         xpsnrs.append(xpsnr_by_frame.get(frame_num))
@@ -707,6 +737,7 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         vmaf=column(vmafs),
         vmaf_neg=column(negs),
         psnr=column(psnrs), ssim=column(ssims), xpsnr=column(xpsnrs),
+        metrics={"vmaf_v1": column(v1s)},
     )
 
 
@@ -762,6 +793,15 @@ def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
     return ladder
 
 
+def _with_v1_model(options: VmafOptions, dimensions: tuple[int, int]) -> VmafOptions:
+    """The options with VMAF v1's model resolved, Auto from the size frames
+    are compared at -- known only after black bars are detected, as for
+    VMAF v0.6.1's Auto (_auto_model_or)."""
+    if not options.compute_vmaf_v1:
+        return options
+    return replace(options, model_v1=resolve_v1_model(options, *dimensions))
+
+
 def _auto_model_or(options: VmafOptions, dimensions: tuple[int, int]) -> str:
     """The model to actually run with. Only Auto is re-decided here; an
     explicit or custom choice is the user's and is left alone."""
@@ -802,6 +842,8 @@ def _execute_run(
         resolved_model = _resolve_model_for_cwd(
             (model if model is not None else options.model) if options.compute_vmaf else "", tmpdir
         )
+        if (v1_file := _v1_model_file(options)) is not None:
+            shutil.copyfile(v1_file, tmpdir / v1_file.name)  # referenced by bare name, as above
 
         def run_with(plan: HwAccelPlan):
             cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
@@ -835,7 +877,7 @@ def _execute_run(
             tail = "\n".join(result.stderr.splitlines()[-25:])
             raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
 
-        if not options.compute_vmaf and not options.compute_vmaf_neg and not options.extra_features:
+        if not _uses_vmaf_model(options) and not options.extra_features:
             values = _parse_xpsnr_log(xpsnr_log_path)
             numbers = np.array(sorted(values), dtype=np.int32)
             frames = FrameScores(numbers, numbers / fps, None,
@@ -890,12 +932,9 @@ def run_vmaf(
     # Auto picks its model from the size frames are compared at, which is
     # only known now: it depends on the scale direction and on crops that
     # were detected a moment ago, not on either input's own resolution.
-    effective_model = _auto_model_or(
-        options,
-        analysis_dimensions(
-            source_info, distorted_info, options, source_crop, distorted_crop
-        ),
-    )
+    dimensions = analysis_dimensions(source_info, distorted_info, options, source_crop, distorted_crop)
+    effective_model = _auto_model_or(options, dimensions)
+    options = _with_v1_model(options, dimensions)
 
     def build_command(plan, model, log_path, xpsnr_log_path):
         filtergraph = _build_filtergraph(
@@ -935,7 +974,9 @@ def run_vmaf(
         scale_algorithm=options.scale_algorithm,
         compared_frame_count=total_frames,
         model_choice=options.model_choice,
-        metric_results=_metric_results_for_current_run(frames, effective_model),
+        model_v1=options.model_v1,
+        model_choice_v1=options.model_choice_v1 if options.compute_vmaf_v1 else None,
+        metric_results=_metric_results_for_current_run(frames, effective_model, options.model_v1),
     )
 
 
@@ -973,9 +1014,9 @@ def run_resample_test(
     elif options.crop_mode == CropMode.MANUAL:
         source_crop = options.manual_source_crop
 
-    effective_model = _auto_model_or(
-        options, resample_analysis_dimensions(source_info, source_crop)
-    )
+    dimensions = resample_analysis_dimensions(source_info, source_crop)
+    effective_model = _auto_model_or(options, dimensions)
+    options = _with_v1_model(options, dimensions)
 
     def build_command(plan, model, log_path, xpsnr_log_path):
         filtergraph = _build_resample_test_filtergraph(
@@ -1014,5 +1055,7 @@ def run_resample_test(
         resample_target=options.resample_test,
         compared_frame_count=total_frames,
         model_choice=options.model_choice,
-        metric_results=_metric_results_for_current_run(frames, effective_model),
+        model_v1=options.model_v1,
+        model_choice_v1=options.model_choice_v1 if options.compute_vmaf_v1 else None,
+        metric_results=_metric_results_for_current_run(frames, effective_model, options.model_v1),
     )

@@ -441,3 +441,86 @@ def test_a_damaged_saved_cvvdp_score_is_skipped_when_listing_other_displays(tmp_
     np.savez(directory / "cvvdp_damaged.npz", metadata=np.array(json.dumps(metadata)), score=np.array(9.0))
     assert result_cache.other_cvvdp_scores(source, distorted, request)[1] == []
 
+
+def _vmaf_run(source, distorted, size, model, score):
+    """A result whose VMAF was calculated with `model`, at `size`."""
+    from dataclasses import replace as _replace
+
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    result = _fake_result(source, distorted)
+    info = _replace(result.distorted_info, width=size[0], height=size[1])
+    result.source_info, result.distorted_info = _replace(info, path=source), info
+    provenance = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1", {"model": model})
+    result.merge_metric_results(MetricResultSet([FrameMetricResult("vmaf", [0], [0.0], [score], provenance)]))
+    return result
+
+
+def _vmaf_request(choice):
+    return analysis_request_from_vmaf_options(VmafOptions(model_choice=choice), ("vmaf",))
+
+
+def _vmaf_found(source, distorted, choice):
+    loaded = result_cache.load_cached(source, distorted, _vmaf_request(choice))
+    metric = loaded[0].frame_metric("vmaf") if loaded else None
+    return None if metric is None else round(float(metric.values[0]), 2)
+
+
+AUTO, V061, V4K = "__auto__", "version=vmaf_v0.6.1", "version=vmaf_4k_v0.6.1"
+
+
+@pytest.mark.parametrize(("size", "found"), [((3840, 2160), 94.06), ((1920, 1080), None)])
+def test_auto_finds_a_score_saved_with_the_model_it_picks_chosen_by_name(tmp_path, size, found):
+    """A video scored with "VMAF 4K v0.6.1" chosen showed no VMAF on a row
+    set to Auto, though Auto picks that model for a 4K comparison. It must
+    still not be shown where Auto picks the other model."""
+    source = _make_file(tmp_path / "source.mkv", 1000)
+    distorted = _make_file(tmp_path / "test.mkv", 500)
+    result_cache.store(source, distorted, _vmaf_run(source, distorted, size, V4K, 94.06), "run", _vmaf_request(V4K))
+    assert _vmaf_found(source, distorted, AUTO) == found
+    assert _vmaf_found(source, distorted, V4K) == 94.06
+
+
+def test_a_score_saved_on_auto_is_found_by_its_model_chosen_by_name_and_no_other(tmp_path):
+    source = _make_file(tmp_path / "source.mkv", 1000)
+    distorted = _make_file(tmp_path / "test.mkv", 500)
+    result_cache.store(source, distorted, _vmaf_run(source, distorted, (3840, 2160), V4K, 96.21), "run",
+                       _vmaf_request(AUTO))
+    assert _vmaf_found(source, distorted, AUTO) == 96.21
+    assert _vmaf_found(source, distorted, V4K) == 96.21
+    assert _vmaf_found(source, distorted, V061) is None
+
+
+def test_old_keys_with_a_leftover_model_are_found_but_never_trusted_for_another_model(tmp_path):
+    """Scores were keyed by the row's leftover model field: an Auto row saved
+    4K-model scores as "vmaf_v0.6.1". The same choice finds them again; an
+    explicit "VMAF v0.6.1" row must not take them for its own."""
+    from vmaf_app.core import metric_cache
+    from vmaf_app.core.analysis_request import MetricRequestSpec
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
+
+    source = _make_file(tmp_path / "source.mkv", 1000)
+    distorted = _make_file(tmp_path / "test.mkv", 500)
+    result_cache.store(source, distorted, _vmaf_run(source, distorted, (3840, 2160), V4K, 1.0), "run",
+                       _vmaf_request(AUTO))  # writes the context
+    request = _vmaf_request(AUTO)
+    spec = request.metrics[0]
+    directory = metric_cache.recipe_directory(result_cache.cache_dir(), source, distorted, request.recipe)
+    metric_cache.metric_path(directory, spec).unlink()  # the context stays, as in a real cache
+    old = MetricRequestSpec(spec.key, spec.backend_id,
+                            (("model", V061), ("model_choice", AUTO), ("custom_model", "")),
+                            spec.coverage, spec.implementation_compatibility_id)
+    legacy = MetricProvenance("legacy", "", "unknown", "legacy-v1", {})
+    metric_cache.store_metric(directory, FrameMetricResult("vmaf", [0], [0.0], [94.06], legacy), old)
+    assert _vmaf_found(source, distorted, AUTO) == 94.06
+    assert _vmaf_found(source, distorted, V061) is None
+    assert _vmaf_found(source, distorted, V4K) is None  # its model is not certain
+
+
+def test_recalculating_vmaf_clears_the_equivalent_scores_too(tmp_path):
+    source = _make_file(tmp_path / "source.mkv", 1000)
+    distorted = _make_file(tmp_path / "test.mkv", 500)
+    result_cache.store(source, distorted, _vmaf_run(source, distorted, (3840, 2160), V4K, 94.06), "run", _vmaf_request(V4K))
+    result_cache.clear(source, distorted, _vmaf_request(AUTO))
+    assert _vmaf_found(source, distorted, V4K) is None
+

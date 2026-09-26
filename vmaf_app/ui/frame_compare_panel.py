@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import re
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html import escape
 
 import numpy as np
@@ -39,6 +39,7 @@ from vmaf_app.core.frame_extract import (
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
+from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.rolling_video_view import RollingVideoCompareView as VideoCompareView
 
@@ -175,6 +176,9 @@ class FrameComparePanel(QWidget):
         self._syncing_video_position = False
         self._generation = 0
         self._workers: set[FrameExtractWorker] = set()
+        self._crop_workers: dict[object, CropDetectWorker] = {}
+        self._auto_crops: dict[object, tuple[object, object]] = {}
+        self._auto_crop_files: dict[tuple, object] = {}
         self._window_filters_installed = False
         try:
             self._color_mode = PreviewColorMode(color_mode)
@@ -340,7 +344,7 @@ class FrameComparePanel(QWidget):
     # ------------------------------------------------------------ public API
     def set_runs(self, entries: list[FrameComparisonEntry]) -> None:
         old_identity = self.current_entry.identity if self.current_entry else None
-        self._entries = list(entries)
+        self._entries = [self._apply_auto_crop(entry) for entry in entries]
         self._generation += 1
         self._cancel_workers()
         # A file that was missing or temporarily unreadable may have been
@@ -424,6 +428,7 @@ class FrameComparePanel(QWidget):
 
     def live_workers(self) -> list:
         workers = [worker for worker in self._workers if worker.isRunning()]
+        workers.extend(worker for worker in self._crop_workers.values() if worker.isRunning())
         if self.video_view is not None:
             workers.extend(self.video_view.live_workers())
         return workers
@@ -433,6 +438,7 @@ class FrameComparePanel(QWidget):
         self._seek_timer.stop()
         self._generation += 1
         self._cancel_workers()
+        self._cancel_crop_workers()
         if self.video_view is not None:
             self.video_view.clear()
 
@@ -468,6 +474,7 @@ class FrameComparePanel(QWidget):
         self._display_timer.stop()
         self._generation += 1
         self._cancel_workers()
+        self._cancel_crop_workers()
         if self.video_view is not None:
             self.video_view.set_playing(False)
         self._showing_source = False
@@ -558,6 +565,7 @@ class FrameComparePanel(QWidget):
                 self.video_view.clear()
             return
         view = self._ensure_video_view()
+        self._ensure_auto_crop(entry)
         self._seek_timer.stop()
         self._cancel_workers()
         self.content_stack.setCurrentWidget(view)
@@ -731,7 +739,10 @@ class FrameComparePanel(QWidget):
             # Say so rather than showing cropped-looking frames that are not:
             # auto-crop is measured during a run, so until one happens these
             # are the raw frames and a scored comparison would differ.
-            parts.append("black bars not detected yet — shown uncropped")
+            if entry.identity in self._crop_workers:
+                parts.append("detecting black bars…")
+            else:
+                parts.append("black bars not detected yet — shown uncropped")
         self.detail_label.setText("   ·   ".join(parts))
         self._update_color_status()
 
@@ -888,6 +899,7 @@ class FrameComparePanel(QWidget):
                 self.video_view.set_color_settings(self._color_settings())
                 self.video_view.show_source(self._showing_source)
             return
+        self._ensure_auto_crop(self.current_entry)
         if self.video_view is not None:
             self.video_view.set_playing(False)
         self.content_stack.setCurrentWidget(self.viewer)
@@ -931,6 +943,107 @@ class FrameComparePanel(QWidget):
         worker.finished.connect(lambda w=worker: self._on_worker_finished(w))
         self._workers.add(worker)
         worker.start()
+
+    # ----------------------------------------------------------- auto-cropping
+    def _apply_auto_crop(self, entry: FrameComparisonEntry) -> FrameComparisonEntry:
+        if not entry.comparison.auto_crop_pending:
+            return entry
+        crops = self._auto_crops.get(entry.identity)
+        if crops is None:
+            return entry
+        source, distorted = crops
+        return replace(
+            entry,
+            comparison=replace(
+                entry.comparison,
+                source_crop=source,
+                distorted_crop=distorted,
+                auto_crop_pending=False,
+            ),
+        )
+
+    def _ensure_auto_crop(self, entry: FrameComparisonEntry | None) -> None:
+        if entry is None or not entry.comparison.auto_crop_pending:
+            return
+        identity = entry.identity
+        if identity in self._auto_crops:
+            # set_runs normally applies this before reaching the UI, but this
+            # also handles an entry replaced while a result was arriving.
+            for index, current in enumerate(self._entries):
+                if current.identity is identity:
+                    self._entries[index] = self._apply_auto_crop(current)
+                    break
+            return
+        if identity in self._crop_workers:
+            return
+        source = entry.comparison.source_info
+        distorted = entry.comparison.distorted_info
+        if not source.path.is_file() or not distorted.path.is_file():
+            return
+        source_key = self._crop_file_key(source.path)
+        distorted_key = self._crop_file_key(distorted.path)
+        source_crop = self._auto_crop_files.get(source_key, _MISSING)
+        distorted_crop = self._auto_crop_files.get(distorted_key, _MISSING)
+        if source_crop is not _MISSING and distorted_crop is not _MISSING:
+            self._auto_crops[identity] = (source_crop, distorted_crop)
+            self._entries = [self._apply_auto_crop(item) for item in self._entries]
+            self._update_labels()
+            return
+        worker = CropDetectWorker(
+            source, distorted, parent=self,
+            source_crop=source_crop, distorted_crop=distorted_crop,
+        )
+        worker.ready.connect(
+            lambda source_crop, distorted_crop, identity=identity, worker=worker:
+                self._on_auto_crop_ready(identity, worker, source_crop, distorted_crop)
+        )
+        worker.finished.connect(lambda worker=worker: self._on_crop_worker_finished(worker))
+        self._crop_workers[identity] = worker
+        self._update_labels()
+        worker.start()
+
+    @staticmethod
+    def _crop_file_key(path) -> tuple:
+        try:
+            resolved = path.resolve()
+            stat = resolved.stat()
+            return (str(resolved), stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            return (str(path),)
+
+    def _on_auto_crop_ready(self, identity, worker, source_crop, distorted_crop) -> None:
+        self._auto_crops[identity] = (source_crop, distorted_crop)
+        entry = next((item for item in self._entries if item.identity is identity), None)
+        if entry is not None:
+            self._auto_crop_files[self._crop_file_key(entry.comparison.source_info.path)] = source_crop
+            self._auto_crop_files[self._crop_file_key(entry.comparison.distorted_info.path)] = distorted_crop
+        for index, entry in enumerate(self._entries):
+            if entry.identity is identity:
+                self._entries[index] = self._apply_auto_crop(entry)
+                break
+        if self.current_entry is not None and self.current_entry.identity is identity:
+            playing = (
+                self.video_view.is_playing or self.video_view.playback_requested
+                if self.video_view is not None else False
+            )
+            self._generation += 1
+            self._update_labels()
+            if self.is_video_mode:
+                self._load_current_video(playing=playing)
+            else:
+                self._show_or_request()
+
+    def _on_crop_worker_finished(self, worker: CropDetectWorker) -> None:
+        for identity, active in tuple(self._crop_workers.items()):
+            if active is worker:
+                self._crop_workers.pop(identity, None)
+                break
+        worker.deleteLater()
+
+    def _cancel_crop_workers(self) -> None:
+        for worker in tuple(self._crop_workers.values()):
+            if worker.isRunning():
+                worker.cancel()
 
     def _on_frame_ready(self, generation: int, side: str, png: bytes) -> None:
         if generation != self._generation:

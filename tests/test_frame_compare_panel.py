@@ -136,7 +136,7 @@ def test_frame_and_timestamp_stay_synchronized(qapp):
     assert panel.timeline.value() == 24
     assert panel.timestamp_edit.text() == "0:00:01.000"
     assert "Frame 24" in panel.detail_label.text()
-    assert "VMAF 90.00" in panel.detail_label.text()
+    assert "VMAF v0.6.1 90.00" in panel.detail_label.text()
 
 
 def test_switching_distortions_preserves_frame_and_wraps(qapp):
@@ -267,7 +267,7 @@ def test_scored_and_unscored_pairs_coexist(qapp):
     assert panel.frame_spin.maximum() == 89
 
     panel.set_frame(10)
-    assert "VMAF 90.00" in panel.detail_label.text()
+    assert "VMAF v0.6.1 90.00" in panel.detail_label.text()
     panel.cycle_distorted(1)
     assert "No metric results loaded" in panel.detail_label.text()
     panel.close()
@@ -287,6 +287,79 @@ def test_pending_auto_crop_is_disclosed_rather_than_implied(qapp):
     panel.set_runs([entry])
 
     assert "black bars not detected yet" in panel.detail_label.text()
+    panel.close()
+
+
+def test_unscored_auto_crop_is_detected_once_in_the_background(qapp, tmp_path, monkeypatch):
+    from dataclasses import replace as dc_replace
+
+    from vmaf_app.core.models import CropBox
+
+    entry = _physical_entry(tmp_path)
+    entry = dc_replace(
+        entry, comparison=dc_replace(entry.comparison, auto_crop_pending=True)
+    )
+    calls = []
+
+    def fake_detect(info, **_kwargs):
+        calls.append(info.path)
+        return CropBox(1920, 816, 0, 132)
+
+    monkeypatch.setattr("vmaf_app.ui.crop_detect_worker.detect_crop", fake_detect)
+    panel = FrameComparePanel()
+    panel.set_runs([entry])
+    panel._ensure_auto_crop(panel.current_entry)
+    for _ in range(100):
+        qapp.processEvents()
+        if not panel._crop_workers:
+            break
+        QTest.qWait(5)
+
+    assert panel.current_entry.comparison.auto_crop_pending is False
+    assert panel.current_entry.comparison.source_crop == CropBox(1920, 816, 0, 132)
+    assert panel.current_entry.comparison.distorted_crop == CropBox(1920, 816, 0, 132)
+    assert set(calls) == {tmp_path / "source.mkv", tmp_path / "encode.mkv"}
+    panel.close()
+
+
+def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, monkeypatch):
+    from dataclasses import replace as dc_replace
+
+    from vmaf_app.core.models import CropBox
+
+    first = _physical_entry(tmp_path, "first")
+    second = _physical_entry(tmp_path, "second")
+    entries = [
+        dc_replace(item, comparison=dc_replace(item.comparison, auto_crop_pending=True))
+        for item in (first, second)
+    ]
+    calls = []
+
+    def fake_detect(info, **_kwargs):
+        calls.append(info.path)
+        return CropBox(1920, 816, 0, 132)
+
+    monkeypatch.setattr("vmaf_app.ui.crop_detect_worker.detect_crop", fake_detect)
+    panel = FrameComparePanel()
+    panel.set_runs(entries)
+    panel._ensure_auto_crop(panel.current_entry)
+    for _ in range(100):
+        qapp.processEvents()
+        if not panel._crop_workers:
+            break
+        QTest.qWait(5)
+    panel.cycle_distorted(1)
+    panel._ensure_auto_crop(panel.current_entry)
+    for _ in range(100):
+        qapp.processEvents()
+        if not panel._crop_workers:
+            break
+        QTest.qWait(5)
+
+    assert calls.count(tmp_path / "source.mkv") == 1
+    assert set(calls) == {
+        tmp_path / "source.mkv", tmp_path / "first.mkv", tmp_path / "second.mkv"
+    }
     panel.close()
 
 

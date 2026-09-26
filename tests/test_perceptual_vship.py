@@ -1087,3 +1087,24 @@ def test_a_failed_gpu_probe_is_redone_after_a_while_but_a_found_gpu_is_kept(monk
     monkeypatch.setattr(vship, "_probed", (vship._probed[0], 0.0))
     vship.forget_failed_vship_probe()
     assert vship.detect_vship_device()[0] is device and len(calls) == 2
+
+
+def test_a_passs_rate_is_timed_from_its_first_frame_not_its_start():
+    """The pass's start-up was counted in its rate: "1.7 fps, 0:05:39 left"
+    at the start of a pass over an 8-second clip."""
+    clock = iter([10.0, 10.2, 10.6, 11.0])
+    rate = vship._PassRate(clock=lambda: next(clock))
+    assert rate.frames_per_second(1) == 0.0  # the first frame pair: nothing to time yet
+    assert rate.frames_per_second(5) == 0.0  # 0.2 s after it: too soon to say
+    assert rate.frames_per_second(13) == pytest.approx(20.0)  # 12 more frames in 0.6 s
+    assert rate.frames_per_second(21) == pytest.approx(20.0)  # 20 in 1.0 s
+
+
+def test_a_sampled_passs_rate_is_in_the_videos_frames_like_its_progress():
+    """Every 5th frame compared: the progress counts the video's frames, and
+    the rate counted pairs, so the time left was 5 times too long."""
+    clock = iter([10.0, 11.0])
+    rate = vship._PassRate(5, clock=lambda: next(clock))
+    rate.frames_per_second(1)
+    assert rate.frames_per_second(21) == pytest.approx(100.0)  # 20 pairs = 100 frames in 1 s
+
