@@ -112,7 +112,7 @@ from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
 from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, VmafJob, VmafWorker
 
 _MODEL_CHOICES = [
-    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
+    ("Auto (analysis resolution, VMAF v0.6.1)", AUTO_MODEL_CHOICE),
     ("VMAF v0.6.1 (default, standard viewing)", "version=vmaf_v0.6.1"),
     ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
     ("VMAF v1 (1080p / 3H)", builtin_choice("vmaf_v1_3d0h")),
@@ -1443,13 +1443,13 @@ class MainWindow(QMainWindow):
         # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
         # what it was counting.
         self.parallel_jobs_check = QCheckBox(
-            "Calculate 2 videos in parallel"
+            "Calculate CPU metrics for 2 videos in parallel"
         )
         self.parallel_jobs_check.setChecked(
             self._settings.parallel_jobs >= MAX_PARALLEL_JOBS
         )
         self.parallel_jobs_check.setToolTip(
-            f"Scores two videos simultaneously on this {cores}-core "
+            f"Runs CPU metric work for two videos simultaneously on this {cores}-core "
             "machine. libvmaf does not keep a many-core CPU busy on its "
             "own, so a second video largely fills the idle capacity "
             "rather than competing for it. libvmaf threads left on Auto "
