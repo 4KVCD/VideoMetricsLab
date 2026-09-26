@@ -4777,3 +4777,22 @@ def test_a_gpu_metrics_first_second_shows_its_percentage_without_times(qapp):
     assert "a — GPU metrics 2 of 3 (33.4%) (Butteraugli 0.3%)" in win.job_progress_labels[0].text()
     win.close()
 
+
+@pytest.mark.parametrize(("cancelled", "tab"), [(True, TAB_VIDEOS), (False, TAB_GRAPH)])
+def test_a_cancelled_run_stays_on_the_videos_tab(qapp, cancelled, tab):
+    """Cancel jumped to the Metric Graphs tab; only a run that ends on its
+    own goes there. What a cancelled run finished is still graphed."""
+    win = MainWindow()
+    for name in ("a.mp4", "b.mp4"):
+        win._add_table_row(Path(name))
+    win._rows[0].completed_run = _fake_completed_run("a.mp4")
+    win._job_rows = list(win._rows)
+    win._checked_rows_for_run = list(win._rows)
+    win.tabs.setCurrentIndex(TAB_VIDEOS)
+    if cancelled:
+        win._on_run_cancelled()
+    win._on_all_finished()
+    assert win.tabs.currentIndex() == tab
+    assert len(win.graph_panel._entries) == 1
+    win.close()
+

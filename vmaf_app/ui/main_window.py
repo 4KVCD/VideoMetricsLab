@@ -4623,7 +4623,10 @@ class MainWindow(QMainWindow):
             if rd.completed_run and self._row_index_of(rd) is not None
         ]
         if finished_runs:
-            self._open_or_update_graph(finished_runs)
+            # A cancelled run stays on the Videos tab, where Cancel was
+            # pressed and the unfinished rows are; what it did finish is
+            # still added to the graph. It used to jump to Metric Graphs.
+            self._open_or_update_graph(finished_runs, show=not self._run_was_cancelled)
 
     # ------------------------------------------------------------------ results actions
     def _selected_runs(self) -> list[CompletedRun]:
@@ -4909,10 +4912,11 @@ class MainWindow(QMainWindow):
             ),
         )
 
-    def _open_or_update_graph(self, runs: list[CompletedRun]) -> None:
-        """Adds runs to the graph tab and brings it to the front."""
+    def _open_or_update_graph(self, runs: list[CompletedRun], show: bool = True) -> None:
+        """Adds runs to the graph tab and, with `show`, brings it to the front."""
         for run in runs:
             self.graph_panel.add_run(
                 run.result, run.label, identity=run.graph_identity
             )
-        self.tabs.setCurrentIndex(TAB_GRAPH)
+        if show:
+            self.tabs.setCurrentIndex(TAB_GRAPH)
