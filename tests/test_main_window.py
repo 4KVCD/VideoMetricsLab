@@ -1739,7 +1739,7 @@ def test_failed_run_reports_failure_instead_of_done(qapp):
     win._on_job_failed(0, "ffmpeg failed", "details")
     win._on_all_finished()
 
-    assert "1 failed" in win.status_label.text()
+    assert win.status_label.text() == "Finished: 1 video failed (hover over its name for why)."
     assert "Done" not in win.status_label.text()
 
 
@@ -4208,7 +4208,7 @@ def test_a_partly_failed_job_shows_and_caches_the_metrics_that_finished(qapp, tm
     assert win.distorted_table.item(row, main_window_module.COL_VMAF).text() != "Failed"
     assert rd.analysis_status == "Partly failed"
     assert "SSIMULACRA2 failed: unsupported input" in rd.status_detail
-    assert win._run_failed_count == 1
+    assert win._run_partial_count == 1 and win._run_failed_count == 0
     assert _load_cached(source, distorted, rd.options) is not None
     win.close()
 
@@ -4445,5 +4445,23 @@ def test_elapsed_leaves_out_paused_time(qapp):
     win._update_run_status()
     assert "Elapsed: 0:01:0" in win.status_label.text()
     win._worker = None
+    win.close()
+
+
+def test_the_end_of_a_run_says_how_long_it_took_and_what_failed(qapp):
+    """It said "Done." with the time gone, or counted a video with one
+    failed metric among scored ones as a failed video."""
+    win = MainWindow()
+    win._run_started_at = time.monotonic() - 3725
+    win._run_failed_count, win._run_partial_count = 1, 2
+    win._on_all_finished()
+    assert win.status_label.text() == (
+        "Finished in 1:02:05: 1 video failed, 2 with some metrics failed (hover over their names for why).")
+    win._run_failed_count = win._run_partial_count = 0
+    win._on_all_finished()
+    assert win.status_label.text() == "Done in 1:02:05."
+    win._run_was_cancelled = True
+    win._on_all_finished()
+    assert win.status_label.text() == "Cancelled after 1:02:05."
     win.close()
 

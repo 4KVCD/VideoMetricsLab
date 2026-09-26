@@ -564,6 +564,7 @@ class MainWindow(QMainWindow):
         # life of the job so a line never jumps to a different video.
         self._job_line_slot: dict[int, int] = {}
         self._run_failed_count = 0
+        self._run_partial_count = 0  # videos with some metrics failed, the rest scored
         self._run_was_cancelled = False
         # Whether a run owns the window's settings right now. Read by
         # every background handler that would otherwise re-enable them.
@@ -3750,6 +3751,7 @@ class MainWindow(QMainWindow):
             line.setVisible(False)
             line.clear()
         self._run_failed_count = 0
+        self._run_partial_count = 0  # videos with some metrics failed, the rest scored
         self._run_was_cancelled = False
         self._run_skipped = len(already_scored_rows)
         self._run_started_at = time.monotonic()
@@ -3936,6 +3938,27 @@ class MainWindow(QMainWindow):
         now = time.monotonic()
         paused = self._paused_total + (now - self._paused_since if self._paused_since is not None else 0.0)
         return max(0.0, now - self._run_started_at - paused)
+
+    def _run_end_message(self) -> str:
+        """How the run ended and how long it took, e.g. "Finished in
+        2:29:51: 1 video failed, 1 with some metrics failed (hover over
+        their names for why)." It used to be "Done." -- the time gone with
+        the elapsed figure -- or "Finished with N failed video(s).", which
+        counted a video with one failed metric among scored ones as failed."""
+        elapsed = self._run_elapsed()
+        took = f" in {format_hms(elapsed)}" if elapsed is not None else ""
+        if self._run_was_cancelled:
+            return f"Cancelled after {format_hms(elapsed)}." if elapsed is not None else "Cancelled."
+        issues = []
+        if self._run_failed_count:
+            issues.append(f"{self._run_failed_count} video{'s' if self._run_failed_count != 1 else ''} failed")
+        if self._run_partial_count:
+            issues.append(f"{self._run_partial_count} with some metrics failed")
+        if not issues:
+            return f"Done{took}."
+        count = self._run_failed_count + self._run_partial_count
+        return (f"Finished{took}: " + ", ".join(issues)
+                + f" (hover over {'its name' if count == 1 else 'their names'} for why).")
 
     def _run_summary(self, running: list[int], total: int) -> str:
         """The queue in counts, e.g. "3 videos: 1 done, 2 in progress".
@@ -4338,7 +4361,7 @@ class MainWindow(QMainWindow):
         """One metric group failed, the other finished: the finished scores
         are shown and cached like any result, and the metrics that failed
         say so in their own cells."""
-        self._run_failed_count += 1
+        self._run_partial_count += 1
         row = self._on_job_finished(index, result)
         if row is None:
             return
@@ -4374,14 +4397,7 @@ class MainWindow(QMainWindow):
         self.pause_btn.setText("Pause")
         for line in self.job_progress_labels:
             line.setVisible(False)
-        if self._run_was_cancelled:
-            self.status_label.setText("Cancelled.")
-        elif self._run_failed_count:
-            self.status_label.setText(
-                f"Finished with {self._run_failed_count} failed video(s)."
-            )
-        else:
-            self.status_label.setText("Done.")
+        self.status_label.setText(self._run_end_message())
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
         # Rows removed mid-run are skipped rather than indexed into.
