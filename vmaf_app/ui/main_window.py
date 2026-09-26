@@ -563,6 +563,9 @@ class MainWindow(QMainWindow):
         # job index -> which of the per-video lines it owns. Held for the
         # life of the job so a line never jumps to a different video.
         self._job_line_slot: dict[int, int] = {}
+        # Each video in progress: its line's text and tooltip. The lines are
+        # laid out from this in list order (_arrange_job_lines).
+        self._job_line_text: dict[int, tuple[str, str]] = {}
         self._run_failed_count = 0
         self._run_partial_count = 0  # videos with some metrics failed, the rest scored
         self._run_was_cancelled = False
@@ -3747,6 +3750,7 @@ class MainWindow(QMainWindow):
         self._running_jobs = []
         self._finished_jobs = set()
         self._job_line_slot = {}
+        self._job_line_text = {}
         for line in self.job_progress_labels:
             line.setVisible(False)
             line.clear()
@@ -3858,17 +3862,40 @@ class MainWindow(QMainWindow):
         self._update_run_status()
 
     def _assign_progress_line(self, index: int, label: str) -> None:
-        """Gives this job a line of its own, reusing one a finished job left."""
-        if index in self._job_line_slot:
+        """Gives this job a line of its own."""
+        if index in self._job_line_text:
             return
-        taken = set(self._job_line_slot.values())
+        self._job_line_text[index] = (f"{label} — starting…", "")
+        self._arrange_job_lines()
+
+    def _set_job_line(self, index: int, text: str, tooltip: str = "") -> None:
+        """What a video's line says; kept, so the lines can be laid out again."""
+        if index not in self._job_line_text:
+            return
+        self._job_line_text[index] = (text, tooltip)
+        slot = self._job_line_slot.get(index)
+        if slot is not None:
+            self.job_progress_labels[slot].setText(text)
+            self.job_progress_labels[slot].setToolTip(tooltip)
+
+    def _arrange_job_lines(self) -> None:
+        """The videos in progress, one line each, in list order.
+
+        A video used to take the first free line, so a later video could
+        sit above an earlier one and the lines changed places as videos
+        finished; and a reused line kept the previous video's tooltip."""
+        order = sorted(self._job_line_text)[:len(self.job_progress_labels)]
+        self._job_line_slot = {index: slot for slot, index in enumerate(order)}
         for slot, line in enumerate(self.job_progress_labels):
-            if slot in taken:
-                continue
-            self._job_line_slot[index] = slot
-            line.setText(f"{label} — starting…")
-            line.setVisible(True)
-            return
+            if slot < len(order):
+                text, tooltip = self._job_line_text[order[slot]]
+                line.setText(text)
+                line.setToolTip(tooltip)
+                line.setVisible(True)
+            else:
+                line.setVisible(False)
+                line.clear()
+                line.setToolTip("")
 
     def _mark_job_over(self, index: int) -> None:
         """Retires a job from the live figures.
@@ -3886,9 +3913,8 @@ class MainWindow(QMainWindow):
         self._job_gpu_fallback.discard(index)
         self._job_lines_due.discard(index)
         self._job_line_shape.pop(index, None)
-        slot = self._job_line_slot.pop(index, None)
-        if slot is not None:
-            self.job_progress_labels[slot].setVisible(False)
+        if self._job_line_text.pop(index, None) is not None:
+            self._arrange_job_lines()
         if 0 <= index < len(self._job_total_frames):
             self._job_frames_done[index] = self._job_total_frames[index]
         self._update_run_status()
@@ -4042,12 +4068,11 @@ class MainWindow(QMainWindow):
         return f"{kind} {pct:.1f}%" + (f" ({', '.join(details)})" if details else "")
 
     def _render_job_progress(self, index: int) -> None:
-        slot = self._job_line_slot.get(index)
-        if slot is None:
+        if index not in self._job_line_text:
             return
-        label = self.job_progress_labels[slot]
         snapshots = self._job_task_progress.get(index, ())
         parts = []
+        tooltip = ""
         if snapshots:
             # A percentage per half. One figure for the video mixed the two:
             # the GPU half's frames over all its passes against one pass's
@@ -4059,9 +4084,9 @@ class MainWindow(QMainWindow):
                 kinds = [kind if task.get("backend") == "ffmpeg" else "CPU tools"
                          for kind, task in zip(kinds, snapshots, strict=True)]
             parts += [self._task_detail(kind, task) for kind, task in zip(kinds, snapshots, strict=True)]
-            label.setToolTip("\n".join(
+            tooltip = "\n".join(
                 f"{kind}: " + ", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
-                for kind, task in zip(kinds, snapshots, strict=True)))
+                for kind, task in zip(kinds, snapshots, strict=True))
         else:
             total = self._job_progress_total.get(index, 0)
             current = self._job_frames_done.get(index, 0)
@@ -4073,7 +4098,7 @@ class MainWindow(QMainWindow):
                 parts += self._halves_detail(index)
         if decode_status := self._job_decode_status.get(index):
             parts.append(decode_status)
-        label.setText(f"{self._job_label(index)} — " + "   ·   ".join(parts))
+        self._set_job_line(index, f"{self._job_label(index)} — " + "   ·   ".join(parts), tooltip)
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs in the
@@ -4232,8 +4257,7 @@ class MainWindow(QMainWindow):
             or "on CPU" in message
         ):
             self._job_gpu_fallback.add(index)
-        slot = self._job_line_slot.get(index)
-        if slot is not None:
+        if index in self._job_line_text:
             # The runner sends the active plan on each attempt, including
             # software fallbacks. Keep it when progress replaces this phase
             # message; each parallel job owns its own decode plan.
@@ -4250,9 +4274,7 @@ class MainWindow(QMainWindow):
                 # snapshot, especially while a GPU pass is waiting.
                 self._render_job_progress(index)
             else:
-                self.job_progress_labels[slot].setText(
-                    f"{self._job_label(index)} — {message.replace('distorted', 'test')}"
-                )
+                self._set_job_line(index, f"{self._job_label(index)} — {message.replace('distorted', 'test')}")
                 # The line no longer shows figures: the next ones show at once.
                 self._job_line_shape.pop(index, None)
         self._update_run_status()

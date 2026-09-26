@@ -3603,12 +3603,12 @@ def test_a_finished_video_frees_its_progress_line_for_the_next(qapp):
 
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
-    slot_of_a = win._job_line_slot[0]
     win._mark_job_over(0)
     win._on_job_started(2, "c")
 
-    assert win._job_line_slot[2] == slot_of_a, "the freed line was not reused"
+    # The finished video's line is freed; the two in progress keep list order.
     assert 0 not in win._job_line_slot
+    assert win._job_line_slot == {1: 0, 2: 1}
 
 
 def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
@@ -3664,7 +3664,10 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
     win._job_total_frames.append(100)
     win._on_job_started(job_count, "next")
     win._on_job_progress(job_count, current=1, total=100, fps=1.0)
-    assert "Decode:" not in win.job_progress_labels[slot].text()
+    # The new video's line (wherever list order puts it) has no decode status
+    # of the finished one.
+    assert "Decode:" not in win.job_progress_labels[win._job_line_slot[job_count]].text()
+    assert slot == 0
 
 
 def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
@@ -4463,5 +4466,28 @@ def test_the_end_of_a_run_says_how_long_it_took_and_what_failed(qapp):
     win._run_was_cancelled = True
     win._on_all_finished()
     assert win.status_label.text() == "Cancelled after 1:02:05."
+    win.close()
+
+
+def test_the_run_lines_stay_in_list_order_and_a_reused_line_starts_clean(qapp):
+    """A new video took the first free line: after the second of three
+    finished, the fourth sat between the first and the third, and it
+    inherited the finished video's tooltip."""
+    win = MainWindow()
+    for name in ("v0.mkv", "v1.mkv", "v2.mkv", "v3.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000] * 4
+    for index in (0, 1, 2):
+        win._on_job_started(index, f"v{index}")
+    snapshot = [{"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 10, "total": 1000, "fps": 5.0,
+                 "state": "running", "phase": None, "waiting_for": None}]
+    win._on_task_progress(1, snapshot)
+    assert win.job_progress_labels[1].toolTip() == "CPU: VMAF v0.6.1"
+    win._mark_job_over(1)
+    win._on_job_started(3, "v3")
+    lines = [label.text().split(" — ")[0] for label in win.job_progress_labels if not label.isHidden()]
+    assert lines == ["v0", "v2", "v3"]
+    assert all(label.toolTip() == "" for label in win.job_progress_labels)
     win.close()
 
