@@ -1593,6 +1593,7 @@ def test_a_video_whose_gpu_half_waits_shows_its_running_half(qapp):
     win._job_halves[0] = [("VMAF/PSNR", 600, 3000, 11.2, "running"),
                           ("SSIMULACRA2/CVVDP", 100, 3000, 40.0, "running")]
     win._on_job_progress(0, current=100, total=3000, fps=11.0)
+    win._on_run_tick()  # numbers are redrawn once a second
     text = win.job_progress_labels[0].text()
     assert "11.0 fps" in text and "left" in text and "waiting" not in text
 
@@ -4320,5 +4321,30 @@ def test_paused_and_cancelling_stay_on_the_status_line(qapp):
     assert win.status_label.text() == "Cancelling..."
     assert calls == ["pause", "resume", "cancel"]
     win._worker = None
+    win.close()
+
+
+def test_progress_figures_are_redrawn_once_a_second_but_changes_at_once(qapp):
+    """A GPU pass reports every frame, 40-60 times a second, and each report
+    redrew the line: its time left flickered."""
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [3000]
+    win._on_job_started(0, "a")
+
+    def gpu(current, state="running", phase=(1, 3, "SSIMULACRA2")):
+        return [{"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": current,
+                 "total": 3000, "fps": 47.7, "state": state, "waiting_for": None, "phase": phase}]
+
+    win._on_task_progress(0, gpu(30))
+    first = win.job_progress_labels[0].text()
+    assert "SSIMULACRA2 3.0%" in first  # the first figures show at once
+    win._on_task_progress(0, gpu(60))
+    assert win.job_progress_labels[0].text() == first, "redrawn between ticks"
+    win._on_run_tick()
+    assert "SSIMULACRA2 6.0%" in win.job_progress_labels[0].text()
+    win._on_task_progress(0, gpu(10, phase=(2, 3, "Butteraugli")))
+    assert "GPU metric 2/3: Butteraugli" in win.job_progress_labels[0].text()  # a change: at once
     win.close()
 

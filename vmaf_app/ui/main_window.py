@@ -572,7 +572,15 @@ class MainWindow(QMainWindow):
         self._run_started_at: float | None = None
         self._run_elapsed_timer = QTimer(self)
         self._run_elapsed_timer.setInterval(1000)
-        self._run_elapsed_timer.timeout.connect(self._update_run_status)
+        self._run_elapsed_timer.timeout.connect(self._on_run_tick)
+        # Progress arrives with every frame a GPU pass scores -- 40 to 60
+        # times a second -- and redrawing the per-video lines (and the queue
+        # ETA) on each made their numbers flicker. Numbers now wait for the
+        # once-a-second tick that also moves "Elapsed"; a line whose content
+        # changes (a video starting, a half waiting, starting, finishing, the
+        # next GPU metric pass) is still redrawn at once.
+        self._job_lines_due: set[int] = set()
+        self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
         # rebuilt every second (the elapsed time) and on every progress
@@ -3743,6 +3751,8 @@ class MainWindow(QMainWindow):
         self._run_was_cancelled = False
         self._run_started_at = time.monotonic()
         self._run_hold = ""
+        self._job_lines_due.clear()
+        self._job_line_shape.clear()
         self._run_elapsed_timer.start()
         if already_scored_rows:
             self.status_label.setText(
@@ -3866,6 +3876,8 @@ class MainWindow(QMainWindow):
         self._job_halves.pop(index, None)
         self._job_task_progress.pop(index, None)
         self._job_gpu_fallback.discard(index)
+        self._job_lines_due.discard(index)
+        self._job_line_shape.pop(index, None)
         slot = self._job_line_slot.pop(index, None)
         if slot is not None:
             self.job_progress_labels[slot].setVisible(False)
@@ -3936,9 +3948,24 @@ class MainWindow(QMainWindow):
         )
 
     def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
-        """Store backend-specific progress before rendering a job line."""
+        """Store backend-specific progress; the line is redrawn at once only
+        when what it says changes, its numbers on the next tick."""
         self._job_task_progress[index] = snapshots
-        self._render_job_progress(index)
+        shape = tuple((task.get("state"), task.get("phase"), task.get("waiting_for")) for task in snapshots)
+        if self._job_line_shape.get(index) != shape:
+            self._job_line_shape[index] = shape
+            self._render_job_progress(index)
+            self._job_lines_due.discard(index)
+        else:
+            self._job_lines_due.add(index)
+
+    def _on_run_tick(self) -> None:
+        """Once a second during a run: the lines with new numbers, then the
+        status line (elapsed time, queue ETA)."""
+        for index in sorted(self._job_lines_due):
+            self._render_job_progress(index)
+        self._job_lines_due.clear()
+        self._update_run_status()
 
     def _task_display_label(self, index: int, task: dict[str, object]) -> str:
         keys = tuple(task.get("metric_keys", ()))
@@ -4026,8 +4053,12 @@ class MainWindow(QMainWindow):
         # -- not the VMAF column, which is for the final score.
         self._job_frames_done[index] = current
         self._job_fps[index] = fps
-        self._render_job_progress(index)
-        self._update_run_status()
+        if index not in self._job_line_shape:  # its first figures show at once
+            self._job_line_shape[index] = ()
+            self._render_job_progress(index)
+            self._update_run_status()
+        else:
+            self._job_lines_due.add(index)  # see _on_run_tick
 
     def _halves_detail(self, index: int) -> list[str]:
         """For a video scored in two halves when one has not started: each
@@ -4134,6 +4165,8 @@ class MainWindow(QMainWindow):
                 self.job_progress_labels[slot].setText(
                     f"{self._job_label(index)} — {message.replace('distorted', 'test')}"
                 )
+                # The line no longer shows figures: the next ones show at once.
+                self._job_line_shape.pop(index, None)
         self._update_run_status()
 
     def _row_index_of(self, row_data: RowData) -> int | None:
