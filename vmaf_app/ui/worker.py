@@ -90,6 +90,11 @@ class VmafWorker(QThread):
     # Each item is a dict containing backend, metric_keys, current, total,
     # fps, state, and an optional phase (GPU metric number/name).
     task_progress = Signal(int, object)
+    # Once, as the run starts: {job_index: [("cpu" or "gpu", passes), ...]},
+    # each video's halves in task order and how many passes over its frames
+    # each makes (a GPU half, one per metric). The queue ETA needs it for
+    # videos that have not started yet.
+    planned = Signal(object)
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, ComparisonResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
@@ -252,6 +257,11 @@ class VmafWorker(QThread):
             except Exception as error:  # a request that cannot be built fails its own video
                 self.job_started.emit(index, job.label)
                 self.job_failed.emit(index, str(error), getattr(error, "stderr_tail", "") or "")
+        self.planned.emit({
+            run.index: [(run.pool_of(task), len(task.requested_specs) if run.pool_of(task) == _GPU else 1)
+                        for task in run.plan.tasks]
+            for run in runs
+        })
         for run in runs:
             if not run.plan.tasks:
                 # Everything is already saved: the saved result is the result.

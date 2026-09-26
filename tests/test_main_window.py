@@ -1525,7 +1525,6 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
     win._job_total_frames = [1000]
-    monkeypatch.setattr(win, "_gpu_metrics_in_run", lambda: True)
     win._on_job_started(0, "a")
 
     win._on_task_progress(0, [
@@ -1562,7 +1561,6 @@ def test_gpu_fallback_changes_status_label_to_cpu(qapp, monkeypatch):
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
     win._job_total_frames = [1000]
-    monkeypatch.setattr(win, "_gpu_metrics_in_run", lambda: False)
     win._on_job_started(0, "a")
     win._on_job_status(0, "Vship GPU unavailable; using CPU reference metrics…")
 
@@ -4397,5 +4395,31 @@ def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
     win._on_job_started(1, "b")
     assert win.status_label.text().startswith("3 videos: 1 done, 2 in progress (2 already")
     assert "may run in parallel" not in win.status_label.text()
+    win.close()
+
+
+@pytest.mark.parametrize(("parallel", "expected"), [(2, "0:02:30"), (1, "0:03:20")])
+def test_the_queue_eta_times_cpu_and_gpu_lanes_separately(qapp, monkeypatch, parallel, expected):
+    """With GPU metrics in the run there was no queue ETA at all."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    monkeypatch.setattr(win, "_parallel_jobs", lambda: parallel)
+    win._job_plan = {0: [("cpu", 1), ("gpu", 3)], 1: [("cpu", 1), ("gpu", 3)]}
+    win._on_job_started(0, "a")
+    cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "waiting_for": None, "phase": None}
+    gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"), "waiting_for": None}
+    # Video a: CPU 1000 frames left at 10 fps (100 s); GPU on pass 2 of 3,
+    # 1500 of its 3000 frames left at 30 fps. Video b not started: 1000 CPU
+    # frames (at the running CPU rate), 3 x 1000 GPU frames (at the GPU's).
+    win._on_task_progress(0, [{**cpu, "current": 0, "total": 1000, "fps": 10.0, "state": "running"},
+                              {**gpu, "current": 1500, "total": 3000, "fps": 30.0, "state": "running",
+                               "phase": (2, 3, "Butteraugli")}])
+    win._on_run_tick()
+    # GPU: (1500 + 3000) / 30 = 150 s. CPU: 100 s each, side by side with
+    # two lanes (100 s), one after the other with one (200 s).
+    assert f"Queue ETA: {expected}" in win.status_label.text()
     win.close()
 

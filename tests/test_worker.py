@@ -868,3 +868,15 @@ def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
     assert in_progress_while_blocked == [0, 1, 2]
     assert sorted(started) == list(range(6))
 
+
+def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch):
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d0.mp4", ("vmaf", "ssimulacra2", "butteraugli")),
+                         _split_job("d1.mp4", ("vmaf",))])
+    plans = []
+    worker.planned.connect(plans.append)
+    worker.run()
+    _drain(qapp)
+    assert plans == [{0: [("cpu", 1), ("gpu", 2)], 1: [("cpu", 1)]}]
+

@@ -558,7 +558,6 @@ class MainWindow(QMainWindow):
         # different clocks, and GPU perceptual metrics may be serialized.
         self._job_task_progress: dict[int, list[dict[str, object]]] = {}
         self._job_gpu_fallback: set[int] = set()
-        self._job_gpu_metrics: set[int] = set()
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
         # job index -> which of the per-video lines it owns. Held for the
@@ -584,6 +583,8 @@ class MainWindow(QMainWindow):
         # The total each video's figures are out of, as reported with them:
         # not the video's frame count, which a GPU half's passes exceed.
         self._job_progress_total: dict[int, int] = {}
+        # Each video's halves as the worker planned them (VmafWorker.planned).
+        self._job_plan: dict[int, list[tuple[str, int]]] = {}
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
@@ -3736,15 +3737,8 @@ class MainWindow(QMainWindow):
         self._job_decode_status.clear()
         self._job_halves.clear()
         self._job_task_progress.clear()
+        self._job_plan = {}
         self._job_gpu_fallback.clear()
-        self._job_gpu_metrics = {
-            index for index, row in enumerate(job_rows)
-            if any(
-                metric_definition(key).backend_id == "perceptual"
-                and (key == "cvvdp" or row.metric_backends.get(key, "gpu") == "gpu")
-                for key in self._requested_metrics(row)
-            )
-        }
         self._running_jobs = []
         self._finished_jobs = set()
         self._job_line_slot = {}
@@ -3769,6 +3763,7 @@ class MainWindow(QMainWindow):
         self._worker.job_started.connect(self._on_job_started)
         self._worker.halves.connect(self._job_halves.__setitem__)
         self._worker.task_progress.connect(self._on_task_progress)
+        self._worker.planned.connect(lambda plan: setattr(self, "_job_plan", dict(plan)))
         self._worker.progress.connect(self._on_job_progress)
         self._worker.status.connect(self._on_job_status)
         self._worker.job_finished.connect(self._on_job_finished)
@@ -3946,14 +3941,6 @@ class MainWindow(QMainWindow):
             summary += f" ({self._run_skipped} already scored, not recalculated)"
         return summary
 
-    def _gpu_metrics_in_run(self) -> bool:
-        """Whether this run includes work serialized through the GPU pass."""
-        return bool(
-            self._job_gpu_metrics
-            - self._finished_jobs
-            - self._job_gpu_fallback
-        )
-
     def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
         """Store backend-specific progress; the line is redrawn at once only
         when what it says changes, its numbers on the next tick."""
@@ -4095,11 +4082,8 @@ class MainWindow(QMainWindow):
         None while nothing has reported a rate yet -- there is no basis for a
         guess, and a wrong number is worse than none.
         """
-        # Perceptual GPU work is a serialized sequence of metric passes, so a
-        # video-level FPS cannot describe the queue. The UI reports each
-        # current GPU pass on its own line instead of presenting a false ETA.
-        if self._gpu_metrics_in_run():
-            return None
+        if self._job_plan or self._job_task_progress:
+            return self._queue_eta_by_lane()
         observed = [rate for rate in self._job_fps.values() if rate > 0]
         if not observed:
             return None
@@ -4132,6 +4116,68 @@ class MainWindow(QMainWindow):
             lanes.sort()
             lanes[0] += seconds
         return max(lanes)
+
+    def _queue_eta_by_lane(self) -> float | None:
+        """The queue ETA when videos have CPU and GPU halves: they run in
+        separate lanes (CPU metrics on as many lanes as the parallel
+        setting allows, GPU metrics one video at a time), so each lane's
+        remaining work is timed at its own rate, and the queue ends when
+        the later lane does. Videos not started count by their planned
+        halves: their frames, times the GPU half's passes.
+
+        It used to show nothing for any run with GPU metrics -- a fixed
+        note in its place for hours -- because one rate per video cannot
+        describe two lanes. None while a lane with work left has no rate
+        yet.
+        """
+        cpu_running: list[float] = []  # seconds left, each at its own rate
+        cpu_waiting: list[float] = []  # frames left, no rate of their own yet
+        cpu_rates: list[float] = []
+        gpu_frames, gpu_rate = 0.0, 0.0
+        for job, frames in enumerate(self._job_total_frames):
+            if job in self._finished_jobs:
+                continue
+            planned = self._job_plan.get(job) or [("cpu", 1)]
+            snapshots = self._job_task_progress.get(job)
+            halves = []
+            if snapshots:
+                for position, task in enumerate(snapshots):
+                    if task.get("state") == "done":
+                        continue
+                    kind = self._task_kind(job, task)
+                    total, current = int(task.get("total") or 0), int(task.get("current") or 0)
+                    if total > 0:
+                        halves.append((kind, max(0, total - current), float(task.get("fps") or 0.0)))
+                    else:
+                        passes = planned[position][1] if position < len(planned) else 1
+                        halves.append((kind, frames * passes, 0.0))
+            else:
+                halves = [(pool.upper(), frames * passes, 0.0) for pool, passes in planned]
+            for kind, left, fps in halves:
+                if kind == "GPU":
+                    gpu_frames += left
+                    gpu_rate = fps or gpu_rate
+                elif fps > 0:
+                    cpu_running.append(left / fps)
+                    cpu_rates.append(fps)
+                else:
+                    cpu_waiting.append(left)
+        cpu_seconds = 0.0
+        if cpu_running or cpu_waiting:
+            if cpu_waiting and not cpu_rates:
+                return None
+            reference = sum(cpu_rates) / len(cpu_rates) if cpu_rates else 1.0
+            lanes = list(cpu_running) + [0.0] * max(0, self._parallel_jobs() - len(cpu_running))
+            for seconds in sorted((left / reference for left in cpu_waiting), reverse=True):
+                lanes.sort()
+                lanes[0] += seconds
+            cpu_seconds = max(lanes, default=0.0)
+        gpu_seconds = 0.0
+        if gpu_frames > 0:
+            if gpu_rate <= 0:
+                return None
+            gpu_seconds = gpu_frames / gpu_rate
+        return max(cpu_seconds, gpu_seconds)
 
     def _on_job_status(self, index: int, message: str) -> None:
         """Phase messages belong to the video they came from.
