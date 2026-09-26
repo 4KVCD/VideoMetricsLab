@@ -4300,10 +4300,7 @@ class MainWindow(QMainWindow):
             marker = "(GPU decode: "
             if marker in message:
                 plan = message.split(marker, 1)[1].split(")", 1)[0]
-                self._job_decode_status[index] = (
-                    "Decode: source CPU, test CPU" if plan == "off" else
-                    "Decode: " + plan.replace("distorted", "test").replace("cpu", "CPU")
-                )
+                self._job_decode_status[index] = self._decoder_text(index, plan)
             if index in self._job_task_progress:
                 # Keep backend-specific rates and pass progress visible. A
                 # generic phase message must not replace the useful task
@@ -4314,6 +4311,22 @@ class MainWindow(QMainWindow):
                 # The line no longer shows figures: the next ones show at once.
                 self._job_line_shape.pop(index, None)
         self._update_run_status()
+
+    def _decoder_text(self, index: int, plan: str) -> str:
+        """Where each video is decoded, as the run line shows it: "Decoder:
+        Source: GPU, test video: CPU".
+
+        `plan` is FFmpeg's decode plan, "source cuda, distorted cpu" or
+        "off". The line showed it nearly as it came, "Decode: source cuda,
+        test cuda": the decoder API's name where the question is only
+        whether the GPU or the CPU decodes each video.
+        """
+        sides = dict(part.split(" ", 1) for part in plan.split(", ") if " " in part)
+        where = {side: "CPU" if sides.get(side, "cpu") == "cpu" else "GPU" for side in ("source", "distorted")}
+        row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
+        if row is not None and row.options.resample_test is not None:
+            return f"Decoder: Source: {where['source']}"  # a resolution test decodes only the source
+        return f"Decoder: Source: {where['source']}, test video: {where['distorted']}"
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was

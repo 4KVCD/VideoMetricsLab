@@ -3643,18 +3643,19 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
         win._on_job_status(i, "Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
         win._on_job_progress(i, current=20, total=100, fps=10.0)
         text = win.job_progress_labels[win._job_line_slot[i]].text()
-        assert "Decode: source cuda, test cuda" in text
+        assert "Decoder: Source: GPU, test video: GPU" in text
         assert "20%" in text and "10.0 fps" in text
 
     for plan, expected in (
-        ("source cuda, distorted cpu", "Decode: source cuda, test CPU"),
-        ("off", "Decode: source CPU, test CPU"),
+        ("source cuda, distorted cpu", "Decoder: Source: GPU, test video: CPU"),
+        ("source cpu, distorted d3d11va", "Decoder: Source: CPU, test video: GPU"),
+        ("off", "Decoder: Source: CPU, test video: CPU"),
     ):
         win._on_job_status(0, f"GPU decode failed, retrying (GPU decode: {plan})...")
         win._on_job_progress(0, current=30, total=100, fps=5.0)
         assert expected in win.job_progress_labels[win._job_line_slot[0]].text()
         if job_count == 2:
-            assert "source cuda, test cuda" in win.job_progress_labels[win._job_line_slot[1]].text()
+            assert "Source: GPU, test video: GPU" in win.job_progress_labels[win._job_line_slot[1]].text()
 
     slot = win._job_line_slot[0]
     win._mark_job_over(0)
@@ -3666,7 +3667,7 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
     win._on_job_progress(job_count, current=1, total=100, fps=1.0)
     # The new video's line (wherever list order puts it) has no decode status
     # of the finished one.
-    assert "Decode:" not in win.job_progress_labels[win._job_line_slot[job_count]].text()
+    assert "Decoder:" not in win.job_progress_labels[win._job_line_slot[job_count]].text()
     assert slot == 0
 
 
@@ -4603,5 +4604,23 @@ def test_each_half_is_named_as_metrics_not_bare_cpu_or_gpu(qapp):
     assert "CPU metrics (SSIMULACRA2, Butteraugli) queued (waiting for a free CPU slot)" in text
     assert win.job_progress_labels[0].toolTip() == \
         "CPU metrics: VMAF v0.6.1\nCPU metrics: SSIMULACRA2, Butteraugli"
+    win.close()
+
+
+def test_a_resolution_tests_decoder_names_only_the_source(qapp):
+    """A resolution test decodes only the source; its made-up test video
+    has no decoder to name."""
+    from vmaf_app.core.models import ResampleTarget
+
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._rows[0].options.resample_test = ResampleTarget(width=1920, label="1080p")
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_job_status(0, "Running ffmpeg (GPU decode: source cuda, distorted cpu)...")
+    win._on_job_progress(0, current=20, total=100, fps=10.0)
+    text = win.job_progress_labels[0].text()
+    assert text.endswith("   ·   Decoder: Source: GPU")
     win.close()
 
