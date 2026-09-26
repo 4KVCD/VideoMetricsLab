@@ -580,6 +580,9 @@ class MainWindow(QMainWindow):
         # changes (a video starting, a half waiting, starting, finishing, the
         # next GPU metric pass) is still redrawn at once.
         self._job_lines_due: set[int] = set()
+        # The total each video's figures are out of, as reported with them:
+        # not the video's frame count, which a GPU half's passes exceed.
+        self._job_progress_total: dict[int, int] = {}
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
@@ -3967,85 +3970,81 @@ class MainWindow(QMainWindow):
         self._job_lines_due.clear()
         self._update_run_status()
 
-    def _task_display_label(self, index: int, task: dict[str, object]) -> str:
-        keys = tuple(task.get("metric_keys", ()))
-        labels = "/".join(metric_definition(key).label for key in keys)
-        backend = task.get("backend")
-        if backend == "ffmpeg":
-            return f"CPU metrics: {labels}"
-        phase = task.get("phase")
-        if phase:
-            _number, _count, name = phase
-            return f"GPU metric {phase[0]}/{phase[1]}: {name}"
+    def _task_kind(self, index: int, task: dict[str, object]) -> str:
+        """"CPU" or "GPU": where a half of a video's work runs."""
+        if task.get("backend") == "ffmpeg":
+            return "CPU"
+        if index in self._job_gpu_fallback:
+            return "CPU"
         row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
-        choices = [
-            "cpu" if index in self._job_gpu_fallback else
-            ("gpu" if key == "cvvdp" else (row.metric_backends.get(key, "gpu") if row else "gpu"))
-            for key in keys
-        ]
-        if choices and all(choice == "gpu" for choice in choices):
-            return f"GPU metrics: {labels}"
-        if choices and all(choice == "cpu" for choice in choices):
-            return f"CPU metrics: {labels}"
-        return f"Perceptual metrics: {labels}"
+        on_gpu = any(key == "cvvdp" or (row.metric_backends.get(key, "gpu") if row else "gpu") == "gpu"
+                     for key in task.get("metric_keys", ()))
+        return "GPU" if on_gpu else "CPU"
 
-    def _task_detail(self, index: int, task: dict[str, object], multiple: bool) -> str:
-        label = self._task_display_label(index, task)
+    def _task_detail(self, kind: str, task: dict[str, object]) -> str:
+        """One half of a video's line: its own percentage of its whole job,
+        then its rate and time left, or what it is waiting for.
+
+        The GPU half's percentage covers all its passes (Vship reports
+        them as one run of passes x frames), and its time left is for all
+        of them at the current pass's rate; the pass under way is named.
+        """
         state = task.get("state")
         if state == "waiting":
-            if task.get("waiting_for") == "CPU":
-                return f"{label} waiting for a CPU slot"
-            return f"{label} waiting for the GPU"
+            return (f"{kind} queued (waiting for a free CPU slot)" if task.get("waiting_for") == "CPU"
+                    else f"{kind} queued (another video is using the GPU)")
         if state == "starting":
-            return f"{label} starting"
+            return f"{kind} starting"
         if state == "done":
-            return f"{label} complete"
+            return f"{kind} done"
         current = int(task.get("current", 0) or 0)
         total = int(task.get("total", 0) or 0)
         fps = float(task.get("fps", 0.0) or 0.0)
-        phase = task.get("phase")
-        phase_total = total
-        if phase and total > 0:
-            # Vship reports a cumulative total across its serialized passes.
-            phase_total = max(1, round(total / max(1, int(phase[1]))))
-            current = max(0, current - (int(phase[0]) - 1) * phase_total)
-            current = min(current, phase_total)
-        pct = min(100.0, 100.0 * current / total) if total > 0 else 0.0
-        if phase and phase_total > 0:
-            pct = min(100.0, 100.0 * current / phase_total)
-        parts = [label]
-        if multiple or phase:
-            parts.append(f"{pct:.1f}%")
+        # Rounded down: 99.96% must not read "100.0%" while work remains.
+        pct = min(1000, 1000 * current // total) / 10 if total > 0 else 0.0
+        details = []
+        if phase := task.get("phase"):
+            number, count, name = phase
+            details.append(f"{name} {number} of {count}")
         if fps > 0:
-            parts.append(f"{fps:.1f} fps")
-            if phase_total > 0:
-                parts.append(f"{format_hms(max(0, phase_total - current) / fps)} left")
-        return " ".join(parts)
+            details.append(f"{fps:.1f} fps")
+            if total > 0:
+                details.append(f"{format_hms(max(0, total - current) / fps)} left")
+        return f"{kind} {pct:.1f}%" + (f" ({', '.join(details)})" if details else "")
 
     def _render_job_progress(self, index: int) -> None:
         slot = self._job_line_slot.get(index)
         if slot is None:
             return
-        total = self._job_total_frames[index] if 0 <= index < len(self._job_total_frames) else 0
-        current = self._job_frames_done.get(index, 0)
-        pct = min(100, int(100 * current / total)) if total > 0 else 0
-        parts = [f"{self._job_label(index)} — {pct}%"]
+        label = self.job_progress_labels[slot]
+        snapshots = self._job_task_progress.get(index, ())
+        parts = []
+        if snapshots:
+            # A percentage per half. One figure for the video mixed the two:
+            # the GPU half's frames over all its passes against one pass's
+            # frame count read 100% while both halves were under way, and
+            # a GPU half still waiting held the video at 0% while its CPU
+            # half was half done.
+            kinds = [self._task_kind(index, task) for task in snapshots]
+            if kinds.count("CPU") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
+                kinds = [kind if task.get("backend") == "ffmpeg" else "CPU tools"
+                         for kind, task in zip(kinds, snapshots, strict=True)]
+            parts += [self._task_detail(kind, task) for kind, task in zip(kinds, snapshots, strict=True)]
+            label.setToolTip("\n".join(
+                f"{kind}: " + ", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
+                for kind, task in zip(kinds, snapshots, strict=True)))
+        else:
+            total = self._job_progress_total.get(index, 0)
+            current = self._job_frames_done.get(index, 0)
+            fps = self._job_fps.get(index, 0.0)
+            parts.append(f"{min(100, 100 * current // total) if total > 0 else 0}%")
+            if fps > 0:
+                parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} left"]
+            else:
+                parts += self._halves_detail(index)
         if decode_status := self._job_decode_status.get(index):
             parts.append(decode_status)
-        snapshots = self._job_task_progress.get(index, ())
-        if snapshots:
-            parts.extend(
-                self._task_detail(index, task, len(snapshots) > 1)
-                for task in snapshots
-                if task.get("state") != "done" or len(snapshots) == 1
-            )
-        else:
-            fps = self._job_fps.get(index, 0.0)
-            if fps > 0:
-                parts.extend((f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} left"))
-            else:
-                parts.extend(self._halves_detail(index))
-        self.job_progress_labels[slot].setText("   ·   ".join(parts))
+        label.setText(f"{self._job_label(index)} — " + "   ·   ".join(parts))
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs in the
@@ -4053,6 +4052,7 @@ class MainWindow(QMainWindow):
         # -- not the VMAF column, which is for the final score.
         self._job_frames_done[index] = current
         self._job_fps[index] = fps
+        self._job_progress_total[index] = total
         if index not in self._job_line_shape:  # its first figures show at once
             self._job_line_shape[index] = ()
             self._render_job_progress(index)

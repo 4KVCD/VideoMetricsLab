@@ -1538,8 +1538,9 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     win._on_job_progress(0, current=200, total=1000, fps=18.1)
 
     text = win.job_progress_labels[0].text()
-    assert "CPU metrics: VMAF v0.6.1 20.0% 20.0 fps" in text
-    assert "GPU metric 1/3: SSIMULACRA2 20.0% 47.7 fps" in text
+    assert "CPU 20.0% (20.0 fps, 0:00:40 left)" in text
+    # The GPU half's share of all three passes, with the pass under way named.
+    assert "GPU 6.6% (SSIMULACRA2 1 of 3, 47.7 fps, 0:00:58 left)" in text
     assert "Queue ETA" not in win.status_label.text()
     assert "CPU metrics may run in parallel" in win.status_label.text()
     assert "GPU metric passes are sequential" in win.status_label.text()
@@ -1611,7 +1612,7 @@ def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
          "fps": 40.0, "state": "running", "waiting_for": None, "phase": None},
     ])
     text = win.job_progress_labels[0].text()
-    assert "VMAF v0.6.1 waiting for a CPU slot" in text and "waiting for the GPU" not in text
+    assert "CPU queued (waiting for a free CPU slot)" in text and "using the GPU" not in text
     assert len(win.job_progress_labels) == 3  # a video on the GPU beside two on the CPU
 
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
@@ -4339,12 +4340,42 @@ def test_progress_figures_are_redrawn_once_a_second_but_changes_at_once(qapp):
 
     win._on_task_progress(0, gpu(30))
     first = win.job_progress_labels[0].text()
-    assert "SSIMULACRA2 3.0%" in first  # the first figures show at once
+    assert "GPU 1.0% (SSIMULACRA2 1 of 3" in first  # the first figures show at once
     win._on_task_progress(0, gpu(60))
     assert win.job_progress_labels[0].text() == first, "redrawn between ticks"
     win._on_run_tick()
-    assert "SSIMULACRA2 6.0%" in win.job_progress_labels[0].text()
+    assert "GPU 2.0% (SSIMULACRA2 1 of 3" in win.job_progress_labels[0].text()
     win._on_task_progress(0, gpu(10, phase=(2, 3, "Butteraugli")))
-    assert "GPU metric 2/3: Butteraugli" in win.job_progress_labels[0].text()  # a change: at once
+    assert "(Butteraugli 2 of 3" in win.job_progress_labels[0].text()  # a change: at once
+    win.close()
+
+
+def test_each_half_of_a_video_has_its_own_percentage(qapp):
+    """One figure per video read 100% while neither half was done (the GPU
+    half's frames over three passes against one pass's frame count), and
+    0% for a video whose CPU half was nearly half done while its GPU half
+    waited."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [150000, 150000]
+    for index, label in ((0, "a"), (1, "b")):
+        win._on_job_started(index, label)
+    cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "state": "running", "phase": None, "waiting_for": None}
+    gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"), "waiting_for": None}
+    win._on_task_progress(0, [{**cpu, "current": 69000, "total": 150000, "fps": 7.8},
+                              {**gpu, "current": 216000, "total": 450000, "fps": 24.2, "state": "running",
+                               "phase": (2, 3, "Butteraugli")}])
+    win._on_job_progress(0, current=207000, total=450000, fps=7.8)
+    win._on_task_progress(1, [{**cpu, "current": 69900, "total": 150000, "fps": 7.9},
+                              {**gpu, "current": 0, "total": 0, "fps": 0.0, "state": "waiting",
+                               "phase": None, "waiting_for": "GPU"}])
+    win._on_job_progress(1, current=0, total=150000, fps=0.0)
+    first, second = (label.text() for label in win.job_progress_labels[:2])
+    assert "100" not in first and "CPU 46.0%" in first and "GPU 48.0% (Butteraugli 2 of 3" in first
+    assert "CPU 46.6%" in second and "GPU queued (another video is using the GPU)" in second
+    assert " 0%" not in second
+    assert "CPU: VMAF v0.6.1" in win.job_progress_labels[0].toolTip()
     win.close()
 
