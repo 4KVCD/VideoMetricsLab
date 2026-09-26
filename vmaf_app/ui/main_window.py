@@ -543,6 +543,12 @@ class MainWindow(QMainWindow):
         # Each half's progress for a video scored in two halves; see
         # VmafWorker.halves.
         self._job_halves: dict[int, list] = {}
+        # Backend-aware task progress.  This is deliberately separate from
+        # the legacy combined progress value: CPU and perceptual work have
+        # different clocks, and GPU perceptual metrics may be serialized.
+        self._job_task_progress: dict[int, list[dict[str, object]]] = {}
+        self._job_gpu_fallback: set[int] = set()
+        self._job_gpu_metrics: set[int] = set()
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
         # job index -> which of the per-video lines it owns. Held for the
@@ -3663,6 +3669,16 @@ class MainWindow(QMainWindow):
         self._job_fps = {}
         self._job_decode_status.clear()
         self._job_halves.clear()
+        self._job_task_progress.clear()
+        self._job_gpu_fallback.clear()
+        self._job_gpu_metrics = {
+            index for index, row in enumerate(job_rows)
+            if any(
+                metric_definition(key).backend_id == "perceptual"
+                and (key == "cvvdp" or row.metric_backends.get(key, "gpu") == "gpu")
+                for key in self._requested_metrics(row)
+            )
+        }
         self._running_jobs = []
         self._finished_jobs = set()
         self._job_line_slot = {}
@@ -3683,6 +3699,7 @@ class MainWindow(QMainWindow):
         self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
         self._worker.job_started.connect(self._on_job_started)
         self._worker.halves.connect(self._job_halves.__setitem__)
+        self._worker.task_progress.connect(self._on_task_progress)
         self._worker.progress.connect(self._on_job_progress)
         self._worker.status.connect(self._on_job_status)
         self._worker.job_finished.connect(self._on_job_finished)
@@ -3785,6 +3802,8 @@ class MainWindow(QMainWindow):
         self._job_fps.pop(index, None)
         self._job_decode_status.pop(index, None)
         self._job_halves.pop(index, None)
+        self._job_task_progress.pop(index, None)
+        self._job_gpu_fallback.discard(index)
         slot = self._job_line_slot.pop(index, None)
         if slot is not None:
             self.job_progress_labels[slot].setVisible(False)
@@ -3813,9 +3832,105 @@ class MainWindow(QMainWindow):
             summary = f"Running {running[0] + 1} of {total}"
         else:
             summary = f"Running {len(running)} of {total} together"
+        if self._gpu_metrics_in_run():
+            self.status_label.setText(
+                f"{summary}   ·   CPU metrics may run in parallel; GPU metric passes are sequential"
+            )
+            return
         seconds = self._queue_eta_seconds()
         eta = "calculating..." if seconds is None else format_hms(seconds)
         self.status_label.setText(f"{summary}   ·   Queue ETA: {eta}")
+
+    def _gpu_metrics_in_run(self) -> bool:
+        """Whether this run includes work serialized through the GPU pass."""
+        return bool(
+            self._job_gpu_metrics
+            - self._finished_jobs
+            - self._job_gpu_fallback
+        )
+
+    def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
+        """Store backend-specific progress before rendering a job line."""
+        self._job_task_progress[index] = snapshots
+        self._render_job_progress(index)
+
+    def _task_display_label(self, index: int, task: dict[str, object]) -> str:
+        keys = tuple(task.get("metric_keys", ()))
+        labels = "/".join(metric_definition(key).label for key in keys)
+        backend = task.get("backend")
+        if backend == "ffmpeg":
+            return f"CPU metrics: {labels}"
+        phase = task.get("phase")
+        if phase:
+            _number, _count, name = phase
+            return f"GPU metric {phase[0]}/{phase[1]}: {name}"
+        row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
+        choices = [
+            "cpu" if index in self._job_gpu_fallback else
+            ("gpu" if key == "cvvdp" else (row.metric_backends.get(key, "gpu") if row else "gpu"))
+            for key in keys
+        ]
+        if choices and all(choice == "gpu" for choice in choices):
+            return f"GPU metrics: {labels}"
+        if choices and all(choice == "cpu" for choice in choices):
+            return f"CPU metrics: {labels}"
+        return f"Perceptual metrics: {labels}"
+
+    def _task_detail(self, index: int, task: dict[str, object], multiple: bool) -> str:
+        label = self._task_display_label(index, task)
+        state = task.get("state")
+        if state == "waiting":
+            return f"{label} waiting for the GPU"
+        if state == "starting":
+            return f"{label} starting"
+        if state == "done":
+            return f"{label} complete"
+        current = int(task.get("current", 0) or 0)
+        total = int(task.get("total", 0) or 0)
+        fps = float(task.get("fps", 0.0) or 0.0)
+        phase = task.get("phase")
+        phase_total = total
+        if phase and total > 0:
+            # Vship reports a cumulative total across its serialized passes.
+            phase_total = max(1, round(total / max(1, int(phase[1]))))
+            current = max(0, current - (int(phase[0]) - 1) * phase_total)
+            current = min(current, phase_total)
+        pct = min(100.0, 100.0 * current / total) if total > 0 else 0.0
+        if phase and phase_total > 0:
+            pct = min(100.0, 100.0 * current / phase_total)
+        parts = [label]
+        if multiple or phase:
+            parts.append(f"{pct:.1f}%")
+        if fps > 0:
+            parts.append(f"{fps:.1f} fps")
+            if phase_total > 0:
+                parts.append(f"{format_hms(max(0, phase_total - current) / fps)} left")
+        return " ".join(parts)
+
+    def _render_job_progress(self, index: int) -> None:
+        slot = self._job_line_slot.get(index)
+        if slot is None:
+            return
+        total = self._job_total_frames[index] if 0 <= index < len(self._job_total_frames) else 0
+        current = self._job_frames_done.get(index, 0)
+        pct = min(100, int(100 * current / total)) if total > 0 else 0
+        parts = [f"{self._job_label(index)} — {pct}%"]
+        if decode_status := self._job_decode_status.get(index):
+            parts.append(decode_status)
+        snapshots = self._job_task_progress.get(index, ())
+        if snapshots:
+            parts.extend(
+                self._task_detail(index, task, len(snapshots) > 1)
+                for task in snapshots
+                if task.get("state") != "done" or len(snapshots) == 1
+            )
+        else:
+            fps = self._job_fps.get(index, 0.0)
+            if fps > 0:
+                parts.extend((f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} left"))
+            else:
+                parts.extend(self._halves_detail(index))
+        self.job_progress_labels[slot].setText("   ·   ".join(parts))
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs in the
@@ -3823,20 +3938,7 @@ class MainWindow(QMainWindow):
         # -- not the VMAF column, which is for the final score.
         self._job_frames_done[index] = current
         self._job_fps[index] = fps
-
-        slot = self._job_line_slot.get(index)
-        if slot is not None:
-            pct = min(100, int(100 * current / total)) if total > 0 else 0
-            parts = [f"{self._job_label(index)} — {pct}%"]
-            if decode_status := self._job_decode_status.get(index):
-                parts.append(decode_status)
-            if fps > 0:
-                parts.append(f"{fps:.1f} fps")
-                parts.append(f"{format_hms(max(0, total - current) / fps)} left")
-            else:
-                parts += self._halves_detail(index)
-            self.job_progress_labels[slot].setText("   ·   ".join(parts))
-
+        self._render_job_progress(index)
         self._update_run_status()
 
     def _halves_detail(self, index: int) -> list[str]:
@@ -3870,6 +3972,11 @@ class MainWindow(QMainWindow):
         None while nothing has reported a rate yet -- there is no basis for a
         guess, and a wrong number is worse than none.
         """
+        # Perceptual GPU work is a serialized sequence of metric passes, so a
+        # video-level FPS cannot describe the queue. The UI reports each
+        # current GPU pass on its own line instead of presenting a false ETA.
+        if self._gpu_metrics_in_run():
+            return None
         observed = [rate for rate in self._job_fps.values() if rate > 0]
         if not observed:
             return None
@@ -3912,6 +4019,12 @@ class MainWindow(QMainWindow):
         to tell which file it was about, and it erased the line naming what
         was running.
         """
+        if (
+            "using CPU" in message
+            or "calculating it on the CPU" in message
+            or "on CPU" in message
+        ):
+            self._job_gpu_fallback.add(index)
         slot = self._job_line_slot.get(index)
         if slot is not None:
             # The runner sends the active plan on each attempt, including
@@ -3924,7 +4037,15 @@ class MainWindow(QMainWindow):
                     "Decode: source CPU, test CPU" if plan == "off" else
                     "Decode: " + plan.replace("distorted", "test").replace("cpu", "CPU")
                 )
-            self.job_progress_labels[slot].setText(f"{self._job_label(index)} — {message.replace('distorted', 'test')}")
+            if index in self._job_task_progress:
+                # Keep backend-specific rates and pass progress visible. A
+                # generic phase message must not replace the useful task
+                # snapshot, especially while a GPU pass is waiting.
+                self._render_job_progress(index)
+            else:
+                self.job_progress_labels[slot].setText(
+                    f"{self._job_label(index)} — {message.replace('distorted', 'test')}"
+                )
         self._update_run_status()
 
     def _row_index_of(self, row_data: RowData) -> int | None:

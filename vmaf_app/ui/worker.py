@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import re
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -74,6 +75,12 @@ class VmafWorker(QThread):
     # (metric labels, current, total, fps, "waiting"|"starting"|"running"|"done").
     # Sent before each `progress` of such a video.
     halves = Signal(int, object)
+    # Backend-aware progress for the status UI.  Unlike `progress`, this
+    # keeps CPU and perceptual work on their own timelines, which matters
+    # when the perceptual backend contains several serialized GPU passes.
+    # Each item is a dict containing backend, metric_keys, current, total,
+    # fps, state, and an optional phase (GPU metric number/name).
+    task_progress = Signal(int, object)
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, ComparisonResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
@@ -256,6 +263,7 @@ class VmafWorker(QThread):
         task_errors: list[tuple[object, Exception]] = []
         task_lock = threading.Lock()
         task_progress: dict[str, tuple[int, int, float]] = {}
+        task_phases: dict[str, tuple[int, int, str]] = {}
         # Halves that said they are queued for the GPU and have not moved yet.
         task_waiting: set[str] = set()
 
@@ -271,14 +279,49 @@ class VmafWorker(QThread):
                 found.append((labels, cur, total, fps, state))
             return found
 
+        def task_snapshots() -> list[dict[str, object]]:
+            """Return progress without collapsing unlike backends together."""
+            found = []
+            for task in plan.tasks:
+                cur, total, fps = task_progress.get(task.backend_id, (0, 0, 0.0))
+                state = ("done" if task.backend_id in task_results else
+                         "waiting" if task.backend_id in task_waiting else
+                         "running" if task.backend_id in task_progress else "starting")
+                found.append({
+                    "backend": task.backend_id,
+                    "metric_keys": task.metric_keys,
+                    "current": cur,
+                    "total": total,
+                    "fps": fps,
+                    "state": state,
+                    "phase": task_phases.get(task.backend_id),
+                })
+            return found
+
         def report_status(backend: str, message: str) -> None:
-            if len(plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
-                with task_lock:
+            with task_lock:
+                if len(plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                     task_waiting.add(backend)
+                phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
+                if phase:
+                    task_phases[backend] = (
+                        int(phase.group(1)), int(phase.group(2)), phase.group(3)
+                    )
+                elif "on CPU" in message or "using CPU" in message:
+                    # A GPU pass has handed work to the CPU fallback (or a
+                    # planned CPU perceptual pass has begun); don't leave a
+                    # stale GPU metric number on the status line.
+                    task_phases.pop(backend, None)
+                snapshot = task_snapshots()
+            self.task_progress.emit(index, snapshot)
             self.status.emit(index, message)
 
         def report_progress(backend: str, cur: int, total: int, fps: float) -> None:
             if len(plan.tasks) == 1:
+                with task_lock:
+                    task_progress[backend] = (cur, total, fps)
+                    snapshot = task_snapshots()
+                self.task_progress.emit(index, snapshot)
                 self.progress.emit(index, cur, total, fps)
                 return
             # Each pass may cover a different number of frames. Until both
@@ -312,6 +355,8 @@ class VmafWorker(QThread):
                     if remaining and max(remaining) > 0 else 0.0
                 )
                 each = halves()
+                snapshot = task_snapshots()
+            self.task_progress.emit(index, snapshot)
             self.halves.emit(index, each)
             self.progress.emit(index, overall_cur, known_total, overall_fps)
 

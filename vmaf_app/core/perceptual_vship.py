@@ -1223,6 +1223,11 @@ def run_vship_task(
         frames = 0
         parts = len(specs)
         for number, spec in enumerate(specs):
+            if on_status:
+                on_status(
+                    f"GPU metric {number + 1}/{parts}: "
+                    f"{metric_definition(spec.key).label}"
+                )
             progress = None
             if on_progress is not None:
                 progress = (lambda cur, total, fps, n=number:

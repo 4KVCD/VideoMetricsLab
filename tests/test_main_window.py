@@ -1519,6 +1519,45 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
     assert cell.checkState() == Qt.Checked  # still just "will be calculated"
 
 
+def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch):
+    """A combined job must not present the GPU rate as CPU VMAF FPS."""
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [1000]
+    monkeypatch.setattr(win, "_gpu_metrics_in_run", lambda: True)
+    win._on_job_started(0, "a")
+
+    win._on_task_progress(0, [
+        {"backend": "ffmpeg", "metric_keys": ("vmaf",),
+         "current": 200, "total": 1000, "fps": 20.0, "state": "running", "phase": None},
+        {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"),
+         "current": 200, "total": 3000, "fps": 47.7, "state": "running",
+         "phase": (1, 3, "SSIMULACRA2")},
+    ])
+    win._on_job_progress(0, current=200, total=1000, fps=18.1)
+
+    text = win.job_progress_labels[0].text()
+    assert "CPU metrics: VMAF 20.0% 20.0 fps" in text
+    assert "GPU metric 1/3: SSIMULACRA2 20.0% 47.7 fps" in text
+    assert "Queue ETA" not in win.status_label.text()
+    assert "CPU metrics may run in parallel" in win.status_label.text()
+    assert "GPU metric passes are sequential" in win.status_label.text()
+
+
+def test_gpu_fallback_changes_status_label_to_cpu(qapp, monkeypatch):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [1000]
+    monkeypatch.setattr(win, "_gpu_metrics_in_run", lambda: False)
+    win._on_job_started(0, "a")
+    win._on_job_status(0, "Vship GPU unavailable; using CPU reference metrics…")
+
+    assert 0 in win._job_gpu_fallback
+    assert "using CPU" in win.job_progress_labels[0].text()
+
+
 
 def test_a_video_whose_gpu_half_waits_shows_its_running_half(qapp):
     """A video scored in two halves took the slower half's progress, and
