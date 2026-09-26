@@ -549,6 +549,33 @@ _PIPE_BYTES = 64 * 1024 * 1024
 _EOF = -1
 
 
+class _PassRate:
+    """A pass's frame rate for its progress reports, timed from its first
+    frame pair rather than from the pass's start.
+
+    The start -- FFmpeg opening both inputs, the first 4K frames decoded,
+    Vship's handlers set up -- takes a second or more that is not the rate
+    the pass runs at. Counted in, it put "1.7 fps, 0:05:39 left" on the run
+    line at the start of a pass over an 8-second clip, and the queue ETA
+    jumped with it. No rate until there is some time to measure over.
+    """
+
+    WARMUP_SECONDS = 0.5
+
+    def __init__(self, clock: Callable[[], float] = time.perf_counter) -> None:
+        self._clock = clock
+        self._first_at: float | None = None
+        self._first_frames = 0
+
+    def frames_per_second(self, frames: int) -> float:
+        now = self._clock()
+        if self._first_at is None:
+            self._first_at, self._first_frames = now, frames
+            return 0.0
+        span = now - self._first_at
+        return (frames - self._first_frames) / span if span >= self.WARMUP_SECONDS else 0.0
+
+
 def _spawn_raw_ffmpeg(command: list[str]) -> tuple[subprocess.Popen, object]:
     """Start FFmpeg writing raw frames to a large pipe; returns (process, reader)."""
     if os.name == "nt":
@@ -1407,6 +1434,7 @@ def _run_vship_pass(
             return {key: error for key, error in errors.items() if error is not None}
 
         frame = 0
+        rate = _PassRate()
         while True:
             errors = lane_errors()
             if len(errors) == len(specs):
@@ -1439,8 +1467,7 @@ def _run_vship_pass(
                 cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
             frame += 1
             if on_progress:
-                elapsed = max(time.perf_counter() - started, 1e-6)
-                on_progress(min(frame * step, total_units), total_units, frame / elapsed)
+                on_progress(min(frame * step, total_units), total_units, rate.frames_per_second(frame))
         for lane in lanes:
             lane.stop()
         for lane in lanes:
@@ -1502,7 +1529,9 @@ def _run_vship_pass(
             ))
         elapsed = max(time.perf_counter() - started, 1e-6)
         if on_progress:
-            on_progress(frame * step, frame * step, frame / elapsed)
+            # A pass too short to time from its first frame keeps the old
+            # figure: its whole length.
+            on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame / elapsed)
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
     except PerceptualCancelled:
         raise
