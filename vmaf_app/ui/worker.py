@@ -290,6 +290,13 @@ class VmafWorker(QThread):
             lanes[-1].run()
         for lane in lanes[:-1]:
             lane.join()
+        if self._cancel_event.is_set():
+            # A video whose other half had not started when the run was
+            # cancelled was never finished by its lanes: what it did finish
+            # is still its result.
+            for run in runs:
+                if run.started and not run.finalized and run.task_results:
+                    self._finish(run)
         for run in runs:  # a video cancelled part-way still holds its handle
             self._release_handle(run.index)
 
@@ -343,6 +350,7 @@ class VmafWorker(QThread):
                     self._sched.notify_all()
 
     def _finish(self, run: _JobRun) -> None:
+        run.finalized = True
         index = run.index
         try:
             result, failure = run.finish()
@@ -381,6 +389,7 @@ class _JobRun:
         # and which of its halves a lane has taken.
         self.started = False
         self.admitted: set[str] = set()
+        self.finalized = False  # its result (or failure) has been sent
         self.lock = threading.Lock()
         self._begun = False
         self.task_results: dict[str, object] = {}
@@ -588,7 +597,14 @@ class _JobRun:
         job, options, cached = self.job, self.options, self.cached
         task_results, task_errors = self.task_results, self.task_errors
         if self.worker._cancel_event.is_set():
-            raise Cancelled("Cancelled by user")
+            # Cancelling keeps the halves that had finished. The halves run
+            # independently, so a video's GPU metrics are often done hours
+            # before its CPU metrics; the whole video used to be dropped,
+            # finished scores included, when the run was cancelled.
+            if not task_results:
+                raise Cancelled("Cancelled by user")
+            task_errors = [(task, error) for task, error in task_errors
+                           if not isinstance(error, (Cancelled, PerceptualCancelled))]
         if task_errors and not task_results and cached is None:
             raise task_errors[0][1]
         result = task_results.get("ffmpeg")
