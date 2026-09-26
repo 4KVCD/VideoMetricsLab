@@ -4519,3 +4519,17 @@ def test_video_lines_say_paused_instead_of_their_last_rate(qapp):
     win._worker = None
     win.close()
 
+
+def test_the_counts_show_a_failure_when_it_happens(qapp):
+    """A failed video left the lines and counted as done until the end."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv", "c.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000] * 3
+    for index in (0, 1):
+        win._on_job_started(index, "x")
+    win._on_job_failed(0, "FFmpeg failed", "")
+    assert win.status_label.text().startswith("3 videos: 1 done (1 failed), 1 in progress, 1 queued")
+    win.close()
+

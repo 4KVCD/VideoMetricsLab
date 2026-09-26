@@ -4006,7 +4006,13 @@ class MainWindow(QMainWindow):
         """
         done = len(self._finished_jobs)
         queued = max(0, total - done - len(running))
-        counts = [f"{done} done" if done else "", f"{len(running)} in progress" if running else "",
+        # Failures as they happen: a video that failed left the lines below
+        # and was counted as done until the run's end message said otherwise.
+        failures = [f"{self._run_failed_count} failed" if self._run_failed_count else "",
+                    f"{self._run_partial_count} with failed metrics" if self._run_partial_count else ""]
+        failures_text = ", ".join(f for f in failures if f)
+        counts = [f"{done} done" + (f" ({failures_text})" if failures_text else "") if done else "",
+                  f"{len(running)} in progress" if running else "",
                   f"{queued} queued" if queued else ""]
         summary = f"{total} video{'s' if total != 1 else ''}: " + ", ".join(c for c in counts if c)
         if self._run_skipped:
@@ -4407,8 +4413,8 @@ class MainWindow(QMainWindow):
         self._set_row_metrics(row)
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
+        self._run_failed_count += 1  # first: _mark_job_over redraws the counts
         self._mark_job_over(index)
-        self._run_failed_count += 1
         row = self._row_index_of(self._job_rows[index])
         if row is None:
             return  # the row was removed mid-run
