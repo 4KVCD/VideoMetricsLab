@@ -4557,3 +4557,28 @@ def test_a_starting_half_names_its_step(qapp, step, shown):
     assert f"a — {shown}   ·   GPU starting" in text
     win.close()
 
+
+def test_a_long_run_line_is_cut_to_the_window_not_widening_it(qapp):
+    """A run line asked for its whole text's width, so a long one set the
+    window's minimum width."""
+    from vmaf_app.ui.widgets import ElidedLabel
+
+    win = MainWindow()
+    idle = win.minimumSizeHint().width()
+    long_text = "The.Beekeeper " + "very long encode name " * 40 + "— CPU 46.0% (7.8 fps, 2:55:08 left)"
+    win.job_progress_labels[0].set_text(long_text, "CPU: VMAF v0.6.1")
+    win.job_progress_labels[0].setVisible(True)
+    assert win.minimumSizeHint().width() == idle
+    label = ElidedLabel()
+    label.set_text(long_text, "CPU: VMAF v0.6.1")
+    label.resize(300, 20)
+    label.show()
+    qapp.processEvents()
+    assert label.text().endswith("\u2026") and len(label.text()) < len(long_text)
+    assert label.toolTip() == long_text + "\n\nCPU: VMAF v0.6.1"
+    label.resize(20000, 20)
+    qapp.processEvents()
+    assert label.text() == long_text and label.toolTip() == "CPU: VMAF v0.6.1"
+    label.close()
+    win.close()
+

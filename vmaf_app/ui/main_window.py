@@ -109,7 +109,7 @@ from vmaf_app.ui.formatting import bitrate_string, media_info_string
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
-from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
+from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
 from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
@@ -1550,10 +1550,10 @@ class MainWindow(QMainWindow):
         # only thing a bar was conveying, it says it exactly rather than
         # approximately, and two bars stacked above a third read as a block
         # of chrome rather than as a status.
-        self.job_progress_labels: list[QLabel] = []
+        self.job_progress_labels: list[ElidedLabel] = []
         # One more than the CPU lanes: the video on the GPU can be a third.
         for _ in range(MAX_VIDEOS_IN_FLIGHT):
-            line = QLabel()
+            line = ElidedLabel()
             line.setStyleSheet("color: #444;")
             line.setVisible(False)
             layout.addWidget(line)
@@ -3897,8 +3897,7 @@ class MainWindow(QMainWindow):
         self._job_line_text[index] = (text, tooltip)
         slot = self._job_line_slot.get(index)
         if slot is not None:
-            self.job_progress_labels[slot].setText(text)
-            self.job_progress_labels[slot].setToolTip(tooltip)
+            self.job_progress_labels[slot].set_text(text, tooltip)
 
     def _arrange_job_lines(self) -> None:
         """The videos in progress, one line each, in list order.
@@ -3911,13 +3910,11 @@ class MainWindow(QMainWindow):
         for slot, line in enumerate(self.job_progress_labels):
             if slot < len(order):
                 text, tooltip = self._job_line_text[order[slot]]
-                line.setText(text)
-                line.setToolTip(tooltip)
                 line.setVisible(True)
+                line.set_text(text, tooltip)
             else:
                 line.setVisible(False)
                 line.clear()
-                line.setToolTip("")
 
     def _mark_job_over(self, index: int) -> None:
         """Retires a job from the live figures.
