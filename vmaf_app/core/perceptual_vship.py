@@ -1175,6 +1175,9 @@ class _CvvdpLane:
 #: work, overlaps the other's Vship pass; only this GPU pass is serialized,
 #: never crop detection or the FFmpeg metrics.
 _gpu_pass = threading.Lock()
+#: Sent through on_status while a pass waits for another video's to end; the
+#: worker recognises it to say which half of a video is waiting.
+GPU_WAIT_MESSAGE = "Waiting for the GPU: another video's Vship pass is running…"
 
 
 def run_vship_task(
@@ -1203,7 +1206,7 @@ def run_vship_task(
     """
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
-            on_status("Waiting for the GPU: another video's Vship pass is running…")
+            on_status(GPU_WAIT_MESSAGE)
         while not _gpu_pass.acquire(timeout=0.1):
             if cancel_event is not None and cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")

@@ -15,7 +15,7 @@ from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
-from vmaf_app.core.perceptual_vship import apply_vship_cpu_fallback
+from vmaf_app.core.perceptual_vship import GPU_WAIT_MESSAGE, apply_vship_cpu_fallback
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
 
@@ -69,6 +69,11 @@ MAX_PARALLEL_JOBS = 2
 class VmafWorker(QThread):
     job_started = Signal(int, str)          # job_index, label
     progress = Signal(int, int, int, float) # job_index, current_frame, total_frames, fps
+    # For a video scored in two halves (FFmpeg metrics, SSIMULACRA2/
+    # Butteraugli/CVVDP) side by side: job_index, then per half
+    # (metric labels, current, total, fps, "waiting"|"starting"|"running"|"done").
+    # Sent before each `progress` of such a video.
+    halves = Signal(int, object)
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, ComparisonResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
@@ -251,6 +256,26 @@ class VmafWorker(QThread):
         task_errors: list[tuple[object, Exception]] = []
         task_lock = threading.Lock()
         task_progress: dict[str, tuple[int, int, float]] = {}
+        # Halves that said they are queued for the GPU and have not moved yet.
+        task_waiting: set[str] = set()
+
+        def halves() -> list[tuple[str, int, int, float, str]]:
+            """Each half's own progress; called with task_lock held."""
+            found = []
+            for task in plan.tasks:
+                cur, total, fps = task_progress.get(task.backend_id, (0, 0, 0.0))
+                state = ("done" if task.backend_id in task_results else
+                         "waiting" if task.backend_id in task_waiting else
+                         "running" if task.backend_id in task_progress else "starting")
+                labels = "/".join(metric_definition(key).label for key in task.metric_keys)
+                found.append((labels, cur, total, fps, state))
+            return found
+
+        def report_status(backend: str, message: str) -> None:
+            if len(plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
+                with task_lock:
+                    task_waiting.add(backend)
+            self.status.emit(index, message)
 
         def report_progress(backend: str, cur: int, total: int, fps: float) -> None:
             if len(plan.tasks) == 1:
@@ -259,6 +284,7 @@ class VmafWorker(QThread):
             # Each pass may cover a different number of frames. Until both
             # are done, the slower completion fraction owns job progress.
             with task_lock:
+                task_waiting.discard(backend)
                 task_progress[backend] = (cur, total, fps)
                 known_total = max((value[1] for value in task_progress.values()), default=0)
                 fractions = [
@@ -285,6 +311,8 @@ class VmafWorker(QThread):
                     (known_total - overall_cur) / max(remaining)
                     if remaining and max(remaining) > 0 else 0.0
                 )
+                each = halves()
+            self.halves.emit(index, each)
             self.progress.emit(index, overall_cur, known_total, overall_fps)
 
         def execute_task(task) -> object:
@@ -310,7 +338,7 @@ class VmafWorker(QThread):
                 return apply_vship_cpu_fallback(
                     job.source_info, job.distorted_info, request, task.requested_specs,
                     on_progress=lambda cur, tot, fps: report_progress(task.backend_id, cur, tot, fps),
-                    on_status=lambda msg: self.status.emit(index, msg),
+                    on_status=lambda msg: report_status(task.backend_id, msg),
                     cancel_event=token, process_handle=handle,
                 )
             raise VmafRunError(f"Unknown metric backend: {task.backend_id}")

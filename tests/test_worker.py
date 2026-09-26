@@ -765,3 +765,36 @@ def test_the_jobs_cvvdp_settings_reach_the_request(qapp, monkeypatch):
     VmafWorker([job]).run()
     _drain(qapp)
     assert seen == [321]
+
+
+def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, monkeypatch):
+    from vmaf_app.core.perceptual_vship import GPU_WAIT_MESSAGE
+
+    ffmpeg_reported, gpu_waiting = threading.Event(), threading.Event()
+
+    def ffmpeg(*args, on_progress=None, **kwargs):
+        gpu_waiting.wait(5)
+        on_progress(10, 100, 11.0)
+        ffmpeg_reported.set()
+        time.sleep(0.2)
+        return _fake_result("d.mp4")
+
+    def vship(*args, on_status=None, on_progress=None, **kwargs):
+        on_status(GPU_WAIT_MESSAGE)
+        gpu_waiting.set()
+        ffmpeg_reported.wait(5)
+        time.sleep(0.05)
+        on_progress(50, 100, 40.0)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d",
+                                 metric_keys=("vmaf", "ssimulacra2"))])
+    seen = []
+    worker.halves.connect(lambda _index, halves: seen.append([(labels, state) for labels, *_x, state in halves]))
+    worker.run()
+    _drain(qapp)
+    assert [("VMAF", "running"), ("SSIMULACRA2", "waiting")] in seen
+    assert [("VMAF", "running"), ("SSIMULACRA2", "running")] in seen
+

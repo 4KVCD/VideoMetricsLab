@@ -1519,6 +1519,31 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
     assert cell.checkState() == Qt.Checked  # still just "will be calculated"
 
 
+
+def test_a_video_whose_gpu_half_waits_shows_its_running_half(qapp):
+    """A video scored in two halves took the slower half's progress, and
+    had no rate until both ran: with its SSIMULACRA2/Butteraugli/CVVDP half
+    waiting for another video's GPU pass, the line read "0%" with no fps or
+    time left while VMAF was being calculated at 11 fps."""
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [3000]
+    win._on_job_started(0, "a")
+    win._job_halves[0] = [("VMAF/PSNR", 300, 3000, 11.2, "running"),
+                          ("SSIMULACRA2/CVVDP", 0, 0, 0.0, "waiting")]
+    win._on_job_progress(0, current=0, total=3000, fps=0.0)
+    text = win.job_progress_labels[0].text()
+    assert "VMAF/PSNR 10.0% at 11.2 fps" in text
+    assert "SSIMULACRA2/CVVDP waiting for the GPU" in text
+
+    # Both running: the video's own rate and time left, as before.
+    win._job_halves[0] = [("VMAF/PSNR", 600, 3000, 11.2, "running"),
+                          ("SSIMULACRA2/CVVDP", 100, 3000, 40.0, "running")]
+    win._on_job_progress(0, current=100, total=3000, fps=11.0)
+    text = win.job_progress_labels[0].text()
+    assert "11.0 fps" in text and "left" in text and "waiting" not in text
+
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
     """The ETA counts what jobs have actually reported.
 

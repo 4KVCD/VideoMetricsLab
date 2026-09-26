@@ -540,6 +540,9 @@ class MainWindow(QMainWindow):
         self._job_frames_done: dict[int, int] = {}
         self._job_fps: dict[int, float] = {}
         self._job_decode_status: dict[int, str] = {}
+        # Each half's progress for a video scored in two halves; see
+        # VmafWorker.halves.
+        self._job_halves: dict[int, list] = {}
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
         # job index -> which of the per-video lines it owns. Held for the
@@ -3659,6 +3662,7 @@ class MainWindow(QMainWindow):
         self._job_frames_done = {}
         self._job_fps = {}
         self._job_decode_status.clear()
+        self._job_halves.clear()
         self._running_jobs = []
         self._finished_jobs = set()
         self._job_line_slot = {}
@@ -3678,6 +3682,7 @@ class MainWindow(QMainWindow):
 
         self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
         self._worker.job_started.connect(self._on_job_started)
+        self._worker.halves.connect(self._job_halves.__setitem__)
         self._worker.progress.connect(self._on_job_progress)
         self._worker.status.connect(self._on_job_status)
         self._worker.job_finished.connect(self._on_job_finished)
@@ -3779,6 +3784,7 @@ class MainWindow(QMainWindow):
         self._finished_jobs.add(index)
         self._job_fps.pop(index, None)
         self._job_decode_status.pop(index, None)
+        self._job_halves.pop(index, None)
         slot = self._job_line_slot.pop(index, None)
         if slot is not None:
             self.job_progress_labels[slot].setVisible(False)
@@ -3827,9 +3833,29 @@ class MainWindow(QMainWindow):
             if fps > 0:
                 parts.append(f"{fps:.1f} fps")
                 parts.append(f"{format_hms(max(0, total - current) / fps)} left")
+            else:
+                parts += self._halves_detail(index)
             self.job_progress_labels[slot].setText("   ·   ".join(parts))
 
         self._update_run_status()
+
+    def _halves_detail(self, index: int) -> list[str]:
+        """For a video scored in two halves when one has not started: each
+        half on its own. The video's percentage is the slower half's, and
+        its rate and time left are unknown until both run, so the line said
+        only "0%" -- for hours when the SSIMULACRA2/Butteraugli/CVVDP half
+        waited for another video's GPU pass while VMAF was being calculated."""
+        detail = []
+        for labels, current, total, fps, state in self._job_halves.get(index, ()):
+            if state == "waiting":
+                detail.append(f"{labels} waiting for the GPU (another video is using it)")
+            elif state == "starting":
+                detail.append(f"{labels} starting")
+            elif state == "running" and total > 0:
+                pct = min(100.0, 100 * current / total)
+                detail.append(f"{labels} {pct:.1f}%" + (f" at {fps:.1f} fps" if fps > 0 else ""))
+        return detail if any(state in ("waiting", "starting") for *_rest, state in
+                             self._job_halves.get(index, ())) else []
 
     def _queue_eta_seconds(self) -> float | None:
         """When the LAST video will finish, not when the work would be done
