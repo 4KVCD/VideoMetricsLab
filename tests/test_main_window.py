@@ -1596,6 +1596,23 @@ def test_a_video_whose_gpu_half_waits_shows_its_running_half(qapp):
     text = win.job_progress_labels[0].text()
     assert "11.0 fps" in text and "left" in text and "waiting" not in text
 
+
+def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [3000]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [
+        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 0, "total": 0, "fps": 0.0,
+         "state": "waiting", "waiting_for": "CPU", "phase": None},
+        {"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": 30, "total": 3000,
+         "fps": 40.0, "state": "running", "waiting_for": None, "phase": None},
+    ])
+    text = win.job_progress_labels[0].text()
+    assert "VMAF waiting for a CPU slot" in text and "waiting for the GPU" not in text
+    assert len(win.job_progress_labels) == 3  # a video on the GPU beside two on the CPU
+
 def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
     """The ETA counts what jobs have actually reported.
 

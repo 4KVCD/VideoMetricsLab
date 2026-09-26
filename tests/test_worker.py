@@ -3,6 +3,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -619,16 +620,17 @@ def test_a_lane_blocked_on_a_slot_is_released_by_cancel(qapp):
     import threading
 
     worker = VmafWorker(_jobs(4), parallel_jobs=1)
-    worker._active = 1  # pretend the single slot is taken
+    worker._busy["cpu"] = 1  # pretend the single slot is taken
+    worker._queues["cpu"].append((SimpleNamespace(started=True, admitted=set()), None))
     outcome = []
-    waiter = threading.Thread(target=lambda: outcome.append(worker._acquire_slot()))
+    waiter = threading.Thread(target=lambda: outcome.append(worker._next_task("cpu")))
     waiter.start()
     try:
         worker.cancel()
         waiter.join(timeout=5)
     finally:
         assert not waiter.is_alive(), "a lane stayed blocked after cancel"
-    assert outcome == [False]
+    assert outcome == [None]
 
 
 def test_the_lane_count_can_be_raised_while_running(qapp):
@@ -797,4 +799,72 @@ def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, mo
     _drain(qapp)
     assert [("VMAF", "running"), ("SSIMULACRA2", "waiting")] in seen
     assert [("VMAF", "running"), ("SSIMULACRA2", "running")] in seen
+
+
+def _split_job(name: str, keys=("vmaf", "ssimulacra2")) -> VmafJob:
+    return VmafJob(_info("s.mp4"), _info(name), VmafOptions(), label=name, metric_keys=keys)
+
+
+def test_cpu_lanes_take_the_next_cpu_work_and_the_gpu_goes_in_list_order(qapp, monkeypatch):
+    """The user's queue: a video needing both halves, one whose FFmpeg
+    metrics were saved (GPU only), and another needing both. A lane took a
+    whole video, so the second lane went to the GPU-only video, which took
+    the GPU ahead of the first video while the third video's FFmpeg metrics
+    never started. Now the two CPU lanes run the first and third videos'
+    FFmpeg metrics while the first video has the GPU."""
+    overlap = threading.Barrier(3, timeout=5)
+    gpu_order, lock = [], threading.Lock()
+
+    def ffmpeg(source, distorted, *a, **k):
+        if distorted.path.name in ("d0.mp4", "d2.mp4"):
+            overlap.wait()
+        return _fake_result(distorted.path.name)
+
+    def vship(source, distorted, *a, **k):
+        with lock:
+            gpu_order.append(distorted.path.name)
+        if distorted.path.name == "d0.mp4":
+            overlap.wait()
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4", ("ssimulacra2",)), _split_job("d2.mp4")],
+                        parallel_jobs=2)
+    finished = []
+    worker.job_finished.connect(lambda index, _result: finished.append(index))
+    worker.run()
+    _drain(qapp)
+    assert not overlap.broken, "the first and third videos' FFmpeg metrics did not run beside the first's GPU half"
+    assert gpu_order == ["d0.mp4", "d1.mp4", "d2.mp4"]
+    assert sorted(finished) == [0, 1, 2]
+
+
+def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
+    """The CPU lanes may run ahead of a slow GPU half, but not without limit:
+    each video in progress has a line in the window."""
+    release = threading.Event()
+    started = []
+
+    def vship(source, distorted, *a, **k):
+        if distorted.path.name == "d0.mp4":
+            release.wait(5)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job(f"d{n}.mp4") for n in range(6)], parallel_jobs=2)
+    worker.job_started.connect(lambda index, _label: started.append(index))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.02)
+    in_progress_while_blocked = sorted(started)
+    release.set()
+    runner.join(10)
+    _drain(qapp)
+    assert in_progress_while_blocked == [0, 1, 2]
+    assert sorted(started) == list(range(6))
 

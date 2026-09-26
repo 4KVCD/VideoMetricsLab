@@ -110,7 +110,7 @@ from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEn
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.widgets import CheckableHeaderView, FillColumnTable
-from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, VmafJob, VmafWorker
+from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
 
 _MODEL_CHOICES = [
     ("Auto (analysis resolution, VMAF v0.6.1)", AUTO_MODEL_CHOICE),
@@ -1502,7 +1502,8 @@ class MainWindow(QMainWindow):
         # approximately, and two bars stacked above a third read as a block
         # of chrome rather than as a status.
         self.job_progress_labels: list[QLabel] = []
-        for _ in range(MAX_PARALLEL_JOBS):
+        # One more than the CPU lanes: the video on the GPU can be a third.
+        for _ in range(MAX_VIDEOS_IN_FLIGHT):
             line = QLabel()
             line.setStyleSheet("color: #444;")
             line.setVisible(False)
@@ -3914,6 +3915,8 @@ class MainWindow(QMainWindow):
         label = self._task_display_label(index, task)
         state = task.get("state")
         if state == "waiting":
+            if task.get("waiting_for") == "CPU":
+                return f"{label} waiting for a CPU slot"
             return f"{label} waiting for the GPU"
         if state == "starting":
             return f"{label} starting"
