@@ -170,6 +170,8 @@ _STATE_COLOURS = {
 # independently of calculation. Settings remains the final page.
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
+_PAUSED = "Paused"  # MainWindow._run_hold while a run is paused
+
 @dataclass(frozen=True)
 class MetricColumn:
     """A stable physical table column bound to one registry metric."""
@@ -571,6 +573,11 @@ class MainWindow(QMainWindow):
         self._run_elapsed_timer = QTimer(self)
         self._run_elapsed_timer.setInterval(1000)
         self._run_elapsed_timer.timeout.connect(self._update_run_status)
+        # A state the run's status line must keep saying while it lasts:
+        # "Paused", "Cancelling...", or the closing message. The line is
+        # rebuilt every second (the elapsed time) and on every progress
+        # update, which replaced "Paused." within a second.
+        self._run_hold = ""
         self._cache_clear_result: list[int] | None = None
         # Set once the user has asked to close: background work has been
         # told to stop and the window closes itself when it actually has.
@@ -634,9 +641,8 @@ class MainWindow(QMainWindow):
         writes_finished = self._file_writes.wait_until_idle(0.5)
         graph_writes_finished = self.graph_panel.wait_until_file_writes_idle(0.5)
         if pending or not writes_finished or not graph_writes_finished:
-            self.status_label.setText(
-                "Finishing up; the window will close on its own."
-            )
+            self._run_hold = "Finishing up; the window will close on its own."
+            self.status_label.setText(self._run_hold)
             # Re-check shortly. Each cancelled worker also calls back here as
             # it finishes, so this timer is only a backstop for the write
             # queues, which have no completion signal of their own.
@@ -3736,6 +3742,7 @@ class MainWindow(QMainWindow):
         self._run_failed_count = 0
         self._run_was_cancelled = False
         self._run_started_at = time.monotonic()
+        self._run_hold = ""
         self._run_elapsed_timer.start()
         if already_scored_rows:
             self.status_label.setText(
@@ -3803,6 +3810,8 @@ class MainWindow(QMainWindow):
     def _on_cancel_clicked(self) -> None:
         if self._worker is not None:
             self._worker.cancel()
+            if not self._closing:
+                self._run_hold = "Cancelling..."
             self.status_label.setText("Cancelling...")
 
     def _on_pause_clicked(self) -> None:
@@ -3811,11 +3820,14 @@ class MainWindow(QMainWindow):
         if self.pause_btn.isChecked():
             self._worker.pause()
             self.pause_btn.setText("Resume")
-            self.status_label.setText("Paused.")
+            self._run_hold = _PAUSED
+            self._update_run_status()
         else:
             self._worker.resume()
             self.pause_btn.setText("Pause")
-            self.status_label.setText("Resumed.")
+            if self._run_hold == _PAUSED:
+                self._run_hold = ""
+            self._update_run_status()
 
     def _on_job_started(self, index: int, label: str) -> None:
         row = self._row_index_of(self._job_rows[index])
@@ -3874,12 +3886,21 @@ class MainWindow(QMainWindow):
         the names here said the same thing twice -- and with two long file
         names it was the longest line on screen for no information.
         """
+        if self._run_hold and self._run_hold != _PAUSED:
+            self.status_label.setText(self._run_hold)
+            return
         running = [i for i in self._running_jobs if i not in self._finished_jobs]
         total = len(self._job_rows)
         elapsed_text = (
             f"Elapsed: {format_hms(time.monotonic() - self._run_started_at)}"
             if self._run_started_at is not None else ""
         )
+        if self._run_hold == _PAUSED:
+            # No ETA or scheduling note: nothing moves until Resume.
+            summary = (f"Running {len(running)} of {total}" if running else f"Queued {total} video(s)")
+            self.status_label.setText(
+                "Paused   ·   " + summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
+            return
         if not running:
             if self._run_active and total:
                 self.status_label.setText(
@@ -4249,6 +4270,7 @@ class MainWindow(QMainWindow):
                 rd.analysis_status = "Cancelled" if self._run_was_cancelled else ""
                 self._set_row_metrics(row)
         self._run_elapsed_timer.stop()
+        self._run_hold = ""
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
         self.pause_btn.setText("Pause")

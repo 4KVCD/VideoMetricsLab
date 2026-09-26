@@ -4286,3 +4286,39 @@ def test_a_score_calculated_the_chosen_way_has_no_implementation_note(qapp, monk
     assert cell.text() == "44.47"
     assert "Calculated on" not in cell.toolTip()
     win.close()
+
+
+def test_paused_and_cancelling_stay_on_the_status_line(qapp):
+    """The status line is rebuilt every second for the elapsed time, and it
+    replaced "Paused." and "Cancelling..." within a second."""
+    from types import SimpleNamespace
+
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._job_rows = [win._rows[row]]
+    win._job_total_frames = [3000]
+    win._run_started_at = time.monotonic() - 65
+    win._on_job_started(0, "a")
+    calls = []
+    win._worker = SimpleNamespace(pause=lambda: calls.append("pause"), resume=lambda: calls.append("resume"),
+                                  cancel=lambda: calls.append("cancel"))
+    win.pause_btn.setChecked(True)
+    win._on_pause_clicked()
+    win._on_job_progress(0, current=100, total=3000, fps=20.0)  # a late update
+    win._update_run_status()  # the timer's tick
+    assert win.status_label.text().startswith("Paused   ·   Running 1 of 1   ·   Elapsed: 0:01:0")
+    assert "ETA" not in win.status_label.text()
+
+    win.pause_btn.setChecked(False)
+    win._on_pause_clicked()
+    win._update_run_status()
+    assert not win.status_label.text().startswith("Paused")
+
+    win._on_cancel_clicked()
+    win._on_job_progress(0, current=200, total=3000, fps=20.0)
+    win._update_run_status()
+    assert win.status_label.text() == "Cancelling..."
+    assert calls == ["pause", "resume", "cancel"]
+    win._worker = None
+    win.close()
+
