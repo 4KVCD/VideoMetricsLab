@@ -535,6 +535,8 @@ class RowData:
     # is the only cell that is always present and always about the row as a
     # whole.
     status_detail: str = ""
+    # Why each metric failed on the last run, by key, for its red cell.
+    metric_failures: dict[str, str] = field(default_factory=dict)
     # True only for a "Test both" companion row (see
     # _add_opposite_scale_direction_rows), where options.scale_direction is
     # set explicitly and unambiguously to whichever direction this row
@@ -1989,7 +1991,7 @@ class MainWindow(QMainWindow):
                     failed = enabled and row_data.analysis_status in {"Failed", _PARTLY_FAILED}
                     item.setText("Failed" if failed else "")
                     item.setToolTip((
-                        "This metric failed on the last run. Untick to skip it."
+                        self._failed_metric_tooltip(row_data, metric_column.key)
                         if failed else
                         "Ticked: calculated on the next run. Untick to skip it."
                         if enabled else
@@ -4583,12 +4585,25 @@ class MainWindow(QMainWindow):
                 return i
         return None
 
+    @staticmethod
+    def _failed_metric_tooltip(row_data: RowData, key: str) -> str:
+        """What a metric's red Failed cell says: why it failed. Every failed
+        cell said only "This metric failed on the last run" -- the reason
+        was on the file name's tooltip, one text for all the row's metrics."""
+        reason = row_data.metric_failures.get(key)
+        if reason is None and row_data.analysis_status == "Failed":
+            reason = row_data.status_detail.split("\n\n", 1)[0]  # the whole video failed: its reason
+        text = f"Failed on the last run: {reason}" if reason else "This metric failed on the last run."
+        return (text + "\n\nLeft ticked, it is calculated again on the next run; untick to skip it."
+                "\nThe full details are in the log (Settings > Storage > Log files).")
+
     def _on_job_finished(self, index: int, result) -> int | None:
         """Shows and caches a finished job. Returns the row it was shown on,
         or None when it was not shown (row removed, source or settings
         changed since the job started)."""
         self._mark_job_over(index)
         row_data = self._job_rows[index]
+        row_data.metric_failures = {}
         row = self._row_index_of(row_data)
         if row is None:
             return None  # the row was removed mid-run; nothing to write the result to
@@ -4673,7 +4688,8 @@ class MainWindow(QMainWindow):
         self._sync_frame_compare()
         return row
 
-    def _on_job_partially_failed(self, index: int, result, message: str, stderr_tail: str) -> None:
+    def _on_job_partially_failed(self, index: int, result, message: str, stderr_tail: str,
+                                 reasons: dict[str, str] | None = None) -> None:
         """One metric group failed, the other finished: the finished scores
         are shown and cached like any result, and the metrics that failed
         say so in their own cells."""
@@ -4681,6 +4697,7 @@ class MainWindow(QMainWindow):
         row = self._on_job_finished(index, result)
         if row is None:
             return
+        self._rows[row].metric_failures = dict(reasons or {})
         self._set_row_status(
             row, _PARTLY_FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )
@@ -4692,6 +4709,7 @@ class MainWindow(QMainWindow):
         row = self._row_index_of(self._job_rows[index])
         if row is None:
             return  # the row was removed mid-run
+        self._rows[row].metric_failures = {}  # the video's reason is every metric's
         self._set_row_status(
             row, "Failed", f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )

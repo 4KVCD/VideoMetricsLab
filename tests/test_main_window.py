@@ -4873,3 +4873,43 @@ def test_power_notices_reaching_the_window_are_logged(qapp, caplog):
     assert "Windows is going to sleep" in caplog.text and "going to sleep (a run" not in caplog.text
     win.close()
 
+
+def test_a_failed_metrics_cell_says_why_it_failed(qapp, tmp_path, monkeypatch):
+    """Every red Failed cell said "This metric failed on the last run. Untick
+    to skip it." -- the reason was only on the file name's tooltip."""
+    from vmaf_app.core import result_cache
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "distorted.mp4"
+    distorted.write_bytes(b"d" * 500)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    rd = win._rows[row]
+    rd.extra_metric_keys.update({"ssimulacra2", "cvvdp"})
+    win._job_rows = [rd]
+    result = _fake_completed_run(str(distorted)).result
+    result.source, result.distorted = source, distorted
+
+    win._on_job_partially_failed(
+        0, result, "SSIMULACRA2 failed: A\nCVVDP failed: B", "",
+        {"ssimulacra2": "Vship GPU calculation failed: CUDA error 999 (unknown error)",
+         "cvvdp": "CVVDP handler failed: out of memory"})
+
+    ssimulacra2 = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
+    cvvdp = win.distorted_table.item(row, main_window_module.COL_CVVDP)
+    assert ssimulacra2.text() == "Failed" and cvvdp.text() == "Failed"
+    assert ssimulacra2.toolTip().startswith(
+        "Failed on the last run: Vship GPU calculation failed: CUDA error 999 (unknown error)")
+    assert cvvdp.toolTip().startswith("Failed on the last run: CVVDP handler failed: out of memory")
+    assert "Log files" in cvvdp.toolTip()
+    # A video that failed as a whole: each of its failed cells gives the video's reason.
+    win._job_rows = [rd]
+    win._on_job_failed(0, "The two videos are different shapes after cropping", "stderr lines")
+    assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).toolTip().startswith(
+        "Failed on the last run: The two videos are different shapes after cropping\n\n")
+    assert win._file_writes.wait_until_idle(10.0)
+    win.close()
+

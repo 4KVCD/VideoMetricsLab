@@ -117,7 +117,8 @@ class VmafWorker(QThread):
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
     # One metric group failed, the other finished: the finished metrics are
     # the result (job_index, ComparisonResult, message, stderr_tail).
-    job_partially_failed = Signal(int, object, str, str)
+    # job_index, result, message, stderr_tail, {metric key: why it failed}
+    job_partially_failed = Signal(int, object, str, str, object)
     cancelled = Signal()
     all_finished = Signal()
 
@@ -399,7 +400,7 @@ class VmafWorker(QThread):
             _log.info("%s finished: %s", run.name, metrics)
             self.job_finished.emit(index, result)
         else:
-            message, tail = failure
+            message, tail, _reasons = failure
             _log.warning("%s finished with failed metrics (kept: %s):\n%s%s", run.name, metrics or "none",
                          message, f"\nLast output:\n{tail}" if tail else "")
             self.job_partially_failed.emit(index, result, *failure)
@@ -743,11 +744,13 @@ class _JobRun:
         metric_failures = dict(perceptual.failures) if perceptual is not None else {}
         if not task_errors and not metric_failures:
             return result, None
-        messages, stderr_tail = [], ""
+        messages, stderr_tail, reasons = [], "", {}
         for task, error in task_errors:
             labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
             messages.append(f"{labels} failed: {error}")
             stderr_tail = stderr_tail or getattr(error, "stderr_tail", "") or ""
+            reasons.update(dict.fromkeys(task.metric_keys, str(error)))
         for key, message in metric_failures.items():
             messages.append(f"{metric_definition(key).label} failed: {message}")
-        return result, ("\n".join(messages), stderr_tail)
+            reasons[key] = message
+        return result, ("\n".join(messages), stderr_tail, reasons)

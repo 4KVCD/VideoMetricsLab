@@ -130,7 +130,8 @@ def _run_one(qapp, monkeypatch, ffmpeg, vship, keys=("vmaf", "ssimulacra2")):
     worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=keys)])
     events = []
     worker.job_finished.connect(lambda _, result: events.append(("finished", result)))
-    worker.job_partially_failed.connect(lambda _, result, message, tail: events.append(("partly", result, message, tail)))
+    worker.job_partially_failed.connect(
+        lambda _, result, message, tail, _reasons: events.append(("partly", result, message, tail)))
     worker.job_failed.connect(lambda _, message, tail: events.append(("failed", message, tail)))
     worker.cancelled.connect(lambda: events.append(("cancelled",)))
     worker.run()
@@ -1025,3 +1026,26 @@ def test_a_runs_plan_steps_and_failures_are_written_to_the_log(qapp, monkeypatch
     assert "Run ended" in text
     failure = next(record for record in caplog.records if "failed after" in record.getMessage())
     assert failure.levelname == "ERROR" and failure.exc_info is not None  # the traceback is kept
+
+
+def test_each_failed_metric_is_sent_with_its_own_reason(qapp, monkeypatch):
+    """The window got one message for the whole video; each failed metric's
+    cell could only say that it had failed."""
+    def ffmpeg(s, d, *a, **k):
+        raise VmafRunError("ffmpeg exited with code 1")
+
+    def vship(s, d, *a, **k):
+        return PerceptualTaskOutput(_perceptual_output().metrics, None, None, 10,
+                                    {"cvvdp": "CVVDP handler failed: out of memory"})
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4", keys=("vmaf", "psnr", "ssimulacra2", "cvvdp"))])
+    sent = []
+    worker.job_partially_failed.connect(lambda *args: sent.append(args))
+    worker.run()
+    _drain(qapp)
+    (_index, _result, _message, _tail, reasons), = sent
+    assert reasons == {"vmaf": "ffmpeg exited with code 1", "psnr": "ffmpeg exited with code 1",
+                       "cvvdp": "CVVDP handler failed: out of memory"}
+
