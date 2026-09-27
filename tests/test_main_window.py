@@ -4825,3 +4825,19 @@ def test_settings_show_the_log_folder_and_open_it(qapp, tmp_path, monkeypatch):
     win._on_open_log_dir()
     assert opened and opened[0].replace("/", "\\").lower() == str(tmp_path / "logs").lower()
     win.close()
+
+
+def test_the_run_end_and_the_keep_awake_request_are_logged(qapp, monkeypatch, caplog):
+    import logging
+
+    from vmaf_app.ui import main_window as main_window_module
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+    monkeypatch.setattr(main_window_module, "keep_system_awake", lambda awake: True)
+    win = MainWindow()
+    win._set_run_ui_active(True)
+    win._on_all_finished()
+    assert "Windows keep-awake request held for the run" in caplog.text
+    assert "Windows keep-awake request released" in caplog.text
+    assert "Run status: " in caplog.text
+    win.close()

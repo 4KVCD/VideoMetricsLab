@@ -1286,6 +1286,8 @@ def run_vship_task(
             except Exception as error:
                 if cancel_event is not None and cancel_event.is_set():
                     raise PerceptualCancelled("Cancelled by user") from error
+                _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, parts,
+                           metric_definition(spec.key).label, error)
                 errors.append(error)
                 failures[spec.key] = str(error)
                 continue
@@ -1544,6 +1546,11 @@ def _run_vship_pass(
                 values=[jod for _start, _count, jod in windows],
             ))
         elapsed = max(time.perf_counter() - started, 1e-6)
+        _log.info("Vship pass (%s) on %s: %d frame pairs in %.1f s, %.1f pairs/s",
+                  ", ".join(metric_definition(spec.key).label for spec in specs), device.name, frame, elapsed,
+                  frame / elapsed)
+        for key, error in errors.items():
+            _log.error("Vship %s failed in its pass: %s", metric_definition(key).label, error, exc_info=error)
         if on_progress:
             # A pass too short to time from its first frame keeps the old
             # figure: its whole length.
@@ -1551,9 +1558,13 @@ def _run_vship_pass(
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
     except PerceptualCancelled:
         raise
-    except VshipUnavailableError:
+    except VshipUnavailableError as error:
+        _log.error("Vship pass (%s) failed: %s", ", ".join(metric_definition(spec.key).label for spec in specs),
+                   error, exc_info=error)
         raise
     except Exception as error:
+        _log.error("Vship pass (%s) failed", ", ".join(metric_definition(spec.key).label for spec in specs),
+                   exc_info=error)
         raise VshipUnavailableError(f"Vship GPU calculation failed: {error}") from error
     finally:
         # Lanes first: they read the pinned frames the streams own, so the

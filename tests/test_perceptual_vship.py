@@ -1108,3 +1108,20 @@ def test_a_sampled_passs_rate_is_in_the_videos_frames_like_its_progress():
     rate.frames_per_second(1)
     assert rate.frames_per_second(21) == pytest.approx(100.0)  # 20 pairs = 100 frames in 1 s
 
+
+def test_a_failed_gpu_pass_is_logged(monkeypatch, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+
+    def one_pass(_s, _t, _r, specs, *_a, **_k):
+        raise vship.VshipUnavailableError(f"Could not initialize Vship {specs[0].key}: out of memory")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", one_pass)
+    source = VideoInfo(Path("s.mkv"), 64, 48, 24.0, 60.0, 1440, "h264", pix_fmt="yuv420p")
+    with pytest.raises(vship.VshipUnavailableError):
+        vship.run_vship_task(source, source, request, request.metrics, device, None, None)
+    assert "GPU metric 1/2 (SSIMULACRA2) failed: Could not initialize Vship ssimulacra2: out of memory" in caplog.text
+    assert "GPU metric 2/2 (CVVDP) failed: Could not initialize Vship cvvdp: out of memory" in caplog.text

@@ -992,3 +992,36 @@ def test_a_new_gpu_pass_does_not_carry_the_last_passs_rate(qapp, monkeypatch):
     assert ((2, 2, "Butteraugli"), 50.0) not in seen
     assert ((2, 2, "Butteraugli"), 0.0) in seen and ((2, 2, "Butteraugli"), 20.0) in seen
 
+
+def test_a_runs_plan_steps_and_failures_are_written_to_the_log(qapp, monkeypatch, caplog):
+    """An overnight run's failures were in tooltips only, and went with the
+    window: the log keeps the plan, each step and each failure in full."""
+    import logging
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+
+    def ffmpeg(s, d, *a, on_status=None, **k):
+        on_status("Detecting black bars in source and distorted...")
+        raise VmafRunError("ffmpeg exited with code 1", stderr_tail="[vvc @ 0x1] Error decoding frame 1234")
+
+    def vship(s, d, *a, **k):
+        return PerceptualTaskOutput(_perceptual_output().metrics, None, None, 10,
+                                    {"cvvdp": "CVVDP handler failed: out of memory"})
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4", keys=("vmaf", "ssimulacra2", "cvvdp"))])
+    worker.run()
+    _drain(qapp)
+    text = caplog.text
+    assert "Run started: 1 video(s)" in text
+    assert "Video 1 'd.mp4':\n  test   d.mp4 (" in text and "  source s.mp4 (" in text
+    assert "calculating CPU metrics (VMAF v0.6.1); GPU metrics (SSIMULACRA2, CVVDP)" in text
+    assert "Video 1 'd.mp4': Detecting black bars in source and distorted..." in text
+    assert ("Video 1 'd.mp4': CPU metrics (VMAF v0.6.1) failed after 0:00:00: ffmpeg exited with code 1\n"
+            "Last output:\n[vvc @ 0x1] Error decoding frame 1234") in text
+    assert "Video 1 'd.mp4': CVVDP failed: CVVDP handler failed: out of memory" in text
+    assert "Video 1 'd.mp4' finished with failed metrics (kept: SSIMULACRA2)" in text
+    assert "Run ended" in text
+    failure = next(record for record in caplog.records if "failed after" in record.getMessage())
+    assert failure.levelname == "ERROR" and failure.exc_info is not None  # the traceback is kept

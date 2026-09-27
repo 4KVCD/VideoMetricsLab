@@ -3843,7 +3843,8 @@ class MainWindow(QMainWindow):
         self._run_active = active
         # A run can take hours: Windows must not go to sleep under it (see
         # vmaf_app.core.power). Released as soon as the run ends.
-        keep_system_awake(active)
+        if keep_system_awake(active):
+            _log.info("Windows keep-awake request %s", "held for the run" if active else "released")
         # The table itself stays live so the queue can be scrolled and read
         # while it runs. Nothing reachable through it can change a running
         # job: the metric tick boxes refuse edits mid-run (see
@@ -4651,6 +4652,7 @@ class MainWindow(QMainWindow):
         for line in self.job_progress_labels:
             line.setVisible(False)
         self.status_label.setText(self._run_end_message())
+        _log.info("Run status: %s", self.status_label.text())
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
         # Rows removed mid-run are skipped rather than indexed into.

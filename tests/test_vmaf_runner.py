@@ -1207,3 +1207,28 @@ def test_a_test_video_stamped_a_millisecond_early_is_still_compared_frame_for_fr
     for key in ("vmaf", "psnr", "xpsnr"):
         assert np.array_equal(np.asarray(jittered.frames.values(key)), np.asarray(clean.frames.values(key))), key
 
+
+def test_each_ffmpeg_attempt_and_its_failure_are_logged(monkeypatch, caplog):
+    import logging
+
+    from vmaf_app.core import vmaf_runner
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+
+    def fake_run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
+        return subprocess.CompletedProcess(cmd, 1, "", "[hevc @ 0x1] hardware decoder refused the stream")
+
+    monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
+    with pytest.raises(vmaf_runner.VmafRunError):
+        vmaf_runner._execute_run(
+            lambda plan, model, log_path, xpsnr_log_path: ["ffmpeg", "-i", "a b.mkv"],
+            options=VmafOptions(), fps=30.0, total_frames=10,
+            hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
+            tmp_prefix="test_", on_progress=None, on_status=None,
+            cancel_event=None, process_handle=None,
+        )
+    text = caplog.text
+    assert 'FFmpeg: ffmpeg -i "a b.mkv"' in text
+    assert ("FFmpeg exited with code 1 (GPU decode: source cuda, distorted cuda); retrying. Last output:\n"
+            "[hevc @ 0x1] hardware decoder refused the stream") in text
+    assert "FFmpeg exited with code 1 (GPU decode: off). Last output:" in text

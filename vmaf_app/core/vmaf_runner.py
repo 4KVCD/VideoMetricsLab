@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -46,6 +47,17 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
+
+_log = logging.getLogger(__name__)
+
+
+def _command_text(command) -> str:
+    """A command as a copy-pasteable line for the log; never raises -- a log
+    line must not be able to stop a run."""
+    try:
+        return subprocess.list2cmdline(command)
+    except TypeError:
+        return repr(command)
 
 ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_frames, fps)
 
@@ -857,6 +869,7 @@ def _execute_run(
 
         def run_with(plan: HwAccelPlan):
             cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
+            _log.info("FFmpeg: %s", _command_text(cmd))
             return _run_ffmpeg(
                 cmd, total_frames, on_progress, cancel_event,
                 cwd=tmpdir, process_handle=process_handle,
@@ -875,6 +888,9 @@ def _execute_run(
             result = run_with(plan)
             if result.returncode == 0:
                 break
+            _log.warning("FFmpeg exited with code %d (GPU decode: %s)%s. Last output:\n%s", result.returncode,
+                         plan.describe(), "; retrying" if attempt + 1 < len(ladder) else "",
+                         "\n".join(result.stderr.splitlines()[-25:]))
             # A stale log from the failed attempt would otherwise be parsed
             # as if the retry had produced it -- ffmpeg can write a partial
             # log before the decoder gives up.
