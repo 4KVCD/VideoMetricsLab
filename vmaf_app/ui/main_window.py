@@ -421,6 +421,12 @@ _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
 _CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL = {"ssimulacra2": 1.1 / 6.17, "butteraugli": 2.0 / 6.17}
 
 
+def _preset_label(preset) -> str:
+    """A CVVDP preset's name as shown: a built-in one's translated, the
+    user's own as they wrote it. The name itself stays the identifier."""
+    return tr(preset.name) if preset.builtin else preset.name
+
+
 def _rough_duration(seconds: float) -> str:
     """"about 3 days", "about 5 hours", "about 40 minutes"."""
     if seconds >= 2 * 86400:
@@ -1148,7 +1154,7 @@ class MainWindow(QMainWindow):
         try:
             combo.clear()
             for preset in cvvdp_presets(self._settings.cvvdp_presets):
-                combo.addItem(preset.name, preset.name)
+                combo.addItem(_preset_label(preset), preset.name)
             chosen = self._settings.cvvdp_default_preset or DEFAULT_PRESET.name
             combo.setCurrentIndex(max(0, combo.findData(chosen)))
         finally:
@@ -1709,12 +1715,6 @@ class MainWindow(QMainWindow):
         columns.addWidget(performance_box, stretch=1)
         options_layout.addStretch(1)
 
-        return options_box
-
-    def _build_run_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-
         # Room for longer words than English's. A field that no longer fits
         # beside its label goes under it, and a dropdown can be narrower than
         # its longest entry (which it shows in full when opened): in German
@@ -1725,6 +1725,12 @@ class MainWindow(QMainWindow):
         for combo in options_box.findChildren(QComboBox):
             combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
             combo.setMinimumContentsLength(12)
+
+        return options_box
+
+    def _build_run_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
 
         run_row = QHBoxLayout()
         self.run_btn = QPushButton(tr("Calculate metrics"))
@@ -2240,7 +2246,7 @@ class MainWindow(QMainWindow):
         lines = []
         for settings, score in sorted(others, key=lambda item: -item[1]):
             preset = matching_preset(settings, self._settings.cvvdp_presets)
-            name = preset.name if preset else tr("Custom ({describe})", describe=settings.display.describe())
+            name = _preset_label(preset) if preset else tr("Custom ({display})", display=settings.display.describe())
             scaled = tr(", video scaled to fill it") if settings.resize_to_display else ""
             lines.append(tr("• {name}{scaled}: {score:.3f} JOD", name=name, scaled=scaled, score=score))
         return (tr("\n\nNo CVVDP score for this video's display yet. Saved for other displays "
@@ -2254,7 +2260,7 @@ class MainWindow(QMainWindow):
         return (
             tr("CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no visible difference, "
                 "and one JOD lower means 75% of viewers would pick the reference as better.\n\nFor the display "
-                "{value}: {display}", value=preset.name if preset else '(custom)', display=display)
+                "{preset}: {display}", preset=_preset_label(preset) if preset else tr("(custom)"), display=display)
             + (tr(", video scaled to fill it") if row_data.cvvdp.resize_to_display else "")
             + tr(".\n\nThe JOD of each second is plotted in Metric Graphs.")
         )
@@ -3151,9 +3157,10 @@ class MainWindow(QMainWindow):
             combo.clear()
             user_presets = self._settings.cvvdp_presets
             for preset in cvvdp_presets(user_presets):
-                combo.addItem(preset.name, preset.name)
+                combo.addItem(_preset_label(preset), preset.name)
                 combo.setItemData(
-                    combo.count() - 1, preset.description or tr("Your saved preset."), Qt.ToolTipRole
+                    combo.count() - 1, tr(preset.description) if preset.description else tr("Your saved preset."),
+                    Qt.ToolTipRole,
                 )
             match = None if mixed_display else matching_preset(settings, user_presets, preferred)
             if mixed_display:
