@@ -24,10 +24,11 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTime, QTimer, QUrl
+from PySide6.QtCore import QAbstractNativeEventFilter, Qt, QTime, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -93,7 +94,13 @@ from vmaf_app.core.models import (
     synthetic_scale_direction_variant_path,
 )
 from vmaf_app.core.perceptual_cpu import LONG_CPU_RUN_SECONDS
-from vmaf_app.core.power import keep_system_awake
+from vmaf_app.core.power import (
+    WM_POWERBROADCAST,
+    describe_power_notice,
+    keep_system_awake,
+    register_power_notices,
+    unregister_power_notices,
+)
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import aggregate_scores
@@ -175,6 +182,42 @@ TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 _PAUSED = "Paused"  # MainWindow._run_hold while a run is paused
 
 _log = logging.getLogger(__name__)
+
+
+class _PowerNoticeFilter(QAbstractNativeEventFilter):
+    """Windows' power notices (vmaf_app.core.power), for the log. Qt hands
+    WM_POWERBROADCAST to the application's native filters but not to the
+    window's nativeEvent -- the window saw none of them -- so they are read
+    here; every message goes on to Qt unchanged."""
+
+    def __init__(self, on_notice) -> None:
+        super().__init__()
+        self._on_notice = on_notice
+
+    def nativeEventFilter(self, event_type, message):
+        # Runs for every native message: it must never raise.
+        with contextlib.suppress(Exception):
+            self._read(event_type, message)
+        return False, 0
+
+    def _read(self, event_type, message) -> None:
+        # The pointer arrives as a shiboken VoidPtr, whose truth value raises
+        # ("does not have a size set"): its address is what to test.
+        address = int(message) if message is not None else 0
+        if not address or bytes(event_type) != b"windows_generic_MSG":
+            return
+        import ctypes
+
+        # MSG: HWND, then the message's number -- read first, so the
+        # thousands of other messages cost one read each.
+        if ctypes.c_uint.from_address(address + ctypes.sizeof(ctypes.c_void_p)).value != WM_POWERBROADCAST:
+            return
+        import ctypes.wintypes
+
+        msg = ctypes.wintypes.MSG.from_address(address)
+        notice = describe_power_notice(int(msg.wParam or 0), int(msg.lParam or 0))
+        if notice is not None:
+            self._on_notice(notice)
 
 
 @dataclass(frozen=True)
@@ -519,6 +562,10 @@ class MainWindow(QMainWindow):
         # Settings first: the ffmpeg location and what new rows default to
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
+        # Windows' notices about sleep, the screen and the power source, for
+        # the log; registered once the window has its native handle.
+        self._power_notices: list[int] | None = None
+        self._power_notice_filter = _PowerNoticeFilter(self._log_power_notice)
         self._settings = Settings.load()
         _log.info(
             "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
@@ -674,6 +721,17 @@ class MainWindow(QMainWindow):
         workers.extend(self.bitrate_panel.live_workers())
         return workers
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._power_notices is None:
+            # The filter first: Windows answers a registration at once with
+            # the screen's state and the power source.
+            QApplication.instance().installNativeEventFilter(self._power_notice_filter)
+            self._power_notices = register_power_notices(int(self.winId()))
+
+    def _log_power_notice(self, notice: str) -> None:
+        _log.info("%s%s", notice, " (a run is going)" if self._run_active else "")
+
     def closeEvent(self, event) -> None:
         # Shutdown is asynchronous rather than a blocking wait. A run owns a
         # live ffmpeg, and a probe owns a live ffprobe that can take many
@@ -703,6 +761,10 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(200, self._close_when_idle)
             event.ignore()
             return
+        if self._power_notices is not None:
+            unregister_power_notices(self._power_notices)
+            QApplication.instance().removeNativeEventFilter(self._power_notice_filter)
+            self._power_notices = []
         # Remember the window size, if asked to. The graph is a tab now, so
         # there is no second window to tear down.
         if self._settings.remember_window_size:
