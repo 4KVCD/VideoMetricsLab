@@ -97,9 +97,79 @@ def test_vship_maps_common_ffmpeg_pixel_formats(pixel_format, family, sample):
     assert image.sample == sample
 
 
-def test_unsupported_pixel_format_is_a_cpu_fallback_condition():
-    with pytest.raises(vship.VshipUnavailableError, match="does not support"):
-        vship._image_format(_info("video.mkv", pix_fmt="yuv411p10le"))
+def test_a_pixel_format_the_gpu_metrics_cannot_read_is_a_cpu_fallback_condition():
+    with pytest.raises(vship.VshipUnavailableError, match="cannot read the decoded pixel format pal8"):
+        vship._image_format(_info("video.mkv", pix_fmt="pal8"))
+
+
+@pytest.mark.parametrize(("pixel_format", "piped", "sample", "shifts", "rgb"), [
+    # Any subsampling at any depth: Vship takes two shifts and a sample
+    # type. The "Vship supports these layouts" table allowed 4:4:0 only up
+    # to 12 bits and 4:1:0 / 4:1:1 only at 8 -- FFmpeg's formats, not Vship's.
+    ("yuv440p12le", "yuv440p12le", 12, (0, 1), False),
+    ("yuv410p", "yuv410p", 8, (2, 1), False),
+    ("yuv444p14le", "yuv444p14le", 14, (0, 0), False),
+    ("yuv422p16be", "yuv422p16le", 16, (1, 0), False),
+    ("yuva420p10le", "yuv420p10le", 10, (1, 1), False),  # alpha dropped
+    ("gray10le", "yuv420p10le", 10, (1, 1), False),  # monochrome: neutral chroma
+    ("p012le", "yuv420p12le", 12, (1, 1), False),
+    ("nv24", "yuv444p", 8, (0, 0), False),
+    ("gbrap12le", "gbrp12le", 12, (0, 0), True),
+    ("bgr48le", "gbrp16le", 16, (0, 0), True),
+])
+def test_every_ffmpeg_layout_reaches_vship_as_a_planar_one(pixel_format, piped, sample, shifts, rgb):
+    image = vship._image_format(_info("video.mkv", pix_fmt=pixel_format))
+    assert image.pixel_format == piped
+    assert image.sample == vship._VSHIP_ENUMS[sample]
+    assert (image.subw, image.subh) == shifts and (image.family == 1) == rgb
+
+
+def _colorspace(width=1920, height=1080, pix_fmt="yuv420p10le", **tags):
+    info = VideoInfo(Path("video.mkv"), width, height, 24.0, 1.0, 24, "hevc", pix_fmt=pix_fmt, **tags)
+    return vship._vship_colorspace(info, vship._image_format(info), width, height)
+
+
+@pytest.mark.parametrize(("tags", "matrix", "transfer", "primaries"), [
+    # As ffprobe names them, to VshipColor.h's values -- FFVship's mapping.
+    ({"color_space": "bt709", "color_transfer": "bt709", "color_primaries": "bt709"}, 1, 1, 1),
+    ({"color_space": "smpte170m", "color_transfer": "smpte170m", "color_primaries": "smpte170m"}, 6, 6, 6),
+    ({"color_space": "bt470bg", "color_transfer": "bt470bg", "color_primaries": "bt470bg"}, 5, 5, 5),
+    ({"color_space": "bt709", "color_transfer": "bt470m", "color_primaries": "bt470m"}, 1, 4, 4),
+    ({"color_space": "bt709", "color_transfer": "smpte240m", "color_primaries": "smpte240m"}, 1, 7, 7),
+    # BT.2020 SDR: its 10- and 12-bit transfer tags are the BT.709 curve.
+    ({"color_space": "bt2020nc", "color_transfer": "bt2020-10", "color_primaries": "bt2020"}, 9, 1, 9),
+    ({"color_space": "bt2020c", "color_transfer": "bt2020-12", "color_primaries": "bt2020"}, 10, 1, 9),
+    ({"color_space": "bt2020nc", "color_transfer": "smpte2084", "color_primaries": "bt2020"}, 9, 16, 9),
+    ({"color_space": "bt2020nc", "color_transfer": "arib-std-b67", "color_primaries": "bt2020"}, 9, 18, 9),
+    ({"color_space": "ictcp", "color_transfer": "smpte2084", "color_primaries": "bt2020"}, 14, 16, 9),
+    ({"color_space": "ycgco", "color_transfer": "iec61966-2-1", "color_primaries": "smpte432"}, 8, 13, 12),
+    ({"color_space": "ycgco-re", "color_transfer": "linear", "color_primaries": "bt709"}, 16, 8, 1),
+    ({"color_space": "ycgco-ro", "color_transfer": "smpte428", "color_primaries": "bt709"}, 17, 17, 1),
+    # Untagged, guessed as FFVship does.
+    ({}, 1, 1, 1),
+    ({"color_space": "ictcp"}, 14, 16, 9),
+    ({"color_space": "bt2020nc"}, 9, 16, 9),
+])
+def test_color_tags_map_to_vships_values(tags, matrix, transfer, primaries):
+    color = _colorspace(**tags)
+    assert (color.YUVMatrix, color.transferFunction, color.primaries) == (matrix, transfer, primaries)
+
+
+def test_untagged_video_is_guessed_as_ffvship_guesses_it():
+    sd = _colorspace(width=720, height=576)
+    assert (sd.YUVMatrix, sd.transferFunction, sd.primaries, sd.range) == (5, 5, 5, 0)
+    rgb = _colorspace(pix_fmt="gbrp")  # sRGB, full range
+    assert (rgb.YUVMatrix, rgb.transferFunction, rgb.primaries, rgb.range) == (0, 13, 1, 1)
+    assert _colorspace(pix_fmt="yuvj420p").range == 1
+
+
+@pytest.mark.parametrize(("tag", "value"), [
+    ("color_space", "smpte240m"), ("color_space", "fcc"), ("color_transfer", "log100"),
+    ("color_primaries", "film"), ("chroma_location", "bottomleft"),
+])
+def test_a_tag_vship_has_no_value_for_is_refused(tag, value):
+    with pytest.raises(vship.VshipUnavailableError, match="Vship does not support"):
+        _colorspace(**{tag: value})
 
 
 def test_no_supported_gpu_falls_back_to_cpu(monkeypatch):

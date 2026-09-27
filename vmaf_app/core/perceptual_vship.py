@@ -171,23 +171,26 @@ class _ScoreCvvdp(ctypes.Structure):
 _U8P = ctypes.POINTER(ctypes.c_uint8)
 _PLANES = ctypes.POINTER(_U8P)
 _I64_3 = ctypes.c_int64 * 3
+#: Vship_Sample_t for each integer bit depth. Vship takes any of these for
+#: any chroma subsampling (Vship_ColorSpace_t.subsampling is two shifts),
+#: and half and float samples too; the layouts are FFmpeg's.
 _VSHIP_ENUMS = {8: 2, 9: 3, 10: 5, 12: 7, 14: 9, 16: 11}
-_YUV_LAYOUTS = {
-    # Vship's format adapter supports these planar layouts / sample depths.
-    "410": {8}, "411": {8}, "420": {8, 9, 10, 12, 14, 16},
-    "422": {8, 9, 10, 12, 14, 16}, "440": {8, 10, 12},
-    "444": {8, 9, 10, 12, 14, 16},
-}
+#: Subsampling shifts (width, height) of FFmpeg's planar YUV layouts.
+_SUBSAMPLING = {"410": (2, 1), "411": (2, 0), "420": (1, 1), "422": (1, 0), "440": (0, 1), "444": (0, 0)}
 
 
 @dataclass(frozen=True, slots=True)
 class _ImageFormat:
+    """What FFmpeg pipes (pixel_format) and how Vship reads it. `family` is
+    this module's: 1 for RGB, planes all full size. Vship 5.1 itself tells
+    RGB from YUV by the matrix (0 is RGB); its colorFamily field is unused."""
+
     pixel_format: str
     family: int
     sample: int
     subw: int
     subh: int
-    full_range: bool = False
+    full_range: bool = False  # yuvj: full range when the stream has no range tag
     # FFmpeg's planar RGB formats are ordered G, B, R; Vship expects R, G, B.
     plane_order: tuple[int, int, int] = (0, 1, 2)
 
@@ -391,39 +394,43 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
 
 
 def _image_format(info: VideoInfo) -> _ImageFormat:
+    """The planar layout FFmpeg pipes a decoded video in, and how Vship
+    reads it. FFmpeg converts to it exactly: a semi-planar or big-endian
+    layout to the planar little-endian one, alpha dropped, a monochrome
+    video given neutral chroma."""
     name = (info.pix_fmt or "").strip().casefold()
     if name in {"nv12", "nv21"}:
-        return _ImageFormat("yuv420p", 0, _VSHIP_ENUMS[8], 1, 1)
-    packed_yuv = {"p010le": ("420", 10), "p016le": ("420", 16),
-                  "p210le": ("422", 10), "p216le": ("422", 16),
-                  "p410le": ("444", 10), "p416le": ("444", 16)}
-    if name in packed_yuv:
-        sampling, depth = packed_yuv[name]
-        return _format_yuv(sampling, depth)
+        return _format_yuv("420", 8)
+    semi_planar = {"p010le": ("420", 10), "p010be": ("420", 10), "p012le": ("420", 12),
+                   "p016le": ("420", 16), "p016be": ("420", 16),
+                   "nv16": ("422", 8), "p210le": ("422", 10), "p212le": ("422", 12), "p216le": ("422", 16),
+                   "nv24": ("444", 8), "p410le": ("444", 10), "p412le": ("444", 12), "p416le": ("444", 16)}
+    if name in semi_planar:
+        return _format_yuv(*semi_planar[name])
 
-    yuv = re.fullmatch(r"yuvj?(410|411|420|422|440|444)p(?:(9|10|12|14|16)(?:le|be)?)?", name)
+    # yuv, yuvj (full range when untagged) and yuva (alpha dropped).
+    yuv = re.fullmatch(r"yuv(j|a)?(410|411|420|422|440|444)p(?:(9|10|12|14|16)(?:le|be)?)?", name)
     if yuv:
-        sampling = yuv.group(1)
-        depth = int(yuv.group(2) or 8)
-        image = _format_yuv(sampling, depth)
-        return replace(image, full_range=name.startswith("yuvj"))
+        image = _format_yuv(yuv.group(2), int(yuv.group(3) or 8))
+        return replace(image, full_range=yuv.group(1) == "j")
+    # Monochrome (AV1 can be): the luma as it is, chroma neutral.
+    gray = re.fullmatch(r"gray(?:(9|10|12|14|16)(?:le|be)?)?", name)
+    if gray:
+        return _format_yuv("420", int(gray.group(1) or 8))
 
-    rgb_depth = None
-    rgb = re.fullmatch(r"gbrp(?:(9|10|12|14|16)(?:le|be)?)?", name)
-    if name in {"rgb24", "bgr24", "rgba", "bgra", "argb", "abgr", "rgb0", "bgr0"}:
-        rgb = re.fullmatch(r".+", name)
-    elif name in {"rgb48le", "rgb48be", "rgba64le", "rgba64be"}:
-        rgb = re.fullmatch(r".+", name)
-        rgb_depth = 16
-    else:
-        rgb_depth = None
+    rgb = re.fullmatch(r"gbra?p(?:(9|10|12|14|16)(?:le|be)?)?", name)
     if rgb:
-        depth = rgb_depth or (int(rgb.group(1) or 8) if rgb.lastindex else 8)
-        if depth not in _VSHIP_ENUMS:
-            raise VshipUnavailableError(f"Vship does not support the {depth}-bit RGB format {info.pix_fmt}.")
-        fmt = "gbrp" + (f"{depth}le" if depth > 8 else "")
-        return _ImageFormat(fmt, 1, _VSHIP_ENUMS[depth], 0, 0, True, (2, 0, 1))
-    raise VshipUnavailableError(f"Vship does not support the decoded pixel format {info.pix_fmt or '(unknown)'}.")
+        depth = int(rgb.group(1) or 8)
+    elif name in {"rgb24", "bgr24", "rgba", "bgra", "argb", "abgr", "rgb0", "bgr0", "0rgb", "0bgr"}:
+        depth = 8
+    elif name in {"rgb48le", "rgb48be", "bgr48le", "bgr48be", "rgba64le", "rgba64be", "bgra64le", "bgra64be"}:
+        depth = 16
+    else:
+        raise VshipUnavailableError(
+            f"The GPU metrics cannot read the decoded pixel format {info.pix_fmt or '(unknown)'}.")
+    fmt = "gbrp" + (f"{depth}le" if depth > 8 else "")
+    # FFmpeg's planar RGB is ordered G, B, R; Vship reads R, G, B.
+    return _ImageFormat(fmt, 1, _VSHIP_ENUMS[depth], 0, 0, True, (2, 0, 1))
 
 
 def _passthrough_format(info: VideoInfo, hwaccel: str | None) -> tuple[_ImageFormat, str] | None:
@@ -440,9 +447,11 @@ def _passthrough_format(info: VideoInfo, hwaccel: str | None) -> tuple[_ImageFor
     P010 keeps each 10-bit sample in the top bits of 16. Declared to Vship as
     16-bit, limited range, that is the same picture exactly: Vship brings
     limited-range samples to 8-bit scale by dividing by 2^(depth-8), so
-    (v << 6) / 256 and v / 4 are the same float. Full range divides by
-    2^depth - 1 instead, where the two differ, so full-range 10-bit keeps
-    FFmpeg's conversion. 8-bit NV12 is exact in either range.
+    (v << 6) / 256 and v / 4 are the same float (FullRange in Vship 5.1.1's
+    gpuColorToLinear/rangeToFull.hpp; the 16-bit read masks nothing off).
+    Full range divides by 2^depth - 1 instead, where the two differ, so
+    full-range 10-bit keeps FFmpeg's conversion. 8-bit NV12 is exact in
+    either range.
     """
     if not hwaccel:
         return None
@@ -458,53 +467,57 @@ def _passthrough_format(info: VideoInfo, hwaccel: str | None) -> tuple[_ImageFor
 
 
 def _format_yuv(sampling: str, depth: int) -> _ImageFormat:
-    if depth not in _YUV_LAYOUTS.get(sampling, set()):
-        raise VshipUnavailableError(f"Vship does not support {sampling} {depth}-bit YUV video.")
-    subw, subh = {
-        "410": (2, 1), "411": (2, 0), "420": (1, 1),
-        "422": (1, 0), "440": (0, 1), "444": (0, 0),
-    }[sampling]
+    subw, subh = _SUBSAMPLING[sampling]
     suffix = "" if depth == 8 else f"{depth}le"
     return _ImageFormat(f"yuv{sampling}p{suffix}", 0, _VSHIP_ENUMS[depth], subw, subh)
 
 
+#: FFmpeg's tag names (as ffprobe prints them, and their aliases) for the
+#: values of Vship's enums in VshipColor.h -- the H.273 numbers. The
+#: mapping is FFVship's (src/ffvship_utility/ffmpegToVshipColorFormat.hpp,
+#: Vship 5.1.1); a tag missing here has no Vship value.
+_MATRICES = {"gbr": 0, "rgb": 0, "bt709": 1, "bt470bg": 5, "smpte170m": 6, "ycgco": 8, "ycocg": 8,
+             "bt2020nc": 9, "bt2020ncl": 9, "bt2020c": 10, "bt2020cl": 10, "ictcp": 14,
+             "ycgco-re": 16, "ycgco-ro": 17}
+#: BT.2020's own 10- and 12-bit curves are BT.709's (H.273), as FFVship maps them.
+_TRANSFERS = {"bt709": 1, "bt470m": 4, "gamma22": 4, "bt470bg": 5, "gamma28": 5, "smpte170m": 6,
+              "smpte240m": 7, "linear": 8, "iec61966-2-1": 13, "srgb": 13, "iec61966_2_1": 13,
+              "bt2020-10": 1, "bt2020_10bit": 1, "bt2020-12": 1, "bt2020_12bit": 1,
+              "smpte2084": 16, "smpte428": 17, "smpte428_1": 17, "arib-std-b67": 18}
+_PRIMARIES = {"bt709": 1, "bt470m": 4, "bt470bg": 5, "smpte170m": 6, "smpte240m": 7, "bt2020": 9,
+              "smpte432": 12}
+_UNTAGGED = {"", "unknown", "unspecified", "reserved"}
+
+
 def _vship_colorspace(info: VideoInfo, image: _ImageFormat, width: int, height: int) -> _Colorspace:
-    matrix_name = (info.color_space or "").casefold().replace(".", "")
-    matrix_values = {
-        "rgb": 0, "bt709": 1, "bt470bg": 5, "smpte170m": 6,
-        "bt2020nc": 9, "bt2020ncl": 9, "bt2020c": 10, "bt2020cl": 10,
-        "ictcp": 14,
-    }
+    """The frame's colorspace for Vship, from the stream's tags. Untagged
+    values are guessed as FFVship guesses them: the matrix by height
+    (BT.709 above 650 lines, else BT.470BG), and the transfer and primaries
+    from the matrix (BT.470BG's, or PQ and BT.2020 for BT.2020 and ICtCp);
+    untagged RGB is sRGB, full range."""
+    matrix_name = (info.color_space or "").casefold()
     if image.family == 1:
         matrix = 0
-    elif matrix_name in {"", "unknown", "unspecified", "reserved"}:
+    elif matrix_name in _UNTAGGED:
         matrix = 1 if height > 650 else 5
-    elif matrix_name in matrix_values:
-        matrix = matrix_values[matrix_name]
+    elif matrix_name in _MATRICES:
+        matrix = _MATRICES[matrix_name]
     else:
         raise VshipUnavailableError(f"Vship does not support the {info.color_space} color matrix.")
-    if matrix == 14:
-        raise VshipUnavailableError("Vship's current GPU metric API does not support ICtCp input.")
 
-    transfer_name = (info.color_transfer or "").casefold().replace(".", "").replace("-", "")
-    transfer_values = {
-        "bt709": 1, "gamma22": 4, "gamma28": 5, "smpte170m": 6,
-        "linear": 8, "iec6196621": 13, "smpte2084": 16,
-        "smpte428": 17, "aribstdb67": 18,
-    }
-    if transfer_name in {"", "unknown", "unspecified", "reserved"}:
-        transfer = 5 if matrix == 5 else 16 if matrix in {9, 10} else 1
-    elif transfer_name in transfer_values:
-        transfer = transfer_values[transfer_name]
+    transfer_name = (info.color_transfer or "").casefold()
+    if transfer_name in _UNTAGGED:
+        transfer = 13 if matrix == 0 else 5 if matrix == 5 else 16 if matrix in {9, 10, 14} else 1
+    elif transfer_name in _TRANSFERS:
+        transfer = _TRANSFERS[transfer_name]
     else:
         raise VshipUnavailableError(f"Vship does not support the {info.color_transfer} transfer function.")
 
-    primaries_name = (info.color_primaries or "").casefold().replace(".", "")
-    primaries_values = {"bt709": 1, "bt470m": 4, "bt470bg": 5, "bt2020": 9}
-    if primaries_name in {"", "unknown", "unspecified", "reserved"}:
-        primaries = 5 if matrix == 5 else 9 if matrix in {9, 10} else 1
-    elif primaries_name in primaries_values:
-        primaries = primaries_values[primaries_name]
+    primaries_name = (info.color_primaries or "").casefold()
+    if primaries_name in _UNTAGGED:
+        primaries = 5 if matrix == 5 else 9 if matrix in {9, 10, 14} else 1
+    elif primaries_name in _PRIMARIES:
+        primaries = _PRIMARIES[primaries_name]
     else:
         raise VshipUnavailableError(f"Vship does not support the {info.color_primaries} color primaries.")
 
@@ -516,6 +529,7 @@ def _vship_colorspace(info: VideoInfo, image: _ImageFormat, width: int, height: 
     else:
         raise VshipUnavailableError(f"Vship does not support the {info.color_range} range tag.")
     location = (info.chroma_location or "left").casefold().replace("-", "")
+    # Vship_ChromaLocation_t has no bottom or bottom-left siting.
     locations = {"left": 0, "center": 1, "topleft": 2, "top": 3,
                  "unspecified": 0, "unknown": 0}
     if location not in locations:
@@ -565,8 +579,10 @@ def _filter_chain(
 
 #: Concurrent Vship handlers per metric. One handler leaves the GPU idle
 #: between its own kernels; two keep it busy. Measured at 4K 10-bit on an
-#: RTX 5090: SSIMULACRA2 217 -> 277 pairs/s, Butteraugli 82 -> 95, both
-#: metrics together 61 -> 72. This is also how FFVship runs Vship.
+#: RTX 5090 (Vship's CUDA build): SSIMULACRA2 217 -> 277 pairs/s,
+#: Butteraugli 82 -> 95, both metrics together 61 -> 72. (FFVship runs 8
+#: GPU streams by default, -g, and its documentation calls 3 usually
+#: enough; each holds its own VRAM.)
 _LANES_PER_METRIC = 2
 #: Frames in flight per video: one per lane being scored, one waiting and
 #: one being filled, so decode, transfer and GPU compute overlap instead of
@@ -1326,7 +1342,7 @@ def _run_vship_pass(
     if not specs or any(spec.backend_id != BACKEND_ID or spec.key not in _METRICS for spec in specs):
         raise ValueError("Vship task requires supported perceptual metric specs")
     if request.recipe.resample_test is not None:
-        raise VshipUnavailableError("Vship does not support resolution round-trip tests yet.")
+        raise VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.")
     _validate_pair(source, distorted, request.recipe)
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
