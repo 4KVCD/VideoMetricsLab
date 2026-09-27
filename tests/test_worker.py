@@ -922,6 +922,22 @@ def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp,
     assert (None, 10) in phases and ((3, 3, "CVVDP"), 10) not in phases
 
 
+@pytest.mark.parametrize("together", [False, True])
+def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_the_plan(qapp, monkeypatch, together):
+    calls = []
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+                        lambda *a, **k: calls.append(k["together"]) or _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))],
+                        gpu_metrics_together=together)
+    plans = []
+    worker.planned.connect(plans.append)
+    worker.run()
+    _drain(qapp)
+    assert calls == [together]
+    assert plans == [{0: [("cpu", 1), ("gpu", 1 if together else 3)]}]
+
+
 def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
     """The halves decode separately: each carries its own latest plan, kept
     when later messages replace its step."""

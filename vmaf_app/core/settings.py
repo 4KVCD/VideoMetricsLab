@@ -77,6 +77,14 @@ class Settings:
     # identity.
     parallel_jobs: int = field(default_factory=default_parallel_jobs)
 
+    # Calculate a video's GPU metrics (SSIMULACRA2, Butteraugli, CVVDP) in
+    # one Vship pass, decoding the video once, instead of one pass each --
+    # see perceptual_vship.run_vship_task. Off by default: at 4K it needs
+    # about 7.3 GB of GPU memory against 4.8 GB one at a time. Like
+    # parallel_jobs it changes how the scores are reached, never what they
+    # are, so it is no part of cache identity.
+    gpu_metrics_together: bool = False
+
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True
 

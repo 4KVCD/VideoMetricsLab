@@ -1227,6 +1227,22 @@ _gpu_pass = threading.Lock()
 GPU_WAIT_MESSAGE = "Waiting for the GPU: another video's Vship pass is running…"
 
 
+def vship_passes(
+    specs: tuple[MetricRequestSpec, ...], together: bool = False,
+) -> list[tuple[MetricRequestSpec, ...]]:
+    """The Vship passes `specs` are scored in, in order: one per metric, or
+    with `together` one per set of frames scored -- every metric scoring
+    the same frames in one pass, so the video is decoded once for them all.
+    CVVDP scores every frame, so with frame subsampling it keeps a pass of
+    its own."""
+    if not together:
+        return [(spec,) for spec in specs]
+    groups: dict[int, list[MetricRequestSpec]] = {}
+    for spec in specs:
+        groups.setdefault(spec.coverage.step if spec.coverage is not None else 1, []).append(spec)
+    return [tuple(group) for group in groups.values()]
+
+
 def run_vship_task(
     source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
     specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
@@ -1236,20 +1252,28 @@ def run_vship_task(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     on_pass_done: Callable[[PerceptualTaskOutput], None] | None = None,
+    together: bool = False,
 ) -> PerceptualTaskOutput:
     """Scores `specs` on the GPU once no other Vship pass is running.
 
-    `on_pass_done` gets each metric's pass as it finishes, before the next
+    `on_pass_done` gets each pass's scores as it finishes, before the next
     starts: the window shows a score the moment it exists.
 
-    One metric at a time: each gets a pass of its own, and the video is
-    decoded again for each. Scoring them in one pass held every metric's
-    GPU memory at once -- 7.3 GB for SSIMULACRA2, Butteraugli and CVVDP
-    together on a full 3840x2160 frame, more than an 8 GB card has free --
-    for little speed: 34 fps together against about 31.5 fps one after the
-    other at 4K, and 91 against 90.5 fps at 1080p (RTX 5090, Beekeeper AV1
-    and a synthetic SDR clip). One at a time, the peak is the largest
-    single metric: SSIMULACRA2 2.7 GB, Butteraugli 4.4 GB, CVVDP 4.8 GB.
+    One metric at a time by default: each gets a pass of its own, and the
+    video is decoded again for each. Scoring them in one pass holds every
+    metric's GPU memory at once -- 7.3 GB for SSIMULACRA2, Butteraugli and
+    CVVDP together on a full 3840x2160 frame, more than an 8 GB card has
+    free -- for little speed where the GPU decodes: 34 fps together against
+    about 31.5 fps one after the other at 4K, and 91 against 90.5 fps at
+    1080p (RTX 5090, Beekeeper AV1 and a synthetic SDR clip). One at a
+    time, the peak is the largest single metric: SSIMULACRA2 2.7 GB,
+    Butteraugli 4.4 GB, CVVDP 4.8 GB.
+
+    `together` (Settings > GPU metrics) scores them in one pass anyway (see
+    vship_passes): where the CPU decodes -- 4K VVC, which no GPU decodes --
+    decoding each video once instead of once per metric saves far more
+    than the memory costs. A metric that fails in a shared pass, out of GPU
+    memory most likely, is calculated again in a pass of its own.
 
     A metric whose pass fails is reported in the output's `failures` while
     the others still run; only when every pass fails is the first error
@@ -1272,39 +1296,56 @@ def run_vship_task(
         failures: dict[str, str] = {}
         errors: list[BaseException] = []
         frames = 0
-        parts = len(specs)
-        for number, spec in enumerate(specs):
+
+        def run_passes(passes: list[tuple[MetricRequestSpec, ...]], announce: bool) -> None:
+            nonlocal frames
+            parts = len(passes)
+            for number, group in enumerate(passes):
+                labels = " + ".join(metric_definition(spec.key).label for spec in group)
+                if on_status and (parts > 1 or announce):
+                    on_status(f"GPU metric {number + 1}/{parts}: {labels}")
+                progress = on_progress
+                if on_progress is not None and parts > 1:
+                    progress = (lambda cur, total, fps, n=number:
+                                on_progress(n * total + cur, parts * total, fps))
+                try:
+                    output = _run_vship_pass(
+                        source, distorted, request, group, device, source_crop, distorted_crop,
+                        on_progress=progress, on_status=on_status,
+                        cancel_event=cancel_event, process_handle=process_handle,
+                    )
+                except PerceptualCancelled:
+                    raise
+                except Exception as error:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise PerceptualCancelled("Cancelled by user") from error
+                    _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, parts, labels, error)
+                    errors.append(error)
+                    failures.update(dict.fromkeys((spec.key for spec in group), str(error)))
+                    continue
+                for key in output.metrics:
+                    metrics.add(output.metrics.get(key))
+                failures.update(output.failures)
+                frames = max(frames, output.compared_frame_count)
+                if on_pass_done is not None and output.metrics:
+                    on_pass_done(output)
+
+        passes = vship_passes(specs, together)
+        run_passes(passes, announce=False)
+        shared = [spec for group in passes if len(group) > 1 for spec in group if spec.key in failures]
+        if shared:
+            labels = " and ".join(metric_definition(spec.key).label for spec in shared)
+            _log.warning("%s failed in the GPU pass shared with the other metrics; calculating %s in a "
+                         "pass of %s own", labels, *(("it", "its") if len(shared) == 1 else ("them", "their")))
             if on_status:
-                on_status(
-                    f"GPU metric {number + 1}/{parts}: "
-                    f"{metric_definition(spec.key).label}"
-                )
-            progress = None
-            if on_progress is not None:
-                progress = (lambda cur, total, fps, n=number:
-                            on_progress(n * total + cur, parts * total, fps))
-            try:
-                output = _run_vship_pass(
-                    source, distorted, request, (spec,), device, source_crop, distorted_crop,
-                    on_progress=progress, on_status=on_status,
-                    cancel_event=cancel_event, process_handle=process_handle,
-                )
-            except PerceptualCancelled:
-                raise
-            except Exception as error:
-                if cancel_event is not None and cancel_event.is_set():
-                    raise PerceptualCancelled("Cancelled by user") from error
-                _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, parts,
-                           metric_definition(spec.key).label, error)
-                errors.append(error)
-                failures[spec.key] = str(error)
-                continue
-            for key in output.metrics:
-                metrics.add(output.metrics.get(key))
-            failures.update(output.failures)
-            frames = max(frames, output.compared_frame_count)
-            if on_pass_done is not None and output.metrics:
-                on_pass_done(output)
+                on_status(f"{labels} failed in the shared GPU pass; calculating "
+                          f"{'it' if len(shared) == 1 else 'each'} in a pass of its own…")
+            for spec in shared:
+                del failures[spec.key]
+            failed_before = list(errors)
+            errors.clear()
+            run_passes([(spec,) for spec in shared], announce=True)
+            errors.extend(failed_before)  # the retries' own errors first
         if not metrics:
             if not errors:
                 raise VshipUnavailableError("Vship produced no scores.")
@@ -1614,8 +1655,10 @@ def apply_vship_cpu_fallback(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     on_pass_done: Callable[[PerceptualTaskOutput], None] | None = None,
+    together: bool = False,
 ) -> PerceptualTaskOutput:
     """Run selected backends, with a per-metric GPU-to-CPU fallback.
+    `together` scores the GPU metrics in one pass (see run_vship_task).
 
     CVVDP runs on the GPU only. Without a usable GPU it fails on its own --
     reported in the output's `failures` -- and the other metrics are scored
@@ -1686,7 +1729,7 @@ def apply_vship_cpu_fallback(
                 if cpu_specs and on_progress else on_progress
             ),
             on_status=on_status, cancel_event=cancel_event,
-            process_handle=process_handle, on_pass_done=on_pass_done,
+            process_handle=process_handle, on_pass_done=on_pass_done, together=together,
         )
     except PerceptualCancelled:
         raise

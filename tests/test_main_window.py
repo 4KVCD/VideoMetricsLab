@@ -5142,3 +5142,21 @@ def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
     assert started == ["update-check"]
     win.close()
 
+
+def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkeypatch):
+    """Settings > GPU metrics: one Vship pass per video, for 4K VVC decoded
+    on the CPU. Off by default: it is very heavy on GPU memory at 4K."""
+    win = MainWindow()
+    assert not win.settings_gpu_together.isChecked() and not win._settings.gpu_metrics_together
+    assert "7.3 GB" in win.settings_gpu_together.toolTip()
+    win.settings_gpu_together.setChecked(True)
+    assert Settings.load().gpu_metrics_together
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    _long_row(win, "clip.mkv", minutes=1, backend="gpu")
+    win._on_run_clicked()
+    assert win._worker is not None and win._worker.gpu_metrics_together
+    win._worker = None
+    win._set_run_ui_active(False)
+    win.close()
+

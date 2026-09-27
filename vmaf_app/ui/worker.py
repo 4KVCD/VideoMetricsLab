@@ -19,7 +19,12 @@ from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
-from vmaf_app.core.perceptual_vship import GPU_ONLY_METRICS, GPU_WAIT_MESSAGE, apply_vship_cpu_fallback
+from vmaf_app.core.perceptual_vship import (
+    GPU_ONLY_METRICS,
+    GPU_WAIT_MESSAGE,
+    apply_vship_cpu_fallback,
+    vship_passes,
+)
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
@@ -127,9 +132,14 @@ class VmafWorker(QThread):
     cancelled = Signal()
     all_finished = Signal()
 
-    def __init__(self, jobs: list[VmafJob], parallel_jobs: int = 1, parent=None):
+    def __init__(self, jobs: list[VmafJob], parallel_jobs: int = 1, parent=None, *,
+                 gpu_metrics_together: bool = False):
         super().__init__(parent)
         self._jobs = jobs
+        # Settings > GPU metrics: each video's GPU metrics in one Vship pass,
+        # decoding it once, rather than one pass (and one decode) per metric.
+        # How the scores are calculated, never what they are.
+        self.gpu_metrics_together = gpu_metrics_together
         self._parallel_jobs = max(1, min(int(parallel_jobs), MAX_PARALLEL_JOBS))
         self._cancel_event = threading.Event()
         # One handle per running job rather than one for the worker: pausing
@@ -280,12 +290,15 @@ class VmafWorker(QThread):
                 _log.error("Video %d '%s' could not be set up: %s", index + 1, job.label, error, exc_info=error)
                 self.job_started.emit(index, job.label)
                 self.job_failed.emit(index, str(error), getattr(error, "stderr_tail", "") or "")
-        _log.info("%s %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time", RUN_START,
-                  len(self._jobs), self.parallel_jobs)
+        _log.info("%s %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time%s", RUN_START,
+                  len(self._jobs), self.parallel_jobs,
+                  ", each video's in one pass" if self.gpu_metrics_together else "")
         for run in runs:
             _log.info("%s", run.describe())
         self.planned.emit({
-            run.index: [(run.pool_of(task), len(task.requested_specs) if run.pool_of(task) == _GPU else 1)
+            run.index: [(run.pool_of(task),
+                         len(vship_passes(task.requested_specs, self.gpu_metrics_together))
+                         if run.pool_of(task) == _GPU else 1)
                         for task in run.plan.tasks]
             for run in runs
         })
@@ -655,7 +668,7 @@ class _JobRun:
                 on_progress=progress,
                 on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
-                on_pass_done=self.report_pass,
+                on_pass_done=self.report_pass, together=self.worker.gpu_metrics_together,
             )
         raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
 

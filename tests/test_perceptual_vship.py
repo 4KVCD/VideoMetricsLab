@@ -238,7 +238,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None, fail=None, on_status=None):
+         inspect=None, fail=None, on_status=None, together=False):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -272,7 +272,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         scored.append(index)
         if inspect is not None:
             inspect(index, source_planes, test_planes)
-        if fail is not None and key == fail[0] and index >= fail[1]:
+        if fail is not None and (fail(key, index) if callable(fail) else key == fail[0] and index >= fail[1]):
             raise vship.VshipUnavailableError(f"Vship {key} failed: out of memory")
         if cancel_after is not None and len(scored) >= cancel_after:
             cancel.set()
@@ -284,7 +284,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode), metrics)
     output = vship.run_vship_task(source or _hevc("source.mkv"), test or _hevc("test.mkv"), request,
                                   request.metrics, _fake_device(), None, None, cancel_event=cancel,
-                                  on_status=on_status)
+                                  on_status=on_status, together=together)
     return output, spawned
 
 
@@ -660,6 +660,65 @@ def test_each_metric_gets_a_pass_and_a_decode_of_its_own(monkeypatch):
     assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
     assert fake.order == list(range(count))
     assert output.metrics.sequence("cvvdp").score == pytest.approx(_whole_video_jod(count), abs=1e-9)
+
+
+def test_together_every_metric_shares_one_pass_and_one_decode_with_the_same_scores(monkeypatch):
+    """Settings > GPU metrics: decoding 4K VVC on the CPU once per metric
+    tripled the decoding; together, each video is decoded once."""
+    count = vship._RING_SLOTS * 5 + 2
+    metrics = ("ssimulacra2", "butteraugli", "cvvdp")
+    _FakeCvvdp().install(monkeypatch)
+    apart, spawned_apart = _run(monkeypatch, metrics=metrics, children=_both(_frames_command(count, _FRAME_BYTES)))
+    fake = _FakeCvvdp().install(monkeypatch)
+    statuses = []
+    together, spawned = _run(monkeypatch, metrics=metrics, children=_both(_frames_command(count, _FRAME_BYTES)),
+                             together=True, on_status=statuses.append)
+    assert len(spawned_apart["source"]) == 3
+    assert len(spawned["source"]) == 1 and len(spawned["test"]) == 1
+    for key in ("ssimulacra2", "butteraugli"):
+        assert list(together.metrics.get(key).values) == list(apart.metrics.get(key).values)
+    assert together.metrics.sequence("cvvdp").score == apart.metrics.sequence("cvvdp").score
+    assert fake.order == list(range(count)) and together.failures == {}
+    assert statuses == ["Vship GPU (fake GPU): calculating SSIMULACRA2, Butteraugli, CVVDP (GPU decode: off)…"]
+
+
+def test_a_metric_that_fails_in_the_shared_pass_is_calculated_in_a_pass_of_its_own(monkeypatch):
+    """Out of GPU memory with all three at once, say: the metric is not
+    lost, it is calculated again alone."""
+    statuses = []
+    # Butteraugli runs out of memory beside SSIMULACRA2, and not alone.
+    alone = lambda: any("pass of its own" in status for status in statuses)
+    count = vship._RING_SLOTS * 3
+    output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli"), together=True,
+                           fail=lambda key, _index: key == "butteraugli" and not alone(),
+                           children=_both(_frames_command(count, _FRAME_BYTES)), on_status=statuses.append)
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert list(output.metrics.get("butteraugli").values) == [i + 0.5 for i in range(count)]
+    assert output.failures == {}
+    assert len(spawned["source"]) == 2
+    assert statuses[1:3] == ["Butteraugli failed in the shared GPU pass; calculating it in a pass of its own…",
+                             "GPU metric 1/1: Butteraugli"]
+
+
+def test_a_metric_that_fails_on_its_own_too_is_reported_with_the_others_kept(monkeypatch):
+    count = vship._RING_SLOTS * 3
+    output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli"), fail=("butteraugli", 2),
+                           together=True, children=_both(_frames_command(count, _FRAME_BYTES)))
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert not output.metrics.has("butteraugli") and "out of memory" in output.failures["butteraugli"]
+    assert len(spawned["source"]) == 2
+
+
+def test_with_frame_subsampling_cvvdp_keeps_a_pass_of_its_own():
+    """CVVDP scores every frame; SSIMULACRA2 and Butteraugli then score
+    every n-th, so they cannot share its pass."""
+    specs = analysis_request_from_vmaf_options(
+        VmafOptions(n_subsample=3), ("ssimulacra2", "butteraugli", "cvvdp")).metrics
+    keys = lambda passes: [tuple(spec.key for spec in group) for group in passes]
+    assert keys(vship.vship_passes(specs)) == [("ssimulacra2",), ("butteraugli",), ("cvvdp",)]
+    assert keys(vship.vship_passes(specs, together=True)) == [("ssimulacra2", "butteraugli"), ("cvvdp",)]
+    full = analysis_request_from_vmaf_options(VmafOptions(), ("ssimulacra2", "butteraugli", "cvvdp")).metrics
+    assert keys(vship.vship_passes(full, together=True)) == [("ssimulacra2", "butteraugli", "cvvdp")]
 
 
 def test_a_cvvdp_failure_keeps_ssimulacra2_and_frees_the_ring(monkeypatch):

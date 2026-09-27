@@ -536,10 +536,11 @@ class MainWindow(QMainWindow):
         self._settings = Settings.load()
         _log.info(
             "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
-            "saved results %s (%s)",
+            "GPU metrics %s, saved results %s (%s)",
             "on" if self._settings.parallel_jobs > 1 else "off",
             "on" if self._settings.default_gpu_decode else "off",
             self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
+            "together in one pass" if self._settings.gpu_metrics_together else "one pass each",
             "reused" if self._settings.use_cache else "not reused",
             self._settings.cache_dir or "default folder",
         )
@@ -967,6 +968,29 @@ class MainWindow(QMainWindow):
         defaults_layout.addLayout(cvvdp_row)
         outer.addWidget(defaults_box)
 
+        gpu_box = QGroupBox("GPU metrics")
+        gpu_layout = QVBoxLayout(gpu_box)
+        self.settings_gpu_together = QCheckBox(
+            "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video")
+        self.settings_gpu_together.setToolTip(
+            "Each video is decoded once for all its GPU metrics instead of once for each. Where the "
+            "GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU "
+            "decodes -- it saves most of the decoding.\n\n"
+            "Very heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most "
+            "4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory "
+            "for example, is calculated again on its own.\n\nThe scores are the same either way. "
+            "Applies from the next run.")
+        self.settings_gpu_together.setChecked(self._settings.gpu_metrics_together)
+        self.settings_gpu_together.toggled.connect(self._on_settings_edited)
+        gpu_layout.addWidget(self.settings_gpu_together)
+        gpu_note = QLabel(
+            "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. "
+            "Very heavy on GPU memory at 4K: about 7.3 GB for all three together.")
+        gpu_note.setWordWrap(True)
+        gpu_note.setStyleSheet("color: #666;")
+        gpu_layout.addWidget(gpu_note)
+        outer.addWidget(gpu_box)
+
         compare_box = QGroupBox("Video Compare")
         compare_layout = QVBoxLayout(compare_box)
         # A dropdown, not a spin box: 1 to 9 is one click away.
@@ -1066,6 +1090,7 @@ class MainWindow(QMainWindow):
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
         self._settings.check_for_updates = self.settings_check_updates.isChecked()
+        self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
 
         if self._settings.ffmpeg_dir != before_ffmpeg:
             self._apply_ffmpeg_setting()
@@ -3924,7 +3949,8 @@ class MainWindow(QMainWindow):
         self.pause_btn.setText("Pause")
         self.cancel_btn.setEnabled(True)
 
-        self._worker = VmafWorker(jobs, self._parallel_jobs(), self)
+        self._worker = VmafWorker(jobs, self._parallel_jobs(), self,
+                                  gpu_metrics_together=self._settings.gpu_metrics_together)
         self._worker.job_started.connect(self._on_job_started)
         self._worker.halves.connect(self._job_halves.__setitem__)
         self._worker.task_progress.connect(self._on_task_progress)
