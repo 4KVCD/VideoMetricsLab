@@ -4796,3 +4796,19 @@ def test_a_cancelled_run_stays_on_the_videos_tab(qapp, cancelled, tab):
     assert len(win.graph_panel._entries) == 1
     win.close()
 
+
+def test_the_pc_is_kept_awake_exactly_while_a_run_is_active(qapp, monkeypatch):
+    """A run can take hours; a PC set to sleep after some idle time slept
+    under it, and Modern Standby suspends desktop apps once asleep."""
+    from vmaf_app.ui import main_window as main_window_module
+
+    calls = []
+    monkeypatch.setattr(main_window_module, "keep_system_awake", lambda awake: calls.append(awake) or True)
+    win = MainWindow()
+    assert calls == []
+    win._set_run_ui_active(True)
+    assert calls == [True]
+    win._on_all_finished()  # the run's end, however it ended
+    assert calls == [True, False]
+    win.close()
+

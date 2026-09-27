@@ -92,6 +92,7 @@ from vmaf_app.core.models import (
     synthetic_scale_direction_variant_path,
 )
 from vmaf_app.core.perceptual_cpu import LONG_CPU_RUN_SECONDS
+from vmaf_app.core.power import keep_system_awake
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import aggregate_scores
@@ -3808,6 +3809,9 @@ class MainWindow(QMainWindow):
     def _set_run_ui_active(self, active: bool) -> None:
         """Freezes every input that can change the meaning of a live job."""
         self._run_active = active
+        # A run can take hours: Windows must not go to sleep under it (see
+        # vmaf_app.core.power). Released as soon as the run ends.
+        keep_system_awake(active)
         # The table itself stays live so the queue can be scrolled and read
         # while it runs. Nothing reachable through it can change a running
         # job: the metric tick boxes refuse edits mid-run (see
