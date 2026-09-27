@@ -238,7 +238,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None, fail=None, on_status=None, together=False):
+         inspect=None, fail=None, on_status=None, together=False, on_progress=None):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -284,7 +284,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode), metrics)
     output = vship.run_vship_task(source or _hevc("source.mkv"), test or _hevc("test.mkv"), request,
                                   request.metrics, _fake_device(), None, None, cancel_event=cancel,
-                                  on_status=on_status, together=together)
+                                  on_status=on_status, together=together, on_progress=on_progress)
     return output, spawned
 
 
@@ -685,19 +685,27 @@ def test_together_every_metric_shares_one_pass_and_one_decode_with_the_same_scor
 def test_a_metric_that_fails_in_the_shared_pass_is_calculated_in_a_pass_of_its_own(monkeypatch):
     """Out of GPU memory with all three at once, say: the metric is not
     lost, it is calculated again alone."""
-    statuses = []
+    statuses, progress = [], []
     # Butteraugli runs out of memory beside SSIMULACRA2, and not alone.
     alone = lambda: any("pass of its own" in status for status in statuses)
     count = vship._RING_SLOTS * 3
     output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli"), together=True,
                            fail=lambda key, _index: key == "butteraugli" and not alone(),
-                           children=_both(_frames_command(count, _FRAME_BYTES)), on_status=statuses.append)
+                           children=_both(_frames_command(count, _FRAME_BYTES)), on_status=statuses.append,
+                           on_progress=lambda current, total, _fps: progress.append((current, total)))
     assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
     assert list(output.metrics.get("butteraugli").values) == [i + 0.5 for i in range(count)]
     assert output.failures == {}
     assert len(spawned["source"]) == 2
+    # The retry is the second pass of two: the shared one is done.
     assert statuses[1:3] == ["Butteraugli failed in the shared GPU pass; calculating it in a pass of its own…",
-                             "GPU metric 1/1: Butteraugli"]
+                             "GPU metric 2/2: Butteraugli"]
+    # One count across both passes: the retry's frames come after the shared
+    # pass's, rather than starting again from 0.
+    currents = [current for current, _total in progress]
+    assert currents == sorted(currents) and progress[-1] == (2 * count, 2 * count)
+    retry = currents.index(count + 1)
+    assert progress[retry - 1] == (count, count) and progress[retry][1] > count
 
 
 def test_a_metric_that_fails_on_its_own_too_is_reported_with_the_others_kept(monkeypatch):

@@ -1296,18 +1296,33 @@ def run_vship_task(
         failures: dict[str, str] = {}
         errors: list[BaseException] = []
         frames = 0
+        # How far each pass run so far got, in its own progress units: the
+        # figure is one count across every pass, a retry's after the passes
+        # before it. A retry reported only itself, so the half went from
+        # 100% back to 0% when a metric that failed in the shared pass was
+        # calculated again, and its time left was that retry's alone.
+        reached: list[int] = []
 
-        def run_passes(passes: list[tuple[MetricRequestSpec, ...]], announce: bool) -> None:
+        def pass_progress(slot: int, done: int, left: int) -> Callable[[int, int, float], None]:
+            """A pass's progress as the task's: after `done` units of the
+            passes before it, with `left` passes of its length to go (this
+            one included -- they score the same frames)."""
+            def progress(current: int, total: int, fps: float) -> None:
+                reached[slot] = current
+                on_progress(done + current, done + left * total, fps)
+            return progress
+
+        def run_passes(passes: list[tuple[MetricRequestSpec, ...]], first: int, count: int) -> None:
+            """Runs `passes` as passes first + 1 onwards of `count`."""
             nonlocal frames
-            parts = len(passes)
-            for number, group in enumerate(passes):
+            for offset, group in enumerate(passes):
+                number = first + offset
                 labels = " + ".join(metric_definition(spec.key).label for spec in group)
-                if on_status and (parts > 1 or announce):
-                    on_status(f"GPU metric {number + 1}/{parts}: {labels}")
-                progress = on_progress
-                if on_progress is not None and parts > 1:
-                    progress = (lambda cur, total, fps, n=number:
-                                on_progress(n * total + cur, parts * total, fps))
+                if on_status and count > 1:
+                    on_status(f"GPU metric {number + 1}/{count}: {labels}")
+                reached.append(0)
+                progress = (pass_progress(len(reached) - 1, sum(reached), count - number)
+                            if on_progress is not None else None)
                 try:
                     output = _run_vship_pass(
                         source, distorted, request, group, device, source_crop, distorted_crop,
@@ -1319,7 +1334,7 @@ def run_vship_task(
                 except Exception as error:
                     if cancel_event is not None and cancel_event.is_set():
                         raise PerceptualCancelled("Cancelled by user") from error
-                    _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, parts, labels, error)
+                    _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, count, labels, error)
                     errors.append(error)
                     failures.update(dict.fromkeys((spec.key for spec in group), str(error)))
                     continue
@@ -1331,7 +1346,7 @@ def run_vship_task(
                     on_pass_done(output)
 
         passes = vship_passes(specs, together)
-        run_passes(passes, announce=False)
+        run_passes(passes, 0, len(passes))
         shared = [spec for group in passes if len(group) > 1 for spec in group if spec.key in failures]
         if shared:
             labels = " and ".join(metric_definition(spec.key).label for spec in shared)
@@ -1344,7 +1359,9 @@ def run_vship_task(
                 del failures[spec.key]
             failed_before = list(errors)
             errors.clear()
-            run_passes([(spec,) for spec in shared], announce=True)
+            # Numbered after the passes before them -- "GPU metric 2/2" after
+            # a shared pass -- so the window counts the shared pass as done.
+            run_passes([(spec,) for spec in shared], len(passes), len(passes) + len(shared))
             errors.extend(failed_before)  # the retries' own errors first
         if not metrics:
             if not errors:

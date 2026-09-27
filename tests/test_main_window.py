@@ -4786,6 +4786,30 @@ def test_the_gpu_half_times_the_metric_under_way_and_the_whole_half_apart(qapp):
     win.close()
 
 
+def test_a_metric_recalculated_after_the_shared_gpu_pass_continues_the_halfs_figures(qapp):
+    """GPU metrics together: Butteraugli failed in the shared pass and is
+    calculated again alone. The half read 100% and then 0% of the retry
+    alone, and its time left was the retry's; the retry is the second of
+    two passes, the shared one done."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "a")
+    half = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "total": 1000,
+            "current": 1000, "fps": 30.0, "state": "running", "waiting_for": None, "phase": None, "step": ""}
+    win._on_task_progress(0, [half])
+    win._on_run_tick()
+    line = win.job_progress_labels[0]
+    assert line.text().startswith("a — GPU metrics 100.0%")
+    win._on_task_progress(0, [dict(half, current=1500, total=2000, fps=40.0, phase=(2, 2, "Butteraugli"))])
+    win._on_run_tick()
+    assert "GPU metrics 2 of 2 (75.0%, 0:00:12 remaining) (Butteraugli 50.0%, 40.0 fps)" in line.text()
+    assert line.toolTip() == "GPU metrics: SSIMULACRA2 (done), Butteraugli (0:00:12 remaining)"
+    assert win._queue_eta_by_lane() == pytest.approx(500 / 40.0)
+    win.close()
+
+
 def test_a_single_gpu_metric_shows_its_time_next_to_its_percentage(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
