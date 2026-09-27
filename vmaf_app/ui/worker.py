@@ -221,10 +221,6 @@ class VmafWorker(QThread):
         with self._handles_lock:
             return self._paused
 
-    def _live_handles(self) -> list[ProcessHandle]:
-        with self._handles_lock:
-            return list(self._handles.values())
-
     def _claim_handle(self, index: int) -> ProcessHandle | None:
         """A handle for one job, or None if the run has been cancelled.
 

@@ -3499,27 +3499,10 @@ class MainWindow(QMainWindow):
         row_data.status_detail = ""
         self._sync_frame_compare()
 
-    def _on_panel_edited(self, *_args) -> None:
-        """Replace all options (kept for programmatic callers/tests).
-
-        Widget signals use _on_panel_field_edited so editing one control in
-        a mixed multi-row selection cannot copy unrelated values from the
-        first selected row over all the others.
-        """
-        if self._syncing_panel:
-            return
-        new_options = self._read_panel_options()
-        self._default_options = clone_options(new_options)
-        changed_rows = []
-        for row in self._panel_target_rows:
-            if self._rows[row].options != new_options:
-                self._invalidate_completed_result(row)
-                changed_rows.append(row)
-            self._rows[row].options = clone_options(new_options)
-            self._set_row_black_bars(row)
-        self._reload_cached_for_rows(changed_rows)
-
     def _on_panel_field_edited(self, field_name: str) -> None:
+        """Applies one edited control to the selected rows. Only that field:
+        copying the whole panel over a mixed multi-row selection would copy
+        the first selected row's other values over all the others."""
         if self._syncing_panel:
             return
         panel = self._read_panel_options()

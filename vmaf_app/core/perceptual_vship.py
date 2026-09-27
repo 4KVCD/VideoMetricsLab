@@ -694,7 +694,6 @@ class _FrameStream:
         self._lock = threading.Lock()
         self._process: subprocess.Popen | None = None
         self._reader = None
-        self.used_hardware = False
         self._thread = threading.Thread(target=self._run, name=f"vship-{label}", daemon=True)
 
     def start(self) -> None:
@@ -707,7 +706,6 @@ class _FrameStream:
                 if self._stopping.is_set():
                     return
                 if code == 0:
-                    self.used_hardware = attempt == 0 and len(self._commands) > 1
                     self._filled.put(_EOF)
                     return
                 if frames == 0 and attempt + 1 < len(self._commands):
