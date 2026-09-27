@@ -343,7 +343,8 @@ class FrameComparePanel(QWidget):
 
     # ------------------------------------------------------------ public API
     def set_runs(self, entries: list[FrameComparisonEntry]) -> None:
-        old_identity = self.current_entry.identity if self.current_entry else None
+        old_entry = self.current_entry
+        old_identity = old_entry.identity if old_entry else None
         self._entries = [self._apply_auto_crop(entry) for entry in entries]
         self._generation += 1
         self._cancel_workers()
@@ -377,7 +378,13 @@ class FrameComparePanel(QWidget):
                 self.video_view.clear()
         elif self.isVisible():
             if self.is_video_mode:
-                self._load_current_video()
+                current = self.current_entry
+                # Only when what is on screen changed: a result arriving for
+                # any video -- scores land several times while a run goes on --
+                # restarted the video being watched.
+                if (old_entry is None or current.identity is not old_identity
+                        or current.comparison != old_entry.comparison):
+                    self._load_current_video()
             else:
                 self._show_or_request()
 

@@ -18,7 +18,7 @@ from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
-from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
+from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
 from vmaf_app.core.perceptual_vship import GPU_ONLY_METRICS, GPU_WAIT_MESSAGE, apply_vship_cpu_fallback
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.time_format import format_hms
@@ -120,6 +120,10 @@ class VmafWorker(QThread):
     # the result (job_index, ComparisonResult, message, stderr_tail).
     # job_index, result, message, stderr_tail, {metric key: why it failed}
     job_partially_failed = Signal(int, object, str, str, object)
+    # job_index, ComparisonResult: the video's result so far, each time a
+    # half or a GPU metric's pass finishes while the rest of it runs on --
+    # shown and saved at once, not only when the whole video is done.
+    result_updated = Signal(int, object)
     cancelled = Signal()
     all_finished = Signal()
 
@@ -437,6 +441,9 @@ class _JobRun:
         # Each half's latest status message: what a half not yet reporting
         # figures is doing (black-bar detection, say).
         self.task_steps: dict[str, str] = {}
+        # The GPU half's finished passes, one metric each, while the half
+        # runs on (see perceptual_so_far).
+        self.pass_outputs: list[PerceptualTaskOutput] = []
         self._finished_tasks = 0
 
     @property
@@ -641,8 +648,22 @@ class _JobRun:
                 on_progress=progress,
                 on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
+                on_pass_done=self.report_pass,
             )
         raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
+
+    def report_pass(self, output: PerceptualTaskOutput) -> None:
+        """A GPU metric's pass is done while its half runs on."""
+        with self.lock:
+            self.pass_outputs.append(output)
+        self._send_result_so_far()
+
+    def _send_result_so_far(self) -> None:
+        with self.lock:
+            task_results = dict(self.task_results)
+        result = self._merged(task_results, self.perceptual_so_far(task_results))
+        if result is not None:
+            self.worker.result_updated.emit(self.index, result)
 
     def run_task(self, task) -> bool:
         """Runs one half; True when it was the video's last."""
@@ -676,7 +697,13 @@ class _JobRun:
                 self.report_progress(task.backend_id, *last_progress)
         with self.lock:
             self._finished_tasks += 1
-            return self._finished_tasks == len(self.plan.tasks)
+            last = self._finished_tasks == len(self.plan.tasks)
+            finished_here = task.backend_id in self.task_results
+        if finished_here and not last:
+            # The other half goes on: this one's scores are shown and saved
+            # now, not when the whole video is done.
+            self._send_result_so_far()
+        return last
 
     def finish(self):
         """The video's result once every half has run.
@@ -686,28 +713,76 @@ class _JobRun:
         finished -- the finished metrics are still the result. Raises when
         nothing was produced.
         """
-        job, options, cached = self.job, self.options, self.cached
+        cached = self.cached
         task_results, task_errors = self.task_results, self.task_errors
+        # The GPU half's result -- or, if it was cancelled or failed after
+        # some of its passes, those passes: their scores were already shown
+        # and saved (see _send_result_so_far).
+        perceptual = self.perceptual_so_far(task_results)
         if self.worker._cancel_event.is_set():
             # Cancelling keeps the halves that had finished. The halves run
             # independently, so a video's GPU metrics are often done hours
             # before its CPU metrics; the whole video used to be dropped,
             # finished scores included, when the run was cancelled.
-            if not task_results:
+            if not task_results and perceptual is None:
                 raise Cancelled("Cancelled by user")
             task_errors = [(task, error) for task, error in task_errors
                            if not isinstance(error, (Cancelled, PerceptualCancelled))]
-        if task_errors and not task_results and cached is None:
+        if task_errors and not task_results and perceptual is None and cached is None:
             raise task_errors[0][1]
+        result = self._merged(task_results, perceptual)
+        if result is None:
+            if task_errors:
+                raise task_errors[0][1]
+            raise VmafRunError("No executable metric task was planned.")
+        # A metric that failed while the rest of its group finished (CVVDP,
+        # GPU only, beside SSIMULACRA2/Butteraugli) is reported like a
+        # failed group.
+        metric_failures = dict(perceptual.failures) if perceptual is not None else {}
+        if not task_errors and not metric_failures:
+            return result, None
+        messages, stderr_tail, reasons = [], "", {}
+        for task, error in task_errors:
+            labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
+            messages.append(f"{labels} failed: {error}")
+            stderr_tail = stderr_tail or getattr(error, "stderr_tail", "") or ""
+            reasons.update(dict.fromkeys(task.metric_keys, str(error)))
+        for key, message in metric_failures.items():
+            messages.append(f"{metric_definition(key).label} failed: {message}")
+            reasons[key] = message
+        return result, ("\n".join(messages), stderr_tail, reasons)
+
+    def perceptual_so_far(self, task_results: dict) -> PerceptualTaskOutput | None:
+        """The GPU half's result; until it has one, its finished passes."""
+        if "perceptual" in task_results:
+            return task_results["perceptual"]
+        with self.lock:
+            passes = list(self.pass_outputs)
+        if not passes:
+            return None
+        metrics = MetricResultSet()
+        for output in passes:
+            for key in output.metrics:
+                metrics.add(output.metrics.get(key))
+        return PerceptualTaskOutput(metrics, passes[0].source_crop, passes[0].distorted_crop,
+                                    max(output.compared_frame_count for output in passes))
+
+    def _merged(self, task_results: dict, perceptual: PerceptualTaskOutput | None) -> ComparisonResult | None:
+        """The video's result from the halves given: FFmpeg's (or the saved
+        run), the GPU metrics, and saved scores this run does not replace.
+        Always a new object: a half's own result is merged again each time
+        another piece lands, and the window may be showing the last one."""
+        job, options, cached = self.job, self.options, self.cached
         result = task_results.get("ffmpeg")
-        if result is None and cached is not None:
+        if result is not None:
+            result = copy.copy(result)
+        elif cached is not None:
             # FFmpeg's metrics are all saved: the saved run is the base, so
             # its crops, frame table and file info carry over. A shallow
             # copy is enough -- merge_metric_results replaces the metric set
             # and frame table rather than editing them, and the row's own
             # result object must not change under the UI thread.
             result = copy.copy(job.cached_result)
-        perceptual = task_results.get("perceptual")
         if perceptual is not None:
             if result is None:
                 from vmaf_app.core.models import ComparisonResult, FrameScores
@@ -727,9 +802,7 @@ class _JobRun:
                 combined.add(value)
             result.merge_metric_results(combined)
         if result is None:
-            if task_errors:
-                raise task_errors[0][1]
-            raise VmafRunError("No executable metric task was planned.")
+            return None
         if cached is not None:
             # Saved metrics fill only what this run did not calculate: a
             # fresh score always wins over the saved one.
@@ -739,19 +812,4 @@ class _JobRun:
             )
             if carried:
                 result.merge_metric_results(carried)
-        # A metric that failed while the rest of its group finished (CVVDP,
-        # GPU only, beside SSIMULACRA2/Butteraugli) is reported like a
-        # failed group.
-        metric_failures = dict(perceptual.failures) if perceptual is not None else {}
-        if not task_errors and not metric_failures:
-            return result, None
-        messages, stderr_tail, reasons = [], "", {}
-        for task, error in task_errors:
-            labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
-            messages.append(f"{labels} failed: {error}")
-            stderr_tail = stderr_tail or getattr(error, "stderr_tail", "") or ""
-            reasons.update(dict.fromkeys(task.metric_keys, str(error)))
-        for key, message in metric_failures.items():
-            messages.append(f"{metric_definition(key).label} failed: {message}")
-            reasons[key] = message
-        return result, ("\n".join(messages), stderr_tail, reasons)
+        return result

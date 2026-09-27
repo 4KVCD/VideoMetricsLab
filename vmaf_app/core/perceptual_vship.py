@@ -1231,8 +1231,12 @@ def run_vship_task(
     on_status: Callable[[str], None] | None = None,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
+    on_pass_done: Callable[[PerceptualTaskOutput], None] | None = None,
 ) -> PerceptualTaskOutput:
     """Scores `specs` on the GPU once no other Vship pass is running.
+
+    `on_pass_done` gets each metric's pass as it finishes, before the next
+    starts: the window shows a score the moment it exists.
 
     One metric at a time: each gets a pass of its own, and the video is
     decoded again for each. Scoring them in one pass held every metric's
@@ -1295,6 +1299,8 @@ def run_vship_task(
                 metrics.add(output.metrics.get(key))
             failures.update(output.failures)
             frames = max(frames, output.compared_frame_count)
+            if on_pass_done is not None and output.metrics:
+                on_pass_done(output)
         if not metrics:
             if not errors:
                 raise VshipUnavailableError("Vship produced no scores.")
@@ -1585,6 +1591,7 @@ def apply_vship_cpu_fallback(
     on_status: Callable[[str], None] | None = None,
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
+    on_pass_done: Callable[[PerceptualTaskOutput], None] | None = None,
 ) -> PerceptualTaskOutput:
     """Run selected backends, with a per-metric GPU-to-CPU fallback.
 
@@ -1657,7 +1664,7 @@ def apply_vship_cpu_fallback(
                 if cpu_specs and on_progress else on_progress
             ),
             on_status=on_status, cancel_event=cancel_event,
-            process_handle=process_handle,
+            process_handle=process_handle, on_pass_done=on_pass_done,
         )
     except PerceptualCancelled:
         raise

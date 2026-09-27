@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
@@ -1048,4 +1049,71 @@ def test_each_failed_metric_is_sent_with_its_own_reason(qapp, monkeypatch):
     (_index, _result, _message, _tail, reasons), = sent
     assert reasons == {"vmaf": "ffmpeg exited with code 1", "psnr": "ffmpeg exited with code 1",
                        "cvvdp": "CVVDP handler failed: out of memory"}
+
+
+def test_a_videos_finished_half_is_sent_while_its_other_half_runs(qapp, monkeypatch):
+    """A video's GPU metrics were done hours before its VMAF, but nothing of
+    the video was shown or saved until both were."""
+    gpu_sent = threading.Event()
+
+    def ffmpeg(s, d, *a, **k):
+        assert gpu_sent.wait(10), "the GPU half's scores were held back"
+        return _fake_result(d.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4")], parallel_jobs=2)
+    updates, finished = [], []
+    worker.result_updated.connect(lambda index, result: (updates.append(result), gpu_sent.set()),
+                                  Qt.DirectConnection)
+    worker.job_finished.connect(lambda index, result: finished.append(result))
+    worker.run()
+    _drain(qapp)
+    assert updates and updates[0].has_metric("ssimulacra2") and not updates[0].has_metric("vmaf")
+    assert finished and finished[0].has_metric("ssimulacra2") and finished[0].has_metric("vmaf")
+
+
+def test_each_gpu_metric_is_sent_as_its_pass_finishes(qapp, monkeypatch):
+    def vship(s, d, *a, on_pass_done=None, **k):
+        on_pass_done(_perceptual_output())  # SSIMULACRA2's pass, before the half's next one
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4")])
+    updates = []
+    worker.result_updated.connect(lambda index, result: updates.append(result), Qt.DirectConnection)
+    worker.run()
+    assert any(update.has_metric("ssimulacra2") for update in updates)
+
+
+def test_cancelling_keeps_the_gpu_metrics_whose_passes_had_finished(qapp, monkeypatch):
+    """SSIMULACRA2 was on screen and saved from its finished pass; cancelling
+    during Butteraugli's pass must not take it away."""
+    pass_done = threading.Event()
+
+    def ffmpeg(s, d, *a, cancel_event=None, **k):
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        raise Cancelled("Cancelled by user")
+
+    def vship(s, d, *a, cancel_event=None, on_pass_done=None, **k):
+        on_pass_done(_perceptual_output())
+        pass_done.set()
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        raise PerceptualCancelled("Cancelled by user")
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4")], parallel_jobs=2)
+    finished = []
+    worker.job_finished.connect(lambda index, result: finished.append(result))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    assert pass_done.wait(10)
+    worker.cancel()
+    runner.join(10)
+    _drain(qapp)
+    assert len(finished) == 1 and finished[0].has_metric("ssimulacra2")
 

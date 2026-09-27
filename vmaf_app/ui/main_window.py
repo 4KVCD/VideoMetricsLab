@@ -450,6 +450,8 @@ class CompletedRun:
         self.result = result
         self.label = label
         self.graph_identity = object()
+        # A video's result so far, during its run (MainWindow._on_result_updated).
+        self.partial = False
 
 
 @dataclass
@@ -3882,6 +3884,7 @@ class MainWindow(QMainWindow):
         self._worker.job_finished.connect(self._on_job_finished)
         self._worker.job_failed.connect(self._on_job_failed)
         self._worker.job_partially_failed.connect(self._on_job_partially_failed)
+        self._worker.result_updated.connect(self._on_result_updated)
         self._worker.cancelled.connect(self._on_run_cancelled)
         self._worker.all_finished.connect(self._on_all_finished)
         self._worker.start()
@@ -4581,13 +4584,25 @@ class MainWindow(QMainWindow):
         return (text + "\n\nLeft ticked, it is calculated again on the next run; untick to skip it."
                 "\nThe full details are in the log (Settings > Storage > Log files).")
 
-    def _on_job_finished(self, index: int, result) -> int | None:
-        """Shows and caches a finished job. Returns the row it was shown on,
-        or None when it was not shown (row removed, source or settings
+    def _on_result_updated(self, index: int, result) -> None:
+        """A video's result so far -- one of its halves, or one GPU metric,
+        done while the rest runs on: saved, and shown in the table, the
+        graph and Video Compare now. Until now nothing of a video was kept
+        before all of it was done: a Butteraugli score waited hours for the
+        video's VMAF, and closing the app or a crash in between lost it."""
+        if index in self._finished_jobs:
+            return  # the video's own result has arrived: it is the one to show
+        self._on_job_finished(index, result, final=False)
+
+    def _on_job_finished(self, index: int, result, final: bool = True) -> int | None:
+        """Shows and caches a finished job -- or, with final=False, a job's
+        result so far (see _on_result_updated). Returns the row it was shown
+        on, or None when it was not shown (row removed, source or settings
         changed since the job started)."""
-        self._mark_job_over(index)
         row_data = self._job_rows[index]
-        row_data.metric_failures = {}
+        if final:
+            self._mark_job_over(index)
+            row_data.metric_failures = {}
         row = self._row_index_of(row_data)
         if row is None:
             return None  # the row was removed mid-run; nothing to write the result to
@@ -4620,12 +4635,14 @@ class MainWindow(QMainWindow):
         # independent viewer; its queue deduplicates the reference when several
         # distorted jobs finish together. A resolution round trip has no
         # second file, so only its source is scanned.
-        bitrate_infos = [result.source_info]
-        if result.resample_target is None:
-            bitrate_infos.append(result.distorted_info)
-        self.bitrate_panel.add_and_analyze(bitrate_infos)
+        if final:
+            bitrate_infos = [result.source_info]
+            if result.resample_target is None:
+                bitrate_infos.append(result.distorted_info)
+            self.bitrate_panel.add_and_analyze(bitrate_infos)
         if self._source_info is None or self._source_info.path != result.source:
-            self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
+            if final:
+                self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
             return None
         if cache_options != row_data.options or not cache_cvvdp.same_as(row_data.cvvdp):
             # The row's settings changed after this job was launched, so the
@@ -4633,13 +4650,16 @@ class MainWindow(QMainWindow):
             # cached above under the options it really used -- returning to
             # them brings it straight back -- but showing it here would
             # label it with settings it was never computed with.
-            self._set_row_status(
-                row,
-                "Finished with the previous settings; change them back to see the result.",
-            )
+            if final:
+                self._set_row_status(
+                    row,
+                    "Finished with the previous settings; change them back to see the result.",
+                )
             return None
-        if row_data.completed_run is not None:
-            previous = row_data.completed_run
+        previous = row_data.completed_run
+        # This run's own result so far, before this piece: updated in place.
+        continuing = previous is not None and previous.partial
+        if previous is not None:
             # Saved scores the row was showing for metrics this run did not
             # calculate (unticked ones) stay on show; the run's result held
             # only what it calculated, so they used to vanish. Merged into a
@@ -4652,22 +4672,30 @@ class MainWindow(QMainWindow):
             if carried:
                 result = copy.copy(result)
                 result.merge_metric_results(carried)
-            if not self.graph_panel.remove_by_identity(previous.graph_identity):
+            if not continuing and not self.graph_panel.remove_by_identity(previous.graph_identity):
                 self.graph_panel.remove_by_path(row_data.path)
         run = CompletedRun(result, label)
+        if continuing:
+            # The same series and the same Video Compare entry as the pieces
+            # before: its colour, whether it was hidden, and what is playing
+            # stay as they were.
+            run.graph_identity = previous.graph_identity
+        run.partial = not final
         row_data.completed_run = run
-        row_data.analysis_status = ""
+        if final:  # a result so far leaves the video in progress
+            row_data.analysis_status = ""
         if row_data.options.resample_test is None:
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
-        row_data.status_detail = (
-            f"{len(result.frames)} scored frames; metrics: "
-            + ", ".join(metric.label for metric in METRICS if result.has_metric(metric.key))
-        )
+        if final:
+            row_data.status_detail = (
+                f"{len(result.frames)} scored frames; metrics: "
+                + ", ".join(metric.label for metric in METRICS if result.has_metric(metric.key))
+            )
         self._set_row_metrics(row)
         # Straight onto the graph: a run that has finished is a curve, and
         # waiting for a button press to see it serves nobody.
         self.graph_panel.add_run(
-            result, label, identity=run.graph_identity
+            result, label, identity=run.graph_identity, restore=not continuing
         )
         self._sync_frame_compare()
         return row

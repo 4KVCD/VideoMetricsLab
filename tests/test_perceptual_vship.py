@@ -1125,3 +1125,21 @@ def test_a_failed_gpu_pass_is_logged(monkeypatch, caplog):
         vship.run_vship_task(source, source, request, request.metrics, device, None, None)
     assert "GPU metric 1/2 (SSIMULACRA2) failed: Could not initialize Vship ssimulacra2: out of memory" in caplog.text
     assert "GPU metric 2/2 (CVVDP) failed: Could not initialize Vship cvvdp: out of memory" in caplog.text
+
+
+def test_each_gpu_metrics_pass_is_handed_on_as_it_finishes(monkeypatch):
+    """The pass loop had each metric's scores the moment its pass ended, and
+    kept them until every pass was done."""
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    done = []
+
+    def one_pass(_s, _t, _r, specs, *_a, **_k):
+        assert [output.metrics.keys() for output in done] == [("ssimulacra2",)] * (specs[0].key == "cvvdp")
+        return _single_metric_output(specs[0].key, 80.0, "gpu")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", one_pass)
+    source = VideoInfo(Path("s.mkv"), 64, 48, 24.0, 60.0, 1440, "h264", pix_fmt="yuv420p")
+    vship.run_vship_task(source, source, request, request.metrics, device, None, None, on_pass_done=done.append)
+    assert [output.metrics.keys() for output in done] == [("ssimulacra2",), ("cvvdp",)]
+

@@ -4941,3 +4941,49 @@ def test_settings_copy_the_log_to_the_clipboard(qapp, tmp_path, monkeypatch):
     win.settings_copy_log_btn.click()
     assert win.settings_status.text() == "There is no log to copy yet."
     win.close()
+
+
+def test_a_videos_result_so_far_is_shown_saved_and_graphed_during_its_run(qapp, tmp_path, monkeypatch):
+    """A Butteraugli score done hours before the video's VMAF was neither
+    shown nor saved until the whole video was done -- closing the app or a
+    crash in between lost it."""
+    from vmaf_app.core import result_cache
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "distorted.mp4"
+    distorted.write_bytes(b"d" * 500)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    rd = win._rows[row]
+    win._job_rows = [rd]
+    win._job_total_frames = [100]
+    win._on_job_started(0, "distorted")
+    rd.analysis_status = "Calculating"
+    so_far = _fake_completed_run(str(distorted)).result
+    so_far.source, so_far.distorted = source, distorted
+
+    win._on_result_updated(0, so_far)
+
+    assert win.distorted_table.item(row, main_window_module.COL_VMAF).text() != ""  # shown at once
+    assert rd.analysis_status == "Calculating"  # the video is still going
+    assert rd.completed_run.partial
+    assert win._file_writes.wait_until_idle(10.0)
+    assert _load_cached(source, distorted, rd.options) is not None  # saved at once
+    assert len(win.graph_panel._entries) == 1
+    series = next(iter(win.graph_panel._entries.values()))
+    series.color = "#123456"  # as the user left it
+
+    final = _fake_completed_run(str(distorted)).result
+    final.source, final.distorted = source, distorted
+    win._on_job_finished(0, final)
+    assert len(win.graph_panel._entries) == 1  # the same series, updated in place
+    assert next(iter(win.graph_panel._entries.values())).color == "#123456"
+    assert not rd.completed_run.partial and rd.analysis_status != "Calculating"
+    win._on_result_updated(0, so_far)  # a late piece after the video's own result: ignored
+    assert rd.completed_run.result is final
+    assert win._file_writes.wait_until_idle(10.0)
+    win.close()
+
