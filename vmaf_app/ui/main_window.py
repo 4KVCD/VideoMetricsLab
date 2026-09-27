@@ -948,9 +948,14 @@ class MainWindow(QMainWindow):
         self.settings_export_log_btn.setToolTip(
             "Save the log files as one .zip file, to attach when reporting a problem.")
         self.settings_export_log_btn.clicked.connect(self._on_export_log)
+        self.settings_copy_log_btn = QPushButton("Copy log")
+        self.settings_copy_log_btn.setToolTip(
+            "Copy the latest session that calculated metrics to the clipboard, to paste into a post or chat.")
+        self.settings_copy_log_btn.clicked.connect(self._on_copy_log)
         log_row = QHBoxLayout()
         log_row.addWidget(self.settings_log_label, stretch=1)
         log_row.addWidget(open_logs)
+        log_row.addWidget(self.settings_copy_log_btn)
         log_row.addWidget(self.settings_export_log_btn)
         storage_form.addRow("Log files:", log_row)
         outer.addWidget(storage_box)
@@ -1151,6 +1156,23 @@ class MainWindow(QMainWindow):
 
     def _on_pick_export_dir(self) -> None:
         self._pick_directory("Where should exports be written?", self.settings_export_edit)
+
+    def _on_copy_log(self) -> None:
+        """Puts the part of the log worth sharing on the clipboard."""
+        try:
+            shared = app_log.log_text_to_share()
+        except OSError as error:
+            self.settings_status.setText(f"Could not read the log: {error}")
+            return
+        if shared is None:
+            self.settings_status.setText("There is no log to copy yet.")
+            return
+        text, shortened = shared
+        QApplication.clipboard().setText(text)
+        lines = text.count("\n") + 1
+        self.settings_status.setText(
+            f"Copied the log to the clipboard ({lines} lines" + (
+                ", the middle left out -- Export log saves all of it)." if shortened else ")."))
 
     def _on_export_log(self) -> None:
         """Saves the log files as one .zip wherever the user picks."""

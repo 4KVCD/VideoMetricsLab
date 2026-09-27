@@ -113,3 +113,76 @@ def test_the_session_log_in_use_is_exported_up_to_its_last_line(session_log, tmp
     with zipfile.ZipFile(target) as archive:
         assert b"the failure just before exporting" in archive.read("VideoMetricsLab.log")
 
+
+def _write_log(directory, name, *lines):
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / name).write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+
+
+def _session(tag: str, *, run: bool, extra=()):
+    lines = [f"{tag} INFO vmaf_app.main: ==== VideoMetricsLab starting ====",
+             f"{tag} INFO vmaf_app.main: VideoMetricsLab 1.3 (from source)"]
+    if run:
+        lines += [f"{tag} INFO vmaf_app.ui.worker: Run started: 1 video(s)",
+                  f"{tag} ERROR vmaf_app.ui.worker: Video 1 'film': GPU metrics failed: CUDA error"]
+    return [*lines, *extra]
+
+
+def test_the_copy_starts_at_the_latest_session_that_ran_metrics(tmp_path):
+    """A failed overnight run, then the app restarted: the copy still holds
+    the run, and not the sessions before it."""
+    _write_log(tmp_path, "VideoMetricsLab.log",
+               *_session("day1", run=True), *_session("day2", run=True), *_session("day3", run=False))
+    text, shortened = app_log.log_text_to_share(tmp_path)
+    assert not shortened
+    assert text.startswith("day2 INFO vmaf_app.main: ==== VideoMetricsLab starting ====")
+    assert "day2 ERROR vmaf_app.ui.worker: Video 1 'film': GPU metrics failed: CUDA error" in text
+    assert "day3" in text and "day1" not in text
+
+
+def test_a_session_begun_in_the_previous_log_file_is_copied_whole(tmp_path):
+    lines = _session("day1", run=True)
+    _write_log(tmp_path, "VideoMetricsLab.log.1", *lines[:2])
+    _write_log(tmp_path, "VideoMetricsLab.log", *lines[2:])
+    text, _ = app_log.log_text_to_share(tmp_path)
+    assert text.startswith("day1 INFO vmaf_app.main: ==== VideoMetricsLab starting ====") and "Run started" in text
+
+
+def test_a_long_session_keeps_its_start_and_its_end(tmp_path):
+    steps = [f"step {n:05d} " + "x" * 90 for n in range(2000)]
+    _write_log(tmp_path, "VideoMetricsLab.log", *_session("day1", run=True, extra=[*steps, "the last line"]))
+    text, shortened = app_log.log_text_to_share(tmp_path, limit=20_000)
+    assert shortened and len(text) <= 20_000
+    assert text.startswith("day1 INFO vmaf_app.main: ==== VideoMetricsLab starting ====")
+    assert text.endswith("the last line")
+    assert "lines left out here; Export log in Settings saves all of it" in text
+
+
+def test_there_is_nothing_to_copy_without_a_log(tmp_path):
+    assert app_log.log_text_to_share(tmp_path / "none") is None
+
+
+def test_the_session_and_run_lines_are_the_ones_the_copy_looks_for(tmp_path, monkeypatch):
+    """The copy finds sessions and runs by the lines the app writes: if their
+    wording changed, the copy would start in the wrong place."""
+    import logging
+
+    from vmaf_app import main as entry
+    from vmaf_app.ui import worker as worker_module
+
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path)
+    monkeypatch.setattr(threading, "excepthook", lambda args: None)
+    monkeypatch.setattr(sys, "excepthook", lambda *args: None)
+    entry.start_session_log()
+    try:
+        worker_module.VmafWorker([], parallel_jobs=1).run()
+        logging.getLogger("vmaf_app.ui.worker").error("a failure in the run")
+        text, _ = app_log.log_text_to_share(tmp_path)
+    finally:
+        from PySide6.QtCore import qInstallMessageHandler
+
+        qInstallMessageHandler(None)
+        app_log.stop_logging()
+    assert text.splitlines()[0].endswith("==== VideoMetricsLab starting ====")
+    assert "Run started: 0 video(s)" in text and "a failure in the run" in text
+

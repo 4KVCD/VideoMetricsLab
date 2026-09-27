@@ -108,7 +108,7 @@ def start_session_log() -> None:
     if app_log.start_logging() is None:
         return
     log = logging.getLogger("vmaf_app.main")
-    log.info("==== %s starting ====", APP_NAME)
+    log.info("==== %s%s", APP_NAME, app_log.SESSION_START)
     for line in app_log.environment_lines():
         log.info("%s", line)
     from PySide6.QtCore import qInstallMessageHandler, qVersion

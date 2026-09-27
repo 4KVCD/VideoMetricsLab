@@ -4951,3 +4951,25 @@ def test_settings_export_the_log_as_a_zip(qapp, tmp_path, monkeypatch):
     assert win.settings_status.text() == "There is no log to export yet."
     win.close()
 
+
+def test_settings_copy_the_log_to_the_clipboard(qapp, tmp_path, monkeypatch):
+    """To paste into a post or chat without finding and attaching files."""
+    from vmaf_app.core import app_log
+    from vmaf_app.ui import main_window as main_window_module
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "VideoMetricsLab.log").write_bytes(
+        b"t INFO vmaf_app.main: ==== VideoMetricsLab starting ====\nt INFO vmaf_app.ui.worker: Run started: 1 video(s)\n"
+        b"t ERROR vmaf_app.ui.worker: Video 1 'film': GPU metrics failed: CUDA error\n")
+    monkeypatch.setattr(app_log, "log_dir", lambda: logs)
+    win = main_window_module.MainWindow()
+    assert win.settings_copy_log_btn.text() == "Copy log"
+    win.settings_copy_log_btn.click()
+    assert QApplication.clipboard().text().endswith("Video 1 'film': GPU metrics failed: CUDA error")
+    assert win.settings_status.text() == "Copied the log to the clipboard (3 lines)."
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path / "none")
+    win.settings_copy_log_btn.click()
+    assert win.settings_status.text() == "There is no log to copy yet."
+    win.close()
+

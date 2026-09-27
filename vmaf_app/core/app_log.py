@@ -30,6 +30,14 @@ LOG_FILE_NAME = "VideoMetricsLab.log"
 CRASH_FILE_NAME = "native-crashes.log"
 _MAX_BYTES = 5 * 1024 * 1024
 _BACKUPS = 4
+#: The line that opens each session (vmaf_app.main.start_session_log), and
+#: the one that opens each run (vmaf_app.ui.worker).
+SESSION_START = " starting ===="
+RUN_START = "Run started:"
+#: The most text "Copy log" puts on the clipboard: a post or chat takes this
+#: much, and a session's log is a few kilobytes -- a run of four films is
+#: some 30 KB -- so only an unusually long one is cut.
+SHARE_LIMIT = 60_000
 _FORMAT = "%(asctime)s.%(msecs)03d %(levelname)-7s [%(threadName)s] %(name)s: %(message)s"
 
 _handler: logging.Handler | None = None
@@ -118,6 +126,49 @@ def export_logs(destination: Path, directory: Path | None = None) -> list[str]:
         for path in files:
             archive.write(path, arcname=path.name)
     return [path.name for path in files]
+
+
+def log_text_to_share(directory: Path | None = None, limit: int = SHARE_LIMIT) -> tuple[str, bool] | None:
+    """The part of the log to paste into a post or chat, and whether it was
+    shortened; None when there is no log yet.
+
+    From the start of the latest session that calculated metrics -- so a
+    run that failed before the app was restarted is still in it -- to the
+    end. Longer than `limit`, it keeps the session's first lines (what the
+    app ran on) and as much of the end as fits, saying how many lines are
+    left out; Export log saves all of it."""
+    directory = directory or log_dir()
+    if _handler is not None:
+        _handler.flush()
+    current = directory / LOG_FILE_NAME
+    rotated = [directory / f"{LOG_FILE_NAME}.{n}" for n in range(_BACKUPS, 0, -1)]  # oldest first
+    lines: list[str] = []
+    for path in [*rotated, current]:
+        if path.is_file():
+            lines += path.read_text(encoding="utf-8", errors="replace").splitlines()
+    if not lines:
+        return None
+    last_run = max((i for i, line in enumerate(lines) if RUN_START in line), default=len(lines) - 1)
+    start = max((i for i, line in enumerate(lines[:last_run + 1]) if line.endswith(SESSION_START)), default=0)
+    lines = lines[start:]
+    text = "\n".join(lines)
+    if len(text) <= limit:
+        return text, False
+    head: list[str] = []
+    for line in lines[:12]:  # the session's header: version, Windows, CPU, FFmpeg, GPUs...
+        if len("\n".join([*head, line])) > limit // 4:
+            break
+        head.append(line)
+    tail: list[str] = []
+    budget = limit - len("\n".join(head)) - 120
+    for line in reversed(lines[len(head):]):
+        if len(line) + 1 > budget:
+            break
+        tail.insert(0, line)
+        budget -= len(line) + 1
+    left_out = len(lines) - len(head) - len(tail)
+    note = f"... {left_out} lines left out here; Export log in Settings saves all of it ..."
+    return "\n".join([*head, note, *tail]), True
 
 
 def environment_lines() -> list[str]:

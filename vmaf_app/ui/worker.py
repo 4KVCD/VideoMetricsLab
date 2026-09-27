@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
@@ -279,7 +280,7 @@ class VmafWorker(QThread):
                 _log.error("Video %d '%s' could not be set up: %s", index + 1, job.label, error, exc_info=error)
                 self.job_started.emit(index, job.label)
                 self.job_failed.emit(index, str(error), getattr(error, "stderr_tail", "") or "")
-        _log.info("Run started: %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time",
+        _log.info("%s %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time", RUN_START,
                   len(self._jobs), self.parallel_jobs)
         for run in runs:
             _log.info("%s", run.describe())
