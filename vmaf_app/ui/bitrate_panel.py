@@ -71,9 +71,9 @@ def _path_key(path: Path) -> str:
 
 def _rate_text(kbps: float) -> str:
     if kbps >= 10_000:
-        return tr("{value:.2f} Mb/s", value=kbps / 1000)
+        return tr("{rate:.2f} Mb/s", rate=kbps / 1000)
     if kbps >= 1000:
-        return tr("{value:.3f} Mb/s", value=kbps / 1000)
+        return tr("{rate:.3f} Mb/s", rate=kbps / 1000)
     return f"{kbps:.0f} kb/s"
 
 
@@ -267,8 +267,10 @@ class BitratePanel(QWidget):
         if completed:
             answer = QMessageBox.question(
                 self, tr("Recalculate bitrate?"),
-                tr("{count} checked video(s) already have bitrate results.\n\nRecalculate those files? Choose No to keep "
-                    "their results and calculate only files without results.", count=len(completed)),
+                ntr("{count} checked video already has bitrate results.\n\nRecalculate it? Choose No to keep "
+                    "its results and calculate only files without results.",
+                    "{count} checked videos already have bitrate results.\n\nRecalculate those files? Choose No to "
+                    "keep their results and calculate only files without results.", len(completed)),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if answer != QMessageBox.Yes:

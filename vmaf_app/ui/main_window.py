@@ -1865,7 +1865,7 @@ class MainWindow(QMainWindow):
         self._ffmpeg_banner.setVisible(False)
         self._locate_ffmpeg_btn.setVisible(False)
         self.status_label.setText(
-            tr("Using ffmpeg {format_version} from {directory}", format_version=format_version(status.ffmpeg.version), directory=directory)
+            tr("Using ffmpeg {version} from {directory}", version=format_version(status.ffmpeg.version), directory=directory)
         )
         return True
 
@@ -5023,7 +5023,8 @@ class MainWindow(QMainWindow):
         self.source_edit.setText(str(result.source))
         info = result.source_info
         self.source_info_label.setText(
-            tr("{media_info_string}, {bitrate_string}  ({time})  [from saved run]", media_info_string=media_info_string(info), bitrate_string=bitrate_string(info), time=format_hms(info.duration, decimals=1))
+            tr("{media}, {bitrate}  ({duration})  [from saved run]", media=media_info_string(info),
+               bitrate=bitrate_string(info), duration=format_hms(info.duration, decimals=1))
         )
 
     def _offer_to_switch_source(self, result) -> bool:
@@ -5056,7 +5057,7 @@ class MainWindow(QMainWindow):
         if len(runs) == 1:
             path, _ = QFileDialog.getSaveFileName(
                 self, tr("Save analysis results"), f"{runs[0].label}{RESULT_SUFFIX}",
-                tr("Analysis results (*{RESULT_SUFFIX})", RESULT_SUFFIX=RESULT_SUFFIX),
+                tr("Analysis results (*{suffix})", suffix=RESULT_SUFFIX),
             )
             if path:
                 self._submit_save(runs[0].result, Path(path), runs[0].label)

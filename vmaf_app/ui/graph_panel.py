@@ -1311,7 +1311,7 @@ class GraphPanel(QWidget):
         title_fm = QFontMetrics(title_font)
         title = tr("{label} vs time", label=metric.label)
         if metric.key == "xpsnr":
-            title += tr(" — ∞ plotted at {XPSNR_INFINITY_PLOT_DB:g} dB (display only)", XPSNR_INFINITY_PLOT_DB=_XPSNR_INFINITY_PLOT_DB)
+            title += tr(" — ∞ plotted at {db:g} dB (display only)", db=_XPSNR_INFINITY_PLOT_DB)
 
         cell_font = QFont("Consolas")
         cell_font.setStyleHint(QFont.Monospace)
@@ -1441,7 +1441,7 @@ class GraphPanel(QWidget):
 
     def save_run_for_later(self, result: ComparisonResult, label: str) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save analysis results"), f"{label}{RESULT_SUFFIX}", tr("Analysis results (*{RESULT_SUFFIX})", RESULT_SUFFIX=RESULT_SUFFIX)
+            self, tr("Save analysis results"), f"{label}{RESULT_SUFFIX}", tr("Analysis results (*{suffix})", suffix=RESULT_SUFFIX)
         )
         if not path:
             return

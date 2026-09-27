@@ -151,7 +151,7 @@ def test_recalculate_confirmation_only_applies_to_checked_results(qapp, tmp_path
     panel.analyze_btn.click()
     keys = list(panel._entries)
     assert queued == ([keys[0], keys[2]] if answer == QMessageBox.Yes else [keys[2]])
-    assert len(messages) == 1 and "1 checked video(s)" in messages[0]
+    assert len(messages) == 1 and "1 checked video already has bitrate results" in messages[0]
 
 
 def test_no_recalculation_leaves_completed_results_and_no_work(qapp, tmp_path, monkeypatch):
