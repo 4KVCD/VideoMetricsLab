@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import sys
 
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app import APP_NAME, __version__
+from vmaf_app.core import app_log
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.ui.main_window import MainWindow
 
@@ -93,6 +95,38 @@ def self_test() -> str:
     return "\n".join(lines)
 
 
+_QT_LOG_LEVELS = {"QtDebugMsg": logging.DEBUG, "QtInfoMsg": logging.INFO, "QtWarningMsg": logging.WARNING,
+                  "QtCriticalMsg": logging.ERROR, "QtFatalMsg": logging.CRITICAL}
+
+
+def _log_qt_message(mode, _context, message: str) -> None:
+    logging.getLogger("vmaf_app.qt").log(_QT_LOG_LEVELS.get(getattr(mode, "name", ""), logging.WARNING), message)
+
+
+def start_session_log() -> None:
+    """The log file for this session, headed with what it runs on."""
+    if app_log.start_logging() is None:
+        return
+    log = logging.getLogger("vmaf_app.main")
+    log.info("==== %s starting ====", APP_NAME)
+    for line in app_log.environment_lines():
+        log.info("%s", line)
+    from PySide6.QtCore import qInstallMessageHandler, qVersion
+
+    log.info("Qt %s", qVersion())
+    from vmaf_app.core.ffmpeg_locate import check_tools, format_version
+    from vmaf_app.core.gpu import detected_gpu_vendors
+
+    tools = check_tools()
+    if tools.ok:
+        log.info("FFmpeg %s: %s", format_version(tools.ffmpeg.version), tools.ffmpeg.path)
+    else:
+        for problem in tools.problems:
+            log.warning("FFmpeg: %s", problem)
+    log.info("GPUs: %s", ", ".join(vendor.name for vendor in detected_gpu_vendors()) or "none detected")
+    qInstallMessageHandler(_log_qt_message)
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -119,6 +153,7 @@ def main() -> int:
             box.exec()
         return 0 if "FAIL" not in report else 1
 
+    start_session_log()
     from vmaf_app.core.perceptual_vship import start_vship_probe
 
     start_vship_probe()  # done by the time the first video is added

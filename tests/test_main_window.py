@@ -4812,3 +4812,16 @@ def test_the_pc_is_kept_awake_exactly_while_a_run_is_active(qapp, monkeypatch):
     assert calls == [True, False]
     win.close()
 
+
+def test_settings_show_the_log_folder_and_open_it(qapp, tmp_path, monkeypatch):
+    from vmaf_app.core import app_log
+    from vmaf_app.ui import main_window as main_window_module
+
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path / "logs")
+    opened = []
+    monkeypatch.setattr(main_window_module.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile()))
+    win = main_window_module.MainWindow()
+    assert win.settings_log_label.text() == str(tmp_path / "logs")
+    win._on_open_log_dir()
+    assert opened and opened[0].replace("/", "\\").lower() == str(tmp_path / "logs").lower()
+    win.close()

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import logging
 import math
 import os
 import queue
@@ -61,6 +62,9 @@ _METRICS = {"ssimulacra2", "butteraugli", "cvvdp"}
 #: Scored on the GPU only: the official CPU implementation needs PyTorch
 #: (almost 1 GB) and takes seconds per 4K frame.
 GPU_ONLY_METRICS = frozenset({"cvvdp"})
+
+
+_log = logging.getLogger(__name__)
 
 
 class VshipUnavailableError(PerceptualRunError):
@@ -294,6 +298,11 @@ def detect_vship_device() -> tuple[VshipDevice | None, str]:
     with _PROBE_LOCK:
         if _probed is None:
             _probed = (_probe_vship_device(), time.monotonic())
+            device, reason = _probed[0]
+            if device is not None:
+                _log.info("Vship %s GPU: %s", device.version, device.name)
+            else:
+                _log.warning("Vship GPU unavailable: %s", reason)
         return _probed[0]
 
 

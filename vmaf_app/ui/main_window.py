@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import logging
 import os
 import time
 from dataclasses import dataclass, field, replace
@@ -55,7 +56,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__
-from vmaf_app.core import perceptual_vship, result_cache
+from vmaf_app.core import app_log, perceptual_vship, result_cache
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
     DEFAULT_PRESET,
@@ -172,6 +173,9 @@ _STATE_COLOURS = {
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
 _PAUSED = "Paused"  # MainWindow._run_hold while a run is paused
+
+_log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class MetricColumn:
@@ -516,6 +520,15 @@ class MainWindow(QMainWindow):
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
         self._settings = Settings.load()
+        _log.info(
+            "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
+            "saved results %s (%s)",
+            "on" if self._settings.parallel_jobs > 1 else "off",
+            "on" if self._settings.default_gpu_decode else "off",
+            self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
+            "reused" if self._settings.use_cache else "not reused",
+            self._settings.cache_dir or "default folder",
+        )
         # Serialising a feature-length result is seconds of work; done here
         # it froze the window at the moment a run finished. See FileWriteQueue.
         self._file_writes = FileWriteQueue(self)
@@ -857,6 +870,20 @@ class MainWindow(QMainWindow):
         self.settings_use_cache.setChecked(self._settings.use_cache)
         self.settings_use_cache.toggled.connect(self._on_settings_edited)
         storage_form.addRow("", self.settings_use_cache)
+
+        # Where each session's log goes: runs, steps and every failure in
+        # full, kept after the window that showed them is closed.
+        self.settings_log_label = QLabel(str(app_log.log_dir()))
+        self.settings_log_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.settings_log_label.setToolTip(
+            "Each session's setup, every run and its steps, and every failure with its full text. "
+            "Send these files along when reporting a problem.")
+        open_logs = QPushButton("Open")
+        open_logs.clicked.connect(self._on_open_log_dir)
+        log_row = QHBoxLayout()
+        log_row.addWidget(self.settings_log_label, stretch=1)
+        log_row.addWidget(open_logs)
+        storage_form.addRow("Log files:", log_row)
         outer.addWidget(storage_box)
 
         defaults_box = QGroupBox("Defaults for newly added videos")
@@ -1055,6 +1082,11 @@ class MainWindow(QMainWindow):
 
     def _on_pick_export_dir(self) -> None:
         self._pick_directory("Where should exports be written?", self.settings_export_edit)
+
+    def _on_open_log_dir(self) -> None:
+        directory = app_log.log_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory)))
 
     def _on_open_cache_dir(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(result_cache.cache_dir())))
