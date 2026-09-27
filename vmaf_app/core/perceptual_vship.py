@@ -37,7 +37,7 @@ from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, write_vship_config
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-from vmaf_app.core.gpu import hw_native_format, hwaccel_args, pick_hwaccel
+from vmaf_app.core.gpu import HwAccelPlan, hw_native_format, hwaccel_args, pick_hwaccel
 from vmaf_app.core.metric_results import (
     FrameMetricResult,
     MetricProvenance,
@@ -644,13 +644,15 @@ class _FrameStream:
     order; the scoring thread returns each slot once Vship is done with it.
     Both the pipe read and the Vship call release the GIL, so the two inputs
     and the GPU all make progress at once. If hardware decode fails before
-    delivering a frame, the same pictures are decoded in software instead.
+    delivering a frame, the same pictures are decoded in software instead,
+    and `on_software` is called first.
     """
 
     def __init__(
         self, lib: ctypes.CDLL, frame_bytes: int, commands: list[list[str]],
         process_handle: ProcessHandle | None, label: str,
         interleaved_chroma: tuple[int, int, type[np.integer]] | None = None,
+        on_software: Callable[[], None] | None = None,
     ) -> None:
         # Allocated one by one so a failure part-way frees what was already
         # allocated: a list comprehension left those buffers -- page-locked
@@ -683,6 +685,7 @@ class _FrameStream:
         self._commands = commands
         self._process_handle = process_handle
         self._label = label
+        self._on_software = on_software
         self._free: queue.Queue[int] = queue.Queue()
         self._filled: queue.Queue[int | BaseException] = queue.Queue()
         for slot in range(_RING_SLOTS):
@@ -708,7 +711,10 @@ class _FrameStream:
                     self._filled.put(_EOF)
                     return
                 if frames == 0 and attempt + 1 < len(self._commands):
-                    continue  # hardware decode refused this stream: decode it in software
+                    # Hardware decode refused this stream: decode it in software.
+                    if self._on_software is not None:
+                        self._on_software()
+                    continue
                 raise VshipUnavailableError(
                     f"FFmpeg failed while decoding the {self._label} for Vship"
                     + (f": {stderr}" if stderr else ".")
@@ -1357,9 +1363,27 @@ def _run_vship_pass(
     frame_specs = tuple(spec for spec in specs if spec.key != "cvvdp")
     if cvvdp_spec is not None and step != 1:
         raise VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.")
+    # Where each video is decoded, in the "(GPU decode: ...)" form FFmpeg's
+    # runs report it in: the window's run line shows it as "Decoder: Source:
+    # GPU, test video: CPU". Only FFmpeg's metrics reported it, so a video
+    # with only GPU metrics never said where it was decoded.
+    decode = {"source": src_hwaccel, "distorted": dist_hwaccel}
+    decode_lock = threading.Lock()
+
+    def decoded_in_software(side: str) -> Callable[[], None]:
+        def report() -> None:
+            with decode_lock:  # the two inputs' threads can both fall back
+                decode[side] = None
+                if on_status:
+                    on_status(f"GPU decode failed for the {'test video' if side == 'distorted' else side}, "
+                              "decoding it in software "
+                              f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
+        return report
+
     if on_status:
         labels = ", ".join(metric_definition(spec.key).label for spec in specs)
-        on_status(f"Vship GPU ({device.name}): calculating {labels}…")
+        on_status(f"Vship GPU ({device.name}): calculating {labels} "
+                  f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
 
     streams: list[_FrameStream] = []
     lanes: list[_MetricLane | _CvvdpLane] = []
@@ -1399,22 +1423,22 @@ def _run_vship_pass(
         return attempts
 
     try:
-        def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label):
+        def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label, side):
             split = None
             if passthrough is not None:
                 dtype = np.uint16 if image_format.sample != _VSHIP_ENUMS[8] else np.uint8
                 split = (plane_sizes[0], plane_sizes[1], dtype)
             pixel_format = passthrough[1] if passthrough else image_format.pixel_format
             return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format),
-                                process_handle, label, split)
+                                process_handle, label, split, decoded_in_software(side))
 
         # Appended one at a time: if the test video's buffers cannot be
         # allocated, the reference's stream is already in `streams`, so the
         # finally block below frees it. Built as one list, it leaked.
         streams.append(stream(source, source_crop, src_size, src_hwaccel, src_format, src_passthrough,
-                              src_frame_bytes, src_plane_sizes, "reference"))
+                              src_frame_bytes, src_plane_sizes, "reference", "source"))
         streams.append(stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format,
-                              dist_passthrough, dist_frame_bytes, dist_plane_sizes, "test video"))
+                              dist_passthrough, dist_frame_bytes, dist_plane_sizes, "test video", "distorted"))
         for stream in streams:
             stream.start()
         source_stream, distorted_stream = streams

@@ -900,6 +900,32 @@ def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypa
     assert ("ffmpeg", "starting", "Detecting black bars in source...") in steps
 
 
+def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
+    """The halves decode separately: each carries its own latest plan, kept
+    when later messages replace its step."""
+    def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
+        on_status("Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
+        on_status("GPU decode failed, retrying (GPU decode: source cuda, distorted cpu)...")
+        on_progress(10, 100, 5.0)
+        return _fake_result(d.path.name)
+
+    def gpu(s, d, *a, on_status=None, **k):
+        on_status("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…")
+        on_status("GPU metric 1/1: SSIMULACRA2")
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
+    worker = VmafWorker([_split_job("d.mp4")])
+    snapshots = []
+    worker.task_progress.connect(lambda _index, snapshot: snapshots.append(snapshot))
+    worker.run()
+    _drain(qapp)
+    last = {task["backend"]: task["decode"] for task in snapshots[-1]}
+    assert last == {"ffmpeg": "source cuda, distorted cpu", "perceptual": "source cuda, distorted cuda"}
+    assert all("decode" in task for snapshot in snapshots for task in snapshot)
+
+
 def test_cancelling_keeps_a_videos_finished_gpu_metrics(qapp, monkeypatch):
     """Two videos in parallel: the first's GPU metrics finished, the GPU went
     on to the second, and Cancel dropped the first video whole -- its

@@ -4609,6 +4609,62 @@ def test_each_half_is_named_as_metrics_not_bare_cpu_or_gpu(qapp):
     win.close()
 
 
+def _half(backend, keys, *, state="running", decode="", current=20, total=100, fps=10.0, phase=None):
+    return {"backend": backend, "metric_keys": keys, "current": current, "total": total, "fps": fps,
+            "state": state, "phase": phase, "waiting_for": None, "step": "", "decode": decode}
+
+
+def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
+    """Only FFmpeg's metrics reported a decode plan, so a video with only
+    GPU metrics never showed "Decoder: ..." on its line."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cpu")])
+    win._on_job_status(0, "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…")
+    assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: CPU")
+    win.close()
+
+
+def test_halves_that_decode_differently_each_say_where(qapp):
+    """One half fell back to software; the other did not. The line said
+    whichever had reported last, for both. A half that is done is left out."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    cpu = _half("ffmpeg", ("vmaf",), decode="source cuda, distorted cpu")
+    gpu = _half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cuda")
+    win._on_task_progress(0, [cpu, gpu])
+    assert win.job_progress_labels[0].text().endswith(
+        "   ·   Decoder: Source: GPU, test video: CPU (CPU metrics) / GPU (GPU metrics)")
+    win._on_task_progress(0, [{**cpu, "state": "done"}, gpu])
+    assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: GPU")
+    win.close()
+
+
+@pytest.mark.parametrize(("step", "shown"), [
+    ("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…",
+     "GPU metrics: Vship GPU (fake GPU): calculating SSIMULACRA2"),
+    ("GPU decode failed for the test video, decoding it in software (GPU decode: source cuda, distorted cpu)…",
+     "GPU metrics: GPU decode failed for the test video, decoding it in software"),
+])
+def test_a_starting_gpu_half_shows_its_step_without_the_decode_plan(qapp, step, shown):
+    """The plan is shown once, as "Decoder: ...", not in the step as well."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [{**_half("perceptual", ("ssimulacra2",), state="starting",
+                                       decode="source cuda, distorted cuda"), "step": step}])
+    assert win.job_progress_labels[0].text().startswith(f"a — {shown}   ·   Decoder: ")
+    win.close()
+
+
 def test_a_resolution_tests_decoder_names_only_the_source(qapp):
     """A resolution test decodes only the source; its made-up test video
     has no decoder to name."""

@@ -238,7 +238,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None, fail=None):
+         inspect=None, fail=None, on_status=None):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -283,7 +283,8 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     request = analysis_request_from_vmaf_options(
         VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode), metrics)
     output = vship.run_vship_task(source or _hevc("source.mkv"), test or _hevc("test.mkv"), request,
-                                  request.metrics, _fake_device(), None, None, cancel_event=cancel)
+                                  request.metrics, _fake_device(), None, None, cancel_event=cancel,
+                                  on_status=on_status)
     return output, spawned
 
 
@@ -301,9 +302,15 @@ def test_frames_arrive_in_order_through_the_ring_and_both_lanes(monkeypatch):
 
 def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeypatch):
     """Hardware decode can refuse a stream (an unsupported profile, say). The
-    same pictures are then decoded in software instead of abandoning the GPU run."""
+    same pictures are then decoded in software instead of abandoning the GPU run.
+
+    The pass says where each video is decoded, and again when one falls
+    back: the window's "Decoder: ..." for a video with only GPU metrics
+    comes from these messages."""
+    statuses = []
     output, spawned = _run(
         monkeypatch, gpu_decode=True, metrics=("ssimulacra2",), hwaccel=lambda _v, _c: "cuda",
+        on_status=statuses.append,
         children={
             "source": [_frames_command(0, _FRAME_BYTES, exit_code=1),  # hardware: refused
                        _frames_command(5, _FRAME_BYTES)],             # software retry
@@ -316,6 +323,17 @@ def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeyp
     assert "-hwaccel" in hardware and "hwdownload" in " ".join(hardware)
     assert "-hwaccel" not in software and "hwdownload" not in " ".join(software)
     assert len(spawned["test"]) == 1, "the input that decoded fine was not restarted"
+    assert statuses == [
+        "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…",
+        "GPU decode failed for the source, decoding it in software (GPU decode: source cpu, distorted cuda)…",
+    ]
+
+
+def test_a_pass_with_gpu_decode_off_says_so(monkeypatch):
+    statuses = []
+    _run(monkeypatch, metrics=("ssimulacra2",), children=_both(_frames_command(2, _FRAME_BYTES)),
+         on_status=statuses.append)
+    assert statuses == ["Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: off)…"]
 
 
 def test_a_truncated_frame_is_an_error_not_a_short_result(monkeypatch):

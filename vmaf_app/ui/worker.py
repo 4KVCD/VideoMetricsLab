@@ -441,6 +441,11 @@ class _JobRun:
         # Each half's latest status message: what a half not yet reporting
         # figures is doing (black-bar detection, say).
         self.task_steps: dict[str, str] = {}
+        # Each half's latest decode plan, "source cuda, distorted cpu" or
+        # "off", from its "(GPU decode: ...)" messages: the halves decode
+        # separately, and one can fall back to software while the other
+        # does not.
+        self.task_decode: dict[str, str] = {}
         # The GPU half's finished passes, one metric each, while the half
         # runs on (see perceptual_so_far).
         self.pass_outputs: list[PerceptualTaskOutput] = []
@@ -544,6 +549,7 @@ class _JobRun:
                 "state": self._state(task),
                 "waiting_for": self.task_waiting.get(task.backend_id),
                 "step": self.task_steps.get(task.backend_id, ""),
+                "decode": self.task_decode.get(task.backend_id, ""),
                 "phase": self.task_phases.get(task.backend_id),
             })
         return found
@@ -552,6 +558,8 @@ class _JobRun:
         _log.info("%s: %s", self.name, message)
         with self.lock:
             self.task_steps[backend] = message
+            if plan := re.search(r"\(GPU decode: ([^)]*)\)", message):
+                self.task_decode[backend] = plan.group(1)
             if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                 self.task_waiting[backend] = "GPU"
             phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)

@@ -18,6 +18,7 @@ import contextlib
 import copy
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -4049,14 +4050,14 @@ class MainWindow(QMainWindow):
     def _step_text(message: str) -> str:
         """A half's status message as its step before figures arrive, e.g.
         "Detecting black bars in source" -- "" for the message that only
-        says FFmpeg is starting (its decode plan is shown on its own).
-        Before, a video with CPU and GPU halves said only "CPU starting" for
-        as long as black bars on a 4K source were being looked for."""
-        text = message.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
+        says FFmpeg is starting. A decode plan, "(GPU decode: ...)", is left
+        out: it is shown on its own, as "Decoder: ...". Before, a video with
+        CPU and GPU halves said only "CPU starting" for as long as black
+        bars on a 4K source were being looked for."""
+        text = re.sub(r"\s*\(GPU decode: [^)]*\)", "", message)
+        text = text.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
         if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
             return ""
-        if text.startswith("GPU decode failed, retrying"):
-            return "GPU decode failed, retrying"
         return text
 
     def _redraw_job_lines(self) -> None:
@@ -4425,7 +4426,16 @@ class MainWindow(QMainWindow):
                 parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} remaining"]
             else:
                 parts += self._halves_detail(index)
-        if decode_status := self._job_decode_status.get(index):
+        if any("decode" in task for task in snapshots):
+            # Each half's own plan, from the worker: the halves decode
+            # separately, and a GPU-only video has no FFmpeg half at all.
+            planned = [(name, task) for name, task in zip(names, snapshots, strict=True) if task.get("decode")]
+            # A half that is done no longer decodes, unless none is left.
+            live = [(name, task) for name, task in planned if task.get("state") != "done"] or planned
+            decode_status = self._decoder_text(index, {name: task["decode"] for name, task in live}) if live else ""
+        else:
+            decode_status = self._job_decode_status.get(index, "")
+        if decode_status:
             parts.append(decode_status)
         self._set_job_line(index, f"{self._job_label(index)} — " + "   ·   ".join(parts), tooltip)
 
@@ -4600,7 +4610,7 @@ class MainWindow(QMainWindow):
             marker = "(GPU decode: "
             if marker in message:
                 plan = message.split(marker, 1)[1].split(")", 1)[0]
-                self._job_decode_status[index] = self._decoder_text(index, plan)
+                self._job_decode_status[index] = self._decoder_text(index, {"": plan})
             if index in self._job_task_progress:
                 # Keep backend-specific rates and pass progress visible. A
                 # generic phase message must not replace the useful task
@@ -4612,21 +4622,34 @@ class MainWindow(QMainWindow):
                 self._job_line_shape.pop(index, None)
         self._update_run_status()
 
-    def _decoder_text(self, index: int, plan: str) -> str:
+    def _decoder_text(self, index: int, plans: dict[str, str]) -> str:
         """Where each video is decoded, as the run line shows it: "Decoder:
         Source: GPU, test video: CPU".
 
-        `plan` is FFmpeg's decode plan, "source cuda, distorted cpu" or
-        "off". The line showed it nearly as it came, "Decode: source cuda,
-        test cuda": the decoder API's name where the question is only
-        whether the GPU or the CPU decodes each video.
+        `plans` holds each half's decode plan by the half's name on the line
+        ("CPU metrics"), as the half reports it: "source cuda, distorted
+        cpu" or "off". The line showed it nearly as it came, "Decode:
+        source cuda, test cuda": the decoder API's name where the question
+        is only whether the GPU or the CPU decodes each video. Where the
+        halves differ -- one fell back to software -- each is named: "test
+        video: CPU (CPU metrics) / GPU (GPU metrics)".
         """
-        sides = dict(part.split(" ", 1) for part in plan.split(", ") if " " in part)
-        where = {side: "CPU" if sides.get(side, "cpu") == "cpu" else "GPU" for side in ("source", "distorted")}
+        def where(plan: str) -> dict[str, str]:
+            sides = dict(part.split(" ", 1) for part in plan.split(", ") if " " in part)
+            return {side: "CPU" if sides.get(side, "cpu") == "cpu" else "GPU" for side in ("source", "distorted")}
+
+        by_half = {half: where(plan) for half, plan in plans.items()}
+
+        def side(name: str) -> str:
+            found = {half: sides[name] for half, sides in by_half.items()}
+            if len(set(found.values())) == 1:
+                return next(iter(found.values()))
+            return " / ".join(f"{decoder} ({half})" for half, decoder in found.items())
+
         row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
         if row is not None and row.options.resample_test is not None:
-            return f"Decoder: Source: {where['source']}"  # a resolution test decodes only the source
-        return f"Decoder: Source: {where['source']}, test video: {where['distorted']}"
+            return f"Decoder: Source: {side('source')}"  # a resolution test decodes only the source
+        return f"Decoder: Source: {side('source')}, test video: {side('distorted')}"
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was
