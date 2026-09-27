@@ -313,7 +313,17 @@ def _v1_model_file(options: VmafOptions) -> Path | None:
 #: of the source's final frame. Those frames score terribly (48 and 31 on a
 #: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
 #: the run silently reports a worse encode than was delivered.
-_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0"]
+#:
+#: The default ts_sync_mode pairs each distorted frame with the last source
+#: frame at or before its timestamp. Two files with the same frames can have
+#: timestamps a millisecond apart -- MKV stores whole milliseconds, and each
+#: program rounds frame times from its own clock -- and a distorted frame
+#: stamped 1 ms early was compared with the source's previous frame: VMAF 0
+#: and XPSNR ~16 dB at scene cuts and in motion, on an anime episode whose
+#: SSIMULACRA2 (paired frame by frame) was 93 on the same frame. "nearest"
+#: takes the source frame nearest in time, the same frame whichever way the
+#: two timestamps are off by less than half a frame.
+_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
 
 
 def _build_libvmaf_stage(
