@@ -178,3 +178,25 @@ def test_new_files_calculate_without_confirmation(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(panel, "_queue_keys", lambda keys: queued.extend(keys))
     panel.analyze_btn.click()
     assert queued == list(panel._entries)
+
+
+def test_updating_a_row_does_not_make_qt_warn(qapp, tmp_path):
+    """Each row update put the row's items into the table again, which Qt
+    refuses with "cannot insert an item that is already owned by another
+    QTableWidget" -- nine warnings in the log per update."""
+    from PySide6.QtCore import qInstallMessageHandler
+
+    messages = []
+    qInstallMessageHandler(lambda _mode, _context, message: messages.append(message))
+    try:
+        panel = BitratePanel()
+        path = tmp_path / "encode.mkv"
+        panel.add_files([path])
+        panel._on_analyzed(path, _info(path), _data(path))
+        panel._refresh_table_values()
+    finally:
+        qInstallMessageHandler(None)
+    assert not [message for message in messages if "already owned" in message]
+    assert panel.table.item(0, 1).text() == "encode.mkv" and panel.table.item(0, 4).text() == "4"
+    assert panel.table.item(0, 0).checkState() == Qt.Checked
+

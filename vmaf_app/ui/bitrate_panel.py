@@ -404,14 +404,23 @@ class BitratePanel(QWidget):
         finally:
             self._populating = False
 
+    def _cell(self, row: int, column: int) -> QTableWidgetItem:
+        """The row's item in `column`, put into the table the first time.
+        Only then: Qt refuses setItem for an item the table already holds,
+        with a warning -- nine to the log each time a row was updated."""
+        item = self.table.item(row, column)
+        if item is None:
+            item = QTableWidgetItem()
+            self.table.setItem(row, column, item)
+        return item
+
     def _set_table_row(self, row: int, entry: BitrateEntry) -> None:
         if row < 0:
             return
-        use = self.table.item(row, _COL_USE) or QTableWidgetItem()
+        use = self._cell(row, _COL_USE)
         use.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
         use.setCheckState(Qt.Checked if entry.enabled else Qt.Unchecked)
         use.setBackground(QColor(entry.color))
-        self.table.setItem(row, _COL_USE, use)
         values = [
             entry.path.name,
             media_info_string(entry.info) if entry.info else "",
@@ -427,11 +436,10 @@ class BitratePanel(QWidget):
                 _rate_text(summary.maximum_kbps),
             ]
         for column, value in zip(range(1, self.table.columnCount()), values, strict=True):
-            item = self.table.item(row, column) or QTableWidgetItem()
+            item = self._cell(row, column)
             item.setText(value)
             if column == _COL_FILE:
                 item.setToolTip(str(entry.path))
-            self.table.setItem(row, column, item)
 
     def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
         if self._populating or item.column() != _COL_USE:
