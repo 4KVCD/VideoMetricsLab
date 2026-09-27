@@ -572,10 +572,13 @@ class _JobRun:
                     # SSIMULACRA2's last rate.
                     current, total, _fps = self.task_progress[backend]
                     self.task_progress[backend] = (current, total, 0.0)
-            elif "on CPU" in message or "using CPU" in message:
+            elif "on CPU" in message or "using CPU" in message or "on the CPU" in message:
                 # A GPU pass has handed work to the CPU fallback (or a
                 # planned CPU perceptual pass has begun); don't leave a
-                # stale GPU metric number on the status line.
+                # stale GPU metric number on the status line. "on the CPU"
+                # is a failed GPU metric retried there ("SSIMULACRA2 failed
+                # on the GPU; calculating it on the CPU"): the line went on
+                # naming the last GPU pass, "CVVDP 3 of 3", over the retry.
                 self.task_phases.pop(backend, None)
             snapshot = self.task_snapshots()
         self.worker.task_progress.emit(self.index, snapshot)

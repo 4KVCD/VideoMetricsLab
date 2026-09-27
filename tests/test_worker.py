@@ -900,6 +900,28 @@ def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypa
     assert ("ffmpeg", "starting", "Detecting black bars in source...") in steps
 
 
+def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp, monkeypatch):
+    """SSIMULACRA2 failed on the GPU and was calculated again on the CPU,
+    while the line still said "CVVDP 3 of 3" -- the last GPU pass."""
+    def gpu(s, d, *a, on_status=None, on_progress=None, **k):
+        on_status("GPU metric 3/3: CVVDP")
+        on_progress(290, 300, 40.0)
+        on_status("SSIMULACRA2 failed on the GPU; calculating it on the CPU…")
+        on_progress(10, 100, 2.0)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
+    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))])
+    phases = []
+    worker.task_progress.connect(lambda _index, snapshot: phases.extend(
+        (task["phase"], task["current"]) for task in snapshot if task["backend"] == "perceptual"))
+    worker.run()
+    _drain(qapp)
+    assert ((3, 3, "CVVDP"), 290) in phases
+    assert (None, 10) in phases and ((3, 3, "CVVDP"), 10) not in phases
+
+
 def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
     """The halves decode separately: each carries its own latest plan, kept
     when later messages replace its step."""
