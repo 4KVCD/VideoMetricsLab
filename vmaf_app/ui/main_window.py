@@ -1673,6 +1673,10 @@ class MainWindow(QMainWindow):
         metric_options_form.addRow("", self.cvvdp_resize_check)
 
         self.duration_edit = QTimeEdit()
+        # In a right-to-left window (Arabic) QTimeEdit writes the sections
+        # backwards ("000.00:00:00"); times read left to right in every
+        # language. The direction must be set before the display format.
+        self.duration_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.duration_edit.setDisplayFormat("HH:mm:ss.zzz")
         self.duration_edit.setTime(QTime(0, 0, 0, 0))
         self.duration_edit.timeChanged.connect(
