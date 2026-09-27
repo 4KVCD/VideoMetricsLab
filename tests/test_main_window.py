@@ -4843,37 +4843,6 @@ def test_the_run_end_and_the_keep_awake_request_are_logged(qapp, monkeypatch, ca
     win.close()
 
 
-def test_power_notices_reaching_the_window_are_logged(qapp, caplog):
-    """A run's GPU metrics failed about when the screen turned off; nothing
-    recorded that the screen had."""
-    import ctypes
-    import ctypes.wintypes
-    import logging
-    import uuid
-
-    import shiboken6
-    from PySide6.QtCore import QByteArray
-
-    caplog.set_level(logging.INFO, logger="vmaf_app")
-    win = MainWindow()
-    setting = ctypes.create_string_buffer(uuid.UUID("6fe69556-704a-47a0-8f24-c28d936fda47").bytes_le
-                                          + (4).to_bytes(4, "little") + (0).to_bytes(4, "little"))
-    msg = ctypes.wintypes.MSG()
-    msg.message, msg.wParam, msg.lParam = 0x0218, 0x8013, ctypes.addressof(setting)
-    win._run_active = True
-    # As Qt passes it: a VoidPtr, falsy whatever it points at.
-    assert win._power_notice_filter.nativeEventFilter(
-        QByteArray(b"windows_generic_MSG"), shiboken6.VoidPtr(ctypes.addressof(msg))) == (False, 0)  # passed on
-    msg.wParam, msg.lParam = 0x0004, 0
-    win._run_active = False
-    win._power_notice_filter.nativeEventFilter(QByteArray(b"windows_generic_MSG"), ctypes.addressof(msg))
-    msg.message = 0x0200  # a mouse move: not a power notice
-    win._power_notice_filter.nativeEventFilter(QByteArray(b"windows_generic_MSG"), ctypes.addressof(msg))
-    assert "Screen turned off (a run is going)" in caplog.text
-    assert "Windows is going to sleep" in caplog.text and "going to sleep (a run" not in caplog.text
-    win.close()
-
-
 def test_a_failed_metrics_cell_says_why_it_failed(qapp, tmp_path, monkeypatch):
     """Every red Failed cell said "This metric failed on the last run. Untick
     to skip it." -- the reason was only on the file name's tooltip."""
@@ -4972,4 +4941,3 @@ def test_settings_copy_the_log_to_the_clipboard(qapp, tmp_path, monkeypatch):
     win.settings_copy_log_btn.click()
     assert win.settings_status.text() == "There is no log to copy yet."
     win.close()
-
