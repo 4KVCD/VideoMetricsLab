@@ -159,6 +159,7 @@ def main() -> int:
     start_vship_probe()  # done by the time the first video is added
     window = MainWindow()
     window.show()
+    window.check_for_updates()  # once, now, and at no other time
     return app.exec()
 
 

@@ -4987,3 +4987,102 @@ def test_a_videos_result_so_far_is_shown_saved_and_graphed_during_its_run(qapp, 
     assert win._file_writes.wait_until_idle(10.0)
     win.close()
 
+
+def _release(version="9.9"):
+    from vmaf_app.core.update_check import Release
+
+    return Release(version, "https://github.com/4KVCD/VideoMetricsLab/releases/tag/v" + version, "- Faster.")
+
+
+def test_a_newer_release_is_offered_with_where_saved_results_are(qapp, monkeypatch):
+    from vmaf_app.core import result_cache
+    from vmaf_app.ui import main_window as main_window_module
+
+    win = MainWindow()
+    opened = []
+    monkeypatch.setattr(main_window_module.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    win._on_update_found(_release())
+    box = win._update_box
+    assert box.windowTitle() == "Update available"
+    assert box.text().startswith("VideoMetricsLab 9.9 is available. You have ")
+    assert "Updating does not affect your saved results" in box.informativeText()
+    assert str(result_cache.cache_dir()) in box.informativeText()
+    assert box.detailedText() == "- Faster."
+    next(button for button in box.buttons() if button.text() == "Download").click()
+    assert opened == ["https://github.com/4KVCD/VideoMetricsLab/releases/tag/v9.9"]
+    win.close()
+
+
+def test_a_skipped_release_is_not_offered_again(qapp, monkeypatch):
+    win = MainWindow()
+    monkeypatch.setattr(win._settings, "save", lambda: None)
+    win._on_update_found(_release())
+    next(button for button in win._update_box.buttons() if button.text() == "Skip this version").click()
+    assert win._settings.skipped_update_version == "9.9"
+    win._update_box = None
+    win._on_update_found(_release())
+    assert win._update_box is None  # nothing shown for it again
+    win._on_update_found(_release("10.0"))
+    assert win._update_box is not None  # a later one is
+    win._update_box.close()
+    win.close()
+
+
+@pytest.mark.parametrize(("latest", "offered"), [("9.9", True), (None, False)])
+def test_the_startup_check_offers_only_a_newer_release(qapp, monkeypatch, latest, offered):
+    """On the latest version, nothing is shown."""
+    from PySide6.QtCore import Qt
+
+    from vmaf_app import __version__
+    from vmaf_app.core import update_check
+
+    monkeypatch.setattr(update_check, "latest_release", lambda: _release(latest or __version__))
+    win = MainWindow()
+    found = []
+    win.update_found.connect(found.append, Qt.DirectConnection)
+    win._ask_for_updates()
+    assert bool(found) is offered
+    win.close()
+
+
+def test_a_failed_startup_check_shows_nothing(qapp, monkeypatch):
+    from PySide6.QtCore import Qt
+
+    from vmaf_app.core import update_check
+
+    def unreachable():
+        raise update_check.UpdateCheckError("no network")
+
+    monkeypatch.setattr(update_check, "latest_release", unreachable)
+    win = MainWindow()
+    found = []
+    win.update_found.connect(found.append, Qt.DirectConnection)
+    win._ask_for_updates()
+    assert found == []
+    win.close()
+
+
+def test_building_the_window_never_checks_for_updates(qapp, monkeypatch):
+    """Only the app's startup asks GitHub -- tests build hundreds of windows."""
+    from vmaf_app.core import update_check
+
+    monkeypatch.setattr(update_check, "latest_release", lambda: pytest.fail("the window asked GitHub"))
+    win = MainWindow()
+    qapp.processEvents()
+    win.close()
+
+
+def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
+    import threading
+
+    win = MainWindow()
+    started = []
+    monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self.name))
+    win.settings_check_updates.setChecked(False)
+    win.check_for_updates()
+    assert started == [] and win._settings.check_for_updates is False
+    win.settings_check_updates.setChecked(True)
+    win.check_for_updates()
+    assert started == ["update-check"]
+    win.close()
+

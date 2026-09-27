@@ -18,13 +18,14 @@ import contextlib
 import copy
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTime, QTimer, QUrl
+from PySide6.QtCore import Qt, QTime, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -57,7 +58,8 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__
-from vmaf_app.core import app_log, perceptual_vship, result_cache
+from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check
+from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
     DEFAULT_PRESET,
@@ -518,12 +520,18 @@ class RowData:
 
 
 class MainWindow(QMainWindow):
+    # A newer release than this one (update_check.Release), found by the
+    # startup check off the UI thread.
+    update_found = Signal(object)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} {__version__}")
         # Settings first: the ffmpeg location and what new rows default to
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
+        self.update_found.connect(self._on_update_found)
+        self._update_box: QMessageBox | None = None
         self._settings = Settings.load()
         _log.info(
             "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
@@ -998,6 +1006,14 @@ class MainWindow(QMainWindow):
         self.settings_remember_size.setChecked(self._settings.remember_window_size)
         self.settings_remember_size.toggled.connect(self._on_settings_edited)
         window_layout.addWidget(self.settings_remember_size)
+        self.settings_check_updates = QCheckBox("Check GitHub for a newer version when the app starts")
+        self.settings_check_updates.setToolTip(
+            "Once, at startup, asks GitHub's public list of releases whether there is a newer one, "
+            "and says so only if there is. Nothing is sent but the request; GitHub sees your "
+            "address, as it would for any page.")
+        self.settings_check_updates.setChecked(self._settings.check_for_updates)
+        self.settings_check_updates.toggled.connect(self._on_settings_edited)
+        window_layout.addWidget(self.settings_check_updates)
         outer.addWidget(window_box)
 
         outer.addStretch(1)
@@ -1048,6 +1064,7 @@ class MainWindow(QMainWindow):
         self._settings.compare_decoded_videos = int(self.settings_decoded_videos.currentData())
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
+        self._settings.check_for_updates = self.settings_check_updates.isChecked()
 
         if self._settings.ffmpeg_dir != before_ffmpeg:
             self._apply_ffmpeg_setting()
@@ -1114,6 +1131,55 @@ class MainWindow(QMainWindow):
         self.settings_status.setText(
             f"Copied the log to the clipboard ({lines} lines" + (
                 ", the middle left out -- Export log saves all of it)." if shortened else ")."))
+
+    def check_for_updates(self) -> None:
+        """Asks GitHub for the latest release, off the UI thread. Called
+        once, when the app starts (vmaf_app.main) -- never by the window
+        itself, so building one never touches the network."""
+        if self._settings.check_for_updates:
+            threading.Thread(target=self._ask_for_updates, name="update-check", daemon=True).start()
+
+    def _ask_for_updates(self) -> None:
+        try:
+            release = update_check.latest_release()
+        except update_check.UpdateCheckError as error:
+            _log.info("Update check: GitHub could not be asked (%s)", error)
+            return
+        if not update_check.is_newer(release.version, __version__):
+            _log.info("Update check: %s %s is the latest release", APP_NAME, __version__)
+            return
+        _log.info("Update check: %s %s is available (this is %s)", APP_NAME, release.version, __version__)
+        self.update_found.emit(release)
+
+    def _on_update_found(self, release: update_check.Release) -> None:
+        """Offers the newer release; nothing is shown while this one is the
+        latest, or for a release the user chose to skip."""
+        if release.version == self._settings.skipped_update_version:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle("Update available")
+        box.setText(f"{APP_NAME} {release.version} is available. You have {__version__}.")
+        box.setInformativeText(
+            "Updating does not affect your saved results or settings: they are stored separately "
+            f"from the app, in {result_cache.cache_dir()} and {user_data_dir()}.")
+        if release.notes.strip():
+            box.setDetailedText(release.notes)
+        download = box.addButton("Download", QMessageBox.AcceptRole)
+        skip = box.addButton("Skip this version", QMessageBox.DestructiveRole)
+        box.addButton("Later", QMessageBox.RejectRole)
+        box.setDefaultButton(download)
+
+        def answered(_result) -> None:
+            if box.clickedButton() is download:
+                QDesktopServices.openUrl(QUrl(release.page_url))
+            elif box.clickedButton() is skip:
+                self._settings.skipped_update_version = release.version
+                self._settings.save()
+
+        box.finished.connect(answered)
+        self._update_box = box
+        box.open()
 
     def _on_export_log(self) -> None:
         """Saves the log files as one .zip wherever the user picks."""

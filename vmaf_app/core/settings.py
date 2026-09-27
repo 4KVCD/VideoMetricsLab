@@ -80,6 +80,11 @@ class Settings:
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True
 
+    # Ask GitHub for a newer release when the app starts (vmaf_app.core.
+    # update_check), and a release the user chose to skip.
+    check_for_updates: bool = True
+    skipped_update_version: str = ""
+
     # Restore the window to the size it was closed at.
     remember_window_size: bool = True
     window_width: int = 1280
