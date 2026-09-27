@@ -39,6 +39,7 @@ from vmaf_app.core.frame_extract import (
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
+from vmaf_app.i18n import N_, tr, tr_message
 from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.rolling_video_view import RollingVideoCompareView as VideoCompareView
@@ -63,21 +64,21 @@ def parse_timestamp(value: str) -> float:
     """Accept seconds, M:SS, or H:MM:SS and return seconds."""
     parts = value.strip().split(":")
     if not 1 <= len(parts) <= 3 or any(not part.strip() for part in parts):
-        raise ValueError("Use seconds, M:SS, or H:MM:SS.sss")
+        raise ValueError(tr("Use seconds, M:SS, or H:MM:SS.sss"))
     try:
         numbers = [float(part) for part in parts]
     except ValueError as exc:
-        raise ValueError("Use seconds, M:SS, or H:MM:SS.sss") from exc
+        raise ValueError(tr("Use seconds, M:SS, or H:MM:SS.sss")) from exc
     if any(number < 0 for number in numbers):
-        raise ValueError("Timestamp cannot be negative")
+        raise ValueError(tr("Timestamp cannot be negative"))
     if any(not math.isfinite(number) for number in numbers):
-        raise ValueError("Timestamp must be a finite number")
+        raise ValueError(tr("Timestamp must be a finite number"))
     if any(not number.is_integer() for number in numbers[:-1]):
-        raise ValueError("Hours and minutes must be whole numbers")
+        raise ValueError(tr("Hours and minutes must be whole numbers"))
     if len(numbers) > 1 and numbers[-1] >= 60:
-        raise ValueError("Seconds must be below 60")
+        raise ValueError(tr("Seconds must be below 60"))
     if len(numbers) > 2 and numbers[-2] >= 60:
-        raise ValueError("Minutes must be below 60")
+        raise ValueError(tr("Minutes must be below 60"))
     if len(numbers) == 1:
         return numbers[0]
     if len(numbers) == 2:
@@ -88,7 +89,7 @@ def parse_timestamp(value: str) -> float:
 #: Shown whenever there is no pair to look at. Deliberately does not ask for
 #: a VMAF run: frames are comparable before anything has been measured.
 _NOTHING_TO_COMPARE = (
-    "Select a source video and add a test video to compare their frames."
+    N_("Select a source video and add a test video to compare their frames.")
 )
 
 
@@ -100,7 +101,7 @@ class FrameView(QScrollArea):
         self.setAlignment(Qt.AlignCenter)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("QScrollArea { background: #171717; border: 1px solid #444; }")
-        self._label = QLabel(_NOTHING_TO_COMPARE)
+        self._label = QLabel(tr(_NOTHING_TO_COMPARE))
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setStyleSheet("color: #ddd; background: #171717;")
         self._image: QImage | None = None
@@ -193,17 +194,17 @@ class FrameComparePanel(QWidget):
 
         top = QHBoxLayout()
         self.previous_video_btn = QPushButton("←")
-        self.previous_video_btn.setToolTip("Previous test video (Left arrow)")
+        self.previous_video_btn.setToolTip(tr("Previous test video (Left arrow)"))
         self.previous_video_btn.clicked.connect(lambda: self.cycle_distorted(-1))
         self.video_combo = QComboBox()
         self.video_combo.setMinimumContentsLength(30)
         self.video_combo.currentIndexChanged.connect(self._on_video_selected)
         self.next_video_btn = QPushButton("→")
-        self.next_video_btn.setToolTip("Next test video (Right arrow)")
+        self.next_video_btn.setToolTip(tr("Next test video (Right arrow)"))
         self.next_video_btn.clicked.connect(lambda: self.cycle_distorted(1))
-        self.fit_checkbox = QCheckBox("Fit to window")
+        self.fit_checkbox = QCheckBox(tr("Fit to window"))
         self.fit_checkbox.setChecked(True)
-        top.addWidget(QLabel("Test video:"))
+        top.addWidget(QLabel(tr("Test video:")))
         top.addWidget(self.previous_video_btn)
         top.addWidget(self.video_combo, stretch=1)
         top.addWidget(self.next_video_btn)
@@ -214,47 +215,47 @@ class FrameComparePanel(QWidget):
         color_row = QHBoxLayout()
         self.color_mode_combo = QComboBox()
         self.color_mode_combo.addItem(
-            "Display-aware (recommended)", PreviewColorMode.DISPLAY_AWARE.value
+            tr("Display-aware (recommended)"), PreviewColorMode.DISPLAY_AWARE.value
         )
         self.color_mode_combo.addItem(
-            "HDR → SDR (100 nit; assume PQ if untagged)",
+            tr("HDR → SDR (100 nit; assume PQ if untagged)"),
             PreviewColorMode.HDR_TO_SDR.value,
         )
         self.color_mode_combo.addItem(
-            "Unmanaged (diagnostic)", PreviewColorMode.UNMANAGED.value
+            tr("Unmanaged (diagnostic)"), PreviewColorMode.UNMANAGED.value
         )
         mode_index = self.color_mode_combo.findData(self._color_mode.value)
         self.color_mode_combo.setCurrentIndex(max(0, mode_index))
         self.color_mode_combo.setToolTip(
-            "Display-aware detects PQ/HLG tags and uses the Windows monitor's "
-            "SDR-white setting. The fixed mode can recover an untagged PQ file."
+            tr("Display-aware detects PQ/HLG tags and uses the Windows monitor's "
+            "SDR-white setting. The fixed mode can recover an untagged PQ file.")
         )
         self.color_mode_combo.currentIndexChanged.connect(self._on_color_mode_changed)
         self.color_status_label = QLabel()
         self.color_status_label.setStyleSheet("color: #666;")
-        color_row.addWidget(QLabel("HDR preview:"))
+        color_row.addWidget(QLabel(tr("HDR preview:")))
         color_row.addWidget(self.color_mode_combo)
         self.source_resolution_combo = QComboBox()
-        self.source_resolution_combo.addItem("Native resolution", True)
-        self.source_resolution_combo.addItem("Downscale to test resolution", False)
+        self.source_resolution_combo.addItem(tr("Native resolution"), True)
+        self.source_resolution_combo.addItem(tr("Downscale to test resolution"), False)
         self.source_resolution_combo.setToolTip(
-            "Playback only. Keep the cropped source at native resolution, or downscale "
+            tr("Playback only. Keep the cropped source at native resolution, or downscale "
             "it to fit the selected encode's cropped resolution. Both fit the window. "
-            "Changing this may briefly buffer. Metric calculations are unaffected."
+            "Changing this may briefly buffer. Metric calculations are unaffected.")
         )
         self.source_resolution_combo.setEnabled(False)
         self.source_resolution_combo.currentIndexChanged.connect(self._on_source_resolution_changed)
-        color_row.addWidget(QLabel("Reference playback:"))
+        color_row.addWidget(QLabel(tr("Reference playback:")))
         color_row.addWidget(self.source_resolution_combo)
         color_row.addWidget(self.color_status_label, stretch=1)
-        self.advanced_info_btn = QPushButton("Advanced info")
-        self.advanced_info_btn.setToolTip("Playback details will appear here when a video is loaded.")
+        self.advanced_info_btn = QPushButton(tr("Advanced info"))
+        self.advanced_info_btn.setToolTip(tr("Playback details will appear here when a video is loaded."))
         self.advanced_info_btn.installEventFilter(self)
         self.advanced_info_btn.clicked.connect(self._show_advanced_info)
         color_row.addWidget(self.advanced_info_btn)
         root.addLayout(color_row)
 
-        self.showing_label = QLabel("No videos loaded")
+        self.showing_label = QLabel(tr("No videos loaded"))
         font = self.showing_label.font()
         font.setBold(True)
         font.setPointSize(font.pointSize() + 1)
@@ -273,17 +274,17 @@ class FrameComparePanel(QWidget):
         root.addWidget(self.content_stack, stretch=1)
 
         seek = QHBoxLayout()
-        self.play_btn = QPushButton("▶ Play")
+        self.play_btn = QPushButton(tr("▶ Play"))
         self.play_btn.clicked.connect(self._on_play_clicked)
-        self.audio_checkbox = QCheckBox("Audio")
+        self.audio_checkbox = QCheckBox(tr("Audio"))
         self.audio_checkbox.setToolTip(
-            "GStreamer plays one source soundtrack continuously across S and encode switches. "
+            tr("GStreamer plays one source soundtrack continuously across S and encode switches. "
             "Missing/unsupported source audio stays silent. The FFmpeg fallback uses the "
-            "first encode's soundtrack. Video buffering also pauses audio."
+            "first encode's soundtrack. Video buffering also pauses audio.")
         )
         self.audio_checkbox.setChecked(True)
         self.audio_checkbox.toggled.connect(self._on_audio_toggled)
-        self.previous_frame_btn = QPushButton("− Frame")
+        self.previous_frame_btn = QPushButton(tr("− Frame"))
         self.previous_frame_btn.clicked.connect(lambda: self.set_frame(self._frame - 1))
         self.frame_spin = QSpinBox()
         self.frame_spin.setRange(0, 0)
@@ -291,17 +292,17 @@ class FrameComparePanel(QWidget):
         self.frame_spin.valueChanged.connect(self.set_frame)
         self.timestamp_edit = QLineEdit("0:00:00.000")
         self.timestamp_edit.setMaximumWidth(120)
-        self.timestamp_edit.setToolTip("Enter seconds, M:SS, or H:MM:SS.sss")
+        self.timestamp_edit.setToolTip(tr("Enter seconds, M:SS, or H:MM:SS.sss"))
         self.timestamp_edit.editingFinished.connect(self._on_timestamp_committed)
-        self.next_frame_btn = QPushButton("+ Frame")
+        self.next_frame_btn = QPushButton(tr("+ Frame"))
         self.next_frame_btn.clicked.connect(lambda: self.set_frame(self._frame + 1))
         seek.addWidget(self.play_btn)
         seek.addWidget(self.audio_checkbox)
         seek.addSpacing(12)
         seek.addWidget(self.previous_frame_btn)
-        seek.addWidget(QLabel("Frame:"))
+        seek.addWidget(QLabel(tr("Frame:")))
         seek.addWidget(self.frame_spin)
-        seek.addWidget(QLabel("Timestamp:"))
+        seek.addWidget(QLabel(tr("Timestamp:")))
         seek.addWidget(self.timestamp_edit)
         seek.addWidget(self.next_frame_btn)
         root.addLayout(seek)
@@ -311,12 +312,12 @@ class FrameComparePanel(QWidget):
         self.timeline.valueChanged.connect(self._on_slider_changed)
         root.addWidget(self.timeline)
 
-        self.detail_label = QLabel("No frame selected.")
+        self.detail_label = QLabel(tr("No frame selected."))
         self.detail_label.setAlignment(Qt.AlignCenter)
         root.addWidget(self.detail_label)
         self.guide_label = QLabel(
-            "Hold S: show source   ·   ←/→: switch test video   ·   "
-            "Space: play/pause"
+            tr("Hold S: show source   ·   ←/→: switch test video   ·   "
+            "Space: play/pause")
         )
         self.guide_label.setAlignment(Qt.AlignCenter)
         self.guide_label.setStyleSheet("color: #666;")
@@ -373,7 +374,7 @@ class FrameComparePanel(QWidget):
         self._update_enabled_state()
         self._update_labels()
         if not self._entries:
-            self.viewer.set_message(_NOTHING_TO_COMPARE)
+            self.viewer.set_message(tr(_NOTHING_TO_COMPARE))
             if self.video_view is not None:
                 self.video_view.clear()
         elif self.isVisible():
@@ -589,7 +590,7 @@ class FrameComparePanel(QWidget):
             series=[item.comparison for item in self._entries
                     if view.can_play(item.comparison)[0]],
         ):
-            self.play_btn.setText("▶ Play")
+            self.play_btn.setText(tr("▶ Play"))
         view.show_source(self._showing_source)
         self._update_enabled_state()
 
@@ -625,7 +626,7 @@ class FrameComparePanel(QWidget):
             self._syncing_video_position = False
 
     def _on_video_playing_changed(self, playing: bool) -> None:
-        self.play_btn.setText("❚❚ Pause" if playing else "▶ Play")
+        self.play_btn.setText(tr("❚❚ Pause") if playing else tr("▶ Play"))
         self._video_status = "Playing" if playing else "Paused"
         if self.is_video_mode:
             self._update_color_status()
@@ -633,7 +634,7 @@ class FrameComparePanel(QWidget):
     def _on_video_status_changed(self, message: str) -> None:
         self._video_status = message
         details = message.replace("distorted", "test")
-        tooltip = "<p>" + "<br>".join(escape(part) for part in details.split(" · ")) + "</p>"
+        tooltip = "<p>" + "<br>".join(escape(tr_message(part)) for part in details.split(" · ")) + "</p>"
         if self.advanced_info_btn.toolTip() != tooltip:
             self.advanced_info_btn.setToolTip(tooltip)
         if self.is_video_mode:
@@ -682,7 +683,7 @@ class FrameComparePanel(QWidget):
             self.timestamp_edit.setToolTip(str(exc))
             return
         self.timestamp_edit.setStyleSheet("")
-        self.timestamp_edit.setToolTip("Enter seconds, M:SS, or H:MM:SS.sss")
+        self.timestamp_edit.setToolTip(tr("Enter seconds, M:SS, or H:MM:SS.sss"))
         self.set_frame(round(seconds * entry.comparison.fps))
 
     def _set_ranges(self, maximum: int) -> None:
@@ -729,17 +730,17 @@ class FrameComparePanel(QWidget):
     def _update_labels(self) -> None:
         entry = self.current_entry
         if entry is None:
-            self.showing_label.setText("No videos to compare")
-            self.detail_label.setText("No frame selected.")
-            self.color_status_label.setText("No video selected.")
+            self.showing_label.setText(tr("No videos to compare"))
+            self.detail_label.setText(tr("No frame selected."))
+            self.color_status_label.setText(tr("No video selected."))
             return
         comparison = entry.comparison
-        side = "SOURCE" if self._showing_source else "TEST"
+        side = tr("SOURCE") if self._showing_source else tr("TEST")
         name = comparison.source_info.path.name if self._showing_source else entry.label
         suffix = "" if self._showing_source else f" {self._current_index + 1} of {len(self._entries)}"
         self.showing_label.setText(f"{side}{suffix} — {name}")
         seconds = self._frame / comparison.fps if comparison.fps > 0 else 0
-        parts = [f"Frame {self._frame:,}", format_hms(seconds, decimals=3), self._score_text(entry)]
+        parts = [tr("Frame {frame:,}", frame=self._frame), format_hms(seconds, decimals=3), self._score_text(entry)]
         if self.is_video_mode:
             parts.append(self._concise_playback_status())
         if comparison.auto_crop_pending:
@@ -747,9 +748,9 @@ class FrameComparePanel(QWidget):
             # auto-crop is measured during a run, so until one happens these
             # are the raw frames and a scored comparison would differ.
             if entry.identity in self._crop_workers:
-                parts.append("detecting black bars…")
+                parts.append(tr("detecting black bars…"))
             else:
-                parts.append("black bars not detected yet — shown uncropped")
+                parts.append(tr("black bars not detected yet — shown uncropped"))
         self.detail_label.setText("   ·   ".join(parts))
         self._update_color_status()
 
@@ -759,23 +760,25 @@ class FrameComparePanel(QWidget):
                           button.toolTip(), button, button.rect(), 30000)
 
     def _concise_playback_status(self) -> str:
+        # The views' status messages are English -- read here for their words
+        # -- and shown translated, piece by piece.
         message = self._video_status.replace("distorted", "test")
         # Errors stay visible; successful playback hides renderer diagnostics
         # in Advanced info, retaining only state and actual decoder choices.
         if any(word in message.lower() for word in ("failed", "could not", "error", "unavailable")):
-            return message
-        parts = [message.split(" · ", 1)[0]]
-        for side in ("source", "test"):
+            return " · ".join(tr_message(part) for part in message.split(" · "))
+        parts = [tr_message(message.split(" · ", 1)[0])]
+        for side, shown in (("source", N_("Source")), ("test", N_("Test"))):
             match = re.search(rf"\b{side} (GPU|software|cpu|cuda|d3d11va|qsv|vaapi)\b", message, re.I)
             if match:
                 mode = "CPU" if match[1].lower() in ("software", "cpu") else "GPU"
-                parts.append(f"{side.title()}: {mode} decode")
+                parts.append(tr("{side}: {mode} decode", side=tr(shown), mode=mode))
         return " · ".join(parts)
 
     def _score_text(self, entry: FrameComparisonEntry) -> str:
         """What this frame scored, or why there is no number to show."""
         if entry.scores is None:
-            return "No metric results loaded"
+            return tr("No metric results loaded")
         idx = int(np.searchsorted(entry.scores.frame, self._frame))
         if idx < len(entry.scores) and int(entry.scores.frame[idx]) == self._frame:
             values = []
@@ -788,7 +791,7 @@ class FrameComparePanel(QWidget):
                 values.append(f"{metric.label} {metric.format_value(candidate)}{metric.value_suffix}")
             if values:
                 return " · ".join(values)
-        return "Metrics not calculated for this frame"
+        return tr("Metrics not calculated for this frame")
 
     def _color_settings(self) -> PreviewColorSettings:
         return PreviewColorSettings(
@@ -822,27 +825,27 @@ class FrameComparePanel(QWidget):
         if self.is_video_mode:
             playable, reason = VideoCompareView.can_play(entry.comparison)
             if not playable:
-                self.color_status_label.setText(f"Video playback · {reason}")
+                self.color_status_label.setText(tr("Video playback · {reason}", reason=tr_message(reason)))
                 return
         side = "source" if self._showing_source else "distorted"
         info = frame_video_info(entry.comparison, side)
         kind = hdr_kind(info)
-        prefix = "Video playback · " if self.is_video_mode else ""
+        prefix = tr("Video playback · ") if self.is_video_mode else ""
         if self._color_mode == PreviewColorMode.UNMANAGED:
             self.color_status_label.setText(
-                f"{prefix}{kind or 'SDR / untagged'} input · tone mapping off"
+                tr("{prefix}{kind} input · tone mapping off", prefix=prefix, kind=kind or tr("SDR / untagged"))
             )
             return
         settings = self._color_settings()
         if self._color_mode == PreviewColorMode.HDR_TO_SDR:
-            source = kind or "Untagged input (assuming HDR10 / PQ)"
+            source = kind or tr("Untagged input (assuming HDR10 / PQ)")
             if self.is_video_mode:
                 if kind is None and info.color_transfer not in {"", "unknown", "unspecified"}:
-                    source = "SDR input"
-                self.color_status_label.setText(f"{prefix}{source} · SDR preview")
+                    source = tr("SDR input")
+                self.color_status_label.setText(tr("{prefix}{source} · SDR preview", prefix=prefix, source=source))
                 return
             self.color_status_label.setText(
-                f"{prefix}{source} · fixed HDR → SDR at {settings.target_nits:g} nit"
+                tr("{prefix}{source} · fixed HDR → SDR at {target_nits:g} nit", prefix=prefix, source=source, target_nits=settings.target_nits)
             )
             return
         wide_gamut = info.color_primaries.casefold() in {"bt2020", "bt.2020"}
@@ -853,38 +856,34 @@ class FrameComparePanel(QWidget):
                 and self._display_hdr.hdr_enabled is True
             ):
                 self.color_status_label.setText(
-                    f"{prefix}BT.2020 wide-gamut input · Windows HDR on · "
-                    "native 10-bit D3D11 presentation"
+                    tr("{prefix}BT.2020 wide-gamut input · Windows HDR on · native 10-bit D3D11 presentation", prefix=prefix)
                 )
                 return
             self.color_status_label.setText(
-                f"{prefix}SDR / untagged input · no tone mapping"
+                tr("{prefix}SDR / untagged input · no tone mapping", prefix=prefix)
             )
             return
         if self._display_hdr.hdr_enabled is True:
             if self.is_video_mode:
                 if self.video_view is not None and self.video_view._pool_active:
-                    self.color_status_label.setText(f"{prefix}{kind} · SDR preview (native HDR unavailable)")
+                    self.color_status_label.setText(tr("{prefix}{kind} · SDR preview (native HDR unavailable)", prefix=prefix, kind=kind))
                     return
                 self.color_status_label.setText(
-                    f"{prefix}{kind} · Windows HDR on · "
-                    "native 10-bit D3D11 presentation · tone mapping off"
+                    tr("{prefix}{kind} · Windows HDR on · native 10-bit D3D11 presentation · tone mapping off", prefix=prefix, kind=kind)
                 )
                 return
             self.color_status_label.setText(
-                f"{prefix}{kind} · display-aware HDR → SDR · Windows HDR on · "
-                f"SDR white {settings.target_nits:g} nit"
+                tr("{prefix}{kind} · display-aware HDR → SDR · Windows HDR on · SDR white {target_nits:g} nit", prefix=prefix, kind=kind, target_nits=settings.target_nits)
             )
         elif self._display_hdr.hdr_enabled is False:
-            target = "SDR preview" if self.is_video_mode else "SDR at 100 nit"
+            target = tr("SDR preview") if self.is_video_mode else tr("SDR at 100 nit")
             self.color_status_label.setText(
-                f"{prefix}{kind} · HDR → {target} · Windows HDR off"
+                tr("{prefix}{kind} · HDR → {target} · Windows HDR off", prefix=prefix, kind=kind, target=target)
             )
         else:
-            target = "SDR preview" if self.is_video_mode else "SDR at 100 nit"
+            target = tr("SDR preview") if self.is_video_mode else tr("SDR at 100 nit")
             self.color_status_label.setText(
-                f"{prefix}{kind} · HDR → {target} · "
-                "display HDR state unavailable"
+                tr("{prefix}{kind} · HDR → {target} · display HDR state unavailable", prefix=prefix, kind=kind, target=target)
             )
 
     # --------------------------------------------------------------- decoding
@@ -920,9 +919,10 @@ class FrameComparePanel(QWidget):
         side = "source" if self._showing_source else "distorted"
         key = self._cache_key(side)
         if key in self._errors:
-            self.viewer.set_message(f"Could not load frame:\n{self._errors[key]}")
+            self.viewer.set_message(tr("Could not load frame:\n{error}", error=tr_message(self._errors[key])))
         else:
-            self.viewer.set_message(f"Loading {'source' if side == 'source' else 'test'} frame {self._frame:,}…")
+            self.viewer.set_message(tr("Loading source frame {frame:,}…", frame=self._frame) if side == "source"
+                                    else tr("Loading test frame {frame:,}…", frame=self._frame))
         self._seek_timer.start()
 
     def _request_current_frames(self) -> None:
@@ -1057,7 +1057,7 @@ class FrameComparePanel(QWidget):
             return
         image = QImage.fromData(png, "PNG")
         if image.isNull():
-            self._on_frame_failed(generation, side, "ffmpeg returned an unreadable image.")
+            self._on_frame_failed(generation, side, tr("ffmpeg returned an unreadable image."))
             return
         key = self._cache_key(side)
         if key is None:
@@ -1082,7 +1082,7 @@ class FrameComparePanel(QWidget):
             self._errors[key] = error
         current_side = "source" if self._showing_source else "distorted"
         if side == current_side:
-            self.viewer.set_message(f"Could not load frame:\n{error}")
+            self.viewer.set_message(tr("Could not load frame:\n{error}", error=tr_message(error)))
 
     def _on_worker_finished(self, worker: FrameExtractWorker) -> None:
         self._workers.discard(worker)

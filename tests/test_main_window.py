@@ -302,7 +302,7 @@ def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
     win._on_run_clicked()
 
     assert win._worker is None  # nothing needed running, so no worker was ever started
-    assert "already have all requested metrics" in win.status_label.text()
+    assert "all requested metrics -- nothing to run" in win.status_label.text()
     assert win.graph_panel is not None
     assert len(win.graph_panel._entries) == 2
 
@@ -2950,7 +2950,7 @@ def test_the_options_unlock_again_once_the_run_ends(qapp, tmp_path):
     win._set_run_ui_active(False)
     # A lookup started after the run: "Ready." replaces its "Reading..."
     # (and never a message such as the run's "Done.").
-    win.status_label.setText("Reading 1 video(s)...")
+    win._show_reading("Reading 1 video...")
     win._on_probe_finished()
 
     assert win.options_box.isEnabled()
@@ -4005,7 +4005,7 @@ def test_a_run_skips_a_row_whose_only_missing_metric_is_hidden(qapp):
     win._on_run_clicked()
 
     assert win._worker is None
-    assert "already have all requested metrics" in win.status_label.text()
+    assert "all requested metrics -- nothing to run" in win.status_label.text()
     win.close()
 
 
@@ -5160,3 +5160,70 @@ def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkey
     win._set_run_ui_active(False)
     win.close()
 
+
+
+def test_settings_choose_the_language_for_the_next_start(qapp):
+    """The window's language follows Windows unless one is chosen here;
+    each is listed in its own name."""
+    from vmaf_app import i18n
+
+    win = MainWindow()
+    combo = win.settings_language
+    assert combo.currentData() == "" and combo.itemText(0).startswith("Same as Windows (")
+    assert [combo.itemText(i) for i in range(1, combo.count())] == list(i18n.LANGUAGES.values())
+    combo.setCurrentIndex(combo.findData("ja"))
+    assert Settings.load().language == "ja"
+    assert win.settings_status.text() == "Settings saved. The new language shows when the app is next started."
+    win.close()
+
+
+def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
+    """Every text in a made-up language -- each "[[English]]" -- through the
+    window's run lines, summaries and tooltips: a placeholder a translation
+    cannot fill raises here, not in front of someone running Japanese."""
+    import json
+
+    from scripts.i18n_catalog import keys
+    from vmaf_app import i18n
+
+    strings, plurals = keys()
+    (tmp_path / "de.json").write_text(json.dumps({
+        "strings": {key: f"[[{key}]]" for key in strings},
+        "plurals": {key: [f"[[{key}]]", f"[[{plural}]]"] for key, plural in plurals.items()},
+    }), encoding="utf-8")
+    monkeypatch.setattr(i18n, "TRANSLATIONS_DIR", tmp_path)
+    assert i18n.set_language("de") == "de"
+    try:
+        win = MainWindow()
+        assert win.tabs.tabText(0) == "[[Videos]]"
+        for name in ("a.mkv", "b.mkv"):
+            win._add_table_row(Path(name))
+        win._job_rows = list(win._rows)
+        win._job_total_frames = [100, 100]
+        win._on_job_started(0, "a")
+        win._on_task_progress(0, [
+            {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 20, "total": 100, "fps": 5.0,
+             "state": "running", "phase": None, "waiting_for": None, "step": "", "decode": "source cuda, distorted cpu"},
+            {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 150, "total": 200,
+             "fps": 30.0, "state": "running", "phase": (2, 2, "Butteraugli"), "waiting_for": None, "step": "",
+             "decode": "source cuda, distorted cuda"},
+        ])
+        win._on_job_status(0, "Vship GPU unavailable (No supported NVIDIA CUDA or AMD HIP GPU was detected.); "
+                              "using CPU reference metrics…")
+        line = win.job_progress_labels[0].text()
+        assert "[[{kind} {number} of {count} ({overall}) ({details})]]" not in line  # filled in, not raw
+        assert "[[Decoder: Source: {source}, test video: {test}]]".replace("{source}", "GPU") not in line
+        assert "[[" in line
+        win._run_failed_count, win._run_partial_count = 1, 2
+        win._update_run_status()
+        assert win.status_label.text().startswith("[[")
+        assert win._run_end_message().startswith("[[")
+        win._set_row_status(0, "Failed", "Frame rates do not match (23.976 vs 24.000 fps).")
+        win._refresh_row_state(0)
+        assert "[[Failed]]" in win.distorted_table.item(0, COL_PATH).toolTip()
+        assert "[[Frame rates do not match ({source} vs {test} fps).]]" not in \
+            win.distorted_table.item(0, COL_PATH).toolTip()
+        win._set_run_ui_active(False)
+        win.close()
+    finally:
+        i18n.set_language("en")

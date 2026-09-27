@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.qt_bundle import KEEP_PLUGINS, QT_MODULES, prune
+from scripts.qt_bundle import KEEP_PLUGINS, KEEP_TRANSLATIONS, QT_MODULES, prune
 
 MIB = 1024 ** 2
 APP = Path(__file__).resolve().parent.parent / "vmaf_app"
@@ -66,7 +66,8 @@ def test_prune_keeps_the_modules_the_plugins_and_what_they_import_and_nothing_el
         assert gone not in kept, gone
     # Untouched: everything outside PySide6/, and PySide6 data that is not a translation.
     assert "shiboken6/shiboken6.abi3.dll" in kept and "numpy/_core/_multiarray_umath.pyd" in kept
-    assert [d for d, _s, _t in kept_d] == ["vmaf_app/native/d3d11_tonemap.dll"]
+    # Qt's own dialogs in the app's languages (French here); nothing else of translations/.
+    assert [d for d, _s, _t in kept_d] == ["PySide6/translations/qtbase_fr.qm", "vmaf_app/native/d3d11_tonemap.dll"]
     assert "PySide6/translations/qt_de.qm" in report["dropped"]
 
 
@@ -113,7 +114,7 @@ def test_against_the_installed_pyside6():
     for gone in ("opengl32sw.dll", "avcodec-61.dll", "qt6quick.dll", "qt6qml.dll", "qt6pdf.dll", "qt6network.dll",
                  "qtnetwork.pyd", "qt6opengl.dll", "qdirect2d.dll", "qoffscreen.dll", "qtvirtualkeyboardplugin.dll"):
         assert gone not in names, gone
-    assert not any("translations/" in d for d in report["kept"])
+    assert all(Path(d).name in KEEP_TRANSLATIONS for d in report["kept"] if "translations/" in d)
 
     # The closure property on the real files: nothing kept imports a PySide6 DLL that was dropped.
     all_names = {Path(d).name.lower() for d, _s, _t in binaries}

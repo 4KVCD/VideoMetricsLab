@@ -93,6 +93,10 @@ class Settings:
     check_for_updates: bool = True
     skipped_update_version: str = ""
 
+    # The window's language (a code from vmaf_app.i18n.LANGUAGES); empty:
+    # the same as Windows', or English when there is no translation for it.
+    language: str = ""
+
     # Restore the window to the size it was closed at.
     remember_window_size: bool = True
     window_width: int = 1280

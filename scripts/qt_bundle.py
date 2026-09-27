@@ -19,6 +19,12 @@ from pathlib import Path, PurePosixPath
 # Through the package: a bare `gstreamer_bundle` would find the GStreamer
 # wheel of the same name on sys.path instead of the sibling module.
 from scripts.gstreamer_bundle import dependency_closure, pe_imports
+from vmaf_app.i18n import LANGUAGES
+
+#: Qt's translations of its own dialogs and buttons (Yes, No, Cancel, the
+#: file dialogs), for the languages the app is translated into; Qt has none
+#: for some of them, and those dialogs stay in English.
+KEEP_TRANSLATIONS = frozenset(f"qtbase_{code}.qm" for code in LANGUAGES if code != "en")
 
 #: The Qt modules the app imports. tests/test_qt_bundle.py checks this
 #: against the source, so adding `from PySide6 import QtSvg` somewhere fails
@@ -84,9 +90,10 @@ def prune(binaries: list, datas: list, imports=pe_imports) -> tuple[list, list, 
     kept_binaries = others + [entry for entry in qt_binaries if Path(entry[1]) in kept_sources]
     dropped_binaries = [entry for entry in qt_binaries if Path(entry[1]) not in kept_sources]
 
-    # The app installs no translator, so Qt's own dialogs are English
-    # regardless; 96 .qm files would only ever be read by code that is not there.
-    dropped_datas = [entry for entry in qt_datas if _relative(entry[0]).parts[:1] == ("translations",)]
+    # Only the app's languages: 96 .qm files, most for languages the app is
+    # not shown in and for Qt modules it does not ship.
+    dropped_datas = [entry for entry in qt_datas if _relative(entry[0]).parts[:1] == ("translations",)
+                     and _relative(entry[0]).name not in KEEP_TRANSLATIONS]
     kept_datas = [entry for entry in datas if entry not in dropped_datas]
 
     def size(entries) -> int:

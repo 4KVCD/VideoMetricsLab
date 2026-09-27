@@ -3,10 +3,11 @@ from __future__ import annotations
 import contextlib
 import logging
 import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from vmaf_app import APP_NAME, __version__
+from vmaf_app import APP_NAME, __version__, i18n
 from vmaf_app.core import app_log
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.ui.main_window import MainWindow
@@ -127,6 +128,31 @@ def start_session_log() -> None:
     qInstallMessageHandler(_log_qt_message)
 
 
+def apply_language(app: QApplication, chosen: str) -> str:
+    """Shows the app in `chosen` -- or, when that is empty, Windows' display
+    language -- and English where there is no translation. Qt's own dialogs
+    and buttons follow (its translations for the language, where it has
+    them), and a right-to-left language mirrors the window. The language
+    applied."""
+    from PySide6.QtCore import QLibraryInfo, Qt, QTranslator
+
+    windows = i18n.windows_language()
+    code = i18n.set_language(chosen or windows)
+    logging.getLogger("vmaf_app.main").info(
+        "Language: %s (%s; Windows: %s)", code, "chosen in Settings" if chosen else "as Windows", windows)
+    if code == "en":
+        return code
+    translator = QTranslator(app)
+    for directory in (QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath),
+                      str(Path(sys.modules["PySide6"].__file__).parent / "translations")):
+        if translator.load(f"qtbase_{code}", directory):
+            app.installTranslator(translator)
+            break
+    if code in i18n.RIGHT_TO_LEFT:
+        app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    return code
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -154,6 +180,9 @@ def main() -> int:
         return 0 if "FAIL" not in report else 1
 
     start_session_log()
+    from vmaf_app.core.settings import Settings
+
+    apply_language(app, Settings.load().language)
     from vmaf_app.core.perceptual_vship import start_vship_probe
 
     start_vship_probe()  # done by the time the first video is added

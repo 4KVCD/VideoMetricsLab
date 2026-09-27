@@ -48,6 +48,7 @@ from vmaf_app.core.run_io import (
 )
 from vmaf_app.core.stats import VmafStats, aggregate_scores, compute_stats
 from vmaf_app.core.time_format import format_hms
+from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
 
@@ -172,16 +173,16 @@ def _metric_means(result: ComparisonResult) -> dict[str, float | None]:
 
 
 _HOVER_PLACEHOLDER = (
-    "Hover to inspect a point (locks onto the lowest nearby score at or below "
+    N_("Hover to inspect a point (locks onto the lowest nearby score at or below "
     "your cursor, so dips are easy to land on).\n"
-    "Scroll to zoom, drag to pan, double-click to reset."
+    "Scroll to zoom, drag to pan, double-click to reset.")
 )
 #: The same, for a metric where a bigger number is worse (Butteraugli). Its
 #: axis is inverted, so the worst frames still hang down as dips on screen.
 _HOVER_PLACEHOLDER_LOWER_IS_BETTER = (
-    "Hover to inspect a point (locks onto the worst nearby score at or below "
+    N_("Hover to inspect a point (locks onto the worst nearby score at or below "
     "your cursor, so dips are easy to land on).\n"
-    "Scroll to zoom, drag to pan, double-click to reset."
+    "Scroll to zoom, drag to pan, double-click to reset.")
 )
 
 
@@ -243,7 +244,7 @@ class _MetricPage(QWidget):
         # Butteraugli. The search works on sign * value, so "lowest" in it
         # always means "worst".
         self._sign = -1.0 if _worst_is_high(metric) else 1.0
-        self._placeholder = _HOVER_PLACEHOLDER_LOWER_IS_BETTER if _worst_is_high(metric) else _HOVER_PLACEHOLDER
+        self._placeholder = tr(_HOVER_PLACEHOLDER_LOWER_IS_BETTER if _worst_is_high(metric) else _HOVER_PLACEHOLDER)
         self._curves: dict[int, _MetricCurve] = {}  # series_id -> stats/values, only entries with data
         self._hover_text = ""
         # The readout's column layout, rebuilt with the series set (see
@@ -259,14 +260,14 @@ class _MetricPage(QWidget):
         # a better encode sits higher on every tab, and its bad frames hang
         # down as dips the way VMAF's do.
         self.chart = ChartWidget(
-            y_axis_label=f"{metric.axis_label} (lower is better)" if _worst_is_high(metric) else metric.axis_label,
+            y_axis_label=tr("{axis_label} (lower is better)", axis_label=metric.axis_label) if _worst_is_high(metric) else metric.axis_label,
             fixed_y_max=metric.fixed_y_max, invert_y=_worst_is_high(metric),
         )
         layout.addWidget(self.chart, stretch=1)
 
         self.no_data_label = QLabel(
-            f"No {metric.label} data among the currently visible series -- "
-            f"tick the {metric.label} column header before running to see it here."
+            tr("No {label} data among the currently visible series -- tick the {label} column header before running "
+                "to see it here.", label=metric.label)
         )
         self.no_data_label.setAlignment(Qt.AlignCenter)
         self.no_data_label.setStyleSheet("color: #888; font-style: italic; padding: 12px;")
@@ -413,7 +414,7 @@ class _MetricPage(QWidget):
 
         # The widest each line can get, with digits standing in at their
         # fattest so the size doesn't shift as the values under the cursor do.
-        lines = ["Time: 0:00:00.00"]
+        lines = [tr("Time: 0:00:00.00")]
         widest = {metric.key: _WIDEST_SAMPLE for metric, _width in self._columns}
         for label in labels:
             lines.append(self._readout_row(
@@ -467,12 +468,12 @@ class _MetricPage(QWidget):
         series = f"[{label}]"
         if self.metric.kind is MetricKind.SEQUENCE:
             return (
-                f"{series:<{self._series_width}}  "
-                f"second from frame {frame:>6}   t={format_hms(time, decimals=2)}   "
+                tr("{series}  second from frame {frame:>6}   t={time}   ", series=f"{series:<{self._series_width}}",
+                   frame=frame, time=format_hms(time, decimals=2))
             )
         return (
-            f"{series:<{self._series_width}}  "
-            f"frame {frame:>6}   t={format_hms(time, decimals=2)}   "
+            tr("{series}  frame {frame:>6}   t={time}   ", series=f"{series:<{self._series_width}}", frame=frame,
+               time=format_hms(time, decimals=2))
         )
 
     @staticmethod
@@ -545,7 +546,7 @@ class _MetricPage(QWidget):
     def _readout_missing_frame(self, label: str, frame: int) -> str:
         """Format a missing-frame notice in the same series column."""
         series = f"[{label}]"
-        return f"{series:<{self._series_width}}  frame {frame:>6}   not in this run"
+        return tr("{series}  frame {frame:>6}   not in this run", series=f"{series:<{self._series_width}}", frame=frame)
 
     def _set_hover_text(self, text: str) -> None:
         # Dragging across one frame's worth of pixels reports the same thing
@@ -663,10 +664,10 @@ class _MetricPage(QWidget):
         ]
         if not visible:
             self.chart.set_cursor_time(x)
-            self._set_hover_text(f"Time: {format_hms(x, decimals=2)}")
+            self._set_hover_text(tr("Time: {time}", time=format_hms(x, decimals=2)))
             return
 
-        lines = [f"Time: {format_hms(x, decimals=2)}"]
+        lines = [tr("Time: {time}", time=format_hms(x, decimals=2))]
         found: list[tuple[str, float]] = []
 
         if self.metric.kind is MetricKind.SEQUENCE:
@@ -723,10 +724,10 @@ class _MetricPage(QWidget):
             for sid, c in self._curves.items() if c.visible
         ]
         if not visible:
-            self._set_hover_text(f"Frame {frame}: no visible series.")
+            self._set_hover_text(tr("Frame {frame}: no visible series.", frame=frame))
             return False
 
-        lines = [f"Frame {frame}"]
+        lines = [tr("Frame {frame}", frame=frame)]
         found: list[tuple[str, float]] = []
         cursor_time: float | None = None
 
@@ -820,7 +821,7 @@ class GraphPanel(QWidget):
         # repeated in two side-by-side panels. Capped at four videos' worth
         # of height, scrolling beyond that, so a long list can't crowd out
         # the plot below.
-        top = QGroupBox("Series and statistics")
+        top = QGroupBox(tr("Series and statistics"))
         top_layout = QVBoxLayout(top)
         # Without this, nothing said the metric columns could be clicked, or
         # that the detail to their right belonged to whichever one was.
@@ -887,7 +888,7 @@ class GraphPanel(QWidget):
         self.status_label.hide()
         self.status_label.setStyleSheet("color: #666;")
         root.addWidget(self.status_label)
-        self.metric_hint = QLabel("Calculate metrics or load analysis results to view graphs.")
+        self.metric_hint = QLabel(tr("Calculate metrics or load analysis results to view graphs."))
         root.addWidget(self.metric_hint)
 
         self._setup_stats_table()
@@ -928,14 +929,14 @@ class GraphPanel(QWidget):
     def _update_metric_hint(self) -> None:
         metric = self._current_metric()
         available = any(e.result.has_metric(metric.key) for e in self._entries.values())
-        self.metric_hint.setText("" if available else f"{metric.label} was not calculated. Tick it in the {metric.label} column in Videos, or load results containing it.")
+        self.metric_hint.setText("" if available else tr("{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.", label=metric.label))
         if available and metric.key == "xpsnr":
             self.metric_hint.setText(_XPSNR_INFINITY_NOTE)
         if available and metric.kind is MetricKind.SEQUENCE:
             self.metric_hint.setText(_CVVDP_NOTE)
         self.metric_hint.setVisible(bool(self.metric_hint.text()))
         for i, spec in enumerate(METRICS):
-            self.tabs.setTabToolTip(i, "" if any(e.result.has_metric(spec.key) for e in self._entries.values()) else "Not calculated")
+            self.tabs.setTabToolTip(i, "" if any(e.result.has_metric(spec.key) for e in self._entries.values()) else tr("Not calculated"))
 
     def _select_available_metric(self) -> None:
         available = [m.key for m in METRICS if any(e.result.has_metric(m.key) for e in self._entries.values())]
@@ -952,30 +953,30 @@ class GraphPanel(QWidget):
         bar = QWidget()
         layout = QHBoxLayout(bar)
 
-        add_btn = QPushButton("Add analysis results...")
+        add_btn = QPushButton(tr("Add analysis results..."))
         add_btn.clicked.connect(self._on_add_saved_run)
         layout.addWidget(add_btn)
 
-        export_png_btn = QPushButton("Export graph as PNG")
+        export_png_btn = QPushButton(tr("Export graph as PNG"))
         export_png_btn.clicked.connect(self._on_export_png)
         layout.addWidget(export_png_btn)
 
-        self.export_csv_btn = export_csv_btn = QPushButton("Export CSV...")
+        self.export_csv_btn = export_csv_btn = QPushButton(tr("Export CSV..."))
         export_csv_btn.clicked.connect(self._on_export_csv)
         layout.addWidget(export_csv_btn)
 
         layout.addSpacing(16)
-        layout.addWidget(QLabel("Go to frame:"))
+        layout.addWidget(QLabel(tr("Go to frame:")))
         self.frame_spin = QSpinBox()
         self.frame_spin.setRange(0, 0)
         self.frame_spin.setKeyboardTracking(False)  # jump on commit, not per digit typed
         self.frame_spin.setToolTip(
-            "Reports every visible series at this exact frame, so two encodes "
-            "can be compared at one moment."
+            tr("Reports every visible series at this exact frame, so two encodes "
+            "can be compared at one moment.")
         )
         self.frame_spin.valueChanged.connect(self._on_frame_requested)
         layout.addWidget(self.frame_spin)
-        go_btn = QPushButton("Go")
+        go_btn = QPushButton(tr("Go"))
         go_btn.clicked.connect(lambda: self._on_frame_requested(self.frame_spin.value()))
         layout.addWidget(go_btn)
 
@@ -1018,11 +1019,15 @@ class GraphPanel(QWidget):
     #: The statistics shown for the selected metric. "Mean" is deliberately
     #: absent: every metric's mean already has a column of its own. The
     #: worst-frames tail follows, "Low" or "High" by the metric's direction.
-    _DETAIL_LABELS = ["Median", "StDev", "Min", "Max"]
+    _DETAIL_LABELS = [N_("Median"), N_("StDev"), N_("Min"), N_("Max")]
 
     @classmethod
     def _detail_labels(cls, metric: MetricDefinition) -> list[str]:
-        return cls._DETAIL_LABELS + VmafStats.tail_labels(_worst_is_high(metric))
+        """The detail columns' headings, in the window's language."""
+        side = N_("{share} High") if _worst_is_high(metric) else N_("{share} Low")
+        return [tr(label) for label in cls._DETAIL_LABELS] + [
+            tr(side, share=label.split(" ", 1)[0]) for label in VmafStats.tail_labels(_worst_is_high(metric))
+        ]
 
     def _setup_stats_table(self) -> None:
         """Columns: the series, every metric's mean, then the selected
@@ -1035,7 +1040,7 @@ class GraphPanel(QWidget):
         and because the deeper statistics are only asked about one at a time.
         """
         metric = self._current_metric()
-        headers = ["Series"] + [m.label for m in METRICS] + self._detail_labels(metric)
+        headers = [tr("Series")] + [m.label for m in METRICS] + self._detail_labels(metric)
         headers += [f"{cmp_op} {thresh:g}" for cmp_op, thresh in metric.thresholds]
         headers.append("")  # the per-row remove button
         self.stats_table.setColumnCount(len(headers))
@@ -1051,11 +1056,11 @@ class GraphPanel(QWidget):
             # axis_label rather than label: it carries the unit ("PSNR (dB)"),
             # which the heading itself leaves off to keep the column narrow.
             head.setToolTip(
-                (f"{spec.axis_label} of the whole video (not the mean of its seconds).\n"
+                (tr("{axis_label} of the whole video (not the mean of its seconds).\n", axis_label=spec.axis_label)
                  if spec.kind is MetricKind.SEQUENCE else
-                 f"Mean {spec.axis_label} over all scored frames.\n")
-                + ("Showing its detailed statistics." if selected
-                   else f"Click this column to show detailed {spec.label} statistics.")
+                 tr("Mean {axis_label} over all scored frames.\n", axis_label=spec.axis_label))
+                + (tr("Showing its detailed statistics.") if selected
+                   else tr("Click this column to show detailed {label} statistics.", label=spec.label))
             )
             # Link-coloured, so the four that can be clicked look different
             # from the fourteen that cannot.
@@ -1064,7 +1069,7 @@ class GraphPanel(QWidget):
             font.setBold(selected)
             head.setFont(font)
         self.stats_hint.setText(
-            f"Click a metric column for its full statistics \u2014 showing {metric.label}."
+            tr("Click a metric column for its full statistics — showing {label}.", label=metric.label)
         )
 
     def _series_name_item(self, entry: SeriesEntry) -> QTableWidgetItem:
@@ -1237,13 +1242,13 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ actions
     def _on_add_saved_run(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open analysis results", "", RESULT_FILE_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Open analysis results"), "", RESULT_FILE_FILTER)
         if not path:
             return
         try:
             result, label = load_run(Path(path))
         except Exception as e:
-            QMessageBox.critical(self, "Failed to load run", str(e))
+            QMessageBox.critical(self, tr("Failed to load run"), str(e))
             return
         self.add_run(
             result, label, identity=("saved-file", str(Path(path).resolve()))
@@ -1268,14 +1273,14 @@ class GraphPanel(QWidget):
             return [], []
 
         first = series[0][1].stats
-        headers = ["Series"] + [label for label, _ in first.values]
+        headers = [tr("Series")] + [label for label, _ in first.values]
         headers += [t.label for t in first.thresholds]
 
         per_video = metric.kind is MetricKind.SEQUENCE
         if per_video:
             # The first statistic is the mean of the seconds, which is not
             # CVVDP's score; the whole video's JOD takes its place.
-            headers[1] = "Whole video"
+            headers[1] = tr("Whole video")
         rows = []
         for entry, curve in series:
             cells = [v for _, v in curve.stats.summary(metric.value_format)]
@@ -1304,9 +1309,9 @@ class GraphPanel(QWidget):
         title_font.setBold(True)
         title_font.setPointSize(max(10, title_font.pointSize() + 3))
         title_fm = QFontMetrics(title_font)
-        title = f"{metric.label} vs time"
+        title = tr("{label} vs time", label=metric.label)
         if metric.key == "xpsnr":
-            title += f" — ∞ plotted at {_XPSNR_INFINITY_PLOT_DB:g} dB (display only)"
+            title += tr(" — ∞ plotted at {XPSNR_INFINITY_PLOT_DB:g} dB (display only)", XPSNR_INFINITY_PLOT_DB=_XPSNR_INFINITY_PLOT_DB)
 
         cell_font = QFont("Consolas")
         cell_font.setStyleHint(QFont.Monospace)
@@ -1391,12 +1396,12 @@ class GraphPanel(QWidget):
     def _on_file_writes_idle(self) -> None:
         self.export_csv_btn.setEnabled(True)
         if self._export_destination is not None:
-            self.status_label.setText(f"Export complete: {self._export_destination}")
+            self.status_label.setText(tr("Export complete: {path}", path=self._export_destination))
             self.status_label.show()
             self._export_destination = None
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
-        self.status_label.setText(f"Could not {description}: {error}")
+        self.status_label.setText(tr("Could not {description}: {error}", description=description, error=error))
         self.status_label.show()
 
     def wait_until_file_writes_idle(self, timeout_seconds: float = 30.0) -> bool:
@@ -1404,16 +1409,16 @@ class GraphPanel(QWidget):
         return self._file_writes.wait_until_idle(timeout_seconds)
 
     def _on_export_png(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Export graph", f"{self._current_metric().key}_comparison.png", "PNG image (*.png)")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Export graph"), f"{self._current_metric().key}_comparison.png", tr("PNG image (*.png)"))
         if not path:
             return
         self.render_export_image().save(path)
 
     def _on_export_csv(self) -> None:
         if not self._entries:
-            QMessageBox.information(self, "No data", "There are no series to export.")
+            QMessageBox.information(self, tr("No data"), tr("There are no series to export."))
             return
-        directory = QFileDialog.getExistingDirectory(self, "Choose export folder")
+        directory = QFileDialog.getExistingDirectory(self, tr("Choose export folder"))
         if not directory:
             return
         # A CSV of a feature-length run is bigger than its cached JSON, and
@@ -1430,12 +1435,13 @@ class GraphPanel(QWidget):
         self._export_destination = directory
         self.status_label.show()
         self.status_label.setText(
-            f"Exporting {len(self._entries)} CSV file(s) to {directory}..."
+            ntr("Exporting {count} CSV file to {directory}...", "Exporting {count} CSV files to {directory}...",
+                len(self._entries), directory=directory)
         )
 
     def save_run_for_later(self, result: ComparisonResult, label: str) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save analysis results", f"{label}{RESULT_SUFFIX}", f"Analysis results (*{RESULT_SUFFIX})"
+            self, tr("Save analysis results"), f"{label}{RESULT_SUFFIX}", tr("Analysis results (*{RESULT_SUFFIX})", RESULT_SUFFIX=RESULT_SUFFIX)
         )
         if not path:
             return
@@ -1471,9 +1477,8 @@ class GraphPanel(QWidget):
                     identical = _identical_frame_count(entry.result, spec.key)
                     if identical:
                         item.setToolTip(
-                            f"{identical} frames identical to the reference are "
-                            "included in the XPSNR sequence average: zero distortion, "
-                            "with their frames included in the count."
+                            tr("{identical} frames identical to the reference are included in the XPSNR sequence average: zero "
+                                "distortion, with their frames included in the count.", identical=identical)
                         )
                     selected = spec.key == metric.key
                     item.setBackground(QColor(*(
@@ -1484,7 +1489,7 @@ class GraphPanel(QWidget):
                         item.setFont(font)
                     else:
                         item.setToolTip(
-                            f"Click this column to show detailed {spec.label} statistics."
+                            tr("Click this column to show detailed {label} statistics.", label=spec.label)
                         )
                     self.stats_table.setItem(row, col, item)
 
@@ -1511,7 +1516,7 @@ class GraphPanel(QWidget):
                 remove = QTableWidgetItem("✕")
                 remove.setFlags(Qt.ItemIsEnabled)
                 remove.setTextAlignment(Qt.AlignCenter)
-                remove.setToolTip(f"Remove {entry.label} from the graph")
+                remove.setToolTip(tr("Remove {label} from the graph", label=entry.label))
                 self.stats_table.setItem(row, self.stats_table.columnCount() - 1, remove)
         finally:
             self._populating_stats = False

@@ -660,7 +660,7 @@ def test_a_finished_lookup_does_not_overwrite_a_message_with_ready(qapp):
     win.status_label.setText('Saved the CVVDP preset "Mine".')
     win._on_probe_finished()
     assert win.status_label.text() == 'Saved the CVVDP preset "Mine".'
-    win.status_label.setText("Reading 2 video(s)...")
+    win._show_reading("Reading 2 videos...")
     win._on_probe_finished()
     assert win.status_label.text() == "Ready."
     win.close()

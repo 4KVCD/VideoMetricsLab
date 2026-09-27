@@ -36,6 +36,7 @@ from vmaf_app.core.bitrate import (
 )
 from vmaf_app.core.models import VideoInfo
 from vmaf_app.core.time_format import format_hms
+from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui.bitrate_worker import BitrateWorker
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.formatting import media_info_string
@@ -56,7 +57,7 @@ class BitrateEntry:
     info: VideoInfo | None = None
     data: BitrateData | None = None
     enabled: bool = True
-    status: str = "Ready to analyze"
+    status: str = N_("Ready to analyze")
     plots: dict[tuple[str, bool], BitratePlot] = field(default_factory=dict)
 
 
@@ -70,9 +71,9 @@ def _path_key(path: Path) -> str:
 
 def _rate_text(kbps: float) -> str:
     if kbps >= 10_000:
-        return f"{kbps / 1000:.2f} Mb/s"
+        return tr("{value:.2f} Mb/s", value=kbps / 1000)
     if kbps >= 1000:
-        return f"{kbps / 1000:.3f} Mb/s"
+        return tr("{value:.3f} Mb/s", value=kbps / 1000)
     return f"{kbps:.0f} kb/s"
 
 
@@ -92,12 +93,12 @@ class BitratePanel(QWidget):
 
         root = QVBoxLayout(self)
         file_controls = QHBoxLayout()
-        self.add_btn = QPushButton("Add files…")
+        self.add_btn = QPushButton(tr("Add files…"))
         self.add_btn.clicked.connect(self._on_add_files)
-        self.remove_btn = QPushButton("Remove selected")
+        self.remove_btn = QPushButton(tr("Remove selected"))
         self.remove_btn.clicked.connect(self._on_remove_selected)
-        self.analyze_btn = QPushButton("Calculate bitrate")
-        self.analyze_btn.setToolTip("Calculate bitrate for videos with the Use checkbox checked.")
+        self.analyze_btn = QPushButton(tr("Calculate bitrate"))
+        self.analyze_btn.setToolTip(tr("Calculate bitrate for videos with the Use checkbox checked."))
         self.analyze_btn.clicked.connect(self._on_calculate_or_stop)
         file_controls.addWidget(self.add_btn)
         file_controls.addWidget(self.remove_btn)
@@ -107,8 +108,8 @@ class BitratePanel(QWidget):
 
         self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels([
-            "Use", "Video file", "Media info", "Duration", "Frames",
-            "Average", "Minimum", "Maximum", "Status",
+            tr("Use"), tr("Video file"), tr("Media info"), tr("Duration"), tr("Frames"),
+            tr("Average"), tr("Minimum"), tr("Maximum"), tr("Status"),
         ])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -125,11 +126,11 @@ class BitratePanel(QWidget):
         root.addWidget(self.table)
 
         plot_controls = QHBoxLayout()
-        plot_controls.addWidget(QLabel("Plot view:"))
+        plot_controls.addWidget(QLabel(tr("Plot view:")))
         self.view_group = QButtonGroup(self)
-        self.frame_radio = QRadioButton("Frame based")
-        self.second_radio = QRadioButton("Second based")
-        self.gop_radio = QRadioButton("GOP based")
+        self.frame_radio = QRadioButton(tr("Frame based"))
+        self.second_radio = QRadioButton(tr("Second based"))
+        self.gop_radio = QRadioButton(tr("GOP based"))
         self.second_radio.setChecked(True)
         for index, button in enumerate(
             (self.frame_radio, self.second_radio, self.gop_radio)
@@ -137,35 +138,35 @@ class BitratePanel(QWidget):
             self.view_group.addButton(button, index)
             plot_controls.addWidget(button)
         self.view_group.idClicked.connect(lambda _index: self._refresh_plot())
-        self.adjust_start_checkbox = QCheckBox("Adjust stream start time to zero")
+        self.adjust_start_checkbox = QCheckBox(tr("Adjust stream start time to zero"))
         self.adjust_start_checkbox.setChecked(True)
         self.adjust_start_checkbox.toggled.connect(lambda _checked: self._refresh_plot())
         plot_controls.addSpacing(18)
         plot_controls.addWidget(self.adjust_start_checkbox)
         plot_controls.addStretch(1)
-        self.reset_zoom_btn = QPushButton("Reset zoom")
+        self.reset_zoom_btn = QPushButton(tr("Reset zoom"))
         self.reset_zoom_btn.clicked.connect(lambda: self.chart.reset_view())
-        self.export_btn = QPushButton("Export PNG…")
+        self.export_btn = QPushButton(tr("Export PNG…"))
         self.export_btn.clicked.connect(self._on_export_png)
         plot_controls.addWidget(self.reset_zoom_btn)
         plot_controls.addWidget(self.export_btn)
         root.addLayout(plot_controls)
 
-        self.chart = ChartWidget(y_axis_label="Video bitrate (kb/s)", fixed_y_max=None)
+        self.chart = ChartWidget(y_axis_label=tr("Video bitrate (kb/s)"), fixed_y_max=None)
         self.chart.hovered.connect(self._on_hovered)
         self.chart.left.connect(self._on_hover_left)
         root.addWidget(self.chart, stretch=1)
 
         self.hover_label = QLabel(
-            "Hover over the plot to inspect values. Scroll to zoom, drag to pan, "
-            "and double-click to reset."
+            tr("Hover over the plot to inspect values. Scroll to zoom, drag to pan, "
+            "and double-click to reset.")
         )
         self.hover_label.setTextFormat(Qt.PlainText)
         root.addWidget(self.hover_label)
 
         status_row = QHBoxLayout()
         self.status_label = QLabel(
-            "Frame view shows encoded video-frame size; second and GOP views show video-only bitrate."
+            tr("Frame view shows encoded video-frame size; second and GOP views show video-only bitrate.")
         )
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -217,11 +218,11 @@ class BitratePanel(QWidget):
     def cancel(self) -> None:
         for key in self._pending:
             if key in self._entries:
-                self._entries[key].status = "Stopped"
+                self._entries[key].status = N_("Stopped")
         self._pending.clear()
         if self._worker is not None:
             self._stopping = True
-            self.status_label.setText("Stopping bitrate analysis…")
+            self.status_label.setText(tr("Stopping bitrate analysis…"))
             self._worker.cancel()
         self._refresh_table_values()
         self._update_buttons()
@@ -237,7 +238,7 @@ class BitratePanel(QWidget):
         event.acceptProposedAction()
 
     def _on_add_files(self) -> None:
-        paths, _filter = QFileDialog.getOpenFileNames(self, "Add videos for bitrate analysis")
+        paths, _filter = QFileDialog.getOpenFileNames(self, tr("Add videos for bitrate analysis"))
         if paths:
             self.add_files([Path(path) for path in paths])
 
@@ -265,10 +266,9 @@ class BitratePanel(QWidget):
         completed = [key for key in keys if self._entries[key].data is not None]
         if completed:
             answer = QMessageBox.question(
-                self, "Recalculate bitrate?",
-                f"{len(completed)} checked video(s) already have bitrate results.\n\n"
-                "Recalculate those files? Choose No to keep their results and "
-                "calculate only files without results.",
+                self, tr("Recalculate bitrate?"),
+                tr("{count} checked video(s) already have bitrate results.\n\nRecalculate those files? Choose No to keep "
+                    "their results and calculate only files without results.", count=len(completed)),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
@@ -282,7 +282,7 @@ class BitratePanel(QWidget):
         for key in keys:
             entry = self._entries.get(key)
             if entry is not None and key not in self._active_keys:
-                entry.status = "Queued"
+                entry.status = N_("Queued")
                 self._pending[key] = None
         self._refresh_table_values()
         self._start_pending()
@@ -316,8 +316,8 @@ class BitratePanel(QWidget):
             return
         entry = self._entries.get(_path_key(path))
         if entry is not None:
-            entry.status = "Reading video packets…"
-            self.status_label.setText(f"Analyzing {path.name}…")
+            entry.status = N_("Reading video packets…")
+            self.status_label.setText(tr("Analyzing {name}…", name=path.name))
             self.progress.setValue(0)
             self._refresh_table_values()
 
@@ -327,10 +327,10 @@ class BitratePanel(QWidget):
         self.progress.setValue(min(99, round(done / max(1, total) * 100)))
         entry = self._entries.get(_path_key(path))
         if entry is not None:
-            entry.status = f"{done:,} packets"
+            entry.status = ntr("{count:,} packet", "{count:,} packets", done)
             row = self._row_for_key(_path_key(path))
             if row >= 0 and self.table.item(row, _COL_STATUS) is not None:
-                self.table.item(row, _COL_STATUS).setText(entry.status)
+                self.table.item(row, _COL_STATUS).setText(tr(entry.status))
 
     def _on_analyzed(self, path: Path, info: VideoInfo, data: BitrateData) -> None:
         entry = self._entries.get(_path_key(path))
@@ -339,7 +339,7 @@ class BitratePanel(QWidget):
         entry.info = info
         entry.data = data
         entry.plots.clear()
-        entry.status = "Complete"
+        entry.status = N_("Complete")
         self.progress.setValue(100)
         self._refresh_table_values()
         self._refresh_plot()
@@ -348,11 +348,11 @@ class BitratePanel(QWidget):
         entry = self._entries.get(_path_key(path))
         if entry is None:
             return
-        entry.status = "Failed"
+        entry.status = N_("Failed")
         row = self._row_for_key(_path_key(path))
         self._refresh_table_values()
         self.table.item(row, _COL_STATUS).setToolTip(error)
-        self.status_label.setText(f"Could not analyze {path.name}: {error}")
+        self.status_label.setText(tr("Could not analyze {name}: {error}", name=path.name, error=error))
 
     def _on_worker_finished(self, worker: BitrateWorker) -> None:
         if worker is not self._worker:
@@ -363,7 +363,7 @@ class BitratePanel(QWidget):
             for key in self._active_keys:
                 entry = self._entries.get(key)
                 if entry is not None and entry.status not in ("Complete", "Failed"):
-                    entry.status = "Stopped"
+                    entry.status = N_("Stopped")
             self._refresh_table_values()
         self._stopping = False
         if worker is self._worker:
@@ -374,8 +374,8 @@ class BitratePanel(QWidget):
             self._start_pending()
         else:
             self.status_label.setText(
-                "Bitrate analysis stopped. Completed results are kept." if stopped else
-                "Bitrate analysis complete. Values contain the first video stream only."
+                tr("Bitrate analysis stopped. Completed results are kept.") if stopped else
+                tr("Bitrate analysis complete. Values contain the first video stream only.")
             )
             self._update_buttons()
 
@@ -426,7 +426,7 @@ class BitratePanel(QWidget):
             media_info_string(entry.info) if entry.info else "",
             format_hms(entry.data.duration, decimals=2) if entry.data else "",
             f"{entry.data.frame_count:,}" if entry.data else "",
-            "", "", "", entry.status,
+            "", "", "", tr(entry.status),
         ]
         if entry.data is not None:
             summary = bitrate_summary(entry.data)
@@ -452,11 +452,11 @@ class BitratePanel(QWidget):
     def _update_buttons(self) -> None:
         running = self._worker is not None
         self.analyze_btn.setText(
-            "Stopping…" if self._stopping else "Stop" if running else "Calculate bitrate"
+            tr("Stopping…") if self._stopping else tr("Stop") if running else tr("Calculate bitrate")
         )
         self.analyze_btn.setToolTip(
-            "Stop bitrate analysis and keep completed results." if running else
-            "Calculate bitrate for videos with the Use checkbox checked."
+            tr("Stop bitrate analysis and keep completed results.") if running else
+            tr("Calculate bitrate for videos with the Use checkbox checked.")
         )
         self.analyze_btn.setEnabled((running or bool(self._entries)) and not self._stopping)
         self.remove_btn.setEnabled(bool(self._entries))
@@ -483,9 +483,9 @@ class BitratePanel(QWidget):
         self.chart.clear()
         self._current_plots.clear()
         axis_label = (
-            "Frame size (kbit)" if self._view_name() == "frame"
-            else "GOP bitrate (kb/s)" if self._view_name() == "gop"
-            else "Video bitrate (kb/s)"
+            tr("Frame size (kbit)") if self._view_name() == "frame"
+            else tr("GOP bitrate (kb/s)") if self._view_name() == "gop"
+            else tr("Video bitrate (kb/s)")
         )
         self.chart.y_axis_label = axis_label
         for entry in self._entries.values():
@@ -506,7 +506,7 @@ class BitratePanel(QWidget):
 
     def _on_hovered(self, time_value: float, _value: float) -> None:
         self.chart.set_cursor_time(time_value)
-        lines = [f"Time: {format_hms(time_value, decimals=3)}"]
+        lines = [tr("Time: {time}", time=format_hms(time_value, decimals=3))]
         for entry, plot in self._current_plots.values():
             if not len(plot.times):
                 continue
@@ -522,16 +522,16 @@ class BitratePanel(QWidget):
     def _on_hover_left(self) -> None:
         self.chart.set_cursor_time(None)
         self.hover_label.setText(
-            "Hover over the plot to inspect values. Scroll to zoom, drag to pan, "
-            "and double-click to reset."
+            tr("Hover over the plot to inspect values. Scroll to zoom, drag to pan, "
+            "and double-click to reset.")
         )
 
     def _on_export_png(self) -> None:
         if not self.chart.has_data():
-            QMessageBox.information(self, "No bitrate data", "Analyze at least one video first.")
+            QMessageBox.information(self, tr("No bitrate data"), tr("Analyze at least one video first."))
             return
         path, _filter = QFileDialog.getSaveFileName(
-            self, "Export bitrate plot", "bitrate_plot.png", "PNG image (*.png)"
+            self, tr("Export bitrate plot"), "bitrate_plot.png", tr("PNG image (*.png)")
         )
         if path and not self.chart.render_to_pixmap().save(path):
-            QMessageBox.warning(self, "Export failed", f"Could not write {path}")
+            QMessageBox.warning(self, tr("Export failed"), tr("Could not write {path}", path=path))

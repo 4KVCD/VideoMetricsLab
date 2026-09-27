@@ -56,6 +56,11 @@ else:
 VMAF_MODELS = PROJECT / "vmaf_app" / "models"
 datas.append((str(VMAF_MODELS), "vmaf_app/models"))
 
+# The window's text in each language (vmaf_app.i18n reads them beside the
+# package); Qt's own dialogs use PySide6's qtbase_*.qm, which
+# scripts/qt_bundle.py keeps for the same languages.
+datas.append((str(PROJECT / "vmaf_app" / "translations"), "vmaf_app/translations"))
+
 # SSIMULACRA2 and Butteraugli are standalone CPU image tools from the
 # official libjxl Windows static distribution.  Keep only the two tools and
 # their notices; perceptual_cpu.py finds them relative to this directory.

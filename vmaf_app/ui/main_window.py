@@ -58,7 +58,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vmaf_app import APP_NAME, __version__
+from vmaf_app import APP_NAME, __version__, i18n
 from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
@@ -109,6 +109,7 @@ from vmaf_app.core.vmaf_runner import (
     resample_analysis_dimensions,
     validate_video_pair,
 )
+from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import bitrate_string, media_info_string
@@ -121,22 +122,22 @@ from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob,
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
 # own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
 _MODEL_CHOICES = [
-    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
-    ("VMAF v0.6.1 (standard viewing)", "version=vmaf_v0.6.1"),
-    ("VMAF 4K v0.6.1 (4K / large-screen viewing)", "version=vmaf_4k_v0.6.1"),
-    ("Custom model file...", CUSTOM_MODEL_CHOICE),
+    (N_("Auto (analysis resolution)"), AUTO_MODEL_CHOICE),
+    (N_("VMAF v0.6.1 (standard viewing)"), "version=vmaf_v0.6.1"),
+    (N_("VMAF 4K v0.6.1 (4K / large-screen viewing)"), "version=vmaf_4k_v0.6.1"),
+    (N_("Custom model file..."), CUSTOM_MODEL_CHOICE),
 ]
 
 _V1_MODEL_CHOICES = [
-    ("Auto (analysis resolution)", AUTO_MODEL_CHOICE),
-    ("VMAF v1 (1080p / 3H)", builtin_choice("vmaf_v1_3d0h")),
-    ("VMAF v1 (1080p phone / 5H)", builtin_choice("vmaf_v1_5d0h")),
-    ("VMAF v1 (4K / 1.5H)", builtin_choice("vmaf_v1_1d5h_2160")),
-    ("VMAF v1 (4K / 3H, up to 110)", builtin_choice("vmaf_v1_3d0h_2160")),
-    ("VMAF v1 HFR (1080p / 3H)", builtin_choice("vmaf_v1_hfr_3d0h")),
-    ("VMAF v1 HFR (1080p phone / 5H)", builtin_choice("vmaf_v1_hfr_5d0h")),
-    ("VMAF v1 HFR (4K / 1.5H)", builtin_choice("vmaf_v1_hfr_1d5h_2160")),
-    ("VMAF v1 HFR (4K / 3H, up to 110)", builtin_choice("vmaf_v1_hfr_3d0h_2160")),
+    (N_("Auto (analysis resolution)"), AUTO_MODEL_CHOICE),
+    (N_("VMAF v1 (1080p / 3H)"), builtin_choice("vmaf_v1_3d0h")),
+    (N_("VMAF v1 (1080p phone / 5H)"), builtin_choice("vmaf_v1_5d0h")),
+    (N_("VMAF v1 (4K / 1.5H)"), builtin_choice("vmaf_v1_1d5h_2160")),
+    (N_("VMAF v1 (4K / 3H, up to 110)"), builtin_choice("vmaf_v1_3d0h_2160")),
+    (N_("VMAF v1 HFR (1080p / 3H)"), builtin_choice("vmaf_v1_hfr_3d0h")),
+    (N_("VMAF v1 HFR (1080p phone / 5H)"), builtin_choice("vmaf_v1_hfr_5d0h")),
+    (N_("VMAF v1 HFR (4K / 1.5H)"), builtin_choice("vmaf_v1_hfr_1d5h_2160")),
+    (N_("VMAF v1 HFR (4K / 3H, up to 110)"), builtin_choice("vmaf_v1_hfr_3d0h_2160")),
 ]
 
 _SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
@@ -176,7 +177,7 @@ _STATE_COLOURS = {
 # independently of calculation. Settings remains the final page.
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
-_PAUSED = "Paused"  # MainWindow._run_hold while a run is paused
+_PAUSED = N_("Paused")  # MainWindow._run_hold while a run is paused
 
 _log = logging.getLogger(__name__)
 
@@ -236,29 +237,29 @@ class CvvdpDisplayDialog(QDialog):
     def __init__(self, display: CvvdpDisplay, parent=None, *, own_preset: str | None = None,
                  new_preset: bool = False, taken_names: frozenset[str] = frozenset()):
         super().__init__(parent)
-        self.setWindowTitle("New CVVDP preset" if new_preset else "CVVDP display")
+        self.setWindowTitle(tr("New CVVDP preset") if new_preset else tr("CVVDP display"))
         self.action = ""
         self._original = display
         self._own_preset = own_preset
         self._taken_names = taken_names
         form = QFormLayout(self)
         intro = QLabel(
-            "CVVDP predicts how visible the differences are to someone watching this "
+            tr("CVVDP predicts how visible the differences are to someone watching this "
             "display, from this distance, in this light. Each value below changes the score, "
-            "so compare videos scored for the same display."
+            "so compare videos scored for the same display.")
         )
         intro.setWordWrap(True)
         form.addRow(intro)
 
         self.name_edit = QLineEdit(own_preset or "")
         self.name_edit.setPlaceholderText(
-            "Name for the new preset" if new_preset or own_preset is None else ""
+            tr("Name for the new preset") if new_preset or own_preset is None else ""
         )
         self.name_edit.setToolTip(
-            "Change it and click Save preset to rename this preset." if own_preset
-            else "Type a name and click Save as new preset to keep this display as a preset."
+            tr("Change it and click Save preset to rename this preset.") if own_preset
+            else tr("Type a name and click Save as new preset to keep this display as a preset.")
         )
-        form.addRow("Preset name:", self.name_edit)
+        form.addRow(tr("Preset name:"), self.name_edit)
 
         def spin(low, high, value, decimals, suffix, step, tip):
             box = QDoubleSpinBox()
@@ -279,65 +280,65 @@ class CvvdpDisplayDialog(QDialog):
             # most GPUs have.
             box.setRange(16, _CVVDP_MAX_DISPLAY_PIXELS)
             box.setValue(value)
-            box.setToolTip("The display's own resolution in pixels (not the video's).")
+            box.setToolTip(tr("The display's own resolution in pixels (not the video's)."))
         resolution = QHBoxLayout()
         resolution.addWidget(self.width_spin)
         resolution.addWidget(QLabel("x"))
         resolution.addWidget(self.height_spin)
         resolution.addStretch(1)
-        form.addRow("Resolution:", resolution)
+        form.addRow(tr("Resolution:"), resolution)
         self.diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, " in", 1,
-                                  "The screen's diagonal size.")
-        form.addRow("Screen size:", self.diagonal_spin)
+                                  tr("The screen's diagonal size."))
+        form.addRow(tr("Screen size:"), self.diagonal_spin)
         self.distance_spin = spin(0.05, 50, display.viewing_distance_m, 4, " m", 0.05,
-                                  "How far the viewer's eyes are from the screen. Closer makes "
-                                  "small artifacts easier to see.")
+                                  tr("How far the viewer's eyes are from the screen. Closer makes "
+                                  "small artifacts easier to see."))
         self.distance_note = QLabel()
         self.distance_note.setStyleSheet("color: #666;")
         distance = QHBoxLayout()
         distance.addWidget(self.distance_spin)
         distance.addWidget(self.distance_note)
         distance.addStretch(1)
-        form.addRow("Viewing distance:", distance)
-        self.peak_spin = spin(1, 10000, display.peak_luminance, 0, " cd/m\u00b2", 50,
-                              "The display's peak brightness (nits): about 200 for an office "
-                              "monitor, 600-1500 for an HDR monitor, 1000-4000 for an HDR TV.")
-        form.addRow("Peak brightness:", self.peak_spin)
+        form.addRow(tr("Viewing distance:"), distance)
+        self.peak_spin = spin(1, 10000, display.peak_luminance, 0, tr(" cd/m\u00b2"), 50,
+                              tr("The display's peak brightness (nits): about 200 for an office "
+                              "monitor, 600-1500 for an HDR monitor, 1000-4000 for an HDR TV."))
+        form.addRow(tr("Peak brightness:"), self.peak_spin)
         self.contrast_spin = spin(1, 10_000_000, display.contrast, 0, " : 1", 100,
-                                  "Peak to black: about 1000:1 for a typical LCD, 1,000,000:1 "
-                                  "for OLED or the official HDR displays.")
-        form.addRow("Contrast:", self.contrast_spin)
+                                  tr("Peak to black: about 1000:1 for a typical LCD, 1,000,000:1 "
+                                  "for OLED or the official HDR displays."))
+        form.addRow(tr("Contrast:"), self.contrast_spin)
         self.ambient_spin = spin(0, 100_000, display.ambient_lux, 1, " lux", 10,
-                                 "Light falling on the screen: about 250 lux in an office, 50 in a "
-                                 "lit living room, 5-10 watching a film with the lights low, 0 in the dark.")
-        form.addRow("Room light:", self.ambient_spin)
+                                 tr("Light falling on the screen: about 250 lux in an office, 50 in a "
+                                 "lit living room, 5-10 watching a film with the lights low, 0 in the dark."))
+        form.addRow(tr("Room light:"), self.ambient_spin)
         self.reflectivity_spin = spin(0, 99.9, display.reflectivity * 100, 2, " %", 0.1,
-                                      "How much of the room light the screen reflects back at the "
-                                      "viewer; 0.5% is the official models' value.")
-        form.addRow("Screen reflectivity:", self.reflectivity_spin)
+                                      tr("How much of the room light the screen reflects back at the "
+                                      "viewer; 0.5% is the official models' value."))
+        form.addRow(tr("Screen reflectivity:"), self.reflectivity_spin)
         self.exposure_spin = spin(0.01, 100, display.exposure, 2, "", 0.1,
-                                  "Brightness multiplier for the pictures; 1 shows them as encoded.")
-        form.addRow("Exposure:", self.exposure_spin)
-        self.hdr_check = QCheckBox("HDR display")
+                                  tr("Brightness multiplier for the pictures; 1 shows them as encoded."))
+        form.addRow(tr("Exposure:"), self.exposure_spin)
+        self.hdr_check = QCheckBox(tr("HDR display"))
         self.hdr_check.setChecked(display.hdr)
-        self.hdr_check.setToolTip("An HDR display, as in the official HDR display models. Off: an SDR one.")
+        self.hdr_check.setToolTip(tr("An HDR display, as in the official HDR display models. Off: an SDR one."))
         form.addRow("", self.hdr_check)
         buttons = QDialogButtonBox()
         self.save_button = None
         if own_preset is not None and not new_preset:
-            self.save_button = buttons.addButton("Save preset", QDialogButtonBox.AcceptRole)
-            self.save_button.setToolTip(f'Save these values (and the name above) as your preset "{own_preset}".')
+            self.save_button = buttons.addButton(tr("Save preset"), QDialogButtonBox.AcceptRole)
+            self.save_button.setToolTip(tr('Save these values (and the name above) as your preset "{own_preset}".', own_preset=own_preset))
             self.save_button.clicked.connect(lambda: self._finish("save"))
-        self.save_new_button = buttons.addButton("Save as new preset", QDialogButtonBox.AcceptRole)
+        self.save_new_button = buttons.addButton(tr("Save as new preset"), QDialogButtonBox.AcceptRole)
         self.save_new_button.setToolTip(
-            "Keep this display as a preset of your own under the name above. It becomes "
-            "the display newly added videos start with."
+            tr("Keep this display as a preset of your own under the name above. It becomes "
+            "the display newly added videos start with.")
         )
         self.save_new_button.clicked.connect(lambda: self._finish("save_new"))
         self.apply_button = None
         if not new_preset:
-            self.apply_button = buttons.addButton("Apply without saving", QDialogButtonBox.AcceptRole)
-            self.apply_button.setToolTip("Use this display for the selected videos without saving a preset.")
+            self.apply_button = buttons.addButton(tr("Apply without saving"), QDialogButtonBox.AcceptRole)
+            self.apply_button.setToolTip(tr("Use this display for the selected videos without saving a preset."))
             self.apply_button.clicked.connect(lambda: self._finish("apply"))
         cancel = buttons.addButton(QDialogButtonBox.Cancel)
         cancel.clicked.connect(self.reject)
@@ -371,7 +372,7 @@ class CvvdpDisplayDialog(QDialog):
         )
 
     def _update_distance_note(self, *_args) -> None:
-        self.distance_note.setText(f"= {self.display().distance_in_heights:.2f} x screen height")
+        self.distance_note.setText(tr("= {distance_in_heights:.2f} x screen height", distance_in_heights=self.display().distance_in_heights))
 
     def preset_name(self) -> str:
         return self.name_edit.text().strip()
@@ -382,10 +383,10 @@ class CvvdpDisplayDialog(QDialog):
         if action == "apply":
             return None
         if not name:
-            return "Type a name for the preset."
+            return tr("Type a name for the preset.")
         renaming_own = action == "save" and name == self._own_preset
         if name in self._taken_names and not renaming_own:
-            return f'There is already a preset called "{name}". Choose another name.'
+            return tr('There is already a preset called "{name}". Choose another name.', name=name)
         return None
 
     def _finish(self, action: str) -> None:
@@ -394,7 +395,7 @@ class CvvdpDisplayDialog(QDialog):
             try:
                 self.display().validated()
             except ValueError as error:
-                problem = str(error)
+                problem = tr_message(str(error))
         if problem is not None:
             QMessageBox.warning(self, self.windowTitle(), problem)
             return
@@ -410,7 +411,7 @@ _EXTRA_METRIC_KEYS = (*_PERCEPTUAL_METRIC_KEYS, "cvvdp")
 
 #: A row whose job finished some metrics and failed others (see
 #: MainWindow._on_job_partially_failed).
-_PARTLY_FAILED = "Partly failed"
+_PARTLY_FAILED = N_("Partly failed")
 
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
@@ -423,10 +424,13 @@ _CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL = {"ssimulacra2": 1.1 / 6.17, "butteraugli
 def _rough_duration(seconds: float) -> str:
     """"about 3 days", "about 5 hours", "about 40 minutes"."""
     if seconds >= 2 * 86400:
-        return f"about {seconds / 86400:.0f} days"
+        days = round(seconds / 86400)
+        return ntr("about {count} day", "about {count} days", days)
     if seconds >= 2 * 3600:
-        return f"about {seconds / 3600:.0f} hours"
-    return f"about {max(1, round(seconds / 60))} minutes"
+        hours = round(seconds / 3600)
+        return ntr("about {count} hour", "about {count} hours", hours)
+    minutes = max(1, round(seconds / 60))
+    return ntr("about {count} minute", "about {count} minutes", minutes)
 
 
 @dataclass(frozen=True)
@@ -592,6 +596,10 @@ class MainWindow(QMainWindow):
         self._job_frames_done: dict[int, int] = {}
         self._job_fps: dict[int, float] = {}
         self._job_decode_status: dict[int, str] = {}
+        # The status line's "Reading..." message while it is showing, which
+        # "Ready." replaces (_show_ready): compared as a whole, since in
+        # another language it need not start with any given word.
+        self._reading_text = ""
         # Each half's progress for a video scored in two halves; see
         # VmafWorker.halves.
         self._job_halves: dict[int, list] = {}
@@ -710,7 +718,7 @@ class MainWindow(QMainWindow):
         writes_finished = self._file_writes.wait_until_idle(0.5)
         graph_writes_finished = self.graph_panel.wait_until_file_writes_idle(0.5)
         if pending or not writes_finished or not graph_writes_finished:
-            self._run_hold = "Finishing up; the window will close on its own."
+            self._run_hold = tr("Finishing up; the window will close on its own.")
             self.status_label.setText(self._run_hold)
             # Re-check shortly. Each cancelled worker also calls back here as
             # it finishes, so this timer is only a backstop for the write
@@ -741,7 +749,7 @@ class MainWindow(QMainWindow):
         self._ffmpeg_banner.setStyleSheet("background: #fff3cd; padding: 6px; border: 1px solid #ffe08a;")
         self._ffmpeg_banner.setWordWrap(True)
         self._ffmpeg_banner.setVisible(False)
-        self._locate_ffmpeg_btn = QPushButton("Locate ffmpeg.exe...")
+        self._locate_ffmpeg_btn = QPushButton(tr("Locate ffmpeg.exe..."))
         self._locate_ffmpeg_btn.clicked.connect(self._on_locate_ffmpeg)
         self._locate_ffmpeg_btn.setVisible(False)
         banner_row.addWidget(self._ffmpeg_banner, stretch=1)
@@ -767,12 +775,12 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._build_options_panel())
         splitter.addWidget(self._build_run_panel())
         splitter.setSizes([380, 300, 120])
-        self.tabs.addTab(videos_page, "Videos")
+        self.tabs.addTab(videos_page, tr("Videos"))
 
         self.graph_panel = GraphPanel()
         self.graph_panel.set_preferred_metric(self._settings.graph_metric)
         self.graph_panel.metric_changed.connect(self._on_graph_metric_changed)
-        self.tabs.addTab(self.graph_panel, "Metric Graphs")
+        self.tabs.addTab(self.graph_panel, tr("Metric Graphs"))
         # Opening the tab is enough; pressing a button to populate it was
         # a leftover from when it was a separate window that had to be
         # opened explicitly.
@@ -785,12 +793,12 @@ class MainWindow(QMainWindow):
         self.frame_compare_panel.color_mode_changed.connect(
             self._on_frame_color_mode_changed
         )
-        self.tabs.addTab(self.frame_compare_panel, "Video Compare")
+        self.tabs.addTab(self.frame_compare_panel, tr("Video Compare"))
 
         self.bitrate_panel = BitratePanel()
-        self.tabs.addTab(self.bitrate_panel, "Bitrate Viewer")
+        self.tabs.addTab(self.bitrate_panel, tr("Bitrate Viewer"))
 
-        self.tabs.addTab(self._build_settings_panel(), "Settings")
+        self.tabs.addTab(self._build_settings_panel(), tr("Settings"))
 
     # ------------------------------------------------------------------ settings tab
     def _options_from_settings(self) -> VmafOptions:
@@ -836,35 +844,35 @@ class MainWindow(QMainWindow):
         tools_box = QGroupBox("ffmpeg")
         tools_form = QFormLayout(tools_box)
         self.settings_ffmpeg_edit = QLineEdit(self._settings.ffmpeg_dir)
-        self.settings_ffmpeg_edit.setPlaceholderText("blank = search PATH")
+        self.settings_ffmpeg_edit.setPlaceholderText(tr("blank = search PATH"))
         self.settings_ffmpeg_edit.editingFinished.connect(self._on_settings_edited)
-        browse_ffmpeg = QPushButton("Browse...")
+        browse_ffmpeg = QPushButton(tr("Browse..."))
         browse_ffmpeg.clicked.connect(self._on_pick_ffmpeg_dir)
         ffmpeg_row = QHBoxLayout()
         ffmpeg_row.addWidget(self.settings_ffmpeg_edit, stretch=1)
         ffmpeg_row.addWidget(browse_ffmpeg)
-        tools_form.addRow("ffmpeg folder:", ffmpeg_row)
+        tools_form.addRow(tr("ffmpeg folder:"), ffmpeg_row)
         self.settings_ffmpeg_status = QLabel()
         tools_form.addRow("", self.settings_ffmpeg_status)
         outer.addWidget(tools_box)
 
-        storage_box = QGroupBox("Storage")
+        storage_box = QGroupBox(tr("Storage"))
         storage_form = QFormLayout(storage_box)
         self.settings_cache_edit = QLineEdit(self._settings.cache_dir)
-        self.settings_cache_edit.setPlaceholderText("blank = shared user-profile folder")
+        self.settings_cache_edit.setPlaceholderText(tr("blank = shared user-profile folder"))
         self.settings_cache_edit.editingFinished.connect(self._on_settings_edited)
-        browse_cache = QPushButton("Browse...")
+        browse_cache = QPushButton(tr("Browse..."))
         browse_cache.clicked.connect(self._on_pick_cache_dir)
-        open_cache = QPushButton("Open")
+        open_cache = QPushButton(tr("Open"))
         open_cache.clicked.connect(self._on_open_cache_dir)
         cache_row = QHBoxLayout()
         cache_row.addWidget(self.settings_cache_edit, stretch=1)
         cache_row.addWidget(browse_cache)
         cache_row.addWidget(open_cache)
-        storage_form.addRow("Saved results:", cache_row)
+        storage_form.addRow(tr("Saved results:"), cache_row)
 
         self.settings_cache_summary = QLabel()
-        clear_cache = QPushButton("Clear saved results")
+        clear_cache = QPushButton(tr("Clear saved results"))
         clear_cache.clicked.connect(self._on_clear_cache)
         summary_row = QHBoxLayout()
         summary_row.addWidget(self.settings_cache_summary, stretch=1)
@@ -872,16 +880,16 @@ class MainWindow(QMainWindow):
         storage_form.addRow("", summary_row)
 
         self.settings_export_edit = QLineEdit(self._settings.export_dir)
-        self.settings_export_edit.setPlaceholderText("blank = ask each time")
+        self.settings_export_edit.setPlaceholderText(tr("blank = ask each time"))
         self.settings_export_edit.editingFinished.connect(self._on_settings_edited)
-        browse_export = QPushButton("Browse...")
+        browse_export = QPushButton(tr("Browse..."))
         browse_export.clicked.connect(self._on_pick_export_dir)
         export_row = QHBoxLayout()
         export_row.addWidget(self.settings_export_edit, stretch=1)
         export_row.addWidget(browse_export)
-        storage_form.addRow("Export folder:", export_row)
+        storage_form.addRow(tr("Export folder:"), export_row)
 
-        self.settings_use_cache = QCheckBox("Reuse a saved result when a video is added again")
+        self.settings_use_cache = QCheckBox(tr("Reuse a saved result when a video is added again"))
         self.settings_use_cache.setChecked(self._settings.use_cache)
         self.settings_use_cache.toggled.connect(self._on_settings_edited)
         storage_form.addRow("", self.settings_use_cache)
@@ -891,41 +899,41 @@ class MainWindow(QMainWindow):
         self.settings_log_label = QLabel(str(app_log.log_dir()))
         self.settings_log_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.settings_log_label.setToolTip(
-            "Each session's setup, every run and its steps, and every failure with its full text. "
-            "Send these files along when reporting a problem.")
-        open_logs = QPushButton("Open")
+            tr("Each session's setup, every run and its steps, and every failure with its full text. "
+            "Send these files along when reporting a problem."))
+        open_logs = QPushButton(tr("Open"))
         open_logs.clicked.connect(self._on_open_log_dir)
-        self.settings_export_log_btn = QPushButton("Export log...")
+        self.settings_export_log_btn = QPushButton(tr("Export log..."))
         self.settings_export_log_btn.setToolTip(
-            "Save the log files as one .zip file, to attach when reporting a problem.")
+            tr("Save the log files as one .zip file, to attach when reporting a problem."))
         self.settings_export_log_btn.clicked.connect(self._on_export_log)
-        self.settings_copy_log_btn = QPushButton("Copy log")
+        self.settings_copy_log_btn = QPushButton(tr("Copy log"))
         self.settings_copy_log_btn.setToolTip(
-            "Copy the latest session that calculated metrics to the clipboard, to paste into a post or chat.")
+            tr("Copy the latest session that calculated metrics to the clipboard, to paste into a post or chat."))
         self.settings_copy_log_btn.clicked.connect(self._on_copy_log)
         log_row = QHBoxLayout()
         log_row.addWidget(self.settings_log_label, stretch=1)
         log_row.addWidget(open_logs)
         log_row.addWidget(self.settings_copy_log_btn)
         log_row.addWidget(self.settings_export_log_btn)
-        storage_form.addRow("Log files:", log_row)
+        storage_form.addRow(tr("Log files:"), log_row)
         outer.addWidget(storage_box)
 
-        defaults_box = QGroupBox("Defaults for newly added videos")
+        defaults_box = QGroupBox(tr("Defaults for newly added videos"))
         defaults_layout = QVBoxLayout(defaults_box)
         hint = QLabel(
-            "These are only a starting point -- each video's own settings are "
-            "edited in the Videos tab."
+            tr("These are only a starting point -- each video's own settings are "
+            "edited in the Videos tab.")
         )
         hint.setStyleSheet("color: #666; font-style: italic;")
         defaults_layout.addWidget(hint)
-        self.settings_default_gpu = QCheckBox("Use GPU decoding")
+        self.settings_default_gpu = QCheckBox(tr("Use GPU decoding"))
         self.settings_default_gpu.setChecked(self._settings.default_gpu_decode)
         self.settings_default_gpu.toggled.connect(self._on_settings_edited)
         defaults_layout.addWidget(self.settings_default_gpu)
 
         metrics_row = QHBoxLayout()
-        metrics_row.addWidget(QLabel("Default metrics:"))
+        metrics_row.addWidget(QLabel(tr("Default metrics:")))
         self.settings_default_psnr = QCheckBox("PSNR")
         self.settings_default_vmaf = QCheckBox("VMAF v0.6.1")
         self.settings_default_vmaf_v1 = QCheckBox("VMAF v1")
@@ -953,13 +961,13 @@ class MainWindow(QMainWindow):
         defaults_layout.addLayout(metrics_row)
 
         cvvdp_row = QHBoxLayout()
-        cvvdp_row.addWidget(QLabel("CVVDP display:"))
+        cvvdp_row.addWidget(QLabel(tr("CVVDP display:")))
         self.settings_cvvdp_default = QComboBox()
         self.settings_cvvdp_default.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.settings_cvvdp_default.setToolTip(
-            "The display CVVDP models for newly added videos, whatever their format. "
+            tr("The display CVVDP models for newly added videos, whatever their format. "
             "Saving a preset of your own in the Options panel makes it the default; "
-            "choose here to change that."
+            "choose here to change that.")
         )
         self._fill_cvvdp_default_combo()
         self.settings_cvvdp_default.currentIndexChanged.connect(self._on_settings_edited)
@@ -968,30 +976,30 @@ class MainWindow(QMainWindow):
         defaults_layout.addLayout(cvvdp_row)
         outer.addWidget(defaults_box)
 
-        gpu_box = QGroupBox("GPU metrics")
+        gpu_box = QGroupBox(tr("GPU metrics"))
         gpu_layout = QVBoxLayout(gpu_box)
         self.settings_gpu_together = QCheckBox(
-            "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video")
+            tr("Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"))
         self.settings_gpu_together.setToolTip(
-            "Each video is decoded once for all its GPU metrics instead of once for each. Where the "
+            tr("Each video is decoded once for all its GPU metrics instead of once for each. Where the "
             "GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU "
             "decodes -- it saves most of the decoding.\n\n"
             "Very heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most "
             "4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory "
             "for example, is calculated again on its own.\n\nThe scores are the same either way. "
-            "Applies from the next run.")
+            "Applies from the next run."))
         self.settings_gpu_together.setChecked(self._settings.gpu_metrics_together)
         self.settings_gpu_together.toggled.connect(self._on_settings_edited)
         gpu_layout.addWidget(self.settings_gpu_together)
         gpu_note = QLabel(
-            "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. "
-            "Very heavy on GPU memory at 4K: about 7.3 GB for all three together.")
+            tr("Decodes each video once instead of once per metric: much less CPU work for 4K VVC. "
+            "Very heavy on GPU memory at 4K: about 7.3 GB for all three together."))
         gpu_note.setWordWrap(True)
         gpu_note.setStyleSheet("color: #666;")
         gpu_layout.addWidget(gpu_note)
         outer.addWidget(gpu_box)
 
-        compare_box = QGroupBox("Video Compare")
+        compare_box = QGroupBox(tr("Video Compare"))
         compare_layout = QVBoxLayout(compare_box)
         # A dropdown, not a spin box: 1 to 9 is one click away.
         self.settings_decoded_videos = QComboBox()
@@ -1005,12 +1013,12 @@ class MainWindow(QMainWindow):
         self.settings_decoded_videos.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.settings_decoded_videos.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.settings_decoded_videos.setToolTip(
-            "How many test videos keep decoding while one is shown, so the "
+            tr("How many test videos keep decoding while one is shown, so the "
             "left and right arrows switch to a video that is already running: "
             "the selected one, then the one to its right, its left, the next "
             "right, the next left, and so on. Each is a running GPU decoder "
             "(about 250 MB of RAM for 4K), plus the source. Takes effect "
-            "immediately, even during playback."
+            "immediately, even during playback.")
         )
         self.settings_decoded_videos.currentIndexChanged.connect(self._on_settings_edited)
         # Dropdown first, at the left edge, with its label beside it -- the
@@ -1019,23 +1027,43 @@ class MainWindow(QMainWindow):
         decoded_row = QHBoxLayout()
         decoded_row.addWidget(self.settings_decoded_videos)
         decoded_row.addWidget(
-            QLabel("Number of test videos decoded simultaneously for fast comparison switching")
+            QLabel(tr("Number of test videos decoded simultaneously for fast comparison switching"))
         )
         decoded_row.addStretch(1)
         compare_layout.addLayout(decoded_row)
         outer.addWidget(compare_box)
 
-        window_box = QGroupBox("Window")
+        window_box = QGroupBox(tr("Window"))
         window_layout = QVBoxLayout(window_box)
-        self.settings_remember_size = QCheckBox("Reopen at the size the window was last closed at")
+        # Each language in its own name, so it can be found by someone who
+        # cannot read the one the window is in.
+        self.settings_language = QComboBox()
+        windows = i18n.windows_language()
+        self.settings_language.addItem(
+            tr("Same as Windows ({language})", language=i18n.LANGUAGES.get(windows, "English")), "")
+        for code, name in i18n.LANGUAGES.items():
+            self.settings_language.addItem(name, code)
+        self.settings_language.setCurrentIndex(max(0, self.settings_language.findData(self._settings.language)))
+        self.settings_language.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.settings_language.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.settings_language.setToolTip(tr(
+            "The language of the window. Takes effect when the app is next started. The log, saved results "
+            "and exported files stay in English."))
+        self.settings_language.currentIndexChanged.connect(self._on_settings_edited)
+        language_row = QHBoxLayout()
+        language_row.addWidget(QLabel(tr("Language:")))
+        language_row.addWidget(self.settings_language)
+        language_row.addStretch(1)
+        window_layout.addLayout(language_row)
+        self.settings_remember_size = QCheckBox(tr("Reopen at the size the window was last closed at"))
         self.settings_remember_size.setChecked(self._settings.remember_window_size)
         self.settings_remember_size.toggled.connect(self._on_settings_edited)
         window_layout.addWidget(self.settings_remember_size)
-        self.settings_check_updates = QCheckBox("Check GitHub for a newer version when the app starts")
+        self.settings_check_updates = QCheckBox(tr("Check GitHub for a newer version when the app starts"))
         self.settings_check_updates.setToolTip(
-            "Once, at startup, asks GitHub's public list of releases whether there is a newer one, "
+            tr("Once, at startup, asks GitHub's public list of releases whether there is a newer one, "
             "and says so only if there is. Nothing is sent but the request; GitHub sees your "
-            "address, as it would for any page.")
+            "address, as it would for any page."))
         self.settings_check_updates.setChecked(self._settings.check_for_updates)
         self.settings_check_updates.toggled.connect(self._on_settings_edited)
         window_layout.addWidget(self.settings_check_updates)
@@ -1056,15 +1084,16 @@ class MainWindow(QMainWindow):
         problems = tools.problems
         ok = not problems
         self.settings_ffmpeg_status.setText(
-            f"ffmpeg {format_version(tools.ffmpeg.version)} and ffprobe found."
-            if ok else " ".join(problems)
+            tr("ffmpeg {version} and ffprobe found.", version=format_version(tools.ffmpeg.version))
+            if ok else " ".join(tr_message(problem) for problem in problems)
         )
         self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
 
         directory = result_cache.cache_dir()
         count, size_bytes = result_cache.cache_summary(directory)
         self.settings_cache_summary.setText(
-            f"{count} saved result(s), {size_bytes / 1_048_576:.1f} MB in {directory}"
+            ntr("{count} saved result, {size:.1f} MB in {directory}", "{count} saved results, {size:.1f} MB in {directory}",
+                count, size=size_bytes / 1048576, directory=directory)
         )
 
     def _on_settings_edited(self, *_args) -> None:
@@ -1090,6 +1119,8 @@ class MainWindow(QMainWindow):
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
         self._settings.check_for_updates = self.settings_check_updates.isChecked()
+        language_before = self._settings.language
+        self._settings.language = self.settings_language.currentData() or ""
         self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
 
         if self._settings.ffmpeg_dir != before_ffmpeg:
@@ -1104,7 +1135,10 @@ class MainWindow(QMainWindow):
         self._default_extra_metric_keys = self._extra_metrics_from_settings()
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
-        self.settings_status.setText(error or "Settings saved.")
+        self.settings_status.setText(
+            tr_message(error) if error else
+            tr("Settings saved. The new language shows when the app is next started.")
+            if self._settings.language != language_before else tr("Settings saved."))
         self._refresh_settings_status()
 
     def _fill_cvvdp_default_combo(self) -> None:
@@ -1124,7 +1158,7 @@ class MainWindow(QMainWindow):
         self._settings.frame_preview_color_mode = mode
         error = self._settings.save()
         if error:
-            self.status_label.setText(error)
+            self.status_label.setText(tr_message(error))
 
     def _pick_directory(self, title: str, edit: QLineEdit) -> None:
         directory = QFileDialog.getExistingDirectory(self, title, edit.text())
@@ -1133,30 +1167,32 @@ class MainWindow(QMainWindow):
             self._on_settings_edited()
 
     def _on_pick_ffmpeg_dir(self) -> None:
-        self._pick_directory("Select the folder containing ffmpeg.exe", self.settings_ffmpeg_edit)
+        self._pick_directory(tr("Select the folder containing ffmpeg.exe"), self.settings_ffmpeg_edit)
 
     def _on_pick_cache_dir(self) -> None:
-        self._pick_directory("Where should saved results be kept?", self.settings_cache_edit)
+        self._pick_directory(tr("Where should saved results be kept?"), self.settings_cache_edit)
 
     def _on_pick_export_dir(self) -> None:
-        self._pick_directory("Where should exports be written?", self.settings_export_edit)
+        self._pick_directory(tr("Where should exports be written?"), self.settings_export_edit)
 
     def _on_copy_log(self) -> None:
         """Puts the part of the log worth sharing on the clipboard."""
         try:
             shared = app_log.log_text_to_share()
         except OSError as error:
-            self.settings_status.setText(f"Could not read the log: {error}")
+            self.settings_status.setText(tr("Could not read the log: {error}", error=error))
             return
         if shared is None:
-            self.settings_status.setText("There is no log to copy yet.")
+            self.settings_status.setText(tr("There is no log to copy yet."))
             return
         text, shortened = shared
         QApplication.clipboard().setText(text)
         lines = text.count("\n") + 1
         self.settings_status.setText(
-            f"Copied the log to the clipboard ({lines} lines" + (
-                ", the middle left out -- Export log saves all of it)." if shortened else ")."))
+            ntr("Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).",
+                "Copied the log to the clipboard ({count} lines, the middle left out -- Export log saves all of it).",
+                lines) if shortened else
+            ntr("Copied the log to the clipboard ({count} line).", "Copied the log to the clipboard ({count} lines).", lines))
 
     def check_for_updates(self) -> None:
         """Asks GitHub for the latest release, off the UI thread. Called
@@ -1184,16 +1220,17 @@ class MainWindow(QMainWindow):
             return
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Information)
-        box.setWindowTitle("Update available")
-        box.setText(f"{APP_NAME} {release.version} is available. You have {__version__}.")
+        box.setWindowTitle(tr("Update available"))
+        box.setText(tr("{app} {version} is available. You have {current}.", app=APP_NAME, version=release.version,
+                       current=__version__))
         box.setInformativeText(
-            "Updating does not affect your saved results or settings: they are stored separately "
-            f"from the app, in {result_cache.cache_dir()} and {user_data_dir()}.")
+            tr("Updating does not affect your saved results or settings: they are stored separately from the app, "
+                "in {cache_dir} and {user_data_dir}.", cache_dir=result_cache.cache_dir(), user_data_dir=user_data_dir()))
         if release.notes.strip():
             box.setDetailedText(release.notes)
-        download = box.addButton("Download", QMessageBox.AcceptRole)
-        skip = box.addButton("Skip this version", QMessageBox.DestructiveRole)
-        box.addButton("Later", QMessageBox.RejectRole)
+        download = box.addButton(tr("Download"), QMessageBox.AcceptRole)
+        skip = box.addButton(tr("Skip this version"), QMessageBox.DestructiveRole)
+        box.addButton(tr("Later"), QMessageBox.RejectRole)
         box.setDefaultButton(download)
 
         def answered(_result) -> None:
@@ -1211,19 +1248,19 @@ class MainWindow(QMainWindow):
         """Saves the log files as one .zip wherever the user picks."""
         start = Path(self._settings.export_dir) if self._settings.export_dir else Path.home() / "Documents"
         name = f"{APP_NAME} log {time.strftime('%Y-%m-%d %H%M')}.zip"
-        path, _ = QFileDialog.getSaveFileName(self, "Export log", str(start / name), "Zip archive (*.zip)")
+        path, _ = QFileDialog.getSaveFileName(self, tr("Export log"), str(start / name), tr("Zip archive (*.zip)"))
         if not path:
             return
         try:
             names = app_log.export_logs(Path(path))
         except OSError as error:
-            self.settings_status.setText(f"Could not export the log: {error}")
+            self.settings_status.setText(tr("Could not export the log: {error}", error=error))
             return
         if not names:
-            self.settings_status.setText("There is no log to export yet.")
+            self.settings_status.setText(tr("There is no log to export yet."))
             return
         _log.info("Log exported to %s", path)
-        self.settings_status.setText(f"Log exported to {path}")
+        self.settings_status.setText(tr("Log exported to {path}", path=path))
 
     def _on_open_log_dir(self) -> None:
         directory = app_log.log_dir()
@@ -1237,15 +1274,14 @@ class MainWindow(QMainWindow):
         directory = result_cache.cache_dir()
         count, _size_bytes = result_cache.cache_summary(directory)
         if count == 0 and self._file_writes.pending == 0:
-            self.settings_status.setText("There are no saved results to clear.")
+            self.settings_status.setText(tr("There are no saved results to clear."))
             return
         if self._cache_clear_result is not None:
-            self.settings_status.setText("Saved results are already being cleared.")
+            self.settings_status.setText(tr("Saved results are already being cleared."))
             return
         confirm = QMessageBox.question(
-            self, "Clear saved results",
-            f"Delete saved results from {directory}?\n\n"
-            "Videos already scored will have to be recomputed.",
+            self, tr("Clear saved results"),
+            tr("Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.", directory=directory),
         )
         if confirm != QMessageBox.Yes:
             return
@@ -1264,34 +1300,34 @@ class MainWindow(QMainWindow):
                 result_cache.clear_all(directory)
             ),
         )
-        self.settings_status.setText("Clearing saved results...")
+        self.settings_status.setText(tr("Clearing saved results..."))
 
     def _build_files_panel(self) -> QWidget:
-        files_box = QGroupBox("Videos")
+        files_box = QGroupBox(tr("Videos"))
         self.files_box = files_box
         files_layout = QVBoxLayout(files_box)
 
-        files_layout.addWidget(QLabel("Reference video:"))
+        files_layout.addWidget(QLabel(tr("Reference video:")))
         src_row = QHBoxLayout()
         self.source_edit = QLineEdit()
         self.source_edit.setReadOnly(True)
-        self.source_browse_btn = src_browse = QPushButton("Browse...")
+        self.source_browse_btn = src_browse = QPushButton(tr("Browse..."))
         src_browse.clicked.connect(self._on_browse_source)
         src_row.addWidget(self.source_edit, stretch=1)
         src_row.addWidget(src_browse)
         files_layout.addLayout(src_row)
-        self.source_info_label = QLabel("No reference selected.")
+        self.source_info_label = QLabel(tr("No reference selected."))
         self.source_info_label.setStyleSheet("color: #666;")
         files_layout.addWidget(self.source_info_label)
 
         # The metric picker belongs to the table: every metric is a column
         # in it, and more are coming. So it sits on the table's top-right
         # corner, in the row that introduces the table, with no gap below.
-        self.metrics_btn = QPushButton("Add/remove metrics")
+        self.metrics_btn = QPushButton(tr("Add/remove metrics"))
         self.metrics_btn.setToolTip(
-            "Choose which metrics appear in the test-video table. A hidden metric "
+            tr("Choose which metrics appear in the test-video table. A hidden metric "
             "is not calculated; scores already saved for it come back when it is "
-            "shown again. Also available by right-clicking the column headers."
+            "shown again. Also available by right-clicking the column headers.")
         )
         self.metrics_btn.clicked.connect(
             lambda: self._show_metrics_menu(
@@ -1300,8 +1336,8 @@ class MainWindow(QMainWindow):
         )
         table_heading = QHBoxLayout()
         table_heading.addWidget(QLabel(
-            "Test videos to compare against the reference. Check rows to calculate; "
-            "select rows to edit their settings below. Metric header shortcuts apply to all rows."
+            tr("Test videos to compare against the reference. Check rows to calculate; "
+            "select rows to edit their settings below. Metric header shortcuts apply to all rows.")
         ), stretch=1, alignment=Qt.AlignBottom)
         table_heading.addWidget(self.metrics_btn, alignment=Qt.AlignBottom)
         # One block, heading row and table, with no spacing between them, so
@@ -1333,7 +1369,7 @@ class MainWindow(QMainWindow):
         self.metric_header.sectionToggled.connect(self._on_metric_column_toggled)
         self.distorted_table.setHorizontalHeaderLabels(
             [
-                "", "File name", "Media info", "Black bars", "Scaling", "Video bitrate",
+                "", tr("File name"), tr("Media info"), tr("Black bars"), tr("Scaling"), tr("Video bitrate"),
                 f"   {metric_definition('psnr').table_header}", f"   {metric_definition('ssim').table_header}",
                 f"   {metric_definition('vmaf').table_header}", f"   {metric_definition('xpsnr').table_header}",
                 f"   {metric_definition('vmaf_neg').table_header}",
@@ -1401,17 +1437,17 @@ class MainWindow(QMainWindow):
         files_layout.addLayout(table_block, stretch=1)
 
         dist_btn_row = QHBoxLayout()
-        add_dist_btn = QPushButton("Add files...")
+        add_dist_btn = QPushButton(tr("Add files..."))
         add_dist_btn.clicked.connect(self._on_add_distorted)
-        add_resample_btn = QPushButton("Add resolution test...")
+        add_resample_btn = QPushButton(tr("Add resolution test..."))
         add_resample_btn.setToolTip(
-            "Calculates selected metrics for downscaling the reference to a lower resolution and "
-            "scaling it back up -- no separate test file needed."
+            tr("Calculates selected metrics for downscaling the reference to a lower resolution and "
+            "scaling it back up -- no separate test file needed.")
         )
         add_resample_btn.clicked.connect(self._on_add_resample_test)
-        remove_dist_btn = QPushButton("Remove selected")
+        remove_dist_btn = QPushButton(tr("Remove selected"))
         remove_dist_btn.clicked.connect(self._on_remove_distorted)
-        self.remove_all_btn = QPushButton("Remove all")
+        self.remove_all_btn = QPushButton(tr("Remove all"))
         self.remove_all_btn.clicked.connect(self._on_remove_all_distorted)
         dist_btn_row.addWidget(add_dist_btn)
         dist_btn_row.addWidget(add_resample_btn)
@@ -1436,7 +1472,7 @@ class MainWindow(QMainWindow):
 
     def _build_options_panel(self) -> QWidget:
         # --- per-video options inspector (below the file table) ---
-        options_box = QGroupBox("Options")
+        options_box = QGroupBox(tr("Options"))
         options_layout = QVBoxLayout(options_box)
         self.options_box = options_box
 
@@ -1452,40 +1488,40 @@ class MainWindow(QMainWindow):
         # selection -- so seeing what four rows were set to took four clicks.
 
         form = QFormLayout()
-        performance_box = QGroupBox("Performance")
+        performance_box = QGroupBox(tr("Performance"))
         performance_form = QFormLayout(performance_box)
-        metric_options_box = QGroupBox("Metric-specific settings")
+        metric_options_box = QGroupBox(tr("Metric-specific settings"))
         metric_options_form = QFormLayout(metric_options_box)
         self.model_combo = QComboBox()
         for name, _ in _MODEL_CHOICES:
-            self.model_combo.addItem(name)
+            self.model_combo.addItem(tr(name))
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         self.model_combo.setToolTip(
-            "The VMAF v0.6.1 column's model. Auto picks the standard or the 4K "
+            tr("The VMAF v0.6.1 column's model. Auto picks the standard or the 4K "
             "model from the size frames are compared at, after black bars are "
-            "removed and one video is scaled to the other."
+            "removed and one video is scaled to the other.")
         )
-        metric_options_form.addRow("VMAF v0.6.1 model:", self.model_combo)
+        metric_options_form.addRow(tr("VMAF v0.6.1 model:"), self.model_combo)
         self.model_v1_combo = QComboBox()
         for name, _ in _V1_MODEL_CHOICES:
-            self.model_v1_combo.addItem(name)
+            self.model_v1_combo.addItem(tr(name))
         self.model_v1_combo.currentIndexChanged.connect(lambda _index: self._on_panel_field_edited("model_v1"))
         self.model_v1_combo.setToolTip(
-            "The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto "
+            tr("The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto "
             "picks the 1080p model at three screen heights, or the 4K model at "
-            "one and a half for 4K comparisons, as for VMAF v0.6.1."
+            "one and a half for 4K comparisons, as for VMAF v0.6.1.")
         )
-        metric_options_form.addRow("VMAF v1 model:", self.model_v1_combo)
+        metric_options_form.addRow(tr("VMAF v1 model:"), self.model_v1_combo)
 
-        self.gpu_checkbox = QCheckBox("Use GPU decoding")
+        self.gpu_checkbox = QCheckBox(tr("Use GPU decoding"))
         self.gpu_checkbox.setToolTip(
-            "Hardware-decodes the reference and the test video. Each is "
+            tr("Hardware-decodes the reference and the test video. Each is "
             "decided separately, and either one falls back to the CPU on its "
-            "own if this GPU can't decode its format."
+            "own if this GPU can't decode its format.")
         )
         self.gpu_checkbox.setChecked(True)
         self.gpu_vendor_combo = QComboBox()
-        self.gpu_vendor_combo.addItems(["Auto-detect", "NVIDIA", "Intel", "AMD"])
+        self.gpu_vendor_combo.addItems([tr("Auto-detect"), "NVIDIA", "Intel", "AMD"])
         self.gpu_checkbox.stateChanged.connect(
             lambda st: self.gpu_vendor_combo.setEnabled(bool(st))
         )
@@ -1498,52 +1534,52 @@ class MainWindow(QMainWindow):
         gpu_row = QHBoxLayout()
         gpu_row.addWidget(self.gpu_checkbox)
         gpu_row.addWidget(self.gpu_vendor_combo)
-        performance_form.addRow("GPU decode:", gpu_row)
+        performance_form.addRow(tr("GPU decode:"), gpu_row)
 
         self.ssimulacra2_backend_combo = QComboBox()
         self.ssimulacra2_backend_combo.addItems(["GPU", "CPU"])
         self.ssimulacra2_backend_combo.setToolTip(
-            "GPU uses Vship when a supported device is available. If GPU computation "
+            tr("GPU uses Vship when a supported device is available. If GPU computation "
             "cannot run, the metric automatically falls back to CPU. Choose CPU to "
-            "always use the bundled libjxl reference implementation."
+            "always use the bundled libjxl reference implementation.")
         )
         self.ssimulacra2_backend_combo.currentIndexChanged.connect(
             lambda _index: self._on_metric_backend_changed("ssimulacra2")
         )
-        performance_form.addRow("SSIMULACRA2 compute:", self.ssimulacra2_backend_combo)
+        performance_form.addRow(tr("SSIMULACRA2 compute:"), self.ssimulacra2_backend_combo)
 
         self.butteraugli_backend_combo = QComboBox()
         self.butteraugli_backend_combo.addItems(["GPU", "CPU"])
         self.butteraugli_backend_combo.setToolTip(
-            "GPU uses Vship when a supported device is available. If GPU computation "
+            tr("GPU uses Vship when a supported device is available. If GPU computation "
             "cannot run, the metric automatically falls back to CPU. Choose CPU to "
-            "always use the bundled libjxl reference implementation."
+            "always use the bundled libjxl reference implementation.")
         )
         self.butteraugli_backend_combo.currentIndexChanged.connect(
             lambda _index: self._on_metric_backend_changed("butteraugli")
         )
-        performance_form.addRow("Butteraugli compute:", self.butteraugli_backend_combo)
+        performance_form.addRow(tr("Butteraugli compute:"), self.butteraugli_backend_combo)
 
         detected = detected_gpu_vendors()
         if detected:
             names = ", ".join(v.value.upper() for v in detected)
-            performance_form.addRow("", QLabel(f"Detected GPU(s): {names}"))
+            performance_form.addRow("", QLabel(tr("Detected GPU(s): {names}", names=names)))
 
         self.crop_combo = QComboBox()
         self.crop_combo.addItems([
-            "Auto-detect (recommended)",
-            "None (use full frame)",
+            tr("Auto-detect (recommended)"),
+            tr("None (use full frame)"),
         ])
         self.crop_combo.currentIndexChanged.connect(
             lambda _value: self._on_panel_field_edited("crop_mode")
         )
-        form.addRow("Black-bar handling:", self.crop_combo)
+        form.addRow(tr("Black-bar handling:"), self.crop_combo)
 
         # The two groups sit side by side rather than stacked: the panel is
         # full window width now, so stacking them left a lot of empty space
         # to the right and pushed the file table up.
         columns = QHBoxLayout()
-        basic_column = QGroupBox("Video preparation (calculation only)")
+        basic_column = QGroupBox(tr("Video preparation (calculation only)"))
         basic_column.setLayout(form)
         columns.addWidget(basic_column, stretch=1)
         options_layout.addLayout(columns)
@@ -1553,15 +1589,15 @@ class MainWindow(QMainWindow):
         self.threads_spin = QSpinBox()
         self.threads_spin.setRange(0, 128)
         self.threads_spin.setValue(0)
-        self.threads_spin.setSpecialValueText("Auto")
+        self.threads_spin.setSpecialValueText(tr("Auto"))
         self.threads_spin.valueChanged.connect(
             lambda _value: self._on_panel_field_edited("n_threads")
         )
-        performance_form.addRow("libvmaf threads:", self.threads_spin)
+        performance_form.addRow(tr("libvmaf threads:"), self.threads_spin)
         self.threads_spin.setToolTip(
-            "Controls VMAF, PSNR and SSIM extraction in libvmaf, not XPSNR "
+            tr("Controls VMAF, PSNR and SSIM extraction in libvmaf, not XPSNR "
             "or video decoding.\n\nAuto uses every core, or half of them "
-            "for each video when two are calculated in parallel."
+            "for each video when two are calculated in parallel.")
         )
 
         self.subsample_spin = QSpinBox()
@@ -1570,52 +1606,52 @@ class MainWindow(QMainWindow):
         self.subsample_spin.valueChanged.connect(
             lambda _value: self._on_panel_field_edited("n_subsample")
         )
-        metric_options_form.addRow("libvmaf frame subsample:", self.subsample_spin)
-        self.subsample_spin.setToolTip("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain values at libvmaf's sampled frames.")
+        metric_options_form.addRow(tr("libvmaf frame subsample:"), self.subsample_spin)
+        self.subsample_spin.setToolTip(tr("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain values at libvmaf's sampled frames."))
 
         # CVVDP's display: a preset, the display itself, and whether the
         # video is scaled to fill it (see vmaf_app.core.cvvdp).
         self.cvvdp_preset_combo = QComboBox()
         self.cvvdp_preset_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.cvvdp_preset_combo.setToolTip(
-            "The display CVVDP predicts visible differences on. The score depends on the "
+            tr("The display CVVDP predicts visible differences on. The score depends on the "
             "display as much as on the videos, so compare videos scored for the same one.\n\n"
             "New videos start with the preset chosen in Settings. Saving a preset of your "
-            "own makes it that default."
+            "own makes it that default.")
         )
         self.cvvdp_preset_combo.currentIndexChanged.connect(self._on_cvvdp_preset_chosen)
-        metric_options_form.addRow("CVVDP display:", self.cvvdp_preset_combo)
+        metric_options_form.addRow(tr("CVVDP display:"), self.cvvdp_preset_combo)
         self.cvvdp_display_label = QLabel()
         self.cvvdp_display_label.setStyleSheet("color: #666;")
         self.cvvdp_display_label.setWordWrap(True)
         metric_options_form.addRow("", self.cvvdp_display_label)
         cvvdp_buttons = QHBoxLayout()
-        self.cvvdp_add_btn = QPushButton("Add preset...")
+        self.cvvdp_add_btn = QPushButton(tr("Add preset..."))
         self.cvvdp_add_btn.setToolTip(
-            "Make a new preset of your own, starting from the display shown here. "
+            tr("Make a new preset of your own, starting from the display shown here. "
             "It becomes the display newly added videos start with; the selected "
-            "videos keep theirs until you choose it for them."
+            "videos keep theirs until you choose it for them.")
         )
         self.cvvdp_add_btn.clicked.connect(self._on_cvvdp_add_preset)
-        self.cvvdp_edit_btn = QPushButton("Edit display...")
+        self.cvvdp_edit_btn = QPushButton(tr("Edit display..."))
         self.cvvdp_edit_btn.setToolTip(
-            "Change the display's size, distance, brightness, room light and more; "
-            "rename your preset or save the display as a new one."
+            tr("Change the display's size, distance, brightness, room light and more; "
+            "rename your preset or save the display as a new one.")
         )
         self.cvvdp_edit_btn.clicked.connect(self._on_cvvdp_edit_display)
-        self.cvvdp_delete_btn = QPushButton("Delete preset")
-        self.cvvdp_delete_btn.setToolTip("Delete this preset of yours. Built-in presets cannot be deleted.")
+        self.cvvdp_delete_btn = QPushButton(tr("Delete preset"))
+        self.cvvdp_delete_btn.setToolTip(tr("Delete this preset of yours. Built-in presets cannot be deleted."))
         self.cvvdp_delete_btn.clicked.connect(self._on_cvvdp_delete_preset)
         for button in (self.cvvdp_add_btn, self.cvvdp_edit_btn, self.cvvdp_delete_btn):
             cvvdp_buttons.addWidget(button)
         cvvdp_buttons.addStretch(1)
         metric_options_form.addRow("", cvvdp_buttons)
-        self.cvvdp_resize_check = QCheckBox("Scale the video to fill the display")
+        self.cvvdp_resize_check = QCheckBox(tr("Scale the video to fill the display"))
         self.cvvdp_resize_check.setToolTip(
-            "Off (the official default): the video is shown pixel for pixel, so a 1080p "
+            tr("Off (the official default): the video is shown pixel for pixel, so a 1080p "
             "video covers a quarter of a 4K display. On: it is scaled, keeping its shape, "
             "to fill the display.\n\nSet per video: choosing or saving a display preset "
-            "does not change it."
+            "does not change it.")
         )
         # checkStateChanged, not toggled: a partly ticked box (a mixed
         # selection) already counts as checked, so ticking it fully would not
@@ -1632,34 +1668,34 @@ class MainWindow(QMainWindow):
         self.duration_edit.timeChanged.connect(
             lambda _value: self._on_panel_field_edited("duration_limit")
         )
-        adv_form.addRow("Duration limit (0 = full):", self.duration_edit)
+        adv_form.addRow(tr("Duration limit (0 = full):"), self.duration_edit)
 
         self.scale_algo_combo = QComboBox()
         self.scale_algo_combo.addItems(_SCALE_ALGORITHMS)
         self.scale_algo_combo.currentIndexChanged.connect(
             lambda _value: self._on_panel_field_edited("scale_algorithm")
         )
-        adv_form.addRow("Scaling algorithm:", self.scale_algo_combo)
+        adv_form.addRow(tr("Scaling algorithm:"), self.scale_algo_combo)
 
         self.scale_direction_combo = QComboBox()
         self.scale_direction_combo.addItems([
-            "Source downscaled to test",
-            "Test upscaled to source",
-            "Test both (adds a comparison row)",
+            tr("Source downscaled to test"),
+            tr("Test upscaled to source"),
+            tr("Test both (adds a comparison row)"),
         ])
         self.scale_direction_combo.setToolTip(
-            "When the two resolutions differ: either evaluate quality at the resolution actually\n"
+            tr("When the two resolutions differ: either evaluate quality at the resolution actually\n"
             "delivered (source scaled to match test -- the default), or as if the test\n"
             "video were upscaled back to the reference's native resolution for playback.\n"
             "\"Test both\" doesn't change this row -- it adds a second row for the same test\n"
-            "file using the other direction, so you can run and compare both."
+            "file using the other direction, so you can run and compare both.")
         )
         self.scale_direction_combo.currentIndexChanged.connect(self._on_scale_direction_combo_changed)
-        adv_form.addRow("Resolution mismatch:", self.scale_direction_combo)
+        adv_form.addRow(tr("Resolution mismatch:"), self.scale_direction_combo)
 
         metrics_hint = QLabel(
-            "Cropping and scaling here affect scores. Video Compare's tone mapping and "
-            "playback resolution are display-only settings and do not change calculated metrics."
+            tr("Cropping and scaling here affect scores. Video Compare's tone mapping and "
+            "playback resolution are display-only settings and do not change calculated metrics.")
         )
         metrics_hint.setStyleSheet("color: #666; font-style: italic;")
         metrics_hint.setWordWrap(True)
@@ -1676,13 +1712,13 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(panel)
 
         run_row = QHBoxLayout()
-        self.run_btn = QPushButton("Calculate metrics")
+        self.run_btn = QPushButton(tr("Calculate metrics"))
         self.run_btn.clicked.connect(self._on_run_clicked)
-        self.pause_btn = QPushButton("Pause")
+        self.pause_btn = QPushButton(tr("Pause"))
         self.pause_btn.setEnabled(False)
         self.pause_btn.setCheckable(True)
         self.pause_btn.clicked.connect(self._on_pause_clicked)
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton(tr("Cancel"))
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.clicked.connect(self._on_cancel_clicked)
         run_row.addWidget(self.run_btn)
@@ -1697,37 +1733,33 @@ class MainWindow(QMainWindow):
         # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
         # what it was counting.
         self.parallel_jobs_check = QCheckBox(
-            "Calculate CPU metrics for 2 videos in parallel"
+            tr("Calculate CPU metrics for 2 videos in parallel")
         )
         self.parallel_jobs_check.setChecked(
             self._settings.parallel_jobs >= MAX_PARALLEL_JOBS
         )
         self.parallel_jobs_check.setToolTip(
-            f"Runs CPU metric work for two videos simultaneously on this {cores}-core "
-            "machine. libvmaf does not keep a many-core CPU busy on its "
-            "own, so a second video largely fills the idle capacity "
-            "rather than competing for it. libvmaf threads left on Auto "
-            "are shared: each video gets half the cores.\n\nCan be "
-            "changed while a run is in progress: ticking it starts another "
-            "video straight away, unticking it lets the running ones finish "
-            "first.\n\nOnly affects how fast results arrive, never what "
-            "they are."
+            tr("Runs CPU metric work for two videos simultaneously on this {cores}-core machine. libvmaf does not "
+                "keep a many-core CPU busy on its own, so a second video largely fills the idle capacity rather than "
+                "competing for it. libvmaf threads left on Auto are shared: each video gets half the cores.\n\nCan be "
+                "changed while a run is in progress: ticking it starts another video straight away, unticking it "
+                "lets the running ones finish first.\n\nOnly affects how fast results arrive, never what they are.", cores=cores)
         )
         self.parallel_jobs_check.toggled.connect(self._on_parallel_jobs_changed)
         run_row.addWidget(self.parallel_jobs_check)
         run_row.addStretch(1)
 
-        load_btn = QPushButton("Load analysis results...")
+        load_btn = QPushButton(tr("Load analysis results..."))
         load_btn.clicked.connect(self._on_load_saved_run)
-        self.save_btn = save_btn = QPushButton("Save selected results...")
+        self.save_btn = save_btn = QPushButton(tr("Save selected results..."))
         save_btn.clicked.connect(self._on_save_selected)
         # One button, not two. "Plot selected results" claimed to plot a
         # subset, but opening the tab syncs every completed row into it
         # (see _sync_graph), so both buttons left exactly the same graph on
         # screen -- the selection one merely refused to open when nothing
         # selected had a result.
-        self.show_graph_btn = QPushButton("Open metric graphs")
-        self.show_graph_btn.setToolTip("Opens Metric Graphs with the current results and graph settings.")
+        self.show_graph_btn = QPushButton(tr("Open metric graphs"))
+        self.show_graph_btn.setToolTip(tr("Opens Metric Graphs with the current results and graph settings."))
         self.show_graph_btn.clicked.connect(self._on_show_graph_clicked)
         run_row.addWidget(load_btn)
         run_row.addWidget(save_btn)
@@ -1774,7 +1806,7 @@ class MainWindow(QMainWindow):
             return True
 
         problems = status.problems
-        self._ffmpeg_banner.setText("  ".join(problems) + "  Click \"Locate ffmpeg.exe...\" to point at it.")
+        self._ffmpeg_banner.setText("  ".join(problems) + tr("  Click \"Locate ffmpeg.exe...\" to point at it."))
         self._ffmpeg_banner.setVisible(True)
         self._locate_ffmpeg_btn.setVisible(True)
 
@@ -1782,11 +1814,11 @@ class MainWindow(QMainWindow):
         # a modal dialog, so it would block forever rather than prompt.
         if prompt and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
             answer = QMessageBox.warning(
-                self, "ffmpeg not usable",
+                self, tr("ffmpeg not usable"),
                 "\n".join(problems)
-                + f"\n\nffmpeg was looked for at:\n  {status.ffmpeg.path}"
-                + f"\nffprobe at:\n  {status.ffprobe.path}"
-                + "\n\nWould you like to point the app at ffmpeg.exe now?",
+                + tr("\n\nffmpeg was looked for at:\n  {path}", path=status.ffmpeg.path)
+                + tr("\nffprobe at:\n  {path}", path=status.ffprobe.path)
+                + tr("\n\nWould you like to point the app at ffmpeg.exe now?"),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
             )
             if answer == QMessageBox.Yes:
@@ -1800,7 +1832,7 @@ class MainWindow(QMainWindow):
         ffmpeg_exe = exe_name("ffmpeg")
         ffprobe_exe = exe_name("ffprobe")
         chosen, _ = QFileDialog.getOpenFileName(
-            self, f"Select {ffmpeg_exe}", "", f"{ffmpeg_exe} ({ffmpeg_exe});;All files (*)",
+            self, tr("Select {ffmpeg_exe}", ffmpeg_exe=ffmpeg_exe), "", tr("{ffmpeg_exe} ({ffmpeg_exe});;All files (*)", ffmpeg_exe=ffmpeg_exe),
         )
         if not chosen:
             return False
@@ -1808,43 +1840,42 @@ class MainWindow(QMainWindow):
         directory = Path(chosen).parent
         if not (directory / ffprobe_exe).exists():
             QMessageBox.information(
-                self, "ffprobe needed too",
-                f"{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\n"
-                f"The app needs both. Please select {ffprobe_exe} as well "
-                f"(it normally ships in the same folder).",
+                self, tr("ffprobe needed too"),
+                tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select {ffprobe_exe} "
+                    "as well (it normally ships in the same folder).", ffprobe_exe=ffprobe_exe, ffmpeg_exe=ffmpeg_exe),
             )
             probe_chosen, _ = QFileDialog.getOpenFileName(
-                self, f"Select {ffprobe_exe}", str(directory), f"{ffprobe_exe} ({ffprobe_exe});;All files (*)",
+                self, tr("Select {ffprobe_exe}", ffprobe_exe=ffprobe_exe), str(directory), tr("{ffprobe_exe} ({ffprobe_exe});;All files (*)", ffprobe_exe=ffprobe_exe),
             )
             if not probe_chosen:
                 return False
             if Path(probe_chosen).parent != directory:
                 QMessageBox.warning(
-                    self, "Different folders",
-                    f"{ffmpeg_exe} and {ffprobe_exe} need to be in the same folder for the app to find both.",
+                    self, tr("Different folders"),
+                    tr("{ffmpeg_exe} and {ffprobe_exe} need to be in the same folder for the app to find both.", ffmpeg_exe=ffmpeg_exe, ffprobe_exe=ffprobe_exe),
                 )
                 return False
 
         set_ffmpeg_dir_override(str(directory))
         status = check_tools()
         if not status.ok:
-            QMessageBox.warning(self, "Still not usable", "\n".join(status.problems))
+            QMessageBox.warning(self, tr("Still not usable"), "\n".join(status.problems))
             self._check_ffmpeg()
             return False
         self._ffmpeg_banner.setVisible(False)
         self._locate_ffmpeg_btn.setVisible(False)
         self.status_label.setText(
-            f"Using ffmpeg {format_version(status.ffmpeg.version)} from {directory}"
+            tr("Using ffmpeg {format_version} from {directory}", format_version=format_version(status.ffmpeg.version), directory=directory)
         )
         return True
 
     # ------------------------------------------------------------------ source selection
     def _on_browse_source(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select reference video")
+        path, _ = QFileDialog.getOpenFileName(self, tr("Select reference video"))
         if not path:
             return
-        self.source_info_label.setText(f"Reading {Path(path).name}...")
-        self.status_label.setText("Reading reference video...")
+        self.source_info_label.setText(tr("Reading {name}...", name=Path(path).name))
+        self._show_reading(tr("Reading reference video..."))
         self._start_source_probe(Path(path))
 
     def _start_source_probe(self, path: Path) -> None:
@@ -1877,9 +1908,9 @@ class MainWindow(QMainWindow):
                     f"{media_info_string(previous)}, {bitrate_string(previous)}  "
                     f"({format_hms(previous.duration, decimals=1)})"
                 )
-                if previous is not None else "No reference selected."
+                if previous is not None else tr("No reference selected.")
             )
-            QMessageBox.critical(self, "Could not read video", error)
+            QMessageBox.critical(self, tr("Could not read video"), tr_message(error))
             return
         self._apply_source_info(path, info)
 
@@ -1922,11 +1953,11 @@ class MainWindow(QMainWindow):
 
         if dropped:
             QMessageBox.information(
-                self, "Resolution tests removed",
-                f"{len(dropped)} resolution test(s) belonged to the previous "
-                "source and have been removed:\n\n"
+                self, tr("Resolution tests removed"),
+                ntr("{count} resolution test belonged to the previous source and has been removed:\n\n",
+                    "{count} resolution tests belonged to the previous source and have been removed:\n\n", len(dropped))
                 + "\n".join(f"  {name}" for name in dropped)
-                + "\n\nAdd them again to test the new source.",
+                + tr("\n\nAdd them again to test the new source."),
             )
 
     def _remove_rows_owned_by_the_previous_source(self) -> list[str]:
@@ -1961,14 +1992,18 @@ class MainWindow(QMainWindow):
             self._sync_frame_compare()
         return list(reversed(removed))
 
+    def _show_reading(self, text: str) -> None:
+        self._reading_text = text
+        self.status_label.setText(text)
+
     def _show_ready(self) -> None:
         """Says "Ready." once reading videos or saved results is done -- in
         place of the "Reading..." message only. Anything else on the status
         line is a message for the user (a preset saved, results cleared),
         and a lookup finishing a moment later used to overwrite it."""
         text = self.status_label.text()
-        if not text or text.startswith("Reading"):
-            self.status_label.setText("Ready.")
+        if not text or text == self._reading_text:
+            self.status_label.setText(tr("Ready."))
 
     def _on_source_probe_finished(self, generation: int, worker: ProbeWorker) -> None:
         if worker in self._probe_workers:
@@ -1993,7 +2028,7 @@ class MainWindow(QMainWindow):
         path_item = QTableWidgetItem(path.name)
         path_item.setToolTip(str(path))  # full path still available on hover
         self.distorted_table.setItem(row, COL_PATH, path_item)
-        self.distorted_table.setItem(row, COL_INFO, QTableWidgetItem("Probing..."))
+        self.distorted_table.setItem(row, COL_INFO, QTableWidgetItem(tr("Probing...")))
         bars_item = QTableWidgetItem()
         bars_item.setTextAlignment(Qt.AlignCenter)
         self.distorted_table.setItem(row, COL_BLACK_BARS, bars_item)
@@ -2067,13 +2102,13 @@ class MainWindow(QMainWindow):
                     )
                     item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
                     failed = enabled and row_data.analysis_status in {"Failed", _PARTLY_FAILED}
-                    item.setText("Failed" if failed else "")
+                    item.setText(tr("Failed") if failed else "")
                     item.setToolTip((
                         self._failed_metric_tooltip(row_data, metric_column.key)
                         if failed else
-                        "Ticked: calculated on the next run. Untick to skip it."
+                        tr("Ticked: calculated on the next run. Untick to skip it.")
                         if enabled else
-                        "Not selected. Tick to calculate this metric."
+                        tr("Not selected. Tick to calculate this metric.")
                     ) + (self._cvvdp_elsewhere_note(row_data) if metric_column.key == "cvvdp" else ""))
                     item.setForeground(
                         QColor("#a03030") if failed else self.distorted_table.palette().text()
@@ -2098,7 +2133,7 @@ class MainWindow(QMainWindow):
                     item.setToolTip(self._cvvdp_note(row_data))
                 else:
                     item.setToolTip(
-                        "Mean of calculated frame scores."
+                        tr("Mean of calculated frame scores.")
                         + self._identical_frames_note(run, col)
                         + self._backend_note(row_data, metric_column.key, frame_metric)
                     )
@@ -2125,10 +2160,10 @@ class MainWindow(QMainWindow):
         is at, and why a finished job is not being shown.
         """
         return row_data.analysis_status or (
-            "No metrics selected" if not self._requested_metrics(row_data) else
-            "Complete" if self._has_requested_results(row_data) else
-            "Partially calculated" if row_data.completed_run is not None
-            else "Not calculated"
+            N_("No metrics selected") if not self._requested_metrics(row_data) else
+            N_("Complete") if self._has_requested_results(row_data) else
+            N_("Partially calculated") if row_data.completed_run is not None
+            else N_("Not calculated")
         )
 
     def _refresh_row_state(self, row: int) -> None:
@@ -2140,9 +2175,12 @@ class MainWindow(QMainWindow):
             return
         row_data = self._rows[row]
         state = self._row_state(row_data)
-        lines = [str(row_data.path), state]
+        # The state is kept in English -- it is compared below -- and shown
+        # in the window's language; a detail from the core modules (a
+        # failure's reason) is translated where its shape is known.
+        lines = [str(row_data.path), tr(state)]
         if row_data.status_detail:
-            lines.append(row_data.status_detail)
+            lines.append(tr_message(row_data.status_detail))
         item.setToolTip("\n\n".join(lines))
         if state == "Failed":
             colour = _STATE_COLOURS["failed"]
@@ -2170,9 +2208,8 @@ class MainWindow(QMainWindow):
         if not identical:
             return ""
         return (
-            f"\n\n{identical} of {len(values)} frames were identical to the reference "
-            "and scored infinity; they contribute zero distortion and are included "
-            "in the frame count for the XPSNR sequence average."
+            tr("\n\n{identical} of {count} frames were identical to the reference and scored infinity; they "
+                "contribute zero distortion and are included in the frame count for the XPSNR sequence average.", identical=identical, count=len(values))
         )
 
     def _cvvdp_elsewhere_note(self, row_data: RowData) -> str:
@@ -2188,11 +2225,11 @@ class MainWindow(QMainWindow):
         lines = []
         for settings, score in sorted(others, key=lambda item: -item[1]):
             preset = matching_preset(settings, self._settings.cvvdp_presets)
-            name = preset.name if preset else f"Custom ({settings.display.describe()})"
-            scaled = ", video scaled to fill it" if settings.resize_to_display else ""
-            lines.append(f"\u2022 {name}{scaled}: {score:.3f} JOD")
-        return ("\n\nNo CVVDP score for this video's display yet. Saved for other displays "
-                "(choose one in CVVDP display to show it; they are not scores for this display):\n"
+            name = preset.name if preset else tr("Custom ({describe})", describe=settings.display.describe())
+            scaled = tr(", video scaled to fill it") if settings.resize_to_display else ""
+            lines.append(tr("• {name}{scaled}: {score:.3f} JOD", name=name, scaled=scaled, score=score))
+        return (tr("\n\nNo CVVDP score for this video's display yet. Saved for other displays "
+                "(choose one in CVVDP display to show it; they are not scores for this display):\n")
                 + "\n".join(lines))
 
     def _cvvdp_note(self, row_data: RowData) -> str:
@@ -2200,12 +2237,11 @@ class MainWindow(QMainWindow):
         preset = matching_preset(row_data.cvvdp, self._settings.cvvdp_presets, row_data.cvvdp_preset)
         display = row_data.cvvdp.display.describe()
         return (
-            "CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no "
-            "visible difference, and one JOD lower means 75% of viewers would pick the "
-            "reference as better.\n\n"
-            f"For the display {preset.name if preset else '(custom)'}: {display}"
-            + (", video scaled to fill it" if row_data.cvvdp.resize_to_display else "")
-            + ".\n\nThe JOD of each second is plotted in Metric Graphs."
+            tr("CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no visible difference, "
+                "and one JOD lower means 75% of viewers would pick the reference as better.\n\nFor the display "
+                "{value}: {display}", value=preset.name if preset else '(custom)', display=display)
+            + (tr(", video scaled to fill it") if row_data.cvvdp.resize_to_display else "")
+            + tr(".\n\nThe JOD of each second is plotted in Metric Graphs.")
         )
 
     @staticmethod
@@ -2224,20 +2260,19 @@ class MainWindow(QMainWindow):
     def _crop_detail(label: str, info: VideoInfo, crop: CropBox | None) -> str:
         """One video's crop, spelled out for the tooltip."""
         if crop is None:
-            return f"{label}: not checked for black bars; no crop was applied."
+            return tr("{label}: not checked for black bars; no crop was applied.", label=label)
         if crop.is_noop(info.width, info.height):
-            return f"{label}: no black bars. Compared in full at {info.width}x{info.height}."
+            return tr("{label}: no black bars. Compared in full at {size}.", label=label,
+                      size=f"{info.width}x{info.height}")
         sides = (
-            ("top", max(0, crop.y)),
-            ("bottom", max(0, info.height - crop.y - crop.h)),
-            ("left", max(0, crop.x)),
-            ("right", max(0, info.width - crop.x - crop.w)),
+            (tr("top {pixels} px"), max(0, crop.y)),
+            (tr("bottom {pixels} px"), max(0, info.height - crop.y - crop.h)),
+            (tr("left {pixels} px"), max(0, crop.x)),
+            (tr("right {pixels} px"), max(0, info.width - crop.x - crop.w)),
         )
-        cut = ", ".join(f"{name} {value} px" for name, value in sides if value)
-        return (
-            f"{label}: black bars cropped off -- {cut}.\n"
-            f"Compared at {crop.w}x{crop.h} instead of {info.width}x{info.height}."
-        )
+        cut = ", ".join(side.format(pixels=value) for side, value in sides if value)
+        return tr("{label}: black bars cropped off -- {sides}.\nCompared at {cropped} instead of {full}.",
+                  label=label, sides=cut, cropped=f"{crop.w}x{crop.h}", full=f"{info.width}x{info.height}")
 
     @staticmethod
     def _has_black_bars(info: VideoInfo, crop: CropBox | None) -> bool | None:
@@ -2271,18 +2306,18 @@ class MainWindow(QMainWindow):
             )
 
         if probe_failed:
-            show("Unknown", "Black bars could not be checked because the video could not be read.", muted=True)
+            show(tr("Unknown"), tr("Black bars could not be checked because the video could not be read."), muted=True)
             return
 
         row_data = self._rows[row]
         completed = row_data.completed_run
         if completed is None:
             if row_data.options.crop_mode == CropMode.NONE:
-                show("Off", "Black-bar detection is disabled for this row; the full frames will be compared.", muted=True)
+                show(tr("Off"), tr("Black-bar detection is disabled for this row; the full frames will be compared."), muted=True)
             elif row_data.options.crop_mode == CropMode.MANUAL:
-                show("Manual", "A manual crop is configured; the detected sides appear after the run.", muted=True)
+                show(tr("Manual"), tr("A manual crop is configured; the detected sides appear after the run."), muted=True)
             else:
-                show("Pending", "Black bars will be detected when this row is run.", muted=True)
+                show(tr("Pending"), tr("Black bars will be detected when this row is run."), muted=True)
             return
 
         result = completed.result
@@ -2292,15 +2327,15 @@ class MainWindow(QMainWindow):
         subject_crop = result.source_crop if resample else result.distorted_crop
         subject_info = result.source_info if resample else result.distorted_info
 
-        details = [self._crop_detail("Test video", subject_info, subject_crop)] if not resample else []
-        details.append(self._crop_detail("Reference", result.source_info, result.source_crop))
+        details = [self._crop_detail(tr("Test video"), subject_info, subject_crop)] if not resample else []
+        details.append(self._crop_detail(tr("Reference"), result.source_info, result.source_crop))
         tooltip = "\n\n".join(details)
 
         has_bars = self._has_black_bars(subject_info, subject_crop)
         if has_bars is None:
-            show("Off", "Black-bar detection was disabled for this run; no crop was applied.", muted=True)
+            show(tr("Off"), tr("Black-bar detection was disabled for this run; no crop was applied."), muted=True)
         else:
-            show("Yes" if has_bars else "No", tooltip)
+            show(tr("Yes") if has_bars else tr("No"), tooltip)
 
     @staticmethod
     def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
@@ -2351,8 +2386,8 @@ class MainWindow(QMainWindow):
 
         if ref == dist:
             return "", (
-                f"Reference and test video are compared at the same "
-                f"{ref[0]}x{ref[1]} -- no scaling needed."
+                tr("Reference and test video are compared at the same {size} -- no scaling needed.",
+                   size=f"{ref[0]}x{ref[1]}")
             )
 
         if run is None and row_data.options.crop_mode != CropMode.NONE and (
@@ -2362,12 +2397,12 @@ class MainWindow(QMainWindow):
             # is exactly what a letterbox or pillarbox looks like. Black bars
             # are detected when the row runs, and removing them may well
             # leave the two the same size, so there is nothing to claim yet.
-            return "Pending", (
-                f"The reference is {source_info.width}x{source_info.height} and the test "
-                f"video {distorted_info.width}x{distorted_info.height}, a difference in one "
-                "dimension only -- the shape of black bars on one of them.\n\n"
-                "Bars are detected when this row runs, and are removed before the two are "
-                "compared, so whether any scaling is needed is known then."
+            return tr("Pending"), (
+                tr("The reference is {reference} and the test video {test}, a difference in one "
+                   "dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, "
+                   "and are removed before the two are compared, so whether any scaling is needed is known then.",
+                   reference=f"{source_info.width}x{source_info.height}",
+                   test=f"{distorted_info.width}x{distorted_info.height}")
             )
 
         if row_data.scale_direction_pinned:
@@ -2377,18 +2412,18 @@ class MainWindow(QMainWindow):
                 run.result.scale_direction if run is not None
                 else row_data.options.scale_direction
             )
-        cropped = " (after black bars)" if (
+        cropped = tr(" (after black bars)") if (
             ref != (source_info.width, source_info.height)
             or dist != (distorted_info.width, distorted_info.height)
         ) else ""
         if direction == ScaleDirection.DISTORTED_TO_SOURCE:
-            return "Test upscaled to source", (
-                f"Test video upscaled {dist[0]}x{dist[1]} -> "
-                f"{ref[0]}x{ref[1]}{cropped} to match the reference."
+            return tr("Test upscaled to source"), (
+                tr("Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.",
+                   from_size=f"{dist[0]}x{dist[1]}", to_size=f"{ref[0]}x{ref[1]}", cropped=cropped)
             )
-        return "\u2193 source", (
-            f"Reference downscaled {ref[0]}x{ref[1]} -> "
-            f"{dist[0]}x{dist[1]}{cropped} to match the test video."
+        return tr("\u2193 source"), (
+            tr("Reference downscaled {from_size} -> {to_size}{cropped} to match the test video.",
+               from_size=f"{ref[0]}x{ref[1]}", to_size=f"{dist[0]}x{dist[1]}", cropped=cropped)
         )
 
     def _set_row_scaling(self, row: int) -> None:
@@ -2404,8 +2439,8 @@ class MainWindow(QMainWindow):
         item = self.distorted_table.item(row, COL_INFO)
         scaling_item = self.distorted_table.item(row, COL_SCALING)
         if error:
-            self._set_row_status(row, "Failed", error)
-            item.setText("Probe failed")
+            self._set_row_status(row, N_("Failed"), error)
+            item.setText(tr("Probe failed"))
             item.setToolTip(error)
             item.setForeground(Qt.red)
             self.distorted_table.item(row, COL_BITRATE).setText("")
@@ -2452,7 +2487,8 @@ class MainWindow(QMainWindow):
         assert info is not None
         down_h = max(2, round(target.width * info.height / info.width / 2) * 2)
         item = self.distorted_table.item(row, COL_INFO)
-        item.setText(f"Downscale to {target.width}x{down_h}, upscale back to {info.width}x{info.height}")
+        item.setText(tr("Downscale to {down}, upscale back to {back}", down=f"{target.width}x{down_h}",
+                        back=f"{info.width}x{info.height}"))
         item.setToolTip(format_hms(info.duration, decimals=1))
         self.distorted_table.item(row, COL_BITRATE).setText("N/A")
         self._set_row_black_bars(row)
@@ -2461,7 +2497,7 @@ class MainWindow(QMainWindow):
 
     def _on_add_resample_test(self) -> None:
         if self._source_info is None:
-            QMessageBox.warning(self, "No reference", "Please select a reference video first.")
+            QMessageBox.warning(self, tr("No reference"), tr("Please select a reference video first."))
             return
 
         targets = [
@@ -2470,14 +2506,14 @@ class MainWindow(QMainWindow):
         ]
         if not targets:
             QMessageBox.information(
-                self, "No smaller resolution available",
-                f"The smallest resolution test is {RESAMPLE_TARGET_CHOICES[-1].width} pixels wide, "
-                f"which is not below this reference's {self._source_info.width}-pixel width.",
+                self, tr("No smaller resolution available"),
+                tr("The smallest resolution test is {smallest} pixels wide, which is not below this reference's "
+                   "{width}-pixel width.", smallest=RESAMPLE_TARGET_CHOICES[-1].width, width=self._source_info.width),
             )
             return
         labels = [t.label for t in targets]
         label, ok = QInputDialog.getItem(
-            self, "Add resolution test", "Downscale to (then scale back up):",
+            self, tr("Add resolution test"), tr("Downscale to (then scale back up):"),
             labels, min(1, len(labels) - 1), editable=False,
         )
         if not ok:
@@ -2487,7 +2523,7 @@ class MainWindow(QMainWindow):
         synthetic_path = synthetic_resample_distorted_path(self._source_info.path, target)
         if any(r.path == synthetic_path for r in self._rows):
             QMessageBox.information(
-                self, "Already added", f"A {label} resolution test for this reference is already in the list."
+                self, tr("Already added"), tr("A {label} resolution test for this reference is already in the list.", label=label)
             )
             return
 
@@ -2507,7 +2543,7 @@ class MainWindow(QMainWindow):
         self._try_load_cached_result(row)
 
     def _on_add_distorted(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Select test videos")
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Select test videos"))
         if not paths:
             return
         existing = {r.path for r in self._rows}
@@ -2521,7 +2557,7 @@ class MainWindow(QMainWindow):
         # the window for the whole time.
         for path in new_paths:
             row = self._add_table_row(path)
-            self._set_row_status(row, "Reading...")
+            self._set_row_status(row, N_("Reading..."))
         self._start_media_probe(new_paths)
         self._start_cache_lookup(new_paths)
 
@@ -2573,7 +2609,7 @@ class MainWindow(QMainWindow):
         # the row has since been removed.
         worker.probed.connect(self._on_probed)
         worker.finished_all.connect(lambda w=worker: self._on_probe_finished(worker=w))
-        self.status_label.setText(f"Reading {len(paths)} video(s)...")
+        self._show_reading(ntr("Reading {count} video...", "Reading {count} videos...", len(paths)))
         worker.start()
 
     def _start_cache_lookup(self, paths: list[Path]) -> None:
@@ -2724,7 +2760,7 @@ class MainWindow(QMainWindow):
             run.graph_identity = previous.graph_identity
         row_data.completed_run = run
         row_data.analysis_status = ""
-        row_data.analysis_status = "Complete (cached)" if self._has_requested_results(row_data) else ""
+        row_data.analysis_status = N_("Complete (cached)") if self._has_requested_results(row_data) else ""
         # Old cache files predate the persisted frame-preview recipe. The
         # cache key still identifies these exact row options, so restore the
         # missing pieces from the row that found the cache entry.
@@ -2784,9 +2820,11 @@ class MainWindow(QMainWindow):
         # table at once. The cached results themselves are untouched, so
         # re-adding a video brings its scores straight back.
         answer = QMessageBox.question(
-            self, "Remove all videos",
-            f"Remove all {len(self._rows)} video(s) from the list?\n\n"
-            "Saved results are kept -- re-adding a video shows its scores again.",
+            self, tr("Remove all videos"),
+            ntr("Remove {count} video from the list?\n\nSaved results are kept -- re-adding a video shows its "
+                "scores again.",
+                "Remove all {count} videos from the list?\n\nSaved results are kept -- re-adding a video shows its "
+                "scores again.", len(self._rows)),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
@@ -2827,10 +2865,10 @@ class MainWindow(QMainWindow):
         else:
             self._set_row_info(row, result.distorted_info)
         row_data.status_detail = (
-            f"{len(result.frames)} scored frames; metrics: "
+            ntr("{count} scored frame; metrics: ", "{count} scored frames; metrics: ", len(result.frames))
             + ", ".join(metric.label for metric in METRICS if result.has_metric(metric.key))
-            + "\nLoaded from a previous run (matching files and calculation settings) -- "
-            "right-click to recompute."
+            + tr("\nLoaded from a previous run (matching files and calculation settings) -- "
+            "right-click to recompute.")
         )
         self._set_row_metrics(row)
         self._sync_frame_compare()
@@ -2845,7 +2883,7 @@ class MainWindow(QMainWindow):
         if not rows:
             return
         menu = QMenu(self)
-        recompute_action = menu.addAction("Recalculate selected metrics (ignore cached/previous results)")
+        recompute_action = menu.addAction(tr("Recalculate selected metrics (ignore cached/previous results)"))
         chosen = menu.exec(self.distorted_table.viewport().mapToGlobal(pos))
         if chosen == recompute_action:
             self._recompute_rows(rows)
@@ -2889,7 +2927,9 @@ class MainWindow(QMainWindow):
             if row_data.video_info is not None and row_data.options.resample_test is None:
                 self._set_row_info(row, row_data.video_info)
         self.status_label.setText(
-            f"Cleared {len(rows)} result(s) -- make sure they're checked, then click Calculate metrics to recompute."
+            ntr("Cleared {count} result -- make sure it is checked, then click Calculate metrics to recompute.",
+                "Cleared {count} results -- make sure they're checked, then click Calculate metrics to recompute.",
+                len(rows))
         )
         self._sync_frame_compare()
         others = [path for path in interrupted if path not in recomputed]
@@ -2904,7 +2944,7 @@ class MainWindow(QMainWindow):
         see the other.
         """
         if self._source_info is None:
-            QMessageBox.warning(self, "No reference", "Please select a reference video first.")
+            QMessageBox.warning(self, tr("No reference"), tr("Please select a reference video first."))
             return
 
         added = 0
@@ -2960,13 +3000,16 @@ class MainWindow(QMainWindow):
 
         if added == 0:
             QMessageBox.information(
-                self, "Nothing to add",
-                "Selected row(s) either already have a matching-opposite row, don't have a resolution "
-                "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test)."
+                self, tr("Nothing to add"),
+                tr("Selected row(s) either already have a matching-opposite row, don't have a resolution "
+                "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test).")
             )
         else:
             self.status_label.setText(
-                f"Added {added} row(s) testing the opposite scaling direction -- check them and click Calculate metrics."
+                ntr("Added {count} row testing the opposite scaling direction -- check it and click Calculate "
+                    "metrics.",
+                    "Added {count} rows testing the opposite scaling direction -- check them and click Calculate "
+                    "metrics.", added)
             )
 
     # ------------------------------------------------------------------ per-video settings panel
@@ -2977,7 +3020,7 @@ class MainWindow(QMainWindow):
         if not rows:
             self.options_box.setEnabled(False)
             self.panel_target_label.setText(
-                "Select one or more videos in the table to view or edit their settings."
+                tr("Select one or more videos in the table to view or edit their settings.")
             )
             self._syncing_panel = True
             try:
@@ -2998,10 +3041,12 @@ class MainWindow(QMainWindow):
         # the previous settings.
         self.options_box.setEnabled(not self._run_active)
         if len(rows) == 1:
-            self.panel_target_label.setText(f"Editing settings for: {self._rows[rows[0]].path.name}")
+            self.panel_target_label.setText(tr("Editing settings for: {name}", name=self._rows[rows[0]].path.name))
         else:
             self.panel_target_label.setText(
-                f"Editing settings for {len(rows)} selected videos -- editing anything below applies to all of them."
+                ntr("Editing settings for {count} selected video -- editing anything below applies to all of them.",
+                    "Editing settings for {count} selected videos -- editing anything below applies to all of them.",
+                    len(rows))
             )
         self._write_panel_options(self._rows[rows[0]].options)
 
@@ -3093,14 +3138,14 @@ class MainWindow(QMainWindow):
             for preset in cvvdp_presets(user_presets):
                 combo.addItem(preset.name, preset.name)
                 combo.setItemData(
-                    combo.count() - 1, preset.description or "Your saved preset.", Qt.ToolTipRole
+                    combo.count() - 1, preset.description or tr("Your saved preset."), Qt.ToolTipRole
                 )
             match = None if mixed_display else matching_preset(settings, user_presets, preferred)
             if mixed_display:
-                combo.addItem("Mixed (the selected videos use different displays)", None)
+                combo.addItem(tr("Mixed (the selected videos use different displays)"), None)
                 combo.setCurrentIndex(combo.count() - 1)
             elif match is None:
-                combo.addItem("Custom (not saved as a preset)", None)
+                combo.addItem(tr("Custom (not saved as a preset)"), None)
                 combo.setCurrentIndex(combo.count() - 1)
             else:
                 combo.setCurrentIndex(combo.findData(match.name))
@@ -3108,7 +3153,7 @@ class MainWindow(QMainWindow):
             combo.blockSignals(False)
         self.cvvdp_delete_btn.setEnabled(match is not None and not match.builtin)
         self.cvvdp_display_label.setText(
-            "The selected videos use different displays; choosing a preset sets them all."
+            tr("The selected videos use different displays; choosing a preset sets them all.")
             if mixed_display else settings.display.describe()
         )
         box = self.cvvdp_resize_check
@@ -3217,7 +3262,7 @@ class MainWindow(QMainWindow):
             ]
             cpu_metrics = [
                 metric_definition(key).label + ("" if row_data.metric_backends.get(key) == "cpu"
-                                                else " (set to GPU, but no supported GPU was found)")
+                                                else tr(" (set to GPU, but no supported GPU was found)"))
                 for key in cpu_keys
             ]
             if not cpu_metrics:
@@ -3231,20 +3276,20 @@ class MainWindow(QMainWindow):
             megapixels = info.width * info.height / 1e6
             scoring = frames * megapixels * sum(_CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL[key] for key in cpu_keys)
             lines.append(
-                f"\u2022 {row_data.path.name}: {format_hms(seconds)}, {' and '.join(cpu_metrics)} "
-                f"on CPU \u2014 {_rough_duration(scoring)} of scoring"
+                tr("• {name}: {time}, {metrics} on CPU — {duration} of scoring", name=row_data.path.name,
+                   time=format_hms(seconds), metrics=tr(" and ").join(cpu_metrics), duration=_rough_duration(scoring))
             )
         if not lines:
             return True
         answer = QMessageBox.warning(
-            self, "CPU perceptual metrics on long videos",
-            "Calculating SSIMULACRA2 or Butteraugli on the CPU is not recommended for "
-            "videos longer than 10 minutes:\n\n" + "\n".join(lines) + "\n\n"
+            self, tr("CPU perceptual metrics on long videos"),
+            tr("Calculating SSIMULACRA2 or Butteraugli on the CPU is not recommended for "
+            "videos longer than 10 minutes:\n\n") + "\n".join(lines) + tr("\n\n"
             "The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 "
             "and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates "
             "above assume a CPU like the one they were measured on). Choose GPU for these "
             "metrics, or set a duration limit.\n\n"
-            "Calculate anyway?",
+            "Calculate anyway?"),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         return answer == QMessageBox.Yes
@@ -3295,16 +3340,16 @@ class MainWindow(QMainWindow):
         """
         label = metric_definition(key).label
         if row_data.options.resample_test is not None and metric_definition(key).backend_id == "perceptual":
-            return (f"{label} is not available for resolution round-trip tests; the other "
-                    "selected metrics are still calculated.")
+            return (tr("{label} is not available for resolution round-trip tests; the other selected metrics are still "
+                "calculated.", label=label))
         if key == "cvvdp":
             if row_data.options.n_subsample > 1:
-                return ("CVVDP judges each frame together with the frames before it, so it "
+                return (tr("CVVDP judges each frame together with the frames before it, so it "
                         "needs every frame: it is not available while libvmaf frame subsample "
-                        "is above 1.")
+                        "is above 1."))
             if not MainWindow._vship_available():
-                return ("CVVDP is calculated on the GPU only, and no supported NVIDIA or AMD "
-                        "GPU was found.")
+                return (tr("CVVDP is calculated on the GPU only, and no supported NVIDIA or AMD "
+                        "GPU was found."))
         return None
 
     @classmethod
@@ -3331,7 +3376,7 @@ class MainWindow(QMainWindow):
             # metrics could calculate nothing.
             if len(shown) == 1 and item in shown:
                 action.setEnabled(False)
-                action.setToolTip("At least one metric must stay shown.")
+                action.setToolTip(tr("At least one metric must stay shown."))
             action.toggled.connect(
                 lambda checked, key=item.key, m=menu: self._on_metric_visibility_toggled(key, checked, m)
             )
@@ -3403,7 +3448,7 @@ class MainWindow(QMainWindow):
                 box.setChecked(checked)
                 box.blockSignals(False)
             if error := self._settings.save():
-                self.status_label.setText(error)
+                self.status_label.setText(tr_message(error))
         self._reload_cached_for_rows(rows)
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
@@ -3500,8 +3545,8 @@ class MainWindow(QMainWindow):
             return ""
         produced = metric.provenance.compute_backend.upper()
         wanted = "GPU" if choice == "gpu" else "CPU"
-        return (f"\n\nCalculated on the {produced}, but this row is set to {wanted}; the two give "
-                f"different numbers, so the next run recalculates it on the {wanted}.")
+        return (tr("\n\nCalculated on the {produced}, but this row is set to {wanted}; the two give different numbers, so "
+            "the next run recalculates it on the {wanted}.", produced=produced, wanted=wanted))
 
     def _has_requested_results(self, row_data: RowData) -> bool:
         requested = self._requested_metrics(row_data)
@@ -3575,7 +3620,7 @@ class MainWindow(QMainWindow):
         setattr(self._settings, f"default_{metric_key}_backend", backend)
         error = self._settings.save()
         if error:
-            self.status_label.setText(error)
+            self.status_label.setText(tr_message(error))
 
     # ------------------------------------------------------------------ CVVDP display
     def _apply_cvvdp(self, change, rows: list[int] | None = None, preset_name: str | None = None) -> None:
@@ -3720,7 +3765,7 @@ class MainWindow(QMainWindow):
         try:
             self._settings.cvvdp_presets = with_user_preset(presets, name, saved)
         except ValueError as error:
-            QMessageBox.warning(self, "CVVDP preset", str(error))
+            QMessageBox.warning(self, tr("CVVDP preset"), tr_message(str(error)))
             return
         if replacing is None or self._settings.cvvdp_default_preset == replacing:
             self._settings.cvvdp_default_preset = name
@@ -3734,11 +3779,14 @@ class MainWindow(QMainWindow):
                 # Renamed only: the videos keep their values, and the name.
                 self._apply_cvvdp(lambda old: old, rows=others, preset_name=name)
             elif QMessageBox.question(
-                self, "CVVDP preset",
-                f'{len(others)} other video{"s" if len(others) != 1 else ""} use{"" if len(others) != 1 else "s"} '
-                f'your preset "{replacing}". Update {"them" if len(others) != 1 else "it"} to the saved '
-                "values too?\n\nA CVVDP score made for the old values is cleared; one already saved for "
-                "the new values is shown instead. Choose No to keep the old values (shown as Custom).",
+                self, tr("CVVDP preset"),
+                ntr('{count} other video uses your preset "{name}". Update it to the saved values too?\n\n'
+                    "A CVVDP score made for the old values is cleared; one already saved for the new values is "
+                    "shown instead. Choose No to keep the old values (shown as Custom).",
+                    '{count} other videos use your preset "{name}". Update them to the saved values too?\n\n'
+                    "A CVVDP score made for the old values is cleared; one already saved for the new values is "
+                    "shown instead. Choose No to keep the old values (shown as Custom).",
+                    len(others), name=replacing),
             ) == QMessageBox.Yes:
                 self._apply_cvvdp(lambda old: replace(old, display=saved.display), rows=others, preset_name=name)
         # _apply_cvvdp redraws the panel only when a row changed; a rename
@@ -3746,14 +3794,15 @@ class MainWindow(QMainWindow):
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
         if replacing is not None:
-            done = (f'Saved your CVVDP preset "{name}"' if name == replacing
-                    else f'Renamed your CVVDP preset "{replacing}" to "{name}" and saved it')
+            done = (tr('Saved your CVVDP preset "{name}".', name=name) if name == replacing
+                    else tr('Renamed your CVVDP preset "{old}" to "{name}" and saved it.', old=replacing, name=name))
         elif apply_to_rows:
-            done = f'Saved the CVVDP preset "{name}". Videos added from now on use it (change that in Settings)'
+            done = tr('Saved the CVVDP preset "{name}". Videos added from now on use it (change that in Settings).',
+                      name=name)
         else:
-            done = (f'Saved the CVVDP preset "{name}". Videos added from now on use it (change that in '
-                    "Settings); choose it in the CVVDP display list to use it for the selected videos")
-        self.status_label.setText(error or done + ".")
+            done = tr('Saved the CVVDP preset "{name}". Videos added from now on use it (change that in Settings); '
+                      "choose it in the CVVDP display list to use it for the selected videos.", name=name)
+        self.status_label.setText(tr_message(error) if error else done)
 
     def _on_cvvdp_delete_preset(self) -> None:
         name = self.cvvdp_preset_combo.currentData()
@@ -3761,8 +3810,8 @@ class MainWindow(QMainWindow):
         if preset is None or preset.builtin:
             return
         answer = QMessageBox.question(
-            self, "Delete CVVDP preset",
-            f'Delete your preset "{name}"?\n\nVideos using it keep their settings.',
+            self, tr("Delete CVVDP preset"),
+            tr('Delete your preset "{name}"?\n\nVideos using it keep their settings.', name=name),
         )
         if answer != QMessageBox.Yes:
             return
@@ -3774,7 +3823,7 @@ class MainWindow(QMainWindow):
         self._fill_cvvdp_default_combo()
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
-        self.status_label.setText(error or f'Deleted the CVVDP preset "{name}".')
+        self.status_label.setText(tr_message(error) if error else tr('Deleted the CVVDP preset "{name}".', name=name))
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:
         if self._syncing_panel:
@@ -3794,7 +3843,7 @@ class MainWindow(QMainWindow):
         if self._syncing_panel:
             return
         if _MODEL_CHOICES[index][1] == CUSTOM_MODEL_CHOICE:
-            path, _ = QFileDialog.getOpenFileName(self, "Select VMAF model file (.json)")
+            path, _ = QFileDialog.getOpenFileName(self, tr("Select VMAF model file (.json)"))
             if path:
                 self._panel_custom_model_path = path
             else:
@@ -3815,19 +3864,19 @@ class MainWindow(QMainWindow):
             return
         if self._source_probe_worker is not None and self._source_probe_worker.isRunning():
             QMessageBox.information(
-                self, "Still reading reference", "Wait for the reference video to finish loading."
+                self, tr("Still reading reference"), tr("Wait for the reference video to finish loading.")
             )
             return
         if self._source_info is None:
-            QMessageBox.warning(self, "No reference", "Please select a reference video.")
+            QMessageBox.warning(self, tr("No reference"), tr("Please select a reference video."))
             return
         checked_rows = self._checked_rows()
         if not checked_rows:
-            QMessageBox.warning(self, "No test videos", "Check at least one test video to calculate metrics.")
+            QMessageBox.warning(self, tr("No test videos"), tr("Check at least one test video to calculate metrics."))
             return
 
         if any(not self._requested_metrics(self._rows[r]) for r in checked_rows):
-            QMessageBox.warning(self, "No metrics selected", "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.")
+            QMessageBox.warning(self, tr("No metrics selected"), tr("Select at least one metric for every checked video, or uncheck videos you do not want to calculate."))
             return
 
         # Checking a row you already have a score for (e.g. it was checked
@@ -3839,7 +3888,9 @@ class MainWindow(QMainWindow):
 
         if not rows_to_run:
             self.status_label.setText(
-                f"All {len(already_scored_rows)} checked video(s) already have all requested metrics -- nothing to run."
+                ntr("The {count} checked video already has all requested metrics -- nothing to run.",
+                    "All {count} checked videos already have all requested metrics -- nothing to run.",
+                    len(already_scored_rows))
             )
             already_done_runs = [self._rows[r].completed_run for r in already_scored_rows]
             if already_done_runs:
@@ -3856,11 +3907,11 @@ class MainWindow(QMainWindow):
                 still_reading = any(worker.isRunning() for worker in self._probe_workers)
                 QMessageBox.information(
                     self,
-                    "Still reading videos" if still_reading else "Unreadable video",
+                    tr("Still reading videos") if still_reading else tr("Unreadable video"),
                     (
-                        "Wait for every checked test video to finish loading before running."
+                        tr("Wait for every checked test video to finish loading before running.")
                         if still_reading else
-                        f"{row_data.path.name} could not be read. Remove it or add the file again to retry."
+                        tr("{name} could not be read. Remove it or add the file again to retry.", name=row_data.path.name)
                     ),
                 )
                 return
@@ -3883,7 +3934,7 @@ class MainWindow(QMainWindow):
                     )
                 model = resolve_model(row_data.options, *analysis_size) if row_data.options.compute_vmaf else ""
             except (ValueError, VmafRunError) as e:
-                QMessageBox.warning(self, "Invalid options", f"{row_data.path.name}: {e}")
+                QMessageBox.warning(self, tr("Invalid options"), f"{row_data.path.name}: {e}")
                 return
             job_options = replace(row_data.options, model=model)
             jobs.append(VmafJob(
@@ -3910,7 +3961,7 @@ class MainWindow(QMainWindow):
 
         self._job_rows = job_rows
         for rd in job_rows:
-            self._set_row_status(self._row_index_of(rd), "Queued")
+            self._set_row_status(self._row_index_of(rd), N_("Queued"))
         self._job_total_frames = job_total_frames
         self._job_cache_options = [clone_options(rd.options) for rd in job_rows]
         self._job_cvvdp = [rd.cvvdp for rd in job_rows]
@@ -3946,7 +3997,7 @@ class MainWindow(QMainWindow):
         self._set_run_ui_active(True)
         self._update_run_status()  # the counts, the skipped included, before any video starts
         self.pause_btn.setChecked(False)
-        self.pause_btn.setText("Pause")
+        self.pause_btn.setText(tr("Pause"))
         self.cancel_btn.setEnabled(True)
 
         self._worker = VmafWorker(jobs, self._parallel_jobs(), self,
@@ -4014,22 +4065,22 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.cancel()
             if not self._closing:
-                self._run_hold = "Cancelling..."
-            self.status_label.setText("Cancelling...")
+                self._run_hold = tr("Cancelling...")
+            self.status_label.setText(tr("Cancelling..."))
 
     def _on_pause_clicked(self) -> None:
         if self._worker is None:
             return
         if self.pause_btn.isChecked():
             self._worker.pause()
-            self.pause_btn.setText("Resume")
+            self.pause_btn.setText(tr("Resume"))
             self._paused_since = time.monotonic()
             self._run_hold = _PAUSED
             self._redraw_job_lines()
             self._update_run_status()
         else:
             self._worker.resume()
-            self.pause_btn.setText("Pause")
+            self.pause_btn.setText(tr("Pause"))
             if self._paused_since is not None:
                 self._paused_total += time.monotonic() - self._paused_since
                 self._paused_since = None
@@ -4041,7 +4092,7 @@ class MainWindow(QMainWindow):
     def _on_job_started(self, index: int, label: str) -> None:
         row = self._row_index_of(self._job_rows[index])
         if row is not None:
-            self._set_row_status(row, "Calculating")
+            self._set_row_status(row, N_("Calculating"))
         if index not in self._running_jobs:
             self._running_jobs.append(index)
         self._job_frames_done.setdefault(index, 0)
@@ -4052,7 +4103,7 @@ class MainWindow(QMainWindow):
         """Gives this job a line of its own."""
         if index in self._job_line_text:
             return
-        self._job_line_text[index] = (f"{label} — starting…", "")
+        self._job_line_text[index] = (tr("{label} — starting…", label=label), "")
         self._arrange_job_lines()
 
     @staticmethod
@@ -4067,7 +4118,7 @@ class MainWindow(QMainWindow):
         text = text.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
         if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
             return ""
-        return text
+        return tr_message(text)
 
     def _redraw_job_lines(self) -> None:
         """Every video line with figures, now: on Pause and Resume."""
@@ -4126,7 +4177,7 @@ class MainWindow(QMainWindow):
     def _job_label(self, index: int) -> str:
         if 0 <= index < len(self._job_rows):
             return self._job_rows[index].path.stem
-        return f"video {index + 1}"
+        return tr("video {number}", number=index + 1)
 
     def _update_run_status(self) -> None:
         """How much is running, and when the queue ends.
@@ -4142,12 +4193,12 @@ class MainWindow(QMainWindow):
         running = [i for i in self._running_jobs if i not in self._finished_jobs]
         total = len(self._job_rows)
         elapsed = self._run_elapsed()
-        elapsed_text = f"Elapsed: {format_hms(elapsed)}" if elapsed is not None else ""
+        elapsed_text = tr("Elapsed: {time}", time=format_hms(elapsed)) if elapsed is not None else ""
         summary = self._run_summary(running, total)
         if self._run_hold == _PAUSED:
             # No ETA: nothing moves until Resume.
             self.status_label.setText(
-                "Paused   ·   " + summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
+                tr("Paused   ·   ") + summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
             return
         if not running:
             if self._run_active and total:
@@ -4158,7 +4209,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText(
             f"{summary}"
             + (f"   ·   {elapsed_text}" if elapsed_text else "")
-            + f"   ·   Queue ETA: {eta}"
+            + tr("   ·   Queue ETA: {eta}", eta=eta)
         )
 
     def _run_elapsed(self) -> float | None:
@@ -4176,19 +4227,21 @@ class MainWindow(QMainWindow):
         the elapsed figure -- or "Finished with N failed video(s).", which
         counted a video with one failed metric among scored ones as failed."""
         elapsed = self._run_elapsed()
-        took = f" in {format_hms(elapsed)}" if elapsed is not None else ""
+        took = format_hms(elapsed) if elapsed is not None else None
         if self._run_was_cancelled:
-            return f"Cancelled after {format_hms(elapsed)}." if elapsed is not None else "Cancelled."
+            return tr("Cancelled after {time}.", time=took) if took is not None else tr("Cancelled.")
         issues = []
         if self._run_failed_count:
-            issues.append(f"{self._run_failed_count} video{'s' if self._run_failed_count != 1 else ''} failed")
+            issues.append(ntr("{count} video failed", "{count} videos failed", self._run_failed_count))
         if self._run_partial_count:
-            issues.append(f"{self._run_partial_count} with some metrics failed")
+            issues.append(tr("{count} with some metrics failed", count=self._run_partial_count))
         if not issues:
-            return f"Done{took}."
+            return tr("Done in {time}.", time=took) if took is not None else tr("Done.")
         count = self._run_failed_count + self._run_partial_count
-        return (f"Finished{took}: " + ", ".join(issues)
-                + f" (hover over {'its name' if count == 1 else 'their names'} for why).")
+        why = tr("hover over its name for why") if count == 1 else tr("hover over their names for why")
+        listed = tr(", ").join(issues)
+        return (tr("Finished in {time}: {issues} ({why}).", time=took, issues=listed, why=why) if took is not None
+                else tr("Finished: {issues} ({why}).", issues=listed, why=why))
 
     def _run_summary(self, running: list[int], total: int) -> str:
         """The queue in counts, e.g. "3 videos: 1 done, 2 in progress".
@@ -4204,15 +4257,16 @@ class MainWindow(QMainWindow):
         queued = max(0, total - done - len(running))
         # Failures as they happen: a video that failed left the lines below
         # and was counted as done until the run's end message said otherwise.
-        failures = [f"{self._run_failed_count} failed" if self._run_failed_count else "",
-                    f"{self._run_partial_count} with failed metrics" if self._run_partial_count else ""]
-        failures_text = ", ".join(f for f in failures if f)
-        counts = [f"{done} done" + (f" ({failures_text})" if failures_text else "") if done else "",
-                  f"{len(running)} in progress" if running else "",
-                  f"{queued} queued" if queued else ""]
-        summary = f"{total} video{'s' if total != 1 else ''}: " + ", ".join(c for c in counts if c)
+        failures = [tr("{count} failed", count=self._run_failed_count) if self._run_failed_count else "",
+                    tr("{count} with failed metrics", count=self._run_partial_count) if self._run_partial_count else ""]
+        failures_text = tr(", ").join(f for f in failures if f)
+        counts = [tr("{count} done", count=done) + (f" ({failures_text})" if failures_text else "") if done else "",
+                  tr("{count} in progress", count=len(running)) if running else "",
+                  tr("{count} queued", count=queued) if queued else ""]
+        summary = ntr("{count} video: {counts}", "{count} videos: {counts}", total,
+                      counts=tr(", ").join(c for c in counts if c))
         if self._run_skipped:
-            summary += f" ({self._run_skipped} already scored, not recalculated)"
+            summary += tr(" ({count} already scored, not recalculated)", count=self._run_skipped)
         return summary
 
     def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
@@ -4336,13 +4390,13 @@ class MainWindow(QMainWindow):
         """
         state = task.get("state")
         if state == "waiting":
-            return (f"{kind} queued (waiting for a free CPU slot)" if task.get("waiting_for") == "CPU"
-                    else f"{kind} queued (another video is using the GPU)")
+            return (tr("{kind} queued (waiting for a free CPU slot)", kind=kind) if task.get("waiting_for") == "CPU"
+                    else tr("{kind} queued (another video is using the GPU)", kind=kind))
         if state == "starting":
             step = self._step_text(str(task.get("step") or ""))
-            return f"{kind}: {step}" if step else f"{kind} starting"
+            return tr("{kind}: {step}", kind=kind, step=step) if step else tr("{kind} starting", kind=kind)
         if state == "done":
-            return f"{kind} done"
+            return tr("{kind} done", kind=kind)
         current = int(task.get("current", 0) or 0)
         total = int(task.get("total", 0) or 0)
         fps = float(task.get("fps", 0.0) or 0.0)
@@ -4355,29 +4409,30 @@ class MainWindow(QMainWindow):
             now = [f"{name} {min(1000, 1000 * done // frames) / 10 if frames > 0 else 0.0:.1f}%"]
             whole = None
             if paused:
-                now.append("paused")
+                now.append(tr("paused"))
             elif fps > 0:
-                now.append(f"{fps:.1f} fps")
+                now.append(tr("{fps:.1f} fps", fps=fps))
                 whole = None if None in passes.seconds else sum(passes.seconds)
                 if passes.number < count:  # on the last, the whole half's time is its own
-                    now.append(f"{format_hms(passes.seconds[passes.number - 1])} remaining")
-            overall = f"{pct:.1f}%" + (f", {format_hms(whole)} remaining" if whole is not None else "")
-            return f"{kind} {passes.number} of {count} ({overall}) ({', '.join(now)})"
+                    now.append(tr("{time} remaining", time=format_hms(passes.seconds[passes.number - 1])))
+            overall = f"{pct:.1f}%" + (tr(", {time} remaining", time=format_hms(whole)) if whole is not None else "")
+            return tr("{kind} {number} of {count} ({overall}) ({details})", kind=kind, number=passes.number,
+                      count=count, overall=overall, details=tr(", ").join(now))
         if gpu and not paused and fps > 0 and total > 0 and not task.get("phase") \
                 and len(task.get("metric_keys", ())) == 1:
-            return f"{kind} {pct:.1f}%, {format_hms(max(0, total - current) / fps)} remaining ({fps:.1f} fps)"
+            return tr("{kind} {pct:.1f}%, {time} remaining ({fps:.1f} fps)", kind=kind, pct=pct, time=format_hms(max(0, total - current) / fps), fps=fps)
         details = []
         if phase := task.get("phase"):
             number, count, name = phase
-            details.append(f"{name} {number} of {count}")
+            details.append(tr("{name} {number} of {count}", name=name, number=number, count=count))
         if paused:
             # Its last rate and time left would read as if it were running.
-            details.append("paused")
+            details.append(tr("paused"))
         elif fps > 0:
-            details.append(f"{fps:.1f} fps")
+            details.append(tr("{fps:.1f} fps", fps=fps))
             if total > 0:
-                details.append(f"{format_hms(max(0, total - current) / fps)} remaining")
-        return f"{kind} {pct:.1f}%" + (f" ({', '.join(details)})" if details else "")
+                details.append(tr("{time} remaining", time=format_hms(max(0, total - current) / fps)))
+        return f"{kind} {pct:.1f}%" + (f" ({tr(', ').join(details)})" if details else "")
 
     def _task_tooltip(self, kind: str, task: dict[str, object], labels: str, paused: bool, gpu: bool) -> str:
         """A half's line in its video's tooltip: its metrics, and for a GPU
@@ -4390,11 +4445,11 @@ class MainWindow(QMainWindow):
         for position, (key, seconds) in enumerate(zip(passes.keys, passes.seconds, strict=True)):
             label = metric_definition(key).label
             if position < passes.number - 1:
-                states.append(f"{label} (done)")
+                states.append(tr("{label} (done)", label=label))
             elif seconds is None or paused:
                 states.append(label)
             else:
-                states.append(f"{label} ({format_hms(seconds)} remaining)")
+                states.append(tr("{label} ({time} remaining)", label=label, time=format_hms(seconds)))
         return f"{kind}: " + ", ".join(states)
 
     def _render_job_progress(self, index: int) -> None:
@@ -4413,26 +4468,28 @@ class MainWindow(QMainWindow):
             # "CPU metrics", not "CPU": the bare word read as the processor's
             # load, "CPU 46.0%" like Task Manager's figure.
             on_gpu = [self._task_kind(index, task) == "GPU" for task in snapshots]
-            kinds = [f"{'GPU' if gpu else 'CPU'} metrics" for gpu in on_gpu]
+            kinds = [N_("GPU metrics") if gpu else N_("CPU metrics") for gpu in on_gpu]
+            shown = [tr(kind) for kind in kinds]
             labels = [", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
                       for task in snapshots]
-            names = kinds
+            names = shown
             if kinds.count("CPU metrics") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
-                names = [kind if task.get("backend") == "ffmpeg" else f"{kind} ({label})"
-                         for kind, task, label in zip(kinds, snapshots, labels, strict=True)]
+                names = [name if task.get("backend") == "ffmpeg" else f"{name} ({label})"
+                         for name, task, label in zip(shown, snapshots, labels, strict=True)]
             parts += [self._task_detail(name, task, paused, gpu)
                       for name, task, gpu in zip(names, snapshots, on_gpu, strict=True)]
-            tooltip = "\n".join(self._task_tooltip(kind, task, label, paused, gpu)
-                                for kind, task, label, gpu in zip(kinds, snapshots, labels, on_gpu, strict=True))
+            tooltip = "\n".join(self._task_tooltip(name, task, label, paused, gpu)
+                                for name, task, label, gpu in zip(shown, snapshots, labels, on_gpu, strict=True))
         else:
             total = self._job_progress_total.get(index, 0)
             current = self._job_frames_done.get(index, 0)
             fps = self._job_fps.get(index, 0.0)
             parts.append(f"{min(100, 100 * current // total) if total > 0 else 0}%")
             if paused:
-                parts.append("paused")
+                parts.append(tr("paused"))
             elif fps > 0:
-                parts += [f"{fps:.1f} fps", f"{format_hms(max(0, total - current) / fps)} remaining"]
+                parts += [tr("{fps:.1f} fps", fps=fps),
+                          tr("{time} remaining", time=format_hms(max(0, total - current) / fps))]
             else:
                 parts += self._halves_detail(index)
         if any("decode" in task for task in snapshots):
@@ -4471,12 +4528,12 @@ class MainWindow(QMainWindow):
         detail = []
         for labels, current, total, fps, state in self._job_halves.get(index, ()):
             if state == "waiting":
-                detail.append(f"{labels} waiting for the GPU (another video is using it)")
+                detail.append(tr("{labels} waiting for the GPU (another video is using it)", labels=labels))
             elif state == "starting":
-                detail.append(f"{labels} starting")
+                detail.append(tr("{labels} starting", labels=labels))
             elif state == "running" and total > 0:
                 pct = min(100.0, 100 * current / total)
-                detail.append(f"{labels} {pct:.1f}%" + (f" at {fps:.1f} fps" if fps > 0 else ""))
+                detail.append(f"{labels} {pct:.1f}%" + (tr(" at {fps:.1f} fps", fps=fps) if fps > 0 else ""))
         return detail if any(state in ("waiting", "starting") for *_rest, state in
                              self._job_halves.get(index, ())) else []
 
@@ -4626,7 +4683,8 @@ class MainWindow(QMainWindow):
                 # snapshot, especially while a GPU pass is waiting.
                 self._render_job_progress(index)
             else:
-                self._set_job_line(index, f"{self._job_label(index)} — {message.replace('distorted', 'test')}")
+                self._set_job_line(
+                    index, f"{self._job_label(index)} — {tr_message(message.replace('distorted', 'test video'))}")
                 # The line no longer shows figures: the next ones show at once.
                 self._job_line_shape.pop(index, None)
         self._update_run_status()
@@ -4657,8 +4715,8 @@ class MainWindow(QMainWindow):
 
         row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
         if row is not None and row.options.resample_test is not None:
-            return f"Decoder: Source: {side('source')}"  # a resolution test decodes only the source
-        return f"Decoder: Source: {side('source')}, test video: {side('distorted')}"
+            return tr("Decoder: Source: {source}", source=side("source"))  # a resolution test decodes only the source
+        return tr("Decoder: Source: {source}, test video: {test}", source=side("source"), test=side("distorted"))
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was
@@ -4678,9 +4736,10 @@ class MainWindow(QMainWindow):
         reason = row_data.metric_failures.get(key)
         if reason is None and row_data.analysis_status == "Failed":
             reason = row_data.status_detail.split("\n\n", 1)[0]  # the whole video failed: its reason
-        text = f"Failed on the last run: {reason}" if reason else "This metric failed on the last run."
-        return (text + "\n\nLeft ticked, it is calculated again on the next run; untick to skip it."
-                "\nThe full details are in the log (Settings > Storage > Log files).")
+        text = (tr("Failed on the last run: {reason}", reason=tr_message(reason)) if reason
+                else tr("This metric failed on the last run."))
+        return (text + tr("\n\nLeft ticked, it is calculated again on the next run; untick to skip it."
+                "\nThe full details are in the log (Settings > Storage > Log files)."))
 
     def _on_result_updated(self, index: int, result) -> None:
         """A video's result so far -- one of its halves, or one GPU metric,
@@ -4740,7 +4799,7 @@ class MainWindow(QMainWindow):
             self.bitrate_panel.add_and_analyze(bitrate_infos)
         if self._source_info is None or self._source_info.path != result.source:
             if final:
-                self._set_row_status(row, "Finished for the previous source; select it again to load the result.")
+                self._set_row_status(row, N_("Finished for the previous source; select it again to load the result."))
             return None
         if cache_options != row_data.options or not cache_cvvdp.same_as(row_data.cvvdp):
             # The row's settings changed after this job was launched, so the
@@ -4751,7 +4810,7 @@ class MainWindow(QMainWindow):
             if final:
                 self._set_row_status(
                     row,
-                    "Finished with the previous settings; change them back to see the result.",
+                    N_("Finished with the previous settings; change them back to see the result."),
                 )
             return None
         previous = row_data.completed_run
@@ -4786,7 +4845,7 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         if final:
             row_data.status_detail = (
-                f"{len(result.frames)} scored frames; metrics: "
+                ntr("{count} scored frame; metrics: ", "{count} scored frames; metrics: ", len(result.frames))
                 + ", ".join(metric.label for metric in METRICS if result.has_metric(metric.key))
             )
         self._set_row_metrics(row)
@@ -4821,7 +4880,7 @@ class MainWindow(QMainWindow):
             return  # the row was removed mid-run
         self._rows[row].metric_failures = {}  # the video's reason is every metric's
         self._set_row_status(
-            row, "Failed", f"{message}\n\n{stderr_tail}" if stderr_tail else message
+            row, N_("Failed"), f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )
         self._set_row_metrics(row)
 
@@ -4832,17 +4891,18 @@ class MainWindow(QMainWindow):
         for rd in self._job_rows:
             row = self._row_index_of(rd)
             if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
-                rd.analysis_status = "Cancelled" if self._run_was_cancelled else ""
+                rd.analysis_status = N_("Cancelled") if self._run_was_cancelled else ""
                 self._set_row_metrics(row)
         self._run_elapsed_timer.stop()
         self._run_hold = ""
         self._set_run_ui_active(False)
         self.pause_btn.setChecked(False)
-        self.pause_btn.setText("Pause")
+        self.pause_btn.setText(tr("Pause"))
         for line in self.job_progress_labels:
             line.setVisible(False)
         self.status_label.setText(self._run_end_message())
-        _log.info("Run status: %s", self.status_label.text())
+        with in_english():  # the log is always in English
+            _log.info("Run status: %s", self._run_end_message())
         # Includes rows that were already scored and skipped, not just ones
         # run this batch, so the comparison graph reflects everything checked.
         # Rows removed mid-run are skipped rather than indexed into.
@@ -4878,13 +4938,13 @@ class MainWindow(QMainWindow):
             return Path(a) == Path(b)
 
     def _on_load_saved_run(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Load analysis results", "", RESULT_FILE_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Load analysis results"), "", RESULT_FILE_FILTER)
         if not path:
             return
         try:
             result, label = load_run(Path(path))
         except Exception as e:
-            QMessageBox.critical(self, "Failed to load run", str(e))
+            QMessageBox.critical(self, tr("Failed to load run"), tr_message(str(e)))
             return
         # A result belongs to a (source, distorted) PAIR. Dropping it into
         # the table under whatever source happens to be selected presents a
@@ -4952,7 +5012,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
         self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
-        self._rows[row].status_detail = "Loaded from saved run"
+        self._rows[row].status_detail = tr("Loaded from saved run")
         self._refresh_row_state(row)
         self._sync_frame_compare()
 
@@ -4963,8 +5023,7 @@ class MainWindow(QMainWindow):
         self.source_edit.setText(str(result.source))
         info = result.source_info
         self.source_info_label.setText(
-            f"{media_info_string(info)}, {bitrate_string(info)}  "
-            f"({format_hms(info.duration, decimals=1)})  [from saved run]"
+            tr("{media_info_string}, {bitrate_string}  ({time})  [from saved run]", media_info_string=media_info_string(info), bitrate_string=bitrate_string(info), time=format_hms(info.duration, decimals=1))
         )
 
     def _offer_to_switch_source(self, result) -> bool:
@@ -4975,11 +5034,10 @@ class MainWindow(QMainWindow):
         table and the result mean the same thing.
         """
         answer = QMessageBox.question(
-            self, "Different reference video",
-            f"This saved run was measured against:\n    {result.source}\n\n"
-            f"but the selected reference is:\n    {self._source_info.path}\n\n"
-            "Scores from two different references cannot be compared. "
-            "Switch the reference to the one this run used?",
+            self, tr("Different reference video"),
+            tr("This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    {path}\n\n"
+                "Scores from two different references cannot be compared. Switch the reference to the one this run "
+                "used?", source=result.source, path=self._source_info.path),
             QMessageBox.Yes | QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
@@ -4993,17 +5051,17 @@ class MainWindow(QMainWindow):
     def _on_save_selected(self) -> None:
         runs = self._selected_runs()
         if not runs:
-            QMessageBox.information(self, "Nothing selected", "Select one or more completed rows to save.")
+            QMessageBox.information(self, tr("Nothing selected"), tr("Select one or more completed rows to save."))
             return
         if len(runs) == 1:
             path, _ = QFileDialog.getSaveFileName(
-                self, "Save analysis results", f"{runs[0].label}{RESULT_SUFFIX}",
-                f"Analysis results (*{RESULT_SUFFIX})",
+                self, tr("Save analysis results"), f"{runs[0].label}{RESULT_SUFFIX}",
+                tr("Analysis results (*{RESULT_SUFFIX})", RESULT_SUFFIX=RESULT_SUFFIX),
             )
             if path:
                 self._submit_save(runs[0].result, Path(path), runs[0].label)
             return
-        directory = QFileDialog.getExistingDirectory(self, "Choose folder to save runs into")
+        directory = QFileDialog.getExistingDirectory(self, tr("Choose folder to save runs into"))
         if not directory:
             return
         reserved: set[Path] = set()
@@ -5027,14 +5085,14 @@ class MainWindow(QMainWindow):
         if self._cache_clear_result is not None:
             removed = sum(self._cache_clear_result)
             self._cache_clear_result = None
-            self.settings_status.setText(f"Removed {removed} saved result(s).")
+            self.settings_status.setText(ntr("Removed {count} saved result.", "Removed {count} saved results.", removed))
             self._refresh_settings_status()
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
         # Reported in the status line rather than a modal: these finish in
         # the background, and a dialog stealing focus minutes later is worse
         # than the failure it announces.
-        self.status_label.setText(f"Could not {description}: {error}")
+        self.status_label.setText(tr("Could not {description}: {error}", description=description, error=error))
 
     def _on_show_graph_clicked(self) -> None:
         # Syncs in every currently-completed row every time -- not just
@@ -5044,7 +5102,7 @@ class MainWindow(QMainWindow):
         all_runs = [r.completed_run for r in self._rows if r.completed_run]
         if not all_runs and not self.graph_panel._entries:
             QMessageBox.information(
-                self, "No results yet", "Calculate metrics or load analysis results to view metric graphs."
+                self, tr("No results yet"), tr("Calculate metrics or load analysis results to view metric graphs.")
             )
             return
         self._open_or_update_graph(all_runs)
