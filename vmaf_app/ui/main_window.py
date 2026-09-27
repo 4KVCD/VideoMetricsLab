@@ -1335,10 +1335,14 @@ class MainWindow(QMainWindow):
             )
         )
         table_heading = QHBoxLayout()
-        table_heading.addWidget(QLabel(
+        table_hint = QLabel(
             tr("Test videos to compare against the reference. Check rows to calculate; "
             "select rows to edit their settings below. Metric header shortcuts apply to all rows.")
-        ), stretch=1, alignment=Qt.AlignBottom)
+        )
+        # Wrapped where it does not fit: on one line, in a longer language,
+        # it set the window's minimum width.
+        table_hint.setWordWrap(True)
+        table_heading.addWidget(table_hint, stretch=1, alignment=Qt.AlignBottom)
         table_heading.addWidget(self.metrics_btn, alignment=Qt.AlignBottom)
         # One block, heading row and table, with no spacing between them, so
         # the button reads as part of the table rather than as a separate row.
@@ -1710,6 +1714,17 @@ class MainWindow(QMainWindow):
     def _build_run_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
+
+        # Room for longer words than English's. A field that no longer fits
+        # beside its label goes under it, and a dropdown can be narrower than
+        # its longest entry (which it shows in full when opened): in German
+        # the panel needed 1,590 px, more than the window's default 1,280,
+        # and was cut off at the right. In English nothing moves.
+        for layout in (form, performance_form, metric_options_form):
+            layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        for combo in options_box.findChildren(QComboBox):
+            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(12)
 
         run_row = QHBoxLayout()
         self.run_btn = QPushButton(tr("Calculate metrics"))
