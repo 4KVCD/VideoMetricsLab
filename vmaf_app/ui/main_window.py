@@ -944,9 +944,14 @@ class MainWindow(QMainWindow):
             "Send these files along when reporting a problem.")
         open_logs = QPushButton("Open")
         open_logs.clicked.connect(self._on_open_log_dir)
+        self.settings_export_log_btn = QPushButton("Export log...")
+        self.settings_export_log_btn.setToolTip(
+            "Save the log files as one .zip file, to attach when reporting a problem.")
+        self.settings_export_log_btn.clicked.connect(self._on_export_log)
         log_row = QHBoxLayout()
         log_row.addWidget(self.settings_log_label, stretch=1)
         log_row.addWidget(open_logs)
+        log_row.addWidget(self.settings_export_log_btn)
         storage_form.addRow("Log files:", log_row)
         outer.addWidget(storage_box)
 
@@ -1146,6 +1151,24 @@ class MainWindow(QMainWindow):
 
     def _on_pick_export_dir(self) -> None:
         self._pick_directory("Where should exports be written?", self.settings_export_edit)
+
+    def _on_export_log(self) -> None:
+        """Saves the log files as one .zip wherever the user picks."""
+        start = Path(self._settings.export_dir) if self._settings.export_dir else Path.home() / "Documents"
+        name = f"{APP_NAME} log {time.strftime('%Y-%m-%d %H%M')}.zip"
+        path, _ = QFileDialog.getSaveFileName(self, "Export log", str(start / name), "Zip archive (*.zip)")
+        if not path:
+            return
+        try:
+            names = app_log.export_logs(Path(path))
+        except OSError as error:
+            self.settings_status.setText(f"Could not export the log: {error}")
+            return
+        if not names:
+            self.settings_status.setText("There is no log to export yet.")
+            return
+        _log.info("Log exported to %s", path)
+        self.settings_status.setText(f"Log exported to {path}")
 
     def _on_open_log_dir(self) -> None:
         directory = app_log.log_dir()

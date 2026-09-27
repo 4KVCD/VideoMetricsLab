@@ -18,6 +18,7 @@ import os
 import platform
 import sys
 import threading
+import zipfile
 from pathlib import Path
 
 from vmaf_app.core.app_paths import user_data_dir
@@ -99,6 +100,24 @@ def stop_logging() -> None:
         faulthandler.disable()
         _crash_file.close()
         _crash_file = None
+
+
+def export_logs(destination: Path, directory: Path | None = None) -> list[str]:
+    """Zips the log files -- the current log, its older rotations and the
+    crash log, those with anything in them -- into destination, to attach
+    to a report. The names written; empty, and nothing written, when there
+    is no log yet."""
+    directory = directory or log_dir()
+    if _handler is not None:
+        _handler.flush()
+    files = sorted(path for path in directory.glob("*.log*") if path.is_file() and path.stat().st_size) \
+        if directory.is_dir() else []
+    if not files:
+        return []
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in files:
+            archive.write(path, arcname=path.name)
+    return [path.name for path in files]
 
 
 def environment_lines() -> list[str]:

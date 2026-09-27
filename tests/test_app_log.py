@@ -80,3 +80,36 @@ def test_each_session_is_headed_with_what_it_runs_on(tmp_path, monkeypatch):
     assert f"VideoMetricsLab {__version__}" in text and "Python " in text and "logical processors" in text
     assert "FFmpeg" in text and "GPUs: " in text and "Qt " in text
     assert "vmaf_app.qt: a Qt warning" in text
+
+
+def test_the_logs_are_exported_as_one_zip(tmp_path):
+    import zipfile
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "VideoMetricsLab.log").write_bytes(b"today's session\n")
+    (logs / "VideoMetricsLab.log.1").write_bytes(b"an older session\n")
+    (logs / "native-crashes.log").write_bytes(b"")  # nothing in it: left out
+    (logs / "notes.txt").write_bytes(b"not a log\n")
+    target = tmp_path / "export.zip"
+    assert app_log.export_logs(target, logs) == ["VideoMetricsLab.log", "VideoMetricsLab.log.1"]
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read("VideoMetricsLab.log") == b"today's session\n"
+        assert sorted(archive.namelist()) == ["VideoMetricsLab.log", "VideoMetricsLab.log.1"]
+
+
+def test_no_log_exports_nothing(tmp_path):
+    assert app_log.export_logs(tmp_path / "export.zip", tmp_path / "no-logs-here") == []
+    assert not (tmp_path / "export.zip").exists()
+
+
+def test_the_session_log_in_use_is_exported_up_to_its_last_line(session_log, tmp_path):
+    import logging
+    import zipfile
+
+    logging.getLogger("vmaf_app.core.example").error("the failure just before exporting")
+    target = tmp_path / "export.zip"
+    app_log.export_logs(target, tmp_path)
+    with zipfile.ZipFile(target) as archive:
+        assert b"the failure just before exporting" in archive.read("VideoMetricsLab.log")
+

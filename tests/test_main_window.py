@@ -4913,3 +4913,41 @@ def test_a_failed_metrics_cell_says_why_it_failed(qapp, tmp_path, monkeypatch):
     assert win._file_writes.wait_until_idle(10.0)
     win.close()
 
+
+def test_settings_export_the_log_as_a_zip(qapp, tmp_path, monkeypatch):
+    """The log could only be found by opening its folder; it can be saved
+    as one file to attach to a report."""
+    import zipfile
+
+    from vmaf_app.core import app_log
+    from vmaf_app.ui import main_window as main_window_module
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "VideoMetricsLab.log").write_bytes(b"a session\n")
+    monkeypatch.setattr(app_log, "log_dir", lambda: logs)
+    target = tmp_path / "out" / "report.zip"
+    target.parent.mkdir()
+    asked = []
+    monkeypatch.setattr(main_window_module.QFileDialog, "getSaveFileName",
+                        lambda *a, **k: asked.append(a) or (str(target), ""))
+    win = main_window_module.MainWindow()
+    assert win.settings_export_log_btn.text() == "Export log..."
+    win.settings_export_log_btn.click()
+    assert asked and asked[0][2].endswith(".zip") and "VideoMetricsLab log " in asked[0][2]
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read("VideoMetricsLab.log") == b"a session\n"
+    assert win.settings_status.text() == f"Log exported to {target}"
+    # Cancelled: nothing happens.
+    monkeypatch.setattr(main_window_module.QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
+    win.settings_status.clear()
+    win.settings_export_log_btn.click()
+    assert win.settings_status.text() == ""
+    # No log yet.
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path / "none")
+    monkeypatch.setattr(main_window_module.QFileDialog, "getSaveFileName",
+                        lambda *a, **k: (str(tmp_path / "empty.zip"), ""))
+    win.settings_export_log_btn.click()
+    assert win.settings_status.text() == "There is no log to export yet."
+    win.close()
+
