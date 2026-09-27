@@ -4,11 +4,13 @@ The important one is `isolate_user_state`: without it the suite reads and
 writes the *user's real* settings file and results cache. That is not just
 untidy -- a test that ticks "compute PSNR by default" persisted it, which
 then leaked into every later test in the run AND into the installed app.
+It also keeps the suite off the machine's power state.
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -84,6 +86,14 @@ def isolate_user_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(result_cache, "set_cache_dir_override", guarded_override)
     result_cache.set_cache_dir_override(cache)
+    # A run holds a Windows keep-awake request (vmaf_app.core.power): from a
+    # test, a real request on the machine running the suite -- 41 of them in
+    # the window tests. Stubbed where Windows is called, so no route reaches
+    # it: a window test starting a run, or the power module called directly.
+    if sys.platform == "win32":
+        import ctypes
+
+        monkeypatch.setattr(ctypes.windll.kernel32, "SetThreadExecutionState", lambda flags: 0x80000000)
     # Detected black bars are remembered per file for the life of the
     # process; a test's answer must not leak into the next one's.
     crop_detect.clear_cache()
