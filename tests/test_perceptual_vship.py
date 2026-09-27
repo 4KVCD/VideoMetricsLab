@@ -56,6 +56,34 @@ def test_vship_device_info_matches_c_api_layout():
     ]
 
 
+@pytest.mark.parametrize(("struct", "size", "offsets"), [
+    # Vship_Colorspace_t: four int64, seven 4-byte fields, the 16-byte crop.
+    (vship._Colorspace, 88, {"sample": 32, "subsampling": 40, "YUVMatrix": 56, "crop": 68}),
+    (vship._InitSsimulacra2, 192, {"structType": 0, "src_colorspace": 8, "dis_colorspace": 96, "gpu_id": 184}),
+    (vship._InitButteraugli, 200, {"dis_colorspace": 96, "Qnorm": 184, "intensity_multiplier": 188, "gpu_id": 192}),
+    (vship._InitCvvdp, 216, {"fps": 184, "resizeToDisplay": 188, "model_key_cstr": 192,
+                             "model_config_json_cstr": 200, "gpu_id": 208}),
+    (vship._ScoreSsimulacra2, 16, {"structType": 0, "score": 8}),
+    (vship._ScoreButteraugli, 48, {"normQ": 8, "norm3": 16, "norminf": 24, "dstp": 32, "dststride": 40}),
+    (vship._ScoreCvvdp, 32, {"score": 8, "dstp": 16, "dststride": 24}),
+])
+def test_vship_51_structs_match_the_c_layout(struct, size, offsets):
+    """The init and score structs of VshipAPI.h (Vship 5.1.1), as the x64 C
+    compiler lays them out: a wrong offset would hand Vship garbage."""
+    assert ctypes.sizeof(struct) == size
+    assert {name: getattr(struct, name).offset for name in offsets} == offsets
+
+
+def test_only_a_vship_with_the_51_api_is_used():
+    """4.x has no Vship_InitHandler; its per-metric functions are only a
+    deprecated layer in 5.1, and this module no longer calls them."""
+    assert vship._has_api(SimpleNamespace(**dict.fromkeys(vship._API_FUNCTIONS)))
+    older = {name: None for name in vship._API_FUNCTIONS if name not in {
+        "Vship_InitHandler", "Vship_ComputeHandler", "Vship_FreeHandler", "Vship_PinnedMalloc2"}}
+    older |= {"Vship_SSIMU2Init": None, "Vship_ComputeSSIMU2": None, "Vship_PinnedMalloc": None}
+    assert not vship._has_api(SimpleNamespace(**older))
+
+
 @pytest.mark.parametrize(("pixel_format", "family", "sample"), [
     ("yuv420p", 0, vship._VSHIP_ENUMS[8]),
     ("yuv420p10le", 0, vship._VSHIP_ENUMS[10]),
@@ -208,7 +236,7 @@ def _frames_command(count: int, frame_bytes: int, *, exit_code: int = 0, partial
 class _FakePinned:
     """Ordinary memory standing in for Vship's pinned allocation."""
 
-    def __init__(self, _lib, size):
+    def __init__(self, _lib, size, _gpu_id=0):
         self.array = (ctypes.c_uint8 * size)()
         self.address = ctypes.c_void_p(ctypes.addressof(self.array))
 
@@ -220,8 +248,7 @@ class _FakePinned:
 
 
 def _fake_device():
-    lib = SimpleNamespace(Vship_SetDevice=lambda _gpu: 0, Vship_SSIMU2Free=lambda _h: 0,
-                          Vship_ButteraugliFree=lambda _h: 0)
+    lib = SimpleNamespace(Vship_FreeHandler=lambda _handle: 0)
     return vship.VshipDevice("nvidia", "fake GPU", 0, "5.1.1", SimpleNamespace(library=lib))
 
 
@@ -249,7 +276,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     lane was handed, so a mixed-up slot or pairing shows up in the values.
     """
     monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
-    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handler())
+    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handle())
     monkeypatch.setattr(vship, "pick_hwaccel", hwaccel)
     queues = {side: list(commands) for side, commands in children.items()}
     spawned: dict[str, list[list[str]]] = {"source": [], "test": []}
@@ -596,7 +623,7 @@ class _FakeCvvdp:
         return 0.05 + 0.37 * (index % 7)  # both sides of the 0.1 linear/power switch
 
     def install(self, monkeypatch):
-        monkeypatch.setattr(vship, "_init_cvvdp", lambda *_args: vship._Handler())
+        monkeypatch.setattr(vship, "_init_cvvdp", lambda *_args: vship._Handle())
         monkeypatch.setattr(vship, "_compute_cvvdp", self.compute)
         monkeypatch.setattr(vship, "_reset_cvvdp_score", lambda *_args: self.reset())
         monkeypatch.setattr(vship, "_free_cvvdp", lambda *_args: setattr(self, "freed", True))
@@ -969,32 +996,10 @@ def test_cvvdp_failure_messages_name_the_real_cause(monkeypatch):
     assert "CVVDP could not be calculated: Frame rates do not match" in str(raised.value)
 
 
-def test_a_vship_without_cvvdp_still_configures_and_only_cvvdp_fails():
-    """Looking CVVDP's functions up unconditionally made a Vship without
-    them fail detection, and with it GPU SSIMULACRA2 and Butteraugli."""
-    class _Function:
-        pass
-
-    class _OlderVship:
-        def __getattr__(self, name):
-            if "CVVDP" in name:
-                raise AttributeError(name)
-            function = _Function()
-            setattr(self, name, function)
-            return function
-
-    lib = _OlderVship()
-    vship._configure_api(lib)  # must not raise
-    device = vship.VshipDevice("nvidia", "old GPU", 0, "4.0.2", SimpleNamespace(library=lib))
-    with pytest.raises(vship.VshipUnavailableError, match="has no CVVDP"):
-        vship._init_cvvdp(device, None, None, None, 24.0)
-
-
 @pytest.mark.parametrize("fps", [0.0, float("nan")])
 def test_cvvdp_refuses_a_video_without_a_frame_rate(fps):
     """A 0 fps video was scored as if it ran at 1 fps."""
-    lib = SimpleNamespace(**{name: None for name in vship._CVVDP_FUNCTIONS})
-    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=lib))
+    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=SimpleNamespace()))
     with pytest.raises(vship.VshipUnavailableError, match="frame rate"):
         vship._init_cvvdp(device, None, None, None, fps)
 
@@ -1087,17 +1092,17 @@ def test_pinned_memory_is_freed_when_allocation_fails_part_way(monkeypatch):
     allocated, freed = [], []
 
     class _Pinned(_FakePinned):
-        def __init__(self, lib, size):
+        def __init__(self, lib, size, gpu_id=0):
             if len(allocated) == vship._RING_SLOTS + 2:  # the test video's 3rd buffer
                 raise vship.VshipUnavailableError("Could not allocate Vship pinned frame memory")
-            super().__init__(lib, size)
+            super().__init__(lib, size, gpu_id)
             allocated.append(self)
 
         def close(self):
             freed.append(self)
 
     monkeypatch.setattr(vship, "_PinnedBuffer", _Pinned)
-    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handler())
+    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handle())
     request = analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2",))
     with pytest.raises(vship.VshipUnavailableError, match="pinned frame memory"):
         vship.run_vship_task(_hevc("source.mkv"), _hevc("test.mkv"), request, request.metrics,
@@ -1106,32 +1111,31 @@ def test_pinned_memory_is_freed_when_allocation_fails_part_way(monkeypatch):
     assert sorted(map(id, freed)) == sorted(map(id, allocated)), "pinned buffers were left allocated"
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="the ANSI code page is Windows'")
-def test_cvvdp_display_config_avoids_a_temp_folder_vship_cannot_open(monkeypatch, tmp_path):
-    """Vship opens the display config with a narrow-character path, so a
-    temp folder under a user name outside the ANSI code page (Cyrillic on a
-    Western Windows here) could not be opened unless 8.3 short names exist."""
-    from vmaf_app.core.cvvdp import CvvdpSettings
+def test_cvvdp_gets_its_display_as_json_text_with_the_gpu_in_the_init_struct():
+    """Vship 5.1 parses a display config starting with "{" itself. A file
+    path failed under a Windows user name outside the ANSI code page, and
+    the file had to be written, found and deleted around every init."""
+    import json
 
-    unopenable, public = tmp_path / "Пользователь", tmp_path / "public"
-    unopenable.mkdir()
-    public.mkdir()
-    monkeypatch.setattr(vship.tempfile, "gettempdir", lambda: str(unopenable))
-    monkeypatch.setenv("PUBLIC", str(public))
+    from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings
+
     seen = []
 
-    def init(_handler, _src, _dist, _fps, _resize, _model, config, _gpu):
-        path = Path(config.decode("mbcs"))
-        seen.append((path.parent, path.read_text(encoding="utf-8")))
+    def init(handle, argument):
+        struct = ctypes.cast(argument, ctypes.POINTER(vship._InitCvvdp)).contents
+        seen.append((struct.structType, struct.gpu_id, struct.fps, struct.resizeToDisplay,
+                     struct.model_key_cstr, struct.model_config_json_cstr))
+        ctypes.cast(handle, ctypes.POINTER(ctypes.c_void_p))[0] = 1234
         return 0
 
-    lib = SimpleNamespace(**{name: None for name in vship._CVVDP_FUNCTIONS} | {"Vship_CVVDPInit3": init})
-    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=lib))
-    vship._init_cvvdp(device, None, None, CvvdpSettings(), 24.0)
-    [(folder, text)] = seen
-    assert folder == public
-    assert text.strip().startswith("{")
-    assert list(public.iterdir()) == [], "the config file was left behind"
+    device = vship.VshipDevice("vulkan", "GPU", 2, "5.1.1",
+                               SimpleNamespace(library=SimpleNamespace(Vship_InitHandler=init)))
+    handle = vship._init_cvvdp(device, vship._Colorspace(), vship._Colorspace(), CvvdpSettings(), 23.976)
+    assert handle.value == 1234
+    [(struct_type, gpu_id, fps, resize, key, config)] = seen
+    assert (struct_type, gpu_id, resize, key) == (vship._INIT_CVVDP, 2, False, VSHIP_MODEL_KEY.encode())
+    assert fps == pytest.approx(23.976)
+    assert config.startswith(b"{") and VSHIP_MODEL_KEY in json.loads(config)
 
 
 def _counting_probe(monkeypatch, *results, delay=0.0):

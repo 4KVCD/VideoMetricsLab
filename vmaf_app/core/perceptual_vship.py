@@ -1,17 +1,21 @@
 """GPU implementation of the perceptual metrics via Vship's C API.
 
+The API is Vship 5.1's (Vship_InitHandler / Vship_ComputeHandler, see
+https://codeberg.org/Line-fr/Vship/src/tag/v5.1.1/src/VshipAPI.h); the older
+per-metric functions are a deprecated compatibility layer in 5.1.
+
 SSIMULACRA2 and Butteraugli score each frame pair on its own; CVVDP is
 temporal and scores the video (see _CvvdpLane).
 
-FFmpeg remains responsible for decoding, cropping, sampling, and scaling. It
-streams tightly packed frames into rings of pinned host buffers (see
-_FrameStream); Vship only does the metric computation on a supported NVIDIA
-CUDA or AMD HIP device. A hardware-decoded frame crosses the pipe in the
-decoder's own NV12/P010 layout and only its chroma is split into planes here
-(see _passthrough_format). Because FFmpeg decodes, every codec it supports works,
-VVC included, and hardware decode is used per input where the GPU has one.
-This avoids bundling FFVship/FFMS2 executables and keeps video decode behavior
-under the same FFmpeg installation used by the rest of the app.
+FFmpeg decodes, crops, samples and scales -- the same FFmpeg as the rest of
+the app, so every codec it reads works, VVC included, with hardware decode
+per input where the GPU has one. It streams tightly packed frames into rings
+of pinned host buffers (see _FrameStream). Vship converts each frame from the
+colorspace it is described in (_vship_colorspace) and computes the metric on
+the GPU. Vship takes a frame as three planes, so a hardware-decoded frame
+that crosses the pipe in the decoder's NV12/P010 layout has only its chroma
+split into planes here (see _passthrough_format). No FFVship or FFMS2
+executable is bundled.
 """
 from __future__ import annotations
 
@@ -23,7 +27,6 @@ import os
 import queue
 import re
 import subprocess
-import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -35,7 +38,7 @@ import numpy as np
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
-from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, write_vship_config
+from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import HwAccelPlan, hw_native_format, hwaccel_args, pick_hwaccel
 from vmaf_app.core.metric_results import (
@@ -119,15 +122,50 @@ class _DeviceInfo(ctypes.Structure):
     ]
 
 
-class _Handler(ctypes.Structure):
-    _fields_ = [("id", ctypes.c_uint)]
+#: Vship_Handle: one metric's handler, opaque to the caller.
+_Handle = ctypes.c_void_p
+
+#: Vship_StructType: which init or score struct a void* argument holds.
+_INIT_SSIMULACRA2, _INIT_BUTTERAUGLI, _INIT_CVVDP = 1, 2, 3
+_SCORE_SSIMULACRA2, _SCORE_BUTTERAUGLI, _SCORE_CVVDP = 4, 5, 6
 
 
-class _ButteraugliScore(ctypes.Structure):
-    _fields_ = [
-        ("normQ", ctypes.c_double), ("norm3", ctypes.c_double),
-        ("norminf", ctypes.c_double),
-    ]
+class _InitSsimulacra2(ctypes.Structure):
+    """Vship_InitSSIMULACRA2_1."""
+    _fields_ = [("structType", ctypes.c_int), ("src_colorspace", _Colorspace),
+                ("dis_colorspace", _Colorspace), ("gpu_id", ctypes.c_int)]
+
+
+class _InitButteraugli(ctypes.Structure):
+    """Vship_InitButteraugli_1."""
+    _fields_ = [("structType", ctypes.c_int), ("src_colorspace", _Colorspace),
+                ("dis_colorspace", _Colorspace), ("Qnorm", ctypes.c_int),
+                ("intensity_multiplier", ctypes.c_float), ("gpu_id", ctypes.c_int)]
+
+
+class _InitCvvdp(ctypes.Structure):
+    """Vship_InitCVVDP_1."""
+    _fields_ = [("structType", ctypes.c_int), ("src_colorspace", _Colorspace),
+                ("dis_colorspace", _Colorspace), ("fps", ctypes.c_float),
+                ("resizeToDisplay", ctypes.c_bool), ("model_key_cstr", ctypes.c_char_p),
+                ("model_config_json_cstr", ctypes.c_char_p), ("gpu_id", ctypes.c_int)]
+
+
+class _ScoreSsimulacra2(ctypes.Structure):
+    """Vship_ScoreSSIMULACRA2."""
+    _fields_ = [("structType", ctypes.c_int), ("score", ctypes.c_double)]
+
+
+class _ScoreButteraugli(ctypes.Structure):
+    """Vship_ScoreButteraugli. dstp NULL: no distortion map."""
+    _fields_ = [("structType", ctypes.c_int), ("normQ", ctypes.c_double), ("norm3", ctypes.c_double),
+                ("norminf", ctypes.c_double), ("dstp", ctypes.c_void_p), ("dststride", ctypes.c_int64)]
+
+
+class _ScoreCvvdp(ctypes.Structure):
+    """Vship_ScoreCVVDP. dstp NULL: no distortion map."""
+    _fields_ = [("structType", ctypes.c_int), ("score", ctypes.c_double),
+                ("dstp", ctypes.c_void_p), ("dststride", ctypes.c_int64)]
 
 
 _U8P = ctypes.POINTER(ctypes.c_uint8)
@@ -190,14 +228,18 @@ class VshipDevice:
     loaded: _LoadedVship
 
 
-_CVVDP_FUNCTIONS = (
-    "Vship_CVVDPInit3", "Vship_CVVDPFree", "Vship_ComputeCVVDP", "Vship_ResetScoreCVVDP",
-    "Vship_CVVDPGetDetailedLastError",
+#: Vship 5.1's API, the one this module uses. A library without it (4.x)
+#: is refused at the probe rather than used through old entry points.
+_API_FUNCTIONS = (
+    "Vship_GetVersion", "Vship_GetDeviceCount", "Vship_GetDeviceInfo", "Vship_GPUFullCheck",
+    "Vship_GetErrorMessage", "Vship_GetDetailedLastError", "Vship_PinnedMalloc2", "Vship_PinnedFree2",
+    "Vship_InitHandler", "Vship_FreeHandler", "Vship_ComputeHandler", "Vship_GetDetailedLastErrorHandler",
+    "Vship_ResetScore",
 )
 
 
-def _has_cvvdp(lib) -> bool:
-    return all(hasattr(lib, name) for name in _CVVDP_FUNCTIONS)
+def _has_api(lib) -> bool:
+    return all(hasattr(lib, name) for name in _API_FUNCTIONS)
 
 
 def _configure_api(lib: ctypes.CDLL) -> None:
@@ -209,63 +251,41 @@ def _configure_api(lib: ctypes.CDLL) -> None:
     lib.Vship_GetDeviceInfo.restype = ctypes.c_int
     lib.Vship_GPUFullCheck.argtypes = [ctypes.c_int]
     lib.Vship_GPUFullCheck.restype = ctypes.c_int
-    lib.Vship_SetDevice.argtypes = [ctypes.c_int]
-    lib.Vship_SetDevice.restype = ctypes.c_int
     lib.Vship_GetErrorMessage.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
     lib.Vship_GetErrorMessage.restype = ctypes.c_int
     lib.Vship_GetDetailedLastError.argtypes = [ctypes.c_char_p, ctypes.c_int]
     lib.Vship_GetDetailedLastError.restype = ctypes.c_int
-    lib.Vship_PinnedMalloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint64]
-    lib.Vship_PinnedMalloc.restype = ctypes.c_int
-    lib.Vship_PinnedFree.argtypes = [ctypes.c_void_p]
-    lib.Vship_PinnedFree.restype = ctypes.c_int
-    lib.Vship_SSIMU2Init.argtypes = [ctypes.POINTER(_Handler), _Colorspace, _Colorspace]
-    lib.Vship_SSIMU2Init.restype = ctypes.c_int
-    lib.Vship_SSIMU2Free.argtypes = [_Handler]
-    lib.Vship_SSIMU2Free.restype = ctypes.c_int
-    lib.Vship_ComputeSSIMU2.argtypes = [
-        _Handler, ctypes.POINTER(ctypes.c_double), _PLANES, _PLANES,
-        ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
+    # The GPU is named in each call: Vulkan allocates per device.
+    lib.Vship_PinnedMalloc2.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint64, ctypes.c_int]
+    lib.Vship_PinnedMalloc2.restype = ctypes.c_int
+    lib.Vship_PinnedFree2.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.Vship_PinnedFree2.restype = ctypes.c_int
+    # One handler per metric, made from an init struct and scored into a
+    # score struct: both start with their Vship_StructType.
+    lib.Vship_InitHandler.argtypes = [ctypes.POINTER(_Handle), ctypes.c_void_p]
+    lib.Vship_InitHandler.restype = ctypes.c_int
+    lib.Vship_FreeHandler.argtypes = [_Handle]
+    lib.Vship_FreeHandler.restype = ctypes.c_int
+    lib.Vship_ComputeHandler.argtypes = [
+        _Handle, ctypes.c_void_p, _PLANES, _PLANES, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
     ]
-    lib.Vship_ComputeSSIMU2.restype = ctypes.c_int
-    lib.Vship_SSIMU2GetDetailedLastError.argtypes = [_Handler, ctypes.c_char_p, ctypes.c_int]
-    lib.Vship_SSIMU2GetDetailedLastError.restype = ctypes.c_int
-    lib.Vship_ButteraugliInit.argtypes = [
-        ctypes.POINTER(_Handler), _Colorspace, _Colorspace, ctypes.c_int, ctypes.c_float,
-    ]
-    lib.Vship_ButteraugliInit.restype = ctypes.c_int
-    lib.Vship_ButteraugliFree.argtypes = [_Handler]
-    lib.Vship_ButteraugliFree.restype = ctypes.c_int
-    lib.Vship_ComputeButteraugli.argtypes = [
-        _Handler, ctypes.POINTER(_ButteraugliScore), ctypes.c_void_p, ctypes.c_int64,
-        _PLANES, _PLANES, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
-    ]
-    lib.Vship_ComputeButteraugli.restype = ctypes.c_int
-    lib.Vship_ButteraugliGetDetailedLastError.argtypes = [_Handler, ctypes.c_char_p, ctypes.c_int]
-    lib.Vship_ButteraugliGetDetailedLastError.restype = ctypes.c_int
-    # CVVDP only if this Vship has it. Looking its functions up
-    # unconditionally made a Vship without CVVDP (an older build) fail
-    # detection altogether, taking GPU SSIMULACRA2/Butteraugli with it;
-    # without them CVVDP alone fails (_init_cvvdp).
-    if not _has_cvvdp(lib):
-        return
-    # Init3 takes the display as a JSON file path (not text) and the GPU id.
-    lib.Vship_CVVDPInit3.argtypes = [
-        ctypes.POINTER(_Handler), _Colorspace, _Colorspace, ctypes.c_float, ctypes.c_bool,
-        ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
-    ]
-    lib.Vship_CVVDPInit3.restype = ctypes.c_int
-    lib.Vship_CVVDPFree.argtypes = [_Handler]
-    lib.Vship_CVVDPFree.restype = ctypes.c_int
-    lib.Vship_ComputeCVVDP.argtypes = [
-        _Handler, ctypes.POINTER(ctypes.c_double), ctypes.c_void_p, ctypes.c_int64,
-        _PLANES, _PLANES, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
-    ]
-    lib.Vship_ComputeCVVDP.restype = ctypes.c_int
-    lib.Vship_ResetScoreCVVDP.argtypes = [_Handler]
-    lib.Vship_ResetScoreCVVDP.restype = ctypes.c_int
-    lib.Vship_CVVDPGetDetailedLastError.argtypes = [_Handler, ctypes.c_char_p, ctypes.c_int]
-    lib.Vship_CVVDPGetDetailedLastError.restype = ctypes.c_int
+    lib.Vship_ComputeHandler.restype = ctypes.c_int
+    lib.Vship_GetDetailedLastErrorHandler.argtypes = [_Handle, ctypes.c_char_p, ctypes.c_int]
+    lib.Vship_GetDetailedLastErrorHandler.restype = ctypes.c_int
+    # Clears CVVDP's score accumulation only, not its temporal history.
+    lib.Vship_ResetScore.argtypes = [_Handle]
+    lib.Vship_ResetScore.restype = ctypes.c_int
+
+
+def _handler_error(lib: ctypes.CDLL, handle: _Handle, code: int) -> str:
+    """Why a call on `handle` failed: the handler's own last error -- other
+    handlers on other threads may have failed since -- or the code's text."""
+    detail = ctypes.create_string_buffer(1024)
+    with contextlib.suppress(Exception):
+        lib.Vship_GetDetailedLastErrorHandler(handle, detail, len(detail))
+        if detail.value:
+            return detail.value.decode("utf-8", errors="replace").strip()
+    return _message(lib, code)
 
 
 def _message(lib: ctypes.CDLL, code: int | None = None) -> str:
@@ -338,6 +358,9 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
         try:
             dll_directory = os.add_dll_directory(str(path.parent))
             lib = ctypes.CDLL(str(path))
+            if not _has_api(lib):
+                failures.append(f"{vendor.upper()} Vship library is older than 5.1")
+                continue
             _configure_api(lib)
             loaded = _LoadedVship(vendor, path, lib, dll_directory)
             count = ctypes.c_int()
@@ -652,7 +675,7 @@ class _FrameStream:
         self, lib: ctypes.CDLL, frame_bytes: int, commands: list[list[str]],
         process_handle: ProcessHandle | None, label: str,
         interleaved_chroma: tuple[int, int, type[np.integer]] | None = None,
-        on_software: Callable[[], None] | None = None,
+        on_software: Callable[[], None] | None = None, gpu_id: int = 0,
     ) -> None:
         # Allocated one by one so a failure part-way frees what was already
         # allocated: a list comprehension left those buffers -- page-locked
@@ -661,7 +684,7 @@ class _FrameStream:
         self.buffers: list[_PinnedBuffer] = []
         try:
             for _ in range(_RING_SLOTS):
-                self.buffers.append(_PinnedBuffer(lib, frame_bytes))
+                self.buffers.append(_PinnedBuffer(lib, frame_bytes, gpu_id))
         except BaseException:
             for buffer in self.buffers:
                 buffer.close()
@@ -819,10 +842,11 @@ class _FrameStream:
 
 
 class _PinnedBuffer:
-    def __init__(self, lib: ctypes.CDLL, size: int) -> None:
+    def __init__(self, lib: ctypes.CDLL, size: int, gpu_id: int) -> None:
         self.lib = lib
+        self.gpu_id = gpu_id
         self.address = ctypes.c_void_p()
-        error = lib.Vship_PinnedMalloc(ctypes.byref(self.address), size)
+        error = lib.Vship_PinnedMalloc2(ctypes.byref(self.address), size, gpu_id)
         if error != 0 or not self.address.value:
             raise VshipUnavailableError(f"Could not allocate Vship pinned frame memory: {_message(lib, error)}")
         self.array = (ctypes.c_uint8 * size).from_address(self.address.value)
@@ -837,7 +861,7 @@ class _PinnedBuffer:
 
     def close(self) -> None:
         if self.address.value:
-            self.lib.Vship_PinnedFree(self.address)
+            self.lib.Vship_PinnedFree2(self.address, self.gpu_id)
             self.address = ctypes.c_void_p()
 
 
@@ -902,11 +926,6 @@ class _MetricLane:
         lib = device.loaded.library
         handler = None
         try:
-            # The CUDA/HIP device is per thread, and a handler allocates on
-            # the device current when it is created.
-            error = lib.Vship_SetDevice(device.gpu_id)
-            if error != 0:
-                raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
             handler = _init_handler(device, self.key, src, dist)
         except BaseException as error:
             self.error = error
@@ -928,7 +947,7 @@ class _MetricLane:
         finally:
             if handler is not None:
                 with contextlib.suppress(Exception):
-                    (lib.Vship_SSIMU2Free if self.key == "ssimulacra2" else lib.Vship_ButteraugliFree)(handler)
+                    lib.Vship_FreeHandler(handler)
 
     def stop(self) -> None:
         self.jobs.put(None)
@@ -937,48 +956,37 @@ class _MetricLane:
         self._thread.join()
 
 
-def _init_handler(device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace) -> _Handler:
+def _init_handler(device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace) -> _Handle:
     lib = device.loaded.library
-    handler = _Handler()
     if key == "ssimulacra2":
-        error = lib.Vship_SSIMU2Init(ctypes.byref(handler), src, dist)
+        init = _InitSsimulacra2(_INIT_SSIMULACRA2, src, dist, device.gpu_id)
     else:
-        # Match FFVship's default 2-norm setting and 203-nit target, but graph
-        # the 3-norm value to preserve the app's existing Butteraugli meaning.
-        error = lib.Vship_ButteraugliInit(ctypes.byref(handler), src, dist, 2, ctypes.c_float(203.0))
+        # Vship's defaults (doc/BUTTERAUGLI.md): the 2-norm, beside the
+        # 3-norm the app graphs, for a 203-nit display.
+        init = _InitButteraugli(_INIT_BUTTERAUGLI, src, dist, 2, 203.0, device.gpu_id)
+    handle = _Handle()
+    error = lib.Vship_InitHandler(ctypes.byref(handle), ctypes.byref(init))
     if error != 0:
-        raise VshipUnavailableError(f"Could not initialize Vship {key}: {_message(lib, error)}")
-    return handler
+        raise VshipUnavailableError(f"Could not initialize Vship {key}: {_message(lib, None)}")
+    return handle
 
 
 def _compute_metric(
-    device: VshipDevice, key: str, handler: _Handler, source_planes: _PLANES,
+    device: VshipDevice, key: str, handler: _Handle, source_planes: _PLANES,
     distorted_planes: _PLANES, source_strides: _I64_3, distorted_strides: _I64_3,
 ) -> float:
     lib = device.loaded.library
-    if key == "ssimulacra2":
-        score = ctypes.c_double()
-        error = lib.Vship_ComputeSSIMU2(handler, ctypes.byref(score), source_planes,
-                                         distorted_planes, source_strides, distorted_strides)
-        if error != 0:
-            detail = ctypes.create_string_buffer(1024)
-            lib.Vship_SSIMU2GetDetailedLastError(handler, detail, len(detail))
-            raise VshipUnavailableError(f"Vship SSIMULACRA2 failed: {detail.value.decode(errors='replace') or _message(lib, error)}")
-        value = float(score.value)
-        if not math.isfinite(value):
-            raise VshipUnavailableError("Vship SSIMULACRA2 returned a non-finite value.")
-        return value
-    score = _ButteraugliScore()
-    error = lib.Vship_ComputeButteraugli(handler, ctypes.byref(score), None, 0,
-                                          source_planes, distorted_planes,
-                                          source_strides, distorted_strides)
+    label = "SSIMULACRA2" if key == "ssimulacra2" else "Butteraugli"
+    # Butteraugli's distortion map is not wanted: its dstp stays NULL.
+    score = (_ScoreSsimulacra2(_SCORE_SSIMULACRA2) if key == "ssimulacra2"
+             else _ScoreButteraugli(_SCORE_BUTTERAUGLI))
+    error = lib.Vship_ComputeHandler(handler, ctypes.byref(score), source_planes, distorted_planes,
+                                     source_strides, distorted_strides)
     if error != 0:
-        detail = ctypes.create_string_buffer(1024)
-        lib.Vship_ButteraugliGetDetailedLastError(handler, detail, len(detail))
-        raise VshipUnavailableError(f"Vship Butteraugli failed: {detail.value.decode(errors='replace') or _message(lib, error)}")
-    value = float(score.norm3)
+        raise VshipUnavailableError(f"Vship {label} failed: {_handler_error(lib, handler, error)}")
+    value = float(score.score if key == "ssimulacra2" else score.norm3)
     if not math.isfinite(value):
-        raise VshipUnavailableError("Vship Butteraugli returned a non-finite value.")
+        raise VshipUnavailableError(f"Vship {label} returned a non-finite value.")
     return value
 
 
@@ -987,14 +995,15 @@ def _compute_metric(
 # Vship pools CVVDP's per-frame quality q the way ColorVideoVDP does: a
 # running sum of q^2 over the n frames scored since the last reset, reported
 # as JOD(sqrt(sum / n)) -- except for a single frame, reported as
-# JOD(q * IMAGE_INT). ResetScoreCVVDP clears only that sum (the temporal
+# JOD(q * IMAGE_INT). Vship_ResetScore clears only that sum (the temporal
 # filters keep their history), so resetting it at each second gives a JOD
 # per second, and inverting each second's JOD back to its sum rebuilds the
 # score of the whole video. On 2 s of the Beekeeper 4K AV1 encode the
 # rebuilt score matched an unreset handler's to 6e-7 JOD; on 49 and 73
 # frames at 23.976 fps, which end in a one-frame second, to 2e-7 and 3e-7
 # (pooling that frame like any other would be off by 0.01). The constants are
-# Vship's (and ColorVideoVDP's) jod_a, jod_exp and image_int.
+# Vship's (and ColorVideoVDP's) jod_a, jod_exp and image_int: src/HIP/cvvdp/
+# parameters.hpp and CVVDPComputingImplementation::run in Vship 5.1.1.
 _JOD_A = 0.0439569391310215
 _JOD_EXP = 0.9302042722702026
 _IMAGE_INT = 0.577918291091919
@@ -1023,70 +1032,9 @@ def pool_cvvdp_windows(windows: list[tuple[int, int, float]]) -> float:
     return _jod_from_quality(math.sqrt(squares / total))
 
 
-def _native_path(path: Path) -> bytes:
-    """A path Vship's narrow-character file open can use: the ANSI code page
-    on Windows, or the 8.3 short name if the path has characters it lacks
-    (a user name in another script, say)."""
-    if os.name != "nt":
-        return os.fsencode(path)
-    try:
-        return str(path).encode("mbcs", errors="strict")
-    except UnicodeEncodeError:
-        buffer = ctypes.create_unicode_buffer(1024)
-        if ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, len(buffer)):
-            return buffer.value.encode("mbcs", errors="replace")
-        raise VshipUnavailableError(f"Vship cannot open the CVVDP display file at {path}.") from None
-
-
-def _narrow_encodable(path: str) -> bool:
-    if os.name != "nt":
-        return True
-    try:
-        path.encode("mbcs", errors="strict")
-    except UnicodeEncodeError:
-        return False
-    return True
-
-
-def _cvvdp_config_file() -> Path:
-    """A new empty file for the display config, in a folder whose path Vship
-    can open. The temp folder sits under the user's profile, so a user name
-    outside the ANSI code page made it unopenable -- and the 8.3 short name
-    that _native_path falls back to does not exist where short names are
-    turned off (the default on non-system drives and many new installs):
-    CVVDP then could not start for that user at all. The shared Public and
-    ProgramData folders have no user name in their path."""
-    candidates = [tempfile.gettempdir(), os.environ.get("PUBLIC"), os.environ.get("PROGRAMDATA")]
-    for directory in filter(None, candidates):
-        if not _narrow_encodable(directory):
-            continue
-        try:
-            handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json", dir=directory)
-        except OSError:
-            continue
-        os.close(handle)
-        return Path(name)
-    # None usable: the temp folder, relying on its short name.
-    handle, name = tempfile.mkstemp(prefix="videometricslab-cvvdp-", suffix=".json")
-    os.close(handle)
-    return Path(name)
-
-
-def _cvvdp_error(lib: ctypes.CDLL, handler: _Handler | None, code: int) -> str:
-    if handler is not None:
-        detail = ctypes.create_string_buffer(1024)
-        with contextlib.suppress(Exception):
-            lib.Vship_CVVDPGetDetailedLastError(handler, detail, len(detail))
-            if detail.value:
-                return detail.value.decode(errors="replace").strip()
-    return _message(lib, None if handler is None else code)
-
-
 def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
-                settings: CvvdpSettings, fps: float) -> _Handler:
+                settings: CvvdpSettings, fps: float) -> _Handle:
     lib = device.loaded.library
-    if not _has_cvvdp(lib):
-        raise VshipUnavailableError(f"This Vship ({device.version}) has no CVVDP.")
     if not (math.isfinite(fps) and fps > 0):
         # CVVDP models how the eye integrates over time, so the frame rate
         # is part of the score; it used to be replaced by 1 fps silently.
@@ -1094,46 +1042,44 @@ def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
             "CVVDP needs the video's frame rate, and none was found (it was read as "
             f"{fps:g} fps)."
         )
-    handler = _Handler()
-    config = _cvvdp_config_file()
-    try:
-        write_vship_config(settings.display, config)
-        error = lib.Vship_CVVDPInit3(
-            ctypes.byref(handler), src, dist, ctypes.c_float(fps), bool(settings.resize_to_display),
-            VSHIP_MODEL_KEY.encode(), _native_path(config), device.gpu_id,
-        )
-    finally:
-        with contextlib.suppress(OSError):
-            config.unlink()
+    # The display as JSON text: Vship parses a config that starts with "{"
+    # itself (DisplayModel::parseJson), with no file to write and no path
+    # for its narrow-character open to fail on -- a Windows user name
+    # outside the ANSI code page broke the file this used to pass.
+    config = vship_display_json(settings.display).encode("utf-8")
+    init = _InitCvvdp(_INIT_CVVDP, src, dist, fps, bool(settings.resize_to_display),
+                      VSHIP_MODEL_KEY.encode(), config, device.gpu_id)
+    handle = _Handle()
+    error = lib.Vship_InitHandler(ctypes.byref(handle), ctypes.byref(init))
     if error != 0:
-        raise VshipUnavailableError(f"Could not initialize Vship CVVDP: {_cvvdp_error(lib, None, error)}")
-    return handler
+        raise VshipUnavailableError(f"Could not initialize Vship CVVDP: {_message(lib, None)}")
+    return handle
 
 
-def _compute_cvvdp(device: VshipDevice, handler: _Handler, source_planes: _PLANES,
+def _compute_cvvdp(device: VshipDevice, handler: _Handle, source_planes: _PLANES,
                    distorted_planes: _PLANES, source_strides: _I64_3, distorted_strides: _I64_3) -> float:
     """Scores the next frame pair; returns the JOD of the frames since the last reset."""
     lib = device.loaded.library
-    score = ctypes.c_double()
-    error = lib.Vship_ComputeCVVDP(handler, ctypes.byref(score), None, 0, source_planes,
-                                   distorted_planes, source_strides, distorted_strides)
+    score = _ScoreCvvdp(_SCORE_CVVDP)  # no distortion map: dstp stays NULL
+    error = lib.Vship_ComputeHandler(handler, ctypes.byref(score), source_planes, distorted_planes,
+                                     source_strides, distorted_strides)
     if error != 0:
-        raise VshipUnavailableError(f"Vship CVVDP failed: {_cvvdp_error(lib, handler, error)}")
-    value = float(score.value)
+        raise VshipUnavailableError(f"Vship CVVDP failed: {_handler_error(lib, handler, error)}")
+    value = float(score.score)
     if not math.isfinite(value):
         raise VshipUnavailableError("Vship CVVDP returned a non-finite value.")
     return value
 
 
-def _reset_cvvdp_score(device: VshipDevice, handler: _Handler) -> None:
+def _reset_cvvdp_score(device: VshipDevice, handler: _Handle) -> None:
     lib = device.loaded.library
-    error = lib.Vship_ResetScoreCVVDP(handler)
+    error = lib.Vship_ResetScore(handler)
     if error != 0:
-        raise VshipUnavailableError(f"Vship CVVDP failed: {_cvvdp_error(lib, handler, error)}")
+        raise VshipUnavailableError(f"Vship CVVDP failed: {_handler_error(lib, handler, error)}")
 
 
-def _free_cvvdp(device: VshipDevice, handler: _Handler) -> None:
-    device.loaded.library.Vship_CVVDPFree(handler)
+def _free_cvvdp(device: VshipDevice, handler: _Handle) -> None:
+    device.loaded.library.Vship_FreeHandler(handler)
 
 
 class _CvvdpLane:
@@ -1169,12 +1115,8 @@ class _CvvdpLane:
 
     def _run(self) -> None:
         device, src, dist, settings, fps = self._args
-        lib = device.loaded.library
         handler = None
         try:
-            error = lib.Vship_SetDevice(device.gpu_id)
-            if error != 0:
-                raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
             handler = _init_cvvdp(device, src, dist, settings, fps)
         except BaseException as error:
             self.error = error
@@ -1390,9 +1332,6 @@ def _run_vship_pass(
         raise PerceptualCancelled("Cancelled by user")
 
     lib = device.loaded.library
-    error = lib.Vship_SetDevice(device.gpu_id)
-    if error != 0:
-        raise VshipUnavailableError(f"Could not select the Vship GPU: {_message(lib, error)}")
 
     # Decode follows the row's GPU-decode setting, per input and per codec:
     # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
@@ -1486,7 +1425,7 @@ def _run_vship_pass(
                 split = (plane_sizes[0], plane_sizes[1], dtype)
             pixel_format = passthrough[1] if passthrough else image_format.pixel_format
             return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format),
-                                process_handle, label, split, decoded_in_software(side))
+                                process_handle, label, split, decoded_in_software(side), device.gpu_id)
 
         # Appended one at a time: if the test video's buffers cannot be
         # allocated, the reference's stream is already in `streams`, so the

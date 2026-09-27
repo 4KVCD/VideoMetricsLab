@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, dataclass, replace
-from pathlib import Path
 
 from vmaf_app.i18n import N_
 
@@ -137,10 +136,11 @@ class CvvdpSettings:
                    bool(values["resize_to_display"]))
 
 
-def write_vship_config(display: CvvdpDisplay, path: Path) -> Path:
-    """Vship reads a custom display from a JSON file (not a string), in the
-    official display_models.json format; every property is set so none falls
-    back to a Vship default."""
+def vship_display_json(display: CvvdpDisplay) -> str:
+    """The display for Vship, as JSON text in the official
+    display_models.json format -- Vship 5.1 parses text that starts with "{"
+    as the config itself. Every property is set, so none falls back to a
+    Vship default."""
     model = {
         "name": "VideoMetricsLab display",
         "colorspace": "HDR" if display.hdr else "SDR",
@@ -154,8 +154,7 @@ def write_vship_config(display: CvvdpDisplay, path: Path) -> Path:
         "exposure": float(display.exposure),
         "source": "VideoMetricsLab",
     }
-    path.write_text(json.dumps({VSHIP_MODEL_KEY: model}, indent=1), encoding="utf-8")
-    return path
+    return json.dumps({VSHIP_MODEL_KEY: model}, indent=1)
 
 
 @dataclass(frozen=True, slots=True)
