@@ -1,5 +1,9 @@
 import json
 import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -106,6 +110,57 @@ def test_every_catalog_is_complete_and_keeps_the_placeholders():
     for path in sorted(i18n.TRANSLATIONS_DIR.glob("*.json")):
         found = problems(path.stem, json.loads(path.read_text(encoding="utf-8")), expected)
         assert not found, f"{path.name}: " + "\n".join(found[:20])
+
+
+def test_every_language_in_settings_has_a_catalog():
+    """Settings > Window > Language offers exactly the languages that ship a
+    catalog: one without would show English under its own name."""
+    shipped = {path.stem for path in i18n.TRANSLATIONS_DIR.glob("*.json")}
+    assert shipped == set(i18n.LANGUAGES) - {"en"}
+
+
+_MEASURE_WINDOW = """
+import tempfile
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+
+from vmaf_app.core.settings import Settings
+
+settings = Path(tempfile.mkdtemp()) / "settings.json"
+Settings.path = staticmethod(lambda: settings)
+app = QApplication([])
+from vmaf_app import i18n
+from vmaf_app.ui.main_window import MainWindow
+
+MainWindow._check_ffmpeg = lambda self, prompt=False: True  # its dialog would wait for an answer
+for code in i18n.LANGUAGES:
+    i18n.set_language(code)
+    win = MainWindow()
+    win.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+    print(code, win.minimumSizeHint().width())
+    win.close()
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="measured with Windows' own fonts")
+def test_the_window_fits_its_default_1280_pixels_in_every_language():
+    """A new window opens 1280 pixels wide. Text that is longer in some
+    language must still fit, or the window opens wider than that and runs
+    off smaller screens (German first needed 1,590). Measured in a process
+    of its own on the Windows platform: the suite's offscreen platform has
+    other fonts, about twice as wide."""
+    result = subprocess.run(
+        [sys.executable, "-c", _MEASURE_WINDOW], capture_output=True, text=True, timeout=120,
+        cwd=Path(__file__).resolve().parents[1], env={**os.environ, "QT_QPA_PLATFORM": "windows"},
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    widths = {code: int(width) for code, width in (line.split() for line in result.stdout.splitlines())}
+    assert set(widths) == set(i18n.LANGUAGES)
+    too_wide = {code: width for code, width in widths.items() if width > 1280}
+    assert not too_wide, f"minimum width over 1280 px: {too_wide}"
 
 
 def test_the_catalog_check_finds_missing_stale_and_broken_entries():
