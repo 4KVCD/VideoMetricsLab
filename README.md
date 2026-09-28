@@ -5,7 +5,7 @@ A Windows desktop app for measuring and comparing video encode quality.
 ## Features
 
 - Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli, and ColorVideo VDP for multiple test videos.
-- VShip integration for GPU acceleration for ColorVideo VDP, SSIMULACRA2, and Butteraugli
+- Vship integration for GPU acceleration for ColorVideo VDP, SSIMULACRA2, and Butteraugli, on NVIDIA (CUDA), AMD (HIP) and any other GPU with a Vulkan driver
 - libjxl integration for CPU fallback for SSIMULACRA2, and Butteraugli (no CPU support for ColorVideo VDP)
 - VMAF v0.6.1 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
 - Compare metric curves, statistics, and per-frame scores (per second for ColorVideo VDP).

@@ -275,7 +275,7 @@ class CvvdpDisplayDialog(QDialog):
         for box, value in ((self.width_spin, display.width), (self.height_spin, display.height)):
             # Up to 8K. With "Scale the video to fill the display", Vship
             # works at the display's resolution: an 8K display took CVVDP
-            # alone to +7.3 GB of VRAM on a 4K video, a 16384x16384 one to
+            # alone (CUDA build) to +7.3 GB of VRAM on a 4K video, a 16384x16384 one to
             # +15.9 GB -- a display that does not exist, costing more than
             # most GPUs have.
             box.setRange(16, _CVVDP_MAX_DISPLAY_PIXELS)
@@ -3403,9 +3403,9 @@ class MainWindow(QMainWindow):
     def _metric_unavailable_reason(row_data: RowData, key: str) -> str | None:
         """Why this row cannot produce `key`, for its "n/a" cell; None if it can.
 
-        Neither perceptual backend (Vship, libjxl CPU tools) implements the
-        resolution round-trip test, which derives both sides from the source
-        at run time. Requesting SSIMULACRA2/Butteraugli on such a row failed
+        The app feeds neither perceptual path (Vship on the GPU, the libjxl
+        tools on the CPU) a resolution round-trip test, which derives both
+        sides from the source at run time. Requesting SSIMULACRA2/Butteraugli on such a row failed
         the whole job -- VMAF included -- with "do not support resolution
         round-trip tests yet".
 
@@ -4399,7 +4399,7 @@ class MainWindow(QMainWindow):
         number, count, name = phase
         if count != len(keys) or not 1 <= number <= count or metric_definition(keys[number - 1]).label != name:
             return None
-        frames = total // count  # Vship reports the passes as passes x frames
+        frames = total // count  # run_vship_task counts its passes as passes x frames
         done = min(frames, max(0, int(task.get("current") or 0) - (number - 1) * frames))
         # The pass under way before its first rate: the rate it had earlier.
         fps = float(task.get("fps") or 0.0) or self._metric_rates.get(keys[number - 1], 0.0)

@@ -227,7 +227,7 @@ class _LoadedVship:
 
 @dataclass(frozen=True, slots=True)
 class VshipDevice:
-    backend: str  # "vulkan", "cuda" or "hip": the Vship build it runs on (VSHIP_BACKENDS)
+    backend: str  # "vulkan", "cuda" or "hip": the Vship build it runs on (VSHIP_BUILDS)
     name: str
     gpu_id: int
     version: str
@@ -767,7 +767,7 @@ class _FrameStream:
         on_software: Callable[[], None] | None = None, gpu_id: int = 0,
     ) -> None:
         # Allocated one by one so a failure part-way frees what was already
-        # allocated: a list comprehension left those buffers -- page-locked
+        # allocated: a list comprehension left those buffers -- pinned
         # RAM, 25 MB each for 4K 10-bit -- allocated for the rest of the
         # session, once per failed attempt.
         self.buffers: list[_PinnedBuffer] = []
@@ -1247,7 +1247,7 @@ class _CvvdpLane:
 
 #: One Vship pass at a time in the whole app. A pass already fills the GPU:
 #: at 4K two passes at once scored no faster than one after the other (84.5
-#: vs 83.6 pairs/s) while holding twice the VRAM (9.1 vs 4.5 GB, more than
+#: vs 83.6 pairs/s, Vship's CUDA build) while holding twice the VRAM (9.1 vs 4.5 GB, more than
 #: most cards have). Running two jobs in parallel still pays off -- 23% at
 #: 1080p, 27% at 4K -- because one job's VMAF/PSNR/SSIM pass, which is CPU
 #: work, overlaps the other's Vship pass; only this GPU pass is serialized,
@@ -1293,7 +1293,8 @@ def run_vship_task(
     One metric at a time by default: each gets a pass of its own, and the
     video is decoded again for each. Scoring them in one pass holds every
     metric's GPU memory at once -- 7.3 GB for SSIMULACRA2, Butteraugli and
-    CVVDP together on a full 3840x2160 frame, more than an 8 GB card has
+    CVVDP together on a full 3840x2160 frame (Vship's CUDA build; its Vulkan
+    build reports no memory size to check against), more than an 8 GB card has
     free -- for little speed where the GPU decodes: 34 fps together against
     about 31.5 fps one after the other at 4K, and 91 against 90.5 fps at
     1080p (RTX 5090, Beekeeper AV1 and a synthetic SDR clip). One at a

@@ -61,7 +61,8 @@ class Settings:
     default_compute_ssimulacra2: bool = True
     default_compute_butteraugli: bool = True
     default_compute_cvvdp: bool = True
-    # "gpu" (Vship, falling back to the CPU tools without a supported GPU)
+    # "gpu" (Vship, falling back to the CPU tools without a GPU Vship can use,
+    # or where its build scores the metric wrongly -- perceptual_vship.SCORED_WRONGLY)
     # or "cpu" (libjxl's tools). Set from the Options panel's GPU/CPU
     # choice, which is also what a newly added video starts with.
     default_ssimulacra2_backend: str = "gpu"
