@@ -174,10 +174,7 @@ Third-party components retain their own licenses; see
   back to the CPU, and CVVDP no longer fails on them. RGB videos without a
   transfer tag are now read as sRGB, as Vship's own FFVship does, and their
   saved GPU scores are recalculated.
-- Added a setting to calculate SSIMULACRA2, Butteraugli and CVVDP together in
-  one pass per video (Settings > GPU metrics, off by default). It decodes each
-  video once instead of once per metric, which helps most with 4K VVC (decoded
-  on the CPU), but needs more GPU memory.
+- Added a setting to calculate SSIMULACRA2, Butteraugli and CVVDP together in one pass per video (Settings > GPU metrics, off by default). It's better GPU utilization for faster metrics calculations, and it decodes each video once instead of once per metric, but needs much more GPU memory.
 - Each metric's score now appears and is saved as soon as it is done, instead
   of when the whole video is finished. Stopping a run or closing the app loses
   at most the metric in progress.
