@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -46,6 +47,17 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
+
+_log = logging.getLogger(__name__)
+
+
+def _command_text(command) -> str:
+    """A command as a copy-pasteable line for the log; never raises -- a log
+    line must not be able to stop a run."""
+    try:
+        return subprocess.list2cmdline(command)
+    except TypeError:
+        return repr(command)
 
 ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_frames, fps)
 
@@ -313,7 +325,17 @@ def _v1_model_file(options: VmafOptions) -> Path | None:
 #: of the source's final frame. Those frames score terribly (48 and 31 on a
 #: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
 #: the run silently reports a worse encode than was delivered.
-_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0"]
+#:
+#: The default ts_sync_mode pairs each distorted frame with the last source
+#: frame at or before its timestamp. Two files with the same frames can have
+#: timestamps a millisecond apart -- MKV stores whole milliseconds, and each
+#: program rounds frame times from its own clock -- and a distorted frame
+#: stamped 1 ms early was compared with the source's previous frame: VMAF 0
+#: and XPSNR ~16 dB at scene cuts and in motion, on an anime episode whose
+#: SSIMULACRA2 (paired frame by frame) was 93 on the same frame. "nearest"
+#: takes the source frame nearest in time, the same frame whichever way the
+#: two timestamps are off by less than half a frame.
+_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
 
 
 def _build_libvmaf_stage(
@@ -847,6 +869,7 @@ def _execute_run(
 
         def run_with(plan: HwAccelPlan):
             cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
+            _log.info("FFmpeg: %s", _command_text(cmd))
             return _run_ffmpeg(
                 cmd, total_frames, on_progress, cancel_event,
                 cwd=tmpdir, process_handle=process_handle,
@@ -865,6 +888,9 @@ def _execute_run(
             result = run_with(plan)
             if result.returncode == 0:
                 break
+            _log.warning("FFmpeg exited with code %d (GPU decode: %s)%s. Last output:\n%s", result.returncode,
+                         plan.describe(), "; retrying" if attempt + 1 < len(ladder) else "",
+                         "\n".join(result.stderr.splitlines()[-25:]))
             # A stale log from the failed attempt would otherwise be parsed
             # as if the retry had produced it -- ffmpeg can write a partial
             # log before the decoder gives up.

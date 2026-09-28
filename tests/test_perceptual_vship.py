@@ -16,6 +16,7 @@ from vmaf_app.core import perceptual_cpu
 from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropMode, GpuVendor, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualTaskOutput
@@ -56,6 +57,34 @@ def test_vship_device_info_matches_c_api_layout():
     ]
 
 
+@pytest.mark.parametrize(("struct", "size", "offsets"), [
+    # Vship_Colorspace_t: four int64, seven 4-byte fields, the 16-byte crop.
+    (vship._Colorspace, 88, {"sample": 32, "subsampling": 40, "YUVMatrix": 56, "crop": 68}),
+    (vship._InitSsimulacra2, 192, {"structType": 0, "src_colorspace": 8, "dis_colorspace": 96, "gpu_id": 184}),
+    (vship._InitButteraugli, 200, {"dis_colorspace": 96, "Qnorm": 184, "intensity_multiplier": 188, "gpu_id": 192}),
+    (vship._InitCvvdp, 216, {"fps": 184, "resizeToDisplay": 188, "model_key_cstr": 192,
+                             "model_config_json_cstr": 200, "gpu_id": 208}),
+    (vship._ScoreSsimulacra2, 16, {"structType": 0, "score": 8}),
+    (vship._ScoreButteraugli, 48, {"normQ": 8, "norm3": 16, "norminf": 24, "dstp": 32, "dststride": 40}),
+    (vship._ScoreCvvdp, 32, {"score": 8, "dstp": 16, "dststride": 24}),
+])
+def test_vship_51_structs_match_the_c_layout(struct, size, offsets):
+    """The init and score structs of VshipAPI.h (Vship 5.1.1), as the x64 C
+    compiler lays them out: a wrong offset would hand Vship garbage."""
+    assert ctypes.sizeof(struct) == size
+    assert {name: getattr(struct, name).offset for name in offsets} == offsets
+
+
+def test_only_a_vship_with_the_51_api_is_used():
+    """4.x has no Vship_InitHandler; its per-metric functions are only a
+    deprecated layer in 5.1, and this module no longer calls them."""
+    assert vship._has_api(SimpleNamespace(**dict.fromkeys(vship._API_FUNCTIONS)))
+    older = {name: None for name in vship._API_FUNCTIONS if name not in {
+        "Vship_InitHandler", "Vship_ComputeHandler", "Vship_FreeHandler", "Vship_PinnedMalloc2"}}
+    older |= {"Vship_SSIMU2Init": None, "Vship_ComputeSSIMU2": None, "Vship_PinnedMalloc": None}
+    assert not vship._has_api(SimpleNamespace(**older))
+
+
 @pytest.mark.parametrize(("pixel_format", "family", "sample"), [
     ("yuv420p", 0, vship._VSHIP_ENUMS[8]),
     ("yuv420p10le", 0, vship._VSHIP_ENUMS[10]),
@@ -69,9 +98,79 @@ def test_vship_maps_common_ffmpeg_pixel_formats(pixel_format, family, sample):
     assert image.sample == sample
 
 
-def test_unsupported_pixel_format_is_a_cpu_fallback_condition():
-    with pytest.raises(vship.VshipUnavailableError, match="does not support"):
-        vship._image_format(_info("video.mkv", pix_fmt="yuv411p10le"))
+def test_a_pixel_format_the_gpu_metrics_cannot_read_is_a_cpu_fallback_condition():
+    with pytest.raises(vship.VshipUnavailableError, match="cannot read the decoded pixel format pal8"):
+        vship._image_format(_info("video.mkv", pix_fmt="pal8"))
+
+
+@pytest.mark.parametrize(("pixel_format", "piped", "sample", "shifts", "rgb"), [
+    # Any subsampling at any depth: Vship takes two shifts and a sample
+    # type. The "Vship supports these layouts" table allowed 4:4:0 only up
+    # to 12 bits and 4:1:0 / 4:1:1 only at 8 -- FFmpeg's formats, not Vship's.
+    ("yuv440p12le", "yuv440p12le", 12, (0, 1), False),
+    ("yuv410p", "yuv410p", 8, (2, 1), False),
+    ("yuv444p14le", "yuv444p14le", 14, (0, 0), False),
+    ("yuv422p16be", "yuv422p16le", 16, (1, 0), False),
+    ("yuva420p10le", "yuv420p10le", 10, (1, 1), False),  # alpha dropped
+    ("gray10le", "yuv420p10le", 10, (1, 1), False),  # monochrome: neutral chroma
+    ("p012le", "yuv420p12le", 12, (1, 1), False),
+    ("nv24", "yuv444p", 8, (0, 0), False),
+    ("gbrap12le", "gbrp12le", 12, (0, 0), True),
+    ("bgr48le", "gbrp16le", 16, (0, 0), True),
+])
+def test_every_ffmpeg_layout_reaches_vship_as_a_planar_one(pixel_format, piped, sample, shifts, rgb):
+    image = vship._image_format(_info("video.mkv", pix_fmt=pixel_format))
+    assert image.pixel_format == piped
+    assert image.sample == vship._VSHIP_ENUMS[sample]
+    assert (image.subw, image.subh) == shifts and (image.family == 1) == rgb
+
+
+def _colorspace(width=1920, height=1080, pix_fmt="yuv420p10le", **tags):
+    info = VideoInfo(Path("video.mkv"), width, height, 24.0, 1.0, 24, "hevc", pix_fmt=pix_fmt, **tags)
+    return vship._vship_colorspace(info, vship._image_format(info), width, height)
+
+
+@pytest.mark.parametrize(("tags", "matrix", "transfer", "primaries"), [
+    # As ffprobe names them, to VshipColor.h's values -- FFVship's mapping.
+    ({"color_space": "bt709", "color_transfer": "bt709", "color_primaries": "bt709"}, 1, 1, 1),
+    ({"color_space": "smpte170m", "color_transfer": "smpte170m", "color_primaries": "smpte170m"}, 6, 6, 6),
+    ({"color_space": "bt470bg", "color_transfer": "bt470bg", "color_primaries": "bt470bg"}, 5, 5, 5),
+    ({"color_space": "bt709", "color_transfer": "bt470m", "color_primaries": "bt470m"}, 1, 4, 4),
+    ({"color_space": "bt709", "color_transfer": "smpte240m", "color_primaries": "smpte240m"}, 1, 7, 7),
+    # BT.2020 SDR: its 10- and 12-bit transfer tags are the BT.709 curve.
+    ({"color_space": "bt2020nc", "color_transfer": "bt2020-10", "color_primaries": "bt2020"}, 9, 1, 9),
+    ({"color_space": "bt2020c", "color_transfer": "bt2020-12", "color_primaries": "bt2020"}, 10, 1, 9),
+    ({"color_space": "bt2020nc", "color_transfer": "smpte2084", "color_primaries": "bt2020"}, 9, 16, 9),
+    ({"color_space": "bt2020nc", "color_transfer": "arib-std-b67", "color_primaries": "bt2020"}, 9, 18, 9),
+    ({"color_space": "ictcp", "color_transfer": "smpte2084", "color_primaries": "bt2020"}, 14, 16, 9),
+    ({"color_space": "ycgco", "color_transfer": "iec61966-2-1", "color_primaries": "smpte432"}, 8, 13, 12),
+    ({"color_space": "ycgco-re", "color_transfer": "linear", "color_primaries": "bt709"}, 16, 8, 1),
+    ({"color_space": "ycgco-ro", "color_transfer": "smpte428", "color_primaries": "bt709"}, 17, 17, 1),
+    # Untagged, guessed as FFVship does.
+    ({}, 1, 1, 1),
+    ({"color_space": "ictcp"}, 14, 16, 9),
+    ({"color_space": "bt2020nc"}, 9, 16, 9),
+])
+def test_color_tags_map_to_vships_values(tags, matrix, transfer, primaries):
+    color = _colorspace(**tags)
+    assert (color.YUVMatrix, color.transferFunction, color.primaries) == (matrix, transfer, primaries)
+
+
+def test_untagged_video_is_guessed_as_ffvship_guesses_it():
+    sd = _colorspace(width=720, height=576)
+    assert (sd.YUVMatrix, sd.transferFunction, sd.primaries, sd.range) == (5, 5, 5, 0)
+    rgb = _colorspace(pix_fmt="gbrp")  # sRGB, full range
+    assert (rgb.YUVMatrix, rgb.transferFunction, rgb.primaries, rgb.range) == (0, 13, 1, 1)
+    assert _colorspace(pix_fmt="yuvj420p").range == 1
+
+
+@pytest.mark.parametrize(("tag", "value"), [
+    ("color_space", "smpte240m"), ("color_space", "fcc"), ("color_transfer", "log100"),
+    ("color_primaries", "film"), ("chroma_location", "bottomleft"),
+])
+def test_a_tag_vship_has_no_value_for_is_refused(tag, value):
+    with pytest.raises(vship.VshipUnavailableError, match="Vship does not support"):
+        _colorspace(**{tag: value})
 
 
 def test_no_supported_gpu_falls_back_to_cpu(monkeypatch):
@@ -113,7 +212,7 @@ def test_mixed_backend_selection_runs_each_metric_on_selected_backend(monkeypatc
         VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2", "butteraugli"),
         {"ssimulacra2": "gpu", "butteraugli": "cpu"},
     )
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "4.0.2", None)
+    device = vship.VshipDevice("cuda", "test GPU", 0, "5.1.1", None)
     crops = (None, None)
     routed = {"gpu": [], "cpu": []}
     progress = []
@@ -152,7 +251,7 @@ def test_vship_processing_error_falls_back_without_repeating_crop_detection(monk
     expected = _cpu_output()
     crop_calls = []
     crops = (None, None)
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "4.0.2", None)
+    device = vship.VshipDevice("cuda", "test GPU", 0, "5.1.1", None)
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: crop_calls.append(args) or crops)
     monkeypatch.setattr(vship, "run_vship_task", lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -169,7 +268,7 @@ def test_vship_processing_error_falls_back_without_repeating_crop_detection(monk
 def test_cancellation_does_not_start_cpu_fallback(monkeypatch):
     source, test = _info("source.mkv"), _info("test.mkv")
     request = _request()
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "4.0.2", None)
+    device = vship.VshipDevice("cuda", "test GPU", 0, "5.1.1", None)
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
     monkeypatch.setattr(vship, "run_vship_task", lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -208,7 +307,7 @@ def _frames_command(count: int, frame_bytes: int, *, exit_code: int = 0, partial
 class _FakePinned:
     """Ordinary memory standing in for Vship's pinned allocation."""
 
-    def __init__(self, _lib, size):
+    def __init__(self, _lib, size, _gpu_id=0):
         self.array = (ctypes.c_uint8 * size)()
         self.address = ctypes.c_void_p(ctypes.addressof(self.array))
 
@@ -220,9 +319,8 @@ class _FakePinned:
 
 
 def _fake_device():
-    lib = SimpleNamespace(Vship_SetDevice=lambda _gpu: 0, Vship_SSIMU2Free=lambda _h: 0,
-                          Vship_ButteraugliFree=lambda _h: 0)
-    return vship.VshipDevice("nvidia", "fake GPU", 0, "5.1.1", SimpleNamespace(library=lib))
+    lib = SimpleNamespace(Vship_FreeHandler=lambda _handle: 0)
+    return vship.VshipDevice("cuda","fake GPU", 0, "5.1.1", SimpleNamespace(library=lib))
 
 
 def _hevc(name: str) -> VideoInfo:
@@ -238,7 +336,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None, fail=None):
+         inspect=None, fail=None, on_status=None, together=False, on_progress=None):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -249,7 +347,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     lane was handed, so a mixed-up slot or pairing shows up in the values.
     """
     monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
-    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handler())
+    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handle())
     monkeypatch.setattr(vship, "pick_hwaccel", hwaccel)
     queues = {side: list(commands) for side, commands in children.items()}
     spawned: dict[str, list[list[str]]] = {"source": [], "test": []}
@@ -272,7 +370,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         scored.append(index)
         if inspect is not None:
             inspect(index, source_planes, test_planes)
-        if fail is not None and key == fail[0] and index >= fail[1]:
+        if fail is not None and (fail(key, index) if callable(fail) else key == fail[0] and index >= fail[1]):
             raise vship.VshipUnavailableError(f"Vship {key} failed: out of memory")
         if cancel_after is not None and len(scored) >= cancel_after:
             cancel.set()
@@ -283,7 +381,8 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     request = analysis_request_from_vmaf_options(
         VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode), metrics)
     output = vship.run_vship_task(source or _hevc("source.mkv"), test or _hevc("test.mkv"), request,
-                                  request.metrics, _fake_device(), None, None, cancel_event=cancel)
+                                  request.metrics, _fake_device(), None, None, cancel_event=cancel,
+                                  on_status=on_status, together=together, on_progress=on_progress)
     return output, spawned
 
 
@@ -301,9 +400,15 @@ def test_frames_arrive_in_order_through_the_ring_and_both_lanes(monkeypatch):
 
 def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeypatch):
     """Hardware decode can refuse a stream (an unsupported profile, say). The
-    same pictures are then decoded in software instead of abandoning the GPU run."""
+    same pictures are then decoded in software instead of abandoning the GPU run.
+
+    The pass says where each video is decoded, and again when one falls
+    back: the window's "Decoder: ..." for a video with only GPU metrics
+    comes from these messages."""
+    statuses = []
     output, spawned = _run(
         monkeypatch, gpu_decode=True, metrics=("ssimulacra2",), hwaccel=lambda _v, _c: "cuda",
+        on_status=statuses.append,
         children={
             "source": [_frames_command(0, _FRAME_BYTES, exit_code=1),  # hardware: refused
                        _frames_command(5, _FRAME_BYTES)],             # software retry
@@ -316,6 +421,17 @@ def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeyp
     assert "-hwaccel" in hardware and "hwdownload" in " ".join(hardware)
     assert "-hwaccel" not in software and "hwdownload" not in " ".join(software)
     assert len(spawned["test"]) == 1, "the input that decoded fine was not restarted"
+    assert statuses == [
+        "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…",
+        "GPU decode failed for the source, decoding it in software (GPU decode: source cpu, distorted cuda)…",
+    ]
+
+
+def test_a_pass_with_gpu_decode_off_says_so(monkeypatch):
+    statuses = []
+    _run(monkeypatch, metrics=("ssimulacra2",), children=_both(_frames_command(2, _FRAME_BYTES)),
+         on_status=statuses.append)
+    assert statuses == ["Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: off)…"]
 
 
 def test_a_truncated_frame_is_an_error_not_a_short_result(monkeypatch):
@@ -545,7 +661,7 @@ def test_a_gpu_failure_on_a_long_video_is_not_retried_on_the_cpu(monkeypatch):
     the worker keeps the video's other metrics."""
     source = VideoInfo(Path("source.mkv"), 3840, 2160, 24.0, 7200.0, 172800, "hevc", pix_fmt="yuv420p10le")
     test = VideoInfo(Path("test.mkv"), 3840, 2160, 24.0, 7200.0, 172800, "hevc", pix_fmt="yuv420p10le")
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
     monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: (_ for _ in ()).throw(
@@ -578,7 +694,7 @@ class _FakeCvvdp:
         return 0.05 + 0.37 * (index % 7)  # both sides of the 0.1 linear/power switch
 
     def install(self, monkeypatch):
-        monkeypatch.setattr(vship, "_init_cvvdp", lambda *_args: vship._Handler())
+        monkeypatch.setattr(vship, "_init_cvvdp", lambda *_args: vship._Handle())
         monkeypatch.setattr(vship, "_compute_cvvdp", self.compute)
         monkeypatch.setattr(vship, "_reset_cvvdp_score", lambda *_args: self.reset())
         monkeypatch.setattr(vship, "_free_cvvdp", lambda *_args: setattr(self, "freed", True))
@@ -631,6 +747,16 @@ def test_cvvdp_scores_every_frame_in_order_with_a_jod_per_second(monkeypatch, co
     assert output.failures == {}
 
 
+def test_every_gpu_score_records_how_the_color_tags_were_read(monkeypatch):
+    """The cache tells a score made since the tags follow FFVship 5.1.1 from
+    one of v1.2's by this (metric_cache.VSHIP_COLOR_TAGS)."""
+    _FakeCvvdp().install(monkeypatch)
+    output, _ = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli", "cvvdp"),
+                     children=_both(_frames_command(3, _FRAME_BYTES)))
+    for key in ("ssimulacra2", "butteraugli", "cvvdp"):
+        assert output.metrics.get(key).provenance.parameters["color_tags"] == VSHIP_COLOR_TAGS
+
+
 def test_each_metric_gets_a_pass_and_a_decode_of_its_own(monkeypatch):
     """One metric at a time keeps the GPU memory to the largest single
     metric's: all three in one pass needed 7.3 GB at 4K."""
@@ -642,6 +768,73 @@ def test_each_metric_gets_a_pass_and_a_decode_of_its_own(monkeypatch):
     assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
     assert fake.order == list(range(count))
     assert output.metrics.sequence("cvvdp").score == pytest.approx(_whole_video_jod(count), abs=1e-9)
+
+
+def test_together_every_metric_shares_one_pass_and_one_decode_with_the_same_scores(monkeypatch):
+    """Settings > GPU metrics: decoding 4K VVC on the CPU once per metric
+    tripled the decoding; together, each video is decoded once."""
+    count = vship._RING_SLOTS * 5 + 2
+    metrics = ("ssimulacra2", "butteraugli", "cvvdp")
+    _FakeCvvdp().install(monkeypatch)
+    apart, spawned_apart = _run(monkeypatch, metrics=metrics, children=_both(_frames_command(count, _FRAME_BYTES)))
+    fake = _FakeCvvdp().install(monkeypatch)
+    statuses = []
+    together, spawned = _run(monkeypatch, metrics=metrics, children=_both(_frames_command(count, _FRAME_BYTES)),
+                             together=True, on_status=statuses.append)
+    assert len(spawned_apart["source"]) == 3
+    assert len(spawned["source"]) == 1 and len(spawned["test"]) == 1
+    for key in ("ssimulacra2", "butteraugli"):
+        assert list(together.metrics.get(key).values) == list(apart.metrics.get(key).values)
+    assert together.metrics.sequence("cvvdp").score == apart.metrics.sequence("cvvdp").score
+    assert fake.order == list(range(count)) and together.failures == {}
+    assert statuses == ["Vship GPU (fake GPU): calculating SSIMULACRA2, Butteraugli, CVVDP (GPU decode: off)…"]
+
+
+def test_a_metric_that_fails_in_the_shared_pass_is_calculated_in_a_pass_of_its_own(monkeypatch):
+    """Out of GPU memory with all three at once, say: the metric is not
+    lost, it is calculated again alone."""
+    statuses, progress = [], []
+    # Butteraugli runs out of memory beside SSIMULACRA2, and not alone.
+    alone = lambda: any("pass of its own" in status for status in statuses)
+    count = vship._RING_SLOTS * 3
+    output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli"), together=True,
+                           fail=lambda key, _index: key == "butteraugli" and not alone(),
+                           children=_both(_frames_command(count, _FRAME_BYTES)), on_status=statuses.append,
+                           on_progress=lambda current, total, _fps: progress.append((current, total)))
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert list(output.metrics.get("butteraugli").values) == [i + 0.5 for i in range(count)]
+    assert output.failures == {}
+    assert len(spawned["source"]) == 2
+    # The retry is the second pass of two: the shared one is done.
+    assert statuses[1:3] == ["Butteraugli failed in the shared GPU pass; calculating it in a pass of its own…",
+                             "GPU metric 2/2: Butteraugli"]
+    # One count across both passes: the retry's frames come after the shared
+    # pass's, rather than starting again from 0.
+    currents = [current for current, _total in progress]
+    assert currents == sorted(currents) and progress[-1] == (2 * count, 2 * count)
+    retry = currents.index(count + 1)
+    assert progress[retry - 1] == (count, count) and progress[retry][1] > count
+
+
+def test_a_metric_that_fails_on_its_own_too_is_reported_with_the_others_kept(monkeypatch):
+    count = vship._RING_SLOTS * 3
+    output, spawned = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli"), fail=("butteraugli", 2),
+                           together=True, children=_both(_frames_command(count, _FRAME_BYTES)))
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert not output.metrics.has("butteraugli") and "out of memory" in output.failures["butteraugli"]
+    assert len(spawned["source"]) == 2
+
+
+def test_with_frame_subsampling_cvvdp_keeps_a_pass_of_its_own():
+    """CVVDP scores every frame; SSIMULACRA2 and Butteraugli then score
+    every n-th, so they cannot share its pass."""
+    specs = analysis_request_from_vmaf_options(
+        VmafOptions(n_subsample=3), ("ssimulacra2", "butteraugli", "cvvdp")).metrics
+    keys = lambda passes: [tuple(spec.key for spec in group) for group in passes]
+    assert keys(vship.vship_passes(specs)) == [("ssimulacra2",), ("butteraugli",), ("cvvdp",)]
+    assert keys(vship.vship_passes(specs, together=True)) == [("ssimulacra2", "butteraugli"), ("cvvdp",)]
+    full = analysis_request_from_vmaf_options(VmafOptions(), ("ssimulacra2", "butteraugli", "cvvdp")).metrics
+    assert keys(vship.vship_passes(full, together=True)) == [("ssimulacra2", "butteraugli", "cvvdp")]
 
 
 def test_a_cvvdp_failure_keeps_ssimulacra2_and_frees_the_ring(monkeypatch):
@@ -727,7 +920,7 @@ def test_without_a_gpu_cvvdp_alone_is_an_error(monkeypatch):
     request = _cvvdp_request("cvvdp")
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (None, "no supported GPU"))
     monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", lambda *a, **k: pytest.fail("no CPU CVVDP"))
-    with pytest.raises(perceptual_cpu.PerceptualRunError, match="CVVDP needs a supported NVIDIA or AMD GPU"):
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="CVVDP needs a GPU that Vship can use"):
         vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
 
 
@@ -738,7 +931,7 @@ def test_cvvdp_has_no_backend_choice():
 
 def test_a_gpu_failure_retries_the_others_on_the_cpu_and_reports_cvvdp(monkeypatch):
     request = _cvvdp_request("ssimulacra2", "cvvdp")
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     cpu_keys = []
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
@@ -754,7 +947,7 @@ def test_a_gpu_failure_retries_the_others_on_the_cpu_and_reports_cvvdp(monkeypat
 
 def test_cvvdp_on_the_gpu_beside_butteraugli_on_the_cpu(monkeypatch):
     request = _cvvdp_request("butteraugli", "cvvdp", backends={"butteraugli": "cpu"})
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     cvvdp = vship.SequenceMetricResult("cvvdp", 9.1, MetricProvenance("t", "1", "gpu", "t"))
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
@@ -818,7 +1011,7 @@ def test_a_metric_that_failed_on_the_gpu_is_retried_on_the_cpu_only_for_short_vi
     source = VideoInfo(Path("source.mkv"), 64, 48, 24.0, seconds, int(seconds * 24), "h264", pix_fmt="yuv420p")
     test = VideoInfo(Path("test.mkv"), 64, 48, 24.0, seconds, int(seconds * 24), "h264", pix_fmt="yuv420p")
     request = _cvvdp_request("ssimulacra2", "cvvdp")
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     cvvdp = vship.SequenceMetricResult("cvvdp", 9.4, MetricProvenance("t", "1", "gpu", "t"))
     cpu_keys = []
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
@@ -844,7 +1037,7 @@ def test_a_cpu_side_failure_keeps_the_finished_gpu_scores(monkeypatch, cpu_probl
     (or differing frame counts) after the GPU pass raised out of the
     fallback and threw away the finished CVVDP score."""
     request = _cvvdp_request("butteraugli", "cvvdp", backends={"butteraugli": "cpu"})
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     cvvdp = vship.SequenceMetricResult("cvvdp", 9.1, MetricProvenance("t", "1", "gpu", "t"))
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
@@ -867,7 +1060,7 @@ def test_cvvdp_failure_messages_name_the_real_cause(monkeypatch):
     """A problem with the videos was reported as CVVDP needing a GPU, and on
     a long video CVVDP's failure was dropped from the message altogether."""
     request = _cvvdp_request("ssimulacra2", "cvvdp")
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *args: (None, None))
     monkeypatch.setattr(vship, "run_vship_task", lambda *a, **k: (_ for _ in ()).throw(
@@ -884,32 +1077,10 @@ def test_cvvdp_failure_messages_name_the_real_cause(monkeypatch):
     assert "CVVDP could not be calculated: Frame rates do not match" in str(raised.value)
 
 
-def test_a_vship_without_cvvdp_still_configures_and_only_cvvdp_fails():
-    """Looking CVVDP's functions up unconditionally made a Vship without
-    them fail detection, and with it GPU SSIMULACRA2 and Butteraugli."""
-    class _Function:
-        pass
-
-    class _OlderVship:
-        def __getattr__(self, name):
-            if "CVVDP" in name:
-                raise AttributeError(name)
-            function = _Function()
-            setattr(self, name, function)
-            return function
-
-    lib = _OlderVship()
-    vship._configure_api(lib)  # must not raise
-    device = vship.VshipDevice("nvidia", "old GPU", 0, "4.0.2", SimpleNamespace(library=lib))
-    with pytest.raises(vship.VshipUnavailableError, match="has no CVVDP"):
-        vship._init_cvvdp(device, None, None, None, 24.0)
-
-
 @pytest.mark.parametrize("fps", [0.0, float("nan")])
 def test_cvvdp_refuses_a_video_without_a_frame_rate(fps):
     """A 0 fps video was scored as if it ran at 1 fps."""
-    lib = SimpleNamespace(**{name: None for name in vship._CVVDP_FUNCTIONS})
-    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=lib))
+    device = vship.VshipDevice("cuda","GPU", 0, "5.1.1", SimpleNamespace(library=SimpleNamespace()))
     with pytest.raises(vship.VshipUnavailableError, match="frame rate"):
         vship._init_cvvdp(device, None, None, None, fps)
 
@@ -922,9 +1093,9 @@ def test_when_every_gpu_pass_fails_cvvdp_keeps_its_own_reason(monkeypatch, long_
     seconds = 7200.0 if long_video else 60.0
     source = VideoInfo(Path("s.mkv"), 64, 48, 24.0, seconds, int(seconds * 24), "h264", pix_fmt="yuv420p")
     request = _cvvdp_request("ssimulacra2", "cvvdp")
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     reasons = {"ssimulacra2": "Could not initialize Vship ssimulacra2: out of memory",
-               "cvvdp": "This Vship (4.0.2) has no CVVDP."}
+               "cvvdp": "Could not initialize Vship CVVDP: out of VRAM"}
 
     def one_pass(_s, _t, _r, specs, *_a, **_k):
         raise vship.VshipUnavailableError(reasons[specs[0].key])
@@ -937,16 +1108,16 @@ def test_when_every_gpu_pass_fails_cvvdp_keeps_its_own_reason(monkeypatch, long_
     if long_video:
         with pytest.raises(perceptual_cpu.PerceptualRunError) as raised:
             vship.apply_vship_cpu_fallback(source, source, request, request.metrics)
-        assert "CVVDP could not be calculated: This Vship (4.0.2) has no CVVDP." in str(raised.value)
+        assert "CVVDP could not be calculated: Could not initialize Vship CVVDP: out of VRAM" in str(raised.value)
     else:
         output = vship.apply_vship_cpu_fallback(source, source, request, request.metrics)
-        assert output.failures["cvvdp"] == "CVVDP could not be calculated: This Vship (4.0.2) has no CVVDP."
+        assert output.failures["cvvdp"] == "CVVDP could not be calculated: Could not initialize Vship CVVDP: out of VRAM"
         assert output.metrics.has("ssimulacra2")
 
 
 def _gpu_failed_ssimulacra2(monkeypatch, cpu):
     request = _cvvdp_request("ssimulacra2", "cvvdp")
-    device = vship.VshipDevice("nvidia", "test GPU", 0, "5.1.1", None)
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     cvvdp = vship.SequenceMetricResult("cvvdp", 9.4, MetricProvenance("t", "1", "gpu", "t"))
 
     def gpu(*_a, on_progress=None, **_k):
@@ -1002,17 +1173,17 @@ def test_pinned_memory_is_freed_when_allocation_fails_part_way(monkeypatch):
     allocated, freed = [], []
 
     class _Pinned(_FakePinned):
-        def __init__(self, lib, size):
+        def __init__(self, lib, size, gpu_id=0):
             if len(allocated) == vship._RING_SLOTS + 2:  # the test video's 3rd buffer
                 raise vship.VshipUnavailableError("Could not allocate Vship pinned frame memory")
-            super().__init__(lib, size)
+            super().__init__(lib, size, gpu_id)
             allocated.append(self)
 
         def close(self):
             freed.append(self)
 
     monkeypatch.setattr(vship, "_PinnedBuffer", _Pinned)
-    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handler())
+    monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handle())
     request = analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2",))
     with pytest.raises(vship.VshipUnavailableError, match="pinned frame memory"):
         vship.run_vship_task(_hevc("source.mkv"), _hevc("test.mkv"), request, request.metrics,
@@ -1021,32 +1192,31 @@ def test_pinned_memory_is_freed_when_allocation_fails_part_way(monkeypatch):
     assert sorted(map(id, freed)) == sorted(map(id, allocated)), "pinned buffers were left allocated"
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="the ANSI code page is Windows'")
-def test_cvvdp_display_config_avoids_a_temp_folder_vship_cannot_open(monkeypatch, tmp_path):
-    """Vship opens the display config with a narrow-character path, so a
-    temp folder under a user name outside the ANSI code page (Cyrillic on a
-    Western Windows here) could not be opened unless 8.3 short names exist."""
-    from vmaf_app.core.cvvdp import CvvdpSettings
+def test_cvvdp_gets_its_display_as_json_text_with_the_gpu_in_the_init_struct():
+    """Vship 5.1 parses a display config starting with "{" itself. A file
+    path failed under a Windows user name outside the ANSI code page, and
+    the file had to be written, found and deleted around every init."""
+    import json
 
-    unopenable, public = tmp_path / "Пользователь", tmp_path / "public"
-    unopenable.mkdir()
-    public.mkdir()
-    monkeypatch.setattr(vship.tempfile, "gettempdir", lambda: str(unopenable))
-    monkeypatch.setenv("PUBLIC", str(public))
+    from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings
+
     seen = []
 
-    def init(_handler, _src, _dist, _fps, _resize, _model, config, _gpu):
-        path = Path(config.decode("mbcs"))
-        seen.append((path.parent, path.read_text(encoding="utf-8")))
+    def init(handle, argument):
+        struct = ctypes.cast(argument, ctypes.POINTER(vship._InitCvvdp)).contents
+        seen.append((struct.structType, struct.gpu_id, struct.fps, struct.resizeToDisplay,
+                     struct.model_key_cstr, struct.model_config_json_cstr))
+        ctypes.cast(handle, ctypes.POINTER(ctypes.c_void_p))[0] = 1234
         return 0
 
-    lib = SimpleNamespace(**{name: None for name in vship._CVVDP_FUNCTIONS} | {"Vship_CVVDPInit3": init})
-    device = vship.VshipDevice("nvidia", "GPU", 0, "5.1.1", SimpleNamespace(library=lib))
-    vship._init_cvvdp(device, None, None, CvvdpSettings(), 24.0)
-    [(folder, text)] = seen
-    assert folder == public
-    assert text.strip().startswith("{")
-    assert list(public.iterdir()) == [], "the config file was left behind"
+    device = vship.VshipDevice("vulkan", "GPU", 2, "5.1.1",
+                               SimpleNamespace(library=SimpleNamespace(Vship_InitHandler=init)))
+    handle = vship._init_cvvdp(device, vship._Colorspace(), vship._Colorspace(), CvvdpSettings(), 23.976)
+    assert handle.value == 1234
+    [(struct_type, gpu_id, fps, resize, key, config)] = seen
+    assert (struct_type, gpu_id, resize, key) == (vship._INIT_CVVDP, 2, False, VSHIP_MODEL_KEY.encode())
+    assert fps == pytest.approx(23.976)
+    assert config.startswith(b"{") and VSHIP_MODEL_KEY in json.loads(config)
 
 
 def _counting_probe(monkeypatch, *results, delay=0.0):
@@ -1108,3 +1278,95 @@ def test_a_sampled_passs_rate_is_in_the_videos_frames_like_its_progress():
     rate.frames_per_second(1)
     assert rate.frames_per_second(21) == pytest.approx(100.0)  # 20 pairs = 100 frames in 1 s
 
+
+def test_a_failed_gpu_pass_is_logged(monkeypatch, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
+
+    def one_pass(_s, _t, _r, specs, *_a, **_k):
+        raise vship.VshipUnavailableError(f"Could not initialize Vship {specs[0].key}: out of memory")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", one_pass)
+    source = VideoInfo(Path("s.mkv"), 64, 48, 24.0, 60.0, 1440, "h264", pix_fmt="yuv420p")
+    with pytest.raises(vship.VshipUnavailableError):
+        vship.run_vship_task(source, source, request, request.metrics, device, None, None)
+    assert "GPU metric 1/2 (SSIMULACRA2) failed: Could not initialize Vship ssimulacra2: out of memory" in caplog.text
+    assert "GPU metric 2/2 (CVVDP) failed: Could not initialize Vship cvvdp: out of memory" in caplog.text
+
+
+def test_each_gpu_metrics_pass_is_handed_on_as_it_finishes(monkeypatch):
+    """The pass loop had each metric's scores the moment its pass ended, and
+    kept them until every pass was done."""
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
+    done = []
+
+    def one_pass(_s, _t, _r, specs, *_a, **_k):
+        assert [output.metrics.keys() for output in done] == [("ssimulacra2",)] * (specs[0].key == "cvvdp")
+        return _single_metric_output(specs[0].key, 80.0, "gpu")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", one_pass)
+    source = VideoInfo(Path("s.mkv"), 64, 48, 24.0, 60.0, 1440, "h264", pix_fmt="yuv420p")
+    vship.run_vship_task(source, source, request, request.metrics, device, None, None, on_pass_done=done.append)
+    assert [output.metrics.keys() for output in done] == [("ssimulacra2",), ("cvvdp",)]
+
+
+
+# ------------------------------------------------------------------ backends
+
+def test_auto_tries_cuda_then_hip_then_vulkan_and_a_choice_goes_first():
+    """Auto: the fastest build whose scores agree with the reference on each
+    GPU; a chosen build is tried first, and the others still follow if it
+    cannot run here."""
+    assert vship.DEFAULT_VSHIP_BACKEND == "auto"
+    assert vship._probe_order("auto") == ("cuda", "hip", "vulkan")
+    assert vship._probe_order("vulkan") == ("vulkan", "cuda", "hip")
+    assert vship._probe_order("hip") == ("hip", "cuda", "vulkan")
+
+
+def test_choosing_another_backend_forgets_the_probe(monkeypatch):
+    monkeypatch.setattr(vship, "_backend", "auto")
+    monkeypatch.setattr(vship, "_probed", ((None, "no GPU"), 0.0))
+    vship.set_vship_backend("auto")
+    assert vship._probed is not None  # the same choice: kept
+    vship.set_vship_backend("vulkan")
+    assert vship._probed is None and vship.vship_backend() == "vulkan"
+    vship.set_vship_backend("no such build")
+    assert vship.vship_backend() == "auto"
+
+
+def test_vulkan_ssimulacra2_is_not_trusted_but_its_other_metrics_are():
+    """Vship 5.1.1's Vulkan SSIMULACRA2 read 62.9 where CUDA read 45.5 and
+    libjxl 47.4 on the same 4K frames; its Butteraugli and CVVDP agree."""
+    vulkan = vship.VshipDevice("vulkan", "GPU", 0, "5.1.1", None)
+    cuda = vship.VshipDevice("cuda", "GPU", 0, "5.1.1", None)
+    assert not vship.scores_correctly(vulkan, "ssimulacra2")
+    assert vship.scores_correctly(vulkan, "butteraugli") and vship.scores_correctly(vulkan, "cvvdp")
+    assert vship.scores_correctly(cuda, "ssimulacra2")
+
+
+def test_on_vulkan_ssimulacra2_is_calculated_on_the_cpu_and_butteraugli_on_the_gpu(monkeypatch):
+    device = vship.VshipDevice("vulkan", "Intel Arc", 0, "5.1.1", None)
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(vship, "forget_failed_vship_probe", lambda: None)
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *_args: (None, None))
+    on_gpu, on_cpu = [], []
+
+    def gpu(_s, _d, _request, specs, used, *_crops, **_kwargs):
+        on_gpu.append((used.backend, [spec.key for spec in specs]))
+        return _single_metric_output("butteraugli", 1.5, "gpu")
+
+    def cpu(_s, _d, _request, specs, **_kwargs):
+        on_cpu.append([spec.key for spec in specs])
+        return _single_metric_output("ssimulacra2", 80.0, "cpu")
+
+    monkeypatch.setattr(vship, "run_vship_task", gpu)
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", cpu)
+    request = _request()  # SSIMULACRA2 and Butteraugli, both set to GPU
+    output = vship.apply_vship_cpu_fallback(_info("a.mkv"), _info("b.mkv"), request, request.metrics)
+    assert on_gpu == [("vulkan", ["butteraugli"])] and on_cpu == [["ssimulacra2"]]
+    assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
+    assert not output.failures

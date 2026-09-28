@@ -454,3 +454,16 @@ def test_pair_detection_waits_for_both_and_prefers_cancel_over_errors():
 
     with pytest.raises(CropDetectError, match="reference"):
         crop_detect.detect_pair(fails, lambda: crop_detect.CropBox(1, 1, 0, 0))
+
+
+def test_the_picture_found_is_logged(monkeypatch, caplog):
+    import logging
+
+    from vmaf_app.core import crop_detect
+    from vmaf_app.core.models import CropBox
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+    monkeypatch.setattr(crop_detect, "_run_single_window", lambda *a, **k: CropBox(w=3840, h=1608, x=0, y=276))
+    info = VideoInfo(Path("film.mkv"), 3840, 2160, 24.0, 600.0, 14400, "hevc", pix_fmt="yuv420p10le")
+    crop_detect.detect_crop(info)
+    assert "Black bars in film.mkv: picture 3840x1608 at 0,276 of 3840x2160" in caplog.text

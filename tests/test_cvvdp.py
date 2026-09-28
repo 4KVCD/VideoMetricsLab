@@ -19,7 +19,6 @@ from vmaf_app.core.cvvdp import (
     with_display,
     with_user_preset,
     without_user_preset,
-    write_vship_config,
 )
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
@@ -127,9 +126,9 @@ def test_settings_round_trip_through_a_dict_and_ignore_unknown_fields():
     assert CvvdpSettings.from_dict(data) == settings
 
 
-def test_vship_config_file_sets_every_display_property(tmp_path):
+def test_vship_display_json_sets_every_display_property():
     display = BUILTIN_PRESETS[2].settings.display
-    model = json.loads(write_vship_config(display, tmp_path / "d.json").read_text())[cvvdp.VSHIP_MODEL_KEY]
+    model = json.loads(cvvdp.vship_display_json(display))[cvvdp.VSHIP_MODEL_KEY]
     assert model["colorspace"] == "HDR" and model["resolution"] == [3840, 2160]
     assert model["max_luminance"] == 1500 and model["contrast"] == 1_000_000 and model["E_ambient"] == 10
     assert {"viewing_distance_meters", "diagonal_size_inches", "k_refl", "exposure"} <= model.keys()

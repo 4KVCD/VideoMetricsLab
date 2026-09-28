@@ -30,7 +30,7 @@ def gpu_present(monkeypatch):
 
 
 def _cvvdp(settings: CvvdpSettings, score=9.8099) -> SequenceMetricResult:
-    parameters = {**dict(settings.spec_parameters()), "gpu_vendor": "nvidia"}
+    parameters = {**dict(settings.spec_parameters()), "gpu_backend": "cuda"}
     return SequenceMetricResult(
         "cvvdp", score, MetricProvenance("Vship/cvvdp", "Vship 5.1.1", "gpu", "cvvdp-vship-gpu-v1", parameters),
         frame=[0, 30], time=[0.0, 1.0], values=[9.9, 9.7],
@@ -660,7 +660,7 @@ def test_a_finished_lookup_does_not_overwrite_a_message_with_ready(qapp):
     win.status_label.setText('Saved the CVVDP preset "Mine".')
     win._on_probe_finished()
     assert win.status_label.text() == 'Saved the CVVDP preset "Mine".'
-    win.status_label.setText("Reading 2 video(s)...")
+    win._show_reading("Reading 2 videos...")
     win._on_probe_finished()
     assert win.status_label.text() == "Ready."
     win.close()

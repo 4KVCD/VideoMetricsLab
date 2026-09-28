@@ -2,23 +2,46 @@
 from __future__ import annotations
 
 import copy
+import logging
 import re
 import threading
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
-from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError
-from vmaf_app.core.perceptual_vship import GPU_ONLY_METRICS, GPU_WAIT_MESSAGE, apply_vship_cpu_fallback
+from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
+from vmaf_app.core.perceptual_vship import (
+    GPU_ONLY_METRICS,
+    GPU_WAIT_MESSAGE,
+    apply_vship_cpu_fallback,
+    vship_passes,
+)
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
+
+_log = logging.getLogger(__name__)
+
+
+def _media(info: VideoInfo) -> str:
+    """A file's shape, for the log: "3840x2160 23.976 fps vvc yuv420p10le HDR PQ, 1:45:36"."""
+    hdr = {"smpte2084": " HDR PQ", "arib-std-b67": " HDR HLG"}.get(info.color_transfer or "", "")
+    return (f"{info.width}x{info.height} {info.fps:.3f} fps {info.codec_name} {info.pix_fmt}{hdr}, "
+            f"{format_hms(info.duration)}")
+
+
+def _stderr_note(error: BaseException) -> str:
+    tail = getattr(error, "stderr_tail", "") or ""
+    return f"\nLast output:\n{tail}" if tail else ""
 
 
 class _TaskCancelToken:
@@ -100,13 +123,23 @@ class VmafWorker(QThread):
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
     # One metric group failed, the other finished: the finished metrics are
     # the result (job_index, ComparisonResult, message, stderr_tail).
-    job_partially_failed = Signal(int, object, str, str)
+    # job_index, result, message, stderr_tail, {metric key: why it failed}
+    job_partially_failed = Signal(int, object, str, str, object)
+    # job_index, ComparisonResult: the video's result so far, each time a
+    # half or a GPU metric's pass finishes while the rest of it runs on --
+    # shown and saved at once, not only when the whole video is done.
+    result_updated = Signal(int, object)
     cancelled = Signal()
     all_finished = Signal()
 
-    def __init__(self, jobs: list[VmafJob], parallel_jobs: int = 1, parent=None):
+    def __init__(self, jobs: list[VmafJob], parallel_jobs: int = 1, parent=None, *,
+                 gpu_metrics_together: bool = False):
         super().__init__(parent)
         self._jobs = jobs
+        # Settings > GPU metrics: each video's GPU metrics in one Vship pass,
+        # decoding it once, rather than one pass (and one decode) per metric.
+        # How the scores are calculated, never what they are.
+        self.gpu_metrics_together = gpu_metrics_together
         self._parallel_jobs = max(1, min(int(parallel_jobs), MAX_PARALLEL_JOBS))
         self._cancel_event = threading.Event()
         # One handle per running job rather than one for the worker: pausing
@@ -140,6 +173,7 @@ class VmafWorker(QThread):
 
     # ------------------------------------------------------------- controls
     def cancel(self) -> None:
+        _log.info("Run: cancel requested")
         # The flag is set and the handles collected under one lock, so a lane
         # claiming a handle either appears in this snapshot (and is
         # terminated) or sees the flag and never starts. Setting the flag
@@ -163,12 +197,14 @@ class VmafWorker(QThread):
         # let a resume land between "record paused" and "pause the handle",
         # leaving that one lane suspended for good while the UI said the run
         # had resumed.
+        _log.info("Run: paused")
         with self._handles_lock:
             self._paused = True
             for handle in self._handles.values():
                 handle.pause()
 
     def resume(self) -> None:
+        _log.info("Run: resumed")
         with self._handles_lock:
             self._paused = False
             for handle in self._handles.values():
@@ -194,10 +230,6 @@ class VmafWorker(QThread):
     def is_paused(self) -> bool:
         with self._handles_lock:
             return self._paused
-
-    def _live_handles(self) -> list[ProcessHandle]:
-        with self._handles_lock:
-            return list(self._handles.values())
 
     def _claim_handle(self, index: int) -> ProcessHandle | None:
         """A handle for one job, or None if the run has been cancelled.
@@ -255,10 +287,18 @@ class VmafWorker(QThread):
             try:
                 runs.append(_JobRun(self, index, job))
             except Exception as error:  # a request that cannot be built fails its own video
+                _log.error("Video %d '%s' could not be set up: %s", index + 1, job.label, error, exc_info=error)
                 self.job_started.emit(index, job.label)
                 self.job_failed.emit(index, str(error), getattr(error, "stderr_tail", "") or "")
+        _log.info("%s %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time%s", RUN_START,
+                  len(self._jobs), self.parallel_jobs,
+                  ", each video's in one pass" if self.gpu_metrics_together else "")
+        for run in runs:
+            _log.info("%s", run.describe())
         self.planned.emit({
-            run.index: [(run.pool_of(task), len(task.requested_specs) if run.pool_of(task) == _GPU else 1)
+            run.index: [(run.pool_of(task),
+                         len(vship_passes(task.requested_specs, self.gpu_metrics_together))
+                         if run.pool_of(task) == _GPU else 1)
                         for task in run.plan.tasks]
             for run in runs
         })
@@ -302,6 +342,7 @@ class VmafWorker(QThread):
 
         if self._cancel_event.is_set():
             self._report_cancelled_once()
+        _log.info("Run ended%s", " (cancelled)" if self._cancel_event.is_set() else "")
         self.all_finished.emit()
 
     def _next_task(self, pool: str):
@@ -355,19 +396,27 @@ class VmafWorker(QThread):
         try:
             result, failure = run.finish()
         except (Cancelled, PerceptualCancelled):
+            _log.info("%s: cancelled", run.name)
             self._report_cancelled_once()
             return
         except (VmafRunError, PerceptualRunError) as e:
+            _log.error("%s failed: %s%s", run.name, e, _stderr_note(e))
             self.job_failed.emit(index, str(e), e.stderr_tail)
             return
         except Exception as e:
+            _log.error("%s failed: %s", run.name, e, exc_info=e)
             self.job_failed.emit(index, str(e), "")
             return
         finally:
             self._release_handle(index)
+        metrics = ", ".join(metric_definition(key).label for key in result.metric_results)
         if failure is None:
+            _log.info("%s finished: %s", run.name, metrics)
             self.job_finished.emit(index, result)
         else:
+            message, tail, _reasons = failure
+            _log.warning("%s finished with failed metrics (kept: %s):\n%s%s", run.name, metrics or "none",
+                         message, f"\nLast output:\n{tail}" if tail else "")
             self.job_partially_failed.emit(index, result, *failure)
 
 
@@ -401,7 +450,50 @@ class _JobRun:
         # Each half's latest status message: what a half not yet reporting
         # figures is doing (black-bar detection, say).
         self.task_steps: dict[str, str] = {}
+        # Each half's latest decode plan, "source cuda, distorted cpu" or
+        # "off", from its "(GPU decode: ...)" messages: the halves decode
+        # separately, and one can fall back to software while the other
+        # does not.
+        self.task_decode: dict[str, str] = {}
+        # The GPU half's finished passes, one metric each, while the half
+        # runs on (see perceptual_so_far).
+        self.pass_outputs: list[PerceptualTaskOutput] = []
         self._finished_tasks = 0
+
+    @property
+    def name(self) -> str:
+        return f"Video {self.index + 1} '{self.job.label}'"
+
+    def half_name(self, task) -> str:
+        labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
+        return f"{'GPU' if self.pool_of(task) == _GPU else 'CPU'} metrics ({labels})"
+
+    def describe(self) -> str:
+        """The video's files, what it will calculate and how, for the log."""
+        job, options = self.job, self.job.options
+        halves = "; ".join(self.half_name(task) for task in self.plan.tasks) or "nothing (all saved)"
+        kept = ", ".join(metric_definition(key).label for key in self.cached) if self.cached else ""
+        settings = (
+            f"black bars {options.crop_mode.value}, duration limit {options.duration_limit:g} s, "
+            f"resolution mismatch {options.scale_direction.value} ({options.scale_algorithm}), "
+            f"VMAF v0.6.1 model {options.model_choice}, VMAF v1 model {options.model_choice_v1}, "
+            f"frame subsample {options.n_subsample}, GPU decode {'on' if options.gpu_decode else 'off'}"
+        )
+        if job.metric_backends:
+            settings += ", " + ", ".join(f"{metric_definition(key).label} on {backend.upper()}"
+                                         for key, backend in sorted(job.metric_backends.items()))
+        if job.cvvdp is not None:
+            settings += f", CVVDP display {job.cvvdp.display.describe()}"
+        lines = [
+            f"{self.name}:",
+            f"  test   {job.distorted_info.path} ({_media(job.distorted_info)})",
+            f"  source {job.source_info.path} ({_media(job.source_info)})",
+            f"  calculating {halves}" + (f"; saved scores kept: {kept}" if kept else ""),
+            f"  {settings}",
+        ]
+        if options.resample_test is not None:
+            lines.append(f"  resolution test: {options.resample_test.label}")
+        return "\n".join(lines)
 
     def pool_of(self, task) -> str:
         """The GPU queue for a half with any metric on the GPU (a GPU pass
@@ -426,6 +518,7 @@ class _JobRun:
             if self.handle is None:
                 return False
             self.options = self.worker._share_cores(self.job.options)
+            _log.info("%s: started", self.name)
             self.worker.job_started.emit(self.index, self.job.label)
             if len(self.plan.tasks) > 1:
                 admitted = set(self.admitted)
@@ -465,13 +558,17 @@ class _JobRun:
                 "state": self._state(task),
                 "waiting_for": self.task_waiting.get(task.backend_id),
                 "step": self.task_steps.get(task.backend_id, ""),
+                "decode": self.task_decode.get(task.backend_id, ""),
                 "phase": self.task_phases.get(task.backend_id),
             })
         return found
 
     def report_status(self, backend: str, message: str) -> None:
+        _log.info("%s: %s", self.name, message)
         with self.lock:
             self.task_steps[backend] = message
+            if plan := re.search(r"\(GPU decode: ([^)]*)\)", message):
+                self.task_decode[backend] = plan.group(1)
             if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                 self.task_waiting[backend] = "GPU"
             phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
@@ -484,10 +581,13 @@ class _JobRun:
                     # SSIMULACRA2's last rate.
                     current, total, _fps = self.task_progress[backend]
                     self.task_progress[backend] = (current, total, 0.0)
-            elif "on CPU" in message or "using CPU" in message:
+            elif "on CPU" in message or "using CPU" in message or "on the CPU" in message:
                 # A GPU pass has handed work to the CPU fallback (or a
                 # planned CPU perceptual pass has begun); don't leave a
-                # stale GPU metric number on the status line.
+                # stale GPU metric number on the status line. "on the CPU"
+                # is a failed GPU metric retried there ("SSIMULACRA2 failed
+                # on the GPU; calculating it on the CPU"): the line went on
+                # naming the last GPU pass, "CVVDP 3 of 3", over the retry.
                 self.task_phases.pop(backend, None)
             snapshot = self.task_snapshots()
         self.worker.task_progress.emit(self.index, snapshot)
@@ -568,22 +668,48 @@ class _JobRun:
                 on_progress=progress,
                 on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
+                on_pass_done=self.report_pass, together=self.worker.gpu_metrics_together,
             )
         raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
+
+    def report_pass(self, output: PerceptualTaskOutput) -> None:
+        """A GPU metric's pass is done while its half runs on."""
+        with self.lock:
+            self.pass_outputs.append(output)
+        self._send_result_so_far()
+
+    def _send_result_so_far(self) -> None:
+        with self.lock:
+            task_results = dict(self.task_results)
+        result = self._merged(task_results, self.perceptual_so_far(task_results))
+        if result is not None:
+            self.worker.result_updated.emit(self.index, result)
 
     def run_task(self, task) -> bool:
         """Runs one half; True when it was the video's last."""
         with self.lock:
             self.task_waiting.pop(task.backend_id, None)
+        half = self.half_name(task)
+        _log.info("%s: %s started", self.name, half)
+        started = time.monotonic()
         try:
             output = self.execute_task(task)
         except Exception as error:
+            took = format_hms(time.monotonic() - started)
+            if isinstance(error, (Cancelled, PerceptualCancelled)):
+                _log.info("%s: %s cancelled after %s", self.name, half, took)
+            else:
+                _log.error("%s: %s failed after %s: %s%s", self.name, half, took, error, _stderr_note(error),
+                           exc_info=error)
             # The sibling is left to finish: a SSIMULACRA2/Butteraugli
             # failure (an unsupported input, a tool error) used to cancel
             # the libvmaf pass and discard VMAF/PSNR/SSIM/XPSNR with it.
             with self.lock:
                 self.task_errors.append((task, error))
         else:
+            _log.info("%s: %s done in %s", self.name, half, format_hms(time.monotonic() - started))
+            for key, message in (getattr(output, "failures", None) or {}).items():
+                _log.error("%s: %s failed: %s", self.name, metric_definition(key).label, message)
             with self.lock:
                 self.task_results[task.backend_id] = output
                 last_progress = self.task_progress.get(task.backend_id, (1, 1, 0.0))
@@ -591,7 +717,13 @@ class _JobRun:
                 self.report_progress(task.backend_id, *last_progress)
         with self.lock:
             self._finished_tasks += 1
-            return self._finished_tasks == len(self.plan.tasks)
+            last = self._finished_tasks == len(self.plan.tasks)
+            finished_here = task.backend_id in self.task_results
+        if finished_here and not last:
+            # The other half goes on: this one's scores are shown and saved
+            # now, not when the whole video is done.
+            self._send_result_so_far()
+        return last
 
     def finish(self):
         """The video's result once every half has run.
@@ -601,28 +733,76 @@ class _JobRun:
         finished -- the finished metrics are still the result. Raises when
         nothing was produced.
         """
-        job, options, cached = self.job, self.options, self.cached
+        cached = self.cached
         task_results, task_errors = self.task_results, self.task_errors
+        # The GPU half's result -- or, if it was cancelled or failed after
+        # some of its passes, those passes: their scores were already shown
+        # and saved (see _send_result_so_far).
+        perceptual = self.perceptual_so_far(task_results)
         if self.worker._cancel_event.is_set():
             # Cancelling keeps the halves that had finished. The halves run
             # independently, so a video's GPU metrics are often done hours
             # before its CPU metrics; the whole video used to be dropped,
             # finished scores included, when the run was cancelled.
-            if not task_results:
+            if not task_results and perceptual is None:
                 raise Cancelled("Cancelled by user")
             task_errors = [(task, error) for task, error in task_errors
                            if not isinstance(error, (Cancelled, PerceptualCancelled))]
-        if task_errors and not task_results and cached is None:
+        if task_errors and not task_results and perceptual is None and cached is None:
             raise task_errors[0][1]
+        result = self._merged(task_results, perceptual)
+        if result is None:
+            if task_errors:
+                raise task_errors[0][1]
+            raise VmafRunError("No executable metric task was planned.")
+        # A metric that failed while the rest of its group finished (CVVDP,
+        # GPU only, beside SSIMULACRA2/Butteraugli) is reported like a
+        # failed group.
+        metric_failures = dict(perceptual.failures) if perceptual is not None else {}
+        if not task_errors and not metric_failures:
+            return result, None
+        messages, stderr_tail, reasons = [], "", {}
+        for task, error in task_errors:
+            labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
+            messages.append(f"{labels} failed: {error}")
+            stderr_tail = stderr_tail or getattr(error, "stderr_tail", "") or ""
+            reasons.update(dict.fromkeys(task.metric_keys, str(error)))
+        for key, message in metric_failures.items():
+            messages.append(f"{metric_definition(key).label} failed: {message}")
+            reasons[key] = message
+        return result, ("\n".join(messages), stderr_tail, reasons)
+
+    def perceptual_so_far(self, task_results: dict) -> PerceptualTaskOutput | None:
+        """The GPU half's result; until it has one, its finished passes."""
+        if "perceptual" in task_results:
+            return task_results["perceptual"]
+        with self.lock:
+            passes = list(self.pass_outputs)
+        if not passes:
+            return None
+        metrics = MetricResultSet()
+        for output in passes:
+            for key in output.metrics:
+                metrics.add(output.metrics.get(key))
+        return PerceptualTaskOutput(metrics, passes[0].source_crop, passes[0].distorted_crop,
+                                    max(output.compared_frame_count for output in passes))
+
+    def _merged(self, task_results: dict, perceptual: PerceptualTaskOutput | None) -> ComparisonResult | None:
+        """The video's result from the halves given: FFmpeg's (or the saved
+        run), the GPU metrics, and saved scores this run does not replace.
+        Always a new object: a half's own result is merged again each time
+        another piece lands, and the window may be showing the last one."""
+        job, options, cached = self.job, self.options, self.cached
         result = task_results.get("ffmpeg")
-        if result is None and cached is not None:
+        if result is not None:
+            result = copy.copy(result)
+        elif cached is not None:
             # FFmpeg's metrics are all saved: the saved run is the base, so
             # its crops, frame table and file info carry over. A shallow
             # copy is enough -- merge_metric_results replaces the metric set
             # and frame table rather than editing them, and the row's own
             # result object must not change under the UI thread.
             result = copy.copy(job.cached_result)
-        perceptual = task_results.get("perceptual")
         if perceptual is not None:
             if result is None:
                 from vmaf_app.core.models import ComparisonResult, FrameScores
@@ -642,9 +822,7 @@ class _JobRun:
                 combined.add(value)
             result.merge_metric_results(combined)
         if result is None:
-            if task_errors:
-                raise task_errors[0][1]
-            raise VmafRunError("No executable metric task was planned.")
+            return None
         if cached is not None:
             # Saved metrics fill only what this run did not calculate: a
             # fresh score always wins over the saved one.
@@ -654,17 +832,4 @@ class _JobRun:
             )
             if carried:
                 result.merge_metric_results(carried)
-        # A metric that failed while the rest of its group finished (CVVDP,
-        # GPU only, beside SSIMULACRA2/Butteraugli) is reported like a
-        # failed group.
-        metric_failures = dict(perceptual.failures) if perceptual is not None else {}
-        if not task_errors and not metric_failures:
-            return result, None
-        messages, stderr_tail = [], ""
-        for task, error in task_errors:
-            labels = ", ".join(metric_definition(key).label for key in task.metric_keys)
-            messages.append(f"{labels} failed: {error}")
-            stderr_tail = stderr_tail or getattr(error, "stderr_tail", "") or ""
-        for key, message in metric_failures.items():
-            messages.append(f"{metric_definition(key).label} failed: {message}")
-        return result, ("\n".join(messages), stderr_tail)
+        return result

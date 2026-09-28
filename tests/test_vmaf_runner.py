@@ -967,6 +967,7 @@ def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
     libvmaf_stage = graph.split("libvmaf=")[1]
     assert "shortest=1" in libvmaf_stage
     assert "repeatlast=0" in libvmaf_stage
+    assert "ts_sync_mode=nearest" in libvmaf_stage
     if compute_xpsnr:
         # xpsnr sits before libvmaf and does its own framesync, so it needs
         # the same treatment or its stats file gains the phantom frames even
@@ -974,6 +975,7 @@ def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
         xpsnr_stage = graph.split("xpsnr=")[1].split("[xmain]")[0]
         assert "shortest=1" in xpsnr_stage
         assert "repeatlast=0" in xpsnr_stage
+        assert "ts_sync_mode=nearest" in xpsnr_stage
 
 
 def test_a_resample_test_needs_no_framesync_guard_but_still_carries_it():
@@ -1168,3 +1170,65 @@ def test_crop_detection_stays_on_the_cpu_when_gpu_decode_is_off(monkeypatch, tmp
         vr.run_vmaf(info, info, vr.VmafOptions(gpu_decode=False, crop_mode=vr.CropMode.AUTO))
 
     assert seen == {"a.mkv": None}
+
+
+def test_a_test_video_stamped_a_millisecond_early_is_still_compared_frame_for_frame(tmp_path):
+    """Two MKVs with the same frames at 23.976 fps, the test's timestamps
+    1 ms earlier than the source's on every third frame (MKV rounds frame
+    times to whole milliseconds, and two programs can round them apart).
+    Each of those test frames was compared with the source's previous frame:
+    an anime episode's VMAF NEG read 0 at scene cuts while its SSIMULACRA2,
+    which pairs frames in order, read 93."""
+    import shutil
+
+    import numpy as np
+
+    from vmaf_app.core.ffprobe import probe_video
+    from vmaf_app.core.models import CropMode
+    from vmaf_app.core.vmaf_runner import run_vmaf
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg unavailable")
+
+    def make(*args):
+        subprocess.run([ffmpeg, "-v", "error", "-y", *args], check=True, capture_output=True, timeout=60)
+
+    source, test, early = (tmp_path / name for name in ("source.mkv", "test.mkv", "early.mkv"))
+    make("-f", "lavfi", "-i", "testsrc2=size=192x108:rate=24000/1001:duration=1", "-c:v", "ffv1", str(source))
+    make("-i", str(source), "-c:v", "libx264", "-crf", "30", "-bf", "0", str(test))
+    make("-i", str(test), "-c", "copy", "-bsf:v",
+         "setts=pts=PTS-eq(mod(N\\,3)\\,1):dts=DTS-eq(mod(N\\,3)\\,1)", str(early))
+    options = VmafOptions(compute_vmaf=True, compute_xpsnr=True, extra_features=["name=psnr"],
+                          gpu_decode=False, crop_mode=CropMode.NONE, n_threads=2)
+    source_info = probe_video(source)
+    clean = run_vmaf(source_info, probe_video(test), options)
+    jittered = run_vmaf(source_info, probe_video(early), options)
+    for key in ("vmaf", "psnr", "xpsnr"):
+        assert np.array_equal(np.asarray(jittered.frames.values(key)), np.asarray(clean.frames.values(key))), key
+
+
+def test_each_ffmpeg_attempt_and_its_failure_are_logged(monkeypatch, caplog):
+    import logging
+
+    from vmaf_app.core import vmaf_runner
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+
+    def fake_run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
+        return subprocess.CompletedProcess(cmd, 1, "", "[hevc @ 0x1] hardware decoder refused the stream")
+
+    monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
+    with pytest.raises(vmaf_runner.VmafRunError):
+        vmaf_runner._execute_run(
+            lambda plan, model, log_path, xpsnr_log_path: ["ffmpeg", "-i", "a b.mkv"],
+            options=VmafOptions(), fps=30.0, total_frames=10,
+            hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
+            tmp_prefix="test_", on_progress=None, on_status=None,
+            cancel_event=None, process_handle=None,
+        )
+    text = caplog.text
+    assert 'FFmpeg: ffmpeg -i "a b.mkv"' in text
+    assert ("FFmpeg exited with code 1 (GPU decode: source cuda, distorted cuda); retrying. Last output:\n"
+            "[hevc @ 0x1] hardware decoder refused the stream") in text
+    assert "FFmpeg exited with code 1 (GPU decode: off). Last output:" in text

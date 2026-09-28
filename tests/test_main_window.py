@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
@@ -90,7 +90,7 @@ def qapp():
 def test_main_window_title_includes_release_version(qapp):
     win = MainWindow()
     try:
-        assert win.windowTitle() == "VideoMetricsLab 1.2.1"
+        assert win.windowTitle() == "VideoMetricsLab 1.3"
     finally:
         win.close()
 
@@ -302,7 +302,7 @@ def test_run_clicked_skips_rows_that_already_have_a_score(qapp):
     win._on_run_clicked()
 
     assert win._worker is None  # nothing needed running, so no worker was ever started
-    assert "already have all requested metrics" in win.status_label.text()
+    assert "all requested metrics -- nothing to run" in win.status_label.text()
     assert win.graph_panel is not None
     assert len(win.graph_panel._entries) == 2
 
@@ -2950,7 +2950,7 @@ def test_the_options_unlock_again_once_the_run_ends(qapp, tmp_path):
     win._set_run_ui_active(False)
     # A lookup started after the run: "Ready." replaces its "Reading..."
     # (and never a message such as the run's "Done.").
-    win.status_label.setText("Reading 1 video(s)...")
+    win._show_reading("Reading 1 video...")
     win._on_probe_finished()
 
     assert win.options_box.isEnabled()
@@ -3918,7 +3918,7 @@ def test_accepting_the_warning_starts_the_run(qapp, monkeypatch):
 
 @pytest.mark.parametrize(("minutes", "backend"), [(105, "gpu"), (9, "cpu")])
 def test_no_warning_on_the_gpu_or_under_ten_minutes(qapp, monkeypatch, minutes, backend):
-    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     win = MainWindow()
     _long_row(win, "clip.mkv", minutes=minutes, backend=backend)
     shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
@@ -4005,7 +4005,7 @@ def test_a_run_skips_a_row_whose_only_missing_metric_is_hidden(qapp):
     win._on_run_clicked()
 
     assert win._worker is None
-    assert "already have all requested metrics" in win.status_label.text()
+    assert "all requested metrics -- nothing to run" in win.status_label.text()
     win.close()
 
 
@@ -4225,7 +4225,7 @@ def test_gpu_choice_without_a_supported_gpu_is_warned_like_cpu(qapp, monkeypatch
     CPU all the same -- days and terabytes for a film -- and used to start
     without a word. It is now in the same long-video warning, saying why."""
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
-                        lambda: (None, "No supported NVIDIA CUDA or AMD HIP GPU was detected."))
+                        lambda: (None, "No GPU that Vship can use was found."))
     win = MainWindow()
     _long_row(win, "film.mkv", minutes=minutes, backend="gpu")
     shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
@@ -4252,7 +4252,7 @@ def test_a_gpu_row_shows_and_redoes_a_cpu_score_only_when_a_gpu_exists(qapp, mon
     from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
 
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
-                        lambda: ((object(), "") if gpu_present else (None, "no GPU")))
+                        lambda: ((_CUDA_GPU, "") if gpu_present else (None, "no GPU")))
     cpu = FrameMetricResult("ssimulacra2", [0], [0.0], [46.89],
                             MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1"))
     win = MainWindow()
@@ -4279,7 +4279,7 @@ def test_a_score_calculated_the_chosen_way_has_no_implementation_note(qapp, monk
     row, so the tooltip does not say how it was calculated."""
     from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
 
-    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     gpu = FrameMetricResult("ssimulacra2", [0], [0.0], [44.47], MetricProvenance(
         "Vship/ssimulacra2", "", "gpu", "ssimulacra2-vship-gpu-v1", {"gpu_name": "NVIDIA GeForce RTX 5090"}))
     win = MainWindow()
@@ -4609,6 +4609,62 @@ def test_each_half_is_named_as_metrics_not_bare_cpu_or_gpu(qapp):
     win.close()
 
 
+def _half(backend, keys, *, state="running", decode="", current=20, total=100, fps=10.0, phase=None):
+    return {"backend": backend, "metric_keys": keys, "current": current, "total": total, "fps": fps,
+            "state": state, "phase": phase, "waiting_for": None, "step": "", "decode": decode}
+
+
+def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
+    """Only FFmpeg's metrics reported a decode plan, so a video with only
+    GPU metrics never showed "Decoder: ..." on its line."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cpu")])
+    win._on_job_status(0, "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…")
+    assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: CPU")
+    win.close()
+
+
+def test_halves_that_decode_differently_each_say_where(qapp):
+    """One half fell back to software; the other did not. The line said
+    whichever had reported last, for both. A half that is done is left out."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    cpu = _half("ffmpeg", ("vmaf",), decode="source cuda, distorted cpu")
+    gpu = _half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cuda")
+    win._on_task_progress(0, [cpu, gpu])
+    assert win.job_progress_labels[0].text().endswith(
+        "   ·   Decoder: Source: GPU, test video: CPU (CPU metrics) / GPU (GPU metrics)")
+    win._on_task_progress(0, [{**cpu, "state": "done"}, gpu])
+    assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: GPU")
+    win.close()
+
+
+@pytest.mark.parametrize(("step", "shown"), [
+    ("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…",
+     "GPU metrics: Vship GPU (fake GPU): calculating SSIMULACRA2"),
+    ("GPU decode failed for the test video, decoding it in software (GPU decode: source cuda, distorted cpu)…",
+     "GPU metrics: GPU decode failed for the test video, decoding it in software"),
+])
+def test_a_starting_gpu_half_shows_its_step_without_the_decode_plan(qapp, step, shown):
+    """The plan is shown once, as "Decoder: ...", not in the step as well."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [{**_half("perceptual", ("ssimulacra2",), state="starting",
+                                       decode="source cuda, distorted cuda"), "step": step}])
+    assert win.job_progress_labels[0].text().startswith(f"a — {shown}   ·   Decoder: ")
+    win.close()
+
+
 def test_a_resolution_tests_decoder_names_only_the_source(qapp):
     """A resolution test decodes only the source; its made-up test video
     has no decoder to name."""
@@ -4730,6 +4786,30 @@ def test_the_gpu_half_times_the_metric_under_way_and_the_whole_half_apart(qapp):
     win.close()
 
 
+def test_a_metric_recalculated_after_the_shared_gpu_pass_continues_the_halfs_figures(qapp):
+    """GPU metrics together: Butteraugli failed in the shared pass and is
+    calculated again alone. The half read 100% and then 0% of the retry
+    alone, and its time left was the retry's; the retry is the second of
+    two passes, the shared one done."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "a")
+    half = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "total": 1000,
+            "current": 1000, "fps": 30.0, "state": "running", "waiting_for": None, "phase": None, "step": ""}
+    win._on_task_progress(0, [half])
+    win._on_run_tick()
+    line = win.job_progress_labels[0]
+    assert line.text().startswith("a — GPU metrics 100.0%")
+    win._on_task_progress(0, [dict(half, current=1500, total=2000, fps=40.0, phase=(2, 2, "Butteraugli"))])
+    win._on_run_tick()
+    assert "GPU metrics 2 of 2 (75.0%, 0:00:12 remaining) (Butteraugli 50.0%, 40.0 fps)" in line.text()
+    assert line.toolTip() == "GPU metrics: SSIMULACRA2 (done), Butteraugli (0:00:12 remaining)"
+    assert win._queue_eta_by_lane() == pytest.approx(500 / 40.0)
+    win.close()
+
+
 def test_a_single_gpu_metric_shows_its_time_next_to_its_percentage(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
@@ -4796,3 +4876,458 @@ def test_a_cancelled_run_stays_on_the_videos_tab(qapp, cancelled, tab):
     assert len(win.graph_panel._entries) == 1
     win.close()
 
+
+def test_the_pc_is_kept_awake_exactly_while_a_run_is_active(qapp, monkeypatch):
+    """A run can take hours; a PC set to sleep after some idle time slept
+    under it, and Modern Standby suspends desktop apps once asleep."""
+    from vmaf_app.ui import main_window as main_window_module
+
+    calls = []
+    monkeypatch.setattr(main_window_module, "keep_system_awake", lambda awake: calls.append(awake) or True)
+    win = MainWindow()
+    assert calls == []
+    win._set_run_ui_active(True)
+    assert calls == [True]
+    win._on_all_finished()  # the run's end, however it ended
+    assert calls == [True, False]
+    win.close()
+
+
+def test_settings_show_the_log_folder_and_open_it(qapp, tmp_path, monkeypatch):
+    from vmaf_app.core import app_log
+    from vmaf_app.ui import main_window as main_window_module
+
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path / "logs")
+    opened = []
+    monkeypatch.setattr(main_window_module.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile()))
+    win = main_window_module.MainWindow()
+    assert win.settings_log_label.text() == str(tmp_path / "logs")
+    win._on_open_log_dir()
+    assert opened and opened[0].replace("/", "\\").lower() == str(tmp_path / "logs").lower()
+    win.close()
+
+
+def test_the_run_end_and_the_keep_awake_request_are_logged(qapp, monkeypatch, caplog):
+    import logging
+
+    from vmaf_app.ui import main_window as main_window_module
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+    monkeypatch.setattr(main_window_module, "keep_system_awake", lambda awake: True)
+    win = MainWindow()
+    win._set_run_ui_active(True)
+    win._on_all_finished()
+    assert "Windows keep-awake request held for the run" in caplog.text
+    assert "Windows keep-awake request released" in caplog.text
+    assert "Run status: " in caplog.text
+    win.close()
+
+
+def test_a_failed_metrics_cell_says_why_it_failed(qapp, tmp_path, monkeypatch):
+    """Every red Failed cell said "This metric failed on the last run. Untick
+    to skip it." -- the reason was only on the file name's tooltip."""
+    from vmaf_app.core import result_cache
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "distorted.mp4"
+    distorted.write_bytes(b"d" * 500)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    rd = win._rows[row]
+    rd.extra_metric_keys.update({"ssimulacra2", "cvvdp"})
+    win._job_rows = [rd]
+    result = _fake_completed_run(str(distorted)).result
+    result.source, result.distorted = source, distorted
+
+    win._on_job_partially_failed(
+        0, result, "SSIMULACRA2 failed: A\nCVVDP failed: B", "",
+        {"ssimulacra2": "Vship GPU calculation failed: CUDA error 999 (unknown error)",
+         "cvvdp": "CVVDP handler failed: out of memory"})
+
+    ssimulacra2 = win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2)
+    cvvdp = win.distorted_table.item(row, main_window_module.COL_CVVDP)
+    assert ssimulacra2.text() == "Failed" and cvvdp.text() == "Failed"
+    assert ssimulacra2.toolTip().startswith(
+        "Failed on the last run: Vship GPU calculation failed: CUDA error 999 (unknown error)")
+    assert cvvdp.toolTip().startswith("Failed on the last run: CVVDP handler failed: out of memory")
+    assert "Log files" in cvvdp.toolTip()
+    # A video that failed as a whole: each of its failed cells gives the video's reason.
+    win._job_rows = [rd]
+    win._on_job_failed(0, "The two videos are different shapes after cropping", "stderr lines")
+    assert win.distorted_table.item(row, main_window_module.COL_SSIMULACRA2).toolTip().startswith(
+        "Failed on the last run: The two videos are different shapes after cropping\n\n")
+    assert win._file_writes.wait_until_idle(10.0)
+    win.close()
+
+
+def test_settings_export_the_log_as_a_zip(qapp, tmp_path, monkeypatch):
+    """The log could only be found by opening its folder; it can be saved
+    as one file to attach to a report."""
+    import zipfile
+
+    from vmaf_app.core import app_log
+    from vmaf_app.ui import main_window as main_window_module
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "VideoMetricsLab.log").write_bytes(b"a session\n")
+    monkeypatch.setattr(app_log, "log_dir", lambda: logs)
+    target = tmp_path / "out" / "report.zip"
+    target.parent.mkdir()
+    asked = []
+    monkeypatch.setattr(main_window_module.QFileDialog, "getSaveFileName",
+                        lambda *a, **k: asked.append(a) or (str(target), ""))
+    win = main_window_module.MainWindow()
+    assert win.settings_export_log_btn.text() == "Export log..."
+    win.settings_export_log_btn.click()
+    assert asked and asked[0][2].endswith(".zip") and "VideoMetricsLab log " in asked[0][2]
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read("VideoMetricsLab.log") == b"a session\n"
+    assert win.settings_status.text() == f"Log exported to {target}"
+    # Cancelled: nothing happens.
+    monkeypatch.setattr(main_window_module.QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
+    win.settings_status.clear()
+    win.settings_export_log_btn.click()
+    assert win.settings_status.text() == ""
+    # No log yet.
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path / "none")
+    monkeypatch.setattr(main_window_module.QFileDialog, "getSaveFileName",
+                        lambda *a, **k: (str(tmp_path / "empty.zip"), ""))
+    win.settings_export_log_btn.click()
+    assert win.settings_status.text() == "There is no log to export yet."
+    win.close()
+
+
+def test_settings_copy_the_log_to_the_clipboard(qapp, tmp_path, monkeypatch):
+    """To paste into a post or chat without finding and attaching files."""
+    from vmaf_app.core import app_log
+    from vmaf_app.ui import main_window as main_window_module
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "VideoMetricsLab.log").write_bytes(
+        b"t INFO vmaf_app.main: ==== VideoMetricsLab starting ====\nt INFO vmaf_app.ui.worker: Run started: 1 video(s)\n"
+        b"t ERROR vmaf_app.ui.worker: Video 1 'film': GPU metrics failed: CUDA error\n")
+    monkeypatch.setattr(app_log, "log_dir", lambda: logs)
+    win = main_window_module.MainWindow()
+    assert win.settings_copy_log_btn.text() == "Copy log"
+    win.settings_copy_log_btn.click()
+    assert QApplication.clipboard().text().endswith("Video 1 'film': GPU metrics failed: CUDA error")
+    assert win.settings_status.text() == "Copied the log to the clipboard (3 lines)."
+    monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path / "none")
+    win.settings_copy_log_btn.click()
+    assert win.settings_status.text() == "There is no log to copy yet."
+    win.close()
+
+
+def test_a_videos_result_so_far_is_shown_saved_and_graphed_during_its_run(qapp, tmp_path, monkeypatch):
+    """A Butteraugli score done hours before the video's VMAF was neither
+    shown nor saved until the whole video was done -- closing the app or a
+    crash in between lost it."""
+    from vmaf_app.core import result_cache
+    monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"s" * 1000)
+    distorted = tmp_path / "distorted.mp4"
+    distorted.write_bytes(b"d" * 500)
+    win = MainWindow()
+    win._source_info = _fake_video_info(str(source))
+    win._source_info.path = source
+    row = win._add_table_row(distorted)
+    rd = win._rows[row]
+    win._job_rows = [rd]
+    win._job_total_frames = [100]
+    win._on_job_started(0, "distorted")
+    rd.analysis_status = "Calculating"
+    so_far = _fake_completed_run(str(distorted)).result
+    so_far.source, so_far.distorted = source, distorted
+
+    win._on_result_updated(0, so_far)
+
+    assert win.distorted_table.item(row, main_window_module.COL_VMAF).text() != ""  # shown at once
+    assert rd.analysis_status == "Calculating"  # the video is still going
+    assert rd.completed_run.partial
+    assert win._file_writes.wait_until_idle(10.0)
+    assert _load_cached(source, distorted, rd.options) is not None  # saved at once
+    assert len(win.graph_panel._entries) == 1
+    series = next(iter(win.graph_panel._entries.values()))
+    series.color = "#123456"  # as the user left it
+
+    final = _fake_completed_run(str(distorted)).result
+    final.source, final.distorted = source, distorted
+    win._on_job_finished(0, final)
+    assert len(win.graph_panel._entries) == 1  # the same series, updated in place
+    assert next(iter(win.graph_panel._entries.values())).color == "#123456"
+    assert not rd.completed_run.partial and rd.analysis_status != "Calculating"
+    win._on_result_updated(0, so_far)  # a late piece after the video's own result: ignored
+    assert rd.completed_run.result is final
+    assert win._file_writes.wait_until_idle(10.0)
+    win.close()
+
+
+def _release(version="9.9"):
+    from vmaf_app.core.update_check import Release
+
+    return Release(version, "https://github.com/4KVCD/VideoMetricsLab/releases/tag/v" + version, "- Faster.")
+
+
+def test_a_newer_release_is_offered_with_where_saved_results_are(qapp, monkeypatch):
+    from vmaf_app.core import result_cache
+    from vmaf_app.ui import main_window as main_window_module
+
+    win = MainWindow()
+    opened = []
+    monkeypatch.setattr(main_window_module.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    win._on_update_found(_release())
+    box = win._update_box
+    assert box.windowTitle() == "Update available"
+    assert box.text().startswith("VideoMetricsLab 9.9 is available. You have ")
+    assert "Updating does not affect your saved results" in box.informativeText()
+    assert str(result_cache.cache_dir()) in box.informativeText()
+    assert box.detailedText() == "- Faster."
+    next(button for button in box.buttons() if button.text() == "Download").click()
+    assert opened == ["https://github.com/4KVCD/VideoMetricsLab/releases/tag/v9.9"]
+    win.close()
+
+
+def test_a_skipped_release_is_not_offered_again(qapp, monkeypatch):
+    win = MainWindow()
+    monkeypatch.setattr(win._settings, "save", lambda: None)
+    win._on_update_found(_release())
+    next(button for button in win._update_box.buttons() if button.text() == "Skip this version").click()
+    assert win._settings.skipped_update_version == "9.9"
+    win._update_box = None
+    win._on_update_found(_release())
+    assert win._update_box is None  # nothing shown for it again
+    win._on_update_found(_release("10.0"))
+    assert win._update_box is not None  # a later one is
+    win._update_box.close()
+    win.close()
+
+
+@pytest.mark.parametrize(("latest", "offered"), [("9.9", True), (None, False)])
+def test_the_startup_check_offers_only_a_newer_release(qapp, monkeypatch, latest, offered):
+    """On the latest version, nothing is shown."""
+    from PySide6.QtCore import Qt
+
+    from vmaf_app import __version__
+    from vmaf_app.core import update_check
+
+    monkeypatch.setattr(update_check, "latest_release", lambda: _release(latest or __version__))
+    win = MainWindow()
+    found = []
+    win.update_found.connect(found.append, Qt.DirectConnection)
+    win._ask_for_updates()
+    assert bool(found) is offered
+    win.close()
+
+
+def test_a_failed_startup_check_shows_nothing(qapp, monkeypatch):
+    from PySide6.QtCore import Qt
+
+    from vmaf_app.core import update_check
+
+    def unreachable():
+        raise update_check.UpdateCheckError("no network")
+
+    monkeypatch.setattr(update_check, "latest_release", unreachable)
+    win = MainWindow()
+    found = []
+    win.update_found.connect(found.append, Qt.DirectConnection)
+    win._ask_for_updates()
+    assert found == []
+    win.close()
+
+
+def test_building_the_window_never_checks_for_updates(qapp, monkeypatch):
+    """Only the app's startup asks GitHub -- tests build hundreds of windows."""
+    from vmaf_app.core import update_check
+
+    monkeypatch.setattr(update_check, "latest_release", lambda: pytest.fail("the window asked GitHub"))
+    win = MainWindow()
+    qapp.processEvents()
+    win.close()
+
+
+def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
+    import threading
+
+    win = MainWindow()
+    started = []
+    monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self.name))
+    win.settings_check_updates.setChecked(False)
+    win.check_for_updates()
+    assert started == [] and win._settings.check_for_updates is False
+    win.settings_check_updates.setChecked(True)
+    win.check_for_updates()
+    assert started == ["update-check"]
+    win.close()
+
+
+_CUDA_GPU = main_window_module.perceptual_vship.VshipDevice("cuda", "NVIDIA GPU", 0, "5.1.1", None)
+_VULKAN_GPU = main_window_module.perceptual_vship.VshipDevice("vulkan", "Intel Arc", 0, "5.1.1", None)
+
+
+@pytest.mark.parametrize(("vendors", "offered"), [
+    (["nvidia"], ["auto", "vulkan", "cuda"]),
+    (["amd", "intel"], ["auto", "vulkan", "hip"]),
+    (["intel"], ["auto", "vulkan"]),
+    (["nvidia", "amd"], ["auto", "vulkan", "cuda", "hip"]),
+])
+def test_settings_offer_vulkan_and_each_gpus_own_vship_build(qapp, monkeypatch, vendors, offered):
+    """Settings > GPU metrics > GPU backend: Vulkan runs on any GPU; CUDA is
+    offered with an NVIDIA GPU and HIP with an AMD one. Auto by default."""
+    from vmaf_app.core.models import GpuVendor
+
+    monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor(v) for v in vendors])
+    win = MainWindow()
+    combo = win.settings_gpu_backend
+    assert [combo.itemData(i) for i in range(combo.count())] == offered
+    assert combo.currentData() == "auto" and win._settings.gpu_backend == "auto"
+    assert "17 points" in combo.toolTip()
+    win.close()
+
+
+def test_choosing_a_gpu_backend_is_saved_and_probed_again(qapp, monkeypatch):
+    from vmaf_app.core import perceptual_vship
+
+    probes = []
+    monkeypatch.setattr(perceptual_vship, "start_vship_probe", lambda: probes.append(perceptual_vship.vship_backend()))
+    monkeypatch.setattr(perceptual_vship, "_backend", "auto")
+    win = MainWindow()
+    win.settings_gpu_backend.setCurrentIndex(win.settings_gpu_backend.findData("vulkan"))
+    assert Settings.load().gpu_backend == "vulkan" and probes == ["vulkan"]
+    win.close()
+
+
+def test_a_cpu_ssimulacra2_is_the_gpu_choice_where_vulkan_cannot_score_it(qapp, monkeypatch):
+    """On Vship's Vulkan build SSIMULACRA2 is calculated on the CPU; that
+    score must count as done, or every run would calculate it again."""
+    from types import SimpleNamespace
+
+    from vmaf_app.core.metric_results import MetricProvenance
+
+    cpu = SimpleNamespace(provenance=MetricProvenance("libjxl/ssimulacra2", "", "cpu", "x"))
+    win = MainWindow()
+    row = win._rows[win._add_table_row(Path("a.mkv"))]
+    row.metric_backends = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_VULKAN_GPU, ""))
+    assert win._backend_matches(row, "ssimulacra2", cpu)
+    assert not win._backend_matches(row, "butteraugli", cpu)  # Vulkan scores it: a GPU run is due
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
+    assert not win._backend_matches(row, "ssimulacra2", cpu)
+    win.close()
+
+
+def test_the_long_cpu_run_warning_says_why_ssimulacra2_is_on_the_cpu_on_vulkan(qapp, monkeypatch):
+    shown = []
+    monkeypatch.setattr(main_window_module.QMessageBox, "warning",
+                        lambda _parent, _title, text, *_args: shown.append(text) or main_window_module.QMessageBox.No)
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_VULKAN_GPU, ""))
+    win = MainWindow()
+    row = _long_row(win, "film.mkv", minutes=90, backend="gpu")
+    assert not win._confirm_long_cpu_perceptual([win._rows[row]])
+    assert "SSIMULACRA2 (set to GPU, but Vship's Vulkan build does not score it correctly yet)" in shown[0]
+    win.close()
+
+
+def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkeypatch):
+    """Settings > GPU metrics: one Vship pass per video, for 4K VVC decoded
+    on the CPU. Off by default: it is very heavy on GPU memory at 4K."""
+    win = MainWindow()
+    assert not win.settings_gpu_together.isChecked() and not win._settings.gpu_metrics_together
+    assert "7.3 GB" in win.settings_gpu_together.toolTip()
+    win.settings_gpu_together.setChecked(True)
+    assert Settings.load().gpu_metrics_together
+    monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
+    _long_row(win, "clip.mkv", minutes=1, backend="gpu")
+    win._on_run_clicked()
+    assert win._worker is not None and win._worker.gpu_metrics_together
+    win._worker = None
+    win._set_run_ui_active(False)
+    win.close()
+
+
+
+def test_settings_choose_the_language_for_the_next_start(qapp):
+    """The window's language follows Windows unless one is chosen here;
+    each is listed in its own name."""
+    from vmaf_app import i18n
+
+    win = MainWindow()
+    combo = win.settings_language
+    assert combo.currentData() == "" and combo.itemText(0).startswith("Same as Windows (")
+    assert [combo.itemText(i) for i in range(1, combo.count())] == list(i18n.LANGUAGES.values())
+    combo.setCurrentIndex(combo.findData("ja"))
+    assert Settings.load().language == "ja"
+    assert win.settings_status.text() == "Settings saved. The new language shows when the app is next started."
+    win.close()
+
+
+def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
+    """Every text in a made-up language -- each "[[English]]" -- through the
+    window's run lines, summaries and tooltips: a placeholder a translation
+    cannot fill raises here, not in front of someone running Japanese."""
+    import json
+
+    from scripts.i18n_catalog import keys
+    from vmaf_app import i18n
+
+    strings, plurals = keys()
+    (tmp_path / "de.json").write_text(json.dumps({
+        "strings": {key: f"[[{key}]]" for key in strings},
+        "plurals": {key: [f"[[{key}]]", f"[[{plural}]]"] for key, plural in plurals.items()},
+    }), encoding="utf-8")
+    monkeypatch.setattr(i18n, "TRANSLATIONS_DIR", tmp_path)
+    assert i18n.set_language("de") == "de"
+    try:
+        win = MainWindow()
+        assert win.tabs.tabText(0) == "[[Videos]]"
+        for name in ("a.mkv", "b.mkv"):
+            win._add_table_row(Path(name))
+        win._job_rows = list(win._rows)
+        win._job_total_frames = [100, 100]
+        win._on_job_started(0, "a")
+        win._on_task_progress(0, [
+            {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 20, "total": 100, "fps": 5.0,
+             "state": "running", "phase": None, "waiting_for": None, "step": "", "decode": "source cuda, distorted cpu"},
+            {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 150, "total": 200,
+             "fps": 30.0, "state": "running", "phase": (2, 2, "Butteraugli"), "waiting_for": None, "step": "",
+             "decode": "source cuda, distorted cuda"},
+        ])
+        win._on_job_status(0, "Vship GPU unavailable (No GPU that Vship can use was found.); "
+                              "using CPU reference metrics…")
+        line = win.job_progress_labels[0].text()
+        assert "[[{kind} {number} of {count} ({overall}) ({details})]]" not in line  # filled in, not raw
+        assert "[[Decoder: Source: {source}, test video: {test}]]".replace("{source}", "GPU") not in line
+        assert "[[" in line
+        win._run_failed_count, win._run_partial_count = 1, 2
+        win._update_run_status()
+        assert win.status_label.text().startswith("[[")
+        assert win._run_end_message().startswith("[[")
+        win._set_row_status(0, "Failed", "Frame rates do not match (23.976 vs 24.000 fps).")
+        win._refresh_row_state(0)
+        assert "[[Failed]]" in win.distorted_table.item(0, COL_PATH).toolTip()
+        assert "[[Frame rates do not match ({source} vs {test} fps).]]" not in \
+            win.distorted_table.item(0, COL_PATH).toolTip()
+        win._set_run_ui_active(False)
+        win.close()
+    finally:
+        i18n.set_language("en")
+
+
+def test_the_duration_limit_reads_left_to_right_in_a_right_to_left_window(qapp):
+    """Arabic lays the window out right to left, and a QTimeEdit laid out
+    that way writes its sections backwards: "000.00:00:00"."""
+    qapp.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    try:
+        win = MainWindow()
+        win.duration_edit.setTime(QTime(1, 2, 3, 4))
+        assert win.duration_edit.lineEdit().text() == "01:02:03.004"
+        win.close()
+    finally:
+        qapp.setLayoutDirection(Qt.LayoutDirection.LeftToRight)

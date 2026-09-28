@@ -494,7 +494,7 @@ def run_perceptual_task(
         expected = min(expected, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
     total_units = max(1, math.ceil(expected / step)) * step
     if on_status:
-        on_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted…")
+        on_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted (GPU decode: off)…")
     started = time.perf_counter()
     values: dict[str, list[float]] = {spec.key: [] for spec in specs}
     total = 0

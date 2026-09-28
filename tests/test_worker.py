@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
@@ -130,7 +131,8 @@ def _run_one(qapp, monkeypatch, ffmpeg, vship, keys=("vmaf", "ssimulacra2")):
     worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=keys)])
     events = []
     worker.job_finished.connect(lambda _, result: events.append(("finished", result)))
-    worker.job_partially_failed.connect(lambda _, result, message, tail: events.append(("partly", result, message, tail)))
+    worker.job_partially_failed.connect(
+        lambda _, result, message, tail, _reasons: events.append(("partly", result, message, tail)))
     worker.job_failed.connect(lambda _, message, tail: events.append(("failed", message, tail)))
     worker.cancelled.connect(lambda: events.append(("cancelled",)))
     worker.run()
@@ -898,6 +900,70 @@ def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypa
     assert ("ffmpeg", "starting", "Detecting black bars in source...") in steps
 
 
+def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp, monkeypatch):
+    """SSIMULACRA2 failed on the GPU and was calculated again on the CPU,
+    while the line still said "CVVDP 3 of 3" -- the last GPU pass."""
+    def gpu(s, d, *a, on_status=None, on_progress=None, **k):
+        on_status("GPU metric 3/3: CVVDP")
+        on_progress(290, 300, 40.0)
+        on_status("SSIMULACRA2 failed on the GPU; calculating it on the CPU…")
+        on_progress(10, 100, 2.0)
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
+    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))])
+    phases = []
+    worker.task_progress.connect(lambda _index, snapshot: phases.extend(
+        (task["phase"], task["current"]) for task in snapshot if task["backend"] == "perceptual"))
+    worker.run()
+    _drain(qapp)
+    assert ((3, 3, "CVVDP"), 290) in phases
+    assert (None, 10) in phases and ((3, 3, "CVVDP"), 10) not in phases
+
+
+@pytest.mark.parametrize("together", [False, True])
+def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_the_plan(qapp, monkeypatch, together):
+    calls = []
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+                        lambda *a, **k: calls.append(k["together"]) or _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))],
+                        gpu_metrics_together=together)
+    plans = []
+    worker.planned.connect(plans.append)
+    worker.run()
+    _drain(qapp)
+    assert calls == [together]
+    assert plans == [{0: [("cpu", 1), ("gpu", 1 if together else 3)]}]
+
+
+def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
+    """The halves decode separately: each carries its own latest plan, kept
+    when later messages replace its step."""
+    def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
+        on_status("Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
+        on_status("GPU decode failed, retrying (GPU decode: source cuda, distorted cpu)...")
+        on_progress(10, 100, 5.0)
+        return _fake_result(d.path.name)
+
+    def gpu(s, d, *a, on_status=None, **k):
+        on_status("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…")
+        on_status("GPU metric 1/1: SSIMULACRA2")
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
+    worker = VmafWorker([_split_job("d.mp4")])
+    snapshots = []
+    worker.task_progress.connect(lambda _index, snapshot: snapshots.append(snapshot))
+    worker.run()
+    _drain(qapp)
+    last = {task["backend"]: task["decode"] for task in snapshots[-1]}
+    assert last == {"ffmpeg": "source cuda, distorted cpu", "perceptual": "source cuda, distorted cuda"}
+    assert all("decode" in task for snapshot in snapshots for task in snapshot)
+
+
 def test_cancelling_keeps_a_videos_finished_gpu_metrics(qapp, monkeypatch):
     """Two videos in parallel: the first's GPU metrics finished, the GPU went
     on to the second, and Cancel dropped the first video whole -- its
@@ -991,4 +1057,127 @@ def test_a_new_gpu_pass_does_not_carry_the_last_passs_rate(qapp, monkeypatch):
     _drain(qapp)
     assert ((2, 2, "Butteraugli"), 50.0) not in seen
     assert ((2, 2, "Butteraugli"), 0.0) in seen and ((2, 2, "Butteraugli"), 20.0) in seen
+
+
+def test_a_runs_plan_steps_and_failures_are_written_to_the_log(qapp, monkeypatch, caplog):
+    """An overnight run's failures were in tooltips only, and went with the
+    window: the log keeps the plan, each step and each failure in full."""
+    import logging
+
+    caplog.set_level(logging.INFO, logger="vmaf_app")
+
+    def ffmpeg(s, d, *a, on_status=None, **k):
+        on_status("Detecting black bars in source and distorted...")
+        raise VmafRunError("ffmpeg exited with code 1", stderr_tail="[vvc @ 0x1] Error decoding frame 1234")
+
+    def vship(s, d, *a, **k):
+        return PerceptualTaskOutput(_perceptual_output().metrics, None, None, 10,
+                                    {"cvvdp": "CVVDP handler failed: out of memory"})
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4", keys=("vmaf", "ssimulacra2", "cvvdp"))])
+    worker.run()
+    _drain(qapp)
+    text = caplog.text
+    assert "Run started: 1 video(s)" in text
+    assert "Video 1 'd.mp4':\n  test   d.mp4 (" in text and "  source s.mp4 (" in text
+    assert "calculating CPU metrics (VMAF v0.6.1); GPU metrics (SSIMULACRA2, CVVDP)" in text
+    assert "Video 1 'd.mp4': Detecting black bars in source and distorted..." in text
+    assert ("Video 1 'd.mp4': CPU metrics (VMAF v0.6.1) failed after 0:00:00: ffmpeg exited with code 1\n"
+            "Last output:\n[vvc @ 0x1] Error decoding frame 1234") in text
+    assert "Video 1 'd.mp4': CVVDP failed: CVVDP handler failed: out of memory" in text
+    assert "Video 1 'd.mp4' finished with failed metrics (kept: SSIMULACRA2)" in text
+    assert "Run ended" in text
+    failure = next(record for record in caplog.records if "failed after" in record.getMessage())
+    assert failure.levelname == "ERROR" and failure.exc_info is not None  # the traceback is kept
+
+
+def test_each_failed_metric_is_sent_with_its_own_reason(qapp, monkeypatch):
+    """The window got one message for the whole video; each failed metric's
+    cell could only say that it had failed."""
+    def ffmpeg(s, d, *a, **k):
+        raise VmafRunError("ffmpeg exited with code 1")
+
+    def vship(s, d, *a, **k):
+        return PerceptualTaskOutput(_perceptual_output().metrics, None, None, 10,
+                                    {"cvvdp": "CVVDP handler failed: out of memory"})
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4", keys=("vmaf", "psnr", "ssimulacra2", "cvvdp"))])
+    sent = []
+    worker.job_partially_failed.connect(lambda *args: sent.append(args))
+    worker.run()
+    _drain(qapp)
+    (_index, _result, _message, _tail, reasons), = sent
+    assert reasons == {"vmaf": "ffmpeg exited with code 1", "psnr": "ffmpeg exited with code 1",
+                       "cvvdp": "CVVDP handler failed: out of memory"}
+
+
+def test_a_videos_finished_half_is_sent_while_its_other_half_runs(qapp, monkeypatch):
+    """A video's GPU metrics were done hours before its VMAF, but nothing of
+    the video was shown or saved until both were."""
+    gpu_sent = threading.Event()
+
+    def ffmpeg(s, d, *a, **k):
+        assert gpu_sent.wait(10), "the GPU half's scores were held back"
+        return _fake_result(d.path.name)
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4")], parallel_jobs=2)
+    updates, finished = [], []
+    worker.result_updated.connect(lambda index, result: (updates.append(result), gpu_sent.set()),
+                                  Qt.DirectConnection)
+    worker.job_finished.connect(lambda index, result: finished.append(result))
+    worker.run()
+    _drain(qapp)
+    assert updates and updates[0].has_metric("ssimulacra2") and not updates[0].has_metric("vmaf")
+    assert finished and finished[0].has_metric("ssimulacra2") and finished[0].has_metric("vmaf")
+
+
+def test_each_gpu_metric_is_sent_as_its_pass_finishes(qapp, monkeypatch):
+    def vship(s, d, *a, on_pass_done=None, **k):
+        on_pass_done(_perceptual_output())  # SSIMULACRA2's pass, before the half's next one
+        return _perceptual_output()
+
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4")])
+    updates = []
+    worker.result_updated.connect(lambda index, result: updates.append(result), Qt.DirectConnection)
+    worker.run()
+    assert any(update.has_metric("ssimulacra2") for update in updates)
+
+
+def test_cancelling_keeps_the_gpu_metrics_whose_passes_had_finished(qapp, monkeypatch):
+    """SSIMULACRA2 was on screen and saved from its finished pass; cancelling
+    during Butteraugli's pass must not take it away."""
+    pass_done = threading.Event()
+
+    def ffmpeg(s, d, *a, cancel_event=None, **k):
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        raise Cancelled("Cancelled by user")
+
+    def vship(s, d, *a, cancel_event=None, on_pass_done=None, **k):
+        on_pass_done(_perceptual_output())
+        pass_done.set()
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        raise PerceptualCancelled("Cancelled by user")
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    worker = VmafWorker([_split_job("d.mp4")], parallel_jobs=2)
+    finished = []
+    worker.job_finished.connect(lambda index, result: finished.append(result))
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    assert pass_done.wait(10)
+    worker.cancel()
+    runner.join(10)
+    _drain(qapp)
+    assert len(finished) == 1 and finished[0].has_metric("ssimulacra2")
 

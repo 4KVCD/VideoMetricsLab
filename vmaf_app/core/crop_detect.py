@@ -17,6 +17,7 @@ one film used to detect the source's bars six times over.
 """
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import threading
@@ -51,6 +52,9 @@ _decoder_slots = threading.BoundedSemaphore(_MAX_DETECTION_DECODERS)
 #: How many files' answers to remember. A CropBox is four ints; this is a
 #: bound against a pathological session, not a memory budget.
 _CACHE_LIMIT = 512
+
+
+_log = logging.getLogger(__name__)
 
 
 class CropDetectError(RuntimeError):
@@ -333,7 +337,12 @@ def detect_crop(
         box = _detect_uncached(
             info, limit, scored_duration, cancel_event, process_handle, hwaccel
         )
+        _log.info("Black bars in %s: picture %dx%d at %d,%d of %dx%d", info.path.name, box.w, box.h, box.x, box.y,
+                  info.width, info.height)
         return box
+    except CropDetectError as error:
+        _log.warning("Black-bar detection failed for %s: %s", info.path.name, error)
+        raise
     finally:
         if key is not None:
             _settle(key, box)

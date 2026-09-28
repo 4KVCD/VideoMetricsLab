@@ -582,3 +582,24 @@ def test_video_mode_discloses_native_hdr_or_actual_sdr_fallback(qapp, tmp_path, 
     assert "tone mapping off" in status
     assert "HDR → SDR" not in status
     panel.close()
+
+
+def test_the_video_being_watched_reloads_only_when_it_changed(qapp, monkeypatch):
+    """Any video's result arriving during a run reloaded the video being
+    watched, restarting it -- several times a video once scores land as
+    each metric finishes."""
+    panel = FrameComparePanel()
+    monkeypatch.setattr(FrameComparePanel, "is_video_mode", property(lambda self: True))
+    monkeypatch.setattr(panel, "isVisible", lambda: True)
+    loads = []
+    monkeypatch.setattr(panel, "_load_current_video", lambda *a, **k: loads.append(panel.current_entry.label))
+    watched, other = _entry("a"), _entry("b")
+    panel.set_runs([watched, other])
+    assert loads == ["a"]
+    panel.set_runs([replace(watched, scores=None), _entry("b", score=50.0)])  # new scores: same video
+    assert loads == ["a"]
+    moved = replace(watched, comparison=replace(watched.comparison, frame_count=60))
+    panel.set_runs([moved, other])  # what is on screen changed
+    assert loads == ["a", "a"]
+    panel.close()
+

@@ -23,7 +23,8 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, dataclass, replace
-from pathlib import Path
+
+from vmaf_app.i18n import N_
 
 #: The key Vship's config file defines the display under. Any name that is not
 #: one of Vship's built-in models works; every property is given explicitly.
@@ -135,10 +136,11 @@ class CvvdpSettings:
                    bool(values["resize_to_display"]))
 
 
-def write_vship_config(display: CvvdpDisplay, path: Path) -> Path:
-    """Vship reads a custom display from a JSON file (not a string), in the
-    official display_models.json format; every property is set so none falls
-    back to a Vship default."""
+def vship_display_json(display: CvvdpDisplay) -> str:
+    """The display for Vship, as JSON text in the official
+    display_models.json format -- Vship 5.1 parses text that starts with "{"
+    as the config itself. Every property is set, so none falls back to a
+    Vship default."""
     model = {
         "name": "VideoMetricsLab display",
         "colorspace": "HDR" if display.hdr else "SDR",
@@ -152,8 +154,7 @@ def write_vship_config(display: CvvdpDisplay, path: Path) -> Path:
         "exposure": float(display.exposure),
         "source": "VideoMetricsLab",
     }
-    path.write_text(json.dumps({VSHIP_MODEL_KEY: model}, indent=1), encoding="utf-8")
-    return path
+    return json.dumps({VSHIP_MODEL_KEY: model}, indent=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,30 +174,31 @@ def _official(name: str, description: str, **display) -> CvvdpPreset:
 
 
 #: The official ColorVideoVDP display models that fit comparing video encodes
-#: (the VR headsets and specific phones/tablets are left out).
+#: (the VR headsets and specific phones/tablets are left out). The names are
+#: identifiers, saved in settings; the window shows them translated.
 BUILTIN_PRESETS: tuple[CvvdpPreset, ...] = (
-    _official("30-inch 4K monitor, office", "Official 'standard_4k' -- the official tool's default display.",
+    _official(N_("30-inch 4K monitor, office"), N_("Official 'standard_4k' -- the official tool's default display."),
               width=3840, height=2160, diagonal_inches=30, viewing_distance_m=0.7472,
               peak_luminance=200, contrast=1000, ambient_lux=250),
-    _official("24-inch 1080p monitor, office", "Official 'standard_fhd'.",
+    _official(N_("24-inch 1080p monitor, office"), N_("Official 'standard_fhd'."),
               width=1920, height=1080, diagonal_inches=24, viewing_distance_m=0.6,
               peak_luminance=200, contrast=1000, ambient_lux=250),
-    _official("30-inch 4K HDR monitor, dim room", "Official 'standard_hdr_pq' (HLG uses the same display).",
+    _official(N_("30-inch 4K HDR monitor, dim room"), N_("Official 'standard_hdr_pq' (HLG uses the same display)."),
               width=3840, height=2160, diagonal_inches=30, viewing_distance_m=0.7472,
               peak_luminance=1500, contrast=1_000_000, ambient_lux=10, hdr=True),
-    _official("30-inch 4K HDR monitor, dark room", "Official 'standard_hdr_dark'.",
+    _official(N_("30-inch 4K HDR monitor, dark room"), N_("Official 'standard_hdr_dark'."),
               width=3840, height=2160, diagonal_inches=30, viewing_distance_m=0.7472,
               peak_luminance=1500, contrast=1_000_000, ambient_lux=0, hdr=True),
-    _official("65-inch 4K HDR TV, 1000 nits, living room", "Official '65inch_hdr_pq_1Knit'.",
+    _official(N_("65-inch 4K HDR TV, 1000 nits, living room"), N_("Official '65inch_hdr_pq_1Knit'."),
               width=3840, height=2160, diagonal_inches=65, viewing_distance_m=1.98,
               peak_luminance=1000, contrast=1_000_000, ambient_lux=5, hdr=True),
-    _official("65-inch 4K HDR TV, 2000 nits, living room", "Official '65inch_hdr_pq_2Knit'.",
+    _official(N_("65-inch 4K HDR TV, 2000 nits, living room"), N_("Official '65inch_hdr_pq_2Knit'."),
               width=3840, height=2160, diagonal_inches=65, viewing_distance_m=1.98,
               peak_luminance=2000, contrast=1_000_000, ambient_lux=5, hdr=True),
-    _official("65-inch 4K HDR TV, 4000 nits, living room", "Official '65inch_hdr_pq_4knit'.",
+    _official(N_("65-inch 4K HDR TV, 4000 nits, living room"), N_("Official '65inch_hdr_pq_4knit'."),
               width=3840, height=2160, diagonal_inches=65, viewing_distance_m=1.98,
               peak_luminance=4000, contrast=1_000_000, ambient_lux=5, hdr=True),
-    _official("6-inch phone", "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
+    _official(N_("6-inch phone"), N_("Official 'standard_phone' (contrast unspecified there: 1000:1, the official default)."),
               width=2400, height=1080, diagonal_inches=6, viewing_distance_m=0.4,
               peak_luminance=500, contrast=1000, ambient_lux=250),
 )

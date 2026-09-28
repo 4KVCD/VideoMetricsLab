@@ -116,9 +116,10 @@ try {
         }
     }
 
-    foreach ($vendor in @('nvidia', 'amd')) {
-        if (-not (Test-Path (Join-Path $output "_internal/vmaf_app/tools/vship/$vendor/libvship.dll"))) {
-            throw "Bundled Vship $vendor GPU library is missing"
+    # Vship's three builds: CUDA (nvidia/), HIP (amd/) and Vulkan (vulkan/).
+    foreach ($build in @('nvidia', 'amd', 'vulkan')) {
+        if (-not (Test-Path (Join-Path $output "_internal/vmaf_app/tools/vship/$build/libvship.dll"))) {
+            throw "Bundled Vship $build GPU library is missing"
         }
     }
 

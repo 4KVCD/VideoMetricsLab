@@ -61,7 +61,8 @@ class Settings:
     default_compute_ssimulacra2: bool = True
     default_compute_butteraugli: bool = True
     default_compute_cvvdp: bool = True
-    # "gpu" (Vship, falling back to the CPU tools without a supported GPU)
+    # "gpu" (Vship, falling back to the CPU tools without a GPU Vship can use,
+    # or where its build scores the metric wrongly -- perceptual_vship.SCORED_WRONGLY)
     # or "cpu" (libjxl's tools). Set from the Options panel's GPU/CPU
     # choice, which is also what a newly added video starts with.
     default_ssimulacra2_backend: str = "gpu"
@@ -77,8 +78,32 @@ class Settings:
     # identity.
     parallel_jobs: int = field(default_factory=default_parallel_jobs)
 
+    # Calculate a video's GPU metrics (SSIMULACRA2, Butteraugli, CVVDP) in
+    # one Vship pass, decoding the video once, instead of one pass each --
+    # see perceptual_vship.run_vship_task. Off by default: at 4K it needs
+    # about 7.3 GB of GPU memory against 4.8 GB one at a time. Like
+    # parallel_jobs it changes how the scores are reached, never what they
+    # are, so it is no part of cache identity.
+    gpu_metrics_together: bool = False
+
+    # Which of Vship's builds calculates the GPU metrics: "auto" (CUDA on
+    # NVIDIA, HIP on AMD, Vulkan on other GPUs), or "vulkan", "cuda" or
+    # "hip" tried first -- see perceptual_vship.VSHIP_BACKENDS. Like
+    # gpu_metrics_together, no part of cache identity: a metric a build
+    # scores wrongly is not scored on it (perceptual_vship.SCORED_WRONGLY).
+    gpu_backend: str = "auto"
+
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True
+
+    # Ask GitHub for a newer release when the app starts (vmaf_app.core.
+    # update_check), and a release the user chose to skip.
+    check_for_updates: bool = True
+    skipped_update_version: str = ""
+
+    # The window's language (a code from vmaf_app.i18n.LANGUAGES); empty:
+    # the same as Windows', or English when there is no translation for it.
+    language: str = ""
 
     # Restore the window to the size it was closed at.
     remember_window_size: bool = True

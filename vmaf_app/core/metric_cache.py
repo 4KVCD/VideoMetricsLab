@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Mapping
@@ -107,6 +108,44 @@ def _info_from_dict(data: dict) -> VideoInfo:
                      color_space=data.get("color_space", ""), color_transfer=data.get("color_transfer", ""),
                      color_primaries=data.get("color_primaries", ""),
                      chroma_location=data.get("chroma_location", ""))
+
+
+#: Every Vship GPU score records the color-tag mapping it was made with, as
+#: provenance parameter "color_tags". Scores from v1.2 and v1.2.1 have none:
+#: their tables, written for Vship 4.0.2 from assumptions, took an RGB video
+#: with no transfer tag as BT.709, where Vship 5.1.1's FFVship and the app
+#: since take it as sRGB. Every other input those versions scored on the GPU
+#: is scored exactly as it was, so only such a pair's scores are calculated
+#: again (_stale_vship_score).
+VSHIP_COLOR_TAGS = "ffvship-5.1.1"
+#: The RGB pixel formats those versions scored on the GPU.
+_OLD_VSHIP_RGB = re.compile(
+    r"gbrp(?:(?:9|10|12|14|16)(?:le|be)?)?|rgb24|bgr24|rgba|bgra|argb|abgr|rgb0|bgr0|rgb48(?:le|be)|rgba64(?:le|be)")
+_UNTAGGED = {"", "unknown", "unspecified", "reserved"}
+
+
+def _stale_vship_score(provenance, infos: tuple[object, ...]) -> bool:
+    """Whether a saved score is a GPU score of v1.2 / v1.2.1 for a pair with
+    an RGB video without a transfer tag (VSHIP_COLOR_TAGS). `infos` are the
+    two videos' context.json entries."""
+    if (provenance.compute_backend != "gpu" or not provenance.implementation.startswith("Vship/")
+            or provenance.parameters.get("color_tags") == VSHIP_COLOR_TAGS):
+        return False
+    return any(
+        isinstance(info, dict)
+        and _OLD_VSHIP_RGB.fullmatch(str(info.get("pix_fmt") or "").strip().casefold()) is not None
+        and str(info.get("color_transfer") or "").strip().casefold() in _UNTAGGED
+        for info in infos
+    )
+
+
+def _context_infos(directory: Path) -> tuple[object, ...]:
+    """The two videos' entries in a comparison's context.json, if readable."""
+    try:
+        context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
+        return context.get("source_info"), context.get("distorted_info")
+    except (OSError, ValueError, AttributeError):
+        return ()
 
 
 def _atomic_json(path: Path, data: dict) -> None:
@@ -260,6 +299,7 @@ def load_other_parameters(directory: Path, spec: MetricRequestSpec) -> list[tupl
         paths = sorted(directory.glob(f"{spec.key}_*.npz"))
     except OSError:
         return []
+    infos = _context_infos(directory) if paths else ()
     for path in paths:
         try:
             with np.load(path, allow_pickle=False) as data:
@@ -268,7 +308,9 @@ def load_other_parameters(directory: Path, spec: MetricRequestSpec) -> list[tupl
                 if (metadata.get("format_version") != METRIC_CACHE_FORMAT_VERSION
                         or metadata.get("key") != spec.key or metadata.get("kind") != "sequence"
                         or {name: value for name, value in request.items() if name != "parameters"} != rest
-                        or _canonical(request.get("parameters")) == _canonical(wanted["parameters"])):
+                        or _canonical(request.get("parameters")) == _canonical(wanted["parameters"])
+                        or (isinstance(metadata.get("provenance"), dict)
+                            and _stale_vship_score(provenance_from_dict(metadata["provenance"]), infos))):
                     continue
                 score = float(data["score"].item())
                 parameters = dict(request["parameters"])
@@ -433,16 +475,32 @@ def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str =
     for a perceptual metric: "cpu" accepts only a libjxl CPU score, never a
     Vship GPU one (the two can differ by a few points on the same frames);
     "gpu" prefers a Vship score and accepts a CPU one, which is what a GPU
-    selection produces on a machine without a supported GPU."""
+    selection produces on a machine without a supported GPU.
+
+    A Vship score v1.2 made with the color tags it had wrong for this pair
+    is passed over (VSHIP_COLOR_TAGS): the next saved score answers, or the
+    metric is calculated again."""
+    infos: tuple[object, ...] | None = None
+
+    def stale(result) -> bool:
+        nonlocal infos
+        if result.provenance.compute_backend != "gpu":
+            return False
+        if infos is None:
+            infos = _context_infos(directory)
+        return _stale_vship_score(result.provenance, infos)
+
     if _is_auto_perceptual_spec(spec):
         for _rank, path, concrete in _auto_perceptual_candidates(directory, spec):
             if compute_backend == "cpu" and "-vship-" in concrete.implementation_compatibility_id:
                 continue
             result = _load_metric_file(path, concrete)
-            if result is not None:
+            if result is not None and not stale(result):
                 return result
         return None
     result = _load_metric_file(metric_path(directory, spec), spec)
+    if result is not None and stale(result):
+        return None
     if result is None and _is_vmaf_spec(spec):
         for _rank, path, concrete in _vmaf_equivalents(directory, spec):
             result = _load_metric_file(path, concrete)

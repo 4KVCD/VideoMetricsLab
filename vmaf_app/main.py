@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from vmaf_app import APP_NAME, __version__
+from vmaf_app import APP_NAME, __version__, i18n
+from vmaf_app.core import app_log
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.ui.main_window import MainWindow
 
@@ -79,18 +82,78 @@ def self_test() -> str:
         tool = find_metric_executable(metric)
         lines.append(f"  OK    {metric} ({tool})" if tool else f"  WARN  {metric} tool absent")
 
-    from vmaf_app.core.perceptual_vship import detect_vship_device
+    from vmaf_app.core.perceptual_vship import backend_label, detect_vship_device, set_vship_backend
+    from vmaf_app.core.settings import Settings
+
+    set_vship_backend(Settings.load().gpu_backend)
 
     vship_device, vship_reason = detect_vship_device()
     if vship_device is not None:
         lines.append(
             f"  OK    Vship {vship_device.version} GPU metrics "
-            f"({vship_device.vendor.upper()}: {vship_device.name})"
+            f"({backend_label(vship_device.backend)}: {vship_device.name})"
         )
     else:
         lines.append(f"  WARN  Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
 
     return "\n".join(lines)
+
+
+_QT_LOG_LEVELS = {"QtDebugMsg": logging.DEBUG, "QtInfoMsg": logging.INFO, "QtWarningMsg": logging.WARNING,
+                  "QtCriticalMsg": logging.ERROR, "QtFatalMsg": logging.CRITICAL}
+
+
+def _log_qt_message(mode, _context, message: str) -> None:
+    logging.getLogger("vmaf_app.qt").log(_QT_LOG_LEVELS.get(getattr(mode, "name", ""), logging.WARNING), message)
+
+
+def start_session_log() -> None:
+    """The log file for this session, headed with what it runs on."""
+    if app_log.start_logging() is None:
+        return
+    log = logging.getLogger("vmaf_app.main")
+    log.info("==== %s%s", APP_NAME, app_log.SESSION_START)
+    for line in app_log.environment_lines():
+        log.info("%s", line)
+    from PySide6.QtCore import qInstallMessageHandler, qVersion
+
+    log.info("Qt %s", qVersion())
+    from vmaf_app.core.ffmpeg_locate import check_tools, format_version
+    from vmaf_app.core.gpu import detected_gpu_vendors
+
+    tools = check_tools()
+    if tools.ok:
+        log.info("FFmpeg %s: %s", format_version(tools.ffmpeg.version), tools.ffmpeg.path)
+    else:
+        for problem in tools.problems:
+            log.warning("FFmpeg: %s", problem)
+    log.info("GPUs: %s", ", ".join(vendor.name for vendor in detected_gpu_vendors()) or "none detected")
+    qInstallMessageHandler(_log_qt_message)
+
+
+def apply_language(app: QApplication, chosen: str) -> str:
+    """Shows the app in `chosen` -- or, when that is empty, Windows' display
+    language -- and English where there is no translation. Qt's own dialogs
+    and buttons follow (its translations for the language, where it has
+    them), and a right-to-left language mirrors the window. The language
+    applied."""
+    from PySide6.QtCore import QLibraryInfo, Qt, QTranslator
+
+    windows = i18n.windows_language()
+    code = i18n.set_language(chosen or windows)
+    logging.getLogger("vmaf_app.main").info(
+        "Language: %s (%s; Windows: %s)", code, "chosen in Settings" if chosen else "as Windows", windows)
+    if code == "en":
+        return code
+    translator = QTranslator(app)
+    for directory in (QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath),
+                      str(Path(sys.modules["PySide6"].__file__).parent / "translations")):
+        if translator.load(f"qtbase_{code}", directory):
+            app.installTranslator(translator)
+            break
+    if code in i18n.RIGHT_TO_LEFT:
+        app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    return code
 
 
 def main() -> int:
@@ -119,11 +182,17 @@ def main() -> int:
             box.exec()
         return 0 if "FAIL" not in report else 1
 
-    from vmaf_app.core.perceptual_vship import start_vship_probe
+    start_session_log()
+    from vmaf_app.core.settings import Settings
 
+    apply_language(app, Settings.load().language)
+    from vmaf_app.core.perceptual_vship import set_vship_backend, start_vship_probe
+
+    set_vship_backend(Settings.load().gpu_backend)
     start_vship_probe()  # done by the time the first video is added
     window = MainWindow()
     window.show()
+    window.check_for_updates()  # once, now, and at no other time
     return app.exec()
 
 
