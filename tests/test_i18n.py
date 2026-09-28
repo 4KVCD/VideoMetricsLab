@@ -87,18 +87,18 @@ def test_a_core_message_is_translated_by_its_shape_line_by_line(catalog):
     catalog({
         "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} ist auf der GPU gescheitert; CPU…",
         "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship-GPU fehlt ({reason}); CPU…",
-        "No supported NVIDIA CUDA or AMD HIP GPU was detected.": "Keine GPU gefunden.",
+        "No GPU that Vship can use was found.": "Keine GPU gefunden.",
         "Detecting black bars in source and test video…": "Schwarze Balken werden gesucht…",
     })
     assert i18n.tr_message("SSIMULACRA2 failed on the GPU; calculating it on the CPU…") == \
         "SSIMULACRA2 ist auf der GPU gescheitert; CPU…"
     # The reason inside is a message of its own, and "..." is "…".
     assert i18n.tr_message(
-        "Vship GPU unavailable (No supported NVIDIA CUDA or AMD HIP GPU was detected.); using CPU reference metrics...") \
+        "Vship GPU unavailable (No GPU that Vship can use was found.); using CPU reference metrics...") \
         == "Vship-GPU fehlt (Keine GPU gefunden.); CPU…"
     # The run line trims the ellipsis: the translation is trimmed to match.
     assert i18n.tr_message("Detecting black bars in source and test video") == "Schwarze Balken werden gesucht"
-    assert i18n.tr_message("Unknown words\nNo supported NVIDIA CUDA or AMD HIP GPU was detected.") == \
+    assert i18n.tr_message("Unknown words\nNo GPU that Vship can use was found.") == \
         "Unknown words\nKeine GPU gefunden."
 
 

@@ -3918,7 +3918,7 @@ def test_accepting_the_warning_starts_the_run(qapp, monkeypatch):
 
 @pytest.mark.parametrize(("minutes", "backend"), [(105, "gpu"), (9, "cpu")])
 def test_no_warning_on_the_gpu_or_under_ten_minutes(qapp, monkeypatch, minutes, backend):
-    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     win = MainWindow()
     _long_row(win, "clip.mkv", minutes=minutes, backend=backend)
     shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
@@ -4225,7 +4225,7 @@ def test_gpu_choice_without_a_supported_gpu_is_warned_like_cpu(qapp, monkeypatch
     CPU all the same -- days and terabytes for a film -- and used to start
     without a word. It is now in the same long-video warning, saying why."""
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
-                        lambda: (None, "No supported NVIDIA CUDA or AMD HIP GPU was detected."))
+                        lambda: (None, "No GPU that Vship can use was found."))
     win = MainWindow()
     _long_row(win, "film.mkv", minutes=minutes, backend="gpu")
     shown = _answer_warning(monkeypatch, main_window_module.QMessageBox.No)
@@ -4252,7 +4252,7 @@ def test_a_gpu_row_shows_and_redoes_a_cpu_score_only_when_a_gpu_exists(qapp, mon
     from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
 
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
-                        lambda: ((object(), "") if gpu_present else (None, "no GPU")))
+                        lambda: ((_CUDA_GPU, "") if gpu_present else (None, "no GPU")))
     cpu = FrameMetricResult("ssimulacra2", [0], [0.0], [46.89],
                             MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1"))
     win = MainWindow()
@@ -4279,7 +4279,7 @@ def test_a_score_calculated_the_chosen_way_has_no_implementation_note(qapp, monk
     row, so the tooltip does not say how it was calculated."""
     from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance
 
-    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     gpu = FrameMetricResult("ssimulacra2", [0], [0.0], [44.47], MetricProvenance(
         "Vship/ssimulacra2", "", "gpu", "ssimulacra2-vship-gpu-v1", {"gpu_name": "NVIDIA GeForce RTX 5090"}))
     win = MainWindow()
@@ -5167,6 +5167,73 @@ def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
     win.close()
 
 
+_CUDA_GPU = main_window_module.perceptual_vship.VshipDevice("cuda", "NVIDIA GPU", 0, "5.1.1", None)
+_VULKAN_GPU = main_window_module.perceptual_vship.VshipDevice("vulkan", "Intel Arc", 0, "5.1.1", None)
+
+
+@pytest.mark.parametrize(("vendors", "offered"), [
+    (["nvidia"], ["auto", "vulkan", "cuda"]),
+    (["amd", "intel"], ["auto", "vulkan", "hip"]),
+    (["intel"], ["auto", "vulkan"]),
+    (["nvidia", "amd"], ["auto", "vulkan", "cuda", "hip"]),
+])
+def test_settings_offer_vulkan_and_each_gpus_own_vship_build(qapp, monkeypatch, vendors, offered):
+    """Settings > GPU metrics > GPU backend: Vulkan runs on any GPU; CUDA is
+    offered with an NVIDIA GPU and HIP with an AMD one. Auto by default."""
+    from vmaf_app.core.models import GpuVendor
+
+    monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor(v) for v in vendors])
+    win = MainWindow()
+    combo = win.settings_gpu_backend
+    assert [combo.itemData(i) for i in range(combo.count())] == offered
+    assert combo.currentData() == "auto" and win._settings.gpu_backend == "auto"
+    assert "17 points" in combo.toolTip()
+    win.close()
+
+
+def test_choosing_a_gpu_backend_is_saved_and_probed_again(qapp, monkeypatch):
+    from vmaf_app.core import perceptual_vship
+
+    probes = []
+    monkeypatch.setattr(perceptual_vship, "start_vship_probe", lambda: probes.append(perceptual_vship.vship_backend()))
+    monkeypatch.setattr(perceptual_vship, "_backend", "auto")
+    win = MainWindow()
+    win.settings_gpu_backend.setCurrentIndex(win.settings_gpu_backend.findData("vulkan"))
+    assert Settings.load().gpu_backend == "vulkan" and probes == ["vulkan"]
+    win.close()
+
+
+def test_a_cpu_ssimulacra2_is_the_gpu_choice_where_vulkan_cannot_score_it(qapp, monkeypatch):
+    """On Vship's Vulkan build SSIMULACRA2 is calculated on the CPU; that
+    score must count as done, or every run would calculate it again."""
+    from types import SimpleNamespace
+
+    from vmaf_app.core.metric_results import MetricProvenance
+
+    cpu = SimpleNamespace(provenance=MetricProvenance("libjxl/ssimulacra2", "", "cpu", "x"))
+    win = MainWindow()
+    row = win._rows[win._add_table_row(Path("a.mkv"))]
+    row.metric_backends = {"ssimulacra2": "gpu", "butteraugli": "gpu"}
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_VULKAN_GPU, ""))
+    assert win._backend_matches(row, "ssimulacra2", cpu)
+    assert not win._backend_matches(row, "butteraugli", cpu)  # Vulkan scores it: a GPU run is due
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
+    assert not win._backend_matches(row, "ssimulacra2", cpu)
+    win.close()
+
+
+def test_the_long_cpu_run_warning_says_why_ssimulacra2_is_on_the_cpu_on_vulkan(qapp, monkeypatch):
+    shown = []
+    monkeypatch.setattr(main_window_module.QMessageBox, "warning",
+                        lambda _parent, _title, text, *_args: shown.append(text) or main_window_module.QMessageBox.No)
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_VULKAN_GPU, ""))
+    win = MainWindow()
+    row = _long_row(win, "film.mkv", minutes=90, backend="gpu")
+    assert not win._confirm_long_cpu_perceptual([win._rows[row]])
+    assert "SSIMULACRA2 (set to GPU, but Vship's Vulkan build does not score it correctly yet)" in shown[0]
+    win.close()
+
+
 def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkeypatch):
     """Settings > GPU metrics: one Vship pass per video, for 4K VVC decoded
     on the CPU. Off by default: it is very heavy on GPU memory at 4K."""
@@ -5176,7 +5243,7 @@ def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkey
     win.settings_gpu_together.setChecked(True)
     assert Settings.load().gpu_metrics_together
     monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
-    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     _long_row(win, "clip.mkv", minutes=1, backend="gpu")
     win._on_run_clicked()
     assert win._worker is not None and win._worker.gpu_metrics_together
@@ -5232,7 +5299,7 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
              "fps": 30.0, "state": "running", "phase": (2, 2, "Butteraugli"), "waiting_for": None, "step": "",
              "decode": "source cuda, distorted cuda"},
         ])
-        win._on_job_status(0, "Vship GPU unavailable (No supported NVIDIA CUDA or AMD HIP GPU was detected.); "
+        win._on_job_status(0, "Vship GPU unavailable (No GPU that Vship can use was found.); "
                               "using CPU reference metrics…")
         line = win.job_progress_labels[0].text()
         assert "[[{kind} {number} of {count} ({overall}) ({details})]]" not in line  # filled in, not raw

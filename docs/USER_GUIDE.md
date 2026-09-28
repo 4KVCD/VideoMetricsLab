@@ -18,10 +18,13 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
    to show its detailed statistics. Export a graph PNG or CSV as needed.
 
-SSIMULACRA2 and Butteraugli use Vship GPU acceleration by default on supported
-NVIDIA CUDA or AMD HIP systems. If no compatible GPU/runtime is available, the
-input format is unsupported, or GPU scoring fails, the app falls back to its
-bundled libjxl CPU implementation. GPU and CPU results are cached separately
+SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship. Settings
+> GPU metrics > GPU backend chooses Vship's build: Auto (the default) uses CUDA
+on NVIDIA, HIP on AMD and Vulkan on other GPUs such as Intel's; Vulkan can also
+be chosen on any GPU. Vship 5.1.1's Vulkan build scores SSIMULACRA2 too high, so
+on Vulkan SSIMULACRA2 is calculated on the CPU. If no GPU can be used, the input
+format is unsupported, or GPU scoring fails, SSIMULACRA2 and Butteraugli fall
+back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU and CPU results are cached separately
 because their implementations can produce different scores. These two metrics
 are opt-in and do not add processing to runs where they are unchecked.
 

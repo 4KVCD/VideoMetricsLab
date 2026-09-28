@@ -12,8 +12,11 @@ the app, so every codec it reads works, VVC included, with hardware decode
 per input where the GPU has one. It streams tightly packed frames into rings
 of pinned host buffers (see _FrameStream). Vship converts each frame from the
 colorspace it is described in (_vship_colorspace) and computes the metric on
-the GPU. Vship takes a frame as three planes, so a hardware-decoded frame
-that crosses the pipe in the decoder's NV12/P010 layout has only its chroma
+the GPU -- through Vship's CUDA build on NVIDIA, its HIP build on AMD, or
+its Vulkan build, which runs on any GPU with a Vulkan driver (see
+VSHIP_BUILDS). Vship takes a frame as three planes, so a hardware-decoded
+frame
+crossing the pipe in the decoder's NV12/P010 layout has only its chroma
 split into planes here (see _passthrough_format). No FFVship or FFMS2
 executable is bundled.
 """
@@ -216,7 +219,7 @@ class _ImageFormat:
 
 @dataclass(slots=True)
 class _LoadedVship:
-    vendor: str
+    backend: str
     path: Path
     library: ctypes.CDLL
     dll_directory: object
@@ -224,7 +227,7 @@ class _LoadedVship:
 
 @dataclass(frozen=True, slots=True)
 class VshipDevice:
-    vendor: str
+    backend: str  # "vulkan", "cuda" or "hip": the Vship build it runs on (VSHIP_BACKENDS)
     name: str
     gpu_id: int
     version: str
@@ -304,6 +307,31 @@ def _message(lib: ctypes.CDLL, code: int | None = None) -> str:
         return f"Vship error {code}"
 
 
+#: Vship's builds, bundled in tools/vship/<folder>: CUDA runs on NVIDIA,
+#: HIP on AMD, and Vulkan on any GPU with a Vulkan driver -- NVIDIA, AMD and
+#: Intel.
+VSHIP_BUILDS: dict[str, str] = {"cuda": "nvidia", "hip": "amd", "vulkan": "vulkan"}
+#: Settings > GPU metrics > backend: "auto", or the build to try first. Auto
+#: tries CUDA, then HIP, then Vulkan: the fastest build whose scores agree
+#: with the reference on each GPU (CUDA is faster than Vulkan on NVIDIA for
+#: SSIMULACRA2 and CVVDP, and Vulkan's SSIMULACRA2 is wrong -- see
+#: SCORED_WRONGLY), and Vulkan for a GPU neither of the others can use.
+#: Whatever is chosen, the other builds follow if it cannot run.
+VSHIP_BACKENDS = ("auto", "vulkan", "cuda", "hip")
+DEFAULT_VSHIP_BACKEND = "auto"
+_AUTO_ORDER = ("cuda", "hip", "vulkan")
+_BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
+#: (build, metric) pairs a Vship build scores wrongly: the metric is
+#: calculated on the CPU instead, as on a PC without a usable GPU. Vship
+#: 5.1.1's Vulkan build scores SSIMULACRA2 far higher than its CUDA build
+#: and libjxl's reference on the same frames -- HoneyBee 4K against a CRF 22
+#: HEVC encode: libjxl 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at
+#: 360p -- reproduced with Vship's own FFVship, while Butteraugli (within
+#: 0.1%) and CVVDP (0.01 JOD) agree. Remove the entry only once a bundled
+#: Vship has been measured to agree.
+SCORED_WRONGLY = frozenset({("vulkan", "ssimulacra2")})
+_backend = DEFAULT_VSHIP_BACKEND
+
 # The probe's result and when it was made. One probe serves the whole
 # session: callers that arrive while it runs wait for it rather than
 # starting their own.
@@ -313,8 +341,41 @@ _probed: tuple[tuple[VshipDevice | None, str], float] | None = None
 FAILED_PROBE_RETRY_SECONDS = 60.0
 
 
+def set_vship_backend(backend: str) -> None:
+    """ "auto" or the Vship build to try first (Settings > GPU metrics); an
+    unknown name is "auto". A probe made for another choice is forgotten, so
+    the next one -- start_vship_probe, or the next GPU run -- uses this."""
+    global _backend, _probed
+    backend = backend if backend in VSHIP_BACKENDS else DEFAULT_VSHIP_BACKEND
+    with _PROBE_LOCK:
+        if backend != _backend:
+            _backend = backend
+            _probed = None
+
+
+def vship_backend() -> str:
+    return _backend
+
+
+def backend_label(backend: str) -> str:
+    """ "Vulkan", "CUDA" or "HIP"."""
+    return _BACKEND_LABELS.get(backend, backend)
+
+
+def scores_correctly(device: VshipDevice, key: str) -> bool:
+    """Whether `device`'s Vship build scores `key` right (SCORED_WRONGLY)."""
+    return (device.backend, key) not in SCORED_WRONGLY
+
+
+def gpu_can_score(key: str) -> bool:
+    """Whether SSIMULACRA2 or Butteraugli set to GPU is calculated on the GPU
+    here: a GPU Vship can use, whose build scores it right. Probes once."""
+    device, _reason = detect_vship_device()
+    return device is not None and scores_correctly(device, key)
+
+
 def detect_vship_device() -> tuple[VshipDevice | None, str]:
-    """Return a fully verified NVIDIA/AMD device, or a user-readable reason.
+    """Return a fully verified GPU for Vship, or a user-readable reason.
 
     Probed once and cached; see start_vship_probe and forget_failed_vship_probe."""
     global _probed
@@ -323,7 +384,7 @@ def detect_vship_device() -> tuple[VshipDevice | None, str]:
             _probed = (_probe_vship_device(), time.monotonic())
             device, reason = _probed[0]
             if device is not None:
-                _log.info("Vship %s GPU: %s", device.version, device.name)
+                _log.info("Vship %s (%s) GPU: %s", device.version, backend_label(device.backend), device.name)
             else:
                 _log.warning("Vship GPU unavailable: %s", reason)
         return _probed[0]
@@ -348,49 +409,61 @@ def forget_failed_vship_probe() -> None:
             _probed = None
 
 
+def _probe_order(choice: str | None = None) -> tuple[str, ...]:
+    """The builds the probe tries, in turn, for "auto" or a chosen build."""
+    choice = _backend if choice is None else choice
+    return _AUTO_ORDER if choice == "auto" else (choice, *(build for build in _AUTO_ORDER if build != choice))
+
+
 def _probe_vship_device() -> tuple[VshipDevice | None, str]:
     if os.name != "nt":
         return None, "Vship GPU acceleration is only bundled for Windows."
     tools = Path(__file__).resolve().parents[1] / "tools" / "vship"
     failures: list[str] = []
-    for vendor in ("nvidia", "amd"):
-        path = tools / vendor / "libvship.dll"
+    for backend in _probe_order():
+        label = backend_label(backend)
+        path = tools / VSHIP_BUILDS[backend] / "libvship.dll"
         if not path.is_file():
-            failures.append(f"{vendor.upper()} Vship library is missing")
+            failures.append(f"Vship's {label} library is missing")
             continue
         try:
             dll_directory = os.add_dll_directory(str(path.parent))
             lib = ctypes.CDLL(str(path))
             if not _has_api(lib):
-                failures.append(f"{vendor.upper()} Vship library is older than 5.1")
+                failures.append(f"Vship's {label} library is older than 5.1")
                 continue
             _configure_api(lib)
-            loaded = _LoadedVship(vendor, path, lib, dll_directory)
+            loaded = _LoadedVship(backend, path, lib, dll_directory)
             count = ctypes.c_int()
             error = lib.Vship_GetDeviceCount(ctypes.byref(count))
             if error != 0:
-                failures.append(f"{vendor.upper()}: {_message(lib, error)}")
+                failures.append(f"{label}: {_message(lib, error)}")
                 continue
+            usable: list[tuple[bool, int, str]] = []
             for gpu_id in range(count.value):
                 error = lib.Vship_GPUFullCheck(gpu_id)
                 if error != 0:
-                    failures.append(f"{vendor.upper()} GPU {gpu_id}: {_message(lib, error)}")
+                    failures.append(f"{label} GPU {gpu_id}: {_message(lib, error)}")
                     continue
                 info = _DeviceInfo()
                 error = lib.Vship_GetDeviceInfo(ctypes.byref(info), gpu_id)
                 if error != 0:
-                    failures.append(f"{vendor.upper()} GPU {gpu_id}: {_message(lib, error)}")
+                    failures.append(f"{label} GPU {gpu_id}: {_message(lib, error)}")
                     continue
-                version = lib.Vship_GetVersion()
                 name = bytes(info.name).split(b"\0", 1)[0].decode("utf-8", errors="replace")
+                usable.append((bool(info.integrated), gpu_id, name or f"{label} GPU {gpu_id}"))
+            if usable:
+                # Vulkan lists every GPU, an integrated one too, in the
+                # driver's order: a discrete GPU comes first here.
+                _integrated, gpu_id, name = min(usable)
+                version = lib.Vship_GetVersion()
                 version_text = f"{version.major}.{version.minor}.{version.minorMinor}"
-                return VshipDevice(vendor, name or f"{vendor.upper()} GPU {gpu_id}", gpu_id,
-                                   version_text, loaded), ""
+                return VshipDevice(backend, name, gpu_id, version_text, loaded), ""
             if count.value == 0:
-                failures.append(f"No {vendor.upper()} Vship GPU was detected")
+                failures.append(f"{label}: no GPU was found")
         except (OSError, AttributeError, TypeError) as error:
-            failures.append(f"{vendor.upper()} Vship library unavailable: {error}")
-    return None, "; ".join(failures) or "No supported NVIDIA CUDA or AMD HIP GPU was detected."
+            failures.append(f"Vship's {label} library could not be loaded: {error}")
+    return None, "; ".join(failures) or "No GPU that Vship can use was found."
 
 
 def _image_format(info: VideoInfo) -> _ImageFormat:
@@ -1545,7 +1618,7 @@ def _run_vship_pass(
         times = frame_numbers.astype(np.float64) / max(source.fps, 1.0)
         results = MetricResultSet()
         parameters = {
-            "gpu_vendor": device.vendor,
+            "gpu_backend": device.backend,
             "gpu_name": device.name,
             "input": "ffmpeg frames (hardware-decoded NV12/P010 split into planes); "
                      "native range/transfer and primaries",
@@ -1577,7 +1650,7 @@ def _run_vship_pass(
                     compute_backend="gpu",
                     implementation_compatibility_id=cvvdp_spec.implementation_compatibility_id,
                     parameters={
-                        "gpu_vendor": device.vendor, "gpu_name": device.name,
+                        "gpu_backend": device.backend, "gpu_name": device.name,
                         "display": dict(cvvdp_spec.parameters)["display"],
                         "resize_to_display": dict(cvvdp_spec.parameters)["resize_to_display"],
                         "timeline": "JOD of each second of video",
@@ -1659,7 +1732,7 @@ def apply_vship_cpu_fallback(
         def message(spec: MetricRequestSpec) -> str:
             label = metric_definition(spec.key).label
             own = (reasons or {}).get(spec.key, reason)
-            return (f"{label} needs a supported NVIDIA or AMD GPU and could not use it: {own}"
+            return (f"{label} needs a GPU that Vship can use, and could not use one: {own}"
                     if no_gpu else f"{label} could not be calculated: {own}")
 
         messages = {spec.key: message(spec) for spec in gpu_only}
@@ -1689,6 +1762,22 @@ def apply_vship_cpu_fallback(
             on_progress=on_progress, on_status=on_status,
             cancel_event=cancel_event, process_handle=process_handle,
         ), failures)
+
+    # A metric this build scores wrongly goes to the CPU, planned like a CPU
+    # choice: as on a PC with no GPU for it, the Videos tab asks before a
+    # long CPU run (MainWindow._confirm_long_cpu_perceptual).
+    wrong = tuple(spec for spec in gpu_specs if not scores_correctly(device, spec.key))
+    if wrong:
+        _log.info("%s on the CPU: Vship's %s build scores it wrongly",
+                  " and ".join(metric_definition(spec.key).label for spec in wrong), backend_label(device.backend))
+        gpu_specs = tuple(spec for spec in gpu_specs if spec not in wrong)
+        cpu_specs = cpu_specs + wrong
+        if not gpu_specs:
+            return run_perceptual_task(
+                source, distorted, request, cpu_specs,
+                on_progress=on_progress, on_status=on_status,
+                cancel_event=cancel_event, process_handle=process_handle,
+            )
 
     crops = _resolve_crops(
         source, distorted, request.recipe, cancel_event, process_handle, on_status,

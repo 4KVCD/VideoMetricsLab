@@ -546,11 +546,12 @@ class MainWindow(QMainWindow):
         self._settings = Settings.load()
         _log.info(
             "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
-            "GPU metrics %s, saved results %s (%s)",
+            "GPU metrics %s on the %s backend, saved results %s (%s)",
             "on" if self._settings.parallel_jobs > 1 else "off",
             "on" if self._settings.default_gpu_decode else "off",
             self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
             "together in one pass" if self._settings.gpu_metrics_together else "one pass each",
+            self._settings.gpu_backend,
             "reused" if self._settings.use_cache else "not reused",
             self._settings.cache_dir or "default folder",
         )
@@ -984,6 +985,34 @@ class MainWindow(QMainWindow):
 
         gpu_box = QGroupBox(tr("GPU metrics"))
         gpu_layout = QVBoxLayout(gpu_box)
+        # Which Vship build: Auto unless the user has a reason to pick one.
+        # Vulkan runs on any GPU; CUDA is offered with an NVIDIA GPU and HIP
+        # with an AMD one -- or when already chosen, so a GPU that detection
+        # missed does not lose the choice.
+        self.settings_gpu_backend = QComboBox()
+        vendors = getattr(self, "_detected_gpu_vendors", [])
+        choices = [(tr("Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)"), "auto"),
+                   (tr("Vulkan (any GPU)"), "vulkan")]
+        if GpuVendor.NVIDIA in vendors or self._settings.gpu_backend == "cuda":
+            choices.append((tr("CUDA (NVIDIA)"), "cuda"))
+        if GpuVendor.AMD in vendors or self._settings.gpu_backend == "hip":
+            choices.append((tr("HIP (AMD)"), "hip"))
+        for label, backend in choices:
+            self.settings_gpu_backend.addItem(label, backend)
+        self.settings_gpu_backend.setCurrentIndex(max(0, self.settings_gpu_backend.findData(self._settings.gpu_backend)))
+        self.settings_gpu_backend.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.settings_gpu_backend.setToolTip(tr(
+            "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with "
+            "the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on "
+            "any GPU, but Vship 5.1.1's Vulkan build scores SSIMULACRA2 far too high (up to 17 points at 4K), so "
+            "on Vulkan SSIMULACRA2 is calculated on the CPU. If the chosen build cannot run here, the others are "
+            "tried."))
+        self.settings_gpu_backend.currentIndexChanged.connect(self._on_settings_edited)
+        backend_row = QHBoxLayout()
+        backend_row.addWidget(QLabel(tr("GPU backend:")))
+        backend_row.addWidget(self.settings_gpu_backend)
+        backend_row.addStretch(1)
+        gpu_layout.addLayout(backend_row)
         self.settings_gpu_together = QCheckBox(
             tr("Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"))
         self.settings_gpu_together.setToolTip(
@@ -1128,6 +1157,13 @@ class MainWindow(QMainWindow):
         language_before = self._settings.language
         self._settings.language = self.settings_language.currentData() or ""
         self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
+        backend = self.settings_gpu_backend.currentData() or "auto"
+        if backend != self._settings.gpu_backend:
+            self._settings.gpu_backend = backend
+            # Probed again now, off the UI thread, for the next run and for
+            # what the table says about GPU metrics.
+            perceptual_vship.set_vship_backend(backend)
+            perceptual_vship.start_vship_probe()
 
         if self._settings.ffmpeg_dir != before_ffmpeg:
             self._apply_ffmpeg_setting()
@@ -1570,7 +1606,9 @@ class MainWindow(QMainWindow):
         )
         performance_form.addRow(tr("Butteraugli compute:"), self.butteraugli_backend_combo)
 
-        detected = detected_gpu_vendors()
+        # Kept for Settings > GPU metrics, which offers the Vship builds for
+        # the GPUs here (built after this panel).
+        self._detected_gpu_vendors = detected = detected_gpu_vendors()
         if detected:
             names = ", ".join(v.value.upper() for v in detected)
             performance_form.addRow("", QLabel(tr("Detected GPU(s): {names}", names=names)))
@@ -3282,13 +3320,17 @@ class MainWindow(QMainWindow):
             ]
             if any(row_data.metric_backends.get(key) != "cpu" for key in pending) and gpu_missing is None:
                 gpu_missing = not self._vship_available()
+            # Set to GPU but calculated on the CPU: no GPU Vship can use, or
+            # a build that scores it wrongly (SSIMULACRA2 on Vulkan).
             cpu_keys = [
                 key for key in pending
-                if row_data.metric_backends.get(key) == "cpu" or gpu_missing
+                if row_data.metric_backends.get(key) == "cpu" or gpu_missing or not self._gpu_can_score(key)
             ]
             cpu_metrics = [
-                metric_definition(key).label + ("" if row_data.metric_backends.get(key) == "cpu"
-                                                else tr(" (set to GPU, but no supported GPU was found)"))
+                metric_definition(key).label + (
+                    "" if row_data.metric_backends.get(key) == "cpu"
+                    else tr(" (set to GPU, but no supported GPU was found)") if gpu_missing
+                    else tr(" (set to GPU, but Vship's Vulkan build does not score it correctly yet)"))
                 for key in cpu_keys
             ]
             if not cpu_metrics:
@@ -3322,9 +3364,16 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _vship_available() -> bool:
-        """Whether GPU SSIMULACRA2/Butteraugli can run here. The probe is
-        cached by perceptual_vship, so only the first call loads anything."""
+        """Whether a GPU Vship can use is here (CVVDP runs on it). The probe
+        is cached by perceptual_vship, so only the first call loads anything."""
         return perceptual_vship.detect_vship_device()[0] is not None
+
+    @staticmethod
+    def _gpu_can_score(key: str) -> bool:
+        """Whether SSIMULACRA2/Butteraugli set to GPU is calculated on the GPU
+        here -- not where the build scores it wrongly (SSIMULACRA2 on Vship's
+        Vulkan build), which calculates it on the CPU."""
+        return perceptual_vship.gpu_can_score(key)
 
     @staticmethod
     def _selected_metrics(row_data: RowData) -> tuple[str, ...]:
@@ -3374,8 +3423,7 @@ class MainWindow(QMainWindow):
                         "needs every frame: it is not available while libvmaf frame subsample "
                         "is above 1."))
             if not MainWindow._vship_available():
-                return (tr("CVVDP is calculated on the GPU only, and no supported NVIDIA or AMD "
-                        "GPU was found."))
+                return tr("CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.")
         return None
 
     @classmethod
@@ -3558,7 +3606,7 @@ class MainWindow(QMainWindow):
         if choice == "cpu":
             return produced == "cpu"
         if choice == "gpu" and produced == "cpu":
-            return not self._vship_available()
+            return not self._gpu_can_score(key)
         return True
 
     def _backend_note(self, row_data: RowData, key: str, metric) -> str:

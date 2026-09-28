@@ -909,7 +909,7 @@ def test_without_a_gpu_cvvdp_alone_is_an_error(monkeypatch):
     request = _cvvdp_request("cvvdp")
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (None, "no supported GPU"))
     monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", lambda *a, **k: pytest.fail("no CPU CVVDP"))
-    with pytest.raises(perceptual_cpu.PerceptualRunError, match="CVVDP needs a supported NVIDIA or AMD GPU"):
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="CVVDP needs a GPU that Vship can use"):
         vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
 
 
@@ -1302,3 +1302,60 @@ def test_each_gpu_metrics_pass_is_handed_on_as_it_finishes(monkeypatch):
     vship.run_vship_task(source, source, request, request.metrics, device, None, None, on_pass_done=done.append)
     assert [output.metrics.keys() for output in done] == [("ssimulacra2",), ("cvvdp",)]
 
+
+
+# ------------------------------------------------------------------ backends
+
+def test_auto_tries_cuda_then_hip_then_vulkan_and_a_choice_goes_first():
+    """Auto: the fastest build whose scores agree with the reference on each
+    GPU; a chosen build is tried first, and the others still follow if it
+    cannot run here."""
+    assert vship.DEFAULT_VSHIP_BACKEND == "auto"
+    assert vship._probe_order("auto") == ("cuda", "hip", "vulkan")
+    assert vship._probe_order("vulkan") == ("vulkan", "cuda", "hip")
+    assert vship._probe_order("hip") == ("hip", "cuda", "vulkan")
+
+
+def test_choosing_another_backend_forgets_the_probe(monkeypatch):
+    monkeypatch.setattr(vship, "_backend", "auto")
+    monkeypatch.setattr(vship, "_probed", ((None, "no GPU"), 0.0))
+    vship.set_vship_backend("auto")
+    assert vship._probed is not None  # the same choice: kept
+    vship.set_vship_backend("vulkan")
+    assert vship._probed is None and vship.vship_backend() == "vulkan"
+    vship.set_vship_backend("no such build")
+    assert vship.vship_backend() == "auto"
+
+
+def test_vulkan_ssimulacra2_is_not_trusted_but_its_other_metrics_are():
+    """Vship 5.1.1's Vulkan SSIMULACRA2 read 62.9 where CUDA read 45.5 and
+    libjxl 47.4 on the same 4K frames; its Butteraugli and CVVDP agree."""
+    vulkan = vship.VshipDevice("vulkan", "GPU", 0, "5.1.1", None)
+    cuda = vship.VshipDevice("cuda", "GPU", 0, "5.1.1", None)
+    assert not vship.scores_correctly(vulkan, "ssimulacra2")
+    assert vship.scores_correctly(vulkan, "butteraugli") and vship.scores_correctly(vulkan, "cvvdp")
+    assert vship.scores_correctly(cuda, "ssimulacra2")
+
+
+def test_on_vulkan_ssimulacra2_is_calculated_on_the_cpu_and_butteraugli_on_the_gpu(monkeypatch):
+    device = vship.VshipDevice("vulkan", "Intel Arc", 0, "5.1.1", None)
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(vship, "forget_failed_vship_probe", lambda: None)
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *_args: (None, None))
+    on_gpu, on_cpu = [], []
+
+    def gpu(_s, _d, _request, specs, used, *_crops, **_kwargs):
+        on_gpu.append((used.backend, [spec.key for spec in specs]))
+        return _single_metric_output("butteraugli", 1.5, "gpu")
+
+    def cpu(_s, _d, _request, specs, **_kwargs):
+        on_cpu.append([spec.key for spec in specs])
+        return _single_metric_output("ssimulacra2", 80.0, "cpu")
+
+    monkeypatch.setattr(vship, "run_vship_task", gpu)
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", cpu)
+    request = _request()  # SSIMULACRA2 and Butteraugli, both set to GPU
+    output = vship.apply_vship_cpu_fallback(_info("a.mkv"), _info("b.mkv"), request, request.metrics)
+    assert on_gpu == [("vulkan", ["butteraugli"])] and on_cpu == [["ssimulacra2"]]
+    assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
+    assert not output.failures

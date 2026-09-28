@@ -85,6 +85,13 @@ class Settings:
     # are, so it is no part of cache identity.
     gpu_metrics_together: bool = False
 
+    # Which of Vship's builds calculates the GPU metrics: "auto" (CUDA on
+    # NVIDIA, HIP on AMD, Vulkan on other GPUs), or "vulkan", "cuda" or
+    # "hip" tried first -- see perceptual_vship.VSHIP_BACKENDS. Like
+    # gpu_metrics_together, no part of cache identity: a metric a build
+    # scores wrongly is not scored on it (perceptual_vship.SCORED_WRONGLY).
+    gpu_backend: str = "auto"
+
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True
 

@@ -51,12 +51,19 @@ case anyone overrides that.
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.
   In the current build they add about 12 MB installed and 7 MB compressed.
-- **Vship 5.1.1 GPU libraries** for SSIMULACRA2 and Butteraugli. The app first
-  tries the matching NVIDIA CUDA or AMD HIP library and falls back to the
-  bundled CPU tools if the GPU, driver/runtime, input format, or GPU processing
-  is unavailable. The Vship CLI and FFMS2 decoder are not included; video
-  frames continue to come from the user's FFmpeg installation. Vship and
-  metric notices are packaged beside the libraries.
+- **Vship 5.1.1 GPU libraries** for SSIMULACRA2, Butteraugli and CVVDP, in
+  three builds: `vmaf_app/tools/vship/nvidia` (CUDA), `amd` (HIP) and `vulkan`
+  (any GPU with a Vulkan driver, NVIDIA, AMD and Intel alike). Settings > GPU
+  metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA, HIP
+  on AMD and Vulkan on other GPUs, and a build that cannot run hands over to the
+  next. Vship 5.1.1's Vulkan SSIMULACRA2 disagrees with its CUDA build and with
+  libjxl, so on Vulkan SSIMULACRA2 uses the CPU tool
+  (`perceptual_vship.SCORED_WRONGLY`); re-measure before removing that when
+  updating Vship. Where no build can use the GPU, the input format is
+  unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall back to
+  the bundled CPU tools. The Vship CLI and FFMS2 decoder are not included; video
+  frames continue to come from the user's FFmpeg installation. Vship and metric
+  notices are packaged beside the libraries.
 
 ## What is not, and why
 

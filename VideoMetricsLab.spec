@@ -70,9 +70,10 @@ if LIBJXL_TOOLS.is_dir():
 else:
     print("WARNING: bundled libjxl perceptual tools are missing")
 
-# Vship's MIT-licensed metric library only (not FFVship/FFMS2). Its CUDA
-# build is self-contained apart from the NVIDIA driver; the HIP build will
-# use the AMD HIP runtime when available. Runtime failures select libjxl CPU.
+# Vship's MIT-licensed metric library only (not FFVship/FFMS2), in three
+# builds: CUDA (self-contained apart from the NVIDIA driver), HIP (uses the
+# AMD HIP runtime when available) and Vulkan (needs only the GPU driver's
+# vulkan-1.dll). Runtime failures select libjxl CPU.
 VSHIP_TOOLS = PROJECT / "vmaf_app" / "tools" / "vship"
 if VSHIP_TOOLS.is_dir():
     datas.append((str(VSHIP_TOOLS), "vmaf_app/tools/vship"))

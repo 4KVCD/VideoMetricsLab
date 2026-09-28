@@ -82,13 +82,16 @@ def self_test() -> str:
         tool = find_metric_executable(metric)
         lines.append(f"  OK    {metric} ({tool})" if tool else f"  WARN  {metric} tool absent")
 
-    from vmaf_app.core.perceptual_vship import detect_vship_device
+    from vmaf_app.core.perceptual_vship import backend_label, detect_vship_device, set_vship_backend
+    from vmaf_app.core.settings import Settings
+
+    set_vship_backend(Settings.load().gpu_backend)
 
     vship_device, vship_reason = detect_vship_device()
     if vship_device is not None:
         lines.append(
             f"  OK    Vship {vship_device.version} GPU metrics "
-            f"({vship_device.vendor.upper()}: {vship_device.name})"
+            f"({backend_label(vship_device.backend)}: {vship_device.name})"
         )
     else:
         lines.append(f"  WARN  Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
@@ -183,8 +186,9 @@ def main() -> int:
     from vmaf_app.core.settings import Settings
 
     apply_language(app, Settings.load().language)
-    from vmaf_app.core.perceptual_vship import start_vship_probe
+    from vmaf_app.core.perceptual_vship import set_vship_backend, start_vship_probe
 
+    set_vship_backend(Settings.load().gpu_backend)
     start_vship_probe()  # done by the time the first video is added
     window = MainWindow()
     window.show()
