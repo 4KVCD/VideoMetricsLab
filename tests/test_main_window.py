@@ -4928,6 +4928,9 @@ def test_a_failed_metrics_cell_says_why_it_failed(qapp, tmp_path, monkeypatch):
     to skip it." -- the reason was only on the file name's tooltip."""
     from vmaf_app.core import result_cache
     monkeypatch.setattr(result_cache, "cache_dir", lambda: tmp_path)
+    # A GPU Vship can use: without one, CVVDP's cell is "n/a" (GPU only),
+    # not Failed -- as on the CI runner, where this test failed.
+    monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     source = tmp_path / "source.mp4"
     source.write_bytes(b"s" * 1000)
     distorted = tmp_path / "distorted.mp4"
