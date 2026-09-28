@@ -1327,6 +1327,25 @@ def test_auto_tries_cuda_then_hip_then_vulkan_and_a_choice_goes_first():
     assert vship._probe_order("hip") == ("hip", "cuda", "vulkan")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Vship is only bundled for Windows")
+def test_vships_vulkan_build_is_not_loaded_where_vulkan_has_no_gpu(monkeypatch):
+    """Where the Vulkan loader is installed but no driver answers, loading
+    Vship's Vulkan build fails (WinError 1114) and the process then crashes
+    as it exits: every test run on GitHub's runner ended in exit code 1."""
+    loaded = []
+
+    def cdll(path):
+        loaded.append(Path(path).parent.name)
+        raise OSError("not loaded in this test")
+
+    monkeypatch.setattr(vship, "_backend", "vulkan")
+    monkeypatch.setattr(vship, "_vulkan_unavailable", lambda: "no GPU with a Vulkan driver was found")
+    monkeypatch.setattr(vship.ctypes, "CDLL", cdll)
+    device, reason = vship._probe_vship_device()
+    assert device is None and "vulkan" not in loaded and loaded == ["nvidia", "amd"]
+    assert reason.startswith("Vulkan: no GPU with a Vulkan driver was found; ")
+
+
 def test_choosing_another_backend_forgets_the_probe(monkeypatch):
     monkeypatch.setattr(vship, "_backend", "auto")
     monkeypatch.setattr(vship, "_probed", ((None, "no GPU"), 0.0))
