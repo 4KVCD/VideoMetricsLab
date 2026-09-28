@@ -14,6 +14,7 @@ from vmaf_app.core.analysis_request import (
     FrameCoverage,
     MetricRequestSpec,
 )
+from vmaf_app.core.cvvdp import CvvdpDisplay, CvvdpSettings
 from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
@@ -22,10 +23,12 @@ from vmaf_app.core.ffmpeg_request import (
     supplemental_metric_specs,
 )
 from vmaf_app.core.metric_cache import (
+    VSHIP_COLOR_TAGS,
     clear_metrics,
     clear_recipe,
     load_metric,
     load_metrics,
+    load_other_parameters,
     metric_path,
     recipe_directory,
     store_metric,
@@ -349,6 +352,69 @@ def test_auto_perceptual_cache_reuses_scores_across_library_versions(tmp_path):
     loaded = load_metric(directory, spec)
     assert loaded.values.tolist() == [82.0]
     assert loaded.provenance.implementation_version == ""
+
+
+def _write_context(directory: Path, **distorted_info) -> None:
+    info = {"pix_fmt": "yuv420p", "color_transfer": ""}
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "context.json").write_text(json.dumps(
+        {"source_info": info, "distorted_info": {**info, **distorted_info}}), encoding="utf-8")
+
+
+def _vship_score(value: float, **parameters) -> FrameMetricResult:
+    provenance = MetricProvenance("Vship/ssimulacra2", "", "gpu", "ssimulacra2-vship-gpu-v1", parameters)
+    return FrameMetricResult("ssimulacra2", [0], [0.0], [value], provenance)
+
+
+def test_a_v12_gpu_score_of_an_untagged_rgb_video_is_calculated_again(tmp_path):
+    """v1.2's Vship tables took RGB without a transfer tag as BT.709; it is
+    sRGB, as FFVship 5.1.1 has it. Its GPU scores of such a pair -- no
+    "color_tags" in their provenance -- are passed over: a saved CPU score
+    answers instead, or the metric is calculated again."""
+    source, test = _paths(tmp_path)
+    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
+    directory = recipe_directory(tmp_path, source, test, recipe)
+    spec = next(spec for spec in metric_request_specs(VmafOptions(), ("ssimulacra2",)) if spec.key == "ssimulacra2")
+    _write_context(directory, pix_fmt="gbrp", color_transfer="unknown")
+    store_metric(directory, _vship_score(70.0), spec)
+    assert load_metric(directory, spec) is None
+
+    cpu = MetricProvenance("SSIMULACRA2", "", "cpu", "ssimulacra2-libjxl-cpu-v1")
+    store_metric(directory, FrameMetricResult("ssimulacra2", [0], [0.0], [71.0], cpu), spec)
+    assert load_metric(directory, spec).values.tolist() == [71.0]
+
+    # A score made since, with the FFVship mapping, is the GPU's answer.
+    store_metric(directory, _vship_score(72.0, color_tags=VSHIP_COLOR_TAGS), spec)
+    assert load_metric(directory, spec).values.tolist() == [72.0]
+
+
+@pytest.mark.parametrize("distorted_info", [
+    {"pix_fmt": "yuv420p10le", "color_transfer": ""},  # YUV: v1.2 read its tags as now
+    {"pix_fmt": "gbrp", "color_transfer": "iec61966-2-1"},  # tagged RGB: the same too
+    {"pix_fmt": "gbrap", "color_transfer": ""},  # v1.2 never scored it on the GPU
+])
+def test_other_v12_gpu_scores_are_still_reused(tmp_path, distorted_info):
+    source, test = _paths(tmp_path)
+    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
+    directory = recipe_directory(tmp_path, source, test, recipe)
+    spec = next(spec for spec in metric_request_specs(VmafOptions(), ("ssimulacra2",)) if spec.key == "ssimulacra2")
+    _write_context(directory, **distorted_info)
+    store_metric(directory, _vship_score(70.0), spec)
+    assert load_metric(directory, spec).values.tolist() == [70.0]
+
+
+def test_a_v12_cvvdp_score_of_an_untagged_rgb_video_is_not_shown_for_any_display(tmp_path):
+    source, test = _paths(tmp_path)
+    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
+    directory = recipe_directory(tmp_path, source, test, recipe)
+    office, phone = (metric_request_specs(VmafOptions(), ("cvvdp",), settings)[0]
+                     for settings in (CvvdpSettings(), CvvdpSettings(CvvdpDisplay(width=2400, height=1080))))
+    _write_context(directory, pix_fmt="rgb24", color_transfer="")
+    for spec, score in ((office, 9.5), (phone, 9.1)):
+        provenance = MetricProvenance("Vship/cvvdp", "", "gpu", spec.implementation_compatibility_id)
+        store_metric(directory, SequenceMetricResult("cvvdp", score, provenance), spec)
+    assert load_metric(directory, office) is None
+    assert load_other_parameters(directory, office) == []
 
 
 def test_planning_retains_grouping_and_special_xpsnr_coverage():

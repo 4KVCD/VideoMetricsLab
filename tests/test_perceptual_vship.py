@@ -16,6 +16,7 @@ from vmaf_app.core import perceptual_cpu
 from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropMode, GpuVendor, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualTaskOutput
@@ -744,6 +745,16 @@ def test_cvvdp_scores_every_frame_in_order_with_a_jod_per_second(monkeypatch, co
     assert result.provenance.compute_backend == "gpu"
     assert result.provenance.implementation_compatibility_id == "cvvdp-vship-gpu-v1"
     assert output.failures == {}
+
+
+def test_every_gpu_score_records_how_the_color_tags_were_read(monkeypatch):
+    """The cache tells a score made since the tags follow FFVship 5.1.1 from
+    one of v1.2's by this (metric_cache.VSHIP_COLOR_TAGS)."""
+    _FakeCvvdp().install(monkeypatch)
+    output, _ = _run(monkeypatch, metrics=("ssimulacra2", "butteraugli", "cvvdp"),
+                     children=_both(_frames_command(3, _FRAME_BYTES)))
+    for key in ("ssimulacra2", "butteraugli", "cvvdp"):
+        assert output.metrics.get(key).provenance.parameters["color_tags"] == VSHIP_COLOR_TAGS
 
 
 def test_each_metric_gets_a_pass_and_a_decode_of_its_own(monkeypatch):

@@ -44,6 +44,7 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import HwAccelPlan, hw_native_format, hwaccel_args, pick_hwaccel
+from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
 from vmaf_app.core.metric_results import (
     FrameMetricResult,
     MetricProvenance,
@@ -1625,6 +1626,9 @@ def _run_vship_pass(
                      "native range/transfer and primaries",
             "coverage_step": step,
             "butteraugli_norm": "3-norm",
+            # How the videos' color tags were read (_vship_colorspace); the
+            # cache recalculates GPU scores of v1.2, which has none.
+            "color_tags": VSHIP_COLOR_TAGS,
         }
         for spec in frame_specs:
             if spec.key in metric_failures:
@@ -1655,6 +1659,7 @@ def _run_vship_pass(
                         "display": dict(cvvdp_spec.parameters)["display"],
                         "resize_to_display": dict(cvvdp_spec.parameters)["resize_to_display"],
                         "timeline": "JOD of each second of video",
+                        "color_tags": VSHIP_COLOR_TAGS,
                     },
                 ),
                 frame=first, time=first.astype(np.float64) / max(source.fps, 1.0),
