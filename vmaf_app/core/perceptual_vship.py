@@ -416,6 +416,50 @@ def _probe_order(choice: str | None = None) -> tuple[str, ...]:
     return _AUTO_ORDER if choice == "auto" else (choice, *(build for build in _AUTO_ORDER if build != choice))
 
 
+class _VkApplicationInfo(ctypes.Structure):
+    _fields_ = [("sType", ctypes.c_int), ("pNext", ctypes.c_void_p), ("pApplicationName", ctypes.c_char_p),
+                ("applicationVersion", ctypes.c_uint32), ("pEngineName", ctypes.c_char_p),
+                ("engineVersion", ctypes.c_uint32), ("apiVersion", ctypes.c_uint32)]
+
+
+class _VkInstanceCreateInfo(ctypes.Structure):
+    _fields_ = [("sType", ctypes.c_int), ("pNext", ctypes.c_void_p), ("flags", ctypes.c_uint32),
+                ("pApplicationInfo", ctypes.POINTER(_VkApplicationInfo)), ("enabledLayerCount", ctypes.c_uint32),
+                ("ppEnabledLayerNames", ctypes.c_void_p), ("enabledExtensionCount", ctypes.c_uint32),
+                ("ppEnabledExtensionNames", ctypes.c_void_p)]
+
+
+def _vulkan_unavailable() -> str | None:
+    """Why no GPU is usable through Vulkan here, or None if one is.
+
+    Asked of the Vulkan loader itself before Vship's Vulkan build is
+    loaded: where the loader is installed but no driver answers -- a virtual
+    machine, GitHub's test runner -- that build's DLL initialisation fails
+    (WinError 1114), and the process then crashes with an access violation
+    as it exits, after everything else has finished. The loader alone
+    answers "no driver" and exits cleanly."""
+    try:
+        vulkan = ctypes.WinDLL("vulkan-1.dll")
+    except OSError:
+        return "no Vulkan driver is installed (vulkan-1.dll was not found)"
+    app = _VkApplicationInfo(0, None, b"VideoMetricsLab", 1, None, 0, 1 << 22)  # Vulkan 1.0
+    info = _VkInstanceCreateInfo(1, None, 0, ctypes.pointer(app), 0, None, 0, None)
+    instance = ctypes.c_void_p()
+    vulkan.vkCreateInstance.restype = ctypes.c_int32
+    result = vulkan.vkCreateInstance(ctypes.byref(info), None, ctypes.byref(instance))
+    if result != 0:
+        return f"no Vulkan driver answered (VkResult {result})"
+    try:
+        count = ctypes.c_uint32(0)
+        vulkan.vkEnumeratePhysicalDevices.restype = ctypes.c_int32
+        result = vulkan.vkEnumeratePhysicalDevices(instance, ctypes.byref(count), None)
+        if result != 0 or count.value == 0:
+            return "no GPU with a Vulkan driver was found"
+        return None
+    finally:
+        vulkan.vkDestroyInstance(instance, None)
+
+
 def _probe_vship_device() -> tuple[VshipDevice | None, str]:
     if os.name != "nt":
         return None, "Vship GPU acceleration is only bundled for Windows."
@@ -427,6 +471,11 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
         if not path.is_file():
             failures.append(f"Vship's {label} library is missing")
             continue
+        if backend == "vulkan":
+            unavailable = _vulkan_unavailable()
+            if unavailable is not None:
+                failures.append(f"{label}: {unavailable}")
+                continue
         try:
             dll_directory = os.add_dll_directory(str(path.parent))
             lib = ctypes.CDLL(str(path))
