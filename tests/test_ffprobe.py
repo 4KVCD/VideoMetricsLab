@@ -1,4 +1,6 @@
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -40,6 +42,29 @@ def _fake_popen(monkeypatch, proc):
     monkeypatch.setattr(ffprobe, "ffprobe_path", lambda: "ffprobe")
     monkeypatch.setattr(ffprobe.proc_util, "popen", lambda *a, **kw: proc)
     return proc
+
+
+def test_a_curly_quote_in_ffprobes_json_is_read_as_utf8(monkeypatch):
+    """Reported on Reddit against 1.3: every probe failed with "the JSON
+    object must be str, bytes or bytearray, not NoneType". ffprobe writes
+    UTF-8; decoded as cp1252, the 0x9D byte of ” has no character, so the
+    reader thread died and stdout came back as None. A real child process
+    writes the bytes here, so the app's own decoding is what is tested."""
+    payload = json.dumps({
+        "streams": [{"codec_type": "video", "codec_name": "h264", "width": 320, "height": 180,
+                     "pix_fmt": "yuv420p", "r_frame_rate": "24/1", "avg_frame_rate": "24/1",
+                     "duration": "1.0"}],
+        "format": {"duration": "1.0", "tags": {"title": "Director’s Cut “Final”"}},
+    }, ensure_ascii=False).encode("utf-8")
+    script = f"import sys; sys.stdout.buffer.write({payload!r})"
+    real_popen = ffprobe.proc_util.popen
+    monkeypatch.setattr(ffprobe, "ffprobe_path", lambda: "ffprobe")
+    monkeypatch.setattr(ffprobe.proc_util, "popen",
+                        lambda cmd, **kw: real_popen([sys.executable, "-c", script], **kw))
+
+    info = ffprobe.probe_video(Path("Director’s Cut “Final”.mkv"))
+
+    assert (info.width, info.height) == (320, 180)
 
 
 def test_ffprobe_timeout_becomes_a_readable_probe_error(monkeypatch):

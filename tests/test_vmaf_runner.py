@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -779,6 +780,28 @@ def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_pa
     assert result.returncode == 0
     assert "ffmpeg stderr" in result.stderr
     assert seen == [(1, 100, 0.0), (2, 100, 24.0)]
+
+
+def test_a_curly_quote_in_ffmpegs_stderr_is_read_as_utf8(monkeypatch, tmp_path):
+    """ffmpeg's stderr opens with each input's path and tags, in UTF-8. Read
+    as cp1252, the 0x9D byte of ” killed the drain thread: the run lost
+    ffmpeg's messages, and nothing was left emptying the pipe."""
+    from vmaf_app.core import vmaf_runner
+
+    banner = "Input #0, matroska,webm, from 'Director’s Cut “Final”.mkv':\n  title : Director’s Cut “Final”\n"
+    script = (
+        f"import sys; sys.stderr.buffer.write({banner.encode('utf-8')!r}); sys.stderr.flush(); "
+        "sys.stdout.write('frame=1\\nprogress=end\\n'); sys.stderr.write('done\\n')"
+    )
+    real_popen = vmaf_runner.proc_util.popen
+    monkeypatch.setattr(vmaf_runner.proc_util, "popen",
+                        lambda cmd, **kw: real_popen([sys.executable, "-c", script], **kw))
+
+    result = vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=1, on_progress=None,
+                                     cancel_event=None, cwd=tmp_path)
+
+    assert result.returncode == 0
+    assert result.stderr == banner + "done\n"
 
 
 # --------------------------------------------- per-input hardware decode

@@ -1,3 +1,4 @@
+import sys
 import threading
 import time
 from pathlib import Path
@@ -399,6 +400,25 @@ def test_no_more_than_two_detection_decoders_run_in_the_whole_app(monkeypatch):
         thread.join()
 
     assert peak == crop_detect._MAX_DETECTION_DECODERS == 2
+
+
+def test_a_curly_quote_in_ffmpegs_stderr_is_read_as_utf8(monkeypatch):
+    """ffmpeg's stderr opens with the input's path and tags, in UTF-8. Read
+    as cp1252, the 0x9D byte of ” killed the reader thread and stderr came
+    back as None, so the box search raised and the run failed."""
+    stderr = (
+        "Input #0, matroska,webm, from 'Director’s Cut “Final”.mkv':\n"
+        "    title           : Director’s Cut “Final”\n"
+        "[Parsed_cropdetect_0 @ 0000] x1:0 x2:1919 y1:140 y2:939 w:1920 h:800 x:0 y:140 crop=1920:800:0:140\n"
+    )
+    script = f"import sys; sys.stderr.buffer.write({stderr.encode('utf-8')!r})"
+    real_popen = crop_detect.proc_util.popen
+    monkeypatch.setattr(crop_detect.proc_util, "popen",
+                        lambda cmd, **kw: real_popen([sys.executable, "-c", script], **kw))
+
+    box = crop_detect._run_single_window("Director’s Cut “Final”.mkv", 0.0, 3.0, 24 / 255)
+
+    assert (box.w, box.h, box.x, box.y) == (1920, 800, 0, 140)
 
 
 def test_waiting_for_a_decoder_slot_still_answers_cancel():

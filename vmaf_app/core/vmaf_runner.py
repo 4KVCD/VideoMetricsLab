@@ -576,8 +576,13 @@ def _run_ffmpeg(
     # start one more ffmpeg that then had to be hunted down and killed.
     if cancel_event is not None and cancel_event.is_set():
         raise Cancelled("Cancelled by user")
+    # UTF-8, not the Windows code page: ffmpeg's stderr starts with the
+    # inputs' paths and tags, and a curly quote (”) in either is a byte cp1252
+    # cannot decode. That killed the drain thread, losing ffmpeg's error
+    # message and leaving nothing to empty the pipe.
     proc = proc_util.popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, cwd=str(cwd),
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, cwd=str(cwd),
     )
     if process_handle is not None:
         process_handle.attach(proc.pid)

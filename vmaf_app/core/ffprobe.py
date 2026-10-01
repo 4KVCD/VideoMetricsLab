@@ -45,8 +45,13 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         str(path),
     ]
     try:
+        # ffprobe writes its JSON as UTF-8. Left to the default, Python decodes
+        # it with the Windows code page (cp1252), which has no character for
+        # some UTF-8 bytes: a title tag or file name with a curly quote (”)
+        # killed the reader thread and left stdout as None.
         proc = proc_util.popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
         )
     except FileNotFoundError as e:
         raise ProbeError(

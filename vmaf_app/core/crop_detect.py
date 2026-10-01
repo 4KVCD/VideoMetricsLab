@@ -128,8 +128,12 @@ def _launch_window(
             raise CropDetectCancelled("Crop detection cancelled")
     proc = None
     try:
+        # UTF-8, not the Windows code page: ffmpeg's stderr starts with the
+        # input's path and tags, and a curly quote (”) in either is a byte
+        # cp1252 cannot decode -- stderr then came back as None.
         proc = proc_util.popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
         )
         if process_handle is not None:
             process_handle.attach(proc.pid)
