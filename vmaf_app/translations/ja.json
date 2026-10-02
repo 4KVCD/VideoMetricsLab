@@ -687,8 +687,8 @@
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg を実行中、VMAF は GPU（GPU デコード：{plan}）…",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU での VMAF に失敗しました（{error}）。CPU で計算中…",
   "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 と NEG の計算：",
-  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU を選ぶと、VMAF v0.6.1 と VMAF NEG を同梱の libvmaf により NVIDIA の GPU で計算します。VMAF v1、PSNR、SSIM、XPSNR はどちらの場合も CPU で計算します（VMAF v1 には GPU 版がありません）。GPU のスコアはどのフレームでも CPU の値と 1000 分の 1 ポイント以内で一致するため、保存済みのスコアはどちらを選んでもそのまま使われます。GPU での計算に失敗した場合は、CPU で計算します。",
-  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "NVIDIA の GPU が見つかりません。VMAF v0.6.1 と VMAF NEG は CPU で計算します。"
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "NVIDIA の GPU が見つかりません。VMAF v0.6.1 と VMAF NEG は CPU で計算します。",
+  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "NVIDIA GPU を選ぶと、VMAF v0.6.1 と VMAF NEG を同梱の libvmaf により NVIDIA の GPU で計算します。VMAF v1、PSNR、SSIM、XPSNR はどちらの場合も CPU で計算します（VMAF v1 には GPU 版がありません）。GPU のスコアはどのフレームでも CPU の値と 1000 分の 1 ポイント以内で一致するため、保存済みのスコアはどちらを選んでもそのまま使われます。GPU での計算に失敗した場合は、CPU で計算します。"
  },
  "plurals": {
   "about {count} day": [

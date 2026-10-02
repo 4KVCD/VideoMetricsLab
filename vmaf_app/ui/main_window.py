@@ -549,7 +549,7 @@ class MainWindow(QMainWindow):
             "Butteraugli on %s, GPU metrics %s on the %s backend, saved results %s (%s)",
             "on" if self._settings.parallel_jobs > 1 else "off",
             "on" if self._settings.default_gpu_decode else "off",
-            "GPU" if self._settings.default_vmaf_on_gpu else "CPU",
+            "NVIDIA GPU" if self._settings.default_vmaf_on_gpu else "CPU",
             self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
             "together in one pass" if self._settings.gpu_metrics_together else "one pass each",
             self._settings.gpu_backend,
@@ -1585,13 +1585,15 @@ class MainWindow(QMainWindow):
         # VMAF v0.6.1 and NEG only: libvmaf has CUDA code for their features,
         # and none for VMAF v1's (see vmaf_cuda.gpu_models).
         self.vmaf_backend_combo = QComboBox()
-        self.vmaf_backend_combo.addItems(["GPU", "CPU"])
+        # "NVIDIA GPU", not "GPU" as for SSIMULACRA2 and Butteraugli: libvmaf's
+        # GPU code is CUDA, where Vship runs on any GPU.
+        self.vmaf_backend_combo.addItems(["NVIDIA GPU", "CPU"])
         self.vmaf_backend_combo.setToolTip(
-            tr("GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, "
-            "PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The "
-            "GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved "
-            "score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the "
-            "CPU instead.")
+            tr("With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled "
+            "libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU "
+            "version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, "
+            "so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated "
+            "on the CPU instead.")
         )
         self.vmaf_backend_combo.currentIndexChanged.connect(
             lambda _index: self._on_panel_field_edited("vmaf_on_gpu")

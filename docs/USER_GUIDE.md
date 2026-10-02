@@ -29,7 +29,7 @@ are opt-in and do not add processing to runs where they are unchecked.
 
 With an NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on it too, with a
 bundled libvmaf built with CUDA: each video's Performance > VMAF v0.6.1 and NEG
-compute, GPU by default and greyed out at CPU without an NVIDIA GPU. Like
+compute, NVIDIA GPU by default and greyed out at CPU without one. Like
 SSIMULACRA2's and Butteraugli's, the last choice is what newly added videos
 start with. The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a
 thousandth of a point on every frame, so unlike those two, a saved VMAF score is
