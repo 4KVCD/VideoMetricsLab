@@ -6,4 +6,4 @@ import logging
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 APP_NAME = "VideoMetricsLab"
-__version__ = "1.3"
+__version__ = "1.4"
