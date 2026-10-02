@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "Oficiální „65inch_hdr_pq_4knit“.",
   "6-inch phone": "6palcový telefon",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Oficiální „standard_phone“ (kontrast neuvádí: 1000:1, oficiální výchozí hodnota).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Počítat VMAF a VMAF NEG na GPU NVIDIA",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF a VMAF NEG se počítají na GPU NVIDIA pomocí přibalené knihovny libvmaf, VMAF v1, PSNR, SSIM a XPSNR na CPU, ze stejných dekódovaných snímků. Skóre se od výsledků CPU liší na každém snímku nejvýše o tisícinu bodu. Pokud výpočet na GPU selže, VMAF se spočítá na CPU.\n\nPlatí od příštího běhu.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Spouštění ffmpeg, VMAF na GPU (dekódování na GPU: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF na GPU selhalo ({error}); počítá se na CPU…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF na GPU selhalo ({error}); počítá se na CPU…",
+  "VMAF v0.6.1 and NEG compute:": "Výpočet VMAF v0.6.1 a NEG:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Při volbě GPU se VMAF v0.6.1 a VMAF NEG počítají na GPU NVIDIA pomocí přibalené knihovny libvmaf. VMAF v1, PSNR, SSIM a XPSNR se v každém případě počítají na CPU: VMAF v1 nemá verzi pro GPU. Skóre z GPU se od výsledků CPU liší na každém snímku nejvýše o tisícinu bodu, takže uložené skóre zůstává, ať je zvoleno cokoli. Pokud výpočet na GPU selže, spočítají se na CPU.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "Nebyla nalezena GPU NVIDIA: VMAF v0.6.1 a VMAF NEG se počítají na CPU."
  },
  "plurals": {
   "about {count} day": [

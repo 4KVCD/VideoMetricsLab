@@ -421,21 +421,10 @@ def probe() -> tuple[bool, str]:
         return False, str(error)
 
 
-# --------------------------------------------------------- the app's switch
+# --------------------------------------------------------- whether a run uses it
 
-_enabled = True
 _PROBE_LOCK = threading.Lock()
 _probed: tuple[bool, str] | None = None
-
-
-def set_gpu_vmaf(enabled: bool) -> None:
-    """Settings > GPU metrics > "Calculate VMAF on an NVIDIA GPU"."""
-    global _enabled
-    _enabled = enabled
-
-
-def gpu_vmaf_enabled() -> bool:
-    return _enabled
 
 
 def gpu_vmaf_available() -> tuple[bool, str]:
@@ -472,12 +461,11 @@ def start_gpu_vmaf_probe() -> None:
 
 
 def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
-                  enabled: bool | None = None) -> dict[str, str] | None:
+                  enabled: bool = True) -> dict[str, str] | None:
     """The models a run scores on the GPU (gpu_models), or None when its
-    VMAF is calculated on the CPU: switched off, a custom model, or no GPU
-    libvmaf can use. `enabled`: the setting as a run took it when it started
-    (None: as it is now)."""
-    if not (_enabled if enabled is None else enabled):
+    VMAF is calculated on the CPU: the video set to CPU (`enabled`, its
+    VmafOptions.vmaf_on_gpu), a custom model, or no GPU libvmaf can use."""
+    if not enabled:
         return None
     models = gpu_models(compute_vmaf, compute_vmaf_neg, model)
     if models is None or not gpu_vmaf_available()[0]:

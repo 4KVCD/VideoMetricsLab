@@ -31,9 +31,8 @@
    changing `perceptual_vship.SCORED_WRONGLY`. Check saved-result round-trip,
    backend-specific cache reuse, still comparison and independent bitrate
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
-   Settings > GPU metrics > Calculate VMAF and VMAF NEG on an NVIDIA GPU on
-   and off: every metric but VMAF and NEG identical, those within 0.001 per
-   frame. After updating `scripts/build_libvmaf_cuda.ps1` (libvmaf or its pull
+   Performance > VMAF v0.6.1 and NEG compute set to GPU and to CPU: every
+   metric but VMAF and NEG identical, those within 0.001 per frame. After updating `scripts/build_libvmaf_cuda.ps1` (libvmaf or its pull
    requests), check that each pull request still merges and whether upstream
    has merged or replaced it.
 4. Test playback on real hardware: H.264/H.265 plus supported software-decoded

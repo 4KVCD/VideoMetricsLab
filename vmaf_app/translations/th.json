@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "\"65inch_hdr_pq_4knit\" ทางการ",
   "6-inch phone": "โทรศัพท์ 6 นิ้ว",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" ทางการ (ไม่ได้ระบุคอนทราสต์: 1000:1 ค่าเริ่มต้นทางการ)",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "คำนวณ VMAF และ VMAF NEG บน GPU ของ NVIDIA",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF และ VMAF NEG คำนวณบน GPU ของ NVIDIA ด้วย libvmaf ที่ให้มา ส่วน VMAF v1, PSNR, SSIM และ XPSNR คำนวณบน CPU จากเฟรมที่ถอดรหัสเดียวกัน คะแนนตรงกับของ CPU ภายในหนึ่งในพันของคะแนนในทุกเฟรม หากการคำนวณบน GPU ล้มเหลว จะคำนวณ VMAF บน CPU แทน\n\nมีผลตั้งแต่การรันครั้งถัดไป",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "กำลังรัน ffmpeg, VMAF บน GPU (ถอดรหัสด้วย GPU: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF บน GPU ล้มเหลว ({error}) กำลังคำนวณบน CPU…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF บน GPU ล้มเหลว ({error}) กำลังคำนวณบน CPU…",
+  "VMAF v0.6.1 and NEG compute:": "การคำนวณ VMAF v0.6.1 และ NEG:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU: คำนวณ VMAF v0.6.1 และ VMAF NEG บน GPU ของ NVIDIA ด้วย libvmaf ที่ให้มา ส่วน VMAF v1, PSNR, SSIM และ XPSNR คำนวณบน CPU เสมอ เพราะ VMAF v1 ไม่มีเวอร์ชันสำหรับ GPU คะแนนของ GPU ตรงกับของ CPU ภายในหนึ่งในพันของคะแนนในทุกเฟรม คะแนนที่บันทึกไว้จึงใช้ต่อได้ไม่ว่าจะเลือกแบบใด หากการคำนวณบน GPU ล้มเหลว จะคำนวณบน CPU แทน",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "ไม่พบ GPU ของ NVIDIA: VMAF v0.6.1 และ VMAF NEG จะคำนวณบน CPU"
  },
  "plurals": {
   "about {count} day": [

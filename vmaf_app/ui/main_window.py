@@ -59,7 +59,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__, i18n
-from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check, vmaf_cuda
+from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
@@ -545,14 +545,14 @@ class MainWindow(QMainWindow):
         self._update_box: QMessageBox | None = None
         self._settings = Settings.load()
         _log.info(
-            "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
-            "GPU metrics %s on the %s backend, VMAF on an NVIDIA GPU %s, saved results %s (%s)",
+            "Settings: parallel CPU metrics %s, GPU decode %s, VMAF v0.6.1 and NEG on %s, SSIMULACRA2 on %s, "
+            "Butteraugli on %s, GPU metrics %s on the %s backend, saved results %s (%s)",
             "on" if self._settings.parallel_jobs > 1 else "off",
             "on" if self._settings.default_gpu_decode else "off",
+            "GPU" if self._settings.default_vmaf_on_gpu else "CPU",
             self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
             "together in one pass" if self._settings.gpu_metrics_together else "one pass each",
             self._settings.gpu_backend,
-            "on" if self._settings.gpu_vmaf else "off",
             "reused" if self._settings.use_cache else "not reused",
             self._settings.cache_dir or "default folder",
         )
@@ -814,6 +814,7 @@ class MainWindow(QMainWindow):
         point: each row's own settings are edited in the Options panel."""
         return VmafOptions(
             gpu_decode=self._settings.default_gpu_decode,
+            vmaf_on_gpu=self._settings.default_vmaf_on_gpu,
             extra_features=self._settings.default_extra_features(),
             compute_xpsnr=self._settings.default_compute_xpsnr,
             compute_vmaf=self._settings.default_compute_vmaf,
@@ -1031,17 +1032,6 @@ class MainWindow(QMainWindow):
         gpu_note.setWordWrap(True)
         gpu_note.setStyleSheet("color: #666;")
         gpu_layout.addWidget(gpu_note)
-        # VMAF on the GPU: NVIDIA only (libvmaf has CUDA code and nothing else).
-        self.settings_gpu_vmaf = QCheckBox(tr("Calculate VMAF and VMAF NEG on an NVIDIA GPU"))
-        self.settings_gpu_vmaf.setToolTip(
-            tr("VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, "
-            "PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's "
-            "to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is "
-            "calculated on the CPU instead.\n\nApplies from the next run."))
-        self.settings_gpu_vmaf.setChecked(self._settings.gpu_vmaf)
-        self.settings_gpu_vmaf.setEnabled(GpuVendor.NVIDIA in vendors)
-        self.settings_gpu_vmaf.toggled.connect(self._on_settings_edited)
-        gpu_layout.addWidget(self.settings_gpu_vmaf)
         outer.addWidget(gpu_box)
 
         compare_box = QGroupBox(tr("Video Compare"))
@@ -1167,8 +1157,6 @@ class MainWindow(QMainWindow):
         language_before = self._settings.language
         self._settings.language = self.settings_language.currentData() or ""
         self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
-        self._settings.gpu_vmaf = self.settings_gpu_vmaf.isChecked()
-        vmaf_cuda.set_gpu_vmaf(self._settings.gpu_vmaf)
         backend = self.settings_gpu_backend.currentData() or "auto"
         if backend != self._settings.gpu_backend:
             self._settings.gpu_backend = backend
@@ -1594,6 +1582,22 @@ class MainWindow(QMainWindow):
         gpu_row.addWidget(self.gpu_vendor_combo)
         performance_form.addRow(tr("GPU decode:"), gpu_row)
 
+        # VMAF v0.6.1 and NEG only: libvmaf has CUDA code for their features,
+        # and none for VMAF v1's (see vmaf_cuda.gpu_models).
+        self.vmaf_backend_combo = QComboBox()
+        self.vmaf_backend_combo.addItems(["GPU", "CPU"])
+        self.vmaf_backend_combo.setToolTip(
+            tr("GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, "
+            "PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The "
+            "GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved "
+            "score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the "
+            "CPU instead.")
+        )
+        self.vmaf_backend_combo.currentIndexChanged.connect(
+            lambda _index: self._on_panel_field_edited("vmaf_on_gpu")
+        )
+        performance_form.addRow(tr("VMAF v0.6.1 and NEG compute:"), self.vmaf_backend_combo)
+
         self.ssimulacra2_backend_combo = QComboBox()
         self.ssimulacra2_backend_combo.addItems(["GPU", "CPU"])
         self.ssimulacra2_backend_combo.setToolTip(
@@ -1621,6 +1625,13 @@ class MainWindow(QMainWindow):
         # Kept for Settings > GPU metrics, which offers the Vship builds for
         # the GPUs here (built after this panel).
         self._detected_gpu_vendors = detected = detected_gpu_vendors()
+        # Without an NVIDIA GPU there is no choice: it shows CPU, which is
+        # where VMAF is calculated (see _write_panel_options).
+        self._vmaf_gpu_possible = GpuVendor.NVIDIA in detected
+        if not self._vmaf_gpu_possible:
+            self.vmaf_backend_combo.setEnabled(False)
+            self.vmaf_backend_combo.setToolTip(
+                tr("No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU."))
         if detected:
             names = ", ".join(v.value.upper() for v in detected)
             performance_form.addRow("", QLabel(tr("Detected GPU(s): {names}", names=names)))
@@ -3099,6 +3110,7 @@ class MainWindow(QMainWindow):
             )
             self._syncing_panel = True
             try:
+                self._show_vmaf_backend(self._default_options.vmaf_on_gpu)
                 self.ssimulacra2_backend_combo.setCurrentIndex(
                     0 if self._default_metric_backends["ssimulacra2"] == "gpu" else 1
                 )
@@ -3143,6 +3155,7 @@ class MainWindow(QMainWindow):
             self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
             self.gpu_vendor_combo.setEnabled(opts.gpu_decode)
 
+            self._show_vmaf_backend(opts.vmaf_on_gpu)
             selected_backends = (
                 self._rows[self._panel_target_rows[0]].metric_backends
                 if self._panel_target_rows else self._default_metric_backends
@@ -3239,6 +3252,11 @@ class MainWindow(QMainWindow):
                           else Qt.Checked if settings.resize_to_display else Qt.Unchecked)
         box.blockSignals(False)
 
+    def _show_vmaf_backend(self, on_gpu: bool) -> None:
+        """The VMAF GPU/CPU choice as a run would take it: CPU when there is
+        no NVIDIA GPU, whatever the video is set to."""
+        self.vmaf_backend_combo.setCurrentIndex(0 if on_gpu and self._vmaf_gpu_possible else 1)
+
     def _read_panel_options(self) -> VmafOptions:
         extra_features = [
             metric.ffmpeg_binding.libvmaf_feature
@@ -3274,6 +3292,7 @@ class MainWindow(QMainWindow):
             duration_limit=duration_limit,
             gpu_decode=self.gpu_checkbox.isChecked(),
             gpu_vendor=vendor,
+            vmaf_on_gpu=self.vmaf_backend_combo.currentIndex() == 0,
             crop_mode=crop_mode,
         )
 
@@ -3678,7 +3697,14 @@ class MainWindow(QMainWindow):
             return changed
 
         apply(self._default_options)
-        execution_only = field_name in {"gpu", "n_threads"}
+        if field_name == "vmaf_on_gpu":
+            # The last choice is what the next session starts with, as for
+            # SSIMULACRA2's and Butteraugli's (_on_metric_backend_changed).
+            self._settings.default_vmaf_on_gpu = panel.vmaf_on_gpu
+            error = self._settings.save()
+            if error:
+                self.status_label.setText(tr_message(error))
+        execution_only = field_name in {"gpu", "n_threads", "vmaf_on_gpu"}
         changed_rows = []
         for row in self._panel_target_rows:
             if apply(self._rows[row].options):

@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "Offiziell „65inch_hdr_pq_4knit“.",
   "6-inch phone": "6-Zoll-Smartphone",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Offiziell „standard_phone“ (dort ist kein Kontrast angegeben: 1000:1, der offizielle Standard).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF und VMAF NEG auf einer NVIDIA-GPU berechnen",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF und VMAF NEG werden mit der mitgelieferten libvmaf auf der NVIDIA-GPU berechnet, VMAF v1, PSNR, SSIM und XPSNR auf der CPU, aus denselben dekodierten Frames. Die Werte stimmen in jedem Frame bis auf ein Tausendstel Punkt mit denen der CPU überein. Schlägt die Berechnung auf der GPU fehl, wird VMAF stattdessen auf der CPU berechnet.\n\nGilt ab dem nächsten Durchlauf.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg läuft, VMAF auf der GPU (GPU-Dekodierung: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF auf der GPU fehlgeschlagen ({error}); wird auf der CPU berechnet…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF auf der GPU fehlgeschlagen ({error}); wird auf der CPU berechnet…",
+  "VMAF v0.6.1 and NEG compute:": "Berechnung von VMAF v0.6.1 und NEG:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Mit GPU werden VMAF v0.6.1 und VMAF NEG mit der mitgelieferten libvmaf auf einer NVIDIA-GPU berechnet. VMAF v1, PSNR, SSIM und XPSNR werden in jedem Fall auf der CPU berechnet: Für VMAF v1 gibt es keine GPU-Version. Die Werte der GPU stimmen in jedem Frame bis auf ein Tausendstel Punkt mit denen der CPU überein, daher bleibt ein gespeicherter Wert erhalten, egal was gewählt ist. Schlägt die Berechnung auf der GPU fehl, werden sie stattdessen auf der CPU berechnet.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "Keine NVIDIA-GPU gefunden: VMAF v0.6.1 und VMAF NEG werden auf der CPU berechnet."
  },
  "plurals": {
   "about {count} day": [

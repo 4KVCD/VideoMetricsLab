@@ -30,12 +30,10 @@ def test_only_vmaf_and_neg_with_a_built_in_model_go_to_the_gpu():
     assert vmaf_cuda.gpu_models(False, False, "version=vmaf_v0.6.1") is None
 
 
-def test_the_setting_and_the_probe_decide(monkeypatch):
+def test_the_videos_choice_and_the_probe_decide(monkeypatch):
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
     assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1") == {"vmaf": "vmaf_v0.6.1"}
-    monkeypatch.setattr(vmaf_cuda, "_enabled", False)
-    assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1") is None
-    monkeypatch.setattr(vmaf_cuda, "_enabled", True)
+    assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1", enabled=False) is None  # set to CPU
     monkeypatch.setattr(vmaf_cuda, "_probed", (False, "no NVIDIA GPU"))
     assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1") is None
 
@@ -152,8 +150,7 @@ def test_ffmpegs_half_queues_for_the_gpu_when_it_scores_vmaf_there(monkeypatch):
     assert pool(("vmaf", "psnr")) == "gpu"
     assert pool(("psnr", "ssim")) == "cpu"
     assert pool(("vmaf",), VmafOptions(resample_test=ResampleTarget(width=1920, label="1080p"))) == "cpu"
-    monkeypatch.setattr(vmaf_cuda, "_enabled", False)
-    assert pool(("vmaf", "psnr")) == "cpu"
+    assert pool(("vmaf", "psnr"), VmafOptions(vmaf_on_gpu=False)) == "cpu"  # the video set to CPU
 
 
 def test_a_pipe_ffmpeg_never_opened_does_not_hold_the_run():
@@ -179,14 +176,13 @@ def test_frames_left_in_a_pipe_after_ffmpeg_ended_are_still_read():
     assert frames == [b"abcd", b"efgh"]
 
 
-def test_the_setting_applies_from_the_next_run(monkeypatch):
-    """Its tooltip says so; read afresh for each video, switching it changed
-    the run in progress."""
+def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
+    """Each video's own choice (Performance > VMAF v0.6.1 and NEG compute),
+    taken with its options when the run starts."""
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    job = worker_module.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d", metric_keys=("vmaf",))
-    worker = worker_module.VmafWorker([job])  # the run starts with it on
-    monkeypatch.setattr(vmaf_cuda, "_enabled", False)  # and it is switched off during the run
-    run = worker_module._JobRun(worker, 0, job)
-    [task] = [task for task in run.plan.tasks if task.backend_id == "ffmpeg"]
-    assert run.pool_of(task) == "gpu"
-    assert worker_module.VmafWorker([job]).gpu_vmaf is False  # the next run
+    monkeypatch.setattr(vr, "_run_on_gpu", lambda *a, **k: pytest.fail("set to CPU, but scored on the GPU"))
+    monkeypatch.setattr(vr, "_execute_run",
+                        lambda *a, **k: FrameScores(np.array([0]), np.array([0.0]), vmaf=np.array([93.0])))
+    result = vr.run_vmaf(_info("s.mkv"), _info("d.mkv"),
+                         VmafOptions(crop_mode=CropMode.NONE, gpu_decode=False, vmaf_on_gpu=False))
+    assert result.metric_results.get("vmaf").provenance.compute_backend == "cpu"

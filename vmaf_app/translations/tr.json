@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "Resmi '65inch_hdr_pq_4knit'.",
   "6-inch phone": "6 inç telefon",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Resmi 'standard_phone' (orada kontrast belirtilmemiş: 1000:1, resmi varsayılan).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF ve VMAF NEG'i NVIDIA GPU'da hesapla",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF ve VMAF NEG, birlikte gelen libvmaf ile NVIDIA GPU'da, VMAF v1, PSNR, SSIM ve XPSNR ise CPU'da, aynı çözülmüş karelerden hesaplanır. Puanlar her karede CPU'nunkilerle binde bir puan içinde uyuşur. GPU'daki hesaplama başarısız olursa VMAF CPU'da hesaplanır.\n\nBir sonraki çalıştırmadan itibaren geçerlidir.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg çalışıyor, VMAF GPU'da (GPU kod çözme: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU'da VMAF başarısız ({error}); CPU'da hesaplanıyor…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU'da VMAF başarısız ({error}); CPU'da hesaplanıyor…",
+  "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 ve NEG hesaplama:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU seçiliyse VMAF v0.6.1 ve VMAF NEG, birlikte gelen libvmaf ile NVIDIA GPU'da hesaplanır. VMAF v1, PSNR, SSIM ve XPSNR her durumda CPU'da hesaplanır: VMAF v1'in GPU sürümü yoktur. GPU'nun puanları her karede CPU'nunkilerle binde bir puan içinde uyuştuğundan, kayıtlı bir puan hangisi seçilirse seçilsin korunur. GPU'daki hesaplama başarısız olursa CPU'da hesaplanırlar.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "NVIDIA GPU bulunamadı: VMAF v0.6.1 ve VMAF NEG CPU'da hesaplanır."
  },
  "plurals": {
   "about {count} day": [

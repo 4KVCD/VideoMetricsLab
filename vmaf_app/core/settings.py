@@ -67,6 +67,10 @@ class Settings:
     # choice, which is also what a newly added video starts with.
     default_ssimulacra2_backend: str = "gpu"
     default_butteraugli_backend: str = "gpu"
+    # VMAF v0.6.1 and NEG on an NVIDIA GPU (VmafOptions.vmaf_on_gpu). Set from
+    # the Options panel's GPU/CPU choice, which is also what a newly added
+    # video starts with.
+    default_vmaf_on_gpu: bool = True
     graph_metric: str = "vmaf"
 
     # How many videos to score at once (1 or 2 -- see MAX_PARALLEL_JOBS).
@@ -92,12 +96,6 @@ class Settings:
     # gpu_metrics_together, no part of cache identity: a metric a build
     # scores wrongly is not scored on it (perceptual_vship.SCORED_WRONGLY).
     gpu_backend: str = "auto"
-
-    # Calculate VMAF and VMAF NEG on an NVIDIA GPU with the bundled libvmaf's
-    # CUDA code (vmaf_cuda); VMAF v1, PSNR, SSIM and XPSNR stay in FFmpeg.
-    # Like gpu_metrics_together, no part of cache identity: its scores agree
-    # with FFmpeg's libvmaf to within a thousandth of a point per frame.
-    gpu_vmaf: bool = True
 
     # Reuse a cached result when a video is added, instead of recomputing.
     use_cache: bool = True

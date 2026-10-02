@@ -2162,6 +2162,59 @@ def test_perceptual_compute_controls_default_to_gpu_and_apply_per_metric(qapp):
     win.close()
 
 
+def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypatch):
+    """Performance > VMAF v0.6.1 and NEG compute, beside SSIMULACRA2's and
+    Butteraugli's: per video, what new videos and the next session start
+    with, and execution only -- the GPU's VMAF agrees with the CPU's to
+    within a thousandth of a point, so a video keeps the scores it has."""
+    from vmaf_app.core.models import GpuVendor
+
+    monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
+    win = MainWindow()
+    combo = win.vmaf_backend_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == ["GPU", "CPU"]
+    assert combo.currentText() == "GPU" and combo.isEnabledTo(win.options_box)
+    assert "VMAF v1 has no GPU version" in combo.toolTip()
+
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("a.mp4"))
+    info = _fake_video_info("a.mp4")
+    result = ComparisonResult(
+        source=Path("source.mp4"), distorted=Path("a.mp4"),
+        frames=[FrameScore(frame=i, time=i / 30.0, vmaf=90.0) for i in range(4)], fps=30.0,
+        model="m", source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+    )
+    win._rows[row].completed_run = CompletedRun(result, "a")
+    win._panel_target_rows = [row]
+    combo.setCurrentIndex(1)
+
+    assert win._rows[row].options.vmaf_on_gpu is False
+    assert win._rows[row].completed_run is not None  # its scores stay
+    assert win._rows[win._add_table_row(Path("b.mp4"))].options.vmaf_on_gpu is False
+    assert Settings.load().default_vmaf_on_gpu is False
+    win.close()
+    win = MainWindow()  # the next session
+    assert win._default_options.vmaf_on_gpu is False
+    win.close()
+
+
+def test_without_an_nvidia_gpu_vmaf_compute_shows_cpu_and_is_greyed_out(qapp, monkeypatch):
+    """libvmaf's GPU code is CUDA: elsewhere VMAF is calculated on the CPU,
+    and the panel says so. The video keeps its own choice, for a PC with one."""
+    from vmaf_app.core.models import GpuVendor
+
+    monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor.INTEL])
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mp4"))
+    win._panel_target_rows = [row]
+    win._write_panel_options(win._rows[row].options)
+    combo = win.vmaf_backend_combo
+    assert combo.currentText() == "CPU" and not combo.isEnabledTo(win.options_box)
+    assert "No NVIDIA GPU was found" in combo.toolTip()
+    assert win._rows[row].options.vmaf_on_gpu is True
+    win.close()
+
+
 def test_metric_toggle_does_not_clobber_other_per_row_settings(qapp):
     # The global default used to be rebuilt from row 0's options, so toggling
     # a metric column pushed that one row's unrelated model/crop/GPU choices

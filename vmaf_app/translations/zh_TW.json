@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "官方「65inch_hdr_pq_4knit」。",
   "6-inch phone": "6 吋手機",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "官方「standard_phone」（其中未指定對比：採用官方預設的 1000:1）。",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "在 NVIDIA GPU 上計算 VMAF 和 VMAF NEG",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF 和 VMAF NEG 使用內建的 libvmaf 在 NVIDIA GPU 上計算，VMAF v1、PSNR、SSIM 和 XPSNR 在 CPU 上計算，均來自相同的解碼影格。每一影格的分數與 CPU 的結果相差不超過千分之一分。如果 GPU 計算失敗，則改在 CPU 上計算 VMAF。\n\n從下次執行開始生效。",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "正在執行 ffmpeg，VMAF 在 GPU 上（GPU 解碼：{plan}）…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF 在 GPU 上失敗（{error}）；正在 CPU 上計算…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF 在 GPU 上失敗（{error}）；正在 CPU 上計算…",
+  "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 和 NEG 計算：",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "選擇 GPU 時，VMAF v0.6.1 和 VMAF NEG 使用內建的 libvmaf 在 NVIDIA GPU 上計算。VMAF v1、PSNR、SSIM 和 XPSNR 無論如何都在 CPU 上計算：VMAF v1 沒有 GPU 版本。GPU 的分數在每一影格都與 CPU 的結果相差不超過千分之一分，因此無論選擇哪一項，已儲存的分數都會保留。如果 GPU 計算失敗，則改在 CPU 上計算。",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "找不到 NVIDIA GPU：VMAF v0.6.1 和 VMAF NEG 在 CPU 上計算。"
  },
  "plurals": {
   "about {count} day": [

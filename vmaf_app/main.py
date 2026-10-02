@@ -212,7 +212,6 @@ def main() -> int:
     start_vship_probe()  # done by the time the first video is added
     from vmaf_app.core import vmaf_cuda
 
-    vmaf_cuda.set_gpu_vmaf(Settings.load().gpu_vmaf)
     vmaf_cuda.start_gpu_vmaf_probe()
     window = MainWindow()
     window.show()

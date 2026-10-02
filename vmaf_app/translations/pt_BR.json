@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "Oficial '65inch_hdr_pq_4knit'.",
   "6-inch phone": "Celular de 6 polegadas",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Oficial 'standard_phone' (lá o contraste não é especificado: 1000:1, o padrão oficial).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Calcular VMAF e VMAF NEG em uma GPU NVIDIA",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF e VMAF NEG são calculados na GPU NVIDIA com a libvmaf incluída, e VMAF v1, PSNR, SSIM e XPSNR na CPU, a partir dos mesmos quadros decodificados. As pontuações coincidem com as da CPU até um milésimo de ponto em cada quadro. Se o cálculo na GPU falhar, o VMAF é calculado na CPU.\n\nVale a partir da próxima execução.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Executando o ffmpeg, VMAF na GPU (decodificação por GPU: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "O VMAF falhou na GPU ({error}); calculando na CPU…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "O VMAF falhou na GPU ({error}); calculando na CPU…",
+  "VMAF v0.6.1 and NEG compute:": "Cálculo do VMAF v0.6.1 e NEG:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Com GPU, o VMAF v0.6.1 e o VMAF NEG são calculados em uma GPU NVIDIA com a libvmaf incluída. VMAF v1, PSNR, SSIM e XPSNR são calculados na CPU de qualquer forma: o VMAF v1 não tem versão para GPU. As pontuações da GPU coincidem com as da CPU até um milésimo de ponto em cada quadro, então uma pontuação salva é mantida qualquer que seja a escolha. Se o cálculo na GPU falhar, eles são calculados na CPU.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "Nenhuma GPU NVIDIA encontrada: VMAF v0.6.1 e VMAF NEG são calculados na CPU."
  },
  "plurals": {
   "about {count} day": [

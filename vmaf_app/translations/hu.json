@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "Hivatalos „65inch_hdr_pq_4knit”.",
   "6-inch phone": "6 hüvelykes telefon",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Hivatalos „standard_phone” (kontrasztot nem ad meg: 1000:1, a hivatalos alapérték).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF és VMAF NEG számítása NVIDIA GPU-n",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "A VMAF és a VMAF NEG az NVIDIA GPU-n számolódik a mellékelt libvmaf-fel, a VMAF v1, a PSNR, az SSIM és az XPSNR pedig a CPU-n, ugyanazokból a dekódolt képkockákból. A pontszámok minden képkockán legfeljebb egy ezred ponttal térnek el a CPU-s értékektől. Ha a GPU-s számítás sikertelen, a VMAF a CPU-n számolódik.\n\nA következő futtatástól érvényes.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg futtatása, VMAF a GPU-n (GPU-dekódolás: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "A VMAF sikertelen a GPU-n ({error}); számítás CPU-n…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "A VMAF sikertelen a GPU-n ({error}); számítás CPU-n…",
+  "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 és NEG számítása:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU: a VMAF v0.6.1 és a VMAF NEG NVIDIA GPU-n számolódik a mellékelt libvmaf-fel. A VMAF v1, a PSNR, az SSIM és az XPSNR mindenképp a CPU-n számolódik: a VMAF v1-nek nincs GPU-s változata. A GPU pontszámai minden képkockán legfeljebb egy ezred ponttal térnek el a CPU-s értékektől, így a mentett pontszám megmarad, bármelyik van kiválasztva. Ha a GPU-s számítás sikertelen, a CPU-n számolódnak.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "Nem található NVIDIA GPU: a VMAF v0.6.1 és a VMAF NEG a CPU-n számolódik."
  },
  "plurals": {
   "about {count} day": [

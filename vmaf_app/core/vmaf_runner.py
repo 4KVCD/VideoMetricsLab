@@ -1033,12 +1033,8 @@ def run_vmaf(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     result_distorted_path: Path | None = None,
-    gpu_vmaf: bool | None = None,
 ) -> ComparisonResult:
-    """`gpu_vmaf`: VMAF on the GPU as the run took the setting when it
-    started (vmaf_cuda.scores_on_gpu; None: the setting as it is now).
-
-    result_distorted_path overrides the returned result's `distorted`
+    """result_distorted_path overrides the returned result's `distorted`
     identity (defaulting to distorted_info.path). It doesn't affect which
     file is actually decoded -- only what identity the result carries for
     caching/graphing -- so a caller running the *same* physical file twice
@@ -1083,7 +1079,8 @@ def run_vmaf(
 
     total_frames = estimate_total_frames(distorted_info, options, source_info)
     frames = None
-    gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model, gpu_vmaf)
+    gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
+                                         options.vmaf_on_gpu)
     if gpu_models is not None:
         plan = _GpuPlan(
             gpu_models, *dimensions, _bit_depth(analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt)),

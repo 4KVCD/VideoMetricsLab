@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "공식 '65inch_hdr_pq_4knit'.",
   "6-inch phone": "6인치 휴대폰",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "공식 'standard_phone'(명암비가 지정되지 않아 공식 기본값 1000:1 사용).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF와 VMAF NEG를 NVIDIA GPU에서 계산",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF와 VMAF NEG는 번들된 libvmaf로 NVIDIA GPU에서, VMAF v1, PSNR, SSIM, XPSNR은 CPU에서 같은 디코딩 프레임으로 계산합니다. 점수는 모든 프레임에서 CPU 값과 1000분의 1점 이내로 일치합니다. GPU 계산이 실패하면 VMAF를 CPU에서 계산합니다.\n\n다음 실행부터 적용됩니다.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg 실행 중, VMAF는 GPU에서(GPU 디코딩: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU에서 VMAF 실패({error}). CPU로 계산 중…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU에서 VMAF 실패({error}). CPU로 계산 중…",
+  "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 및 NEG 계산:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU를 선택하면 VMAF v0.6.1과 VMAF NEG를 번들된 libvmaf로 NVIDIA GPU에서 계산합니다. VMAF v1, PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산합니다. VMAF v1에는 GPU 버전이 없습니다. GPU 점수는 모든 프레임에서 CPU 값과 1000분의 1점 이내로 일치하므로, 저장된 점수는 무엇을 선택하든 그대로 유지됩니다. GPU 계산이 실패하면 CPU에서 계산합니다.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "NVIDIA GPU를 찾지 못했습니다. VMAF v0.6.1과 VMAF NEG는 CPU에서 계산합니다."
  },
  "plurals": {
   "about {count} day": [

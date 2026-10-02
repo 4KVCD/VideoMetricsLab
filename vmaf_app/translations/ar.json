@@ -684,10 +684,11 @@
   "Official '65inch_hdr_pq_4knit'.": "الرسمي «65inch_hdr_pq_4knit».",
   "6-inch phone": "هاتف 6 بوصات",
   "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "الرسمي «standard_phone» (التباين غير محدد فيه: ‏1000:1، القيمة الرسمية الافتراضية).",
-  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "احسب VMAF وVMAF NEG على GPU من NVIDIA",
-  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "تُحسب VMAF وVMAF NEG على GPU من NVIDIA بمكتبة libvmaf المضمّنة، وتُحسب VMAF v1 وPSNR وSSIM وXPSNR على المعالج، من الإطارات المفكوكة نفسها. تتطابق الدرجات مع درجات المعالج في حدود جزء من الألف من النقطة في كل إطار. إذا فشل الحساب على GPU، تُحسب VMAF على المعالج بدلًا منه.\n\nيُطبَّق بدءًا من التشغيل التالي.",
   "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "جارٍ تشغيل ffmpeg، وVMAF على GPU (فك الترميز عبر GPU: {plan})…",
-  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "فشل VMAF على GPU ({error})؛ يُحسب على المعالج…"
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "فشل VMAF على GPU ({error})؛ يُحسب على المعالج…",
+  "VMAF v0.6.1 and NEG compute:": "حساب VMAF v0.6.1 وNEG:",
+  "GPU calculates VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "مع GPU تُحسب VMAF v0.6.1 وVMAF NEG على GPU من NVIDIA بمكتبة libvmaf المضمّنة. وتُحسب VMAF v1 وPSNR وSSIM وXPSNR على المعالج في الحالتين: لا توجد نسخة من VMAF v1 لـ GPU. تتطابق درجات GPU مع درجات المعالج في حدود جزء من الألف من النقطة في كل إطار، لذا تبقى الدرجة المحفوظة أيًّا كان الاختيار. إذا فشل الحساب على GPU، تُحسبان على المعالج بدلًا منه.",
+  "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "لم يُعثر على GPU من NVIDIA: تُحسب VMAF v0.6.1 وVMAF NEG على المعالج."
  },
  "plurals": {
   "about {count} day": [

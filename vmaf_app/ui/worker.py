@@ -141,10 +141,6 @@ class VmafWorker(QThread):
         # decoding it once, rather than one pass (and one decode) per metric.
         # How the scores are calculated, never what they are.
         self.gpu_metrics_together = gpu_metrics_together
-        # VMAF on the GPU (Settings > GPU metrics), as it was when the run
-        # started: its tooltip says a change applies from the next run. Read
-        # afresh for each video, a change made mid-run changed that run.
-        self.gpu_vmaf = vmaf_cuda.gpu_vmaf_enabled()
         self._parallel_jobs = max(1, min(int(parallel_jobs), MAX_PARALLEL_JOBS))
         self._cancel_event = threading.Event()
         # One handle per running job rather than one for the worker: pausing
@@ -528,7 +524,7 @@ class _JobRun:
             return False
         keys = task.metric_keys
         return vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
-                                       self.worker.gpu_vmaf) is not None
+                                       options.vmaf_on_gpu) is not None
 
     def begin(self) -> bool:
         """Starts the video when its first half is taken: its process
@@ -687,7 +683,7 @@ class _JobRun:
                 on_progress=progress,
                 on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
-                result_distorted_path=job.result_distorted_path, gpu_vmaf=self.worker.gpu_vmaf,
+                result_distorted_path=job.result_distorted_path,
             )
         if task.backend_id == "perceptual":
             return apply_vship_cpu_fallback(
