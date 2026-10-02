@@ -1,10 +1,10 @@
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
+from tests.factories import STDLIB_PYTHON
 from vmaf_app.core import ffprobe
 from vmaf_app.core.ffprobe import ProbeError
 
@@ -60,7 +60,7 @@ def test_a_curly_quote_in_ffprobes_json_is_read_as_utf8(monkeypatch):
     real_popen = ffprobe.proc_util.popen
     monkeypatch.setattr(ffprobe, "ffprobe_path", lambda: "ffprobe")
     monkeypatch.setattr(ffprobe.proc_util, "popen",
-                        lambda cmd, **kw: real_popen([sys.executable, "-S", "-c", script], **kw))
+                        lambda cmd, **kw: real_popen([STDLIB_PYTHON, "-S", "-c", script], **kw))
 
     info = ffprobe.probe_video(Path("Director’s Cut “Final”.mkv"))
 

@@ -6,9 +6,19 @@ in ``conftest.py``.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from vmaf_app.core.models import ComparisonResult, FrameScore, VideoInfo
+
+#: The real Python interpreter, for the stand-in processes the tests start
+#: (fake FFmpeg, fake metric tools, launchers). A virtual environment's
+#: python.exe is itself a launcher that starts the real one as a child; a
+#: pause, the CPU throttle or a cancel landing while it creates that child
+#: makes Windows refuse the creation ("Access is denied"), which a parallel
+#: run's load turns into an occasional failure. Stand-ins use the standard
+#: library only.
+STDLIB_PYTHON = getattr(sys, "_base_executable", sys.executable)
 
 
 def fake_video_info(name: str | Path) -> VideoInfo:

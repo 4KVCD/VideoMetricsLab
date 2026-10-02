@@ -1,10 +1,10 @@
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
+from tests.factories import STDLIB_PYTHON
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import (
     CropBox,
@@ -795,7 +795,7 @@ def test_a_curly_quote_in_ffmpegs_stderr_is_read_as_utf8(monkeypatch, tmp_path):
     )
     real_popen = vmaf_runner.proc_util.popen
     monkeypatch.setattr(vmaf_runner.proc_util, "popen",
-                        lambda cmd, **kw: real_popen([sys.executable, "-S", "-c", script], **kw))
+                        lambda cmd, **kw: real_popen([STDLIB_PYTHON, "-S", "-c", script], **kw))
 
     result = vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=1, on_progress=None,
                                      cancel_event=None, cwd=tmp_path)

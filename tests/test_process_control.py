@@ -1,6 +1,7 @@
 import psutil
 import pytest
 
+from tests.factories import STDLIB_PYTHON
 from vmaf_app.core.process_control import ProcessHandle
 
 
@@ -186,21 +187,19 @@ _LAUNCHER = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
 
 
 def _launcher_with_child():
-    """A launcher process and the long-running child it started."""
+    """A launcher process and the long-running child it started, once the
+    child is running: a pause landing while the launcher is still creating
+    it makes Windows refuse the creation, and the child is gone."""
     import subprocess
-    import sys
-    import time
 
-    launcher = subprocess.Popen([sys.executable, "-S", "-c", _LAUNCHER, sys.executable, "-S", "-c",
-                                 "import time; time.sleep(60)"])
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        children = psutil.Process(launcher.pid).children()
-        if children:
-            return launcher, children[0]
-        time.sleep(0.05)
-    launcher.kill()
-    raise AssertionError("the launcher did not start its child")
+    launcher = subprocess.Popen([STDLIB_PYTHON, "-S", "-c", _LAUNCHER, STDLIB_PYTHON, "-S", "-c",
+                                 "import sys, time; print('running', flush=True); time.sleep(60)"],
+                                stdout=subprocess.PIPE, text=True)
+    if launcher.stdout.readline().strip() != "running":  # the child inherits the launcher's stdout
+        launcher.kill()
+        raise AssertionError("the launcher did not start its child")
+    [child] = psutil.Process(launcher.pid).children()
+    return launcher, child
 
 
 def test_pause_resume_and_cancel_reach_a_process_started_by_a_launcher():
@@ -222,3 +221,4 @@ def test_pause_resume_and_cancel_reach_a_process_started_by_a_launcher():
                 process.kill()
         if launcher.poll() is None:
             launcher.kill()
+        launcher.stdout.close()

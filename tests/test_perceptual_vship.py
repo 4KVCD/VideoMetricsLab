@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from tests.factories import STDLIB_PYTHON
 from vmaf_app.core import perceptual_cpu
 from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
@@ -301,7 +302,7 @@ def _frames_command(count: int, frame_bytes: int, *, exit_code: int = 0, partial
         "out.flush()\n"
         "sys.exit(code)\n"
     )
-    return [sys.executable, "-S", "-c", script]
+    return [STDLIB_PYTHON, "-S", "-c", script]
 
 
 class _FakePinned:
@@ -590,7 +591,7 @@ def _interleaved_command(count: int, width: int, height: int, sample_bytes: int)
         "    out.write(struct.pack(fmt, 100 + i, 200 + i) * ((w // 2) * (h // 2)))\n"
         "out.flush()\n"
     )
-    return [sys.executable, "-S", "-c", script]
+    return [STDLIB_PYTHON, "-S", "-c", script]
 
 
 @pytest.mark.parametrize(("pix_fmt", "sample_type", "sample_bytes", "piped"), [
@@ -967,7 +968,7 @@ def test_cvvdp_alone_failing_to_start_stops_the_pass_at_once(monkeypatch):
 
     _FakeCvvdp().install(monkeypatch)
     monkeypatch.setattr(vship, "_init_cvvdp", cannot_start)
-    slow = [sys.executable, "-S", "-c",
+    slow = [STDLIB_PYTHON, "-S", "-c",
             f"import sys, time\nfor i in range(600):\n    sys.stdout.buffer.write(bytes({_FRAME_BYTES})); "
             "sys.stdout.buffer.flush(); time.sleep(0.01)\n"]
     started = time.monotonic()
@@ -1362,7 +1363,7 @@ def test_the_bundled_vulkan_build_loads_where_vulkan_finds_no_gpu():
              "try:\n    ctypes.WinDLL('vulkan-1.dll')\nexcept OSError:\n    sys.exit(3)\n"
              "lib = ctypes.CDLL(sys.argv[1])\ncount = ctypes.c_int()\n"
              "print(lib.Vship_GetDeviceCount(ctypes.byref(count)), count.value)\n")
-    result = subprocess.run([sys.executable, "-S", "-c", check, str(dll)], capture_output=True, text=True,
+    result = subprocess.run([STDLIB_PYTHON, "-S", "-c", check, str(dll)], capture_output=True, text=True,
                             timeout=60, env={**os.environ, "VK_LOADER_DRIVERS_DISABLE": "*"})
     if result.returncode == 3:
         pytest.skip("no Vulkan loader on this PC")

@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tests.factories import STDLIB_PYTHON
 from vmaf_app.core.analysis_request import AnalysisRequest, ExecutionPreferences, FrameCoverage, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.execution import build_execution_plan
@@ -216,12 +217,18 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
 
 def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
     """A stand-in for ssimulacra2: sleeps, then prints a score. Returned as
-    (executable, "reference", "test") for _run_metric's argument order."""
-    import sys
+    (executable, "reference", "test") for _run_metric's argument order.
+
+    Run by the real interpreter, not a virtual environment's python.exe:
+    that is a launcher starting the real one as its child, and a pause
+    landing while it creates that child makes Windows refuse the creation
+    ("Unable to create process ... Access is denied", exit code 101) -- 19
+    of 240 paused starts under a parallel run's load. The real tools are
+    single processes."""
 
     script = tmp_path / "tool.py"
     script.write_text(f"import time\ntime.sleep({seconds})\nprint('score: 42.5')\n", encoding="utf-8")
-    return sys.executable, script, tmp_path / "unused.png"
+    return STDLIB_PYTHON, script, tmp_path / "unused.png"
 
 
 def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
@@ -345,7 +352,6 @@ def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, 
     stands in for FFmpeg: all test images first, then the references
     slowly, each written atomically."""
     import subprocess
-    import sys
     import threading
 
     from vmaf_app.core import perceptual_cpu
@@ -362,7 +368,7 @@ def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, 
         "    put(f'reference-{i:08d}.png'); time.sleep(0.005)\n"
     )
     monkeypatch.setattr(perceptual_cpu.proc_util, "popen",
-                        lambda _cmd, **kwargs: subprocess.Popen([sys.executable, "-S", "-c", writer, str(tmp_path)], **kwargs))
+                        lambda _cmd, **kwargs: subprocess.Popen([STDLIB_PYTHON, "-S", "-c", writer, str(tmp_path)], **kwargs))
     pairs = []
 
     def consume():
@@ -385,14 +391,13 @@ def test_the_backlog_holds_when_ffmpeg_is_started_through_a_launcher(tmp_path, m
     launcher that starts the real one as a child. Suspending the launcher
     left FFmpeg writing: the runner saw 364 images waiting where the limit
     is 52 (444 here). The throttle now suspends the whole process tree."""
-    import sys
 
     from vmaf_app.core import proc as proc_util
 
     real = proc_util.popen
     launcher = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
     monkeypatch.setattr(proc_util, "popen",
-                        lambda command, **kwargs: real([sys.executable, "-S", "-c", launcher, *command], **kwargs))
+                        lambda command, **kwargs: real([STDLIB_PYTHON, "-S", "-c", launcher, *command], **kwargs))
     test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch)
 
 
