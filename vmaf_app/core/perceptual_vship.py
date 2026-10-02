@@ -44,6 +44,7 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import HwAccelPlan, hw_native_format, hwaccel_args, pick_hwaccel
+from vmaf_app.core.isolated import IsolatedCrashError, run_isolated
 from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
 from vmaf_app.core.metric_results import (
     FrameMetricResult,
@@ -232,7 +233,10 @@ class VshipDevice:
     name: str
     gpu_id: int
     version: str
-    loaded: _LoadedVship
+    #: The library, where it was loaded in this process. None in the app
+    #: itself: Vship is probed and run in a process of its own (see
+    #: _run_vship_pass), which loads the build again (_library).
+    loaded: _LoadedVship | None
     #: Who made the GPU: NVIDIA for CUDA, AMD for HIP, and for Vulkan what
     #: the Vulkan loader says (GpuVendor.NONE for another maker). None when
     #: it could not be told.
@@ -393,7 +397,7 @@ def detect_vship_device() -> tuple[VshipDevice | None, str]:
     global _probed
     with _PROBE_LOCK:
         if _probed is None:
-            _probed = (_probe_vship_device(), time.monotonic())
+            _probed = (_probe_isolated(), time.monotonic())
             device, reason = _probed[0]
             if device is not None:
                 _log.info("Vship %s (%s) GPU: %s", device.version, backend_label(device.backend), device.name)
@@ -569,6 +573,46 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
         except (OSError, AttributeError, TypeError) as error:
             failures.append(f"Vship's {label} library could not be loaded: {error}")
     return None, "; ".join(failures) or "No GPU that Vship can use was found."
+
+
+def _probe_isolated() -> tuple[VshipDevice | None, str]:
+    """_probe_vship_device in a process of its own. Loading Vship starts the
+    GPU driver, and a crash there took the app down: Vship 5.1.1's Vulkan
+    build on a PC whose only GPU is Intel's crashed it as it closed. Now it
+    ends that process, and the GPU metrics are calculated on the CPU."""
+    try:
+        return run_isolated(_probe_in_own_process, _backend, what="Vship's GPU probe")
+    except IsolatedCrashError as error:
+        return None, str(error)
+
+
+def _probe_in_own_process(choice: str) -> tuple[VshipDevice | None, str]:
+    """Run by _probe_isolated: the device goes back without the library,
+    which belongs to the process that loaded it."""
+    global _backend
+    _backend = choice  # this process starts with the default
+    device, reason = _probe_vship_device()
+    return (replace(device, loaded=None) if device is not None else None), reason
+
+
+#: The builds a pass's process has loaded (see _library).
+_loaded_builds: dict[str, _LoadedVship] = {}
+
+
+def _library(device: VshipDevice) -> ctypes.CDLL:
+    """The Vship library `device` runs on: the probe's own, or, in the
+    process a pass runs in (which gets the device without it), loaded there
+    once."""
+    if device.loaded is not None:
+        return device.loaded.library
+    loaded = _loaded_builds.get(device.backend)
+    if loaded is None:
+        path = Path(__file__).resolve().parents[1] / "tools" / "vship" / VSHIP_BUILDS[device.backend] / "libvship.dll"
+        dll_directory = os.add_dll_directory(str(path.parent))
+        lib = ctypes.CDLL(str(path))
+        _configure_api(lib)
+        loaded = _loaded_builds[device.backend] = _LoadedVship(device.backend, path, lib, dll_directory)
+    return loaded.library
 
 
 def _image_format(info: VideoInfo) -> _ImageFormat:
@@ -1117,7 +1161,7 @@ class _MetricLane:
 
     def _run(self) -> None:
         device, src, dist = self._args
-        lib = device.loaded.library
+        lib = _library(device)
         handler = None
         try:
             handler = _init_handler(device, self.key, src, dist)
@@ -1151,7 +1195,7 @@ class _MetricLane:
 
 
 def _init_handler(device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace) -> _Handle:
-    lib = device.loaded.library
+    lib = _library(device)
     if key == "ssimulacra2":
         init = _InitSsimulacra2(_INIT_SSIMULACRA2, src, dist, device.gpu_id)
     else:
@@ -1169,7 +1213,7 @@ def _compute_metric(
     device: VshipDevice, key: str, handler: _Handle, source_planes: _PLANES,
     distorted_planes: _PLANES, source_strides: _I64_3, distorted_strides: _I64_3,
 ) -> float:
-    lib = device.loaded.library
+    lib = _library(device)
     label = "SSIMULACRA2" if key == "ssimulacra2" else "Butteraugli"
     # Butteraugli's distortion map is not wanted: its dstp stays NULL.
     score = (_ScoreSsimulacra2(_SCORE_SSIMULACRA2) if key == "ssimulacra2"
@@ -1228,7 +1272,7 @@ def pool_cvvdp_windows(windows: list[tuple[int, int, float]]) -> float:
 
 def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
                 settings: CvvdpSettings, fps: float) -> _Handle:
-    lib = device.loaded.library
+    lib = _library(device)
     if not (math.isfinite(fps) and fps > 0):
         # CVVDP models how the eye integrates over time, so the frame rate
         # is part of the score; it used to be replaced by 1 fps silently.
@@ -1253,7 +1297,7 @@ def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
 def _compute_cvvdp(device: VshipDevice, handler: _Handle, source_planes: _PLANES,
                    distorted_planes: _PLANES, source_strides: _I64_3, distorted_strides: _I64_3) -> float:
     """Scores the next frame pair; returns the JOD of the frames since the last reset."""
-    lib = device.loaded.library
+    lib = _library(device)
     score = _ScoreCvvdp(_SCORE_CVVDP)  # no distortion map: dstp stays NULL
     error = lib.Vship_ComputeHandler(handler, ctypes.byref(score), source_planes, distorted_planes,
                                      source_strides, distorted_strides)
@@ -1266,14 +1310,14 @@ def _compute_cvvdp(device: VshipDevice, handler: _Handle, source_planes: _PLANES
 
 
 def _reset_cvvdp_score(device: VshipDevice, handler: _Handle) -> None:
-    lib = device.loaded.library
+    lib = _library(device)
     error = lib.Vship_ResetScore(handler)
     if error != 0:
         raise VshipUnavailableError(f"Vship CVVDP failed: {_handler_error(lib, handler, error)}")
 
 
 def _free_cvvdp(device: VshipDevice, handler: _Handle) -> None:
-    device.loaded.library.Vship_FreeHandler(handler)
+    _library(device).Vship_FreeHandler(handler)
 
 
 class _CvvdpLane:
@@ -1518,6 +1562,44 @@ def _run_vship_pass(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
+    """One Vship pass (_score_vship_pass), in a process of its own.
+
+    Vship and the GPU driver under it run in the process that loads them: a
+    crash in either took the app down, every video's progress with it, with
+    no message. Now it ends the pass's process: the pass fails like any
+    other GPU failure -- its metrics are calculated on the CPU, or fail with
+    the reason -- and the run goes on. The pass's FFmpeg processes are
+    attached to `process_handle` as before, so Pause and Cancel reach them.
+
+    A device whose library this process has already loaded is scored here:
+    the crash it could cause is this process's anyway. The app's devices
+    come from the isolated probe without one."""
+    if device.loaded is not None:
+        return _score_vship_pass(
+            source, distorted, request, specs, device, source_crop, distorted_crop,
+            on_progress=on_progress, on_status=on_status, cancel_event=cancel_event, process_handle=process_handle,
+        )
+    try:
+        return run_isolated(
+            _score_vship_pass, source, distorted, request, specs, device, source_crop, distorted_crop,
+            what="Vship", callbacks=("on_progress", "on_status"), on_progress=on_progress, on_status=on_status,
+            process_handle=process_handle, cancel_event=cancel_event, cancelled=PerceptualCancelled,
+        )
+    except IsolatedCrashError as error:
+        labels = ", ".join(metric_definition(spec.key).label for spec in specs)
+        _log.error("Vship pass (%s) failed: %s", labels, error)
+        raise VshipUnavailableError(f"Vship GPU calculation failed: {error}") from error
+
+
+def _score_vship_pass(
+    source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
+    specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+    on_progress: Callable[[int, int, float], None] | None = None,
+    on_status: Callable[[str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    process_handle: ProcessHandle | None = None,
+) -> PerceptualTaskOutput:
     if not specs or any(spec.backend_id != BACKEND_ID or spec.key not in _METRICS for spec in specs):
         raise ValueError("Vship task requires supported perceptual metric specs")
     if request.recipe.resample_test is not None:
@@ -1526,7 +1608,7 @@ def _run_vship_pass(
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
 
-    lib = device.loaded.library
+    lib = _library(device)
 
     # Decode follows the row's GPU-decode setting, per input and per codec:
     # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no

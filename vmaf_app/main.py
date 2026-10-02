@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import multiprocessing
 import sys
 from pathlib import Path
 
@@ -81,6 +82,19 @@ def self_test() -> str:
     for metric in ("ssimulacra2", "butteraugli"):
         tool = find_metric_executable(metric)
         lines.append(f"  OK    {metric} ({tool})" if tool else f"  WARN  {metric} tool absent")
+
+    # Vship runs in processes of its own (vmaf_app.core.isolated): in the
+    # packaged build that is the executable started again, which only works
+    # while main() calls multiprocessing.freeze_support() first.
+    import os
+
+    from vmaf_app.core.isolated import run_isolated
+
+    try:
+        child = run_isolated(os.getpid, what="a child process")
+        lines.append(f"  OK    GPU libraries run in a process of their own (started process {child})")
+    except Exception as error:
+        lines.append(f"  FAIL  no process for the GPU libraries could be started: {error}")
 
     from vmaf_app.core.perceptual_vship import backend_label, detect_vship_device, set_vship_backend
     from vmaf_app.core.settings import Settings
@@ -197,4 +211,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # The packaged app starts itself again for the processes Vship runs in
+    # (vmaf_app.core.isolated): there this runs that process's work and
+    # exits, before any window.
+    multiprocessing.freeze_support()
     sys.exit(main())

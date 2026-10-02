@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ctypes
+import faulthandler
+import logging
 import math
 import subprocess
 import sys
@@ -264,6 +266,27 @@ def test_vship_processing_error_falls_back_without_repeating_crop_detection(monk
 
     assert actual is expected
     assert len(crop_calls) == 1
+
+
+def _crashing_pass(*_args, **_kwargs):
+    faulthandler._sigsegv()  # an access violation, as in Vship or the GPU driver
+
+
+def test_a_crash_in_vship_ends_its_own_process_and_the_cpu_takes_over(monkeypatch, caplog):
+    """A crash in Vship, or in the GPU driver under it, ended the app with
+    every video's progress, with no message."""
+    device = vship.VshipDevice("vulkan", "GPU", 0, "5.1.2", None, GpuVendor.NVIDIA)  # no library: isolated
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(vship, "forget_failed_vship_probe", lambda: None)
+    monkeypatch.setattr(vship, "_score_vship_pass", _crashing_pass)
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *_args: (None, None))
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task",
+                        lambda *_a, **_k: _single_metric_output("ssimulacra2", 80.0, "cpu"))
+    request = analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), ("ssimulacra2",))
+    with caplog.at_level(logging.ERROR):
+        output = vship.apply_vship_cpu_fallback(_info("a.mkv"), _info("b.mkv"), request, request.metrics)
+    assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
+    assert "Vship crashed" in caplog.text
 
 
 def test_cancellation_does_not_start_cpu_fallback(monkeypatch):
@@ -1229,7 +1252,7 @@ def _counting_probe(monkeypatch, *results, delay=0.0):
         return results[min(len(calls), len(results)) - 1]
 
     monkeypatch.setattr(vship, "_probed", None)
-    monkeypatch.setattr(vship, "_probe_vship_device", probe)
+    monkeypatch.setattr(vship, "_probe_isolated", probe)
     return calls
 
 
