@@ -5191,7 +5191,7 @@ def test_settings_offer_vulkan_and_each_gpus_own_vship_build(qapp, monkeypatch, 
     combo = win.settings_gpu_backend
     assert [combo.itemData(i) for i in range(combo.count())] == offered
     assert combo.currentData() == "auto" and win._settings.gpu_backend == "auto"
-    assert "17 points" in combo.toolTip()
+    assert "Vulkan runs on any GPU" in combo.toolTip()
     win.close()
 
 
@@ -5207,14 +5207,17 @@ def test_choosing_a_gpu_backend_is_saved_and_probed_again(qapp, monkeypatch):
     win.close()
 
 
-def test_a_cpu_ssimulacra2_is_the_gpu_choice_where_vulkan_cannot_score_it(qapp, monkeypatch):
-    """On Vship's Vulkan build with an NVIDIA GPU SSIMULACRA2 is calculated
-    on the CPU; that score must count as done, or every run would calculate
-    it again."""
+def test_a_cpu_ssimulacra2_is_the_gpu_choice_where_the_build_cannot_score_it(qapp, monkeypatch):
+    """Where Vship's build scores SSIMULACRA2 wrongly (as its Vulkan build did
+    on NVIDIA GPUs before its shader was patched) it is calculated on the
+    CPU; that score must count as done, or every run would calculate it
+    again."""
     from types import SimpleNamespace
 
     from vmaf_app.core.metric_results import MetricProvenance
 
+    monkeypatch.setattr(main_window_module.perceptual_vship, "SCORED_WRONGLY",
+                        frozenset({("vulkan", main_window_module.GpuVendor.NVIDIA, "ssimulacra2")}))
     cpu = SimpleNamespace(provenance=MetricProvenance("libjxl/ssimulacra2", "", "cpu", "x"))
     win = MainWindow()
     row = win._rows[win._add_table_row(Path("a.mkv"))]
@@ -5227,7 +5230,10 @@ def test_a_cpu_ssimulacra2_is_the_gpu_choice_where_vulkan_cannot_score_it(qapp, 
     win.close()
 
 
-def test_the_long_cpu_run_warning_says_why_ssimulacra2_is_on_the_cpu_on_vulkan(qapp, monkeypatch):
+def test_the_long_cpu_run_warning_says_why_ssimulacra2_is_on_the_cpu_where_the_build_cannot_score_it(
+        qapp, monkeypatch):
+    monkeypatch.setattr(main_window_module.perceptual_vship, "SCORED_WRONGLY",
+                        frozenset({("vulkan", main_window_module.GpuVendor.NVIDIA, "ssimulacra2")}))
     shown = []
     monkeypatch.setattr(main_window_module.QMessageBox, "warning",
                         lambda _parent, _title, text, *_args: shown.append(text) or main_window_module.QMessageBox.No)

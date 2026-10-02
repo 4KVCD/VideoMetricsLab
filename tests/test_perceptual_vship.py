@@ -1423,11 +1423,15 @@ def test_choosing_another_backend_forgets_the_probe(monkeypatch):
     assert vship.vship_backend() == "auto"
 
 
-def test_vulkan_ssimulacra2_is_not_trusted_on_nvidia_but_its_other_metrics_are():
-    """Vship's Vulkan SSIMULACRA2 read 62.9 where CUDA read 45.5 and libjxl
-    47.4 on the same 4K frames on an NVIDIA GPU; on an Intel GPU it read
-    45.50, as CUDA does. Its Butteraugli and CVVDP agree on both. A GPU whose
-    maker could not be told is treated as NVIDIA."""
+#: Vship's Vulkan SSIMULACRA2 before its shader was patched: 62.9 where CUDA
+#: read 45.5 on the same 4K frames on an NVIDIA GPU, 45.50 on an Intel GPU.
+_UNPATCHED_VULKAN = frozenset({("vulkan", GpuVendor.NVIDIA, "ssimulacra2")})
+
+
+def test_a_metric_a_build_scores_wrongly_is_not_trusted_on_that_makers_gpu(monkeypatch):
+    """Only that metric, on that build and maker's GPU; a GPU whose maker
+    could not be told counts as affected."""
+    monkeypatch.setattr(vship, "SCORED_WRONGLY", _UNPATCHED_VULKAN)
     nvidia = vship.VshipDevice("vulkan", "NVIDIA GeForce RTX 5090", 0, "5.1.2", None, GpuVendor.NVIDIA)
     intel = vship.VshipDevice("vulkan", "Intel(R) Graphics", 1, "5.1.2", None, GpuVendor.INTEL)
     unknown = vship.VshipDevice("vulkan", "GPU", 0, "5.1.2", None, None)
@@ -1442,8 +1446,9 @@ def test_vulkan_ssimulacra2_is_not_trusted_on_nvidia_but_its_other_metrics_are()
     (GpuVendor.NVIDIA, ["butteraugli"], [["ssimulacra2"]]),
     (GpuVendor.INTEL, ["ssimulacra2", "butteraugli"], []),
 ])
-def test_on_vulkan_ssimulacra2_is_calculated_on_the_cpu_only_on_an_nvidia_gpu(
+def test_a_metric_a_build_scores_wrongly_is_calculated_on_the_cpu_only_on_that_makers_gpu(
         monkeypatch, vendor, on_gpu_expected, on_cpu_expected):
+    monkeypatch.setattr(vship, "SCORED_WRONGLY", _UNPATCHED_VULKAN)
     device = vship.VshipDevice("vulkan", "GPU", 0, "5.1.2", None, vendor)
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(vship, "forget_failed_vship_probe", lambda: None)

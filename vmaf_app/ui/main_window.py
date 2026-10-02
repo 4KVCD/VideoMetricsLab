@@ -1004,10 +1004,7 @@ class MainWindow(QMainWindow):
         self.settings_gpu_backend.setToolTip(tr(
             "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with "
             "the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on "
-            "any GPU, but Vship's Vulkan build scores SSIMULACRA2 far too high on NVIDIA GPUs (up to 17 points at "
-            "4K), so Vulkan on an NVIDIA GPU calculates SSIMULACRA2 on the CPU. If the chosen build cannot run "
-            "here, the others are "
-            "tried."))
+            "any GPU. If the chosen build cannot run here, the others are tried."))
         self.settings_gpu_backend.currentIndexChanged.connect(self._on_settings_edited)
         backend_row = QHBoxLayout()
         backend_row.addWidget(QLabel(tr("GPU backend:")))
@@ -3322,7 +3319,7 @@ class MainWindow(QMainWindow):
             if any(row_data.metric_backends.get(key) != "cpu" for key in pending) and gpu_missing is None:
                 gpu_missing = not self._vship_available()
             # Set to GPU but calculated on the CPU: no GPU Vship can use, or
-            # a build that scores it wrongly (SSIMULACRA2 on Vulkan).
+            # a build that scores it wrongly (perceptual_vship.SCORED_WRONGLY).
             cpu_keys = [
                 key for key in pending
                 if row_data.metric_backends.get(key) == "cpu" or gpu_missing or not self._gpu_can_score(key)
@@ -3372,8 +3369,8 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _gpu_can_score(key: str) -> bool:
         """Whether SSIMULACRA2/Butteraugli set to GPU is calculated on the GPU
-        here -- not where the build scores it wrongly (SSIMULACRA2 on Vship's
-        Vulkan build), which calculates it on the CPU."""
+        here -- not where the build scores it wrongly
+        (perceptual_vship.SCORED_WRONGLY), which calculates it on the CPU."""
         return perceptual_vship.gpu_can_score(key)
 
     @staticmethod

@@ -21,8 +21,7 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship. Settings
 > GPU metrics > GPU backend chooses Vship's build: Auto (the default) uses CUDA
 on NVIDIA, HIP on AMD and Vulkan on other GPUs such as Intel's; Vulkan can also
-be chosen on any GPU. Vship's Vulkan build scores SSIMULACRA2 too high on NVIDIA
-GPUs, so Vulkan on an NVIDIA GPU calculates SSIMULACRA2 on the CPU. If no GPU can be used, the input
+be chosen on any GPU. If no GPU can be used, the input
 format is unsupported, or GPU scoring fails, SSIMULACRA2 and Butteraugli fall
 back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU and CPU results are cached separately
 because their implementations can produce different scores. These two metrics

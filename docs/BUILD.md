@@ -57,17 +57,19 @@ case anyone overrides that.
   Intel alike). The Vulkan build is made from Vship commit 0732ed3 by
   `scripts/build_vship_vulkan.ps1` (MinGW-w64 g++, as for the tone mapper):
   5.1.1's cannot be loaded where Intel's GPU is the only one, and the later
-  color fixes have no release yet. Settings > GPU metrics > GPU backend picks
-  one; Auto, the default, uses CUDA on NVIDIA, HIP on AMD and Vulkan on other
-  GPUs, and a build that cannot run hands over to the next. Vship's Vulkan
-  SSIMULACRA2 disagrees with its CUDA build and with libjxl on NVIDIA GPUs, so
-  Vulkan on an NVIDIA GPU uses the CPU tool for it
-  (`perceptual_vship.SCORED_WRONGLY`); re-measure before removing that when
-  updating Vship. Where no build can use the GPU, the input format is
-  unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall back to
-  the bundled CPU tools. The Vship CLI and FFMS2 decoder are not included; video
-  frames continue to come from the user's FFmpeg installation. Vship and metric
-  notices are packaged beside the libraries.
+  color fixes have no release yet. Its SSIMULACRA2 shader is patched
+  (`scripts/vship_ssimulacra2_nvidia.patch`, compiled with Slang 2026.10.2,
+  which the script downloads and checks by SHA-256): unpatched, NVIDIA's Vulkan
+  driver miscompiles it and the scores come out far too high. Settings > GPU
+  metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA, HIP
+  on AMD and Vulkan on other GPUs, and a build that cannot run hands over to the
+  next. A metric a build is measured to score wrongly on a GPU maker's GPUs is
+  calculated on the CPU there (`perceptual_vship.SCORED_WRONGLY`, empty now);
+  re-measure every build when updating Vship. Where no build can use the GPU,
+  the input format is unsupported, or GPU processing fails, SSIMULACRA2 and
+  Butteraugli fall back to the bundled CPU tools. The Vship CLI and FFMS2
+  decoder are not included; video frames continue to come from the user's FFmpeg
+  installation. Vship and metric notices are packaged beside the libraries.
 
 ## What is not, and why
 

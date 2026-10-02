@@ -1,0 +1,82 @@
+Vship (Vulkan build): keep the SSIMULACRA2 blur accumulator one-dimensional
+
+Applied by scripts/build_vship_vulkan.ps1 to Vship commit 0732ed3 before it
+compiles src/Vulkan/ssimu2/shaders/scoreSSIMU2.slang to SPIR-V.
+
+On an NVIDIA GPU (RTX 5090, driver 616.92) Vship's Vulkan build scored
+SSIMULACRA2 far too high: 62.93 against CUDA's 45.50 on a 4K clip (Vship
+issue 18). The SPIR-V is valid; NVIDIA's driver miscompiles the local
+`float out[gaussianTileX][gaussianTileY+1]` (float[1][2]) in
+GaussianSmart_Device. Its second element is never accumulated, so the
+horizontal pass writes zeros to the shared tile's rows 16-31 and all four
+blurs (both means, the product and the squares) shrink towards the bottom of
+every 16x16 block. The same array in one dimension, indexed a*stride+b, gives
+the right scores; Intel's scores are unchanged to the bit.
+
+diff --git a/src/Vulkan/ssimu2/shaders/scoreSSIMU2.slang b/src/Vulkan/ssimu2/shaders/scoreSSIMU2.slang
+index faa41af..263bf9c 100644
+--- a/src/Vulkan/ssimu2/shaders/scoreSSIMU2.slang
++++ b/src/Vulkan/ssimu2/shaders/scoreSSIMU2.slang
+@@ -35,8 +35,12 @@ void GaussianSmartSharedLoad(const int thx, const int thy, uint tamponOffset, fl
+ //at the end, the central (tamponWidth-gaussianSize*2)*(tamponHeight-gaussianSize*2) part of tampon contains the blurred value for each thread
+ float[gaussianTileX*gaussianTileY] GaussianSmart_Device(const int thx, const int thy, uint tamponOffset, int64_t x, int64_t y, int64_t width, int64_t height, float* gaussiankernel, float* gaussiankernel_integral){
+     float tot[gaussianTileX];
+-    float out[gaussianTileX][gaussianTileY+1];
+-    for (int i = 0; i < gaussianTileX; i++) for (int j = 0; j < gaussianTileY+1; j++) out[i][j] = 0.f;
++    //out[a][b] is stored at out[a*outStride + b]. Kept one-dimensional on purpose: NVIDIA's Vulkan driver (616.92)
++    //miscompiles the two-dimensional float[1][2], never accumulating its second element, so the horizontal pass
++    //wrote zeros to tampon rows gaussianThy to tamponHeight-1 and every blur, and SSIMULACRA2 with them, was wrong
++    static const int outStride = gaussianTileY+1;
++    float out[gaussianTileX*outStride];
++    for (int i = 0; i < gaussianTileX*outStride; i++) out[i] = 0.f;
+ 
+     //horizontal blur on each X tile columns (each of size gaussianTileX * tamponHeight)
+ 
+@@ -52,7 +56,7 @@ float[gaussianTileX*gaussianTileY] GaussianSmart_Device(const int thx, const int
+ 
+         for (int tamponY = thy; tamponY < tamponHeight; tamponY += gaussianThy){
+             for (int i = 0; i < 2*gaussianSize+1; i++){ //starting gaussianSize to the left and going gaussianSize to the right
+-                out[region_x][tileRow] += tampon[tamponOffset+tamponY*tamponWidth + thx+i+region_x*gaussianThx]*gaussiankernel[i];
++                out[region_x*outStride + tileRow] += tampon[tamponOffset+tamponY*tamponWidth + thx+i+region_x*gaussianThx]*gaussiankernel[i];
+             }
+             tileRow++;
+         }
+@@ -65,7 +69,7 @@ float[gaussianTileX*gaussianTileY] GaussianSmart_Device(const int thx, const int
+         int tileRow = 0;
+ 
+         for (int tamponY = thy; tamponY < tamponHeight; tamponY += gaussianThy){
+-            tampon[tamponOffset+(tamponY)*tamponWidth + thx+gaussianSize+region_x*gaussianThx] = out[region_x][tileRow]/tot[region_x];
++            tampon[tamponOffset+(tamponY)*tamponWidth + thx+gaussianSize+region_x*gaussianThx] = out[region_x*outStride + tileRow]/tot[region_x];
+             tileRow++;
+         }
+     }
+@@ -82,9 +86,9 @@ float[gaussianTileX*gaussianTileY] GaussianSmart_Device(const int thx, const int
+ 
+ 
+         for (int region_x = 0; region_x < gaussianTileX; region_x++){
+-            out[region_y][region_x] = 0;
++            out[region_y*outStride + region_x] = 0;
+             for (int i = 0; i < 2*gaussianSize+1; i++){ //starting 8 to the left and going 8 to the right
+-                out[region_y][region_x] += tampon[tamponOffset+(thy+i+region_y*gaussianThy)*tamponWidth + thx+gaussianSize+region_x*gaussianThx]*gaussiankernel[i];
++                out[region_y*outStride + region_x] += tampon[tamponOffset+(thy+i+region_y*gaussianThy)*tamponWidth + thx+gaussianSize+region_x*gaussianThx]*gaussiankernel[i];
+             }
+         }
+     }
+@@ -94,7 +98,7 @@ float[gaussianTileX*gaussianTileY] GaussianSmart_Device(const int thx, const int
+     for (int region_y = 0; region_y < gaussianTileY; region_y++){
+ 
+         for (int region_x = 0; region_x < gaussianTileX; region_x++){
+-            output[region_y*gaussianTileX+region_x] = out[region_y][region_x]/tot[region_y];
++            output[region_y*gaussianTileX+region_x] = out[region_y*outStride + region_x]/tot[region_y];
+         }
+     }
+     GroupMemoryBarrierWithGroupSync();
+@@ -104,7 +108,7 @@ float[gaussianTileX*gaussianTileY] GaussianSmart_Device(const int thx, const int
+ 
+     for (int region_y = 0; region_y < gaussianTileY; region_y++){
+         for (int region_x = 0; region_x < gaussianTileX; region_x++){
+-            tampon[tamponOffset+(thy+gaussianSize+region_y*gaussianThy)*tamponWidth + thx+gaussianSize+region_x*gaussianThx] = out[region_y][region_x]/tot[region_y];
++            tampon[tamponOffset+(thy+gaussianSize+region_y*gaussianThy)*tamponWidth + thx+gaussianSize+region_x*gaussianThx] = out[region_y*outStride + region_x]/tot[region_y];
+         }
+     }
+     GroupMemoryBarrierWithGroupSync();

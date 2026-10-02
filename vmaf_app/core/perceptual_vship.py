@@ -319,26 +319,27 @@ VSHIP_BUILDS: dict[str, str] = {"cuda": "nvidia", "hip": "amd", "vulkan": "vulka
 #: Settings > GPU metrics > backend: "auto", or the build to try first. Auto
 #: tries CUDA, then HIP, then Vulkan: the fastest build whose scores agree
 #: with the reference on each GPU (CUDA is faster than Vulkan on NVIDIA for
-#: SSIMULACRA2 and CVVDP, and Vulkan's SSIMULACRA2 is wrong -- see
-#: SCORED_WRONGLY), and Vulkan for a GPU neither of the others can use.
+#: SSIMULACRA2 and CVVDP), and Vulkan for a GPU neither of the others can use.
 #: Whatever is chosen, the other builds follow if it cannot run.
 VSHIP_BACKENDS = ("auto", "vulkan", "cuda", "hip")
 DEFAULT_VSHIP_BACKEND = "auto"
 _AUTO_ORDER = ("cuda", "hip", "vulkan")
 _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
 #: (build, GPU maker, metric) a Vship build scores wrongly: the metric is
-#: calculated on the CPU instead, as on a PC without a usable GPU. Vship's
-#: Vulkan build (5.1.1, and the bundled commit 0732ed3) scores SSIMULACRA2
-#: far higher than its CUDA build and libjxl's reference on the same frames
-#: on an NVIDIA GPU -- HoneyBee 4K against a CRF 22 HEVC encode: libjxl
-#: 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at 360p -- reproduced with
-#: Vship's own FFVship, while Butteraugli (within 0.1%) and CVVDP (0.01 JOD)
-#: agree. On an Intel GPU the same build agrees with CUDA: 45.50 against
-#: 45.50 at 4K, 72.58 at 1080p, and 43.696 against 43.696 over 600 frames
-#: (Vship issue 18). AMD's Vulkan is unmeasured. A GPU whose maker could not
-#: be told is treated as NVIDIA. Remove the entry only once a bundled Vship
-#: has been measured to agree.
-SCORED_WRONGLY = frozenset({("vulkan", GpuVendor.NVIDIA, "ssimulacra2")})
+#: calculated on the CPU instead, as on a PC without a usable GPU. A GPU whose
+#: maker could not be told counts as every maker. Add an entry only for a
+#: bundled build measured to disagree with CUDA and libjxl on the same frames.
+#:
+#: Empty since the bundled Vulkan build's SSIMULACRA2 shader is patched
+#: (scripts/vship_ssimulacra2_nvidia.patch). Unpatched, Vship's Vulkan build
+#: (5.1.1, and commit 0732ed3) scored SSIMULACRA2 far too high on NVIDIA GPUs
+#: -- HoneyBee 4K against a CRF 22 HEVC encode: libjxl 47.4, CUDA 45.5,
+#: Vulkan 62.9; +7 at 1080p, +1 at 360p (Vship issue 18) -- because NVIDIA's
+#: driver miscompiles a small two-dimensional array in its blur. Patched, an
+#: RTX 5090 scores 45.5019 there against CUDA's 45.5020, and Intel's scores
+#: are unchanged. Butteraugli and CVVDP always agreed. AMD's Vulkan is
+#: unmeasured.
+SCORED_WRONGLY: frozenset[tuple[str, GpuVendor, str]] = frozenset()
 _backend = DEFAULT_VSHIP_BACKEND
 
 # The probe's result and when it was made. One probe serves the whole
