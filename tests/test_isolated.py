@@ -23,6 +23,32 @@ def _report(value, on_status=None):
     return value * 2
 
 
+def _log_info():
+    logging.getLogger("vmaf_app.core.test_child").info("FFmpeg: ffmpeg -i a.mkv")
+
+
+def test_the_childs_info_lines_reach_the_apps_log(monkeypatch):
+    """The app's log is at INFO on the vmaf_app logger, the root logger at
+    WARNING: the child was given the root's level and dropped every INFO
+    line -- its FFmpeg commands and a pass's timing never reached the log."""
+    records = []
+
+    class Keep(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    app = logging.getLogger("vmaf_app")
+    handler = Keep()
+    app.addHandler(handler)
+    monkeypatch.setattr(app, "level", logging.INFO)
+    monkeypatch.setattr(logging.getLogger(), "level", logging.WARNING)
+    try:
+        run_isolated(_log_info, what="test")
+    finally:
+        app.removeHandler(handler)
+    assert "FFmpeg: ffmpeg -i a.mkv" in records
+
+
 def _fail():
     raise VmafRunError("libvmaf failed", "the last lines FFmpeg wrote")
 

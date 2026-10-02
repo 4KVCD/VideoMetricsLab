@@ -80,9 +80,16 @@ def run_isolated(
         kwargs.pop(name, None)
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
+    # The lowest level any of the app's loggers takes: the app's own log is
+    # at INFO on its package logger while the root logger stays at WARNING,
+    # and the root's level alone dropped every INFO line the child wrote
+    # (its FFmpeg commands, a pass's timing). Records come back to their own
+    # logger names here, whose levels decide again.
+    level = min(logging.getLogger().getEffectiveLevel(),
+                logging.getLogger(__name__.partition(".")[0]).getEffectiveLevel())
     child = context.Process(
         target=_child_main,
-        args=(sender, logging.getLogger().getEffectiveLevel(), target, args, kwargs,
+        args=(sender, level, target, args, kwargs,
               tuple(calls), process_handle is not None, cancel_event is not None),
         name=f"isolated-{what}", daemon=True,
     )
