@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QThread, Signal
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings
@@ -123,11 +123,22 @@ def make_view(monkeypatch, tmp_path, count=5):
 
 
 def cleanup(view):
+    """Stops the view and deletes it, its workers first.
+
+    The view has no parent here (in the app it always has one), so Python owns
+    it, and once its pool is cleared the only thing still keeping it alive is
+    the lambda on each worker's finished signal. Left to Qt, a worker's
+    deferred deletion released that lambda and freed the view while Qt was
+    still deleting its child: the process aborted in whichever later test
+    processed the events -- now and then under pytest-xdist."""
     workers = view.live_workers()
     view.clear()
     for worker in workers:
         worker.finish()
     view.close()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)  # the workers, while the view is held
+    view.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 def test_selection_keeps_source_and_warm_neighbours_without_fifth_decoder(qapp, monkeypatch, tmp_path):
