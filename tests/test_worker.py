@@ -948,7 +948,12 @@ def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_the_plan(qapp
 
 def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
     """The halves decode separately: each carries its own latest plan, kept
-    when later messages replace its step."""
+    when later messages replace its step.
+
+    The worker runs on a thread of its own, as in the app. On the test's
+    thread its GPU half's snapshots reached the slot at once and the CPU
+    half's only at the drain, so "the last snapshot" was a matter of which
+    half finished first."""
     def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
         on_status("Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
         on_status("GPU decode failed, retrying (GPU decode: source cuda, distorted cpu)...")
@@ -965,7 +970,9 @@ def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
     worker = VmafWorker([_split_job("d.mp4")])
     snapshots = []
     worker.task_progress.connect(lambda _index, snapshot: snapshots.append(snapshot))
-    worker.run()
+    runner = threading.Thread(target=worker.run)
+    runner.start()
+    runner.join(10)
     _drain(qapp)
     last = {task["backend"]: task["decode"] for task in snapshots[-1]}
     assert last == {"ffmpeg": "source cuda, distorted cpu", "perceptual": "source cuda, distorted cuda"}

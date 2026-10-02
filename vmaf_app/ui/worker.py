@@ -440,6 +440,12 @@ class _JobRun:
         self.admitted: set[str] = set()
         self.finalized = False  # its result (or failure) has been sent
         self.lock = threading.Lock()
+        # Held from building a snapshot under `lock` until it has been emitted:
+        # the halves report from their own threads, and a snapshot built first
+        # but emitted last left the window showing the older state (a half's
+        # decode plan missing until the next report). Re-entrant, so a slot
+        # connected directly may report again.
+        self.emit_lock = threading.RLock()
         self._begun = False
         self.task_results: dict[str, object] = {}
         self.task_errors: list[tuple[object, Exception]] = []
@@ -510,25 +516,26 @@ class _JobRun:
         """Starts the video when its first half is taken: its process
         handle, its share of the cores, and job_started. False if the run
         was cancelled first. Only the first call does anything."""
-        with self.lock:
-            if self._begun:
-                return self.handle is not None
-            self._begun = True
-            self.handle = self.worker._claim_handle(self.index)
-            if self.handle is None:
-                return False
-            self.options = self.worker._share_cores(self.job.options)
-            _log.info("%s: started", self.name)
-            self.worker.job_started.emit(self.index, self.job.label)
+        with self.emit_lock:
+            with self.lock:
+                if self._begun:
+                    return self.handle is not None
+                self._begun = True
+                self.handle = self.worker._claim_handle(self.index)
+                if self.handle is None:
+                    return False
+                self.options = self.worker._share_cores(self.job.options)
+                _log.info("%s: started", self.name)
+                self.worker.job_started.emit(self.index, self.job.label)
+                if len(self.plan.tasks) > 1:
+                    admitted = set(self.admitted)
+                    for task in self.plan.tasks:
+                        if task.backend_id not in admitted:
+                            self.task_waiting[task.backend_id] = "GPU" if self.pool_of(task) == _GPU else "CPU"
+                    snapshot = self.task_snapshots()
             if len(self.plan.tasks) > 1:
-                admitted = set(self.admitted)
-                for task in self.plan.tasks:
-                    if task.backend_id not in admitted:
-                        self.task_waiting[task.backend_id] = "GPU" if self.pool_of(task) == _GPU else "CPU"
-                snapshot = self.task_snapshots()
-        if len(self.plan.tasks) > 1:
-            self.worker.task_progress.emit(self.index, snapshot)
-        return True
+                self.worker.task_progress.emit(self.index, snapshot)
+            return True
 
     def halves(self) -> list[tuple[str, int, int, float, str]]:
         """Each half's own progress; called with self.lock held."""
@@ -565,78 +572,80 @@ class _JobRun:
 
     def report_status(self, backend: str, message: str) -> None:
         _log.info("%s: %s", self.name, message)
-        with self.lock:
-            self.task_steps[backend] = message
-            if plan := re.search(r"\(GPU decode: ([^)]*)\)", message):
-                self.task_decode[backend] = plan.group(1)
-            if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
-                self.task_waiting[backend] = "GPU"
-            phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
-            if phase:
-                self.task_phases[backend] = (int(phase.group(1)), int(phase.group(2)), phase.group(3))
-                if backend in self.task_progress:
-                    # The new pass has no rate yet. The last pass's stayed
-                    # until the new one reported, shown (and timed) as the
-                    # new metric's: "Butteraugli 2 of 3, 13.3 fps" was
-                    # SSIMULACRA2's last rate.
-                    current, total, _fps = self.task_progress[backend]
-                    self.task_progress[backend] = (current, total, 0.0)
-            elif "on CPU" in message or "using CPU" in message or "on the CPU" in message:
-                # A GPU pass has handed work to the CPU fallback (or a
-                # planned CPU perceptual pass has begun); don't leave a
-                # stale GPU metric number on the status line. "on the CPU"
-                # is a failed GPU metric retried there ("SSIMULACRA2 failed
-                # on the GPU; calculating it on the CPU"): the line went on
-                # naming the last GPU pass, "CVVDP 3 of 3", over the retry.
-                self.task_phases.pop(backend, None)
-            snapshot = self.task_snapshots()
-        self.worker.task_progress.emit(self.index, snapshot)
-        self.worker.status.emit(self.index, message)
+        with self.emit_lock:
+            with self.lock:
+                self.task_steps[backend] = message
+                if plan := re.search(r"\(GPU decode: ([^)]*)\)", message):
+                    self.task_decode[backend] = plan.group(1)
+                if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
+                    self.task_waiting[backend] = "GPU"
+                phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
+                if phase:
+                    self.task_phases[backend] = (int(phase.group(1)), int(phase.group(2)), phase.group(3))
+                    if backend in self.task_progress:
+                        # The new pass has no rate yet. The last pass's stayed
+                        # until the new one reported, shown (and timed) as the
+                        # new metric's: "Butteraugli 2 of 3, 13.3 fps" was
+                        # SSIMULACRA2's last rate.
+                        current, total, _fps = self.task_progress[backend]
+                        self.task_progress[backend] = (current, total, 0.0)
+                elif "on CPU" in message or "using CPU" in message or "on the CPU" in message:
+                    # A GPU pass has handed work to the CPU fallback (or a
+                    # planned CPU perceptual pass has begun); don't leave a
+                    # stale GPU metric number on the status line. "on the CPU"
+                    # is a failed GPU metric retried there ("SSIMULACRA2 failed
+                    # on the GPU; calculating it on the CPU"): the line went on
+                    # naming the last GPU pass, "CVVDP 3 of 3", over the retry.
+                    self.task_phases.pop(backend, None)
+                snapshot = self.task_snapshots()
+            self.worker.task_progress.emit(self.index, snapshot)
+            self.worker.status.emit(self.index, message)
 
     def report_progress(self, backend: str, cur: int, total: int, fps: float) -> None:
-        worker, index, tasks = self.worker, self.index, self.plan.tasks
-        if len(tasks) == 1:
+        with self.emit_lock:
+            worker, index, tasks = self.worker, self.index, self.plan.tasks
+            if len(tasks) == 1:
+                with self.lock:
+                    self.task_progress[backend] = (cur, total, fps)
+                    snapshot = self.task_snapshots()
+                worker.task_progress.emit(index, snapshot)
+                worker.progress.emit(index, cur, total, fps)
+                return
+            # Each pass may cover a different number of frames. Until both
+            # are done, the slower completion fraction owns job progress.
             with self.lock:
+                self.task_waiting.pop(backend, None)
                 self.task_progress[backend] = (cur, total, fps)
+                known_total = max((value[1] for value in self.task_progress.values()), default=0)
+                fractions = [
+                    1.0 if task.backend_id in self.task_results else
+                    min(0.999, value[0] / value[1]) if value[1] > 0 else 0.0
+                    for task in tasks
+                    for value in [self.task_progress.get(task.backend_id, (0, 0, 0.0))]
+                ]
+                fraction = min(fractions)
+                remaining = []
+                for task in tasks:
+                    if task.backend_id in self.task_results:
+                        remaining.append(0.0)
+                        continue
+                    value = self.task_progress.get(task.backend_id)
+                    if value is None or value[2] <= 0 or value[0] >= value[1]:
+                        remaining = []
+                        break
+                    remaining.append(max(0, value[1] - value[0]) / value[2])
+                overall_cur = round(known_total * fraction)
+                if len(self.task_results) < len(tasks) and known_total > 0:
+                    overall_cur = min(overall_cur, known_total - 1)
+                overall_fps = (
+                    (known_total - overall_cur) / max(remaining)
+                    if remaining and max(remaining) > 0 else 0.0
+                )
+                each = self.halves()
                 snapshot = self.task_snapshots()
             worker.task_progress.emit(index, snapshot)
-            worker.progress.emit(index, cur, total, fps)
-            return
-        # Each pass may cover a different number of frames. Until both
-        # are done, the slower completion fraction owns job progress.
-        with self.lock:
-            self.task_waiting.pop(backend, None)
-            self.task_progress[backend] = (cur, total, fps)
-            known_total = max((value[1] for value in self.task_progress.values()), default=0)
-            fractions = [
-                1.0 if task.backend_id in self.task_results else
-                min(0.999, value[0] / value[1]) if value[1] > 0 else 0.0
-                for task in tasks
-                for value in [self.task_progress.get(task.backend_id, (0, 0, 0.0))]
-            ]
-            fraction = min(fractions)
-            remaining = []
-            for task in tasks:
-                if task.backend_id in self.task_results:
-                    remaining.append(0.0)
-                    continue
-                value = self.task_progress.get(task.backend_id)
-                if value is None or value[2] <= 0 or value[0] >= value[1]:
-                    remaining = []
-                    break
-                remaining.append(max(0, value[1] - value[0]) / value[2])
-            overall_cur = round(known_total * fraction)
-            if len(self.task_results) < len(tasks) and known_total > 0:
-                overall_cur = min(overall_cur, known_total - 1)
-            overall_fps = (
-                (known_total - overall_cur) / max(remaining)
-                if remaining and max(remaining) > 0 else 0.0
-            )
-            each = self.halves()
-            snapshot = self.task_snapshots()
-        worker.task_progress.emit(index, snapshot)
-        worker.halves.emit(index, each)
-        worker.progress.emit(index, overall_cur, known_total, overall_fps)
+            worker.halves.emit(index, each)
+            worker.progress.emit(index, overall_cur, known_total, overall_fps)
 
     def execute_task(self, task) -> object:
         job, options = self.job, self.options
