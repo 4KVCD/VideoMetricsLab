@@ -27,6 +27,16 @@ back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU a
 because their implementations can produce different scores. These two metrics
 are opt-in and do not add processing to runs where they are unchecked.
 
+With an NVIDIA GPU, VMAF and VMAF NEG are calculated on it too, with a bundled
+libvmaf built with CUDA (Settings > GPU metrics > Calculate VMAF and VMAF NEG on
+an NVIDIA GPU, on by default). Their scores agree with FFmpeg's libvmaf on the
+CPU to within a thousandth of a point on every frame. VMAF v1, PSNR, SSIM and
+XPSNR have no GPU code and are still calculated by FFmpeg on the CPU, from the
+same decoded frames. A video's VMAF then waits for the GPU like its other GPU
+metrics, one video at a time. If the GPU calculation fails, or crashes, that
+video's VMAF is calculated on the CPU instead. Without an NVIDIA GPU nothing
+changes: FFmpeg's libvmaf calculates everything.
+
 The files must describe corresponding frames. The app rejects several timing
 and geometry mismatches; this is not automatic content alignment. A source with
 a different cut, opening sequence or frame offset must be aligned first.

@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "GPU üzerinde başarısız: {metrics}; CPU üzerinde hesaplanıyor…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU kullanılamıyor ({reason}); CPU referans metrikleri kullanılıyor…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Vship GPU hesaplaması başarısız ({error}); CPU referans metrikleri kullanılıyor…",
-  "Waiting for the GPU: another video's Vship pass is running…": "GPU bekleniyor: başka bir videonun Vship geçişi çalışıyor…",
+  "Waiting for the GPU: another video's GPU pass is running…": "GPU bekleniyor: başka bir videonun GPU geçişi çalışıyor…",
   "{metrics} failed: {error}": "Başarısız ({metrics}): {error}",
   "Cancelled by user": "Kullanıcı tarafından iptal edildi",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU puanlaması başarısız ({error}). 10 dakikadan uzun bir videoda saatler ile günler arası süreceği için CPU üzerinde yeniden denenmedi. Yine de CPU üzerinde hesaplamak için {metrics} için CPU'yu seçin.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65 inç 4K HDR TV, 4000 nit, oturma odası",
   "Official '65inch_hdr_pq_4knit'.": "Resmi '65inch_hdr_pq_4knit'.",
   "6-inch phone": "6 inç telefon",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Resmi 'standard_phone' (orada kontrast belirtilmemiş: 1000:1, resmi varsayılan)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Resmi 'standard_phone' (orada kontrast belirtilmemiş: 1000:1, resmi varsayılan).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF ve VMAF NEG'i NVIDIA GPU'da hesapla",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF ve VMAF NEG, birlikte gelen libvmaf ile NVIDIA GPU'da, VMAF v1, PSNR, SSIM ve XPSNR ise CPU'da, aynı çözülmüş karelerden hesaplanır. Puanlar her karede CPU'nunkilerle binde bir puan içinde uyuşur. GPU'daki hesaplama başarısız olursa VMAF CPU'da hesaplanır.\n\nBir sonraki çalıştırmadan itibaren geçerlidir.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg çalışıyor, VMAF GPU'da (GPU kod çözme: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU'da VMAF başarısız ({error}); CPU'da hesaplanıyor…"
  },
  "plurals": {
   "about {count} day": [

@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} falhou na GPU; calculando na CPU…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "GPU Vship indisponível ({reason}); usando as métricas de referência na CPU…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "O cálculo na GPU Vship falhou ({error}); usando as métricas de referência na CPU…",
-  "Waiting for the GPU: another video's Vship pass is running…": "Aguardando a GPU: a passada Vship de outro vídeo está em execução…",
+  "Waiting for the GPU: another video's GPU pass is running…": "Aguardando a GPU: a passada na GPU de outro vídeo está em execução…",
   "{metrics} failed: {error}": "{metrics} falhou: {error}",
   "Cancelled by user": "Cancelado pelo usuário",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "A pontuação na GPU falhou ({error}). Não foi repetida na CPU, o que levaria de horas a dias para um vídeo com mais de 10 minutos. Escolha CPU para {metrics} para calcular na CPU mesmo assim.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "TV 4K HDR de 65 polegadas, 4000 nits, sala de estar",
   "Official '65inch_hdr_pq_4knit'.": "Oficial '65inch_hdr_pq_4knit'.",
   "6-inch phone": "Celular de 6 polegadas",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Oficial 'standard_phone' (lá o contraste não é especificado: 1000:1, o padrão oficial)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Oficial 'standard_phone' (lá o contraste não é especificado: 1000:1, o padrão oficial).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Calcular VMAF e VMAF NEG em uma GPU NVIDIA",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF e VMAF NEG são calculados na GPU NVIDIA com a libvmaf incluída, e VMAF v1, PSNR, SSIM e XPSNR na CPU, a partir dos mesmos quadros decodificados. As pontuações coincidem com as da CPU até um milésimo de ponto em cada quadro. Se o cálculo na GPU falhar, o VMAF é calculado na CPU.\n\nVale a partir da próxima execução.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Executando o ffmpeg, VMAF na GPU (decodificação por GPU: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "O VMAF falhou na GPU ({error}); calculando na CPU…"
  },
  "plurals": {
   "about {count} day": [

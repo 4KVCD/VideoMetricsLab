@@ -200,6 +200,8 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "Detecting black bars in source and test video…",
     "Detecting black bars in source…",
     "Running ffmpeg (GPU decode: {plan})…",
+    "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…",
+    "VMAF on the GPU failed ({error}); calculating it on the CPU…",
     "GPU decode failed, retrying (GPU decode: {plan})…",
     "GPU decode failed, retrying…",
     "Vship GPU ({device}): calculating {metrics} (GPU decode: {plan})…",
@@ -216,7 +218,7 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "{metrics} failed on the GPU; calculating it on the CPU…",
     "Vship GPU unavailable ({reason}); using CPU reference metrics…",
     "Vship GPU compute failed ({error}); using CPU reference metrics…",
-    "Waiting for the GPU: another video's Vship pass is running…",
+    "Waiting for the GPU: another video's GPU pass is running…",
     # --- why a video or a metric failed
     "{metrics} failed: {error}",
     "Cancelled by user",

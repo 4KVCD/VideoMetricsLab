@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "Sikertelen GPU-n: {metrics}; számítás CPU-n…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "A Vship GPU nem érhető el ({reason}); CPU-s referenciametrikák használata…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "A Vship GPU-s számítás sikertelen ({error}); CPU-s referenciametrikák használata…",
-  "Waiting for the GPU: another video's Vship pass is running…": "Várakozás a GPU-ra: egy másik videó Vship-menete fut…",
+  "Waiting for the GPU: another video's GPU pass is running…": "Várakozás a GPU-ra: egy másik videó GPU-menete fut…",
   "{metrics} failed: {error}": "Sikertelen: {metrics}: {error}",
   "Cancelled by user": "A felhasználó megszakította",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "A GPU-s pontozás sikertelen ({error}). CPU-n nem próbálta újra, mert 10 percnél hosszabb videónál ez órákig vagy napokig tartana. Ha mégis CPU-n szeretné számolni, válassza a CPU-t ehhez: {metrics}.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65 hüvelykes 4K HDR tévé, 4000 nit, nappali",
   "Official '65inch_hdr_pq_4knit'.": "Hivatalos „65inch_hdr_pq_4knit”.",
   "6-inch phone": "6 hüvelykes telefon",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Hivatalos „standard_phone” (kontrasztot nem ad meg: 1000:1, a hivatalos alapérték)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Hivatalos „standard_phone” (kontrasztot nem ad meg: 1000:1, a hivatalos alapérték).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF és VMAF NEG számítása NVIDIA GPU-n",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "A VMAF és a VMAF NEG az NVIDIA GPU-n számolódik a mellékelt libvmaf-fel, a VMAF v1, a PSNR, az SSIM és az XPSNR pedig a CPU-n, ugyanazokból a dekódolt képkockákból. A pontszámok minden képkockán legfeljebb egy ezred ponttal térnek el a CPU-s értékektől. Ha a GPU-s számítás sikertelen, a VMAF a CPU-n számolódik.\n\nA következő futtatástól érvényes.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg futtatása, VMAF a GPU-n (GPU-dekódolás: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "A VMAF sikertelen a GPU-n ({error}); számítás CPU-n…"
  },
  "plurals": {
   "about {count} day": [

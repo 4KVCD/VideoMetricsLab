@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} lỗi trên GPU; đang tính trên CPU…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "GPU Vship không khả dụng ({reason}); đang dùng chỉ số tham chiếu trên CPU…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Tính trên GPU Vship lỗi ({error}); đang dùng chỉ số tham chiếu trên CPU…",
-  "Waiting for the GPU: another video's Vship pass is running…": "Đang chờ GPU: lượt Vship của video khác đang chạy…",
+  "Waiting for the GPU: another video's GPU pass is running…": "Đang chờ GPU: lượt GPU của video khác đang chạy…",
   "{metrics} failed: {error}": "{metrics} lỗi: {error}",
   "Cancelled by user": "Người dùng đã hủy",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Chấm điểm trên GPU lỗi ({error}). Không thử lại trên CPU, vì sẽ mất hàng giờ đến hàng ngày với video dài hơn 10 phút. Chọn CPU cho {metrics} để vẫn tính trên CPU.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "TV 4K HDR 65 inch, 4000 nit, phòng khách",
   "Official '65inch_hdr_pq_4knit'.": "\"65inch_hdr_pq_4knit\" chính thức.",
   "6-inch phone": "Điện thoại 6 inch",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" chính thức (không ghi độ tương phản: 1000:1, giá trị mặc định chính thức)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" chính thức (không ghi độ tương phản: 1000:1, giá trị mặc định chính thức).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Tính VMAF và VMAF NEG trên GPU NVIDIA",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF và VMAF NEG được tính trên GPU NVIDIA bằng libvmaf đi kèm, còn VMAF v1, PSNR, SSIM và XPSNR trên CPU, từ cùng các khung hình đã giải mã. Điểm số khớp với điểm của CPU trong phạm vi một phần nghìn điểm ở mọi khung hình. Nếu tính trên GPU lỗi, VMAF sẽ được tính trên CPU.\n\nÁp dụng từ lần chạy tiếp theo.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Đang chạy ffmpeg, VMAF trên GPU (giải mã GPU: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF trên GPU lỗi ({error}); đang tính trên CPU…"
  },
  "plurals": {
   "about {count} day": [

@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} ล้มเหลวบน GPU กำลังคำนวณบน CPU…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU ใช้ไม่ได้ ({reason}) กำลังใช้เมตริกอ้างอิงบน CPU…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "การคำนวณบน Vship GPU ล้มเหลว ({error}) กำลังใช้เมตริกอ้างอิงบน CPU…",
-  "Waiting for the GPU: another video's Vship pass is running…": "กำลังรอ GPU: รอบ Vship ของวิดีโออื่นกำลังทำงาน…",
+  "Waiting for the GPU: another video's GPU pass is running…": "กำลังรอ GPU: รอบ GPU ของวิดีโออื่นกำลังทำงาน…",
   "{metrics} failed: {error}": "{metrics} ล้มเหลว: {error}",
   "Cancelled by user": "ผู้ใช้ยกเลิก",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "การให้คะแนนบน GPU ล้มเหลว ({error}) ไม่ได้ลองใหม่บน CPU เพราะจะใช้เวลาหลายชั่วโมงถึงหลายวันสำหรับวิดีโอที่ยาวเกิน 10 นาที เลือก CPU สำหรับ {metrics} เพื่อคำนวณบน CPU อยู่ดี",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "ทีวี 4K HDR 65 นิ้ว 4000 นิต ห้องนั่งเล่น",
   "Official '65inch_hdr_pq_4knit'.": "\"65inch_hdr_pq_4knit\" ทางการ",
   "6-inch phone": "โทรศัพท์ 6 นิ้ว",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" ทางการ (ไม่ได้ระบุคอนทราสต์: 1000:1 ค่าเริ่มต้นทางการ)"
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" ทางการ (ไม่ได้ระบุคอนทราสต์: 1000:1 ค่าเริ่มต้นทางการ)",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "คำนวณ VMAF และ VMAF NEG บน GPU ของ NVIDIA",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF และ VMAF NEG คำนวณบน GPU ของ NVIDIA ด้วย libvmaf ที่ให้มา ส่วน VMAF v1, PSNR, SSIM และ XPSNR คำนวณบน CPU จากเฟรมที่ถอดรหัสเดียวกัน คะแนนตรงกับของ CPU ภายในหนึ่งในพันของคะแนนในทุกเฟรม หากการคำนวณบน GPU ล้มเหลว จะคำนวณ VMAF บน CPU แทน\n\nมีผลตั้งแต่การรันครั้งถัดไป",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "กำลังรัน ffmpeg, VMAF บน GPU (ถอดรหัสด้วย GPU: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF บน GPU ล้มเหลว ({error}) กำลังคำนวณบน CPU…"
  },
  "plurals": {
   "about {count} day": [

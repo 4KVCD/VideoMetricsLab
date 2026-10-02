@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} na GPU selhalo; počítá se na CPU…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU není k dispozici ({reason}); používají se referenční metriky CPU…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Výpočet na Vship GPU selhal ({error}); používají se referenční metriky CPU…",
-  "Waiting for the GPU: another video's Vship pass is running…": "Čeká se na GPU: běží průchod Vship jiného videa…",
+  "Waiting for the GPU: another video's GPU pass is running…": "Čeká se na GPU: běží průchod GPU jiného videa…",
   "{metrics} failed: {error}": "{metrics} selhalo: {error}",
   "Cancelled by user": "Zrušeno uživatelem",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Hodnocení na GPU selhalo ({error}). Na CPU se znovu nezkoušelo, protože by to u videa delšího než 10 minut trvalo hodiny až dny. Zvolte pro {metrics} CPU, chcete-li přesto počítat na CPU.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65palcová 4K HDR televize, 4000 nitů, obývací pokoj",
   "Official '65inch_hdr_pq_4knit'.": "Oficiální „65inch_hdr_pq_4knit“.",
   "6-inch phone": "6palcový telefon",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Oficiální „standard_phone“ (kontrast neuvádí: 1000:1, oficiální výchozí hodnota)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Oficiální „standard_phone“ (kontrast neuvádí: 1000:1, oficiální výchozí hodnota).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Počítat VMAF a VMAF NEG na GPU NVIDIA",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF a VMAF NEG se počítají na GPU NVIDIA pomocí přibalené knihovny libvmaf, VMAF v1, PSNR, SSIM a XPSNR na CPU, ze stejných dekódovaných snímků. Skóre se od výsledků CPU liší na každém snímku nejvýše o tisícinu bodu. Pokud výpočet na GPU selže, VMAF se spočítá na CPU.\n\nPlatí od příštího běhu.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Spouštění ffmpeg, VMAF na GPU (dekódování na GPU: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF na GPU selhalo ({error}); počítá se na CPU…"
  },
  "plurals": {
   "about {count} day": [

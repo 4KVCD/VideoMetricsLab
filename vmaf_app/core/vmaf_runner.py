@@ -13,15 +13,18 @@ import subprocess
 import tempfile
 import threading
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 
 from vmaf_app.core import proc as proc_util
+from vmaf_app.core import vmaf_cuda
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
 from vmaf_app.core.gpu import (
+    GPU_PASS,
+    GPU_WAIT_MESSAGE,
     HwAccelPlan,
     plan_hwaccel,
 )
@@ -34,6 +37,7 @@ from vmaf_app.core.gpu import (
 from vmaf_app.core.gpu import (
     hwaccel_args as _hwaccel_args,
 )
+from vmaf_app.core.isolated import run_isolated
 from vmaf_app.core.metric_results import current_ffmpeg_provenance, results_from_frame_scores
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, model_for_resolution, resolve_v1_model
 from vmaf_app.core.models import (
@@ -62,22 +66,26 @@ def _command_text(command) -> str:
 ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_frames, fps)
 
 
-def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: str = ""):
-    """Adapt one FFmpeg parse into generic results without re-parsing it."""
+def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: str = "",
+                                    gpu_keys: set[str] | None = None):
+    """Adapt one FFmpeg parse into generic results without re-parsing it.
+    `gpu_keys`: VMAF and NEG scored on the GPU (vmaf_cuda) -- the same
+    request identity as FFmpeg's libvmaf (their scores agree to within
+    4e-5), recorded as GPU scores of the bundled build."""
     status = check_tools()
     version = format_version(status.ffmpeg.version) if status.ffmpeg.runnable else "unknown"
-    return results_from_frame_scores(
-        frames,
-        {
-            key: current_ffmpeg_provenance(
-                key, version,
-                ({"model": "version=vmaf_v0.6.1neg"} if key == "vmaf_neg"
-                 else {"model": model} if key == "vmaf"
-                 else {"model": model_v1} if key == "vmaf_v1" else None),
-            )
-            for key in frames.metric_keys
-        },
-    )
+
+    def provenance(key: str):
+        parameters = ({"model": "version=vmaf_v0.6.1neg"} if key == "vmaf_neg"
+                      else {"model": model} if key == "vmaf"
+                      else {"model": model_v1} if key == "vmaf_v1" else None)
+        made = current_ffmpeg_provenance(key, version, parameters)
+        if key in (gpu_keys or ()):
+            made = replace(made, implementation="libvmaf/cuda", implementation_version=vmaf_cuda.LIBRARY_BUILD,
+                           compute_backend="gpu")
+        return made
+
+    return results_from_frame_scores(frames, {key: provenance(key) for key in frames.metric_keys})
 
 
 class VmafRunError(RuntimeError):
@@ -340,22 +348,24 @@ _FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
 
 def _build_libvmaf_stage(
     options: VmafOptions, log_path: Path, model: str | None, xpsnr_log_path: Path | None,
+    main_label: str = "main", ref_label: str = "ref", output_label: str = "",
 ) -> str:
     """The XPSNR + libvmaf tail shared by both filtergraph builders. XPSNR
     isn't a libvmaf "feature" like PSNR/SSIM -- it's a fully separate ffmpeg
     filter with its own stats file -- so when requested it sits between
     decode and libvmaf, passing [main] through under a new label.
+    `output_label` names its output (the GPU VMAF graph maps it explicitly).
     """
     if not options.requested_metrics():
         raise VmafRunError("Select at least one metric to calculate.")
+    output = f"[{output_label}]" if output_label else ""
     # XPSNR-only needs no libvmaf filter or model at all.
     if not _uses_vmaf_model(options) and not options.extra_features:
         assert xpsnr_log_path is not None
-        return f"[main][ref]xpsnr=stats_file={xpsnr_log_path.name}:" + ":".join(_FRAMESYNC_OPTS)
+        return (f"[{main_label}][{ref_label}]xpsnr=stats_file={xpsnr_log_path.name}:"
+                + ":".join(_FRAMESYNC_OPTS) + output)
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
     chains = []
-    main_label = "main"
-    ref_label = "ref"
     if options.compute_xpsnr and xpsnr_log_path is not None:
         # xpsnr consumes [ref], and libvmaf needs it too -- but a filtergraph
         # label can only be consumed once. Without this explicit split,
@@ -364,14 +374,14 @@ def _build_libvmaf_stage(
         # VMAF 100 / PSNR 60 / SSIM 1.0 for every frame no matter how bad the
         # encode actually is. It does NOT error out, so the scores just come
         # back quietly, plausibly wrong.
-        chains.append("[ref]split=2[ref_xpsnr][ref_vmaf]")
+        chains.append(f"[{ref_label}]split=2[ref_xpsnr][ref_vmaf]")
         chains.append(
-            f"[main][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}:"
+            f"[{main_label}][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}:"
             + ":".join(_FRAMESYNC_OPTS) + "[xmain]"
         )
         main_label = "xmain"
         ref_label = "ref_vmaf"
-    chains.append(f"[{main_label}][{ref_label}]libvmaf=" + ":".join(libvmaf_opts))
+    chains.append(f"[{main_label}][{ref_label}]libvmaf=" + ":".join(libvmaf_opts) + output)
     return ";".join(chains)
 
 
@@ -422,8 +432,12 @@ def _build_filtergraph(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
     hwaccel: HwAccelPlan, log_path: Path, model: str | None = None,
-    xpsnr_log_path: Path | None = None,
+    xpsnr_log_path: Path | None = None, gpu_vmaf: bool = False,
 ) -> str:
+    """`gpu_vmaf`: VMAF and NEG are scored on the GPU (vmaf_cuda), from the
+    compared frames as two raw outputs, [vmaf_dist] and [vmaf_ref]; `options`
+    then holds what FFmpeg's own filters still score (XPSNR, VMAF v1, PSNR,
+    SSIM), and they get the same frames through a split."""
     dist_content_w, dist_content_h = _content_size(distorted_info, distorted_crop)
     ref_content_w, ref_content_h = _content_size(source_info, source_crop)
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
@@ -472,7 +486,14 @@ def _build_filtergraph(
     ref_ops.append("setpts=PTS-STARTPTS")
     ref_chain = f"[1:v]{','.join(ref_ops)}[ref]"
 
-    tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
+    if not gpu_vmaf:
+        tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
+    elif options.requested_metrics():
+        tail = ("[main]split=2[main_cpu][vmaf_dist];[ref]split=2[ref_cpu][vmaf_ref];"
+                + _build_libvmaf_stage(options, log_path, model, xpsnr_log_path,
+                                       main_label="main_cpu", ref_label="ref_cpu", output_label="cpu_out"))
+    else:
+        tail = "[main]null[vmaf_dist];[ref]null[vmaf_ref]"
     return ";".join([main_chain, ref_chain, tail])
 
 
@@ -530,6 +551,7 @@ _PROGRESS_FPS_RE = re.compile(r"fps=\s*([\d.]+)")
 def _build_ffmpeg_cmd(
     distorted_path: Path, source_path: Path, filtergraph: str,
     hwaccel: HwAccelPlan, duration_limit: float = 0.0,
+    gpu_outputs: list[str] | None = None, cpu_output: bool = True,
 ) -> list[str]:
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y"]
     # -i paths are plain argv (not filtergraph syntax) so absolute Windows
@@ -540,7 +562,7 @@ def _build_ffmpeg_cmd(
     cmd += ["-i", str(Path(distorted_path).resolve())]
     cmd += _hwaccel_args(hwaccel.source)
     cmd += ["-i", str(Path(source_path).resolve())]
-    cmd += _build_ffmpeg_output_args(filtergraph, duration_limit)
+    cmd += _build_ffmpeg_output_args(filtergraph, duration_limit, gpu_outputs, cpu_output)
     return cmd
 
 
@@ -554,8 +576,17 @@ def _build_resample_cmd(
     return cmd
 
 
-def _build_ffmpeg_output_args(filtergraph: str, duration_limit: float) -> list[str]:
+def _build_ffmpeg_output_args(
+    filtergraph: str, duration_limit: float, gpu_outputs: list[str] | None = None, cpu_output: bool = True,
+) -> list[str]:
+    """`gpu_outputs`: GPU VMAF's raw outputs (vmaf_cuda.GpuAttempt), each
+    with its own -t; the CPU filters' output is then mapped by its label,
+    and left out when they have nothing to score (`cpu_output`)."""
     args = ["-lavfi", filtergraph, "-progress", "pipe:1", "-nostats"]
+    if gpu_outputs is not None:
+        if not cpu_output:
+            return args + gpu_outputs
+        args += ["-map", "[cpu_out]"]
     if duration_limit > 0:
         # An output-side -t caps how much of the filtered output is produced
         # (and so how many frames reach libvmaf), regardless of any length
@@ -563,7 +594,7 @@ def _build_ffmpeg_output_args(filtergraph: str, duration_limit: float) -> list[s
         # each input separately.
         args += ["-t", f"{duration_limit:.3f}"]
     args += ["-f", "null", "-"]
-    return args
+    return args + (gpu_outputs or [])
 
 
 def _run_ffmpeg(
@@ -795,7 +826,40 @@ def _parse_xpsnr_log(xpsnr_log_path: Path) -> dict[int, float]:
 #: log path, xpsnr log path or None) -> the ffmpeg argv to run. The two run
 #: flavours differ only in this, so _execute_run takes it as a parameter
 #: rather than duplicating the whole pipeline around it.
-CommandBuilder = Callable[[HwAccelPlan, str | None, Path, Path | None], list[str]]
+CommandBuilder = Callable[..., list[str]]
+
+
+@dataclass(frozen=True)
+class _GpuPlan:
+    """VMAF and NEG scored on the GPU (vmaf_cuda): libvmaf's models for
+    them, the size and depth frames are compared at, and `cpu_options`,
+    what FFmpeg's own filters still score (XPSNR, VMAF v1, PSNR, SSIM)."""
+    models: dict[str, str]
+    width: int
+    height: int
+    bit_depth: int
+    cpu_options: VmafOptions
+
+
+def _with_gpu_scores(frames: FrameScores | None, gpu_scores, fps: float) -> FrameScores:
+    """The GPU's VMAF and NEG added to what FFmpeg's logs gave, frame by
+    frame. FFmpeg pairs frames by time and the GPU by position; for every
+    pair the app accepts they are the same frames. When they are not -- or
+    the GPU scored none -- the GPU result is refused (VmafGpuError) and the
+    run is made again on the CPU: the frames one side lacked used to be
+    kept as NaN, a VMAF with holes in it."""
+    numbers, scores = gpu_scores
+    if not len(numbers):
+        raise vmaf_cuda.VmafGpuError("GPU VMAF scored no frames")
+    if frames is None or not len(frames):
+        time = numbers / fps if fps > 0 else np.zeros(len(numbers), dtype=np.float64)
+        return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"))
+    if not np.array_equal(numbers, frames.frame):
+        raise vmaf_cuda.VmafGpuError(
+            f"GPU VMAF scored {len(numbers)} frames and FFmpeg's filters {len(frames)}, not the same ones")
+    for key, values in scores.items():
+        frames = frames.with_values(key, np.asarray(values, dtype=np.float32))
+    return frames
 
 
 def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
@@ -852,8 +916,13 @@ def _execute_run(
     on_status: Callable[[str], None] | None,
     cancel_event: threading.Event | None,
     process_handle: ProcessHandle | None,
+    gpu: _GpuPlan | None = None,
 ) -> FrameScores:
     """Runs one ffmpeg invocation to completion and parses its logs.
+
+    With `gpu`, VMAF and NEG are scored on the GPU from FFmpeg's raw outputs
+    (vmaf_cuda.GpuAttempt, one per attempt) and FFmpeg's filters score the
+    rest; build_command then also takes those outputs' arguments.
 
     Shared by run_vmaf and run_resample_test, which previously carried
     byte-identical copies of the temp-dir setup, the GPU-decode fallback, the
@@ -866,26 +935,54 @@ def _execute_run(
         tmpdir = Path(tmpdir_str)
         log_path = tmpdir / "vmaf_log.json"
         xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
+        cpu = gpu.cpu_options if gpu is not None else options  # what FFmpeg's filters score
         resolved_model = _resolve_model_for_cwd(
-            (model if model is not None else options.model) if options.compute_vmaf else "", tmpdir
+            (model if model is not None else options.model) if cpu.compute_vmaf else "", tmpdir
         )
+        gpu_scores = None
         if (v1_file := _v1_model_file(options)) is not None:
             shutil.copyfile(v1_file, tmpdir / v1_file.name)  # referenced by bare name, as above
 
         def run_with(plan: HwAccelPlan):
-            cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
-            _log.info("FFmpeg: %s", _command_text(cmd))
-            return _run_ffmpeg(
-                cmd, total_frames, on_progress, cancel_event,
-                cwd=tmpdir, process_handle=process_handle,
-            )
+            nonlocal gpu_scores
+            if gpu is None:
+                cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path)
+                _log.info("FFmpeg: %s", _command_text(cmd))
+                return _run_ffmpeg(
+                    cmd, total_frames, on_progress, cancel_event,
+                    cwd=tmpdir, process_handle=process_handle,
+                )
+            # A libvmaf context and pipes of its own for each attempt: a
+            # failed attempt's are spent.
+            attempt = vmaf_cuda.GpuAttempt(gpu.width, gpu.height, gpu.bit_depth, gpu.models, options.n_subsample)
+            try:
+                # One frame more than the limit: FFmpeg's libvmaf filter scores
+                # the first frame at or past it (stamped 30.03 s for a 30 s
+                # limit at 23.976 fps) before the null output stops there, and
+                # the raw outputs are to carry the same frames.
+                limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
+                cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path, attempt.output_args(limit))
+                _log.info("FFmpeg: %s", _command_text(cmd))
+                result = _run_ffmpeg(
+                    cmd, total_frames, on_progress, cancel_event,
+                    cwd=tmpdir, process_handle=process_handle,
+                )
+            except BaseException:
+                with contextlib.suppress(Exception):
+                    attempt.finish(False)
+                raise
+            # Raises when libvmaf failed: FFmpeg failing then is its doing,
+            # and no decode retry would help.
+            gpu_scores = attempt.finish(result.returncode == 0)
+            return result
 
         ladder = _fallback_ladder(hwaccel)
         result = None
         for attempt, plan in enumerate(ladder):
             if on_status:
                 if attempt == 0:
-                    on_status(f"Running ffmpeg (GPU decode: {plan.describe()})...")
+                    on_status(f"Running ffmpeg{', VMAF on the GPU' if gpu is not None else ''} "
+                              f"(GPU decode: {plan.describe()})...")
                 else:
                     on_status(
                         f"GPU decode failed, retrying (GPU decode: {plan.describe()})..."
@@ -908,7 +1005,9 @@ def _execute_run(
             tail = "\n".join(result.stderr.splitlines()[-25:])
             raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
 
-        if not _uses_vmaf_model(options) and not options.extra_features:
+        if not cpu.requested_metrics():
+            frames = None  # VMAF and NEG only, both from the GPU
+        elif not _uses_vmaf_model(cpu) and not cpu.extra_features:
             values = _parse_xpsnr_log(xpsnr_log_path)
             numbers = np.array(sorted(values), dtype=np.int32)
             frames = FrameScores(numbers, numbers / fps, None,
@@ -917,6 +1016,8 @@ def _execute_run(
             if not log_path.exists():
                 raise VmafRunError("ffmpeg finished but no metric log was produced.", stderr_tail=result.stderr[-2000:])
             frames = _parse_log(log_path, fps, xpsnr_log_path)
+        if gpu is not None:
+            frames = _with_gpu_scores(frames, gpu_scores, fps)
         missing = [m for m in options.requested_metrics() if not frames.has(m)]
         if not frames or missing:
             raise VmafRunError("No results for requested metrics: " + ", ".join(missing or options.requested_metrics()))
@@ -932,8 +1033,12 @@ def run_vmaf(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     result_distorted_path: Path | None = None,
+    gpu_vmaf: bool | None = None,
 ) -> ComparisonResult:
-    """result_distorted_path overrides the returned result's `distorted`
+    """`gpu_vmaf`: VMAF on the GPU as the run took the setting when it
+    started (vmaf_cuda.scores_on_gpu; None: the setting as it is now).
+
+    result_distorted_path overrides the returned result's `distorted`
     identity (defaulting to distorted_info.path). It doesn't affect which
     file is actually decoded -- only what identity the result carries for
     caching/graphing -- so a caller running the *same* physical file twice
@@ -977,19 +1082,34 @@ def run_vmaf(
         )
 
     total_frames = estimate_total_frames(distorted_info, options, source_info)
-    frames = _execute_run(
-        build_command,
-        options=options,
-        model=effective_model,
-        fps=distorted_info.fps,
-        total_frames=total_frames,
-        hwaccel=hwaccel,
-        tmp_prefix="vmaf_run_",
-        on_progress=on_progress,
-        on_status=on_status,
-        cancel_event=cancel_event,
-        process_handle=process_handle,
-    )
+    frames = None
+    gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model, gpu_vmaf)
+    if gpu_models is not None:
+        plan = _GpuPlan(
+            gpu_models, *dimensions, _bit_depth(analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt)),
+            replace(options, compute_vmaf=False, compute_vmaf_neg=False),
+        )
+        frames = _run_on_gpu(
+            plan, source_info, distorted_info, options, source_crop, distorted_crop, effective_model, hwaccel,
+            total_frames, on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+            process_handle=process_handle,
+        )
+        if frames is None:
+            gpu_models = None
+    if frames is None:
+        frames = _execute_run(
+            build_command,
+            options=options,
+            model=effective_model,
+            fps=distorted_info.fps,
+            total_frames=total_frames,
+            hwaccel=hwaccel,
+            tmp_prefix="vmaf_run_",
+            on_progress=on_progress,
+            on_status=on_status,
+            cancel_event=cancel_event,
+            process_handle=process_handle,
+        )
 
     return ComparisonResult(
         source=source_info.path,
@@ -1007,7 +1127,69 @@ def run_vmaf(
         model_choice=options.model_choice,
         model_v1=options.model_v1,
         model_choice_v1=options.model_choice_v1 if options.compute_vmaf_v1 else None,
-        metric_results=_metric_results_for_current_run(frames, effective_model, options.model_v1),
+        metric_results=_metric_results_for_current_run(
+            frames, effective_model, options.model_v1, gpu_keys=set(gpu_models or ()) & set(frames.metric_keys),
+        ),
+    )
+
+
+def _run_on_gpu(
+    plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, model: str, hwaccel: HwAccelPlan,
+    total_frames: int, *, on_progress, on_status, cancel_event, process_handle,
+) -> FrameScores | None:
+    """The run with VMAF and NEG on the GPU (vmaf_cuda), in a process of its
+    own: a crash in libvmaf or the NVIDIA driver ends that process, not the
+    app. None when it fails for any reason but Cancel: the run is then made
+    again with VMAF on the CPU, as on a PC without the GPU.
+
+    One GPU pass at a time with Vship's (gpu.GPU_PASS): VMAF on the GPU does
+    not run beside another video's GPU metrics."""
+    _log.info("VMAF on the GPU (%s): %s", ", ".join(plan.models.values()), vmaf_cuda.LIBRARY_BUILD)
+    if not GPU_PASS.acquire(blocking=False):
+        if on_status:
+            on_status(GPU_WAIT_MESSAGE)
+        while not GPU_PASS.acquire(timeout=0.1):
+            if cancel_event is not None and cancel_event.is_set():
+                raise Cancelled("Cancelled by user")
+    try:
+        return run_isolated(
+            _score_on_gpu, plan, source_info, distorted_info, options, source_crop, distorted_crop, model, hwaccel,
+            total_frames, what="libvmaf", callbacks=("on_progress", "on_status"), on_progress=on_progress,
+            on_status=on_status, cancel_event=cancel_event, process_handle=process_handle, cancelled=Cancelled,
+        )
+    except Cancelled:
+        raise
+    except Exception as error:
+        _log.error("VMAF on the GPU failed; calculating it on the CPU: %s", error, exc_info=error)
+        if on_status:
+            on_status(f"VMAF on the GPU failed ({error}); calculating it on the CPU…")
+        return None
+    finally:
+        GPU_PASS.release()
+
+
+def _score_on_gpu(
+    plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, model: str, hwaccel: HwAccelPlan,
+    total_frames: int, *, on_progress=None, on_status=None, cancel_event=None, process_handle=None,
+) -> FrameScores:
+    """Run by _run_on_gpu in its own process: FFmpeg as on the CPU, its
+    filters scoring the rest, and the compared frames fed to libvmaf."""
+    cpu_output = bool(plan.cpu_options.requested_metrics())
+
+    def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
+        filtergraph = _build_filtergraph(
+            source_info, distorted_info, plan.cpu_options, source_crop, distorted_crop, hw, log_path,
+            model=resolved_model, xpsnr_log_path=xpsnr_log_path, gpu_vmaf=True,
+        )
+        return _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, hw,
+                                 options.duration_limit, gpu_outputs, cpu_output)
+
+    return _execute_run(
+        build_command, options=options, model=model, fps=distorted_info.fps, total_frames=total_frames,
+        hwaccel=hwaccel, tmp_prefix="vmaf_gpu_run_", on_progress=on_progress, on_status=on_status,
+        cancel_event=cancel_event, process_handle=process_handle, gpu=plan,
     )
 
 

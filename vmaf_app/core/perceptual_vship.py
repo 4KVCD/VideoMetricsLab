@@ -43,7 +43,14 @@ from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-from vmaf_app.core.gpu import HwAccelPlan, hw_native_format, hwaccel_args, pick_hwaccel
+from vmaf_app.core.gpu import (
+    GPU_PASS,
+    GPU_WAIT_MESSAGE,
+    HwAccelPlan,
+    hw_native_format,
+    hwaccel_args,
+    pick_hwaccel,
+)
 from vmaf_app.core.isolated import IsolatedCrashError, run_isolated
 from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
 from vmaf_app.core.metric_results import (
@@ -1400,11 +1407,9 @@ class _CvvdpLane:
 #: most cards have). Running two jobs in parallel still pays off -- 23% at
 #: 1080p, 27% at 4K -- because one job's VMAF/PSNR/SSIM pass, which is CPU
 #: work, overlaps the other's Vship pass; only this GPU pass is serialized,
-#: never crop detection or the FFmpeg metrics.
-_gpu_pass = threading.Lock()
-#: Sent through on_status while a pass waits for another video's to end; the
-#: worker recognises it to say which half of a video is waiting.
-GPU_WAIT_MESSAGE = "Waiting for the GPU: another video's Vship pass is running…"
+#: never crop detection or the FFmpeg metrics. Shared with VMAF on the GPU
+#: (gpu.GPU_PASS).
+_gpu_pass = GPU_PASS
 
 
 def vship_passes(

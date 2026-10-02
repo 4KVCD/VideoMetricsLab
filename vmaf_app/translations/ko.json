@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics}이(가) GPU에서 실패하여 CPU로 계산 중…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU를 사용할 수 없음({reason}). CPU 참조 지표 사용 중…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Vship GPU 계산 실패({error}). CPU 참조 지표 사용 중…",
-  "Waiting for the GPU: another video's Vship pass is running…": "GPU 대기 중: 다른 영상의 Vship 패스가 실행 중입니다…",
+  "Waiting for the GPU: another video's GPU pass is running…": "GPU 대기 중: 다른 영상의 GPU 패스가 실행 중입니다…",
   "{metrics} failed: {error}": "{metrics} 실패: {error}",
   "Cancelled by user": "사용자가 취소함",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU 채점 실패({error}). 10분이 넘는 영상은 몇 시간에서 며칠이 걸리므로 CPU로 다시 시도하지 않았습니다. 그래도 CPU로 계산하려면 {metrics}에 CPU를 선택하세요.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65인치 4K HDR TV, 4000니트, 거실",
   "Official '65inch_hdr_pq_4knit'.": "공식 '65inch_hdr_pq_4knit'.",
   "6-inch phone": "6인치 휴대폰",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "공식 'standard_phone'(명암비가 지정되지 않아 공식 기본값 1000:1 사용)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "공식 'standard_phone'(명암비가 지정되지 않아 공식 기본값 1000:1 사용).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF와 VMAF NEG를 NVIDIA GPU에서 계산",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF와 VMAF NEG는 번들된 libvmaf로 NVIDIA GPU에서, VMAF v1, PSNR, SSIM, XPSNR은 CPU에서 같은 디코딩 프레임으로 계산합니다. 점수는 모든 프레임에서 CPU 값과 1000분의 1점 이내로 일치합니다. GPU 계산이 실패하면 VMAF를 CPU에서 계산합니다.\n\n다음 실행부터 적용됩니다.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg 실행 중, VMAF는 GPU에서(GPU 디코딩: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU에서 VMAF 실패({error}). CPU로 계산 중…"
  },
  "plurals": {
   "about {count} day": [

@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} は GPU で失敗したため、CPU で計算中…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU を使用できません（{reason}）。CPU のリファレンス指標を使用中…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Vship GPU の計算に失敗しました（{error}）。CPU のリファレンス指標を使用中…",
-  "Waiting for the GPU: another video's Vship pass is running…": "GPU を待っています：別の動画の Vship パスが実行中です…",
+  "Waiting for the GPU: another video's GPU pass is running…": "GPU を待っています：別の動画の GPU パスが実行中です…",
   "{metrics} failed: {error}": "{metrics} が失敗しました：{error}",
   "Cancelled by user": "ユーザーがキャンセルしました",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU での採点に失敗しました（{error}）。10 分を超える動画では数時間から数日かかるため、CPU での再試行は行っていません。それでも CPU で計算するには、{metrics} に CPU を選んでください。",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65 インチ 4K HDR テレビ、4000 ニト、リビング",
   "Official '65inch_hdr_pq_4knit'.": "公式の「65inch_hdr_pq_4knit」。",
   "6-inch phone": "6 インチ スマートフォン",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "公式の「standard_phone」（コントラストの指定がないため、公式の既定値 1000:1）。"
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "公式の「standard_phone」（コントラストの指定がないため、公式の既定値 1000:1）。",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "VMAF と VMAF NEG を NVIDIA の GPU で計算する",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF と VMAF NEG は同梱の libvmaf により NVIDIA の GPU で、VMAF v1、PSNR、SSIM、XPSNR は CPU で、同じデコード済みフレームから計算します。スコアはどのフレームでも CPU の値と 1000 分の 1 ポイント以内で一致します。GPU での計算に失敗した場合は、VMAF を CPU で計算します。\n\n次回の実行から適用されます。",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "ffmpeg を実行中、VMAF は GPU（GPU デコード：{plan}）…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU での VMAF に失敗しました（{error}）。CPU で計算中…"
  },
  "plurals": {
   "about {count} day": [

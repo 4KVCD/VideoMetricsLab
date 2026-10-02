@@ -14,12 +14,21 @@ from __future__ import annotations
 
 import platform
 import re
+import threading
 from dataclasses import dataclass
 from functools import lru_cache
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.models import GpuVendor
+
+#: One GPU pass at a time in the whole app: a Vship pass (see
+#: perceptual_vship._gpu_pass) or VMAF on the GPU (vmaf_runner). Each
+#: already fills the GPU, and two at once can run a card out of memory.
+GPU_PASS = threading.Lock()
+#: Sent through on_status while a pass waits for another video's to end; the
+#: worker recognises it to say which half of a video is waiting.
+GPU_WAIT_MESSAGE = "Waiting for the GPU: another video's GPU pass is running…"
 
 # hwaccel name -> codecs it reliably decodes via ffmpeg's generic hwaccel path
 _HWACCEL_CODEC_SUPPORT = {

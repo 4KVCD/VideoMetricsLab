@@ -80,6 +80,15 @@ if VSHIP_TOOLS.is_dir():
 else:
     print("WARNING: bundled Vship GPU libraries are missing; perceptual metrics will use CPU")
 
+# libvmaf with CUDA, for VMAF and VMAF NEG on NVIDIA GPUs
+# (scripts/build_libvmaf_cuda.ps1): needs only Windows and the NVIDIA driver.
+# Without it VMAF is calculated by FFmpeg's libvmaf, as on other GPUs.
+LIBVMAF_TOOLS = PROJECT / "vmaf_app" / "tools" / "libvmaf"
+if LIBVMAF_TOOLS.is_dir():
+    datas.append((str(LIBVMAF_TOOLS), "vmaf_app/tools/libvmaf"))
+else:
+    print("WARNING: bundled libvmaf (CUDA) is missing; VMAF will be calculated on the CPU")
+
 a = Analysis(
     [str(PROJECT / "vmaf_app" / "main.py")],
     pathex=[str(PROJECT)],

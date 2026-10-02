@@ -59,7 +59,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__, i18n
-from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check
+from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check, vmaf_cuda
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
@@ -1030,6 +1030,17 @@ class MainWindow(QMainWindow):
         gpu_note.setWordWrap(True)
         gpu_note.setStyleSheet("color: #666;")
         gpu_layout.addWidget(gpu_note)
+        # VMAF on the GPU: NVIDIA only (libvmaf has CUDA code and nothing else).
+        self.settings_gpu_vmaf = QCheckBox(tr("Calculate VMAF and VMAF NEG on an NVIDIA GPU"))
+        self.settings_gpu_vmaf.setToolTip(
+            tr("VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, "
+            "PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's "
+            "to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is "
+            "calculated on the CPU instead.\n\nApplies from the next run."))
+        self.settings_gpu_vmaf.setChecked(self._settings.gpu_vmaf)
+        self.settings_gpu_vmaf.setEnabled(GpuVendor.NVIDIA in vendors)
+        self.settings_gpu_vmaf.toggled.connect(self._on_settings_edited)
+        gpu_layout.addWidget(self.settings_gpu_vmaf)
         outer.addWidget(gpu_box)
 
         compare_box = QGroupBox(tr("Video Compare"))
@@ -1155,6 +1166,8 @@ class MainWindow(QMainWindow):
         language_before = self._settings.language
         self._settings.language = self.settings_language.currentData() or ""
         self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
+        self._settings.gpu_vmaf = self.settings_gpu_vmaf.isChecked()
+        vmaf_cuda.set_gpu_vmaf(self._settings.gpu_vmaf)
         backend = self.settings_gpu_backend.currentData() or "auto"
         if backend != self._settings.gpu_backend:
             self._settings.gpu_backend = backend

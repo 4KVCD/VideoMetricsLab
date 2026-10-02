@@ -129,6 +129,18 @@ try {
         }
     }
 
+    # libvmaf with CUDA (scripts/build_libvmaf_cuda.ps1): without it, VMAF on
+    # NVIDIA GPUs is quietly calculated on the CPU.
+    $libvmaf = Join-Path $output '_internal/vmaf_app/tools/libvmaf'
+    if (-not (Test-Path (Join-Path $libvmaf 'libvmaf.dll'))) {
+        throw 'Bundled libvmaf (CUDA) is missing: run scripts/build_libvmaf_cuda.ps1'
+    }
+    foreach ($notice in @('LICENSE.libvmaf.txt', 'LICENSE.pthreads4w.txt', 'LICENSE.nv-codec-headers.txt')) {
+        if (-not (Test-Path (Join-Path $libvmaf "licenses/$notice"))) {
+            throw "Bundled libvmaf license notice is missing: $notice"
+        }
+    }
+
     # Distributions must carry the project's MIT terms and the notices for
     # the third-party components bundled alongside the executable.
     Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt') -Force

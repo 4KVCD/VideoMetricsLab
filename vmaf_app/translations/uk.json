@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} не вдалося на GPU; обчислення на CPU…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU недоступний ({reason}); використовуються еталонні метрики CPU…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Обчислення на Vship GPU не вдалося ({error}); використовуються еталонні метрики CPU…",
-  "Waiting for the GPU: another video's Vship pass is running…": "Очікування GPU: виконується прохід Vship іншого відео…",
+  "Waiting for the GPU: another video's GPU pass is running…": "Очікування GPU: виконується прохід на GPU іншого відео…",
   "{metrics} failed: {error}": "{metrics} не вдалося: {error}",
   "Cancelled by user": "Скасовано користувачем",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Оцінювання на GPU не вдалося ({error}). Повтор на CPU не виконувався: для відео, довшого за 10 хвилин, це зайняло б від годин до днів. Виберіть CPU для {metrics}, щоб усе одно обчислити на CPU.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65-дюймовий 4K HDR-телевізор, 4000 ніт, вітальня",
   "Official '65inch_hdr_pq_4knit'.": "Офіційний «65inch_hdr_pq_4knit».",
   "6-inch phone": "6-дюймовий телефон",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Офіційний «standard_phone» (контраст у ньому не вказано: 1000:1, офіційне типове значення)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "Офіційний «standard_phone» (контраст у ньому не вказано: 1000:1, офіційне типове значення).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Обчислювати VMAF і VMAF NEG на GPU NVIDIA",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF і VMAF NEG обчислюються на GPU NVIDIA за допомогою вбудованої libvmaf, а VMAF v1, PSNR, SSIM і XPSNR — на CPU, з тих самих декодованих кадрів. Оцінки збігаються з оцінками CPU з точністю до тисячної частки пункту в кожному кадрі. Якщо обчислення на GPU не вдається, VMAF обчислюється на CPU.\n\nДіє з наступного запуску.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Запуск ffmpeg, VMAF на GPU (декодування на GPU: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF на GPU не вдалося ({error}); обчислення на CPU…"
  },
  "plurals": {
   "about {count} day": [

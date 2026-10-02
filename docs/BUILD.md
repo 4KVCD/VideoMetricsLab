@@ -70,11 +70,24 @@ case anyone overrides that.
   Butteraugli fall back to the bundled CPU tools. The Vship CLI and FFMS2
   decoder are not included; video frames continue to come from the user's FFmpeg
   installation. Vship and metric notices are packaged beside the libraries.
+- **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`), for VMAF and
+  VMAF NEG on NVIDIA GPUs only: libvmaf master with the open pull requests
+  that let it build with MSVC and fix its CUDA code, built by
+  `scripts/build_libvmaf_cuda.ps1` (MSVC, CUDA 13.4, meson and ninja; the
+  script lists each pull request and the commit of it merged). The C runtime
+  is linked in, so it needs only Windows and the NVIDIA driver; no CUDA
+  runtime ships. VMAF on any other GPU or the CPU, VMAF v1, PSNR, SSIM and
+  XPSNR still come from the user's FFmpeg. It adds about 3.3 MB installed,
+  1 MB compressed. libvmaf and Vship each run in a process of their own
+  (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,
+  falls back to the CPU instead of closing the app.
 
 ## What is not, and why
 
 **FFmpeg and libvmaf.** The app finds them at runtime and prompts for their
-location if they are missing. They are left out deliberately:
+location if they are missing. They are left out deliberately (the bundled
+libvmaf above scores only VMAF and VMAF NEG on NVIDIA GPUs, from frames the
+user's FFmpeg decodes):
 
 - A libvmaf-enabled FFmpeg is another ~80 MB on an already large download.
 - FFmpeg licensing depends on its build configuration and linked libraries.

@@ -110,6 +110,12 @@ def self_test() -> str:
     else:
         lines.append(f"  WARN  Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
 
+    from vmaf_app.core import vmaf_cuda
+
+    available, text = vmaf_cuda.gpu_vmaf_available()
+    lines.append(f"  OK    VMAF on the GPU ({text})" if available
+                 else f"  WARN  VMAF on the GPU unavailable; FFmpeg's libvmaf is used ({text})")
+
     return "\n".join(lines)
 
 
@@ -204,6 +210,10 @@ def main() -> int:
 
     set_vship_backend(Settings.load().gpu_backend)
     start_vship_probe()  # done by the time the first video is added
+    from vmaf_app.core import vmaf_cuda
+
+    vmaf_cuda.set_gpu_vmaf(Settings.load().gpu_vmaf)
+    vmaf_cuda.start_gpu_vmaf_probe()
     window = MainWindow()
     window.show()
     window.check_for_updates()  # once, now, and at no other time
@@ -211,8 +221,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # The packaged app starts itself again for the processes Vship runs in
-    # (vmaf_app.core.isolated): there this runs that process's work and
-    # exits, before any window.
+    # The packaged app starts itself again for the processes Vship and
+    # libvmaf run in (vmaf_app.core.isolated): there this runs that process's
+    # work and exits, before any window.
     multiprocessing.freeze_support()
     sys.exit(main())

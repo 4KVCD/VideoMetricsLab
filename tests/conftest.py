@@ -113,6 +113,11 @@ def isolate_user_state(tmp_path, monkeypatch):
         import ctypes
 
         monkeypatch.setattr(ctypes.windll.kernel32, "SetThreadExecutionState", lambda flags: 0x80000000)
+    # VMAF on the GPU is off unless a test asks for it: GitHub's runner has
+    # no GPU, so the suite runs as there wherever it runs.
+    from vmaf_app.core import vmaf_cuda
+
+    monkeypatch.setattr(vmaf_cuda, "_probed", (False, "off in tests"))
     # Detected black bars are remembered per file for the life of the
     # process; a test's answer must not leak into the next one's.
     crop_detect.clear_cache()

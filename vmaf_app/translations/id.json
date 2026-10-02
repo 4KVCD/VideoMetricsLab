@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} gagal di GPU; dihitung di CPU…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "GPU Vship tidak tersedia ({reason}); memakai metrik referensi CPU…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Perhitungan GPU Vship gagal ({error}); memakai metrik referensi CPU…",
-  "Waiting for the GPU: another video's Vship pass is running…": "Menunggu GPU: lintasan Vship video lain sedang berjalan…",
+  "Waiting for the GPU: another video's GPU pass is running…": "Menunggu GPU: lintasan GPU video lain sedang berjalan…",
   "{metrics} failed: {error}": "{metrics} gagal: {error}",
   "Cancelled by user": "Dibatalkan oleh pengguna",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Penilaian GPU gagal ({error}). Tidak dicoba ulang di CPU, yang akan memakan waktu berjam-jam hingga berhari-hari untuk video lebih dari 10 menit. Pilih CPU untuk {metrics} agar tetap dihitung di CPU.",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "TV 4K HDR 65 inci, 4000 nit, ruang keluarga",
   "Official '65inch_hdr_pq_4knit'.": "\"65inch_hdr_pq_4knit\" resmi.",
   "6-inch phone": "Ponsel 6 inci",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" resmi (tidak menyebut kontras: 1000:1, nilai bawaan resmi)."
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "\"standard_phone\" resmi (tidak menyebut kontras: 1000:1, nilai bawaan resmi).",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "Hitung VMAF dan VMAF NEG di GPU NVIDIA",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF dan VMAF NEG dihitung di GPU NVIDIA dengan libvmaf bawaan, sedangkan VMAF v1, PSNR, SSIM, dan XPSNR di CPU, dari frame hasil dekode yang sama. Skornya sama dengan skor CPU hingga seperseribu poin di setiap frame. Jika perhitungan GPU gagal, VMAF dihitung di CPU.\n\nBerlaku mulai proses berikutnya.",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "Menjalankan ffmpeg, VMAF di GPU (dekode GPU: {plan})…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF gagal di GPU ({error}); dihitung di CPU…"
  },
  "plurals": {
   "about {count} day": [

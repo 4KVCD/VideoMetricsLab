@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from vmaf_app.core import vmaf_cuda
 from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import build_execution_plan
@@ -140,6 +141,10 @@ class VmafWorker(QThread):
         # decoding it once, rather than one pass (and one decode) per metric.
         # How the scores are calculated, never what they are.
         self.gpu_metrics_together = gpu_metrics_together
+        # VMAF on the GPU (Settings > GPU metrics), as it was when the run
+        # started: its tooltip says a change applies from the next run. Read
+        # afresh for each video, a change made mid-run changed that run.
+        self.gpu_vmaf = vmaf_cuda.gpu_vmaf_enabled()
         self._parallel_jobs = max(1, min(int(parallel_jobs), MAX_PARALLEL_JOBS))
         self._cancel_event = threading.Event()
         # One handle per running job rather than one for the worker: pausing
@@ -503,14 +508,27 @@ class _JobRun:
 
     def pool_of(self, task) -> str:
         """The GPU queue for a half with any metric on the GPU (a GPU pass
-        that fails is retried on the CPU inside it); the CPU queue otherwise."""
+        that fails is retried on the CPU inside it) -- FFmpeg's half too when
+        it scores VMAF on the GPU, so that it never runs beside another
+        video's GPU metrics; the CPU queue otherwise."""
         if task.backend_id != "perceptual":
-            return _CPU
+            return _GPU if self.vmaf_on_gpu(task) else _CPU
         on_gpu = any(
             spec.key in GPU_ONLY_METRICS or self.request.execution.perceptual_backend(spec.key) == "gpu"
             for spec in task.requested_specs
         )
         return _GPU if on_gpu else _CPU
+
+    def vmaf_on_gpu(self, task) -> bool:
+        """Whether FFmpeg's half scores its VMAF or NEG on the GPU
+        (vmaf_cuda.scores_on_gpu): the half's own metrics decide, not the
+        video's -- a saved VMAF is not scored again."""
+        options = self.job.options
+        if task.backend_id != "ffmpeg" or options.resample_test is not None:
+            return False
+        keys = task.metric_keys
+        return vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
+                                       self.worker.gpu_vmaf) is not None
 
     def begin(self) -> bool:
         """Starts the video when its first half is taken: its process
@@ -669,7 +687,7 @@ class _JobRun:
                 on_progress=progress,
                 on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
-                result_distorted_path=job.result_distorted_path,
+                result_distorted_path=job.result_distorted_path, gpu_vmaf=self.worker.gpu_vmaf,
             )
         if task.backend_id == "perceptual":
             return apply_vship_cpu_fallback(

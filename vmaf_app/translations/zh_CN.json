@@ -544,7 +544,7 @@
   "{metrics} failed on the GPU; calculating it on the CPU…": "{metrics} 在 GPU 上失败；正在 CPU 上计算…",
   "Vship GPU unavailable ({reason}); using CPU reference metrics…": "Vship GPU 不可用（{reason}）；改用 CPU 参考指标…",
   "Vship GPU compute failed ({error}); using CPU reference metrics…": "Vship GPU 计算失败（{error}）；改用 CPU 参考指标…",
-  "Waiting for the GPU: another video's Vship pass is running…": "正在等待 GPU：另一个视频的 Vship 计算正在进行…",
+  "Waiting for the GPU: another video's GPU pass is running…": "正在等待 GPU：另一个视频的 GPU 计算正在进行…",
   "{metrics} failed: {error}": "{metrics} 失败：{error}",
   "Cancelled by user": "已被用户取消",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU 评分失败（{error}）。未在 CPU 上重试，因为对超过 10 分钟的视频这需要数小时到数天。如仍要在 CPU 上计算，请为 {metrics} 选择 CPU。",
@@ -683,7 +683,11 @@
   "65-inch 4K HDR TV, 4000 nits, living room": "65 英寸 4K HDR 电视，4000 尼特，客厅",
   "Official '65inch_hdr_pq_4knit'.": "官方“65inch_hdr_pq_4knit”。",
   "6-inch phone": "6 英寸手机",
-  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "官方“standard_phone”（其中未指定对比度：采用官方默认的 1000:1）。"
+  "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).": "官方“standard_phone”（其中未指定对比度：采用官方默认的 1000:1）。",
+  "Calculate VMAF and VMAF NEG on an NVIDIA GPU": "在 NVIDIA GPU 上计算 VMAF 和 VMAF NEG",
+  "VMAF and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf, and VMAF v1, PSNR, SSIM and XPSNR on the CPU, from the same decoded frames. The scores agree with the CPU's to within a thousandth of a point on every frame. If the GPU calculation fails, VMAF is calculated on the CPU instead.\n\nApplies from the next run.": "VMAF 和 VMAF NEG 使用内置的 libvmaf 在 NVIDIA GPU 上计算，VMAF v1、PSNR、SSIM 和 XPSNR 在 CPU 上计算，均来自相同的解码帧。每一帧的分数与 CPU 的结果相差不超过千分之一分。如果 GPU 计算失败，则改在 CPU 上计算 VMAF。\n\n从下次运行开始生效。",
+  "Running ffmpeg, VMAF on the GPU (GPU decode: {plan})…": "正在运行 ffmpeg，VMAF 在 GPU 上（GPU 解码：{plan}）…",
+  "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF 在 GPU 上失败（{error}）；正在 CPU 上计算…"
  },
  "plurals": {
   "about {count} day": [
