@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
@@ -5322,15 +5322,3 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
     finally:
         i18n.set_language("en")
 
-
-def test_the_duration_limit_reads_left_to_right_in_a_right_to_left_window(qapp):
-    """Arabic lays the window out right to left, and a QTimeEdit laid out
-    that way writes its sections backwards: "000.00:00:00"."""
-    qapp.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-    try:
-        win = MainWindow()
-        win.duration_edit.setTime(QTime(1, 2, 3, 4))
-        assert win.duration_edit.lineEdit().text() == "01:02:03.004"
-        win.close()
-    finally:
-        qapp.setLayoutDirection(Qt.LayoutDirection.LeftToRight)

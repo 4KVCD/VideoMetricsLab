@@ -377,7 +377,7 @@ def _concurrency_probe(monkeypatch):
     # they overlap, and making every job wait would cost a barrier timeout
     # per job on the single-lane runs. Two parallel jobs meet within
     # milliseconds; a single-lane run waits out the whole timeout once.
-    gate = threading.Barrier(2, timeout=0.5)
+    gate = threading.Barrier(2, timeout=0.25)
 
     def counted(source, distorted, *a, **kw):
         with lock:
