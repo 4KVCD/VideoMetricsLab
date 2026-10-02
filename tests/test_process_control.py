@@ -139,7 +139,7 @@ def test_a_pause_requested_before_the_process_existed_survives_a_resume_race():
     # Resume arrives while the suspend is still in flight.
     resuming = threading.Thread(target=handle.resume)
     resuming.start()
-    resuming.join(timeout=1)
+    resuming.join(timeout=0.2)  # with the bug, resume returns at once
     let_suspend_finish.set()
     attaching.join(timeout=5)
     resuming.join(timeout=5)

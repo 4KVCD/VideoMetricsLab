@@ -232,13 +232,13 @@ def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
     from vmaf_app.core.perceptual_cpu import _run_metric
     from vmaf_app.core.process_control import ProcessHandle
 
-    executable, script, other = _slow_tool(tmp_path, 0.5)
+    executable, script, other = _slow_tool(tmp_path, 0.2)
     handle = ProcessHandle()
     handle.pause()
     out = []
     worker = threading.Thread(target=lambda: out.append(_run_metric(executable, "ssimulacra2", script, other, handle)))
     worker.start()
-    worker.join(2.0)
+    worker.join(0.8)  # four times what the tool needs, Python's start included
     assert worker.is_alive(), "the tool ran on while the job was paused"
     handle.resume()
     worker.join(10.0)
@@ -267,11 +267,11 @@ def test_time_paused_does_not_count_towards_the_tool_timeout(tmp_path, monkeypat
     from vmaf_app.core import perceptual_cpu
     from vmaf_app.core.process_control import ProcessHandle
 
-    monkeypatch.setattr(perceptual_cpu, "_TOOL_TIMEOUT_SECONDS", 1.0)
-    executable, script, other = _slow_tool(tmp_path, 0.3)
+    monkeypatch.setattr(perceptual_cpu, "_TOOL_TIMEOUT_SECONDS", 0.75)
+    executable, script, other = _slow_tool(tmp_path, 0.1)
     handle = ProcessHandle()
     handle.pause()
-    threading.Timer(2.0, handle.resume).start()  # paused for twice the timeout
+    threading.Timer(1.5, handle.resume).start()  # paused for twice the timeout
     assert perceptual_cpu._run_metric(executable, "ssimulacra2", script, other, handle) == 42.5
 
     slow, script, other = _slow_tool(tmp_path, 5)
@@ -294,8 +294,8 @@ def test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, mo
 
     exe = ffmpeg_path()
     clip = tmp_path / "clip.mkv"
-    subprocess.run([exe, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=24",
-                    "-frames:v", "240", "-c:v", "ffv1", str(clip)], check=True, capture_output=True, timeout=120)
+    subprocess.run([exe, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=24",
+                    "-frames:v", "96", "-c:v", "ffv1", str(clip)], check=True, capture_output=True, timeout=120)
     info = probe_video(clip)
     work = tmp_path / "work"
     work.mkdir()
@@ -304,8 +304,11 @@ def test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, mo
     monkeypatch.setattr(perceptual_cpu, "find_metric_executable", lambda key: key)
     monkeypatch.setattr(perceptual_cpu, "_tool_version", lambda executable: "test")
 
+    # Scoring has to be slower than extraction for a backlog to build at all:
+    # 5 ms a pair at 640x360 peaks at 32-39 images with the throttle and
+    # 162-167 without it (1280x720, 240 frames and 20 ms took 5 s).
     def slow_score(*_args):
-        time.sleep(0.02)
+        time.sleep(0.005)
         return 50.0
 
     monkeypatch.setattr(perceptual_cpu, "_run_metric", slow_score)
@@ -329,18 +332,18 @@ def test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, mo
         stop.set()
         watcher.join()
 
-    assert output.compared_frame_count == 240
-    assert len(output.metrics.get("ssimulacra2").values) == 240
+    assert output.compared_frame_count == 96
+    assert len(output.metrics.get("ssimulacra2").values) == 96
     # The backlog limit (6 pairs) plus the frames FFmpeg already has in its
     # queues when it resumes -- traced at 7-10 at 720p, arriving within
     # ~10 ms, before the next check can suspend it again. Bounded by that,
-    # not by the video's length: writing everything first meant 480 images.
+    # not by the video's length: writing everything first meant 192 images.
     # 34-47 images on an idle machine; up to 66 with 22 busy processes on
     # 24 cores, so the bound leaves room for a busy machine running the
     # suite.
     assert most_images[0] <= 2 * (6 + 30), most_images[0]
     assert [done for done, _total, _rate in progress[:3]] == [1, 2, 3]
-    assert progress[0][1] == 240 and progress[0][2] > 0
+    assert progress[0][1] == 96 and progress[0][2] > 0
 
 
 def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, monkeypatch):
@@ -365,7 +368,7 @@ def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, 
         "    os.replace(os.path.join(d, name + '.tmp'), os.path.join(d, name))\n"
         "for i in range(1, 41): put(f'test-{i:08d}.png')\n"
         "for i in range(1, 41):\n"
-        "    put(f'reference-{i:08d}.png'); time.sleep(0.02)\n"
+        "    put(f'reference-{i:08d}.png'); time.sleep(0.005)\n"
     )
     monkeypatch.setattr(perceptual_cpu.proc_util, "popen",
                         lambda _cmd, **kwargs: subprocess.Popen([sys.executable, "-c", writer, str(tmp_path)], **kwargs))

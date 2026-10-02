@@ -375,8 +375,9 @@ def _concurrency_probe(monkeypatch):
     lock = threading.Lock()
     # Only the first two callers gate on each other: that is enough to prove
     # they overlap, and making every job wait would cost a barrier timeout
-    # per job on the single-lane runs.
-    gate = threading.Barrier(2, timeout=2)
+    # per job on the single-lane runs. Two parallel jobs meet within
+    # milliseconds; a single-lane run waits out the whole timeout once.
+    gate = threading.Barrier(2, timeout=0.5)
 
     def counted(source, distorted, *a, **kw):
         with lock:
@@ -662,11 +663,13 @@ def test_the_lane_count_can_be_raised_while_running(qapp):
         runner = threading.Thread(target=worker.run)
         runner.start()
         assert started.wait(5)
-        time.sleep(0.3)
+        time.sleep(0.2)
         assert live["peak"] == 1, "more than one ran before the count was raised"
 
         worker.set_parallel_jobs(2)
-        time.sleep(0.5)
+        deadline = time.monotonic() + 5
+        while live["peak"] < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
         assert live["peak"] == 2, "raising the count did not start another video"
     finally:
         release.set()
@@ -859,8 +862,13 @@ def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
     worker.job_started.connect(lambda index, _label: started.append(index))
     runner = threading.Thread(target=worker.run)
     runner.start()
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline:
+    # Until three have started, then a while longer for a fourth that must not.
+    deadline = time.monotonic() + 5
+    while len(started) < 3 and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.02)
+    settle = time.monotonic() + 0.3
+    while time.monotonic() < settle:
         qapp.processEvents()
         time.sleep(0.02)
     in_progress_while_blocked = sorted(started)
