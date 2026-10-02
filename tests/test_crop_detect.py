@@ -414,7 +414,7 @@ def test_a_curly_quote_in_ffmpegs_stderr_is_read_as_utf8(monkeypatch):
     script = f"import sys; sys.stderr.buffer.write({stderr.encode('utf-8')!r})"
     real_popen = crop_detect.proc_util.popen
     monkeypatch.setattr(crop_detect.proc_util, "popen",
-                        lambda cmd, **kw: real_popen([sys.executable, "-c", script], **kw))
+                        lambda cmd, **kw: real_popen([sys.executable, "-S", "-c", script], **kw))
 
     box = crop_detect._run_single_window("Director’s Cut “Final”.mkv", 0.0, 3.0, 24 / 255)
 

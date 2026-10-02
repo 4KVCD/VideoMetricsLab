@@ -362,7 +362,7 @@ def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, 
         "    put(f'reference-{i:08d}.png'); time.sleep(0.005)\n"
     )
     monkeypatch.setattr(perceptual_cpu.proc_util, "popen",
-                        lambda _cmd, **kwargs: subprocess.Popen([sys.executable, "-c", writer, str(tmp_path)], **kwargs))
+                        lambda _cmd, **kwargs: subprocess.Popen([sys.executable, "-S", "-c", writer, str(tmp_path)], **kwargs))
     pairs = []
 
     def consume():
@@ -392,7 +392,7 @@ def test_the_backlog_holds_when_ffmpeg_is_started_through_a_launcher(tmp_path, m
     real = proc_util.popen
     launcher = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
     monkeypatch.setattr(proc_util, "popen",
-                        lambda command, **kwargs: real([sys.executable, "-c", launcher, *command], **kwargs))
+                        lambda command, **kwargs: real([sys.executable, "-S", "-c", launcher, *command], **kwargs))
     test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch)
 
 

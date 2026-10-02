@@ -301,7 +301,7 @@ def _frames_command(count: int, frame_bytes: int, *, exit_code: int = 0, partial
         "out.flush()\n"
         "sys.exit(code)\n"
     )
-    return [sys.executable, "-c", script]
+    return [sys.executable, "-S", "-c", script]
 
 
 class _FakePinned:
@@ -590,7 +590,7 @@ def _interleaved_command(count: int, width: int, height: int, sample_bytes: int)
         "    out.write(struct.pack(fmt, 100 + i, 200 + i) * ((w // 2) * (h // 2)))\n"
         "out.flush()\n"
     )
-    return [sys.executable, "-c", script]
+    return [sys.executable, "-S", "-c", script]
 
 
 @pytest.mark.parametrize(("pix_fmt", "sample_type", "sample_bytes", "piped"), [
@@ -967,7 +967,7 @@ def test_cvvdp_alone_failing_to_start_stops_the_pass_at_once(monkeypatch):
 
     _FakeCvvdp().install(monkeypatch)
     monkeypatch.setattr(vship, "_init_cvvdp", cannot_start)
-    slow = [sys.executable, "-c",
+    slow = [sys.executable, "-S", "-c",
             f"import sys, time\nfor i in range(600):\n    sys.stdout.buffer.write(bytes({_FRAME_BYTES})); "
             "sys.stdout.buffer.flush(); time.sleep(0.01)\n"]
     started = time.monotonic()

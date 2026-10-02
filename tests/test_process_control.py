@@ -191,7 +191,7 @@ def _launcher_with_child():
     import sys
     import time
 
-    launcher = subprocess.Popen([sys.executable, "-c", _LAUNCHER, sys.executable, "-c",
+    launcher = subprocess.Popen([sys.executable, "-S", "-c", _LAUNCHER, sys.executable, "-S", "-c",
                                  "import time; time.sleep(60)"])
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
