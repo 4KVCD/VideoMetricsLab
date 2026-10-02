@@ -61,6 +61,8 @@ def test_closure_survives_import_cycles():
 SITE = Path(sysconfig.get_paths()["purelib"])
 wheels_installed = all((SITE / package).is_dir() for package in PACKAGES)
 needs_wheels = pytest.mark.skipif(not wheels_installed, reason="GStreamer wheels are not installed")
+#: The checks against the installed wheels are the slow ones: run with --packaging.
+packaging = pytest.mark.packaging
 
 
 @pytest.fixture(scope="module")
@@ -72,18 +74,21 @@ def bundle():
     return datas, report, {Path(source) for source, _ in datas}
 
 
+@packaging
 @needs_wheels
 def test_every_allow_listed_plugin_exists_and_is_shipped(bundle):
     _datas, report, _kept = bundle
     assert set(report["kept_plugins"]) >= set(KEEP_PLUGINS)
 
 
+@packaging
 @needs_wheels
 def test_no_plugin_outside_the_allow_list_is_shipped(bundle):
     _datas, report, _kept = bundle
     assert set(report["kept_plugins"]) == set(KEEP_PLUGINS)
 
 
+@packaging
 @needs_wheels
 def test_what_imports_cannot_reveal_is_shipped_anyway(bundle):
     """The scanner is spawned, not imported; GLib spawns it through helpers;
@@ -102,6 +107,7 @@ def test_what_imports_cannot_reveal_is_shipped_anyway(bundle):
         assert SITE / package / "__init__.py" in kept, f"{package} must remain importable"
 
 
+@packaging
 @needs_wheels
 def test_the_dead_weight_is_gone(bundle):
     _datas, _report, kept = bundle
@@ -121,6 +127,7 @@ def test_the_dead_weight_is_gone(bundle):
     assert not any(part in {"share", "etc"} for p in kept for part in p.relative_to(SITE).parts)
 
 
+@packaging
 @needs_wheels
 def test_every_import_a_shipped_binary_makes_is_shipped(bundle):
     """The closure property itself, checked on the real files: nothing kept
@@ -141,6 +148,7 @@ def test_every_import_a_shipped_binary_makes_is_shipped(bundle):
     assert not unmet
 
 
+@packaging
 @needs_wheels
 def test_the_bundle_stays_small(bundle):
     """The whole point. 288 MiB of wheels became 50; this fails long before
@@ -150,6 +158,7 @@ def test_the_bundle_stays_small(bundle):
     assert report["original_bytes"] > 4 * report["bundled_bytes"]
 
 
+@packaging
 @needs_wheels
 def test_datas_keep_each_file_at_its_wheel_relative_path(bundle):
     datas, _report, _kept = bundle

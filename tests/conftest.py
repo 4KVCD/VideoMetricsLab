@@ -25,6 +25,25 @@ from vmaf_app.core.app_paths import DATA_DIR_NAME
 from vmaf_app.core.settings import Settings
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--packaging", action="store_true",
+        help="also run the packaging checks against the installed wheels (CI and releases do)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """The packaging checks scan every DLL of the installed PySide6 and
+    GStreamer wheels: 12 of the suite's 72 seconds, for code that changes
+    only when the build does. Skipped unless asked for with --packaging."""
+    if config.getoption("--packaging"):
+        return
+    skip = pytest.mark.skip(reason="packaging check; run with --packaging")
+    for item in items:
+        if "packaging" in item.keywords:
+            item.add_marker(skip)
+
+
 def _real_user_cache_dir() -> Path:
     """Where the installed app keeps results. Nothing in the suite may touch
     it, so it is resolved once here to be recognised and refused."""

@@ -19,7 +19,9 @@
 1. Select a clean commit and record its hash. Keep individual bug fixes in
    separate commits with regression tests.
 2. Install development dependencies in a fresh environment. Run `pip check`,
-   Ruff and pytest. Record Python, dependency and FFmpeg versions.
+   Ruff and `pytest --packaging` (the packaging checks against the installed
+   wheels are skipped without it). Record Python, dependency and FFmpeg
+   versions.
 3. Test every metric, including SSIMULACRA2 and Butteraugli through both the
    Vship GPU path and the libjxl CPU fallback, with Settings > GPU metrics >
    GPU backend on Auto and on Vulkan (SSIMULACRA2 then on the CPU). After

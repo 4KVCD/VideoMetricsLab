@@ -28,6 +28,11 @@ choosing a Python version; Python 3.14.0 has an unresolved crash in our tests.
 git diff --check
 ```
 
+Add `--packaging` when you change what the Windows build ships
+(`scripts/qt_bundle.py`, `scripts/gstreamer_bundle.py`): it also checks
+those lists against the installed PySide6 and GStreamer wheels, which takes
+about 12 seconds. CI always runs them.
+
 Tests run offscreen and isolate settings and result caches. Preserve that
 isolation in new tests. Some tests run actual FFmpeg encodes; do not replace
 those with mocked success merely to make CI green. Hardware playback, HDR,

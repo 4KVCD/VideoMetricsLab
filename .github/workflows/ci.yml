@@ -40,4 +40,4 @@ jobs:
       - name: Lint
         run: python -m ruff check vmaf_app tests
       - name: Tests
-        run: python -X faulthandler -m pytest -q
+        run: python -X faulthandler -m pytest -q --packaging

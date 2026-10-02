@@ -100,6 +100,7 @@ def _installed_toc():
 
 
 @pytest.mark.skipif(not (SITE / "PySide6" / "Qt6Core.dll").is_file(), reason="PySide6 is not installed here")
+@pytest.mark.packaging
 def test_against_the_installed_pyside6():
     pytest.importorskip("pefile")
     from scripts.gstreamer_bundle import pe_imports
