@@ -546,12 +546,13 @@ class MainWindow(QMainWindow):
         self._settings = Settings.load()
         _log.info(
             "Settings: parallel CPU metrics %s, GPU decode %s, SSIMULACRA2 on %s, Butteraugli on %s, "
-            "GPU metrics %s on the %s backend, saved results %s (%s)",
+            "GPU metrics %s on the %s backend, VMAF on an NVIDIA GPU %s, saved results %s (%s)",
             "on" if self._settings.parallel_jobs > 1 else "off",
             "on" if self._settings.default_gpu_decode else "off",
             self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
             "together in one pass" if self._settings.gpu_metrics_together else "one pass each",
             self._settings.gpu_backend,
+            "on" if self._settings.gpu_vmaf else "off",
             "reused" if self._settings.use_cache else "not reused",
             self._settings.cache_dir or "default folder",
         )
