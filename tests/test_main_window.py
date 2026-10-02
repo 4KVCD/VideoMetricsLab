@@ -5171,7 +5171,8 @@ def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
 
 
 _CUDA_GPU = main_window_module.perceptual_vship.VshipDevice("cuda", "NVIDIA GPU", 0, "5.1.1", None)
-_VULKAN_GPU = main_window_module.perceptual_vship.VshipDevice("vulkan", "Intel Arc", 0, "5.1.1", None)
+_VULKAN_GPU = main_window_module.perceptual_vship.VshipDevice(
+    "vulkan", "NVIDIA GeForce RTX 4060", 0, "5.1.2", None, main_window_module.GpuVendor.NVIDIA)
 
 
 @pytest.mark.parametrize(("vendors", "offered"), [
@@ -5207,8 +5208,9 @@ def test_choosing_a_gpu_backend_is_saved_and_probed_again(qapp, monkeypatch):
 
 
 def test_a_cpu_ssimulacra2_is_the_gpu_choice_where_vulkan_cannot_score_it(qapp, monkeypatch):
-    """On Vship's Vulkan build SSIMULACRA2 is calculated on the CPU; that
-    score must count as done, or every run would calculate it again."""
+    """On Vship's Vulkan build with an NVIDIA GPU SSIMULACRA2 is calculated
+    on the CPU; that score must count as done, or every run would calculate
+    it again."""
     from types import SimpleNamespace
 
     from vmaf_app.core.metric_results import MetricProvenance

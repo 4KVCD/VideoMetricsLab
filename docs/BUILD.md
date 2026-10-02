@@ -61,7 +61,7 @@ case anyone overrides that.
   one; Auto, the default, uses CUDA on NVIDIA, HIP on AMD and Vulkan on other
   GPUs, and a build that cannot run hands over to the next. Vship's Vulkan
   SSIMULACRA2 disagrees with its CUDA build and with libjxl on NVIDIA GPUs, so
-  on Vulkan SSIMULACRA2 uses the CPU tool
+  Vulkan on an NVIDIA GPU uses the CPU tool for it
   (`perceptual_vship.SCORED_WRONGLY`); re-measure before removing that when
   updating Vship. Where no build can use the GPU, the input format is
   unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall back to

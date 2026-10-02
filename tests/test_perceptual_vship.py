@@ -1370,6 +1370,47 @@ def test_the_bundled_vulkan_build_loads_where_vulkan_finds_no_gpu():
     assert result.stdout.split()[-1] == "0"  # loaded, and no GPU found
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Vship is only bundled for Windows")
+@pytest.mark.parametrize(("backend", "expected"), [("vulkan", GpuVendor.INTEL), ("cuda", GpuVendor.NVIDIA)])
+def test_the_probe_knows_who_made_the_gpu(monkeypatch, backend, expected):
+    """CUDA runs on NVIDIA and HIP on AMD; for Vulkan the loader says, since
+    the name need not (NVIDIA's Quadro cards)."""
+    asked = []
+
+    def fake_lib(_path):
+        def count(pointer):
+            pointer._obj.value = 1
+            return 0
+
+        def info(pointer, _gpu_id):
+            pointer._obj.name = b"Some GPU"
+            return 0
+
+        functions = {name: (lambda *_args: 0) for name in vship._API_FUNCTIONS}
+        functions.update(Vship_GetDeviceCount=count, Vship_GetDeviceInfo=info,
+                         Vship_GetVersion=lambda: SimpleNamespace(major=5, minor=1, minorMinor=2))
+        return SimpleNamespace(**{name: _Callable(f) for name, f in functions.items()})
+
+    monkeypatch.setattr(vship, "_backend", backend)
+    monkeypatch.setattr(vship, "_vulkan_unavailable", lambda: None)
+    monkeypatch.setattr(vship, "_vulkan_vendor", lambda name: asked.append(name) or GpuVendor.INTEL)
+    monkeypatch.setattr(vship.ctypes, "CDLL", fake_lib)
+    device, reason = vship._probe_vship_device()
+    assert device is not None, reason
+    assert (device.backend, device.vendor) == (backend, expected)
+    assert asked == (["Some GPU"] if backend == "vulkan" else [])
+
+
+class _Callable:
+    """A function _configure_api can set argtypes and restype on."""
+
+    def __init__(self, function):
+        self._function = function
+
+    def __call__(self, *args):
+        return self._function(*args)
+
+
 def test_choosing_another_backend_forgets_the_probe(monkeypatch):
     monkeypatch.setattr(vship, "_backend", "auto")
     monkeypatch.setattr(vship, "_probed", ((None, "no GPU"), 0.0))
@@ -1381,18 +1422,28 @@ def test_choosing_another_backend_forgets_the_probe(monkeypatch):
     assert vship.vship_backend() == "auto"
 
 
-def test_vulkan_ssimulacra2_is_not_trusted_but_its_other_metrics_are():
-    """Vship 5.1.1's Vulkan SSIMULACRA2 read 62.9 where CUDA read 45.5 and
-    libjxl 47.4 on the same 4K frames; its Butteraugli and CVVDP agree."""
-    vulkan = vship.VshipDevice("vulkan", "GPU", 0, "5.1.1", None)
-    cuda = vship.VshipDevice("cuda", "GPU", 0, "5.1.1", None)
-    assert not vship.scores_correctly(vulkan, "ssimulacra2")
-    assert vship.scores_correctly(vulkan, "butteraugli") and vship.scores_correctly(vulkan, "cvvdp")
-    assert vship.scores_correctly(cuda, "ssimulacra2")
+def test_vulkan_ssimulacra2_is_not_trusted_on_nvidia_but_its_other_metrics_are():
+    """Vship's Vulkan SSIMULACRA2 read 62.9 where CUDA read 45.5 and libjxl
+    47.4 on the same 4K frames on an NVIDIA GPU; on an Intel GPU it read
+    45.50, as CUDA does. Its Butteraugli and CVVDP agree on both. A GPU whose
+    maker could not be told is treated as NVIDIA."""
+    nvidia = vship.VshipDevice("vulkan", "NVIDIA GeForce RTX 5090", 0, "5.1.2", None, GpuVendor.NVIDIA)
+    intel = vship.VshipDevice("vulkan", "Intel(R) Graphics", 1, "5.1.2", None, GpuVendor.INTEL)
+    unknown = vship.VshipDevice("vulkan", "GPU", 0, "5.1.2", None, None)
+    cuda = vship.VshipDevice("cuda", "GPU", 0, "5.1.1", None, GpuVendor.NVIDIA)
+    assert not vship.scores_correctly(nvidia, "ssimulacra2") and not vship.scores_correctly(unknown, "ssimulacra2")
+    assert vship.scores_correctly(intel, "ssimulacra2") and vship.scores_correctly(cuda, "ssimulacra2")
+    assert all(vship.scores_correctly(device, key)
+               for device in (nvidia, intel, unknown) for key in ("butteraugli", "cvvdp"))
 
 
-def test_on_vulkan_ssimulacra2_is_calculated_on_the_cpu_and_butteraugli_on_the_gpu(monkeypatch):
-    device = vship.VshipDevice("vulkan", "Intel Arc", 0, "5.1.1", None)
+@pytest.mark.parametrize(("vendor", "on_gpu_expected", "on_cpu_expected"), [
+    (GpuVendor.NVIDIA, ["butteraugli"], [["ssimulacra2"]]),
+    (GpuVendor.INTEL, ["ssimulacra2", "butteraugli"], []),
+])
+def test_on_vulkan_ssimulacra2_is_calculated_on_the_cpu_only_on_an_nvidia_gpu(
+        monkeypatch, vendor, on_gpu_expected, on_cpu_expected):
+    device = vship.VshipDevice("vulkan", "GPU", 0, "5.1.2", None, vendor)
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(vship, "forget_failed_vship_probe", lambda: None)
     monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *_args: (None, None))
@@ -1410,6 +1461,7 @@ def test_on_vulkan_ssimulacra2_is_calculated_on_the_cpu_and_butteraugli_on_the_g
     monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", cpu)
     request = _request()  # SSIMULACRA2 and Butteraugli, both set to GPU
     output = vship.apply_vship_cpu_fallback(_info("a.mkv"), _info("b.mkv"), request, request.metrics)
-    assert on_gpu == [("vulkan", ["butteraugli"])] and on_cpu == [["ssimulacra2"]]
-    assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
+    assert on_gpu == [("vulkan", on_gpu_expected)] and on_cpu == on_cpu_expected
+    if on_cpu_expected:
+        assert output.metrics.get("ssimulacra2").provenance.compute_backend == "cpu"
     assert not output.failures

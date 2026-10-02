@@ -233,6 +233,10 @@ class VshipDevice:
     gpu_id: int
     version: str
     loaded: _LoadedVship
+    #: Who made the GPU: NVIDIA for CUDA, AMD for HIP, and for Vulkan what
+    #: the Vulkan loader says (GpuVendor.NONE for another maker). None when
+    #: it could not be told.
+    vendor: GpuVendor | None = None
 
 
 #: Vship 5.1's API, the one this module uses. A library without it (4.x)
@@ -322,17 +326,19 @@ VSHIP_BACKENDS = ("auto", "vulkan", "cuda", "hip")
 DEFAULT_VSHIP_BACKEND = "auto"
 _AUTO_ORDER = ("cuda", "hip", "vulkan")
 _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
-#: (build, metric) pairs a Vship build scores wrongly: the metric is
+#: (build, GPU maker, metric) a Vship build scores wrongly: the metric is
 #: calculated on the CPU instead, as on a PC without a usable GPU. Vship's
 #: Vulkan build (5.1.1, and the bundled commit 0732ed3) scores SSIMULACRA2
 #: far higher than its CUDA build and libjxl's reference on the same frames
 #: on an NVIDIA GPU -- HoneyBee 4K against a CRF 22 HEVC encode: libjxl
 #: 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at 360p -- reproduced with
 #: Vship's own FFVship, while Butteraugli (within 0.1%) and CVVDP (0.01 JOD)
-#: agree. On an Intel GPU the same build agrees with CUDA (45.50 at 4K), but
-#: the entry covers every Vulkan GPU until others are measured (Vship issue
-#: 18). Remove the entry only once a bundled Vship has been measured to agree.
-SCORED_WRONGLY = frozenset({("vulkan", "ssimulacra2")})
+#: agree. On an Intel GPU the same build agrees with CUDA: 45.50 against
+#: 45.50 at 4K, 72.58 at 1080p, and 43.696 against 43.696 over 600 frames
+#: (Vship issue 18). AMD's Vulkan is unmeasured. A GPU whose maker could not
+#: be told is treated as NVIDIA. Remove the entry only once a bundled Vship
+#: has been measured to agree.
+SCORED_WRONGLY = frozenset({("vulkan", GpuVendor.NVIDIA, "ssimulacra2")})
 _backend = DEFAULT_VSHIP_BACKEND
 
 # The probe's result and when it was made. One probe serves the whole
@@ -366,8 +372,10 @@ def backend_label(backend: str) -> str:
 
 
 def scores_correctly(device: VshipDevice, key: str) -> bool:
-    """Whether `device`'s Vship build scores `key` right (SCORED_WRONGLY)."""
-    return (device.backend, key) not in SCORED_WRONGLY
+    """Whether `device`'s Vship build scores `key` right on its GPU
+    (SCORED_WRONGLY); a GPU of unknown make is assumed to be affected."""
+    return not any(device.backend == backend and key == metric and device.vendor in (vendor, None)
+                   for backend, vendor, metric in SCORED_WRONGLY)
 
 
 def gpu_can_score(key: str) -> bool:
@@ -462,6 +470,49 @@ def _vulkan_unavailable() -> str | None:
         vulkan.vkDestroyInstance(instance, None)
 
 
+#: PCI vendor IDs, as Vulkan reports them.
+_PCI_VENDORS = {0x10DE: GpuVendor.NVIDIA, 0x1002: GpuVendor.AMD, 0x1022: GpuVendor.AMD, 0x8086: GpuVendor.INTEL}
+
+
+def _vulkan_vendor(name: str) -> GpuVendor | None:
+    """Who made the Vulkan GPU called `name`, from the Vulkan loader: Vship
+    names a GPU by its VkPhysicalDeviceProperties.deviceName. Asked of the
+    loader because names do not always say (NVIDIA's "Quadro" and "Tesla"
+    cards). GpuVendor.NONE for another maker, None if no GPU has the name."""
+    try:
+        vulkan = ctypes.WinDLL("vulkan-1.dll")
+    except OSError:
+        return None
+    app = _VkApplicationInfo(0, None, b"VideoMetricsLab", 1, None, 0, 1 << 22)  # Vulkan 1.0
+    info = _VkInstanceCreateInfo(1, None, 0, ctypes.pointer(app), 0, None, 0, None)
+    instance = ctypes.c_void_p()
+    vulkan.vkCreateInstance.restype = ctypes.c_int32
+    if vulkan.vkCreateInstance(ctypes.byref(info), None, ctypes.byref(instance)) != 0:
+        return None
+    try:
+        count = ctypes.c_uint32(0)
+        vulkan.vkEnumeratePhysicalDevices.restype = ctypes.c_int32
+        if vulkan.vkEnumeratePhysicalDevices(instance, ctypes.byref(count), None) != 0 or not count.value:
+            return None
+        devices = (ctypes.c_void_p * count.value)()
+        vulkan.vkEnumeratePhysicalDevices(instance, ctypes.byref(count), devices)
+        for device in devices[:count.value]:
+            # VkPhysicalDeviceProperties: apiVersion, driverVersion, vendorID,
+            # deviceID, deviceType (4 bytes each), then deviceName[256].
+            properties = (ctypes.c_ubyte * 1024)()
+            vulkan.vkGetPhysicalDeviceProperties(ctypes.c_void_p(device), properties)
+            raw = bytes(properties)
+            if raw[20:276].split(b"\0", 1)[0].decode("utf-8", errors="replace") == name:
+                return _PCI_VENDORS.get(int.from_bytes(raw[8:12], "little"), GpuVendor.NONE)
+        return None
+    finally:
+        vulkan.vkDestroyInstance(instance, None)
+
+
+#: The GPU maker each build runs on; Vulkan's is asked of the loader.
+_BUILD_VENDORS = {"cuda": GpuVendor.NVIDIA, "hip": GpuVendor.AMD}
+
+
 def _probe_vship_device() -> tuple[VshipDevice | None, str]:
     if os.name != "nt":
         return None, "Vship GPU acceleration is only bundled for Windows."
@@ -510,7 +561,8 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
                 _integrated, gpu_id, name = min(usable)
                 version = lib.Vship_GetVersion()
                 version_text = f"{version.major}.{version.minor}.{version.minorMinor}"
-                return VshipDevice(backend, name, gpu_id, version_text, loaded), ""
+                vendor = _BUILD_VENDORS.get(backend) or _vulkan_vendor(name)
+                return VshipDevice(backend, name, gpu_id, version_text, loaded, vendor), ""
             if count.value == 0:
                 failures.append(f"{label}: no GPU was found")
         except (OSError, AttributeError, TypeError) as error:
@@ -1825,8 +1877,9 @@ def apply_vship_cpu_fallback(
     # long CPU run (MainWindow._confirm_long_cpu_perceptual).
     wrong = tuple(spec for spec in gpu_specs if not scores_correctly(device, spec.key))
     if wrong:
-        _log.info("%s on the CPU: Vship's %s build scores it wrongly",
-                  " and ".join(metric_definition(spec.key).label for spec in wrong), backend_label(device.backend))
+        _log.info("%s on the CPU: Vship's %s build scores it wrongly on %s",
+                  " and ".join(metric_definition(spec.key).label for spec in wrong), backend_label(device.backend),
+                  device.name)
         gpu_specs = tuple(spec for spec in gpu_specs if spec not in wrong)
         cpu_specs = cpu_specs + wrong
         if not gpu_specs:
