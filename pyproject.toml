@@ -1,6 +1,9 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# In parallel: one worker per core, at most 12 (a run took 36 s on one core and
+# 10 s on 12 workers; more workers only add start-up). `-n 0` runs serially.
+addopts = "-n auto --maxprocesses=12"
 markers = [
     "packaging: checks the release build's file lists against the installed PySide6 and GStreamer wheels; slow, run with --packaging (CI and releases do)",
 ]

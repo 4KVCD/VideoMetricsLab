@@ -28,6 +28,10 @@ choosing a Python version; Python 3.14.0 has an unresolved crash in our tests.
 git diff --check
 ```
 
+The tests run in parallel by default (pytest-xdist, one worker per core, at
+most 12; see `addopts` in pyproject.toml). Add `-n 0` to run serially, for
+example to debug one test with `print` or a debugger.
+
 Add `--packaging` when you change what the Windows build ships
 (`scripts/qt_bundle.py`, `scripts/gstreamer_bundle.py`): it also checks
 those lists against the installed PySide6 and GStreamer wheels, which takes

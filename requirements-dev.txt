@@ -1,4 +1,5 @@
 -r requirements.txt
 pytest>=8.0
+pytest-xdist>=3.6
 ruff>=0.16.5
 pyinstaller>=6.10
