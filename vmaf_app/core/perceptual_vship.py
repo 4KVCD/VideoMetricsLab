@@ -323,13 +323,15 @@ DEFAULT_VSHIP_BACKEND = "auto"
 _AUTO_ORDER = ("cuda", "hip", "vulkan")
 _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
 #: (build, metric) pairs a Vship build scores wrongly: the metric is
-#: calculated on the CPU instead, as on a PC without a usable GPU. Vship
-#: 5.1.1's Vulkan build scores SSIMULACRA2 far higher than its CUDA build
-#: and libjxl's reference on the same frames -- HoneyBee 4K against a CRF 22
-#: HEVC encode: libjxl 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at
-#: 360p -- reproduced with Vship's own FFVship, while Butteraugli (within
-#: 0.1%) and CVVDP (0.01 JOD) agree. Remove the entry only once a bundled
-#: Vship has been measured to agree.
+#: calculated on the CPU instead, as on a PC without a usable GPU. Vship's
+#: Vulkan build (5.1.1, and the bundled commit 0732ed3) scores SSIMULACRA2
+#: far higher than its CUDA build and libjxl's reference on the same frames
+#: on an NVIDIA GPU -- HoneyBee 4K against a CRF 22 HEVC encode: libjxl
+#: 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at 360p -- reproduced with
+#: Vship's own FFVship, while Butteraugli (within 0.1%) and CVVDP (0.01 JOD)
+#: agree. On an Intel GPU the same build agrees with CUDA (45.50 at 4K), but
+#: the entry covers every Vulkan GPU until others are measured (Vship issue
+#: 18). Remove the entry only once a bundled Vship has been measured to agree.
 SCORED_WRONGLY = frozenset({("vulkan", "ssimulacra2")})
 _backend = DEFAULT_VSHIP_BACKEND
 

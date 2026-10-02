@@ -51,13 +51,17 @@ case anyone overrides that.
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.
   In the current build they add about 12 MB installed and 7 MB compressed.
-- **Vship 5.1.1 GPU libraries** for SSIMULACRA2, Butteraugli and CVVDP, in
-  three builds: `vmaf_app/tools/vship/nvidia` (CUDA), `amd` (HIP) and `vulkan`
-  (any GPU with a Vulkan driver, NVIDIA, AMD and Intel alike). Settings > GPU
-  metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA, HIP
-  on AMD and Vulkan on other GPUs, and a build that cannot run hands over to the
-  next. Vship 5.1.1's Vulkan SSIMULACRA2 disagrees with its CUDA build and with
-  libjxl, so on Vulkan SSIMULACRA2 uses the CPU tool
+- **Vship GPU libraries** for SSIMULACRA2, Butteraugli and CVVDP, in three
+  builds: `vmaf_app/tools/vship/nvidia` (CUDA, the 5.1.1 release), `amd` (HIP,
+  the 5.1.1 release) and `vulkan` (any GPU with a Vulkan driver, NVIDIA, AMD and
+  Intel alike). The Vulkan build is made from Vship commit 0732ed3 by
+  `scripts/build_vship_vulkan.ps1` (MinGW-w64 g++, as for the tone mapper):
+  5.1.1's cannot be loaded where Intel's GPU is the only one, and the later
+  color fixes have no release yet. Settings > GPU metrics > GPU backend picks
+  one; Auto, the default, uses CUDA on NVIDIA, HIP on AMD and Vulkan on other
+  GPUs, and a build that cannot run hands over to the next. Vship's Vulkan
+  SSIMULACRA2 disagrees with its CUDA build and with libjxl on NVIDIA GPUs, so
+  on Vulkan SSIMULACRA2 uses the CPU tool
   (`perceptual_vship.SCORED_WRONGLY`); re-measure before removing that when
   updating Vship. Where no build can use the GPU, the input format is
   unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall back to

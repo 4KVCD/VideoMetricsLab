@@ -1346,6 +1346,30 @@ def test_vships_vulkan_build_is_not_loaded_where_vulkan_has_no_gpu(monkeypatch):
     assert reason.startswith("Vulkan: no GPU with a Vulkan driver was found; ")
 
 
+def test_the_bundled_vulkan_build_loads_where_vulkan_finds_no_gpu():
+    """Vship 5.1.1's Vulkan build started Vulkan while Windows loaded it, and
+    where a driver could not start there -- Intel's, on a PC with no other
+    GPU -- it failed to load (WinError 1114) and the app crashed as it
+    exited. The bundled build starts Vulkan on first use. With every driver
+    hidden from the Vulkan loader, 5.1.1 still fails that way; this build
+    loads and reports no GPU."""
+    import os
+
+    dll = Path(vship.__file__).resolve().parents[1] / "tools" / "vship" / "vulkan" / "libvship.dll"
+    if os.name != "nt" or not dll.is_file():
+        pytest.skip("Windows build of Vship only")
+    check = ("import ctypes, sys\n"
+             "try:\n    ctypes.WinDLL('vulkan-1.dll')\nexcept OSError:\n    sys.exit(3)\n"
+             "lib = ctypes.CDLL(sys.argv[1])\ncount = ctypes.c_int()\n"
+             "print(lib.Vship_GetDeviceCount(ctypes.byref(count)), count.value)\n")
+    result = subprocess.run([sys.executable, "-S", "-c", check, str(dll)], capture_output=True, text=True,
+                            timeout=60, env={**os.environ, "VK_LOADER_DRIVERS_DISABLE": "*"})
+    if result.returncode == 3:
+        pytest.skip("no Vulkan loader on this PC")
+    assert result.returncode == 0, result.stderr[-500:]
+    assert result.stdout.split()[-1] == "0"  # loaded, and no GPU found
+
+
 def test_choosing_another_backend_forgets_the_probe(monkeypatch):
     monkeypatch.setattr(vship, "_backend", "auto")
     monkeypatch.setattr(vship, "_probed", ((None, "no GPU"), 0.0))

@@ -1004,7 +1004,7 @@ class MainWindow(QMainWindow):
         self.settings_gpu_backend.setToolTip(tr(
             "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with "
             "the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on "
-            "any GPU, but Vship 5.1.1's Vulkan build scores SSIMULACRA2 far too high (up to 17 points at 4K), so "
+            "any GPU, but Vship's Vulkan build scores SSIMULACRA2 far too high (up to 17 points at 4K), so "
             "on Vulkan SSIMULACRA2 is calculated on the CPU. If the chosen build cannot run here, the others are "
             "tried."))
         self.settings_gpu_backend.currentIndexChanged.connect(self._on_settings_edited)

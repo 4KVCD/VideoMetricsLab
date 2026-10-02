@@ -123,7 +123,7 @@ try {
         }
     }
 
-    foreach ($notice in @('LICENSE.vship.txt', 'LICENSE.ssimulacra2.txt', 'LICENSE.butteraugli.txt')) {
+    foreach ($notice in @('LICENSE.vship.txt', 'LICENSE.ssimulacra2.txt', 'LICENSE.butteraugli.txt', 'LICENSE.winpthreads.txt')) {
         if (-not (Test-Path (Join-Path $output "_internal/vmaf_app/tools/vship/licenses/$notice"))) {
             throw "Bundled Vship metric license notice is missing: $notice"
         }
