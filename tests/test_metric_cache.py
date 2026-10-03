@@ -157,10 +157,43 @@ def test_recipe_and_metric_identity_keep_scientific_choices_separate(tmp_path):
     changed_execution = VmafOptions(n_threads=12, gpu_decode=False, gpu_vendor=GpuVendor.INTEL)
     assert recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(changed_execution)) == baseline
     assert recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE))) != baseline
-    assert recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="lanczos"))) != baseline
+    # The scaling algorithm is not what the comparison is (on the CPU or the
+    # GPU, any algorithm): scores saved with one are found with another.
+    assert recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="lanczos"))) == baseline
     assert recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions(duration_limit=2.0))) != baseline
     source.write_bytes(b"source changed")
     assert recipe_directory(tmp_path, source, test, recipe) != baseline
+
+
+@pytest.mark.parametrize("saved_with", ["bicubic", "lanczos", "spline"])
+def test_scores_saved_when_the_algorithm_was_part_of_the_identity_are_found(tmp_path, saved_with):
+    """A comparison saved before the scaling algorithm left its identity sits
+    under a hash that held the algorithm: found, under any algorithm, and moved
+    to the new name, with its scores."""
+    from vmaf_app.core import metric_cache
+
+    source, test = _paths(tmp_path)
+    recipe = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm=saved_with))
+    old = tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, saved_with)
+    old.mkdir(parents=True)
+    store_metric(old, _frame(), _spec())
+    wanted = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="bilinear"))
+    directory = recipe_directory(tmp_path, source, test, wanted)
+    assert directory.name == metric_cache.recipe_hash(source, test, wanted)
+    assert not old.exists()
+    assert load_metric(directory, _spec()) is not None
+
+
+def test_the_recipes_own_algorithm_is_adopted_first(tmp_path):
+    from vmaf_app.core import metric_cache
+
+    source, test = _paths(tmp_path)
+    recipe = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="lanczos"))
+    for algorithm in ("bicubic", "lanczos"):
+        (tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, algorithm)).mkdir(parents=True)
+    recipe_directory(tmp_path, source, test, recipe)
+    assert (tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, "bicubic")).exists()
+    assert not (tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, "lanczos")).exists()
 
 
 def test_coverage_and_compatibility_id_produce_independent_direct_entries(tmp_path):

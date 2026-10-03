@@ -60,10 +60,11 @@ def _json_default(value: object):
 
 
 def recipe_hash(source: Path, distorted: Path, recipe: ComparisonRecipe) -> str:
-    raw = _canonical({
-        "source": file_identity(source), "distorted": file_identity(distorted),
-        "recipe": recipe.identity_dict(),
-    })
+    return _hash(file_identity(source), file_identity(distorted), recipe.identity_dict())
+
+
+def _hash(source_identity: str, distorted_identity: str, recipe_identity: dict) -> str:
+    raw = _canonical({"source": source_identity, "distorted": distorted_identity, "recipe": recipe_identity})
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -71,8 +72,38 @@ def metric_identity_hash(spec: MetricRequestSpec) -> str:
     return hashlib.sha256(_canonical(spec.identity_dict()).encode("utf-8")).hexdigest()
 
 
+#: The scaling algorithms a comparison's identity once held (the app's
+#: choices). Its directory was named by a hash that included the one it was
+#: scaled with; the identity no longer does (ComparisonRecipe.identity_dict).
+_LEGACY_SCALE_ALGORITHMS = ("bicubic", "lanczos", "bilinear", "spline")
+
+
+def _legacy_hash(source: Path, distorted: Path, recipe: ComparisonRecipe, algorithm: str) -> str:
+    return _hash(file_identity(source), file_identity(distorted), {**recipe.identity_dict(), "scale_algorithm": algorithm})
+
+
 def recipe_directory(base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe) -> Path:
-    return Path(base) / _V2_DIR / recipe_hash(source, distorted, recipe)
+    """The comparison's directory. One saved before the scaling algorithm left
+    its identity -- under a hash that held it -- is moved to the new name the
+    first time it is asked for: the recipe's own algorithm first, then the
+    others, so no saved score is lost. If it cannot be moved (open
+    elsewhere), it is used where it is."""
+    root = Path(base) / _V2_DIR
+    identities = file_identity(source), file_identity(distorted)
+    identity = recipe.identity_dict()
+    directory = root / _hash(*identities, identity)
+    if directory.exists() or not root.is_dir():
+        return directory
+    algorithms = [recipe.scale_algorithm, *(a for a in _LEGACY_SCALE_ALGORITHMS if a != recipe.scale_algorithm)]
+    for algorithm in algorithms:
+        legacy = root / _hash(*identities, {**identity, "scale_algorithm": algorithm})
+        if legacy.is_dir():
+            try:
+                legacy.rename(directory)
+            except OSError:
+                return legacy
+            return directory
+    return directory
 
 
 def metric_path(directory: Path, spec: MetricRequestSpec) -> Path:

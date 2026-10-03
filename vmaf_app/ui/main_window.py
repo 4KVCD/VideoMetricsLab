@@ -3717,7 +3717,10 @@ class MainWindow(QMainWindow):
             error = self._settings.save()
             if error:
                 self.status_label.setText(tr_message(error))
-        execution_only = field_name in {"gpu", "n_threads", "vmaf_on_gpu"}
+        # Which GPU, how many threads, and how frames are scaled change how a
+        # comparison is made, not what it is (ComparisonRecipe.identity_dict):
+        # its scores stay.
+        execution_only = field_name in {"gpu", "n_threads", "vmaf_on_gpu", "scale_algorithm"}
         changed_rows = []
         for row in self._panel_target_rows:
             if apply(self._rows[row].options):

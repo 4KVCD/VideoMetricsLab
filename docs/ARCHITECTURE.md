@@ -83,9 +83,11 @@ the current five displayed metrics.
 ## Comparison recipe, requests and execution
 
 `ComparisonRecipe` describes the scientifically compared pictures: crop
-policy, manual crops, scaling algorithm and direction, duration limit, and a
-possible resolution round-trip recipe. It intentionally excludes decode GPU,
-GPU vendor, libvmaf thread count, and the application's parallel-job count.
+policy, manual crops, scaling direction, duration limit, and a possible
+resolution round-trip recipe. It intentionally excludes decode GPU, GPU vendor,
+libvmaf thread count, and the application's parallel-job count -- and the
+scaling algorithm, which it carries for the run but not in its identity:
+pictures scaled with another algorithm, or on the GPU, are the same comparison.
 
 `AnalysisRequest` is the backend-neutral contract used by cache and planning.
 It contains the common recipe, immutable `MetricRequestSpec` objects, and

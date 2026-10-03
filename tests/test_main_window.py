@@ -1950,8 +1950,10 @@ def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
     assert win._rows[row].completed_run is None
 
 
-@pytest.mark.parametrize("control", ["gpu", "threads"])
+@pytest.mark.parametrize("control", ["gpu", "threads", "scaling algorithm"])
 def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
+    """Which GPU, how many threads, and how frames are scaled change how a
+    comparison is made, not what it is: its scores stay."""
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     completed = _fake_completed_run("a.mp4")
@@ -1961,8 +1963,11 @@ def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
 
     if control == "gpu":
         win.gpu_checkbox.setChecked(not win.gpu_checkbox.isChecked())
-    else:
+    elif control == "threads":
         win.threads_spin.setValue(7)
+    else:
+        win.scale_algo_combo.setCurrentText("lanczos")
+        assert win._rows[row].options.scale_algorithm == "lanczos"
 
     assert win._rows[row].completed_run is completed
 

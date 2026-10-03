@@ -199,6 +199,10 @@ def test_cache_miss_when_calculation_options_change(tmp_path):
         VmafOptions(gpu_vendor=GpuVendor.NVIDIA),
         VmafOptions(n_threads=12),
         VmafOptions(gpu_decode=False, gpu_vendor=GpuVendor.AMD, n_threads=4),
+        # Scaled with another algorithm (or on the GPU), a comparison is the
+        # same comparison (ComparisonRecipe.identity_dict).
+        VmafOptions(scale_algorithm="lanczos"),
+        VmafOptions(scale_algorithm="bilinear"),
     ],
 )
 def test_cache_hit_survives_execution_only_option_changes(tmp_path, changed):
@@ -220,7 +224,6 @@ def test_cache_hit_survives_execution_only_option_changes(tmp_path, changed):
             model_choice="version=vmaf_4k_v0.6.1",
         ),
         VmafOptions(crop_mode=CropMode.NONE),
-        VmafOptions(scale_algorithm="lanczos"),
         VmafOptions(scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
         VmafOptions(duration_limit=2.0),
         VmafOptions(n_subsample=5),
