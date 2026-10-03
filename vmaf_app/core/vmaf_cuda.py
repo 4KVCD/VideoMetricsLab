@@ -455,6 +455,9 @@ def score_decoded(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
         if (plan.crop_w, plan.crop_h) != (width, height):
             raise nvdec_frames.NvdecUnavailableError("a video is scaled")
+        supported, refusal = nvdec_frames.decoder_supports(0, plan)
+        if not supported:
+            raise nvdec_frames.NvdecUnavailableError(refusal)
         plans.append(plan)
     # The decoders first: the first to start CUDA sets its waits to sleep
     # rather than spin (nvdec_frames), and libvmaf's then do too.
