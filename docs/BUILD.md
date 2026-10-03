@@ -91,6 +91,11 @@ case anyone overrides that.
   libraries add about 155 MB installed; no new release size is claimed
   until an actual packaged build is measured.
 
+The native helper uses an owned CUDA context with blocking synchronization
+by default, so the CPU sleeps during GPU waits. The legacy raw-pipe
+fallback retains its existing wait policy. `--wait auto` remains available
+in the helper for controlled benchmarks.
+
 To reproduce the native helper, first run `scripts/build_libvmaf_cuda.ps1`,
 then `scripts/build_vmaf_native.ps1 -CudaPath <CUDA Toolkit folder>`.
 The latter verifies the shared FFmpeg archive's pinned SHA-256, uses its
