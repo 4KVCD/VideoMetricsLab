@@ -835,8 +835,8 @@ class _PassRate:
     The start -- FFmpeg opening both inputs, the first 4K frames decoded,
     Vship's handlers set up -- takes a second or more that is not the rate
     the pass runs at. Counted in, it put "1.7 fps, 0:05:39 left" on the run
-    line at the start of a pass over an 8-second clip, and the queue ETA
-    jumped with it. No rate until there is some time to measure over.
+    line at the start of a pass over an 8-second clip. No rate until there
+    is some time to measure over.
 
     The rate is in the video's frames, as the progress is: with frame
     subsampling each compared pair covers `step` frames. Pairs per second

@@ -1415,7 +1415,6 @@ def test_removing_a_row_mid_run_still_lands_results_on_the_right_row(qapp):
         r = win._add_table_row(Path(name))
         win._rows[r].video_info = _fake_video_info(name)
     win._job_rows = list(win._rows)
-    win._job_total_frames = [10, 10, 10]
     win._checked_rows_for_run = list(win._rows)
 
     win.distorted_table.selectRow(0)
@@ -1434,7 +1433,6 @@ def test_jobs_for_removed_rows_are_dropped_without_crashing(qapp):
     row = win._add_table_row(Path("a.mp4"))
     win._rows[row].video_info = _fake_video_info("a.mp4")
     win._job_rows = list(win._rows)
-    win._job_total_frames = [10]
     win._checked_rows_for_run = list(win._rows)
 
     win.distorted_table.selectRow(0)
@@ -1503,7 +1501,6 @@ def test_job_progress_shows_fps_and_file_eta(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [3000]  # a single 3000-frame job
     win._on_job_started(0, "a")
 
     win._on_job_progress(0, current=1000, total=3000, fps=100.0)
@@ -1524,7 +1521,6 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
 
     win._on_task_progress(0, [
@@ -1550,7 +1546,6 @@ def test_run_status_includes_elapsed_time(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [1000]
     win._run_started_at = time.monotonic() - 61
     win._on_job_started(0, "a")
 
@@ -1561,7 +1556,6 @@ def test_gpu_fallback_changes_status_label_to_cpu(qapp, monkeypatch):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     win._on_job_status(0, "Vship GPU unavailable; using CPU reference metrics…")
 
@@ -1578,7 +1572,6 @@ def test_a_video_whose_gpu_half_waits_shows_its_running_half(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [3000]
     win._on_job_started(0, "a")
     win._job_halves[0] = [("VMAF/PSNR", 300, 3000, 11.2, "running"),
                           ("SSIMULACRA2/CVVDP", 0, 0, 0.0, "waiting")]
@@ -1600,7 +1593,6 @@ def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [3000]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
         {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 0, "total": 0, "fps": 0.0,
@@ -1612,78 +1604,6 @@ def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
     assert "CPU metrics queued (waiting for a free CPU slot)" in text and "using the GPU" not in text
     assert len(win.job_progress_labels) == 3  # a video on the GPU beside two on the CPU
 
-def test_job_progress_queue_eta_accounts_for_other_queued_jobs(qapp):
-    """The ETA counts what jobs have actually reported.
-
-    It used to assume every earlier job was finished, which was only true
-    while jobs ran strictly one after another. With several in flight an
-    earlier index says nothing about whether that job is done.
-    """
-    win = MainWindow()
-    row_a = win._add_table_row(Path("a.mp4"))
-    row_b = win._add_table_row(Path("b.mp4"))
-    win._job_rows = [win._rows[row_a], win._rows[row_b]]
-    win._job_total_frames = [1000, 4000]
-    win._on_job_started(1, "b")
-
-    win._mark_job_over(0)  # job 0 really has finished: all 1000 frames
-    win._on_job_progress(1, current=2000, total=4000, fps=50.0)
-
-    # Only job 1's remaining 2000 frames are left, at 50fps -> 40s.
-    assert "Queue ETA: 0:00:40" in win.status_label.text()
-
-
-def test_queue_progress_does_not_assume_earlier_jobs_have_finished(qapp):
-    # The parallel case: job 1 is running while job 0 still is too, so job
-    # 0's frames must not be counted as done.
-    win = MainWindow()
-    for name in ("a.mp4", "b.mp4"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 4000]
-    win._on_job_started(1, "b")
-
-    win._on_job_progress(1, current=2000, total=4000, fps=50.0)
-
-    # 2000 frames still to do on job 1 and 1000 untouched on job 0, at 50fps.
-    assert "Queue ETA: 0:01:00" in win.status_label.text()
-
-
-def test_two_running_jobs_drain_the_queue_at_their_combined_rate(qapp):
-    win = MainWindow()
-    for name in ("a.mp4", "b.mp4"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
-    win._on_job_started(0, "a")
-    win._on_job_started(1, "b")
-
-    win._on_job_progress(0, current=500, total=1000, fps=25.0)
-    win._on_job_progress(1, current=500, total=1000, fps=25.0)
-
-    # Each has 500 frames left at 25fps, and they run side by side, so the
-    # queue ends in 20s rather than the 40s one after another would take.
-    assert win.status_label.text() == "2 videos: 2 in progress   ·   Queue ETA: 0:00:20"
-
-
-def test_a_finished_job_stops_counting_towards_the_combined_rate(qapp):
-    win = MainWindow()
-    for name in ("a.mp4", "b.mp4"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
-    win._on_job_started(0, "a")
-    win._on_job_started(1, "b")
-
-    win._on_job_progress(0, current=1000, total=1000, fps=25.0)
-    win._mark_job_over(0)
-    win._on_job_progress(1, current=0, total=1000, fps=25.0)
-
-    # 1000 frames left at 25fps = 40s. Leaving the finished job's rate in
-    # would have claimed 20s and the estimate would never be met.
-    assert "Queue ETA: 0:00:40" in win.status_label.text()
-
-
 def test_the_status_line_does_not_repeat_the_names_below_it(qapp):
     """Every running video has its own line directly underneath carrying its
     name, so listing the names here said the same thing twice -- and with two
@@ -1692,7 +1612,6 @@ def test_the_status_line_does_not_repeat_the_names_below_it(qapp):
     for name in ("encode-a.mp4", "encode-b.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
 
     win._on_job_started(0, "encode-a")
     assert win.status_label.text().startswith("2 videos: 1 in progress, 1 queued")
@@ -1714,13 +1633,12 @@ def test_job_progress_with_zero_fps_promises_no_time(qapp):
     # than none.
     win = MainWindow()
     win._job_rows = [win._rows[win._add_table_row(Path("a.mp4"))]]
-    win._job_total_frames = [3000]
     win._on_job_started(0, "a")
 
     win._on_job_progress(0, current=5, total=3000, fps=0.0)
 
     assert "left" not in win.job_progress_labels[0].text()
-    assert win.status_label.text() == "1 video: 1 in progress   ·   Queue ETA: calculating..."
+    assert win.status_label.text() == "1 video: 1 in progress"
 
 
 def test_cancelled_run_does_not_claim_done(qapp):
@@ -1852,25 +1770,6 @@ def test_with_no_video_that_can_be_compared_nothing_runs(qapp, monkeypatch):
     assert len(warned) == 1 and "ok.mkv: It could not be read." in warned[0]
     assert _FakeRunWorker.started_with == []
     win.close()
-
-
-def test_estimate_total_frames_used_when_building_jobs(qapp):
-    win = MainWindow()
-    win._source_info = _fake_video_info("source.mp4")
-    win._source_info.duration = 10.0
-    win._source_info.nb_frames = 300
-    row = win._add_table_row(Path("distorted.mp4"))
-    win._rows[row].video_info = VideoInfo(
-        path=Path("distorted.mp4"), width=1920, height=1080, fps=30.0, duration=10.0,
-        nb_frames=300, codec_name="h264",
-    )
-
-    win._on_run_clicked()
-
-    assert win._job_total_frames == [300]
-
-    win._worker.cancel()
-    win._worker.wait(5000)
 
 
 def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
@@ -3741,7 +3640,6 @@ def test_each_running_video_gets_its_own_progress_line(qapp):
     for name in ("a.mp4", "b.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
 
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
@@ -3763,7 +3661,6 @@ def test_a_finished_video_frees_its_progress_line_for_the_next(qapp):
     for name in ("a.mp4", "b.mp4", "c.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100, 100, 100]
 
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
@@ -3783,7 +3680,6 @@ def test_a_phase_message_is_attached_to_the_video_it_came_from(qapp):
     for name in ("encode-a.mp4", "encode-b.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100, 100]
     win._on_job_started(0, "encode-a")
     win._on_job_started(1, "encode-b")
 
@@ -3801,7 +3697,6 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
     for i in range(job_count):
         win._add_table_row(Path(f"encode-{i}.mp4"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100] * job_count
     for i in range(job_count):
         win._on_job_started(i, f"encode-{i}")
         win._on_job_status(i, "Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
@@ -3826,7 +3721,6 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
     assert 0 not in win._job_decode_status
     row = win._add_table_row(Path("next.mp4"))
     win._job_rows.append(win._rows[row])
-    win._job_total_frames.append(100)
     win._on_job_started(job_count, "next")
     win._on_job_progress(job_count, current=1, total=100, fps=1.0)
     # The new video's line (wherever list order puts it) has no decode status
@@ -3841,59 +3735,12 @@ def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mp4"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
 
     win._on_job_status(0, "Running ffmpeg (GPU decode: off)...")
 
     assert "GPU decode" in win.job_progress_labels[0].text()
     assert win.status_label.text().startswith("1 video: 1 in progress")
-
-
-# ------------------------------------------------- queue ETA is a makespan
-
-def test_queue_eta_is_bounded_by_the_slowest_remaining_video(qapp):
-    """Dividing remaining frames by the summed frame rate assumes every lane
-    stays busy to the same instant. With 10 seconds left on one video and
-    1000 on the other it claimed about 505s, when the queue plainly cannot
-    end before the 1000-second one does."""
-    win = MainWindow()
-    for name in ("quick.mp4", "slow.mp4"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win.parallel_jobs_check.setChecked(True)
-    win._job_total_frames = [10, 1000]
-
-    # Both running at 1 fps: 10s left on one, 1000s on the other.
-    win._on_job_progress(0, current=0, total=10, fps=1.0)
-    win._on_job_progress(1, current=0, total=1000, fps=1.0)
-
-    assert win._queue_eta_seconds() == pytest.approx(1000.0)
-
-
-def test_queue_eta_schedules_waiting_videos_onto_free_lanes(qapp):
-    win = MainWindow()
-    for name in ("a.mp4", "b.mp4", "c.mp4", "d.mp4"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win.parallel_jobs_check.setChecked(True)
-    win._job_total_frames = [100, 100, 100, 100]
-
-    # Two running at 1 fps with 100s each; two more queued at the same rate.
-    win._on_job_progress(0, current=0, total=100, fps=1.0)
-    win._on_job_progress(1, current=0, total=100, fps=1.0)
-
-    # Each lane takes one of the queued videos: 100s now + 100s after.
-    assert win._queue_eta_seconds() == pytest.approx(200.0)
-
-
-def test_queue_eta_is_unknown_until_something_reports_a_rate(qapp):
-    win = MainWindow()
-    win._add_table_row(Path("a.mp4"))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
-
-    assert win._queue_eta_seconds() is None
 
 
 def test_the_decoded_videos_setting_persists_and_reaches_the_compare_panel(qapp):
@@ -3950,14 +3797,15 @@ def test_changing_the_control_reaches_a_running_worker(qapp):
 
 
 
-def test_the_queue_eta_rides_on_the_status_line(qapp):
-    """There is one shared line, not two. It says how much is running and
-    when the queue ends, and nothing that changes several times a second."""
+def test_the_status_line_says_how_much_is_running_and_no_queue_eta(qapp):
+    """There is one shared line, not two. It says how much is running, and
+    nothing that changes several times a second. Its queue ETA swung by
+    minutes -- the metrics run at very different speeds, in a CPU queue and
+    a GPU queue that overlap -- and is gone."""
     win = MainWindow()
     for name in ("encode-a.mp4", "encode-b.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
     win._on_job_started(0, "encode-a")
     win._on_job_started(1, "encode-b")
 
@@ -3967,17 +3815,15 @@ def test_the_queue_eta_rides_on_the_status_line(qapp):
     second = win.status_label.text()
 
     for text in (first, second):
-        assert text.startswith("2 videos: 2 in progress")
-        assert "Queue ETA:" in text
-        assert "fps" not in text
+        assert "fps" not in text and "ETA" not in text
         assert "encode-a" not in text and "encode-b" not in text
-    assert second == "2 videos: 2 in progress   ·   Queue ETA: 0:00:20"
+    assert first == second == "2 videos: 2 in progress"
     assert not hasattr(win, "progress_detail_label")
 
 
 def test_there_are_no_progress_bars_at_all(qapp):
-    # Each running video states its own percentage, and the queue line states
-    # the ETA. Nothing is left for a bar to add.
+    # Each running video states its own percentage and time remaining.
+    # Nothing is left for a bar to add.
     win = MainWindow()
     assert not hasattr(win, "progress_bar")
     assert not hasattr(win, "job_progress_bars")
@@ -3990,7 +3836,6 @@ def test_a_running_video_states_its_percentage_in_words(qapp):
     win = MainWindow()
     win._add_table_row(Path("encode.mp4"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "encode")
 
     win._on_job_progress(0, current=333, total=1000, fps=20.0)
@@ -4003,7 +3848,6 @@ def test_a_video_with_no_rate_yet_shows_only_its_percentage(qapp):
     win = MainWindow()
     win._add_table_row(Path("encode.mp4"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "encode")
 
     win._on_job_progress(0, current=5, total=1000, fps=0.0)
@@ -4016,7 +3860,6 @@ def test_a_finished_video_leaves_its_line(qapp):
     for name in ("a.mp4", "b.mp4", "c.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100, 100, 100]
     win._on_job_started(0, "a")
     win._on_job_started(1, "b")
 
@@ -4462,7 +4305,6 @@ def test_paused_and_cancelling_stay_on_the_status_line(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [3000]
     win._run_started_at = time.monotonic() - 65
     win._on_job_started(0, "a")
     calls = []
@@ -4495,7 +4337,6 @@ def test_progress_figures_are_redrawn_once_a_second_but_changes_at_once(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [3000]
     win._on_job_started(0, "a")
 
     def gpu(current, state="running", phase=(1, 3, "SSIMULACRA2")):
@@ -4523,7 +4364,6 @@ def test_each_half_of_a_video_has_its_own_percentage(qapp):
     for name in ("a.mkv", "b.mkv"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [150000, 150000]
     for index, label in ((0, "a"), (1, "b")):
         win._on_job_started(index, label)
     cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "state": "running", "phase": None, "waiting_for": None}
@@ -4553,7 +4393,6 @@ def test_a_pause_neither_slows_a_halfs_rate_nor_lengthens_its_time_left(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     clock = [0.0]
     win._run_elapsed = lambda: clock[0]
@@ -4581,7 +4420,6 @@ def test_vmaf_on_the_gpu_is_the_first_of_the_gpu_metrics(qapp):
     for name in ("a.mkv", "b.mkv", "c.mkv"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100, 100, 100]
     win._job_plan = {0: [("cpu", 1, "ffmpeg"), ("gpu", 1, "vmaf_gpu"), ("gpu", 3, "perceptual")]}
     for index, label in enumerate(("a", "b", "c")):
         win._on_job_started(index, label)
@@ -4614,41 +4452,33 @@ def test_vmaf_on_the_gpu_is_the_first_of_the_gpu_metrics(qapp):
     win.close()
 
 
-def test_vmaf_on_the_gpu_is_timed_in_the_gpus_queue_one_video_at_a_time(qapp):
-    """FFmpeg's half with VMAF on the GPU waits for the GPU like Vship's
-    halves, but was timed as CPU work, beside them: the queue's time was
-    the longer of the two, not their sum. A video's waiting for its turn is
-    timed at FFmpeg's own rate, not Vship's."""
+def test_vmafs_rate_on_the_gpu_is_not_taken_for_vships_metrics(qapp):
+    """Each GPU metric's rate this run times its pass on the next video's
+    line; VMAF on the GPU's is FFmpeg's, not one of Vship's."""
     win = MainWindow()
-    for name in ("a.mkv", "b.mkv"):
-        win._add_table_row(Path(name))
+    win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
-    win._job_plan = {0: [("gpu", 1, "vmaf_gpu"), ("gpu", 1, "perceptual")], 1: [("gpu", 1, "vmaf_gpu")]}
-    for index, label in ((0, "a"), (1, "b")):
-        win._on_job_started(index, label)
-    win._metric_rates["ssimulacra2"] = 20.0
+    win._job_plan = {0: [("gpu", 1, "vmaf_gpu"), ("gpu", 1, "perceptual")]}
+    win._on_job_started(0, "a")
     vmaf = {**_half("vmaf_gpu", ("vmaf",)), "gpu_keys": ("vmaf",), "lane": "gpu"}
     win._on_task_progress(0, [{**vmaf, "current": 600, "total": 1000, "fps": 40.0},
                               {**_half("perceptual", ("ssimulacra2",), state="waiting", current=0, total=0,
                                        fps=0.0), "waiting_for": "GPU"}])
-    win._on_task_progress(1, [{**vmaf, "state": "waiting", "waiting_for": "GPU", "current": 0, "total": 0,
-                               "fps": 0.0}])
-    # a's VMAF (400 frames at 40 fps), then its SSIMULACRA2 (1000 at 20), then b's VMAF (1000 at 40)
-    assert win._queue_eta_by_lane() == pytest.approx(400 / 40 + 1000 / 20 + 1000 / 40)
-    assert win._metric_rates == {"ssimulacra2": 20.0}  # FFmpeg's rate is not taken for Vship's
+    assert win._metric_rates == {}
+    win._on_task_progress(0, [{**vmaf, "state": "done", "current": 1000, "total": 1000, "fps": 40.0},
+                              _half("perceptual", ("ssimulacra2",), current=200, total=1000, fps=20.0)])
+    assert win._metric_rates == {"ssimulacra2": 20.0}
     win.close()
 
 
 def test_vship_work_not_yet_started_is_timed_as_such_work_took_before(qapp):
-    """With VMAF on the GPU, a video's Vship half starts only after its
-    FFmpeg half: the queue ETA said "calculating..." for all of that, with
-    no rate yet for the Vship metrics. A half that ran before on this PC
-    gives one, per megapixel per frame of a pass."""
+    """With VMAF on the GPU, a video's Vship half starts only after VMAF:
+    with no rate yet for the Vship metrics, the GPU metrics' time remaining
+    is as such a half took before on this PC, per megapixel per frame of a
+    pass -- none when it never ran here."""
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._job_megapixels = [2.0]
     win._job_plan = {0: [("gpu", 1, "vmaf_gpu"), ("gpu", 1, "perceptual")]}
     win._on_job_started(0, "a")
@@ -4657,28 +4487,12 @@ def test_vship_work_not_yet_started_is_timed_as_such_work_took_before(qapp):
     vmaf = {**_half("vmaf_gpu", ("vmaf",)), "gpu_keys": ("vmaf",), "lane": "gpu", "current": 600, "total": 1000,
             "fps": 40.0}
     win._on_task_progress(0, [vmaf, vship_half])
-    assert win._queue_eta_by_lane() is None  # never timed on this PC: no basis for a figure
-    win._settings.gpu_half_seconds[win._gpu_half_shape("perceptual", ("ssimulacra2",))] = 0.005  # s per megapixel-frame
-    assert win._queue_eta_by_lane() == pytest.approx(400 / 40 + 1000 * 2.0 * 0.005)
-    win.close()
-
-
-def test_a_video_not_started_times_each_of_its_halves_at_its_own_remembered_speed(qapp):
-    """Before a video starts its plan says which queue each half is in and
-    which half it is: VMAF on the GPU was timed at Vship's speed, then
-    "calculating..." until it had a rate."""
-    win = MainWindow()
-    win._add_table_row(Path("a.mkv"))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
-    win._job_megapixels = [2.0]
-    win._job_plan = {0: [("gpu", 1, "vmaf_gpu"), ("gpu", 1, "perceptual")]}
-    keys = win._requested_metrics(win._rows[0])
-    vmaf_keys = [key for key in keys if key in ("vmaf", "vmaf_neg")]
-    vship_keys = [key for key in keys if key in ("ssimulacra2", "butteraugli", "cvvdp")]
-    win._settings.gpu_half_seconds = {win._gpu_half_shape("vmaf_gpu", vmaf_keys): 0.01,
-                                      win._gpu_half_shape("perceptual", vship_keys): 0.002}
-    assert win._queue_eta_by_lane() == pytest.approx(1000 * 2.0 * (0.01 + 0.002))
+    assert "GPU metrics 1 of 2 (30.0%) (VMAF v0.6.1 60.0%, 40.0 fps, 0:00:10 remaining)" in \
+        win.job_progress_labels[0].text()
+    win._settings.gpu_half_seconds[win._gpu_half_shape(("ssimulacra2",))] = 0.005  # s per megapixel-frame
+    win._render_job_progress(0)
+    # VMAF's 400 frames at 40 fps, then SSIMULACRA2's 1000 at 0.005 x 2 megapixels a frame.
+    assert "GPU metrics 1 of 2 (30.0%, 0:00:20 remaining)" in win.job_progress_labels[0].text()
     win.close()
 
 
@@ -4686,7 +4500,6 @@ def test_a_running_vship_half_is_timed_for_the_next_run(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._job_megapixels = [2.0]
     win._on_job_started(0, "a")
     clock = [10.0]
@@ -4698,17 +4511,15 @@ def test_a_running_vship_half_is_timed_for_the_next_run(qapp):
     win.close()
 
 
-def test_a_failed_half_says_so_and_is_no_longer_timed(qapp):
+def test_a_failed_half_says_so_without_its_last_step(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf",), state="failed"), "step": "Detecting black bars"},
                               _half("perceptual", ("ssimulacra2",), current=50, total=100, fps=10.0)])
     line = win.job_progress_labels[0].text()
     assert "CPU metrics failed" in line and "Detecting black bars" not in line
-    assert win._queue_eta_by_lane() == pytest.approx(5.0)  # the GPU half's 50 frames at 10 fps only
     win.close()
 
 
@@ -4718,7 +4529,6 @@ def test_vmaf_failing_on_the_gpu_leaves_vships_half_named_gpu(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
     win._on_job_status(0, "VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…")
     win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf",)), "gpu_keys": ()},
@@ -4739,7 +4549,6 @@ def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
     for name in ("a.mp4", "b.mp4", "c.mp4"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000, 1000]
     win._run_skipped = 2
     win._update_run_status()
     win._on_job_started(2, "c")
@@ -4753,32 +4562,6 @@ def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
     win.close()
 
 
-@pytest.mark.parametrize(("parallel", "expected"), [(2, "0:02:30"), (1, "0:03:20")])
-def test_the_queue_eta_times_cpu_and_gpu_lanes_separately(qapp, monkeypatch, parallel, expected):
-    """With GPU metrics in the run there was no queue ETA at all."""
-    win = MainWindow()
-    for name in ("a.mkv", "b.mkv"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
-    monkeypatch.setattr(win, "_parallel_jobs", lambda: parallel)
-    win._job_plan = {0: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")], 1: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")]}
-    win._on_job_started(0, "a")
-    cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "waiting_for": None, "phase": None}
-    gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"), "waiting_for": None}
-    # Video a: CPU 1000 frames left at 10 fps (100 s); GPU on pass 2 of 3,
-    # 1500 of its 3000 frames left at 30 fps. Video b not started: 1000 CPU
-    # frames (at the running CPU rate), 3 x 1000 GPU frames (at the GPU's).
-    win._on_task_progress(0, [{**cpu, "current": 0, "total": 1000, "fps": 10.0, "state": "running"},
-                              {**gpu, "current": 1500, "total": 3000, "fps": 30.0, "state": "running",
-                               "phase": (2, 3, "Butteraugli")}])
-    win._on_run_tick()
-    # GPU: (1500 + 3000) / 30 = 150 s. CPU: 100 s each, side by side with
-    # two lanes (100 s), one after the other with one (200 s).
-    assert f"Queue ETA: {expected}" in win.status_label.text()
-    win.close()
-
-
 def test_elapsed_leaves_out_paused_time(qapp):
     """"Elapsed" kept counting while a run was paused."""
     from types import SimpleNamespace
@@ -4786,7 +4569,6 @@ def test_elapsed_leaves_out_paused_time(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._job_total_frames = [1000]
     win._run_started_at = time.monotonic() - 100
     win._on_job_started(0, "a")
     win._worker = SimpleNamespace(pause=lambda: None, resume=lambda: None)
@@ -4829,7 +4611,6 @@ def test_the_run_lines_stay_in_list_order_and_a_reused_line_starts_clean(qapp):
     for name in ("v0.mkv", "v1.mkv", "v2.mkv", "v3.mkv"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000] * 4
     for index in (0, 1, 2):
         win._on_job_started(index, f"v{index}")
     snapshot = [{"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 10, "total": 1000, "fps": 5.0,
@@ -4851,7 +4632,6 @@ def test_video_lines_say_paused_instead_of_their_last_rate(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
         {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 460, "total": 1000, "fps": 7.8,
@@ -4878,7 +4658,6 @@ def test_the_counts_show_a_failure_when_it_happens(qapp):
     for name in ("a.mkv", "b.mkv", "c.mkv"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000] * 3
     for index in (0, 1):
         win._on_job_started(index, "x")
     win._on_job_failed(0, "FFmpeg failed", "")
@@ -4897,7 +4676,6 @@ def test_a_starting_half_names_its_step(qapp, step, shown):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
         {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 0, "total": 0, "fps": 0.0,
@@ -4942,7 +4720,6 @@ def test_each_half_is_named_as_metrics_not_bare_cpu_or_gpu(qapp):
     win._add_table_row(Path("a.mkv"))
     win._rows[0].metric_backends.update(ssimulacra2="cpu", butteraugli="cpu")
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
         {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 460, "total": 1000, "fps": 7.8,
@@ -4969,7 +4746,6 @@ def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cpu")])
     win._on_job_status(0, "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…")
@@ -4983,7 +4759,6 @@ def test_halves_that_decode_differently_each_say_where(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
     cpu = _half("ffmpeg", ("vmaf",), decode="source cuda, distorted cpu")
     gpu = _half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cuda")
@@ -5006,7 +4781,6 @@ def test_a_starting_gpu_half_shows_its_step_without_the_decode_plan(qapp, step, 
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [{**_half("perceptual", ("ssimulacra2",), state="starting",
                                        decode="source cuda, distorted cuda"), "step": step}])
@@ -5023,49 +4797,11 @@ def test_a_resolution_tests_decoder_names_only_the_source(qapp):
     win._add_table_row(Path("a.mkv"))
     win._rows[0].options.resample_test = ResampleTarget(width=1920, label="1080p")
     win._job_rows = list(win._rows)
-    win._job_total_frames = [100]
     win._on_job_started(0, "a")
     win._on_job_status(0, "Running ffmpeg (GPU decode: source cuda, distorted cpu)...")
     win._on_job_progress(0, current=20, total=100, fps=10.0)
     text = win.job_progress_labels[0].text()
     assert text.endswith("   ·   Decoder: Source: GPU")
-    win.close()
-
-
-def test_the_queue_eta_keeps_a_lanes_last_rate_while_it_has_none(qapp, monkeypatch):
-    """While the next video's CPU half looked for black bars, and at the
-    start of each GPU pass, a lane had no rate and the queue ETA went back
-    to "calculating..." for several seconds."""
-    win = MainWindow()
-    for name in ("a.mkv", "b.mkv"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
-    monkeypatch.setattr(win, "_parallel_jobs", lambda: 1)
-    win._job_plan = {0: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")], 1: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")]}
-    cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "waiting_for": None, "phase": None, "step": ""}
-    gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"),
-           "waiting_for": None, "step": ""}
-    win._on_job_started(0, "a")
-    win._on_task_progress(0, [{**cpu, "current": 500, "total": 1000, "fps": 10.0, "state": "running"},
-                              {**gpu, "current": 1000, "total": 3000, "fps": 30.0, "state": "running",
-                               "phase": (2, 3, "Butteraugli")}])
-    win._on_run_tick()
-    assert "Queue ETA: calculating" not in win.status_label.text()
-    # a's CPU half is done and its last GPU pass has just started; b's CPU
-    # half is looking for black bars. Neither lane has a rate right now.
-    win._on_job_started(1, "b")
-    win._on_task_progress(0, [{**cpu, "current": 1000, "total": 1000, "fps": 10.0, "state": "done"},
-                              {**gpu, "current": 2000, "total": 3000, "fps": 0.0, "state": "running",
-                               "phase": (3, 3, "CVVDP")}])
-    win._on_task_progress(1, [{**cpu, "current": 0, "total": 0, "fps": 0.0, "state": "starting",
-                               "step": "Detecting black bars in source"},
-                              {**gpu, "current": 0, "total": 0, "fps": 0.0, "state": "waiting",
-                               "waiting_for": "GPU", "phase": None}])
-    win._on_run_tick()
-    # CPU: b's 1000 frames at the last 10 fps, 100 s. GPU: a's last 1000
-    # frames and b's 3 x 1000 at the last 30 fps, 133 s.
-    assert "Queue ETA: 0:02:13" in win.status_label.text()
     win.close()
 
 
@@ -5102,7 +4838,6 @@ def test_the_gpu_half_times_the_metric_under_way_and_the_whole_half_apart(qapp):
     for name in ("a.mkv", "b.mkv"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
     win._on_job_started(0, "a")
     line = win.job_progress_labels[0]
     # The first video: Butteraugli and CVVDP have not run yet, so there is
@@ -5143,7 +4878,6 @@ def test_a_metric_recalculated_after_the_shared_gpu_pass_continues_the_halfs_fig
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     half = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "total": 1000,
             "current": 1000, "fps": 30.0, "state": "running", "waiting_for": None, "phase": None, "step": ""}
@@ -5155,7 +4889,6 @@ def test_a_metric_recalculated_after_the_shared_gpu_pass_continues_the_halfs_fig
     win._on_run_tick()
     assert "GPU metrics 2 of 2 (75.0%, 0:00:12 remaining) (Butteraugli 50.0%, 40.0 fps)" in line.text()
     assert line.toolTip() == "GPU metrics: SSIMULACRA2 (done), Butteraugli (0:00:12 remaining)"
-    assert win._queue_eta_by_lane() == pytest.approx(500 / 40.0)
     win.close()
 
 
@@ -5163,7 +4896,6 @@ def test_a_single_gpu_metric_shows_its_time_next_to_its_percentage(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [{"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": 460,
                                "total": 1000, "fps": 45.0, "state": "running", "waiting_for": None,
@@ -5172,35 +4904,11 @@ def test_a_single_gpu_metric_shows_its_time_next_to_its_percentage(qapp):
     win.close()
 
 
-@pytest.mark.parametrize("second_started", [False, True])
-def test_the_queue_eta_times_gpu_work_per_metric(qapp, second_started):
-    """All GPU work was timed at the rate of the metric under way:
-    Butteraugli's 20 fps for SSIMULACRA2 and CVVDP too."""
-    win = MainWindow()
-    for name in ("a.mkv", "b.mkv"):
-        win._add_table_row(Path(name))
-    win._job_rows = list(win._rows)
-    win._job_total_frames = [1000, 1000]
-    win._job_plan = {0: [("gpu", 3, "perceptual")], 1: [("gpu", 3, "perceptual")]}
-    win._on_job_started(0, "a")
-    win._metric_rates = {"ssimulacra2": 50.0, "cvvdp": 40.0}  # from an earlier video
-    win._on_task_progress(0, [_gpu_half(1500, 20.0, (2, 3, "Butteraugli"))])
-    if second_started:  # b admitted, its GPU half waiting for a's
-        win._on_job_started(1, "b")
-        win._on_task_progress(1, [{**_gpu_half(0, 0.0, None, state="waiting"), "total": 0}])
-    win._on_run_tick()
-    # a: Butteraugli 500/20 + CVVDP 1000/40 = 50 s. b: 1000/50 + 1000/20
-    # + 1000/40 = 95 s, or three passes at the metrics' average time.
-    assert "Queue ETA: 0:02:25" in win.status_label.text()
-    win.close()
-
-
 def test_a_gpu_metrics_first_second_shows_its_percentage_without_times(qapp):
     """Before the metric under way has a rate of its own, no times."""
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
-    win._job_total_frames = [1000]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [_gpu_half(1003, 0.0, (2, 3, "Butteraugli"))])
     assert "a — GPU metrics 2 of 3 (33.4%) (Butteraugli 0.3%)" in win.job_progress_labels[0].text()
@@ -5391,7 +5099,6 @@ def test_a_videos_result_so_far_is_shown_saved_and_graphed_during_its_run(qapp, 
     row = win._add_table_row(distorted)
     rd = win._rows[row]
     win._job_rows = [rd]
-    win._job_total_frames = [100]
     win._on_job_started(0, "distorted")
     rd.analysis_status = "Calculating"
     so_far = _fake_completed_run(str(distorted)).result
@@ -5650,7 +5357,6 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         for name in ("a.mkv", "b.mkv"):
             win._add_table_row(Path(name))
         win._job_rows = list(win._rows)
-        win._job_total_frames = [100, 100]
         win._on_job_started(0, "a")
         win._on_task_progress(0, [
             {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 20, "total": 100, "fps": 5.0,
@@ -5668,9 +5374,6 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         win._run_failed_count, win._run_partial_count = 1, 2
         win._update_run_status()
         assert win.status_label.text().startswith("[[")
-        win._queue_eta_seconds = lambda: None  # no rate yet: the ETA's word was left in English
-        win._update_run_status()
-        assert "[[calculating...]]" in win.status_label.text()
         assert win._run_end_message().startswith("[[")
         win._set_row_status(0, "Failed", "Frame rates do not match (23.976 vs 24.000 fps).")
         win._refresh_row_state(0)

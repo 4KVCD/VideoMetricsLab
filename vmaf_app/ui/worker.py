@@ -127,10 +127,11 @@ class VmafWorker(QThread):
     # Each item is a dict containing backend, metric_keys, current, total,
     # fps, state, and an optional phase (GPU metric number/name).
     task_progress = Signal(int, object)
-    # Once, as the run starts: {job_index: [("cpu" or "gpu", passes), ...]},
-    # each video's halves in task order and how many passes over its frames
-    # each makes (a GPU half, one per metric). The queue ETA needs it for
-    # videos that have not started yet.
+    # Once, as the run starts: {job_index: [("cpu" or "gpu", passes, backend),
+    # ...]}, each video's halves in task order, their queue, and how many
+    # passes over its frames each makes (a GPU half, one per metric). The
+    # run line counts a video's GPU metrics passes by it before Vship's half
+    # says how many it makes.
     planned = Signal(object)
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, ComparisonResult
@@ -310,9 +311,9 @@ class VmafWorker(QThread):
         for run in runs:
             _log.info("%s", run.describe())
         # Each half's queue, its passes over the video and which half it is:
-        # Vship's GPU half one pass per metric or set (vship_passes), FFmpeg's
-        # one, also in the GPU's queue with VMAF on the GPU -- where Vship's
-        # count made it one per metric.
+        # Vship's GPU half one pass per metric or set (vship_passes), the
+        # others one -- VMAF on the GPU too, where Vship's count made it one
+        # per metric.
         self.planned.emit({
             run.index: [(run.pool_of(task),
                          len(vship_passes(task.requested_specs, self.gpu_metrics_together))

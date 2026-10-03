@@ -92,9 +92,9 @@ class Settings:
 
     # Seconds a video's Vship half took on this PC per megapixel per frame
     # of each of its passes, by the metrics it scored and whether together
-    # (MainWindow._gpu_half_shape): the queue ETA's figure for a half no
+    # (MainWindow._gpu_half_shape): the run line's figure for a half no
     # run has timed yet -- with VMAF on the GPU, the first video's half
-    # starts only once its FFmpeg half is done.
+    # starts only once VMAF is done.
     gpu_half_seconds: dict[str, float] = field(default_factory=dict)
 
     # Which of Vship's builds calculates the GPU metrics: "auto" (CUDA on
