@@ -692,7 +692,8 @@
   "GPU and CPU metrics": "Metrik GPU dan CPU",
   "{gpu} on the GPU; {cpu} on the CPU": "{gpu} di GPU; {cpu} di CPU",
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "Tidak dapat mendeteksi bilah hitam otomatis di {path}: FFmpeg tidak menemukan gambar di bagian yang diambil sampelnya. File mungkin rusak atau terpotong.",
-  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Hanya {compared} dari {expected} frame yang diharapkan dapat dibandingkan: salah satu video berakhir setelah {time}, padahal filenya menyebut lebih panjang. Mungkin terpotong: encode yang berhenti lebih awal, atau salinan yang tidak selesai."
+  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Hanya {compared} dari {expected} frame yang diharapkan dapat dibandingkan: salah satu video berakhir setelah {time}, padahal filenya menyebut lebih panjang. Mungkin terpotong: encode yang berhenti lebih awal, atau salinan yang tidak selesai.",
+  "{kind} queued (waiting for this video's {other} to finish)": "{kind} mengantre (menunggu {other} video ini selesai)"
  },
  "plurals": {
   "about {count} day": [

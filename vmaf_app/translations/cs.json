@@ -692,7 +692,8 @@
   "GPU and CPU metrics": "Metriky GPU a CPU",
   "{gpu} on the GPU; {cpu} on the CPU": "{gpu} na GPU; {cpu} na CPU",
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "Černé pruhy v {path} nelze automaticky zjistit: FFmpeg v jeho vzorkovaných částech nenašel žádné snímky. Soubor může být poškozený nebo zkrácený.",
-  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Porovnat šlo jen {compared} z očekávaných {expected} snímků: jedno z videí končí po {time}, ačkoli jeho soubor udává větší délku. Mohlo být zkráceno: kódování, které skončilo předčasně, nebo nedokončená kopie."
+  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Porovnat šlo jen {compared} z očekávaných {expected} snímků: jedno z videí končí po {time}, ačkoli jeho soubor udává větší délku. Mohlo být zkráceno: kódování, které skončilo předčasně, nebo nedokončená kopie.",
+  "{kind} queued (waiting for this video's {other} to finish)": "{kind} ve frontě (čeká na dokončení: {other} tohoto videa)"
  },
  "plurals": {
   "about {count} day": [

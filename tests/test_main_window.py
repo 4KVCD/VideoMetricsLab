@@ -4475,16 +4475,19 @@ def test_each_half_is_named_by_where_its_metrics_run(qapp):
     vship = {**_half("perceptual", ("ssimulacra2", "butteraugli"), state="waiting"), "waiting_for": "GPU"}
     win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf", "vmaf_neg", "vmaf_v1", "psnr"), state="waiting"),
                                "waiting_for": "GPU", "gpu_keys": ("vmaf", "vmaf_neg")}])
-    win._on_task_progress(1, [{**_half("ffmpeg", ("vmaf", "vmaf_neg")), "gpu_keys": ("vmaf", "vmaf_neg")}, vship])
+    win._on_task_progress(1, [{**_half("ffmpeg", ("vmaf", "vmaf_neg")), "gpu_keys": ("vmaf", "vmaf_neg"), "lane": "gpu"},
+                              vship])
     win._on_task_progress(2, [{**_half("ffmpeg", ("vmaf", "psnr")), "gpu_keys": ()}])
     first, second, third = (label.text() for label in win.job_progress_labels[:3])
-    assert "GPU and CPU metrics queued (another video is using the GPU)" in first
+    assert "GPU and CPU metrics queued (another video is using the GPU)" in first  # nothing of its own runs
     assert "CPU metrics queued" not in first.replace("GPU and CPU metrics", "")
     assert ("GPU and CPU metrics: VMAF v0.6.1, VMAF NEG on the GPU; VMAF v1, PSNR on the CPU"
             in win.job_progress_labels[0].toolTip())
     # VMAF and NEG alone on the GPU, beside Vship's GPU metrics: told apart by their metrics.
+    # Vship's half waits for the same video's VMAF, not for another video.
     assert "GPU metrics (VMAF v0.6.1, VMAF NEG) 20.0%" in second
-    assert "GPU metrics (SSIMULACRA2, Butteraugli) queued" in second
+    assert ("GPU metrics (SSIMULACRA2, Butteraugli) queued (waiting for this video's GPU metrics "
+            "(VMAF v0.6.1, VMAF NEG) to finish)") in second
     # Set to CPU, or VMAF on the GPU failed: FFmpeg's libvmaf, on the CPU.
     assert "CPU metrics 20.0%" in third and "GPU" not in third.split("Decoder")[0]
     win.close()

@@ -692,7 +692,8 @@
   "GPU and CPU metrics": "เมตริก GPU และ CPU",
   "{gpu} on the GPU; {cpu} on the CPU": "{gpu} บน GPU; {cpu} บน CPU",
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "ตรวจหาแถบดำใน {path} อัตโนมัติไม่ได้: FFmpeg ไม่พบภาพในช่วงที่สุ่มตรวจ ไฟล์อาจเสียหายหรือถูกตัดสั้น",
-  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "เปรียบเทียบได้เพียง {compared} จาก {expected} เฟรมที่คาดไว้: วิดีโอหนึ่งจบหลัง {time} ทั้งที่ไฟล์ระบุว่ายาวกว่านั้น อาจถูกตัดสั้น เช่น การเข้ารหัสที่หยุดก่อนเสร็จ หรือการคัดลอกที่ไม่เสร็จ"
+  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "เปรียบเทียบได้เพียง {compared} จาก {expected} เฟรมที่คาดไว้: วิดีโอหนึ่งจบหลัง {time} ทั้งที่ไฟล์ระบุว่ายาวกว่านั้น อาจถูกตัดสั้น เช่น การเข้ารหัสที่หยุดก่อนเสร็จ หรือการคัดลอกที่ไม่เสร็จ",
+  "{kind} queued (waiting for this video's {other} to finish)": "{kind} อยู่ในคิว (รอให้ {other} ของวิดีโอนี้เสร็จ)"
  },
  "plurals": {
   "about {count} day": [

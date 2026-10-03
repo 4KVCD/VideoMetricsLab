@@ -692,7 +692,8 @@
   "GPU and CPU metrics": "Метрики GPU і CPU",
   "{gpu} on the GPU; {cpu} on the CPU": "{gpu} — на GPU; {cpu} — на CPU",
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "Не вдалося автоматично визначити чорні смуги в {path}: FFmpeg не знайшов зображення в перевірених ділянках. Файл може бути пошкоджений або обрізаний.",
-  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Вдалося порівняти лише {compared} з {expected} очікуваних кадрів: одне з відео закінчується після {time}, хоча за його файлом воно довше. Можливо, його обрізано: кодування зупинилося раніше часу або копія не завершилася."
+  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Вдалося порівняти лише {compared} з {expected} очікуваних кадрів: одне з відео закінчується після {time}, хоча за його файлом воно довше. Можливо, його обрізано: кодування зупинилося раніше часу або копія не завершилася.",
+  "{kind} queued (waiting for this video's {other} to finish)": "{kind} у черзі (чекає, поки завершаться {other} цього відео)"
  },
  "plurals": {
   "about {count} day": [

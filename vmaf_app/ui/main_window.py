@@ -4563,8 +4563,21 @@ class MainWindow(QMainWindow):
             return frames * passes * per_frame, 0.0
         return 0.0, float(frames * passes)
 
+    def _gpu_holder(self, index: int, snapshots, task: dict[str, object]) -> int | None:
+        """Which of this video's other halves holds the GPU's turn while
+        `task` waits for it; None when the GPU is another video's. With VMAF
+        on the GPU a video's FFmpeg half takes the GPU before its Vship
+        half, which said "another video is using the GPU" with one video
+        in the run."""
+        for position, other in enumerate(snapshots):
+            if other is task or other.get("state") not in ("starting", "running"):
+                continue
+            if self._task_kind(index, other) == "GPU" or other.get("lane") == "gpu":
+                return position
+        return None
+
     def _task_detail(self, kind: str, task: dict[str, object], paused: bool = False,
-                     gpu: bool = False) -> str:
+                     gpu: bool = False, holder: str = "") -> str:
         """One half of a video's line: its own percentage of its whole job,
         then its rate and time remaining, or what it is waiting for. `kind`
         is the half's name on the line, e.g. "CPU metrics".
@@ -4582,8 +4595,11 @@ class MainWindow(QMainWindow):
         """
         state = task.get("state")
         if state == "waiting":
-            return (tr("{kind} queued (waiting for a free CPU slot)", kind=kind) if task.get("waiting_for") == "CPU"
-                    else tr("{kind} queued (another video is using the GPU)", kind=kind))
+            if task.get("waiting_for") == "CPU":
+                return tr("{kind} queued (waiting for a free CPU slot)", kind=kind)
+            if holder:  # this video's own other half (_gpu_holder)
+                return tr("{kind} queued (waiting for this video's {other} to finish)", kind=kind, other=holder)
+            return tr("{kind} queued (another video is using the GPU)", kind=kind)
         if state == "starting":
             step = self._step_text(str(task.get("step") or ""))
             return tr("{kind}: {step}", kind=kind, step=step) if step else tr("{kind} starting", kind=kind)
@@ -4672,8 +4688,9 @@ class MainWindow(QMainWindow):
             names = [name if kinds.count(kind) == 1 or (task.get("backend") == "ffmpeg" and kind == "CPU metrics")
                      else f"{name} ({label})"
                      for name, kind, task, label in zip(shown, kinds, snapshots, labels, strict=True)]
-            parts += [self._task_detail(name, task, paused, gpu)
-                      for name, task, gpu in zip(names, snapshots, on_gpu, strict=True)]
+            holders = [self._gpu_holder(index, snapshots, task) for task in snapshots]
+            parts += [self._task_detail(name, task, paused, gpu, names[holder] if holder is not None else "")
+                      for name, task, gpu, holder in zip(names, snapshots, on_gpu, holders, strict=True)]
             tooltip = "\n".join(self._task_tooltip(name, task, label, paused, gpu)
                                 for name, task, label, gpu in zip(shown, snapshots, labels, on_gpu, strict=True))
         else:
