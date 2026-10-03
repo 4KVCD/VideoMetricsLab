@@ -18,8 +18,8 @@ from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core import nvdec_frames, vmaf_cuda
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core import vmaf_cuda
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
@@ -1219,8 +1219,26 @@ def _score_on_gpu(
     total_frames: int, *, on_progress=None, on_status=None, cancel_event=None, process_handle=None,
 ) -> FrameScores:
     """Run by _run_on_gpu in its own process: FFmpeg as on the CPU, its
-    filters scoring the rest, and the compared frames fed to libvmaf."""
+    filters scoring the rest, and the compared frames fed to libvmaf.
+
+    When only VMAF and NEG are scored and NVIDIA's decoder decodes both
+    videos, the videos are decoded in this process instead
+    (vmaf_cuda.score_decoded): the same frames, without FFmpeg's decode
+    and the CPU copies and pipes behind it. If that decoding fails after it
+    has started, the run is made again with FFmpeg's, as before."""
     cpu_output = bool(plan.cpu_options.requested_metrics())
+    if not cpu_output and hwaccel.source == "cuda" and hwaccel.distorted == "cuda":
+        try:
+            return _score_decoded_on_gpu(
+                plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
+                on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+                process_handle=process_handle)
+        except nvdec_frames.NvdecUnavailableError as error:
+            _log.info("VMAF on the GPU: the videos are decoded by FFmpeg (%s)", error)
+        except nvdec_frames.NvdecFailedError as error:
+            _log.warning("GPU decoding for VMAF on the GPU failed; decoding through FFmpeg instead: %s", error)
+            if on_status:
+                on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
 
     def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
         filtergraph = _build_filtergraph(
@@ -1235,6 +1253,36 @@ def _score_on_gpu(
         hwaccel=hwaccel, tmp_prefix="vmaf_gpu_run_", on_progress=on_progress, on_status=on_status,
         cancel_event=cancel_event, process_handle=process_handle, gpu=plan,
     )
+
+
+def _score_decoded_on_gpu(
+    plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
+    on_progress=None, on_status=None, cancel_event=None, process_handle=None,
+) -> FrameScores:
+    """VMAF and NEG from videos decoded in this process (vmaf_cuda.score_decoded),
+    over the frames _execute_run's FFmpeg would give libvmaf on the GPU."""
+    fps = distorted_info.fps
+    # As _execute_run: one frame more than the limit, which FFmpeg's libvmaf
+    # filter scores before its output stops.
+    limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
+    if on_status:
+        on_status(f"Running VMAF on the GPU (GPU decode: {hwaccel.describe()})...")
+
+    def check_cancel() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise Cancelled("Cancelled by user")
+
+    scores = vmaf_cuda.score_decoded(
+        source_info, distorted_info, source_crop, distorted_crop, width=plan.width, height=plan.height,
+        bit_depth=plan.bit_depth, models=plan.models, n_subsample=options.n_subsample,
+        duration_limit=f"{limit:.3f}" if limit > 0 else None, total_frames=total_frames,
+        on_progress=on_progress, check_cancel=check_cancel, process_handle=process_handle)
+    frames = _with_gpu_scores(None, scores, fps)
+    missing = [m for m in options.requested_metrics() if not frames.has(m)]
+    if not frames or missing:
+        raise VmafRunError("No results for requested metrics: " + ", ".join(missing or options.requested_metrics()))
+    return frames
 
 
 def run_resample_test(

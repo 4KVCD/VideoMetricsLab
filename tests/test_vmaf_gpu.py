@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 
-from vmaf_app.core import vmaf_cuda
+from vmaf_app.core import nvdec_frames, vmaf_cuda
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VideoInfo, VmafOptions
@@ -326,3 +326,80 @@ def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
     result = vr.run_vmaf(_info("s.mkv"), _info("d.mkv"),
                          VmafOptions(crop_mode=CropMode.NONE, gpu_decode=False, vmaf_on_gpu=False))
     assert result.metric_results.get("vmaf").provenance.compute_backend == "cpu"
+
+
+# ------------------------------------- videos decoded in libvmaf's process
+
+#: The real one: the suite's conftest makes FFmpeg decode everywhere else.
+_real_score_decoded_on_gpu = vr._score_decoded_on_gpu
+
+
+def _gpu_plan(**cpu) -> vr._GpuPlan:
+    return vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 1920, 1080, 8, VmafOptions(compute_vmaf=False, **cpu))
+
+
+def _decoded_frames() -> FrameScores:
+    return FrameScores(np.array([0, 1]), np.array([0.0, 1 / 24]), vmaf=np.array([90.0, 91.0]))
+
+
+def test_vmaf_alone_with_nvidia_decoding_both_videos_decodes_them_in_libvmafs_process(monkeypatch):
+    decoded = _decoded_frames()
+    monkeypatch.setattr(vr, "_score_decoded_on_gpu", lambda *a, **k: decoded)
+    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: pytest.fail("FFmpeg decoded the videos"))
+    frames = vr._score_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
+                              "version=vmaf_v0.6.1", HwAccelPlan("cuda", "cuda"), 2)
+    assert frames is decoded
+
+
+@pytest.mark.parametrize(("hwaccel", "cpu"), [
+    (HwAccelPlan("cuda", None), {}),
+    (HwAccelPlan(None, "cuda"), {}),
+    (HwAccelPlan("qsv", "qsv"), {}),
+    (HwAccelPlan("cuda", "cuda"), {"compute_xpsnr": True}),  # FFmpeg's filters score in the same run
+])
+def test_ffmpeg_decodes_when_nvidia_does_not_decode_both_or_ffmpeg_scores_more(monkeypatch, hwaccel, cpu):
+    monkeypatch.setattr(vr, "_score_decoded_on_gpu", lambda *a, **k: pytest.fail("decoded in libvmaf's process"))
+    by_ffmpeg = _decoded_frames()
+    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: by_ffmpeg)
+    frames = vr._score_on_gpu(_gpu_plan(**cpu), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
+                              "version=vmaf_v0.6.1", hwaccel, 2)
+    assert frames is by_ffmpeg
+
+
+@pytest.mark.parametrize("error", [nvdec_frames.NvdecUnavailableError("a video is scaled"),
+                                   nvdec_frames.NvdecFailedError("the GPU's decoder found an error in the video")])
+def test_when_decoding_in_libvmafs_process_is_refused_or_fails_ffmpeg_decodes(monkeypatch, error):
+    def refuse(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(vr, "_score_decoded_on_gpu", refuse)
+    by_ffmpeg = _decoded_frames()
+    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: by_ffmpeg)
+    statuses = []
+    frames = vr._score_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
+                              "version=vmaf_v0.6.1", HwAccelPlan("cuda", "cuda"), 2, on_status=statuses.append)
+    assert frames is by_ffmpeg
+    failed = [status for status in statuses if status.startswith("GPU decoding failed")]
+    assert failed == ([f"GPU decoding failed ({error}); decoding through FFmpeg instead…"]
+                      if isinstance(error, nvdec_frames.NvdecFailedError) else [])
+
+
+def test_decoded_in_libvmafs_process_the_limit_is_that_of_ffmpegs_raw_outputs(monkeypatch):
+    """One frame more than the limit, as _execute_run gives FFmpeg (see
+    test_a_duration_limit_gives_the_raw_outputs_one_frame_more), as the text
+    FFmpeg would read: 30 s at 24 fps is -t 30.042."""
+    seen = {}
+
+    def score(*_args, **kwargs):
+        seen.update(kwargs)
+        return np.array([0, 1], dtype=np.int32), {"vmaf": np.array([90.0, 91.0])}
+
+    monkeypatch.setattr(vmaf_cuda, "score_decoded", score)
+    frames = _real_score_decoded_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"),
+                                        VmafOptions(duration_limit=30.0), None, None, HwAccelPlan("cuda", "cuda"), 721)
+    assert seen["duration_limit"] == "30.042"
+    assert (seen["width"], seen["height"], seen["bit_depth"], seen["n_subsample"]) == (1920, 1080, 8, 1)
+    assert frames.values("vmaf").tolist() == [90.0, 91.0]
+    frames = _real_score_decoded_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
+                                        HwAccelPlan("cuda", "cuda"), 721)
+    assert seen["duration_limit"] is None
