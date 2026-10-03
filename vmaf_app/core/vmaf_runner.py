@@ -345,6 +345,40 @@ def _v1_model_file(options: VmafOptions) -> Path | None:
 #: two timestamps are off by less than half a frame.
 _FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
 
+#: overlay's name for each analysis format it holds unchanged. It has none
+#: for 12-bit, which is therefore scored on the CPU (vmaf_cuda.scores_on_gpu).
+_OVERLAY_FORMAT = {"yuv420p": "yuv420", "yuv420p10le": "yuv420p10"}
+
+
+def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: str, ref_label: str) -> str:
+    """The frame pairs FFmpeg's libvmaf filter compares, as the raw outputs
+    [vmaf_dist] and [vmaf_ref] that VMAF on the GPU reads: the two streams
+    are synchronized by overlay with libvmaf's own frame sync options
+    (_FRAMESYNC_OPTS), side by side in one frame, and cut apart again,
+    every pixel unchanged.
+
+    The two outputs used to come straight from the two streams, paired by
+    position, where libvmaf pairs them by timestamp: on a test video whose
+    timestamps were a fraction of a millisecond from the source's, libvmaf
+    on the CPU compared 239 frames and the GPU 240 -- and with VMAF v1,
+    PSNR, SSIM or XPSNR beside it, VMAF on the GPU was refused and the
+    video calculated again on the CPU.
+
+    The source goes at an even offset, so that an odd width still puts it
+    on a chroma sample."""
+    offset = width + (width & 1)
+    sync = ":".join(_FRAMESYNC_OPTS)
+    return (f"[{main_label}]pad={offset + width}:{height}[vmaf_canvas];"
+            f"[vmaf_canvas][{ref_label}]overlay=x={offset}:y=0:eval=init:"
+            f"format={_OVERLAY_FORMAT[analysis_format]}:{sync},split=2[vmaf_left][vmaf_right];"
+            f"[vmaf_left]crop={width}:{height}:0:0[vmaf_dist];"
+            f"[vmaf_right]crop={width}:{height}:{offset}:0[vmaf_ref]")
+
+
+def analysis_bit_depth(source_info: VideoInfo, distorted_info: VideoInfo) -> int:
+    """The bit depth two videos are compared at (analysis_pix_fmt)."""
+    return _bit_depth(analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt))
+
 
 def _build_libvmaf_stage(
     options: VmafOptions, log_path: Path, model: str | None, xpsnr_log_path: Path | None,
@@ -486,14 +520,17 @@ def _build_filtergraph(
     ref_ops.append("setpts=PTS-STARTPTS")
     ref_chain = f"[1:v]{','.join(ref_ops)}[ref]"
 
+    compared_w, compared_h = (
+        (ref_content_w, ref_content_h) if upscale_distorted else (dist_content_w, dist_content_h))
     if not gpu_vmaf:
         tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
     elif options.requested_metrics():
-        tail = ("[main]split=2[main_cpu][vmaf_dist];[ref]split=2[ref_cpu][vmaf_ref];"
+        tail = ("[main]split=2[main_cpu][main_gpu];[ref]split=2[ref_cpu][ref_gpu];"
+                + _gpu_pairs_stage(analysis_format, compared_w, compared_h, "main_gpu", "ref_gpu") + ";"
                 + _build_libvmaf_stage(options, log_path, model, xpsnr_log_path,
                                        main_label="main_cpu", ref_label="ref_cpu", output_label="cpu_out"))
     else:
-        tail = "[main]null[vmaf_dist];[ref]null[vmaf_ref]"
+        tail = _gpu_pairs_stage(analysis_format, compared_w, compared_h, "main", "ref")
     return ";".join([main_chain, ref_chain, tail])
 
 
@@ -1080,10 +1117,10 @@ def run_vmaf(
     total_frames = estimate_total_frames(distorted_info, options, source_info)
     frames = None
     gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
-                                         options.vmaf_on_gpu)
+                                         options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info))
     if gpu_models is not None:
         plan = _GpuPlan(
-            gpu_models, *dimensions, _bit_depth(analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt)),
+            gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info),
             replace(options, compute_vmaf=False, compute_vmaf_neg=False),
         )
         frames = _run_on_gpu(

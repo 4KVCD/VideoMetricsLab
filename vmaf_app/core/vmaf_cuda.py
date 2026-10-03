@@ -461,11 +461,13 @@ def start_gpu_vmaf_probe() -> None:
 
 
 def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
-                  enabled: bool = True) -> dict[str, str] | None:
+                  enabled: bool = True, bit_depth: int = 8) -> dict[str, str] | None:
     """The models a run scores on the GPU (gpu_models), or None when its
     VMAF is calculated on the CPU: the video set to CPU (`enabled`, its
-    VmafOptions.vmaf_on_gpu), a custom model, or no GPU libvmaf can use."""
-    if not enabled:
+    VmafOptions.vmaf_on_gpu), a custom model, a comparison deeper than 10
+    bits (`bit_depth`: the frames libvmaf pairs reach the GPU through
+    FFmpeg's overlay, which holds 8 and 10 bits), or no GPU libvmaf can use."""
+    if not enabled or bit_depth > 10:
         return None
     models = gpu_models(compute_vmaf, compute_vmaf_neg, model)
     if models is None or not gpu_vmaf_available()[0]:

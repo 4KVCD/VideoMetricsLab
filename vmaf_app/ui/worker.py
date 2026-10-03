@@ -32,6 +32,7 @@ from vmaf_app.core.vmaf_runner import (
     VMAF_GPU_FAILED,
     Cancelled,
     VmafRunError,
+    analysis_bit_depth,
     auto_threads,
     run_resample_test,
     run_vmaf,
@@ -535,8 +536,8 @@ class _JobRun:
         if task.backend_id != "ffmpeg" or options.resample_test is not None:
             return False
         keys = task.metric_keys
-        return vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
-                                       options.vmaf_on_gpu) is not None
+        return vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model, options.vmaf_on_gpu,
+                                       analysis_bit_depth(self.job.source_info, self.job.distorted_info)) is not None
 
     def gpu_keys(self, task) -> tuple[str, ...]:
         """The half's metrics calculated on the GPU as the run stands, for

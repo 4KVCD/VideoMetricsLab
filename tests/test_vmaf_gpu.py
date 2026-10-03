@@ -38,18 +38,36 @@ def test_the_videos_choice_and_the_probe_decide(monkeypatch):
     assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1") is None
 
 
-def test_the_graph_gives_the_compared_frames_to_the_gpu_and_to_ffmpegs_filters():
+def test_the_graph_gives_the_gpu_libvmafs_frame_pairs_and_ffmpegs_filters_the_same_frames():
     """VMAF v1, PSNR, SSIM and XPSNR stay in FFmpeg and get the same frames
-    through a split; with nothing left for FFmpeg, the frames go straight out."""
+    through a split. The GPU's pairs come through overlay's frame sync with
+    libvmaf's options -- by position, they were not always libvmaf's pairs."""
     rest = VmafOptions(compute_vmaf=False, compute_vmaf_neg=False, compute_xpsnr=True, extra_features=["name=psnr"])
     graph = vr._build_filtergraph(_info("d.mkv"), _info("s.mkv"), rest, None, None, HwAccelPlan(),
                                   Path("vmaf_log.json"), xpsnr_log_path=Path("xpsnr.txt"), gpu_vmaf=True)
-    assert "[main]split=2[main_cpu][vmaf_dist];[ref]split=2[ref_cpu][vmaf_ref]" in graph
+    assert "[main]split=2[main_cpu][main_gpu];[ref]split=2[ref_cpu][ref_gpu]" in graph
+    assert ("[main_gpu]pad=3840:1080[vmaf_canvas];[vmaf_canvas][ref_gpu]overlay=x=1920:y=0:eval=init:"
+            "format=yuv420:shortest=1:repeatlast=0:ts_sync_mode=nearest,split=2[vmaf_left][vmaf_right];"
+            "[vmaf_left]crop=1920:1080:0:0[vmaf_dist];[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]") in graph
     assert "[ref_cpu]split=2[ref_xpsnr][ref_vmaf]" in graph and "[main_cpu][ref_xpsnr]xpsnr=" in graph
     assert graph.endswith("[cpu_out]") and "model=''" in graph  # no VMAF model left in FFmpeg
     alone = vr._build_filtergraph(_info("d.mkv"), _info("s.mkv"), VmafOptions(compute_vmaf=False), None, None,
                                   HwAccelPlan(), Path("vmaf_log.json"), gpu_vmaf=True)
-    assert alone.endswith("[main]null[vmaf_dist];[ref]null[vmaf_ref]")
+    assert "[main]pad=3840:1080[vmaf_canvas];[vmaf_canvas][ref]overlay=" in alone
+    assert alone.endswith("[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]")
+
+
+def test_an_odd_width_puts_the_source_on_a_chroma_sample():
+    stage = vr._gpu_pairs_stage("yuv420p10le", 1365, 768, "main", "ref")
+    assert "pad=2731:768" in stage and "overlay=x=1366:" in stage and "format=yuv420p10:" in stage
+    assert stage.endswith("[vmaf_right]crop=1365:768:1366:0[vmaf_ref]")
+
+
+def test_a_12_bit_comparison_is_scored_on_the_cpu(monkeypatch):
+    """overlay, which gives the GPU libvmaf's frame pairs, holds 8 and 10 bits."""
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1", bit_depth=10) == {"vmaf": "vmaf_v0.6.1"}
+    assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1", bit_depth=12) is None
 
 
 def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through():
