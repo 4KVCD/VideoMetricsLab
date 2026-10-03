@@ -796,14 +796,15 @@ def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, mo
 
     monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
     monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
-    worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d",
+    worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(vmaf_on_gpu=False), "d",
                                  metric_keys=("vmaf", "ssimulacra2"))])
     seen = []
-    worker.halves.connect(lambda _index, halves: seen.append([(labels, state) for labels, *_x, state in halves]))
+    worker.task_progress.connect(lambda _index, snapshot: seen.append(
+        [(task["backend"], task["state"]) for task in snapshot]))
     worker.run()
     _drain(qapp)
-    assert [("VMAF v0.6.1", "running"), ("SSIMULACRA2", "waiting")] in seen
-    assert [("VMAF v0.6.1", "running"), ("SSIMULACRA2", "running")] in seen
+    assert [("ffmpeg", "running"), ("perceptual", "waiting")] in seen
+    assert [("ffmpeg", "running"), ("perceptual", "running")] in seen
 
 
 def _split_job(name: str, keys=("vmaf", "ssimulacra2")) -> VmafJob:
@@ -879,32 +880,66 @@ def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
     assert sorted(started) == list(range(6))
 
 
-def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch):
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
-    worker = VmafWorker([_split_job("d0.mp4", ("vmaf", "ssimulacra2", "butteraugli")),
-                         _split_job("d1.mp4", ("vmaf",))])
-    plans = []
-    worker.planned.connect(plans.append)
+def _halves(job, together=False):
+    """Each half's backend, queue and passes, as the run line is told them."""
+    run = worker_module._JobRun(VmafWorker([job], gpu_metrics_together=together), 0, job)
+    with run.lock:
+        return [(task["backend"], task["lane"], task["passes"]) for task in run.task_snapshots()]
+
+
+def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp):
+    assert _halves(_split_job("d0.mp4", ("vmaf", "ssimulacra2", "butteraugli"))) == [
+        ("ffmpeg", "cpu", (("vmaf",),)), ("perceptual", "gpu", (("ssimulacra2",), ("butteraugli",)))]
+    assert _halves(_split_job("d1.mp4", ("vmaf",))) == [("ffmpeg", "cpu", (("vmaf",),))]
+
+
+def test_metrics_chosen_for_the_cpu_are_a_half_of_their_own_in_the_cpus_queue(qapp):
+    """SSIMULACRA2 chosen for the CPU was calculated in Vship's half after
+    its GPU passes, holding the GPU's turn, and shown as a GPU metric."""
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d",
+                  metric_keys=("ssimulacra2", "butteraugli", "cvvdp"), metric_backends={"ssimulacra2": "cpu"})
+    assert _halves(job) == [("perceptual", "gpu", (("butteraugli",), ("cvvdp",))),
+                            (worker_module.PERCEPTUAL_CPU, "cpu", (("ssimulacra2",),))]
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d", metric_keys=("ssimulacra2",),
+                  metric_backends={"ssimulacra2": "cpu"})
+    assert _halves(job) == [(worker_module.PERCEPTUAL_CPU, "cpu", (("ssimulacra2",),))]
+
+
+def test_the_cpus_and_the_gpus_perceptual_scores_make_one_result(qapp, monkeypatch):
+    def output(key, backend):
+        metric = FrameMetricResult(key, [0], [0.0], [5.0], MetricProvenance("test", "1", backend, "test-v1"))
+        return PerceptualTaskOutput(MetricResultSet([metric]), None, None, 10)
+
+    calls = []
+
+    def perceptual(*args, **kwargs):
+        keys = tuple(spec.key for spec in args[3])
+        calls.append(keys)
+        return output(keys[0], "cpu" if keys == ("ssimulacra2",) else "gpu")
+
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", perceptual)
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d",
+                  metric_keys=("ssimulacra2", "butteraugli"), metric_backends={"ssimulacra2": "cpu"})
+    worker = VmafWorker([job])
+    finished = []
+    worker.job_finished.connect(lambda _index, result: finished.append(result))
     worker.run()
     _drain(qapp)
-    assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 2, "perceptual")], 1: [("cpu", 1, "ffmpeg")]}]
+    assert sorted(calls) == [("butteraugli",), ("ssimulacra2",)]
+    [result] = finished
+    assert result.has_metric("ssimulacra2") and result.has_metric("butteraugli")
 
 
 def test_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
     """Vship's pass count, used for every half in the GPU's queue, made
-    FFmpeg's half one pass per FFmpeg metric."""
+    FFmpeg's half one pass per FFmpeg metric. VMAF and NEG are one pass of
+    two metrics."""
     from vmaf_app.core import vmaf_cuda
 
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
-    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "vmaf_neg", "psnr", "ssimulacra2"))])
-    plans = []
-    worker.planned.connect(plans.append)
-    worker.run()
-    _drain(qapp)
-    assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 1, worker_module.GPU_VMAF), ("gpu", 1, "perceptual")]}]
+    assert _halves(_split_job("d.mp4", ("vmaf", "vmaf_neg", "psnr", "ssimulacra2"))) == [
+        ("ffmpeg", "cpu", (("psnr",),)), (worker_module.GPU_VMAF, "gpu", (("vmaf", "vmaf_neg"),)),
+        ("perceptual", "gpu", (("ssimulacra2",),))]
 
 
 def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):
@@ -946,40 +981,43 @@ def test_a_failed_half_is_reported_failed_while_the_other_goes_on(qapp, monkeypa
 
 def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp, monkeypatch):
     """SSIMULACRA2 failed on the GPU and was calculated again on the CPU,
-    while the line still said "CVVDP 3 of 3" -- the last GPU pass."""
-    def gpu(s, d, *a, on_status=None, on_progress=None, **k):
-        on_status("GPU metric 3/3: CVVDP")
+    while the line still said "CVVDP 3 of 3" -- the last GPU pass. The half
+    now says which metrics the CPU has taken, and its figures are theirs."""
+    def gpu(s, d, *a, on_progress=None, on_pass=None, on_cpu=None, **k):
+        on_pass(3, 3, ("cvvdp",))
         on_progress(290, 300, 40.0)
-        on_status("SSIMULACRA2 failed on the GPU; calculating it on the CPU…")
+        on_cpu(("ssimulacra2",))
         on_progress(10, 100, 2.0)
         return _perceptual_output()
 
     monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
     monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
     worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))])
-    phases = []
-    worker.task_progress.connect(lambda _index, snapshot: phases.extend(
-        (task["phase"], task["current"]) for task in snapshot if task["backend"] == "perceptual"))
+    seen = []
+    worker.task_progress.connect(lambda _index, snapshot: seen.extend(
+        (task["phase"], task["current"], task["cpu_keys"]) for task in snapshot if task["backend"] == "perceptual"))
     worker.run()
     _drain(qapp)
-    assert ((3, 3, "CVVDP"), 290) in phases
-    assert (None, 10) in phases and ((3, 3, "CVVDP"), 10) not in phases
+    assert ((3, 3, 0), 290, ()) in seen
+    assert (None, 10, ("ssimulacra2",)) in seen and ((3, 3, 0), 10, ("ssimulacra2",)) not in seen
 
 
 @pytest.mark.parametrize("together", [False, True])
-def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_the_plan(qapp, monkeypatch, together):
+def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_its_passes(qapp, monkeypatch, together):
     calls = []
     monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
     monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
                         lambda *a, **k: calls.append(k["together"]) or _perceptual_output())
     worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))],
                         gpu_metrics_together=together)
-    plans = []
-    worker.planned.connect(plans.append)
+    run = worker_module._JobRun(worker, 0, worker._jobs[0])
+    with run.lock:
+        [vship] = [task for task in run.task_snapshots() if task["backend"] == "perceptual"]
+    assert vship["passes"] == ((("ssimulacra2", "butteraugli", "cvvdp"),) if together else
+                               (("ssimulacra2",), ("butteraugli",), ("cvvdp",)))
     worker.run()
     _drain(qapp)
     assert calls == [together]
-    assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 1 if together else 3, "perceptual")]}]
 
 
 def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
@@ -1090,24 +1128,26 @@ def test_cancelling_keeps_the_gpu_metrics_of_a_video_whose_cpu_half_never_starte
 
 def test_a_new_gpu_pass_does_not_carry_the_last_passs_rate(qapp, monkeypatch):
     """"Butteraugli 2 of 3, 13.3 fps" was SSIMULACRA2's last rate, shown
-    until Butteraugli's first figures arrived."""
-    def vship(s, d, *a, on_progress=None, on_status=None, **k):
-        on_status("GPU metric 1/2: SSIMULACRA2")
+    until Butteraugli's first figures arrived. Each pass is measured from
+    where the half's figures stood when it started."""
+    def vship(s, d, *a, on_progress=None, on_pass=None, **k):
+        on_pass(1, 2, ("ssimulacra2",))
         on_progress(100, 200, 50.0)
-        on_status("GPU metric 2/2: Butteraugli")
+        on_pass(2, 2, ("butteraugli",))
         on_progress(150, 200, 20.0)
         return _perceptual_output()
 
     monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
     monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
-    worker = VmafWorker([_split_job("d.mp4")])
+    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli"))])
     seen = []
     worker.task_progress.connect(lambda _index, snapshot: seen.extend(
-        (t["phase"], t["fps"]) for t in snapshot if t["backend"] == "perceptual" and t["phase"]))
+        (t["phase"], t["fps"], t["passes"]) for t in snapshot if t["backend"] == "perceptual" and t["phase"]))
     worker.run()
     _drain(qapp)
-    assert ((2, 2, "Butteraugli"), 50.0) not in seen
-    assert ((2, 2, "Butteraugli"), 0.0) in seen and ((2, 2, "Butteraugli"), 20.0) in seen
+    passes = (("ssimulacra2",), ("butteraugli",))
+    assert ((2, 2, 100), 50.0, passes) not in seen
+    assert ((2, 2, 100), 0.0, passes) in seen and ((2, 2, 100), 20.0, passes) in seen
 
 
 def test_a_runs_plan_steps_and_failures_are_written_to_the_log(qapp, monkeypatch, caplog):

@@ -247,13 +247,16 @@ def test_mixed_backend_selection_runs_each_metric_on_selected_backend(monkeypatc
     actual = vship.apply_vship_cpu_fallback(
         source, test, request, request.metrics,
         on_progress=lambda cur, total, fps: progress.append((cur, total, fps)),
+        on_cpu=lambda keys: progress.append("cpu: " + ", ".join(keys)),
     )
 
     assert routed == {"gpu": ["ssimulacra2"], "cpu": ["butteraugli"]}
     assert actual.metrics.keys() == ("ssimulacra2", "butteraugli")
     assert actual.metrics.get("ssimulacra2").provenance.compute_backend == "gpu"
     assert actual.metrics.get("butteraugli").provenance.compute_backend == "cpu"
-    assert progress == [(1, 2, 10.0), (2, 2, 8.0)]
+    # Each stage's own figures: the CPU's start from 0 once it is told which
+    # metrics it takes (on_cpu), and the run line shows them as CPU metrics.
+    assert progress == [(1, 1, 10.0), "cpu: butteraugli", (1, 1, 8.0)]
 
 
 def test_vship_processing_error_falls_back_without_repeating_crop_detection(monkeypatch):

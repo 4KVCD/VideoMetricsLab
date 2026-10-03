@@ -1523,20 +1523,13 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     win._job_rows = [win._rows[row]]
     win._on_job_started(0, "a")
 
-    win._on_task_progress(0, [
-        {"backend": "ffmpeg", "metric_keys": ("vmaf",),
-         "current": 200, "total": 1000, "fps": 20.0, "state": "running", "phase": None},
-        {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"),
-         "current": 200, "total": 3000, "fps": 47.7, "state": "running",
-         "phase": (1, 3, "SSIMULACRA2")},
-    ])
+    win._on_task_progress(0, [_half("ffmpeg", ("vmaf",), current=200, total=1000, fps=20.0), _gpu_half(200, 47.7, 1)])
     win._on_job_progress(0, current=200, total=1000, fps=18.1)
 
     text = win.job_progress_labels[0].text()
-    assert "CPU metrics 20.0% (20.0 fps, 0:00:40 remaining)" in text
-    # The GPU half's share of all three passes, then the pass under way on
-    # its own: 200 of its 1000 frames, 800 left at 47.7 fps.
-    assert "GPU metrics 1 of 3 (6.6%) (SSIMULACRA2 20.0%, 47.7 fps, 0:00:16 remaining)" in text
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 20.0% (20.0 fps, 0:00:40 remaining)" in text
+    # The pass under way on its own: 200 of its 1000 frames, 800 left at 47.7 fps.
+    assert "GPU metrics 1 of 3: SSIMULACRA2 20.0% (47.7 fps, 0:00:16 remaining)" in text
     assert win.status_label.text().startswith("1 video: 1 in progress")
 
 
@@ -1552,41 +1545,41 @@ def test_run_status_includes_elapsed_time(qapp):
     assert "Elapsed: 0:01:01" in win.status_label.text()
 
 
-def test_gpu_fallback_changes_status_label_to_cpu(qapp, monkeypatch):
+def test_metrics_handed_to_the_cpu_are_shown_as_cpu_metrics(qapp):
+    """No GPU for Vship: SSIMULACRA2 and Butteraugli go to the CPU, and
+    CVVDP, which needs one, fails. The whole video was marked as fallen
+    back to the CPU, from its status message's wording."""
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
     win._on_job_started(0, "a")
-    win._on_job_status(0, "Vship GPU unavailable; using CPU reference metrics…")
-
-    assert 0 in win._job_gpu_fallback
+    win._on_job_status(0, "Vship GPU unavailable; using CPU reference metrics\u2026")
     assert "using CPU" in win.job_progress_labels[0].text()
-
+    win._on_task_progress(0, [_half("perceptual", ("ssimulacra2", "butteraugli", "cvvdp"), current=30, total=300,
+                                    fps=3.0, passes=(("ssimulacra2",), ("butteraugli",), ("cvvdp",)),
+                                    cpu_keys=("ssimulacra2", "butteraugli"))])
+    text = win.job_progress_labels[0].text()
+    assert "CPU metrics 1\u20132 of 2: SSIMULACRA2, Butteraugli 10.0% (3.0 fps, 0:01:30 remaining)" in text
+    assert "GPU metrics 1 of 1: CVVDP failed" in text
 
 
 def test_a_video_whose_gpu_half_waits_shows_its_running_half(qapp):
     """A video scored in two halves took the slower half's progress, and
-    had no rate until both ran: with its SSIMULACRA2/Butteraugli/CVVDP half
-    waiting for another video's GPU pass, the line read "0%" with no fps or
-    time left while VMAF was being calculated at 11 fps."""
+    had no rate until both ran: with its SSIMULACRA2/CVVDP half waiting for
+    another video's GPU pass, the line read "0%" with no fps or time left
+    while VMAF was being calculated at 11 fps."""
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
     win._on_job_started(0, "a")
-    win._job_halves[0] = [("VMAF/PSNR", 300, 3000, 11.2, "running"),
-                          ("SSIMULACRA2/CVVDP", 0, 0, 0.0, "waiting")]
-    win._on_job_progress(0, current=0, total=3000, fps=0.0)
+    win._on_task_progress(0, [
+        _half("ffmpeg", ("vmaf", "psnr"), current=300, total=3000, fps=11.2),
+        {**_half("perceptual", ("ssimulacra2", "cvvdp"), state="waiting", current=0, total=0, fps=0.0,
+                 passes=(("ssimulacra2",), ("cvvdp",))), "waiting_for": "GPU"},
+    ])
     text = win.job_progress_labels[0].text()
-    assert "VMAF/PSNR 10.0% at 11.2 fps" in text
-    assert "SSIMULACRA2/CVVDP waiting for the GPU" in text
-
-    # Both running: the video's own rate and time left, as before.
-    win._job_halves[0] = [("VMAF/PSNR", 600, 3000, 11.2, "running"),
-                          ("SSIMULACRA2/CVVDP", 100, 3000, 40.0, "running")]
-    win._on_job_progress(0, current=100, total=3000, fps=11.0)
-    win._on_run_tick()  # numbers are redrawn once a second
-    text = win.job_progress_labels[0].text()
-    assert "11.0 fps" in text and "remaining" in text and "waiting" not in text
+    assert "CPU metrics 1\u20132 of 2: VMAF v0.6.1, PSNR 10.0% (11.2 fps, " in text
+    assert "GPU metrics 1 of 2: SSIMULACRA2 queued (another video is using the GPU)" in text
 
 
 def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
@@ -1595,14 +1588,14 @@ def test_a_half_waiting_for_a_cpu_lane_says_so(qapp):
     win._job_rows = [win._rows[row]]
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
-        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 0, "total": 0, "fps": 0.0,
-         "state": "waiting", "waiting_for": "CPU", "phase": None},
-        {"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": 30, "total": 3000,
-         "fps": 40.0, "state": "running", "waiting_for": None, "phase": None},
+        {**_half("ffmpeg", ("vmaf",), state="waiting", current=0, total=0, fps=0.0), "waiting_for": "CPU"},
+        _half("perceptual", ("ssimulacra2",), current=30, total=3000, fps=40.0),
     ])
     text = win.job_progress_labels[0].text()
-    assert "CPU metrics queued (waiting for a free CPU slot)" in text and "using the GPU" not in text
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 queued (waiting for a free CPU slot)" in text
+    assert "using the GPU" not in text
     assert len(win.job_progress_labels) == 3  # a video on the GPU beside two on the CPU
+
 
 def test_the_status_line_does_not_repeat_the_names_below_it(qapp):
     """Every running video has its own line directly underneath carrying its
@@ -4338,20 +4331,15 @@ def test_progress_figures_are_redrawn_once_a_second_but_changes_at_once(qapp):
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
     win._on_job_started(0, "a")
-
-    def gpu(current, state="running", phase=(1, 3, "SSIMULACRA2")):
-        return [{"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": current,
-                 "total": 3000, "fps": 47.7, "state": state, "waiting_for": None, "phase": phase}]
-
-    win._on_task_progress(0, gpu(30))
+    win._on_task_progress(0, [_gpu_half(30, 47.7, 1)])
     first = win.job_progress_labels[0].text()
-    assert "GPU metrics 1.0% (SSIMULACRA2 1 of 3" in first  # the first figures show at once
-    win._on_task_progress(0, gpu(60))
+    assert "GPU metrics 1 of 3: SSIMULACRA2 3.0%" in first  # the first figures show at once
+    win._on_task_progress(0, [_gpu_half(60, 47.7, 1)])
     assert win.job_progress_labels[0].text() == first, "redrawn between ticks"
     win._on_run_tick()
-    assert "GPU metrics 2.0% (SSIMULACRA2 1 of 3" in win.job_progress_labels[0].text()
-    win._on_task_progress(0, gpu(10, phase=(2, 3, "Butteraugli")))
-    assert "(Butteraugli 2 of 3" in win.job_progress_labels[0].text()  # a change: at once
+    assert "GPU metrics 1 of 3: SSIMULACRA2 6.0%" in win.job_progress_labels[0].text()
+    win._on_task_progress(0, [_gpu_half(1010, 47.7, 2, done_keys=("ssimulacra2",))])
+    assert "GPU metrics 2 of 3: Butteraugli 1.0%" in win.job_progress_labels[0].text()  # a change: at once
     win.close()
 
 
@@ -4366,22 +4354,22 @@ def test_each_half_of_a_video_has_its_own_percentage(qapp):
     win._job_rows = list(win._rows)
     for index, label in ((0, "a"), (1, "b")):
         win._on_job_started(index, label)
-    cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "state": "running", "phase": None, "waiting_for": None}
-    gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"), "waiting_for": None}
-    win._on_task_progress(0, [{**cpu, "current": 69000, "total": 150000, "fps": 7.8},
-                              {**gpu, "current": 216000, "total": 450000, "fps": 24.2, "state": "running",
-                               "phase": (2, 3, "Butteraugli")}])
+    keys = ("ssimulacra2", "butteraugli", "cvvdp")
+    win._on_task_progress(0, [_half("ffmpeg", ("vmaf",), current=69000, total=150000, fps=7.8),
+                              _half("perceptual", keys, current=216000, total=450000, fps=24.2,
+                                    phase=(2, 3, 150000), passes=(("ssimulacra2",), ("butteraugli",), ("cvvdp",)), done_keys=("ssimulacra2",))])
     win._on_job_progress(0, current=207000, total=450000, fps=7.8)
-    win._on_task_progress(1, [{**cpu, "current": 69900, "total": 150000, "fps": 7.9},
-                              {**gpu, "current": 0, "total": 0, "fps": 0.0, "state": "waiting",
-                               "phase": None, "waiting_for": "GPU"}])
+    win._on_task_progress(1, [_half("ffmpeg", ("vmaf",), current=69900, total=150000, fps=7.9),
+                              {**_half("perceptual", keys, state="waiting", current=0, total=0, fps=0.0,
+                                       passes=(("ssimulacra2",), ("butteraugli",), ("cvvdp",))), "waiting_for": "GPU"}])
     win._on_job_progress(1, current=0, total=150000, fps=0.0)
     first, second = (label.text() for label in win.job_progress_labels[:2])
-    assert "100" not in first and "CPU metrics 46.0%" in first
-    assert "GPU metrics 2 of 3 (48.0%) (Butteraugli 44.0%, 24.2 fps" in first
-    assert "CPU metrics 46.6%" in second and "GPU metrics queued (another video is using the GPU)" in second
+    assert "100" not in first and "CPU metrics 1 of 1: VMAF v0.6.1 46.0%" in first
+    assert "GPU metrics 2 of 3: Butteraugli 44.0% (24.2 fps" in first
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 46.6%" in second
+    assert "GPU metrics 1 of 3: SSIMULACRA2 queued (another video is using the GPU)" in second
     assert " 0%" not in second
-    assert "CPU metrics: VMAF v0.6.1" in win.job_progress_labels[0].toolTip()
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 46.0%" in win.job_progress_labels[0].toolTip()
     win.close()
 
 
@@ -4413,101 +4401,48 @@ def test_a_pause_neither_slows_a_halfs_rate_nor_lengthens_its_time_left(qapp):
 
 def test_vmaf_on_the_gpu_is_the_first_of_the_gpu_metrics(qapp):
     """It was its own part of the line, "GPU and CPU metrics" while it
-    shared FFmpeg's run with the CPU's metrics, beside "GPU metrics". Now
-    the CPU's metrics are CPU metrics, and VMAF on the GPU is the first
-    pass of the GPU metrics, Vship's numbered after it."""
+    shared FFmpeg's run with the CPU's metrics, beside "GPU metrics"; then
+    a pass of its own among Vship's, "GPU metrics 1 of 2" for five metrics.
+    Now each metric has its number: VMAF and NEG the GPU's 1 and 2 of 5."""
     win = MainWindow()
     for name in ("a.mkv", "b.mkv", "c.mkv"):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
-    win._job_plan = {0: [("cpu", 1, "ffmpeg"), ("gpu", 1, "vmaf_gpu"), ("gpu", 3, "perceptual")]}
     for index, label in enumerate(("a", "b", "c")):
         win._on_job_started(index, label)
-    cpu = {**_half("ffmpeg", ("vmaf_v1", "psnr"), current=40, total=100), "gpu_keys": (), "lane": "cpu"}
-    vmaf = {**_half("vmaf_gpu", ("vmaf", "vmaf_neg"), current=50, total=100, fps=40.0),
-            "gpu_keys": ("vmaf", "vmaf_neg"), "lane": "gpu"}
-    vship = {**_half("perceptual", ("ssimulacra2", "butteraugli", "cvvdp"), state="waiting"), "waiting_for": "GPU"}
+    cpu = _half("ffmpeg", ("vmaf_v1", "psnr"), current=40, total=100)
+    vmaf = _half("vmaf_gpu", ("vmaf", "vmaf_neg"), current=50, total=100, fps=40.0)
+    vship = {**_half("perceptual", ("ssimulacra2", "butteraugli", "cvvdp"), state="waiting",
+                     passes=(("ssimulacra2",), ("butteraugli",), ("cvvdp",))), "waiting_for": "GPU"}
     win._on_task_progress(0, [cpu, vmaf, vship])
     line = win.job_progress_labels[0].text()
-    assert "CPU metrics 40.0%" in line
-    assert "GPU metrics 1 of 4 (12.5%) (VMAF v0.6.1, VMAF NEG 50.0%, 40.0 fps, 0:00:01 remaining)" in line
+    assert "CPU metrics 1\u20132 of 2: VMAF v1, PSNR 40.0%" in line
+    assert "GPU metrics 1\u20132 of 5: VMAF v0.6.1, VMAF NEG 50.0% (40.0 fps, 0:00:01 remaining)" in line
     assert "GPU and CPU metrics" not in line and "queued" not in line
-    assert ("GPU metrics: VMAF v0.6.1, VMAF NEG, SSIMULACRA2, Butteraugli, CVVDP"
-            in win.job_progress_labels[0].toolTip())
+    assert win.job_progress_labels[0].toolTip() == (
+        "CPU metrics 1 of 2: VMAF v1 40.0% (0:00:06 remaining)\n"
+        "CPU metrics 2 of 2: PSNR 40.0% (0:00:06 remaining)\n"
+        "GPU metrics 1 of 5: VMAF v0.6.1 50.0% (0:00:01 remaining)\n"
+        "GPU metrics 2 of 5: VMAF NEG 50.0% (0:00:01 remaining)\n"
+        "GPU metrics 3 of 5: SSIMULACRA2 (queued)\n"
+        "GPU metrics 4 of 5: Butteraugli (queued)\n"
+        "GPU metrics 5 of 5: CVVDP (queued)")
     # VMAF done: Vship's passes, numbered after it.
-    win._on_task_progress(0, [cpu, {**vmaf, "state": "done", "current": 100},
+    win._on_task_progress(0, [cpu, {**vmaf, "state": "done", "current": 100, "done_keys": ("vmaf", "vmaf_neg")},
                               {**vship, "state": "running", "waiting_for": None, "current": 150, "total": 300,
-                               "fps": 30.0, "phase": (2, 3, "Butteraugli")}])
-    line = win.job_progress_labels[0].text()
-    assert "GPU metrics 3 of 4 (62.5%) (Butteraugli 50.0%, 30.0 fps" in line
-    assert "VMAF v0.6.1, VMAF NEG (done), SSIMULACRA2 (done)" in win.job_progress_labels[0].toolTip()
+                               "fps": 30.0, "phase": (2, 3, 100), "done_keys": ("ssimulacra2",)}])
+    assert "GPU metrics 4 of 5: Butteraugli 50.0% (30.0 fps" in win.job_progress_labels[0].text()
+    assert ("GPU metrics 2 of 5: VMAF NEG (done)\nGPU metrics 3 of 5: SSIMULACRA2 (done)"
+            in win.job_progress_labels[0].toolTip())
     win._on_task_progress(0, [cpu, {**vmaf, "state": "failed"}, vship])
-    assert "GPU metrics: VMAF v0.6.1, VMAF NEG (failed), SSIMULACRA2" in win.job_progress_labels[0].toolTip()
-    # VMAF and NEG alone: GPU metrics, no pass count.
+    assert ("GPU metrics 1 of 5: VMAF v0.6.1 (failed)\nGPU metrics 2 of 5: VMAF NEG (failed)"
+            in win.job_progress_labels[0].toolTip())
+    # VMAF and NEG alone.
     win._on_task_progress(1, [{**vmaf, "current": 20}])
-    assert "GPU metrics 20.0%" in win.job_progress_labels[1].text()
+    assert "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG 20.0%" in win.job_progress_labels[1].text()
     # VMAF on the GPU failed: FFmpeg's libvmaf, on the CPU.
-    win._on_task_progress(2, [{**vmaf, "gpu_keys": (), "current": 20}])
-    assert "CPU metrics 20.0%" in win.job_progress_labels[2].text()
-    win.close()
-
-
-def test_vmafs_rate_on_the_gpu_is_not_taken_for_vships_metrics(qapp):
-    """Each GPU metric's rate this run times its pass on the next video's
-    line; VMAF on the GPU's is FFmpeg's, not one of Vship's."""
-    win = MainWindow()
-    win._add_table_row(Path("a.mkv"))
-    win._job_rows = list(win._rows)
-    win._job_plan = {0: [("gpu", 1, "vmaf_gpu"), ("gpu", 1, "perceptual")]}
-    win._on_job_started(0, "a")
-    vmaf = {**_half("vmaf_gpu", ("vmaf",)), "gpu_keys": ("vmaf",), "lane": "gpu"}
-    win._on_task_progress(0, [{**vmaf, "current": 600, "total": 1000, "fps": 40.0},
-                              {**_half("perceptual", ("ssimulacra2",), state="waiting", current=0, total=0,
-                                       fps=0.0), "waiting_for": "GPU"}])
-    assert win._metric_rates == {}
-    win._on_task_progress(0, [{**vmaf, "state": "done", "current": 1000, "total": 1000, "fps": 40.0},
-                              _half("perceptual", ("ssimulacra2",), current=200, total=1000, fps=20.0)])
-    assert win._metric_rates == {"ssimulacra2": 20.0}
-    win.close()
-
-
-def test_vship_work_not_yet_started_is_timed_as_such_work_took_before(qapp):
-    """With VMAF on the GPU, a video's Vship half starts only after VMAF:
-    with no rate yet for the Vship metrics, the GPU metrics' time remaining
-    is as such a half took before on this PC, per megapixel per frame of a
-    pass -- none when it never ran here."""
-    win = MainWindow()
-    win._add_table_row(Path("a.mkv"))
-    win._job_rows = list(win._rows)
-    win._job_megapixels = [2.0]
-    win._job_plan = {0: [("gpu", 1, "vmaf_gpu"), ("gpu", 1, "perceptual")]}
-    win._on_job_started(0, "a")
-    vship_half = {**_half("perceptual", ("ssimulacra2",), state="waiting", current=0, total=0, fps=0.0),
-                  "waiting_for": "GPU"}
-    vmaf = {**_half("vmaf_gpu", ("vmaf",)), "gpu_keys": ("vmaf",), "lane": "gpu", "current": 600, "total": 1000,
-            "fps": 40.0}
-    win._on_task_progress(0, [vmaf, vship_half])
-    assert "GPU metrics 1 of 2 (30.0%) (VMAF v0.6.1 60.0%, 40.0 fps, 0:00:10 remaining)" in \
-        win.job_progress_labels[0].text()
-    win._settings.gpu_half_seconds[win._gpu_half_shape(("ssimulacra2",))] = 0.005  # s per megapixel-frame
-    win._render_job_progress(0)
-    # VMAF's 400 frames at 40 fps, then SSIMULACRA2's 1000 at 0.005 x 2 megapixels a frame.
-    assert "GPU metrics 1 of 2 (30.0%, 0:00:20 remaining)" in win.job_progress_labels[0].text()
-    win.close()
-
-
-def test_a_running_vship_half_is_timed_for_the_next_run(qapp):
-    win = MainWindow()
-    win._add_table_row(Path("a.mkv"))
-    win._job_rows = list(win._rows)
-    win._job_megapixels = [2.0]
-    win._on_job_started(0, "a")
-    clock = [10.0]
-    win._run_elapsed = lambda: clock[0]
-    for seconds, current in ((10.0, 10), (15.0, 510)):
-        clock[0] = seconds
-        win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), current=current, total=1000, fps=100.0)])
-    assert win._settings.gpu_half_seconds == {"ssimulacra2": pytest.approx(5.0 / (510 * 2.0))}
+    win._on_task_progress(2, [{**vmaf, "current": 20, "cpu_keys": ("vmaf", "vmaf_neg")}])
+    assert "CPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG 20.0%" in win.job_progress_labels[2].text()
     win.close()
 
 
@@ -4517,27 +4452,31 @@ def test_a_failed_half_says_so_without_its_last_step(qapp):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf",), state="failed"), "step": "Detecting black bars"},
-                              _half("perceptual", ("ssimulacra2",), current=50, total=100, fps=10.0)])
+                              _half("perceptual", ("ssimulacra2",), current=50, total=100, fps=10.0, phase=(1, 1, 0))])
     line = win.job_progress_labels[0].text()
-    assert "CPU metrics failed" in line and "Detecting black bars" not in line
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 failed" in line and "Detecting black bars" not in line
+    assert "GPU metrics 1 of 1: SSIMULACRA2 50.0% (10.0 fps, 0:00:05 remaining)" in line
     win.close()
 
 
 def test_vmaf_failing_on_the_gpu_leaves_vships_half_named_gpu(qapp):
     """The fallback's "calculating it on the CPU" marked the whole video as
-    fallen back to the CPU, Vship's half on the GPU with it."""
+    fallen back to the CPU, Vship's half on the GPU with it. Each half now
+    says which of its metrics the CPU has taken."""
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    win._on_job_status(0, "VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…")
-    win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf",)), "gpu_keys": ()},
-                              _half("perceptual", ("ssimulacra2",))])
+    win._on_job_status(0, "VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU\u2026")
+    vmaf = _half("vmaf_gpu", ("vmaf",), cpu_keys=("vmaf",))
+    win._on_task_progress(0, [vmaf, _half("perceptual", ("ssimulacra2",))])
     line = win.job_progress_labels[0].text()
-    assert "CPU metrics 20.0%" in line and "GPU metrics 20.0%" in line
-    win._on_job_status(0, "SSIMULACRA2 failed on the GPU; calculating it on the CPU…")  # Vship's own fallback
-    win._render_job_progress(0)
-    assert "GPU metrics" not in win.job_progress_labels[0].text()
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 20.0%" in line and "GPU metrics 1 of 1: SSIMULACRA2 20.0%" in line
+    win._on_job_status(0, "SSIMULACRA2 failed on the GPU; calculating it on the CPU\u2026")  # Vship's own fallback
+    win._on_task_progress(0, [vmaf, _half("perceptual", ("ssimulacra2",), current=5, cpu_keys=("ssimulacra2",))])
+    line = win.job_progress_labels[0].text()
+    assert "GPU metrics" not in line
+    assert "CPU metrics 1 of 2: VMAF v0.6.1 20.0%" in line and "CPU metrics 2 of 2: SSIMULACRA2 5.0%" in line
     win.close()
 
 
@@ -4613,10 +4552,8 @@ def test_the_run_lines_stay_in_list_order_and_a_reused_line_starts_clean(qapp):
     win._job_rows = list(win._rows)
     for index in (0, 1, 2):
         win._on_job_started(index, f"v{index}")
-    snapshot = [{"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 10, "total": 1000, "fps": 5.0,
-                 "state": "running", "phase": None, "waiting_for": None}]
-    win._on_task_progress(1, snapshot)
-    assert win.job_progress_labels[1].toolTip() == "CPU metrics: VMAF v0.6.1"
+    win._on_task_progress(1, [_half("ffmpeg", ("vmaf",), current=10, total=1000, fps=5.0)])
+    assert win.job_progress_labels[1].toolTip() == "CPU metrics 1 of 1: VMAF v0.6.1 1.0% (0:03:18 remaining)"
     win._mark_job_over(1)
     win._on_job_started(3, "v3")
     lines = [label.text().split(" — ")[0] for label in win.job_progress_labels if not label.isHidden()]
@@ -4634,16 +4571,16 @@ def test_video_lines_say_paused_instead_of_their_last_rate(qapp):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
-        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 460, "total": 1000, "fps": 7.8,
-         "state": "running", "phase": None, "waiting_for": None},
-        {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 2160,
-         "total": 3000, "fps": 24.2, "state": "running", "phase": (2, 2, "Butteraugli"), "waiting_for": None},
+        _half("ffmpeg", ("vmaf",), current=460, total=1000, fps=7.8),
+        _half("perceptual", ("ssimulacra2", "butteraugli"), current=2160, total=3000, fps=24.2,
+              phase=(2, 2, 1500), passes=(("ssimulacra2",), ("butteraugli",)), done_keys=("ssimulacra2",)),
     ])
     win._worker = SimpleNamespace(pause=lambda: None, resume=lambda: None)
     win.pause_btn.setChecked(True)
     win._on_pause_clicked()
     text = win.job_progress_labels[0].text()
-    assert "CPU metrics 46.0% (paused)" in text and "GPU metrics 2 of 2 (72.0%) (Butteraugli 44.0%, paused)" in text
+    assert "CPU metrics 1 of 1: VMAF v0.6.1 46.0% (paused)" in text
+    assert "GPU metrics 2 of 2: Butteraugli 44.0% (paused)" in text
     assert "fps" not in text and "remaining" not in text
     win.pause_btn.setChecked(False)
     win._on_pause_clicked()
@@ -4666,9 +4603,10 @@ def test_the_counts_show_a_failure_when_it_happens(qapp):
 
 
 @pytest.mark.parametrize(("step", "shown"), [
-    ("Detecting black bars in source...", "CPU metrics: Detecting black bars in source"),
-    ("Running ffmpeg (GPU decode: source cuda, distorted cpu)...", "CPU metrics starting"),
-    ("GPU decode failed, retrying (GPU decode: off)...", "CPU metrics: GPU decode failed, retrying"),
+    ("Detecting black bars in source...", "CPU metrics 1 of 1: VMAF v0.6.1 (Detecting black bars in source)"),
+    ("Running ffmpeg (GPU decode: source cuda, distorted cpu)...", "CPU metrics 1 of 1: VMAF v0.6.1 starting"),
+    ("GPU decode failed, retrying (GPU decode: off)...",
+     "CPU metrics 1 of 1: VMAF v0.6.1 (GPU decode failed, retrying)"),
 ])
 def test_a_starting_half_names_its_step(qapp, step, shown):
     """"CPU starting" was all a two-half video said while black bars on a
@@ -4678,13 +4616,11 @@ def test_a_starting_half_names_its_step(qapp, step, shown):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
-        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 0, "total": 0, "fps": 0.0,
-         "state": "starting", "phase": None, "waiting_for": None, "step": step},
-        {"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": 0, "total": 0, "fps": 0.0,
-         "state": "starting", "phase": None, "waiting_for": None, "step": ""},
+        {**_half("ffmpeg", ("vmaf",), state="starting", current=0, total=0, fps=0.0), "step": step},
+        _half("perceptual", ("ssimulacra2",), state="starting", current=0, total=0, fps=0.0),
     ])
     text = win.job_progress_labels[0].text()
-    assert f"a — {shown}   ·   GPU metrics starting" in text
+    assert f"a — {shown}   ·   GPU metrics 1 of 1: SSIMULACRA2 starting" in text
     win.close()
 
 
@@ -4713,31 +4649,39 @@ def test_a_long_run_line_is_cut_to_the_window_not_widening_it(qapp):
     win.close()
 
 
-def test_each_half_is_named_as_metrics_not_bare_cpu_or_gpu(qapp):
-    """"CPU 46.0%" read as the processor's load; with SSIMULACRA2 and
-    Butteraugli on the CPU too, each CPU half says which metrics it runs."""
+def test_cpu_metrics_from_two_programs_are_numbered_as_one_place(qapp):
+    """"CPU 46.0%" read as the processor's load. With SSIMULACRA2 and
+    Butteraugli on the CPU too, the line had two "CPU metrics", one per
+    program; now they are the CPU's metrics 2 and 3 of 3, with figures of
+    their own once they run."""
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._rows[0].metric_backends.update(ssimulacra2="cpu", butteraugli="cpu")
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    win._on_task_progress(0, [
-        {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 460, "total": 1000, "fps": 7.8,
-         "state": "running", "phase": None, "waiting_for": None, "step": ""},
-        {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 0, "total": 0,
-         "fps": 0.0, "state": "waiting", "phase": None, "waiting_for": "CPU", "step": ""},
-    ])
-    text = win.job_progress_labels[0].text()
-    assert "a — CPU metrics 46.0% (7.8 fps, 0:01:09 remaining)" in text
-    assert "CPU metrics (SSIMULACRA2, Butteraugli) queued (waiting for a free CPU slot)" in text
-    assert win.job_progress_labels[0].toolTip() == \
-        "CPU metrics: VMAF v0.6.1\nCPU metrics: SSIMULACRA2, Butteraugli"
+    ffmpeg = _half("ffmpeg", ("vmaf",), current=460, total=1000, fps=7.8)
+    perceptual = _half("perceptual_cpu", ("ssimulacra2", "butteraugli"), state="waiting", current=0, total=0,
+                       fps=0.0)
+    win._on_task_progress(0, [ffmpeg, {**perceptual, "waiting_for": "CPU"}])
+    assert win.job_progress_labels[0].text() == \
+        "a \u2014 CPU metrics 1 of 3: VMAF v0.6.1 46.0% (7.8 fps, 0:01:09 remaining)"
+    assert win.job_progress_labels[0].toolTip() == (
+        "CPU metrics 1 of 3: VMAF v0.6.1 46.0% (0:01:09 remaining)\n"
+        "CPU metrics 2 of 3: SSIMULACRA2 (queued)\nCPU metrics 3 of 3: Butteraugli (queued)")
+    win._on_task_progress(0, [ffmpeg, {**perceptual, "state": "running", "current": 10, "total": 1000, "fps": 0.9}])
+    assert win.job_progress_labels[0].text() == (
+        "a \u2014 CPU metrics 1 of 3: VMAF v0.6.1 46.0% (7.8 fps, 0:01:09 remaining)   \u00b7   "
+        "CPU metrics 2\u20133 of 3: SSIMULACRA2, Butteraugli 1.0% (0.9 fps, 0:18:20 remaining)")
     win.close()
 
 
-def _half(backend, keys, *, state="running", decode="", current=20, total=100, fps=10.0, phase=None):
+def _half(backend, keys, *, state="running", decode="", current=20, total=100, fps=10.0, phase=None,
+          passes=None, cpu_keys=(), done_keys=(), lane=None):
+    """A half's snapshot as the worker sends it (VmafWorker.task_progress)."""
     return {"backend": backend, "metric_keys": keys, "current": current, "total": total, "fps": fps,
-            "state": state, "phase": phase, "waiting_for": None, "step": "", "decode": decode}
+            "state": state, "phase": phase, "waiting_for": None, "step": "", "decode": decode,
+            "lane": lane or ("cpu" if backend in ("ffmpeg", "perceptual_cpu") else "gpu"),
+            "passes": passes or (keys,), "cpu_keys": cpu_keys, "done_keys": done_keys}
 
 
 def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
@@ -4750,6 +4694,21 @@ def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
     win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cpu")])
     win._on_job_status(0, "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…")
     assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: CPU")
+    win.close()
+
+
+def test_two_halves_on_the_cpu_that_decode_differently_are_named_by_their_metrics(qapp):
+    """SSIMULACRA2 on the CPU decodes in software beside FFmpeg's GPU decode:
+    the two halves on the CPU are told apart by their metrics' numbers."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [_half("ffmpeg", ("vmaf", "psnr"), decode="source cuda, distorted cuda"),
+                              _half("perceptual_cpu", ("ssimulacra2",), decode="off")])
+    assert win.job_progress_labels[0].full_text().endswith(
+        "Decoder: Source: GPU (CPU metrics 1–2) / CPU (CPU metrics 3), "
+        "test video: GPU (CPU metrics 1–2) / CPU (CPU metrics 3)")
     win.close()
 
 
@@ -4772,9 +4731,9 @@ def test_halves_that_decode_differently_each_say_where(qapp):
 
 @pytest.mark.parametrize(("step", "shown"), [
     ("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…",
-     "GPU metrics: Vship GPU (fake GPU): calculating SSIMULACRA2"),
+     "GPU metrics 1 of 1: SSIMULACRA2 (Vship GPU (fake GPU): calculating SSIMULACRA2)"),
     ("GPU decode failed for the test video, decoding it in software (GPU decode: source cuda, distorted cpu)…",
-     "GPU metrics: GPU decode failed for the test video, decoding it in software"),
+     "GPU metrics 1 of 1: SSIMULACRA2 (GPU decode failed for the test video, decoding it in software)"),
 ])
 def test_a_starting_gpu_half_shows_its_step_without_the_decode_plan(qapp, step, shown):
     """The plan is shown once, as "Decoder: ...", not in the step as well."""
@@ -4825,82 +4784,72 @@ def test_both_halves_name_their_black_bar_detection_alike(qapp, monkeypatch):
         "Detecting black bars in source and test video"
 
 
-def _gpu_half(current, fps, phase, state="running"):
-    return {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"), "current": current,
-            "total": 3000, "fps": fps, "state": state, "waiting_for": None, "phase": phase, "step": ""}
+def _gpu_half(current, fps, number, state="running", done_keys=()):
+    """Vship's half: SSIMULACRA2, Butteraugli and CVVDP in a pass of 1000
+    frames each, pass `number` under way."""
+    return _half("perceptual", ("ssimulacra2", "butteraugli", "cvvdp"), state=state, current=current, total=3000,
+                 fps=fps, phase=(number, 3, (number - 1) * 1000) if number else None,
+                 passes=(("ssimulacra2",), ("butteraugli",), ("cvvdp",)), done_keys=done_keys)
 
 
-def test_the_gpu_half_times_the_metric_under_way_and_the_whole_half_apart(qapp):
+def test_each_gpu_pass_shows_its_own_metric_and_figures(qapp):
     """The GPU half's time remaining was all its passes at the current
     pass's rate, shown as if it were the current metric's; the metrics run
-    at very different rates."""
+    at very different rates. Each pass is its metric's, with its own."""
     win = MainWindow()
-    for name in ("a.mkv", "b.mkv"):
-        win._add_table_row(Path(name))
+    win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     line = win.job_progress_labels[0]
-    # The first video: Butteraugli and CVVDP have not run yet, so there is
-    # no whole-half time -- only SSIMULACRA2's own.
-    win._on_task_progress(0, [_gpu_half(500, 50.0, (1, 3, "SSIMULACRA2"))])
+    win._on_task_progress(0, [_gpu_half(500, 50.0, 1)])
     win._on_run_tick()
-    assert line.text() == "a — GPU metrics 1 of 3 (16.6%) (SSIMULACRA2 50.0%, 50.0 fps, 0:00:10 remaining)"
-    win._on_task_progress(0, [_gpu_half(1500, 20.0, (2, 3, "Butteraugli"))])
+    assert line.text() == "a \u2014 GPU metrics 1 of 3: SSIMULACRA2 50.0% (50.0 fps, 0:00:10 remaining)"
+    win._on_task_progress(0, [_gpu_half(1500, 20.0, 2, done_keys=("ssimulacra2",))])
     win._on_run_tick()
-    assert "GPU metrics 2 of 3 (50.0%) (Butteraugli 50.0%, 20.0 fps, 0:00:25 remaining)" in line.text()
-    # The last pass: its time is the whole half's.
-    win._on_task_progress(0, [_gpu_half(2600, 40.0, (3, 3, "CVVDP"))])
+    assert line.text() == "a \u2014 GPU metrics 2 of 3: Butteraugli 50.0% (20.0 fps, 0:00:25 remaining)"
+    assert line.toolTip() == ("GPU metrics 1 of 3: SSIMULACRA2 (done)\n"
+                              "GPU metrics 2 of 3: Butteraugli 50.0% (0:00:25 remaining)\n"
+                              "GPU metrics 3 of 3: CVVDP (queued)")
+    win._on_task_progress(0, [_gpu_half(2600, 40.0, 3, done_keys=("ssimulacra2", "butteraugli"))])
     win._on_run_tick()
-    assert "GPU metrics 3 of 3 (86.6%, 0:00:10 remaining) (CVVDP 60.0%, 40.0 fps)" in line.text()
-    win._mark_job_over(0)
-    # The next video: every metric has run once, so the whole half is timed,
-    # each metric at its own rate: 10 s + 1000/20 + 1000/40.
-    win._on_job_started(1, "b")
-    win._on_task_progress(1, [_gpu_half(500, 50.0, (1, 3, "SSIMULACRA2"))])
-    win._on_run_tick()
-    line = win.job_progress_labels[win._job_line_slot[1]]
-    assert "GPU metrics 1 of 3 (16.6%, 0:01:25 remaining) (SSIMULACRA2 50.0%, 50.0 fps, 0:00:10 remaining)" \
-        in line.text()
-    assert line.toolTip() == ("GPU metrics: SSIMULACRA2 (0:00:10 remaining), Butteraugli (0:00:50 remaining), "
-                              "CVVDP (0:00:25 remaining)")
-    win._on_task_progress(1, [_gpu_half(1500, 20.0, (2, 3, "Butteraugli"))])
-    win._on_run_tick()
-    assert line.toolTip() == ("GPU metrics: SSIMULACRA2 (done), Butteraugli (0:00:25 remaining), "
-                              "CVVDP (0:00:25 remaining)")
+    assert line.text() == "a \u2014 GPU metrics 3 of 3: CVVDP 60.0% (40.0 fps, 0:00:10 remaining)"
     win.close()
 
 
 def test_a_metric_recalculated_after_the_shared_gpu_pass_continues_the_halfs_figures(qapp):
     """GPU metrics together: Butteraugli failed in the shared pass and is
-    calculated again alone. The half read 100% and then 0% of the retry
-    alone, and its time left was the retry's; the retry is the second of
-    two passes, the shared one done."""
+    calculated again alone, in a pass of its own after it: the retry's
+    figures are its own, and SSIMULACRA2 is done."""
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    half = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "total": 1000,
-            "current": 1000, "fps": 30.0, "state": "running", "waiting_for": None, "phase": None, "step": ""}
-    win._on_task_progress(0, [half])
+    shared = _half("perceptual", ("ssimulacra2", "butteraugli"), current=1000, total=1000, fps=30.0,
+                   phase=(1, 1, 0), passes=(("ssimulacra2", "butteraugli"),))
+    win._on_task_progress(0, [shared])
     win._on_run_tick()
     line = win.job_progress_labels[0]
-    assert line.text().startswith("a — GPU metrics 100.0%")
-    win._on_task_progress(0, [dict(half, current=1500, total=2000, fps=40.0, phase=(2, 2, "Butteraugli"))])
+    assert line.text() == ("a \u2014 GPU metrics 1\u20132 of 2: SSIMULACRA2, Butteraugli 100.0% "
+                           "(30.0 fps, 0:00:00 remaining)")
+    win._on_task_progress(0, [dict(shared, current=1500, total=2000, fps=40.0, phase=(2, 2, 1000),
+                                   passes=(("ssimulacra2", "butteraugli"), ("butteraugli",)),
+                                   done_keys=("ssimulacra2",))])
     win._on_run_tick()
-    assert "GPU metrics 2 of 2 (75.0%, 0:00:12 remaining) (Butteraugli 50.0%, 40.0 fps)" in line.text()
-    assert line.toolTip() == "GPU metrics: SSIMULACRA2 (done), Butteraugli (0:00:12 remaining)"
+    assert line.text() == "a \u2014 GPU metrics 2 of 2: Butteraugli 50.0% (40.0 fps, 0:00:12 remaining)"
+    assert line.toolTip() == ("GPU metrics 1 of 2: SSIMULACRA2 (done)\n"
+                              "GPU metrics 2 of 2: Butteraugli 50.0% (0:00:12 remaining)")
     win.close()
 
 
-def test_a_single_gpu_metric_shows_its_time_next_to_its_percentage(qapp):
+def test_a_single_gpu_metric_shows_its_figures_as_any_metric_does(qapp):
     win = MainWindow()
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    win._on_task_progress(0, [{"backend": "perceptual", "metric_keys": ("ssimulacra2",), "current": 460,
-                               "total": 1000, "fps": 45.0, "state": "running", "waiting_for": None,
-                               "phase": None, "step": ""}])
-    assert "a — GPU metrics 46.0%, 0:00:12 remaining (45.0 fps)" in win.job_progress_labels[0].text()
+    win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), current=460, total=1000, fps=45.0,
+                                    phase=(1, 1, 0))])
+    assert win.job_progress_labels[0].text() == \
+        "a \u2014 GPU metrics 1 of 1: SSIMULACRA2 46.0% (45.0 fps, 0:00:12 remaining)"
     win.close()
 
 
@@ -4910,8 +4859,8 @@ def test_a_gpu_metrics_first_second_shows_its_percentage_without_times(qapp):
     win._add_table_row(Path("a.mkv"))
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    win._on_task_progress(0, [_gpu_half(1003, 0.0, (2, 3, "Butteraugli"))])
-    assert "a — GPU metrics 2 of 3 (33.4%) (Butteraugli 0.3%)" in win.job_progress_labels[0].text()
+    win._on_task_progress(0, [_gpu_half(1003, 0.0, 2, done_keys=("ssimulacra2",))])
+    assert win.job_progress_labels[0].text() == "a \u2014 GPU metrics 2 of 3: Butteraugli 0.3%"
     win.close()
 
 
@@ -5359,16 +5308,15 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         win._job_rows = list(win._rows)
         win._on_job_started(0, "a")
         win._on_task_progress(0, [
-            {"backend": "ffmpeg", "metric_keys": ("vmaf",), "current": 20, "total": 100, "fps": 5.0,
-             "state": "running", "phase": None, "waiting_for": None, "step": "", "decode": "source cuda, distorted cpu"},
-            {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli"), "current": 150, "total": 200,
-             "fps": 30.0, "state": "running", "phase": (2, 2, "Butteraugli"), "waiting_for": None, "step": "",
-             "decode": "source cuda, distorted cuda"},
+            _half("ffmpeg", ("vmaf",), current=20, total=100, fps=5.0, decode="source cuda, distorted cpu"),
+            _half("perceptual", ("ssimulacra2", "butteraugli"), current=150, total=200, fps=30.0, phase=(2, 2, 100),
+                  passes=(("ssimulacra2",), ("butteraugli",)), done_keys=("ssimulacra2",),
+                  decode="source cuda, distorted cuda"),
         ])
         win._on_job_status(0, "Vship GPU unavailable (No GPU that Vship can use was found.); "
                               "using CPU reference metrics…")
         line = win.job_progress_labels[0].text()
-        assert "[[{kind} {number} of {count} ({overall}) ({details})]]" not in line  # filled in, not raw
+        assert "[[{kind} {numbers} of {count}: {labels}]]" not in line  # filled in, not raw
         assert "[[Decoder: Source: {source}, test video: {test}]]".replace("{source}", "GPU") not in line
         assert "[[" in line
         win._run_failed_count, win._run_partial_count = 1, 2

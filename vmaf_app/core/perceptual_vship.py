@@ -1440,11 +1440,14 @@ def run_vship_task(
     process_handle: ProcessHandle | None = None,
     on_pass_done: Callable[[PerceptualTaskOutput], None] | None = None,
     together: bool = False,
+    on_pass: Callable[[int, int, tuple[str, ...]], None] | None = None,
 ) -> PerceptualTaskOutput:
     """Scores `specs` on the GPU once no other Vship pass is running.
 
     `on_pass_done` gets each pass's scores as it finishes, before the next
-    starts: the window shows a score the moment it exists.
+    starts: the window shows a score the moment it exists. `on_pass` gets
+    each pass as it starts: its number, how many there are, and the keys of
+    the metrics it scores -- the run line's figures are per metric.
 
     One metric at a time by default: each gets a pass of its own, and the
     video is decoded again for each. Scoring them in one pass holds every
@@ -1475,6 +1478,8 @@ def run_vship_task(
                 raise PerceptualCancelled("Cancelled by user")
     try:
         if len(specs) <= 1:
+            if on_pass is not None:
+                on_pass(1, 1, tuple(spec.key for spec in specs))
             return _run_vship_pass(
                 source, distorted, request, specs, device, source_crop, distorted_crop,
                 on_progress=on_progress, on_status=on_status,
@@ -1508,6 +1513,8 @@ def run_vship_task(
                 labels = " + ".join(metric_definition(spec.key).label for spec in group)
                 if on_status and count > 1:
                     on_status(f"GPU metric {number + 1}/{count}: {labels}")
+                if on_pass is not None:
+                    on_pass(number + 1, count, tuple(spec.key for spec in group))
                 reached.append(0)
                 progress = (pass_progress(len(reached) - 1, sum(reached), count - number)
                             if on_progress is not None else None)
@@ -1902,9 +1909,19 @@ def apply_vship_cpu_fallback(
     process_handle: ProcessHandle | None = None,
     on_pass_done: Callable[[PerceptualTaskOutput], None] | None = None,
     together: bool = False,
+    on_pass: Callable[[int, int, tuple[str, ...]], None] | None = None,
+    on_cpu: Callable[[tuple[str, ...]], None] | None = None,
 ) -> PerceptualTaskOutput:
     """Run selected backends, with a per-metric GPU-to-CPU fallback.
-    `together` scores the GPU metrics in one pass (see run_vship_task).
+    `together` scores the GPU metrics in one pass (see run_vship_task), and
+    `on_pass` hears of each GPU pass as it starts.
+
+    `on_cpu` gets the keys of the metrics the CPU is about to calculate,
+    just before it starts on them: ones chosen for the CPU, and ones meant
+    for the GPU and handed over -- no usable GPU, a failed GPU pass, or a
+    GPU this build of Vship scores wrongly on. Progress reported after it
+    is the CPU's own, from 0: the run line shows those metrics as CPU
+    metrics, with the CPU's figures.
 
     CVVDP runs on the GPU only. Without a usable GPU it fails on its own --
     reported in the output's `failures` -- and the other metrics are scored
@@ -1944,8 +1961,14 @@ def apply_vship_cpu_fallback(
     def with_failures(output: PerceptualTaskOutput, failures: dict[str, str]) -> PerceptualTaskOutput:
         return replace(output, failures={**output.failures, **failures}) if failures else output
 
+    def to_cpu(handed: tuple[MetricRequestSpec, ...]) -> None:
+        """The metrics the CPU is about to calculate."""
+        if on_cpu is not None and handed:
+            on_cpu(tuple(spec.key for spec in handed))
+
     # An explicit CPU selection must not probe Vship or touch a compute GPU.
     if not gpu_specs:
+        to_cpu(cpu_specs)
         return run_perceptual_task(
             source, distorted, request, cpu_specs,
             on_progress=on_progress, on_status=on_status,
@@ -1958,6 +1981,7 @@ def apply_vship_cpu_fallback(
         failures = gpu_only_failed(reason) if gpu_only else {}
         if on_status:
             on_status(f"Vship GPU unavailable ({reason}); using CPU reference metrics…")
+        to_cpu(retryable)
         return with_failures(run_perceptual_task(
             source, distorted, request, retryable,
             on_progress=on_progress, on_status=on_status,
@@ -1975,6 +1999,7 @@ def apply_vship_cpu_fallback(
         gpu_specs = tuple(spec for spec in gpu_specs if spec not in wrong)
         cpu_specs = cpu_specs + wrong
         if not gpu_specs:
+            to_cpu(cpu_specs)
             return run_perceptual_task(
                 source, distorted, request, cpu_specs,
                 on_progress=on_progress, on_status=on_status,
@@ -1987,12 +2012,8 @@ def apply_vship_cpu_fallback(
     try:
         gpu_output = run_vship_task(
             source, distorted, request, gpu_specs, device, *crops,
-            on_progress=(
-                (lambda cur, total, fps: on_progress(cur, total * 2, fps))
-                if cpu_specs and on_progress else on_progress
-            ),
-            on_status=on_status, cancel_event=cancel_event,
-            process_handle=process_handle, on_pass_done=on_pass_done, together=together,
+            on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+            process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass,
         )
     except PerceptualCancelled:
         raise
@@ -2020,6 +2041,7 @@ def apply_vship_cpu_fallback(
             ) from error
         if on_status:
             on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
+        to_cpu(retryable)
         # Run all metrics together after a GPU failure so CPU frame extraction
         # happens only once, and the returned result remains atomic.
         return with_failures(run_perceptual_task(
@@ -2033,7 +2055,6 @@ def apply_vship_cpu_fallback(
     # on the CPU on the same terms as a failed pass: only for videos up to
     # ten minutes, which nobody has to agree to.
     failures = dict(gpu_output.failures)
-    planned_cpu = bool(cpu_specs)
     gpu_failed = tuple(spec for spec in gpu_specs if spec.key in failures and spec.key not in GPU_ONLY_METRICS)
     if gpu_failed and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
         for spec in gpu_failed:
@@ -2049,6 +2070,7 @@ def apply_vship_cpu_fallback(
     cpu_specs = cpu_specs + gpu_failed
     if not cpu_specs:
         return replace(gpu_output, failures=failures) if failures != gpu_output.failures else gpu_output
+    to_cpu(cpu_specs)
 
     if on_status:
         if gpu_failed:
@@ -2056,17 +2078,6 @@ def apply_vship_cpu_fallback(
             on_status(f"{labels} failed on the GPU; calculating it on the CPU…")
         else:
             on_status("Calculating selected perceptual metric(s) on CPU…")
-
-    def report_cpu_progress(cur: int, total: int, fps: float) -> None:
-        if not on_progress:
-            return
-        if planned_cpu:
-            on_progress(total + cur, total * 2, fps)  # the second half, after the GPU's
-        else:
-            # An unplanned retry after the GPU had already reported 100%:
-            # a stage of its own, announced above. Mapped onto the second
-            # half, progress jumped from 100% back to 55%.
-            on_progress(cur, total, fps)
 
     def failed_on_cpu(key: str, reason: str) -> str:
         if key in gpu_reasons:
@@ -2079,7 +2090,7 @@ def apply_vship_cpu_fallback(
     try:
         cpu_output = run_perceptual_task(
             source, distorted, request, cpu_specs,
-            on_progress=report_cpu_progress,
+            on_progress=on_progress,  # a stage of its own, from 0 (on_cpu)
             on_status=on_status, cancel_event=cancel_event,
             process_handle=process_handle, resolved_crops=crops,
         )

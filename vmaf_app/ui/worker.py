@@ -41,9 +41,12 @@ from vmaf_app.core.vmaf_runner import (
 _log = logging.getLogger(__name__)
 
 #: The backend of VMAF and NEG calculated on the GPU, a half of their own
-#: (_JobRun._with_gpu_vmaf_on_its_own): run_vmaf with those two alone.
+#: (_JobRun._by_place): run_vmaf with those two alone.
 GPU_VMAF = "vmaf_gpu"
 _GPU_VMAF_KEYS = ("vmaf", "vmaf_neg")
+#: The backend of SSIMULACRA2 and Butteraugli chosen for the CPU, apart from
+#: Vship's metrics on the GPU ("perceptual"): see _JobRun._by_place.
+PERCEPTUAL_CPU = "perceptual_cpu"
 
 
 def _media(info: VideoInfo) -> str:
@@ -116,23 +119,9 @@ _CPU, _GPU = "cpu", "gpu"
 class VmafWorker(QThread):
     job_started = Signal(int, str)          # job_index, label
     progress = Signal(int, int, int, float) # job_index, current_frame, total_frames, fps
-    # For a video scored in two halves (FFmpeg metrics, SSIMULACRA2/
-    # Butteraugli/CVVDP) side by side: job_index, then per half
-    # (metric labels, current, total, fps, "waiting"|"starting"|"running"|"done").
-    # Sent before each `progress` of such a video.
-    halves = Signal(int, object)
-    # Backend-aware progress for the status UI.  Unlike `progress`, this
-    # keeps CPU and perceptual work on their own timelines, which matters
-    # when the perceptual backend contains several serialized GPU passes.
-    # Each item is a dict containing backend, metric_keys, current, total,
-    # fps, state, and an optional phase (GPU metric number/name).
+    # Each of a video's halves as it stands (_JobRun.task_snapshots): the
+    # window's run line is built from them, metric by metric.
     task_progress = Signal(int, object)
-    # Once, as the run starts: {job_index: [("cpu" or "gpu", passes, backend),
-    # ...]}, each video's halves in task order, their queue, and how many
-    # passes over its frames each makes (a GPU half, one per metric). The
-    # run line counts a video's GPU metrics passes by it before Vship's half
-    # says how many it makes.
-    planned = Signal(object)
     status = Signal(int, str)               # job_index, status text
     job_finished = Signal(int, object)      # job_index, ComparisonResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
@@ -310,18 +299,6 @@ class VmafWorker(QThread):
                   ", each video's in one pass" if self.gpu_metrics_together else "")
         for run in runs:
             _log.info("%s", run.describe())
-        # Each half's queue, its passes over the video and which half it is:
-        # Vship's GPU half one pass per metric or set (vship_passes), the
-        # others one -- VMAF on the GPU too, where Vship's count made it one
-        # per metric.
-        self.planned.emit({
-            run.index: [(run.pool_of(task),
-                         len(vship_passes(task.requested_specs, self.gpu_metrics_together))
-                         if run.pool_of(task) == _GPU and task.backend_id == "perceptual" else 1,
-                         task.backend_id)
-                        for task in run.plan.tasks]
-            for run in runs
-        })
         for run in runs:
             if not run.plan.tasks:
                 # Everything is already saved: the saved result is the result.
@@ -450,7 +427,7 @@ class _JobRun:
             job.options, job.metric_keys, job.metric_backends, job.cvvdp,
         )
         self.cached = job.cached_metrics if job.cached_result is not None and job.cached_metrics else None
-        self.plan = self._with_gpu_vmaf_on_its_own(build_execution_plan(self.request, self.cached))
+        self.plan = self._by_place(build_execution_plan(self.request, self.cached))
         self.token = _TaskCancelToken(worker._cancel_event)
         self.options = job.options
         self.handle: ProcessHandle | None = None
@@ -467,12 +444,25 @@ class _JobRun:
         # connected directly may report again.
         self.emit_lock = threading.RLock()
         self._begun = False
-        # FFmpeg's VMAF on the GPU failed and its libvmaf took over (VMAF_GPU_FAILED).
-        self.vmaf_gpu_failed = False
         self.task_results: dict[str, object] = {}
         self.task_errors: list[tuple[object, Exception]] = []
         self.task_progress: dict[str, tuple[int, int, float]] = {}
-        self.task_phases: dict[str, tuple[int, int, str]] = {}
+        # Each half's passes, the metric keys each scores, in order: Vship's
+        # as planned (vship_passes) and as each starts (report_pass_start),
+        # a retry after the others; one pass of all its metrics otherwise.
+        self.task_passes: dict[str, list[tuple[str, ...]]] = {
+            task.backend_id: ([tuple(spec.key for spec in group) for group in
+                               vship_passes(task.requested_specs, worker.gpu_metrics_together)]
+                              if task.backend_id == "perceptual" else [task.metric_keys])
+            for task in self.plan.tasks
+        }
+        # The pass under way: (number, count, the half's progress figure when
+        # it started -- its own figures are measured from there).
+        self.task_phases: dict[str, tuple[int, int, int]] = {}
+        # Metrics of a half in the GPU's queue being calculated on the CPU,
+        # after a GPU failure or as planned beside the GPU's: the half's
+        # figures are theirs from then on (report_cpu).
+        self.task_cpu_keys: dict[str, tuple[str, ...]] = {}
         # Halves not running yet, and what they wait for: "GPU" or "CPU".
         self.task_waiting: dict[str, str] = {}
         # Each half's latest status message: what a half not yet reporting
@@ -488,19 +478,32 @@ class _JobRun:
         self.pass_outputs: list[PerceptualTaskOutput] = []
         self._finished_tasks = 0
 
-    def _with_gpu_vmaf_on_its_own(self, plan: ExecutionPlan) -> ExecutionPlan:
-        """With VMAF on the GPU, VMAF and NEG are a half of their own
-        (GPU_VMAF), in the GPU's queue ahead of Vship's metrics, and
-        FFmpeg's half keeps the metrics calculated on the CPU.
+    def _by_place(self, plan: ExecutionPlan) -> ExecutionPlan:
+        """Each half's metrics calculated in one place, the CPU or the GPU.
 
-        In one FFmpeg run with VMAF v1, PSNR, SSIM and XPSNR, VMAF on the GPU
-        went at their pace -- 14.6 fps for all six at 4K -- and SSIMULACRA2,
-        Butteraugli and CVVDP, which wait for the GPU's VMAF, waited for the
-        CPU's metrics too. On its own it runs at its own speed, and the CPU
-        metrics run beside the GPU's."""
+        The planner groups metrics by the program that calculates them:
+        FFmpeg's, and Vship's SSIMULACRA2/Butteraugli/CVVDP. With VMAF on the
+        GPU, VMAF and NEG are a half of their own (GPU_VMAF) in the GPU's
+        queue, ahead of Vship's metrics, and FFmpeg's half keeps the metrics
+        calculated on the CPU. In one FFmpeg run with VMAF v1, PSNR, SSIM and
+        XPSNR it went at their pace -- 14.6 fps for all six at 4K -- and the
+        Vship metrics waited for the CPU's metrics too.
+
+        SSIMULACRA2 or Butteraugli chosen for the CPU are a half of their own
+        too (PERCEPTUAL_CPU), in the CPU's queue. In Vship's half they were
+        calculated after its GPU passes, holding the GPU's turn meanwhile,
+        and were shown as GPU metrics."""
         options = self.job.options
         tasks = []
         for task in plan.tasks:
+            if task.backend_id == "perceptual":
+                on_gpu = tuple(spec for spec in task.requested_specs if spec.key in GPU_ONLY_METRICS
+                               or self.request.execution.perceptual_backend(spec.key) == "gpu")
+                on_cpu = tuple(spec for spec in task.requested_specs if spec not in on_gpu)
+                for backend_id, specs in (("perceptual", on_gpu), (PERCEPTUAL_CPU, on_cpu)):
+                    if specs:
+                        tasks.append(MetricTask(backend_id, tuple(spec.key for spec in specs), specs))
+                continue
             vmaf = tuple(spec for spec in task.requested_specs if spec.key in _GPU_VMAF_KEYS)
             keys = {spec.key for spec in vmaf}
             if (task.backend_id != "ffmpeg" or not vmaf or options.resample_test is not None
@@ -554,29 +557,13 @@ class _JobRun:
             lines.append(f"  resolution test: {options.resample_test.label}")
         return "\n".join(lines)
 
-    def pool_of(self, task) -> str:
-        """The GPU queue for a half with any metric on the GPU (a GPU pass
-        that fails is retried on the CPU inside it) -- VMAF on the GPU too
-        (GPU_VMAF), so that it never runs beside another video's GPU
-        metrics; the CPU queue otherwise."""
-        if task.backend_id == GPU_VMAF:
-            return _GPU
-        if task.backend_id != "perceptual":
-            return _CPU
-        on_gpu = any(
-            spec.key in GPU_ONLY_METRICS or self.request.execution.perceptual_backend(spec.key) == "gpu"
-            for spec in task.requested_specs
-        )
-        return _GPU if on_gpu else _CPU
-
-    def gpu_keys(self, task) -> tuple[str, ...]:
-        """The half's metrics calculated on the GPU as the run stands, for
-        the run line: VMAF and NEG on the GPU (GPU_VMAF), until a failure
-        hands them to FFmpeg's libvmaf. Vship's half is the window's to
-        describe (its GPU/CPU choices)."""
-        if task.backend_id != GPU_VMAF or self.vmaf_gpu_failed:
-            return ()
-        return task.metric_keys
+    @staticmethod
+    def pool_of(task) -> str:
+        """The GPU's queue for the halves calculated on the GPU (_by_place):
+        one at a time, so that none runs beside another video's GPU
+        metrics. A GPU pass that fails is retried on the CPU in the same
+        turn. The CPU's queue otherwise."""
+        return _GPU if task.backend_id in (GPU_VMAF, "perceptual") else _CPU
 
     def begin(self) -> bool:
         """Starts the video when its first half is taken: its process
@@ -603,31 +590,34 @@ class _JobRun:
                 self.worker.task_progress.emit(self.index, snapshot)
             return True
 
-    def halves(self) -> list[tuple[str, int, int, float, str]]:
-        """Each half's own progress; called with self.lock held."""
-        found = []
-        for task in self.plan.tasks:
-            cur, total, fps = self.task_progress.get(task.backend_id, (0, 0, 0.0))
-            labels = "/".join(metric_definition(key).label for key in task.metric_keys)
-            found.append((labels, cur, total, fps, self._state(task)))
-        return found
-
     def _state(self, task) -> str:
         return ("done" if task.backend_id in self.task_results else
                 "failed" if any(failed is task for failed, _error in self.task_errors) else
                 "waiting" if task.backend_id in self.task_waiting else
                 "running" if task.backend_id in self.task_progress else "starting")
 
+    def _done_keys(self, task) -> tuple[str, ...]:
+        """The half's metrics that have scores: all it scored once it is
+        done, its finished passes while it runs."""
+        output = self.task_results.get(task.backend_id)
+        outputs = [output] if output is not None else self.pass_outputs if task.backend_id == "perceptual" else []
+        found: set[str] = set()
+        for output in outputs:
+            found.update(output.metrics if isinstance(output, PerceptualTaskOutput) else output.metric_results)
+        return tuple(key for key in task.metric_keys if key in found)
+
     def task_snapshots(self) -> list[dict[str, object]]:
-        """Progress without collapsing unlike backends together; called with self.lock held."""
+        """Each half as it stands, for the run line; called with self.lock held."""
         found = []
         for task in self.plan.tasks:
             cur, total, fps = self.task_progress.get(task.backend_id, (0, 0, 0.0))
             found.append({
                 "backend": task.backend_id,
                 "metric_keys": task.metric_keys,
-                "gpu_keys": self.gpu_keys(task),
                 "lane": self.pool_of(task),
+                "passes": tuple(self.task_passes.get(task.backend_id, (task.metric_keys,))),
+                "cpu_keys": self.task_cpu_keys.get(task.backend_id, ()),
+                "done_keys": self._done_keys(task),
                 "current": cur,
                 "total": total,
                 "fps": fps,
@@ -649,28 +639,46 @@ class _JobRun:
                 if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                     self.task_waiting[backend] = "GPU"
                 if backend == GPU_VMAF and message.startswith(VMAF_GPU_FAILED):
-                    self.vmaf_gpu_failed = True
-                phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
-                if phase:
-                    self.task_phases[backend] = (int(phase.group(1)), int(phase.group(2)), phase.group(3))
-                    if backend in self.task_progress:
-                        # The new pass has no rate yet. The last pass's stayed
-                        # until the new one reported, shown (and timed) as the
-                        # new metric's: "Butteraugli 2 of 3, 13.3 fps" was
-                        # SSIMULACRA2's last rate.
-                        current, total, _fps = self.task_progress[backend]
-                        self.task_progress[backend] = (current, total, 0.0)
-                elif "on CPU" in message or "using CPU" in message or "on the CPU" in message:
-                    # A GPU pass has handed work to the CPU fallback (or a
-                    # planned CPU perceptual pass has begun); don't leave a
-                    # stale GPU metric number on the status line. "on the CPU"
-                    # is a failed GPU metric retried there ("SSIMULACRA2 failed
-                    # on the GPU; calculating it on the CPU"): the line went on
-                    # naming the last GPU pass, "CVVDP 3 of 3", over the retry.
-                    self.task_phases.pop(backend, None)
+                    # FFmpeg's libvmaf takes over, on the CPU, from frame 0.
+                    self._to_cpu(backend, next(task.metric_keys for task in self.plan.tasks
+                                               if task.backend_id == backend))
                 snapshot = self.task_snapshots()
             self.worker.task_progress.emit(self.index, snapshot)
             self.worker.status.emit(self.index, message)
+
+    def report_pass_start(self, backend: str, number: int, count: int, keys: tuple[str, ...]) -> None:
+        """A GPU pass starting (run_vship_task's on_pass): the metrics it
+        scores, and where the half's figures stand -- the pass's own are
+        measured from there."""
+        with self.emit_lock:
+            with self.lock:
+                passes = self.task_passes.setdefault(backend, [])
+                passes.extend([()] * (number - len(passes)))
+                passes[number - 1] = keys
+                del passes[max(count, number):]
+                current, total, _fps = self.task_progress.get(backend, (0, 0, 0.0))
+                self.task_phases[backend] = (number, count, current)
+                if backend in self.task_progress:
+                    # The new pass has no rate yet: the last pass's was shown
+                    # (and timed) as the new metric's.
+                    self.task_progress[backend] = (current, total, 0.0)
+                snapshot = self.task_snapshots()
+            self.worker.task_progress.emit(self.index, snapshot)
+
+    def report_cpu(self, backend: str, keys: tuple[str, ...]) -> None:
+        """Metrics of a half the CPU is about to calculate (on_cpu)."""
+        with self.emit_lock:
+            with self.lock:
+                self._to_cpu(backend, keys)
+                snapshot = self.task_snapshots()
+            self.worker.task_progress.emit(self.index, snapshot)
+
+    def _to_cpu(self, backend: str, keys: tuple[str, ...]) -> None:
+        """The half's figures are the CPU's for `keys` from now on, from 0;
+        called with self.lock held."""
+        self.task_cpu_keys[backend] = keys
+        self.task_phases.pop(backend, None)
+        self.task_progress.pop(backend, None)
 
     def report_progress(self, backend: str, cur: int, total: int, fps: float) -> None:
         with self.emit_lock:
@@ -712,10 +720,8 @@ class _JobRun:
                     (known_total - overall_cur) / max(remaining)
                     if remaining and max(remaining) > 0 else 0.0
                 )
-                each = self.halves()
                 snapshot = self.task_snapshots()
             worker.task_progress.emit(index, snapshot)
-            worker.halves.emit(index, each)
             worker.progress.emit(index, overall_cur, known_total, overall_fps)
 
     def execute_task(self, task) -> object:
@@ -742,13 +748,15 @@ class _JobRun:
                 cancel_event=self.token, process_handle=self.handle,
                 result_distorted_path=job.result_distorted_path,
             )
-        if task.backend_id == "perceptual":
+        if task.backend_id in ("perceptual", PERCEPTUAL_CPU):
             return apply_vship_cpu_fallback(
                 job.source_info, job.distorted_info, self.request, task.requested_specs,
                 on_progress=progress,
                 on_status=lambda msg: self.report_status(task.backend_id, msg),
                 cancel_event=self.token, process_handle=self.handle,
                 on_pass_done=self.report_pass, together=self.worker.gpu_metrics_together,
+                on_pass=lambda number, count, keys: self.report_pass_start(task.backend_id, number, count, keys),
+                on_cpu=lambda keys: self.report_cpu(task.backend_id, keys),
             )
         raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
 
@@ -860,19 +868,27 @@ class _JobRun:
         return result, ("\n".join(messages), stderr_tail, reasons)
 
     def perceptual_so_far(self, task_results: dict) -> PerceptualTaskOutput | None:
-        """The GPU half's result; until it has one, its finished passes."""
+        """SSIMULACRA2, Butteraugli and CVVDP so far: the GPU half's result,
+        or until it has one its finished passes, and the CPU half's."""
         if "perceptual" in task_results:
-            return task_results["perceptual"]
-        with self.lock:
-            passes = list(self.pass_outputs)
-        if not passes:
+            parts = [task_results["perceptual"]]
+        else:
+            with self.lock:
+                parts = list(self.pass_outputs)
+        if PERCEPTUAL_CPU in task_results:
+            parts.append(task_results[PERCEPTUAL_CPU])
+        if not parts:
             return None
+        if len(parts) == 1 and ("perceptual" in task_results or PERCEPTUAL_CPU in task_results):
+            return parts[0]
         metrics = MetricResultSet()
-        for output in passes:
+        failures: dict[str, str] = {}
+        for output in parts:
             for key in output.metrics:
                 metrics.add(output.metrics.get(key))
-        return PerceptualTaskOutput(metrics, passes[0].source_crop, passes[0].distorted_crop,
-                                    max(output.compared_frame_count for output in passes))
+            failures.update(output.failures)
+        return PerceptualTaskOutput(metrics, parts[0].source_crop, parts[0].distorted_crop,
+                                    max(output.compared_frame_count for output in parts), failures)
 
     def _merged(self, task_results: dict, perceptual: PerceptualTaskOutput | None) -> ComparisonResult | None:
         """The video's result from the halves given: FFmpeg's (or the saved
