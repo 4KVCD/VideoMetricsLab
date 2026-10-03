@@ -5183,7 +5183,9 @@ class MainWindow(QMainWindow):
         for rd in self._job_rows:
             row = self._row_index_of(rd)
             if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
-                rd.analysis_status = N_("Cancelled") if self._run_was_cancelled else ""
+                # A video the run never reached is as it was, not cancelled.
+                rd.analysis_status = (N_("Cancelled") if self._run_was_cancelled and rd.analysis_status == "Calculating"
+                                      else "")
                 self._set_row_metrics(row)
         if self._gpu_half_started:  # Vship halves were timed: the next run's ETA
             error = self._settings.save()

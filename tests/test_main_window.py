@@ -1732,6 +1732,22 @@ def test_cancelled_run_does_not_claim_done(qapp):
     assert win.status_label.text() == "Cancelled."
 
 
+def test_a_cancelled_run_leaves_the_videos_it_never_reached_as_they_were(qapp):
+    """Only the video being calculated was cancelled; the ones still queued
+    were marked "Cancelled" too, as if something had been done to them."""
+    win = MainWindow()
+    running, queued = (win._add_table_row(Path(name)) for name in ("a.mkv", "b.mkv"))
+    win._job_rows = [win._rows[running], win._rows[queued]]
+    win._set_row_status(running, "Calculating")
+    win._set_row_status(queued, "Queued")
+    win._on_run_cancelled()
+    win._on_all_finished()
+    assert "Cancelled" in win.distorted_table.item(running, COL_PATH).toolTip()
+    assert "Cancelled" not in win.distorted_table.item(queued, COL_PATH).toolTip()
+    assert "Not calculated" in win.distorted_table.item(queued, COL_PATH).toolTip()
+    win.close()
+
+
 def test_failed_run_reports_failure_instead_of_done(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("bad.mp4"))
