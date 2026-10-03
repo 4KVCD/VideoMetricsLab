@@ -4435,6 +4435,33 @@ def test_each_half_of_a_video_has_its_own_percentage(qapp):
     win.close()
 
 
+def test_a_pause_neither_slows_a_halfs_rate_nor_lengthens_its_time_left(qapp):
+    """FFmpeg reports its average since it started, a pause counted in:
+    after a 4-second pause "19.5 fps, 0:00:09 remaining" became "9.6 fps,
+    0:00:16 remaining". The line measures over the run's own clock, which
+    leaves pauses out."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._on_job_started(0, "a")
+    clock = [0.0]
+    win._run_elapsed = lambda: clock[0]
+    half = _half("ffmpeg", ("vmaf",), total=1000)
+    # 20 fps, then a 4-second pause the run's clock leaves out, after which
+    # FFmpeg's own average reads 9.6 fps.
+    for seconds, current, reported in ((0.0, 0, 20.0), (5.0, 100, 20.0), (6.0, 120, 9.6)):
+        clock[0] = seconds
+        win._on_task_progress(0, [{**half, "current": current, "fps": reported}])
+    win._render_job_progress(0)
+    assert "(20.0 fps, 0:00:44 remaining)" in win.job_progress_labels[0].text()
+    # A retry counts from the start again: its own rate, not the last one's.
+    win._on_task_progress(0, [{**half, "current": 10, "fps": 15.0}])
+    win._render_job_progress(0)
+    assert "(15.0 fps" in win.job_progress_labels[0].text()
+    win.close()
+
+
 def test_each_half_is_named_by_where_its_metrics_run(qapp):
     """FFmpeg's half was "CPU metrics" also while its VMAF and NEG ran on the
     GPU, and so read "CPU metrics queued (another video is using the GPU)"."""

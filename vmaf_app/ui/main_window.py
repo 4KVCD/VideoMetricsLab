@@ -14,6 +14,7 @@ give a single video its own crop/model/etc. independent of the rest).
 """
 from __future__ import annotations
 
+import collections
 import contextlib
 import copy
 import logging
@@ -179,6 +180,12 @@ _STATE_COLOURS = {
 TAB_VIDEOS, TAB_GRAPH, TAB_FRAME_COMPARE, TAB_BITRATE, TAB_SETTINGS = range(5)
 
 _PAUSED = N_("Paused")  # MainWindow._run_hold while a run is paused
+
+#: A half's rate on its run line is measured over this much of the run's
+#: own clock (pauses left out), once it covers _RATE_MIN_SECONDS; until
+#: then the rate the half reports stands (see MainWindow._pause_free_rates).
+_RATE_WINDOW_SECONDS = 10.0
+_RATE_MIN_SECONDS = 2.0
 
 _log = logging.getLogger(__name__)
 
@@ -659,6 +666,9 @@ class MainWindow(QMainWindow):
         # Each GPU metric's last rate this run: what its pass will take on
         # the next video, for the GPU half's total time remaining.
         self._metric_rates: dict[str, float] = {}
+        # Each half's (run seconds, frames done) lately, by (video, half,
+        # pass): see _pause_free_rates.
+        self._half_samples: dict[tuple, collections.deque] = {}
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
@@ -4092,6 +4102,7 @@ class MainWindow(QMainWindow):
         self._job_plan = {}
         self._lane_rates = {}
         self._metric_rates = {}
+        self._half_samples = {}
         self._job_gpu_fallback.clear()
         self._running_jobs = []
         self._finished_jobs = set()
@@ -4385,9 +4396,40 @@ class MainWindow(QMainWindow):
             summary += tr(" ({count} already scored, not recalculated)", count=self._run_skipped)
         return summary
 
+    def _pause_free_rates(self, index: int, snapshots: list[dict[str, object]]) -> None:
+        """Each running half's rate as frames done over the run's own clock,
+        which leaves pauses out (_run_elapsed), lately: the last
+        _RATE_WINDOW_SECONDS of it, once there are _RATE_MIN_SECONDS.
+
+        The halves report an average from their start -- FFmpeg its own fps,
+        Vship's passes theirs -- and a pause counted in it: after a 4-second
+        pause "19.5 fps, 0:00:09 remaining" became "9.6 fps, 0:00:16
+        remaining" and took most of the half to come back, the queue ETA with
+        it. A pass of a GPU half, or a retry that starts its count over, is
+        measured afresh."""
+        now = self._run_elapsed()
+        if now is None:
+            return
+        for task in snapshots:
+            if task.get("state") != "running":
+                continue
+            phase = task.get("phase")
+            key = (index, task.get("backend"), phase[0] if phase else 0)
+            current = int(task.get("current") or 0)
+            samples = self._half_samples.setdefault(key, collections.deque())
+            if samples and current < samples[-1][1]:
+                samples.clear()  # counting again from the start: a retry
+            samples.append((now, current))
+            while len(samples) > 2 and now - samples[1][0] >= _RATE_WINDOW_SECONDS:
+                samples.popleft()
+            since, then = samples[0]
+            if now - since >= _RATE_MIN_SECONDS and current > then:
+                task["fps"] = (current - then) / (now - since)
+
     def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
         """Store backend-specific progress; the line is redrawn at once only
         when what it says changes, its numbers on the next tick."""
+        self._pause_free_rates(index, snapshots)
         self._job_task_progress[index] = snapshots
         for task in snapshots:
             fps = float(task.get("fps") or 0.0)
