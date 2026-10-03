@@ -693,7 +693,8 @@
   "{gpu} on the GPU; {cpu} on the CPU": "{gpu} op de GPU; {cpu} op de CPU",
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "Kan zwarte balken in {path} niet automatisch detecteren: FFmpeg vond geen beelden in de onderzochte delen. Het bestand is mogelijk beschadigd of afgekapt.",
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Slechts {compared} van de {expected} verwachte frames konden worden vergeleken: een van de video's eindigt na {time}, hoewel het bestand zegt dat het langer is. Het is mogelijk afgekapt: een codering die te vroeg stopte, of een kopie die niet af is.",
-  "{kind} queued (waiting for this video's {other} to finish)": "{kind} in wachtrij (wacht tot de {other} van deze video klaar zijn)"
+  "{kind} queued (waiting for this video's {other} to finish)": "{kind} in wachtrij (wacht tot de {other} van deze video klaar zijn)",
+  "calculating...": "wordt berekend..."
  },
  "plurals": {
   "about {count} day": [

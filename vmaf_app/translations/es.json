@@ -693,7 +693,8 @@
   "{gpu} on the GPU; {cpu} on the CPU": "{gpu} en la GPU; {cpu} en la CPU",
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "No se pudieron detectar automáticamente las barras negras en {path}: FFmpeg no encontró imágenes en las partes que se muestrearon. El archivo puede estar dañado o cortado.",
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Solo se pudieron comparar {compared} de los {expected} fotogramas esperados: uno de los videos termina a los {time}, aunque su archivo indica que es más largo. Puede haberse cortado: una codificación que se detuvo antes de tiempo o una copia que no terminó.",
-  "{kind} queued (waiting for this video's {other} to finish)": "{kind} en cola (esperando a que terminen las {other} de este video)"
+  "{kind} queued (waiting for this video's {other} to finish)": "{kind} en cola (esperando a que terminen las {other} de este video)",
+  "calculating...": "calculando..."
  },
  "plurals": {
   "about {count} day": [

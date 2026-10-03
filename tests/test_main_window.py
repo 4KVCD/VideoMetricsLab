@@ -5549,6 +5549,9 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         win._run_failed_count, win._run_partial_count = 1, 2
         win._update_run_status()
         assert win.status_label.text().startswith("[[")
+        win._queue_eta_seconds = lambda: None  # no rate yet: the ETA's word was left in English
+        win._update_run_status()
+        assert "[[calculating...]]" in win.status_label.text()
         assert win._run_end_message().startswith("[[")
         win._set_row_status(0, "Failed", "Frame rates do not match (23.976 vs 24.000 fps).")
         win._refresh_row_state(0)

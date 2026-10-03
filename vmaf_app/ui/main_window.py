@@ -4341,7 +4341,7 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(summary + (f"   ·   {elapsed_text}" if elapsed_text else ""))
             return
         seconds = self._queue_eta_seconds()
-        eta = "calculating..." if seconds is None else format_hms(seconds)
+        eta = tr("calculating...") if seconds is None else format_hms(seconds)
         self.status_label.setText(
             f"{summary}"
             + (f"   ·   {elapsed_text}" if elapsed_text else "")
