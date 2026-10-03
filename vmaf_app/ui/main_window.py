@@ -3677,9 +3677,14 @@ class MainWindow(QMainWindow):
         return bool(requested) and set(self._reusable_results(row_data).keys()) == set(requested)
 
     def _invalidate_completed_result(self, row: int) -> None:
-        """Marks a row stale after an option that affects its run changes."""
+        """Marks a row stale after an option that affects its run changes.
+
+        Its detail goes with its state, before the row is drawn again: the
+        tooltip said "Not calculated" over the old result's "240 scored
+        frames; metrics: ...", or over a failure's reason."""
         row_data = self._rows[row]
         row_data.analysis_status = ""
+        row_data.status_detail = ""
         if row_data.completed_run is None:
             self._set_row_metrics(row)
             return
@@ -3690,7 +3695,6 @@ class MainWindow(QMainWindow):
             # path before row-scoped graph identities existed.
             self.graph_panel.remove_by_path(row_data.path)
         self._set_row_metrics(row)
-        row_data.status_detail = ""
         self._sync_frame_compare()
 
     def _on_panel_field_edited(self, field_name: str) -> None:

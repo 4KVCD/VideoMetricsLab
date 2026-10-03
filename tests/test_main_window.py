@@ -1748,6 +1748,19 @@ def test_a_cancelled_run_leaves_the_videos_it_never_reached_as_they_were(qapp):
     win.close()
 
 
+@pytest.mark.parametrize("state, detail", [("Complete", "240 scored frames; metrics: VMAF v0.6.1"),
+                                            ("Failed", "Frame rates do not match (23.976 vs 25.000 fps).")])
+def test_a_changed_setting_clears_the_old_state_and_its_detail_together(qapp, state, detail):
+    """The tooltip said "Not calculated" over the old result's detail."""
+    win = MainWindow()
+    row = win._add_table_row(Path("a.mkv"))
+    win._set_row_status(row, state, detail)
+    win._invalidate_completed_result(row)
+    tooltip = win.distorted_table.item(row, COL_PATH).toolTip()
+    assert "Not calculated" in tooltip and detail not in tooltip
+    win.close()
+
+
 def test_failed_run_reports_failure_instead_of_done(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("bad.mp4"))
