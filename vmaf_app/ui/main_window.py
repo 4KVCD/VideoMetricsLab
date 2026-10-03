@@ -119,7 +119,7 @@ from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEn
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
-from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
+from vmaf_app.ui.worker import GPU_VMAF, MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
 # own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
@@ -4462,8 +4462,8 @@ class MainWindow(QMainWindow):
         """What the time per frame of a half in the GPU's queue depends on
         besides the size: which half, its metrics, and for Vship's whether
         it scores them in one pass."""
-        if backend == "ffmpeg":  # VMAF on the GPU, beside FFmpeg's other metrics
-            return "ffmpeg:" + "+".join(sorted(keys))
+        if backend == GPU_VMAF:  # VMAF and NEG on the GPU, a half of their own
+            return "vmaf_gpu:" + "+".join(sorted(keys))
         return "+".join(sorted(keys)) + ("|together" if self._settings.gpu_metrics_together else "")
 
     def _time_gpu_half(self, index: int, task: dict[str, object]) -> None:
@@ -4491,8 +4491,8 @@ class MainWindow(QMainWindow):
             keys = task.get("metric_keys", ())
         elif 0 <= job < len(self._job_rows):
             row = self._job_rows[job]
-            if backend == "ffmpeg":
-                keys = [key for key in self._requested_metrics(row) if metric_definition(key).ffmpeg_binding]
+            if backend == GPU_VMAF:
+                keys = [key for key in self._requested_metrics(row) if key in ("vmaf", "vmaf_neg")]
             else:
                 keys = [key for key in self._requested_metrics(row) if key == "cvvdp" or
                         (key in _PERCEPTUAL_METRIC_KEYS and row.metric_backends.get(key) != "cpu")]
@@ -4510,7 +4510,7 @@ class MainWindow(QMainWindow):
             fps = float(task.get("fps") or 0.0)
             if task.get("state") == "running" and fps > 0:
                 kind = self._task_kind(index, task)
-                if kind == "GPU" and task.get("backend") == "ffmpeg":
+                if kind == "GPU" and task.get("backend") == GPU_VMAF:
                     # VMAF on the GPU: FFmpeg's rate, kept apart from
                     # Vship's -- the next such video is timed by it.
                     self._lane_rates["GPU VMAF"] = fps
@@ -4542,11 +4542,11 @@ class MainWindow(QMainWindow):
         self._update_run_status()
 
     def _task_kind(self, index: int, task: dict[str, object]) -> str:
-        """"CPU" or "GPU": where a half of a video's work runs. FFmpeg's half
-        by its queue (lane, from the worker): the GPU's when it scores VMAF
-        there -- one video at a time, as Vship's halves -- also after a
-        failure hands VMAF to the CPU in that same turn."""
-        if task.get("backend") == "ffmpeg":
+        """"CPU" or "GPU": where a half of a video's work runs. FFmpeg's
+        halves by their queue (lane, from the worker): VMAF on the GPU's
+        (GPU_VMAF) is the GPU's -- one video at a time, as Vship's halves --
+        also after a failure hands VMAF to the CPU in that same turn."""
+        if task.get("backend") in ("ffmpeg", GPU_VMAF):
             return "GPU" if task.get("lane") == "gpu" else "CPU"
         if index in self._job_gpu_fallback:
             return "CPU"
@@ -4557,29 +4557,124 @@ class MainWindow(QMainWindow):
 
     def _metrics_kind(self, index: int, task: dict[str, object]) -> str:
         """A half's name on the run line, from where its metrics are
-        calculated: "GPU metrics", "CPU metrics", or "GPU and CPU metrics"
-        for FFmpeg's half with VMAF and NEG on the GPU (gpu_keys, from the
-        worker) beside VMAF v1, PSNR, SSIM or XPSNR on the CPU. Every
-        FFmpeg half used to be "CPU metrics", also while its VMAF ran on the
-        GPU: "CPU metrics queued (another video is using the GPU)"."""
+        calculated: "GPU metrics" or "CPU metrics". VMAF on the GPU is GPU
+        metrics while the GPU scores it (gpu_keys, from the worker); a
+        failure hands it to FFmpeg's libvmaf, on the CPU."""
         if task.get("backend") == "ffmpeg":
-            on_gpu = set(task.get("gpu_keys") or ())
-            if not on_gpu:
-                return N_("CPU metrics")
-            return N_("GPU and CPU metrics") if set(task.get("metric_keys", ())) - on_gpu else N_("GPU metrics")
+            return N_("CPU metrics")
+        if task.get("backend") == GPU_VMAF:
+            return N_("GPU metrics") if task.get("gpu_keys") else N_("CPU metrics")
         return N_("GPU metrics") if self._task_kind(index, task) == "GPU" else N_("CPU metrics")
 
-    def _metric_labels(self, task: dict[str, object]) -> str:
-        """A half's metrics for its line in the tooltip; FFmpeg's half says
-        which run on the GPU when they do not all run in one place."""
-        keys = tuple(task.get("metric_keys", ()))
-        on_gpu = set(task.get("gpu_keys") or ())
-        def labels(chosen) -> str:
-            return ", ".join(metric_definition(key).label for key in chosen)
-        if task.get("backend") == "ffmpeg" and on_gpu and set(keys) - on_gpu:
-            return tr("{gpu} on the GPU; {cpu} on the CPU", gpu=labels(k for k in keys if k in on_gpu),
-                      cpu=labels(k for k in keys if k not in on_gpu))
-        return labels(keys)
+    @staticmethod
+    def _metric_labels(task: dict[str, object]) -> str:
+        """A half's metrics, "VMAF v0.6.1, VMAF NEG"."""
+        return ", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
+
+    def _gpu_metrics_pair(self, index: int, snapshots) -> tuple[int, int] | None:
+        """Where in `snapshots` VMAF on the GPU and Vship's GPU half are,
+        when the video has both: one "GPU metrics" on the line, VMAF the
+        first of its passes (_gpu_metrics_detail)."""
+        vmaf = next((position for position, task in enumerate(snapshots)
+                     if task.get("backend") == GPU_VMAF and task.get("gpu_keys")), None)
+        vship = next((position for position, task in enumerate(snapshots)
+                      if task.get("backend") == "perceptual" and self._task_kind(index, task) == "GPU"), None)
+        return None if vmaf is None or vship is None else (vmaf, vship)
+
+    def _vship_passes(self, index: int, vship: dict[str, object]) -> int:
+        """How many passes Vship's half makes: as it says once it runs,
+        or as the worker planned them."""
+        if phase := vship.get("phase"):
+            return int(phase[1])
+        planned = [passes for _pool, passes, backend in self._job_plan.get(index, ()) if backend == "perceptual"]
+        return planned[0] if planned else max(1, len(vship.get("metric_keys", ())))
+
+    def _gpu_metrics_detail(self, index: int, vmaf: dict[str, object], vship: dict[str, object],
+                            paused: bool, holder: str) -> str:
+        """A video's GPU metrics as one: VMAF on the GPU the first of their
+        passes, then Vship's -- "GPU metrics 1 of 4 (12.4%, 0:00:41
+        remaining) (VMAF v0.6.1, VMAF NEG 49.5%, 44.0 fps, 0:00:08
+        remaining)", then "GPU metrics 2 of 4 (...) (SSIMULACRA2 ...)". They
+        were two halves: "GPU and CPU metrics", when VMAF on the GPU shared
+        FFmpeg's run with the CPU's metrics, beside "GPU metrics"."""
+        kind = tr("GPU metrics")
+        count = 1 + self._vship_passes(index, vship)
+        frames = int(vmaf.get("total") or 0)
+        state = vmaf.get("state")
+        if state in ("waiting", "starting"):
+            return self._task_detail(kind, vmaf, paused, False, holder)
+        if state == "running":
+            done = int(vmaf.get("current") or 0)
+            fps = float(vmaf.get("fps") or 0.0)
+            pct = min(1000, 1000 * done // frames) / 10 if frames > 0 else 0.0
+            now = [f"{self._metric_labels(vmaf)} {pct:.1f}%"]
+            whole = None
+            if paused:
+                now.append(tr("paused"))
+            elif fps > 0:
+                now.append(tr("{fps:.1f} fps", fps=fps))
+                left = max(0, frames - done) / fps
+                now.append(tr("{time} remaining", time=format_hms(left)))
+                rest = self._vship_seconds(index, vship, frames, count - 1)
+                whole = None if rest is None else left + rest
+            overall = min(1000, 1000 * done // (frames * count)) / 10 if frames > 0 else 0.0
+            overall_text = f"{overall:.1f}%" + (tr(", {time} remaining", time=format_hms(whole))
+                                                if whole is not None else "")
+            return tr("{kind} {number} of {count} ({overall}) ({details})", kind=kind, number=1, count=count,
+                      overall=overall_text, details=tr(", ").join(now))
+        # VMAF done (or failed: its reason is in the video's tooltip): Vship's passes, after it.
+        if vship.get("state") != "running":
+            return self._task_detail(kind, vship, paused, True, holder)
+        current, total = int(vship.get("current") or 0), int(vship.get("total") or 0)
+        fps = float(vship.get("fps") or 0.0)
+        overall = min(1000, 1000 * (frames + current) // (frames + total)) / 10 if frames + total > 0 else 0.0
+        whole = None
+        if (passes := self._gpu_passes(vship)) is not None:
+            number, name = passes.number, vship["phase"][2]
+            pass_frames = total // max(1, count - 1)
+            pass_done = pass_frames - passes.frames_left[passes.number - 1]
+            pass_left = passes.seconds[passes.number - 1]
+            if None not in passes.seconds:
+                whole = sum(passes.seconds)
+        else:
+            phase = vship.get("phase")
+            number, name = (int(phase[0]), str(phase[2])) if phase else (1, self._metric_labels(vship))
+            pass_frames, pass_done = total, current
+            pass_left = max(0, total - current) / fps if fps > 0 and total > 0 else None
+            whole = pass_left if count == 2 else None
+        now = [f"{name} {min(1000, 1000 * pass_done // pass_frames) / 10 if pass_frames > 0 else 0.0:.1f}%"]
+        if paused:
+            now.append(tr("paused"))
+            whole = None
+        elif fps > 0:
+            now.append(tr("{fps:.1f} fps", fps=fps))
+            if pass_left is not None and number + 1 < count:  # on the last, the whole time is its own
+                now.append(tr("{time} remaining", time=format_hms(pass_left)))
+        else:
+            whole = None
+        overall_text = f"{overall:.1f}%" + (tr(", {time} remaining", time=format_hms(whole))
+                                            if whole is not None else "")
+        return tr("{kind} {number} of {count} ({overall}) ({details})", kind=kind, number=number + 1, count=count,
+                  overall=overall_text, details=tr(", ").join(now))
+
+    def _vship_seconds(self, index: int, vship: dict[str, object], frames: int, passes: int) -> float | None:
+        """How long Vship's passes, not started yet, will take: each metric
+        at its rate this run, or the half as such a half took before
+        (_remembered_gpu_seconds); None without either."""
+        keys = tuple(vship.get("metric_keys", ()))
+        if passes == len(keys) and all(self._metric_rates.get(key, 0.0) > 0 for key in keys):
+            return sum(frames / self._metric_rates[key] for key in keys)
+        remembered = self._remembered_gpu_seconds(index, "perceptual", vship)
+        return frames * passes * remembered if remembered else None
+
+    def _gpu_metrics_tooltip(self, vmaf: dict[str, object], vship: dict[str, object], paused: bool) -> str:
+        """The video's GPU metrics in its tooltip, VMAF first."""
+        vmaf_state = vmaf.get("state")
+        labels = self._metric_labels(vmaf)
+        vmaf_text = (tr("{label} (done)", label=labels) if vmaf_state == "done"
+                     else tr("{label} (failed)", label=labels) if vmaf_state == "failed" else labels)
+        vship_text = self._task_tooltip("", vship, self._metric_labels(vship), paused, True).removeprefix(": ")
+        return f"{tr('GPU metrics')}: {vmaf_text}, {vship_text}"
 
     def _gpu_passes(self, task: dict[str, object]) -> _GpuPasses | None:
         """A GPU half's passes, one metric each, and the time each still
@@ -4755,7 +4850,7 @@ class MainWindow(QMainWindow):
             # "CPU metrics", not "CPU": the bare word read as the processor's
             # load, "CPU 46.0%" like Task Manager's figure.
             # Vship's passes, one metric each: the half's `gpu` below.
-            on_gpu = [task.get("backend") != "ffmpeg" and self._task_kind(index, task) == "GPU"
+            on_gpu = [task.get("backend") not in ("ffmpeg", GPU_VMAF) and self._task_kind(index, task) == "GPU"
                       for task in snapshots]
             kinds = [self._metrics_kind(index, task) for task in snapshots]
             shown = [tr(kind) for kind in kinds]
@@ -4768,10 +4863,21 @@ class MainWindow(QMainWindow):
                      else f"{name} ({label})"
                      for name, kind, task, label in zip(shown, kinds, snapshots, labels, strict=True)]
             holders = [self._gpu_holder(index, snapshots, task) for task in snapshots]
-            parts += [self._task_detail(name, task, paused, gpu, names[holder] if holder is not None else "")
-                      for name, task, gpu, holder in zip(names, snapshots, on_gpu, holders, strict=True)]
-            tooltip = "\n".join(self._task_tooltip(name, task, label, paused, gpu)
-                                for name, task, label, gpu in zip(shown, snapshots, labels, on_gpu, strict=True))
+            pair = self._gpu_metrics_pair(index, snapshots)
+            lines = []
+            for position, (name, task, label, gpu, holder) in enumerate(
+                    zip(names, snapshots, labels, on_gpu, holders, strict=True)):
+                if pair is not None and position == pair[1]:
+                    continue  # Vship's half: part of the GPU metrics, with VMAF
+                if pair is not None and position == pair[0]:
+                    vship = snapshots[pair[1]]
+                    parts.append(self._gpu_metrics_detail(index, task, vship, paused,
+                                                          names[holder] if holder is not None else ""))
+                    lines.append(self._gpu_metrics_tooltip(task, vship, paused))
+                    continue
+                parts.append(self._task_detail(name, task, paused, gpu, names[holder] if holder is not None else ""))
+                lines.append(self._task_tooltip(shown[position], task, label, paused, gpu))
+            tooltip = "\n".join(lines)
         else:
             total = self._job_progress_total.get(index, 0)
             current = self._job_frames_done.get(index, 0)
@@ -4917,7 +5023,7 @@ class MainWindow(QMainWindow):
                 halves = [(pool.upper(), None, passes, backend) for pool, passes, backend in planned]
             for kind, task, passes, backend in halves:
                 fps = float(task.get("fps") or 0.0) if task is not None else 0.0
-                if kind == "GPU" and backend == "ffmpeg":
+                if kind == "GPU" and backend == GPU_VMAF:
                     # VMAF on the GPU: FFmpeg's one pass, in the GPU's queue.
                     total = int(task.get("total") or 0) if task is not None else 0
                     left = max(0, total - int(task.get("current") or 0)) if total > 0 else frames

@@ -891,9 +891,9 @@ def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch)
     assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 2, "perceptual")], 1: [("cpu", 1, "ffmpeg")]}]
 
 
-def test_ffmpegs_half_with_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
-    """Vship's pass count, used for every half in the GPU's queue, made it
-    one pass per FFmpeg metric."""
+def test_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
+    """Vship's pass count, used for every half in the GPU's queue, made
+    FFmpeg's half one pass per FFmpeg metric."""
     from vmaf_app.core import vmaf_cuda
 
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
@@ -904,7 +904,7 @@ def test_ffmpegs_half_with_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, m
     worker.planned.connect(plans.append)
     worker.run()
     _drain(qapp)
-    assert plans == [{0: [("gpu", 1, "ffmpeg"), ("gpu", 1, "perceptual")]}]
+    assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 1, worker_module.GPU_VMAF), ("gpu", 1, "perceptual")]}]
 
 
 def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):

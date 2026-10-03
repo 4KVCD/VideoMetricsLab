@@ -14,7 +14,7 @@ from PySide6.QtCore import QThread, Signal
 from vmaf_app.core import vmaf_cuda
 from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
-from vmaf_app.core.execution import build_execution_plan
+from vmaf_app.core.execution import ExecutionPlan, MetricTask, build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import MetricResultSet
 from vmaf_app.core.metrics import metric_definition
@@ -39,6 +39,11 @@ from vmaf_app.core.vmaf_runner import (
 )
 
 _log = logging.getLogger(__name__)
+
+#: The backend of VMAF and NEG calculated on the GPU, a half of their own
+#: (_JobRun._with_gpu_vmaf_on_its_own): run_vmaf with those two alone.
+GPU_VMAF = "vmaf_gpu"
+_GPU_VMAF_KEYS = ("vmaf", "vmaf_neg")
 
 
 def _media(info: VideoInfo) -> str:
@@ -444,7 +449,7 @@ class _JobRun:
             job.options, job.metric_keys, job.metric_backends, job.cvvdp,
         )
         self.cached = job.cached_metrics if job.cached_result is not None and job.cached_metrics else None
-        self.plan = build_execution_plan(self.request, self.cached)
+        self.plan = self._with_gpu_vmaf_on_its_own(build_execution_plan(self.request, self.cached))
         self.token = _TaskCancelToken(worker._cancel_event)
         self.options = job.options
         self.handle: ProcessHandle | None = None
@@ -481,6 +486,37 @@ class _JobRun:
         # runs on (see perceptual_so_far).
         self.pass_outputs: list[PerceptualTaskOutput] = []
         self._finished_tasks = 0
+
+    def _with_gpu_vmaf_on_its_own(self, plan: ExecutionPlan) -> ExecutionPlan:
+        """With VMAF on the GPU, VMAF and NEG are a half of their own
+        (GPU_VMAF), in the GPU's queue ahead of Vship's metrics, and
+        FFmpeg's half keeps the metrics calculated on the CPU.
+
+        In one FFmpeg run with VMAF v1, PSNR, SSIM and XPSNR, VMAF on the GPU
+        went at their pace -- 14.6 fps for all six at 4K -- and SSIMULACRA2,
+        Butteraugli and CVVDP, which wait for the GPU's VMAF, waited for the
+        CPU's metrics too. On its own it runs at its own speed, and the CPU
+        metrics run beside the GPU's."""
+        options = self.job.options
+        tasks = []
+        for task in plan.tasks:
+            vmaf = tuple(spec for spec in task.requested_specs if spec.key in _GPU_VMAF_KEYS)
+            keys = {spec.key for spec in vmaf}
+            if (task.backend_id != "ffmpeg" or not vmaf or options.resample_test is not None
+                    or vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
+                                               options.vmaf_on_gpu, analysis_bit_depth(
+                                                   self.job.source_info, self.job.distorted_info)) is None):
+                tasks.append(task)
+                continue
+            # The planner keeps FFmpeg's metrics together, so a saved one is
+            # calculated again with the rest; split, a part whose metrics are
+            # all saved is not.
+            for backend_id, specs in (("ffmpeg", tuple(spec for spec in task.requested_specs
+                                                       if spec.key not in _GPU_VMAF_KEYS)),
+                                      (GPU_VMAF, vmaf)):
+                if specs and not (self.cached is not None and all(self.cached.has(spec.key) for spec in specs)):
+                    tasks.append(MetricTask(backend_id, tuple(spec.key for spec in specs), specs))
+        return ExecutionPlan(plan.requested_metrics, tuple(tasks))
 
     @property
     def name(self) -> str:
@@ -519,36 +555,27 @@ class _JobRun:
 
     def pool_of(self, task) -> str:
         """The GPU queue for a half with any metric on the GPU (a GPU pass
-        that fails is retried on the CPU inside it) -- FFmpeg's half too when
-        it scores VMAF on the GPU, so that it never runs beside another
-        video's GPU metrics; the CPU queue otherwise."""
+        that fails is retried on the CPU inside it) -- VMAF on the GPU too
+        (GPU_VMAF), so that it never runs beside another video's GPU
+        metrics; the CPU queue otherwise."""
+        if task.backend_id == GPU_VMAF:
+            return _GPU
         if task.backend_id != "perceptual":
-            return _GPU if self.vmaf_on_gpu(task) else _CPU
+            return _CPU
         on_gpu = any(
             spec.key in GPU_ONLY_METRICS or self.request.execution.perceptual_backend(spec.key) == "gpu"
             for spec in task.requested_specs
         )
         return _GPU if on_gpu else _CPU
 
-    def vmaf_on_gpu(self, task) -> bool:
-        """Whether FFmpeg's half scores its VMAF or NEG on the GPU
-        (vmaf_cuda.scores_on_gpu): the half's own metrics decide, not the
-        video's -- a saved VMAF is not scored again."""
-        options = self.job.options
-        if task.backend_id != "ffmpeg" or options.resample_test is not None:
-            return False
-        keys = task.metric_keys
-        return vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model, options.vmaf_on_gpu,
-                                       analysis_bit_depth(self.job.source_info, self.job.distorted_info)) is not None
-
     def gpu_keys(self, task) -> tuple[str, ...]:
         """The half's metrics calculated on the GPU as the run stands, for
-        the run line: FFmpeg's VMAF and NEG while they are scored there
-        (vmaf_on_gpu), until a failure hands them to FFmpeg's libvmaf.
-        Vship's half is the window's to describe (its GPU/CPU choices)."""
-        if task.backend_id != "ffmpeg" or self.vmaf_gpu_failed or not self.vmaf_on_gpu(task):
+        the run line: VMAF and NEG on the GPU (GPU_VMAF), until a failure
+        hands them to FFmpeg's libvmaf. Vship's half is the window's to
+        describe (its GPU/CPU choices)."""
+        if task.backend_id != GPU_VMAF or self.vmaf_gpu_failed:
             return ()
-        return tuple(key for key in task.metric_keys if key in ("vmaf", "vmaf_neg"))
+        return task.metric_keys
 
     def begin(self) -> bool:
         """Starts the video when its first half is taken: its process
@@ -620,7 +647,7 @@ class _JobRun:
                     self.task_decode[backend] = plan.group(1)
                 if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                     self.task_waiting[backend] = "GPU"
-                if backend == "ffmpeg" and message.startswith(VMAF_GPU_FAILED):
+                if backend == GPU_VMAF and message.startswith(VMAF_GPU_FAILED):
                     self.vmaf_gpu_failed = True
                 phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
                 if phase:
@@ -696,7 +723,7 @@ class _JobRun:
         def progress(cur, tot, fps):
             self.report_progress(task.backend_id, cur, tot, fps)
 
-        if task.backend_id == "ffmpeg":
+        if task.backend_id in ("ffmpeg", GPU_VMAF):  # GPU_VMAF: run_vmaf with VMAF and NEG alone
             task_options = replace(options)
             for key in options.requested_metrics():
                 task_options.set_metric_enabled(key, key in task.metric_keys)
@@ -853,8 +880,17 @@ class _JobRun:
         another piece lands, and the window may be showing the last one."""
         job, options, cached = self.job, self.options, self.cached
         result = task_results.get("ffmpeg")
+        gpu_vmaf = task_results.get(GPU_VMAF)
+        if result is None and gpu_vmaf is not None:
+            result, gpu_vmaf = gpu_vmaf, None
         if result is not None:
             result = copy.copy(result)
+            if gpu_vmaf is not None:  # VMAF and NEG from their own run, beside FFmpeg's other metrics
+                combined = result.metric_results.copy()
+                for key in gpu_vmaf.metric_results:
+                    combined.add(gpu_vmaf.metric_results.get(key))
+                result.merge_metric_results(combined)
+                result.model = gpu_vmaf.model  # FFmpeg's run calculated no VMAF: its model was ""
         elif cached is not None:
             # FFmpeg's metrics are all saved: the saved run is the base, so
             # its crops, frame table and file info carry over. A shallow
@@ -891,4 +927,12 @@ class _JobRun:
             )
             if carried:
                 result.merge_metric_results(carried)
+                # A saved VMAF's model, when this run's halves calculated
+                # none: with VMAF on the GPU a saved part of FFmpeg's metrics
+                # is not calculated again, and the saved run is not the base.
+                saved = job.cached_result
+                if carried.has("vmaf") and not result.model:
+                    result.model = saved.model
+                if carried.has("vmaf_v1") and not result.model_choice_v1:
+                    result.model_v1, result.model_choice_v1 = saved.model_v1, saved.model_choice_v1
         return result
