@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
         # not the video's frame count, which a GPU half's passes exceed.
         self._job_progress_total: dict[int, int] = {}
         # Each video's halves as the worker planned them (VmafWorker.planned).
-        self._job_plan: dict[int, list[tuple[str, int]]] = {}
+        self._job_plan: dict[int, list[tuple[str, int, str]]] = {}
         # The last rate seen this run on the CPU and on the GPU lane, for
         # the queue ETA while a lane has no current rate: "CPU", "GPU"
         # (Vship) and "GPU VMAF" (FFmpeg's half with VMAF on the GPU).
@@ -669,6 +669,11 @@ class MainWindow(QMainWindow):
         # Each half's (run seconds, frames done) lately, by (video, half,
         # pass): see _pause_free_rates.
         self._half_samples: dict[tuple, collections.deque] = {}
+        # Each half in the GPU's queue: its first moment running on the run's
+        # clock, by (video, half); and each video's compared megapixels:
+        # _time_gpu_half.
+        self._gpu_half_started: dict[tuple[int, str], float] = {}
+        self._job_megapixels: list[float] = []
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
@@ -4026,6 +4031,7 @@ class MainWindow(QMainWindow):
         jobs = []
         job_rows = []
         job_total_frames = []
+        job_megapixels = []
         for row in rows_to_run:
             row_data = self._rows[row]
             dist_info = row_data.video_info
@@ -4075,6 +4081,7 @@ class MainWindow(QMainWindow):
                 cached_metrics=self._reusable_results(row_data),
             ))
             job_rows.append(row_data)
+            job_megapixels.append(analysis_size[0] * analysis_size[1] / 1e6)
             # A resample test's output timeline is driven by the reference (see
             # run_resample_test), not this row's (synthetic) "distorted" info.
             reference_for_frames = self._source_info if job_options.resample_test is not None else dist_info
@@ -4103,6 +4110,8 @@ class MainWindow(QMainWindow):
         self._lane_rates = {}
         self._metric_rates = {}
         self._half_samples = {}
+        self._gpu_half_started = {}
+        self._job_megapixels = job_megapixels
         self._job_gpu_fallback.clear()
         self._running_jobs = []
         self._finished_jobs = set()
@@ -4426,6 +4435,49 @@ class MainWindow(QMainWindow):
             if now - since >= _RATE_MIN_SECONDS and current > then:
                 task["fps"] = (current - then) / (now - since)
 
+    def _gpu_half_shape(self, backend: str, keys) -> str:
+        """What the time per frame of a half in the GPU's queue depends on
+        besides the size: which half, its metrics, and for Vship's whether
+        it scores them in one pass."""
+        if backend == "ffmpeg":  # VMAF on the GPU, beside FFmpeg's other metrics
+            return "ffmpeg:" + "+".join(sorted(keys))
+        return "+".join(sorted(keys)) + ("|together" if self._settings.gpu_metrics_together else "")
+
+    def _time_gpu_half(self, index: int, task: dict[str, object]) -> None:
+        """Keeps how long a running half in the GPU's queue is taking per
+        megapixel per frame of its passes (Settings.gpu_half_seconds), for
+        the queue ETA of halves with no rate of their own yet: with VMAF on
+        the GPU, the first video's Vship half starts only once its FFmpeg
+        half is done, and nothing in the run has timed it."""
+        now = self._run_elapsed()
+        megapixels = self._job_megapixels[index] if 0 <= index < len(self._job_megapixels) else 0.0
+        if now is None or megapixels <= 0:
+            return
+        backend = str(task.get("backend"))
+        started = self._gpu_half_started.setdefault((index, backend), now)
+        done = int(task.get("current") or 0)
+        if now - started >= _RATE_MIN_SECONDS and done > 0:
+            shape = self._gpu_half_shape(backend, task.get("metric_keys", ()))
+            self._settings.gpu_half_seconds[shape] = (now - started) / (done * megapixels)
+
+    def _remembered_gpu_seconds(self, job: int, backend: str, task: dict[str, object] | None) -> float:
+        """Seconds per frame of a pass for this video's half in the GPU's
+        queue, as such a half took on this PC before (_time_gpu_half); 0 if
+        none has."""
+        if task is not None:
+            keys = task.get("metric_keys", ())
+        elif 0 <= job < len(self._job_rows):
+            row = self._job_rows[job]
+            if backend == "ffmpeg":
+                keys = [key for key in self._requested_metrics(row) if metric_definition(key).ffmpeg_binding]
+            else:
+                keys = [key for key in self._requested_metrics(row) if key == "cvvdp" or
+                        (key in _PERCEPTUAL_METRIC_KEYS and row.metric_backends.get(key) != "cpu")]
+        else:
+            return 0.0
+        megapixels = self._job_megapixels[job] if 0 <= job < len(self._job_megapixels) else 0.0
+        return self._settings.gpu_half_seconds.get(self._gpu_half_shape(backend, keys), 0.0) * megapixels
+
     def _on_task_progress(self, index: int, snapshots: list[dict[str, object]]) -> None:
         """Store backend-specific progress; the line is redrawn at once only
         when what it says changes, its numbers on the next tick."""
@@ -4439,11 +4491,13 @@ class MainWindow(QMainWindow):
                     # VMAF on the GPU: FFmpeg's rate, kept apart from
                     # Vship's -- the next such video is timed by it.
                     self._lane_rates["GPU VMAF"] = fps
+                    self._time_gpu_half(index, task)
                     continue
                 self._lane_rates[kind] = fps
                 keys = tuple(task.get("metric_keys", ()))
                 if kind != "GPU":
                     continue
+                self._time_gpu_half(index, task)
                 if (passes := self._gpu_passes(task)) is not None:
                     self._metric_rates[passes.keys[passes.number - 1]] = fps
                 elif not task.get("phase") and len(keys) == 1:
@@ -4825,31 +4879,37 @@ class MainWindow(QMainWindow):
         for job, frames in enumerate(self._job_total_frames):
             if job in self._finished_jobs:
                 continue
-            planned = self._job_plan.get(job) or [("cpu", 1)]
+            planned = self._job_plan.get(job) or [("cpu", 1, "ffmpeg")]
             snapshots = self._job_task_progress.get(job)
-            halves: list[tuple[str, dict[str, object] | None, int]] = []
+            halves: list[tuple[str, dict[str, object] | None, int, str]] = []
             if snapshots:
                 for position, task in enumerate(snapshots):
                     if task.get("state") == "done":
                         continue
                     passes = planned[position][1] if position < len(planned) else 1
-                    halves.append((self._task_kind(job, task), task, passes))
+                    halves.append((self._task_kind(job, task), task, passes, str(task.get("backend"))))
             else:
-                halves = [(pool.upper(), None, passes) for pool, passes in planned]
-            for kind, task, passes in halves:
+                halves = [(pool.upper(), None, passes, backend) for pool, passes, backend in planned]
+            for kind, task, passes, backend in halves:
                 fps = float(task.get("fps") or 0.0) if task is not None else 0.0
-                if kind == "GPU" and task is not None and task.get("backend") == "ffmpeg":
+                if kind == "GPU" and backend == "ffmpeg":
                     # VMAF on the GPU: FFmpeg's one pass, in the GPU's queue.
-                    total = int(task.get("total") or 0)
+                    total = int(task.get("total") or 0) if task is not None else 0
                     left = max(0, total - int(task.get("current") or 0)) if total > 0 else frames
                     if total > 0 and fps > 0:
                         gpu_seconds += left / fps
                         vmaf_rate = fps
+                    elif not self._lane_rates.get("GPU VMAF") and (
+                            remembered := self._remembered_gpu_seconds(job, backend, task)):
+                        gpu_seconds += left * remembered  # none this run yet: as before
                     else:
                         vmaf_frames += left
                     continue
                 if kind == "GPU":
                     seconds, unknown = self._gpu_work(task, frames, passes)
+                    if unknown and (remembered := self._remembered_gpu_seconds(job, backend, task)):
+                        # No rate this run yet: as such a half took before.
+                        seconds, unknown = seconds + unknown * remembered, 0.0
                     gpu_seconds += seconds
                     gpu_frames += unknown
                     gpu_rate = fps or gpu_rate
@@ -5125,6 +5185,10 @@ class MainWindow(QMainWindow):
             if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
                 rd.analysis_status = N_("Cancelled") if self._run_was_cancelled else ""
                 self._set_row_metrics(row)
+        if self._gpu_half_started:  # Vship halves were timed: the next run's ETA
+            error = self._settings.save()
+            if error:
+                _log.warning("Settings not saved: %s", error)
         self._run_elapsed_timer.stop()
         self._run_hold = ""
         self._set_run_ui_active(False)

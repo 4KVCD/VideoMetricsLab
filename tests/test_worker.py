@@ -888,7 +888,7 @@ def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch)
     worker.planned.connect(plans.append)
     worker.run()
     _drain(qapp)
-    assert plans == [{0: [("cpu", 1), ("gpu", 2)], 1: [("cpu", 1)]}]
+    assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 2, "perceptual")], 1: [("cpu", 1, "ffmpeg")]}]
 
 
 def test_ffmpegs_half_with_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
@@ -904,7 +904,7 @@ def test_ffmpegs_half_with_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, m
     worker.planned.connect(plans.append)
     worker.run()
     _drain(qapp)
-    assert plans == [{0: [("gpu", 1), ("gpu", 1)]}]
+    assert plans == [{0: [("gpu", 1, "ffmpeg"), ("gpu", 1, "perceptual")]}]
 
 
 def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):
@@ -959,7 +959,7 @@ def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_the_plan(qapp
     worker.run()
     _drain(qapp)
     assert calls == [together]
-    assert plans == [{0: [("cpu", 1), ("gpu", 1 if together else 3)]}]
+    assert plans == [{0: [("cpu", 1, "ffmpeg"), ("gpu", 1 if together else 3, "perceptual")]}]
 
 
 def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):

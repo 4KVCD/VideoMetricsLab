@@ -4503,7 +4503,7 @@ def test_vmaf_on_the_gpu_is_timed_in_the_gpus_queue_one_video_at_a_time(qapp):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
     win._job_total_frames = [1000, 1000]
-    win._job_plan = {0: [("gpu", 1), ("gpu", 1)], 1: [("gpu", 1)]}
+    win._job_plan = {0: [("gpu", 1, "ffmpeg"), ("gpu", 1, "perceptual")], 1: [("gpu", 1, "ffmpeg")]}
     for index, label in ((0, "a"), (1, "b")):
         win._on_job_started(index, label)
     win._metric_rates["ssimulacra2"] = 20.0
@@ -4516,6 +4516,64 @@ def test_vmaf_on_the_gpu_is_timed_in_the_gpus_queue_one_video_at_a_time(qapp):
     # a's VMAF (400 frames at 40 fps), then its SSIMULACRA2 (1000 at 20), then b's VMAF (1000 at 40)
     assert win._queue_eta_by_lane() == pytest.approx(400 / 40 + 1000 / 20 + 1000 / 40)
     assert win._metric_rates == {"ssimulacra2": 20.0}  # FFmpeg's rate is not taken for Vship's
+    win.close()
+
+
+def test_vship_work_not_yet_started_is_timed_as_such_work_took_before(qapp):
+    """With VMAF on the GPU, a video's Vship half starts only after its
+    FFmpeg half: the queue ETA said "calculating..." for all of that, with
+    no rate yet for the Vship metrics. A half that ran before on this PC
+    gives one, per megapixel per frame of a pass."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._job_megapixels = [2.0]
+    win._job_plan = {0: [("gpu", 1, "ffmpeg"), ("gpu", 1, "perceptual")]}
+    win._on_job_started(0, "a")
+    vship_half = {**_half("perceptual", ("ssimulacra2",), state="waiting", current=0, total=0, fps=0.0),
+                  "waiting_for": "GPU"}
+    vmaf = {**_half("ffmpeg", ("vmaf",)), "gpu_keys": ("vmaf",), "lane": "gpu", "current": 600, "total": 1000,
+            "fps": 40.0}
+    win._on_task_progress(0, [vmaf, vship_half])
+    assert win._queue_eta_by_lane() is None  # never timed on this PC: no basis for a figure
+    win._settings.gpu_half_seconds[win._gpu_half_shape("perceptual", ("ssimulacra2",))] = 0.005  # s per megapixel-frame
+    assert win._queue_eta_by_lane() == pytest.approx(400 / 40 + 1000 * 2.0 * 0.005)
+    win.close()
+
+
+def test_a_video_not_started_times_each_of_its_halves_at_its_own_remembered_speed(qapp):
+    """Before a video starts its plan says only which queue each half is in
+    and now which half it is: FFmpeg's half with VMAF on the GPU was timed
+    at Vship's speed, then "calculating..." until FFmpeg had a rate."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._job_megapixels = [2.0]
+    win._job_plan = {0: [("gpu", 1, "ffmpeg"), ("gpu", 1, "perceptual")]}
+    keys = win._requested_metrics(win._rows[0])
+    ffmpeg_keys = [key for key in keys if key in ("vmaf", "vmaf_neg", "vmaf_v1", "psnr", "ssim", "xpsnr")]
+    vship_keys = [key for key in keys if key in ("ssimulacra2", "butteraugli", "cvvdp")]
+    win._settings.gpu_half_seconds = {win._gpu_half_shape("ffmpeg", ffmpeg_keys): 0.01,
+                                      win._gpu_half_shape("perceptual", vship_keys): 0.002}
+    assert win._queue_eta_by_lane() == pytest.approx(1000 * 2.0 * (0.01 + 0.002))
+    win.close()
+
+
+def test_a_running_vship_half_is_timed_for_the_next_run(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000]
+    win._job_megapixels = [2.0]
+    win._on_job_started(0, "a")
+    clock = [10.0]
+    win._run_elapsed = lambda: clock[0]
+    for seconds, current in ((10.0, 10), (15.0, 510)):
+        clock[0] = seconds
+        win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), current=current, total=1000, fps=100.0)])
+    assert win._settings.gpu_half_seconds == {"ssimulacra2": pytest.approx(5.0 / (510 * 2.0))}
     win.close()
 
 
@@ -4569,7 +4627,7 @@ def test_the_queue_eta_times_cpu_and_gpu_lanes_separately(qapp, monkeypatch, par
     win._job_rows = list(win._rows)
     win._job_total_frames = [1000, 1000]
     monkeypatch.setattr(win, "_parallel_jobs", lambda: parallel)
-    win._job_plan = {0: [("cpu", 1), ("gpu", 3)], 1: [("cpu", 1), ("gpu", 3)]}
+    win._job_plan = {0: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")], 1: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")]}
     win._on_job_started(0, "a")
     cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "waiting_for": None, "phase": None}
     gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"), "waiting_for": None}
@@ -4849,7 +4907,7 @@ def test_the_queue_eta_keeps_a_lanes_last_rate_while_it_has_none(qapp, monkeypat
     win._job_rows = list(win._rows)
     win._job_total_frames = [1000, 1000]
     monkeypatch.setattr(win, "_parallel_jobs", lambda: 1)
-    win._job_plan = {0: [("cpu", 1), ("gpu", 3)], 1: [("cpu", 1), ("gpu", 3)]}
+    win._job_plan = {0: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")], 1: [("cpu", 1, "ffmpeg"), ("gpu", 3, "perceptual")]}
     cpu = {"backend": "ffmpeg", "metric_keys": ("vmaf",), "waiting_for": None, "phase": None, "step": ""}
     gpu = {"backend": "perceptual", "metric_keys": ("ssimulacra2", "butteraugli", "cvvdp"),
            "waiting_for": None, "step": ""}
@@ -4988,7 +5046,7 @@ def test_the_queue_eta_times_gpu_work_per_metric(qapp, second_started):
         win._add_table_row(Path(name))
     win._job_rows = list(win._rows)
     win._job_total_frames = [1000, 1000]
-    win._job_plan = {0: [("gpu", 3)], 1: [("gpu", 3)]}
+    win._job_plan = {0: [("gpu", 3, "perceptual")], 1: [("gpu", 3, "perceptual")]}
     win._on_job_started(0, "a")
     win._metric_rates = {"ssimulacra2": 50.0, "cvvdp": 40.0}  # from an earlier video
     win._on_task_progress(0, [_gpu_half(1500, 20.0, (2, 3, "Butteraugli"))])

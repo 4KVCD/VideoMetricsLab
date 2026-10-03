@@ -90,6 +90,13 @@ class Settings:
     # are, so it is no part of cache identity.
     gpu_metrics_together: bool = False
 
+    # Seconds a video's Vship half took on this PC per megapixel per frame
+    # of each of its passes, by the metrics it scored and whether together
+    # (MainWindow._gpu_half_shape): the queue ETA's figure for a half no
+    # run has timed yet -- with VMAF on the GPU, the first video's half
+    # starts only once its FFmpeg half is done.
+    gpu_half_seconds: dict[str, float] = field(default_factory=dict)
+
     # Which of Vship's builds calculates the GPU metrics: "auto" (CUDA on
     # NVIDIA, HIP on AMD, Vulkan on other GPUs), or "vulkan", "cuda" or
     # "hip" tried first -- see perceptual_vship.VSHIP_BACKENDS. Like
