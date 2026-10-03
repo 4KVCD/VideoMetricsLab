@@ -1,5 +1,68 @@
 # Changelog
 
+## v1.4
+
+- Added VMAF v0.6.1 and VMAF NEG on NVIDIA GPUs (GeForce GTX 16 and RTX 20
+  series or newer), with a bundled libvmaf built with CUDA. The GPU's scores
+  agree with the CPU's to within a thousandth of a point on every frame, so
+  saved scores are reused either way. Each video's Performance > VMAF v0.6.1
+  and NEG compute chooses NVIDIA GPU (the default) or CPU. VMAF on the GPU runs
+  apart from VMAF v1, PSNR, SSIM and XPSNR, which stay on the CPU, so they do
+  not slow it down. If the GPU fails, that video's VMAF is calculated on the
+  CPU.
+- Updated Vship's Vulkan build (Intel GPUs, or Settings > GPU metrics > GPU
+  backend set to Vulkan) to 5.1.2. SSIMULACRA2 is now calculated on the GPU
+  with it: Vship 5.1.1's Vulkan build scored it up to 17 points too high on
+  NVIDIA GPUs, so v1.3 calculated it on the CPU. It also fixes v1.3's known
+  issues with videos tagged with SMPTE 170M or 240M primaries or BT.470BG.
+- Fixed Intel GPUs getting no GPU metrics: Vship 5.1.1's Vulkan build could not
+  be loaded on a PC whose only GPU is Intel's, and the app then crashed as it
+  closed. Fixed the same crash on PCs with a Vulkan loader but no Vulkan
+  driver, such as virtual machines.
+- 4:1:0 (yuv410p) videos are now scored on the GPU.
+- A crash in Vship, libvmaf or the GPU driver no longer closes the app. The GPU
+  metrics run in processes of their own; if one crashes, its metrics are
+  handled as for any other GPU failure, and the rest of the run goes on.
+- SSIMULACRA2 and Butteraugli set to CPU now run beside the GPU metrics,
+  instead of after them while holding up the GPU.
+- Reworked each video's progress line. It numbers the metrics under way among
+  those calculated on the CPU and on the GPU, each with its percentage, fps and
+  time remaining, for example "GPU metrics 1–2 of 5: VMAF v0.6.1, VMAF NEG
+  50.0% (55.0 fps, 0:00:08 remaining)"; metrics calculated in one pass share
+  them. Hover over the line for every metric's state. A pause no longer slows
+  the rates shown for the rest of the run, a failed metric says so at once, and
+  a metric waiting for its own video's VMAF on the GPU no longer says that
+  another video is using the GPU.
+- Removed the queue's estimated time remaining from the status line. With the
+  CPU and GPU metrics running at very different speeds in two queues, it could
+  not be made accurate. Each video's line still shows its own time remaining.
+- A video whose pictures end long before its length says, such as an encode
+  that stopped early or a copy that did not finish, now fails instead of being
+  scored on the frames it had.
+- Calculate metrics now names every checked video that cannot be compared with
+  the reference (a different frame rate or length, an unreadable file) at
+  once, and offers to calculate the others, instead of stopping at the first.
+- Fixed adding a video whose title tag or file name contains a curly quote
+  (”), some accented letters, or Chinese, Japanese or Korean text, which failed
+  with "the JSON object must be str, bytes or bytearray, not NoneType".
+- Cancelling a run now leaves the videos it never reached as they were, instead
+  of marking them Cancelled.
+- Included various small bug fixes and reliability improvements.
+
+### Known issues
+
+- VMAF on the GPU still copies every frame from the GPU's decoder through the
+  CPU and back to the GPU, which takes several CPU cores (about 6.5 at 4K and
+  55 fps on a Core Ultra 9 285K). CPU metrics calculated at the same time slow
+  it down, to about 42 fps beside PSNR and SSIM.
+- Vship's CUDA (NVIDIA) and HIP (AMD) builds are still 5.1.1 until 5.1.2 is
+  released. For them, 4:1:0 videos are converted to 4:4:4 before scoring,
+  which gives slightly different scores than the Vulkan build (SSIMULACRA2
+  72.82 against 72.98 on one test video).
+- On the integrated Intel GPU of a Core Ultra 9 285K, CVVDP fails on 4K videos
+  ("A GPU Call failed inside Vship"). SSIMULACRA2 and Butteraugli are not
+  affected.
+
 ## v1.3
 
 - Added the window in 20 languages: Simplified and Traditional Chinese,
