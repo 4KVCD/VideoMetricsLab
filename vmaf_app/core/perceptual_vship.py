@@ -350,14 +350,14 @@ _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
 #: maker could not be told counts as every maker. Add an entry only for a
 #: bundled build measured to disagree with CUDA and libjxl on the same frames.
 #:
-#: Empty since the bundled Vulkan build's SSIMULACRA2 shader is patched
-#: (scripts/vship_ssimulacra2_nvidia.patch). Unpatched, Vship's Vulkan build
-#: (5.1.1, and commit 0732ed3) scored SSIMULACRA2 far too high on NVIDIA GPUs
-#: -- HoneyBee 4K against a CRF 22 HEVC encode: libjxl 47.4, CUDA 45.5,
-#: Vulkan 62.9; +7 at 1080p, +1 at 360p (Vship issue 18) -- because NVIDIA's
-#: driver miscompiles a small two-dimensional array in its blur. Patched, an
-#: RTX 5090 scores 45.5019 there against CUDA's 45.5020, and Intel's scores
-#: are unchanged. Butteraugli and CVVDP always agreed. AMD's Vulkan is
+#: Empty since the bundled Vulkan build is Vship 5.1.2 (commit 97d0dc5).
+#: Before it, Vship's Vulkan build (5.1.1, and commit 0732ed3) scored
+#: SSIMULACRA2 far too high on NVIDIA GPUs -- HoneyBee 4K against a CRF 22
+#: HEVC encode: libjxl 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at 360p
+#: (Vship issue 18) -- because NVIDIA's driver miscompiles a small
+#: two-dimensional array in its blur, which 5.1.2 flattens. An RTX 5090 now
+#: scores 45.5019 there against CUDA's 45.5020, and Intel's scores are
+#: unchanged. Butteraugli and CVVDP always agreed. AMD's Vulkan is
 #: unmeasured.
 SCORED_WRONGLY: frozenset[tuple[str, GpuVendor, str]] = frozenset()
 _backend = DEFAULT_VSHIP_BACKEND

@@ -54,13 +54,13 @@ case anyone overrides that.
 - **Vship GPU libraries** for SSIMULACRA2, Butteraugli and CVVDP, in three
   builds: `vmaf_app/tools/vship/nvidia` (CUDA, the 5.1.1 release), `amd` (HIP,
   the 5.1.1 release) and `vulkan` (any GPU with a Vulkan driver, NVIDIA, AMD and
-  Intel alike). The Vulkan build is made from Vship commit 0732ed3 by
-  `scripts/build_vship_vulkan.ps1` (MinGW-w64 g++, as for the tone mapper):
-  5.1.1's cannot be loaded where Intel's GPU is the only one, and the later
-  color fixes have no release yet. Its SSIMULACRA2 shader is patched
-  (`scripts/vship_ssimulacra2_nvidia.patch`, compiled with Slang 2026.10.2,
-  which the script downloads and checks by SHA-256): unpatched, NVIDIA's Vulkan
-  driver miscompiles it and the scores come out far too high. Settings > GPU
+  Intel alike). The Vulkan build is made from Vship commit 97d0dc5, which
+  reports 5.1.2 and is to be released as it, by `scripts/build_vship_vulkan.ps1`
+  (MinGW-w64 g++, as for the tone mapper; the same source gives the same file).
+  5.1.1's cannot be loaded where Intel's GPU is the only one, and scores
+  SSIMULACRA2 far too high on NVIDIA GPUs. Replace the CUDA and HIP builds with
+  the 5.1.2 release when it is out; until then FFmpeg upsamples 4:1:0 video to
+  4:4:4 for them, as 5.1.1 cannot read it. Settings > GPU
   metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA, HIP
   on AMD and Vulkan on other GPUs, and a build that cannot run hands over to the
   next. A metric a build is measured to score wrongly on a GPU maker's GPUs is

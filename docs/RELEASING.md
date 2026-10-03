@@ -24,11 +24,10 @@
    versions.
 3. Test every metric, including SSIMULACRA2 and Butteraugli through both the
    Vship GPU path and the libjxl CPU fallback, with Settings > GPU metrics >
-   GPU backend on Auto and on Vulkan. After updating Vship, check that
-   `scripts/vship_ssimulacra2_nvidia.patch` still applies (and is still
-   needed), and compare each build's SSIMULACRA2, Butteraugli and CVVDP
-   against the CUDA build and libjxl, on an NVIDIA and an Intel GPU, before
-   changing `perceptual_vship.SCORED_WRONGLY`. Check saved-result round-trip,
+   GPU backend on Auto and on Vulkan. After updating Vship, compare each
+   build's SSIMULACRA2, Butteraugli and CVVDP against the CUDA build and
+   libjxl, on an NVIDIA and an Intel GPU, before changing
+   `perceptual_vship.SCORED_WRONGLY`. Check saved-result round-trip,
    backend-specific cache reuse, still comparison and independent bitrate
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
    Performance > VMAF v0.6.1 and NEG compute set to NVIDIA GPU and to CPU: every
