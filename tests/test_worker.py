@@ -924,6 +924,26 @@ def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypa
     assert ("ffmpeg", "starting", "Detecting black bars in source...") in steps
 
 
+def test_a_failed_half_is_reported_failed_while_the_other_goes_on(qapp, monkeypatch):
+    """The window was not told: the failed half's part of the line went on
+    showing its last step, "Detecting black bars", while the other ran."""
+    from vmaf_app.core.vmaf_runner import VmafRunError
+
+    def ffmpeg(s, d, *a, on_status=None, **k):
+        on_status("Detecting black bars in source...")
+        raise VmafRunError("Could not auto-detect black bars")
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4")])
+    states = []
+    worker.task_progress.connect(
+        lambda _index, snapshot: states.extend((t["backend"], t["state"]) for t in snapshot))
+    worker.run()
+    _drain(qapp)
+    assert ("ffmpeg", "failed") in states
+
+
 def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp, monkeypatch):
     """SSIMULACRA2 failed on the GPU and was calculated again on the CPU,
     while the line still said "CVVDP 3 of 3" -- the last GPU pass."""

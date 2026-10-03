@@ -694,7 +694,8 @@
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "{path} の黒帯を自動検出できませんでした：調べた部分に FFmpeg が映像を見つけられませんでした。ファイルが壊れているか、途中で切れている可能性があります。",
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "比較できたのは予定の {expected} フレームのうち {compared} フレームだけです：ファイル上はもっと長いはずの動画の一方が {time} で終わっています。途中で切れている可能性があります（途中で止まったエンコードや、完了しなかったコピーなど）。",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} 待機中（この動画の {other} の完了待ち）",
-  "calculating...": "計算中..."
+  "calculating...": "計算中...",
+  "{kind} failed": "{kind} 失敗"
  },
  "plurals": {
   "about {count} day": [

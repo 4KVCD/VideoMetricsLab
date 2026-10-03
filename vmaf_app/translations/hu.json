@@ -694,7 +694,8 @@
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "A fekete sávok nem ismerhetők fel automatikusan ({path}): az FFmpeg nem talált képet a mintavételezett részekben. A fájl sérült vagy csonka lehet.",
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "A várt {expected} képkockából csak {compared} volt összehasonlítható: az egyik videó {time} után véget ér, pedig a fájlja szerint hosszabb. Lehet, hogy csonka: idő előtt leállt kódolás vagy befejezetlen másolat.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} sorban áll (megvárja ennek a videónak ezt a részét: {other})",
-  "calculating...": "számítás..."
+  "calculating...": "számítás...",
+  "{kind} failed": "{kind}: sikertelen"
  },
  "plurals": {
   "about {count} day": [

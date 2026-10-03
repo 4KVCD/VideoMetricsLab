@@ -694,7 +694,8 @@
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "Siyah bantlar otomatik algılanamadı ({path}): FFmpeg örneklenen bölümlerde görüntü bulamadı. Dosya hasarlı ya da yarım kalmış olabilir.",
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Beklenen {expected} kareden yalnızca {compared} tanesi karşılaştırılabildi: videolardan biri, dosyası daha uzun olduğunu söylese de {time} sonra bitiyor. Yarım kalmış olabilir: erken duran bir kodlama ya da tamamlanmamış bir kopya.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} sırada (bu videonun {other} bitmesini bekliyor)",
-  "calculating...": "hesaplanıyor..."
+  "calculating...": "hesaplanıyor...",
+  "{kind} failed": "{kind}: başarısız"
  },
  "plurals": {
   "about {count} day": [

@@ -4659,6 +4659,8 @@ class MainWindow(QMainWindow):
             return tr("{kind}: {step}", kind=kind, step=step) if step else tr("{kind} starting", kind=kind)
         if state == "done":
             return tr("{kind} done", kind=kind)
+        if state == "failed":  # why: in the video's tooltip when it is over
+            return tr("{kind} failed", kind=kind)
         current = int(task.get("current", 0) or 0)
         total = int(task.get("total", 0) or 0)
         fps = float(task.get("fps", 0.0) or 0.0)
@@ -4764,7 +4766,7 @@ class MainWindow(QMainWindow):
             # separately, and a GPU-only video has no FFmpeg half at all.
             planned = [(name, task) for name, task in zip(names, snapshots, strict=True) if task.get("decode")]
             # A half that is done no longer decodes, unless none is left.
-            live = [(name, task) for name, task in planned if task.get("state") != "done"] or planned
+            live = [(name, task) for name, task in planned if task.get("state") not in ("done", "failed")] or planned
             decode_status = self._decoder_text(index, {name: task["decode"] for name, task in live}) if live else ""
         else:
             decode_status = self._job_decode_status.get(index, "")
@@ -4884,7 +4886,7 @@ class MainWindow(QMainWindow):
             halves: list[tuple[str, dict[str, object] | None, int, str]] = []
             if snapshots:
                 for position, task in enumerate(snapshots):
-                    if task.get("state") == "done":
+                    if task.get("state") in ("done", "failed"):
                         continue
                     passes = planned[position][1] if position < len(planned) else 1
                     halves.append((self._task_kind(job, task), task, passes, str(task.get("backend"))))

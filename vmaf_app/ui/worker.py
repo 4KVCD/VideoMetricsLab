@@ -586,6 +586,7 @@ class _JobRun:
 
     def _state(self, task) -> str:
         return ("done" if task.backend_id in self.task_results else
+                "failed" if any(failed is task for failed, _error in self.task_errors) else
                 "waiting" if task.backend_id in self.task_waiting else
                 "running" if task.backend_id in self.task_progress else "starting")
 
@@ -755,8 +756,15 @@ class _JobRun:
             # The sibling is left to finish: a SSIMULACRA2/Butteraugli
             # failure (an unsupported input, a tool error) used to cancel
             # the libvmaf pass and discard VMAF/PSNR/SSIM/XPSNR with it.
-            with self.lock:
-                self.task_errors.append((task, error))
+            # The window hears of it now: the half's part of the line went on
+            # showing its last step -- "Detecting black bars" -- while the
+            # other half ran.
+            with self.emit_lock:
+                with self.lock:
+                    self.task_errors.append((task, error))
+                    snapshot = self.task_snapshots()
+                if len(self.plan.tasks) > 1:
+                    self.worker.task_progress.emit(self.index, snapshot)
         else:
             _log.info("%s: %s done in %s", self.name, half, format_hms(time.monotonic() - started))
             for key, message in (getattr(output, "failures", None) or {}).items():

@@ -4593,6 +4593,20 @@ def test_a_running_vship_half_is_timed_for_the_next_run(qapp):
     win.close()
 
 
+def test_a_failed_half_says_so_and_is_no_longer_timed(qapp):
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf",), state="failed"), "step": "Detecting black bars"},
+                              _half("perceptual", ("ssimulacra2",), current=50, total=100, fps=10.0)])
+    line = win.job_progress_labels[0].text()
+    assert "CPU metrics failed" in line and "Detecting black bars" not in line
+    assert win._queue_eta_by_lane() == pytest.approx(5.0)  # the GPU half's 50 frames at 10 fps only
+    win.close()
+
+
 def test_vmaf_failing_on_the_gpu_leaves_vships_half_named_gpu(qapp):
     """The fallback's "calculating it on the CPU" marked the whole video as
     fallen back to the CPU, Vship's half on the GPU with it."""

@@ -694,7 +694,8 @@
   "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "无法自动检测 {path} 中的黑边：FFmpeg 在抽样检查的部分中没有找到画面。文件可能已损坏或被截断。",
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "预计 {expected} 帧中只有 {compared} 帧可以比较：其中一个视频在 {time} 后就结束了，而文件声明它更长。它可能被截断了：提前停止的编码，或没有复制完成的文件。",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} 排队中（等待此视频的 {other} 完成）",
-  "calculating...": "计算中..."
+  "calculating...": "计算中...",
+  "{kind} failed": "{kind} 失败"
  },
  "plurals": {
   "about {count} day": [
