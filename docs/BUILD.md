@@ -47,14 +47,20 @@ case anyone overrides that.
   style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
-- **`nvdec_frames.dll`**, the NVIDIA decoder the GPU metrics read their
-  frames from (`vmaf_app/core/nvdec_frames.py`), built from
-  `native/nvdec_frames.cpp` by `scripts/build_nvdec_frames.ps1` (MinGW-w64
-  g++, as for the tone mapper) as part of the build. It links nothing: the
-  NVIDIA driver's `nvcuda.dll` and `nvcuvid.dll` are loaded at run time, and
-  its conversion kernels are PTX in the source, so no CUDA toolkit is needed
-  to build it. It contains nv-codec-headers' definitions (MIT), whose notice
-  is packaged beside it. Without it, FFmpeg decodes those videos as before.
+- **`nvdec_frames.dll`, `vpl_frames.dll` and `amf_frames.dll`**, the
+  NVIDIA, Intel and AMD decoders the GPU metrics read their frames from
+  (`vmaf_app/core/nvdec_frames.py`), built from `native/nvdec_frames.cpp`,
+  `native/vpl_frames.cpp` and `native/amf_frames.cpp` by
+  `scripts/build_gpu_frames.ps1` (MinGW-w64 g++, as for the tone mapper) as
+  part of the build, about 0.3 MB each. They link nothing of the GPU makers':
+  each loads its maker's decoder library from the graphics driver at run time
+  -- NVIDIA's `nvcuda.dll` and `nvcuvid.dll`, Intel's oneVPL `libvpl.dll`,
+  AMD's AMF `amfrt64.dll` -- and NVIDIA's conversion kernels are PTX in the
+  source, so no CUDA toolkit or SDK is needed to build them. They contain
+  nv-codec-headers', oneVPL's and AMF's API definitions (all MIT), whose
+  notices are packaged beside them. Without one, FFmpeg decodes those
+  videos as before. `scripts/check_gpu_decoder.py` checks one of them on the
+  PC it runs on: pictures against FFmpeg's decode, speed, and GPU scores.
 - **SSIMULACRA2 and Butteraugli**, the official libjxl 0.12.0 static Windows
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.
@@ -76,11 +82,12 @@ case anyone overrides that.
   re-measure every build when updating Vship. Where no build can use the GPU,
   the input format is unsupported, or GPU processing fails, SSIMULACRA2 and
   Butteraugli fall back to the bundled CPU tools. The Vship CLI and FFMS2
-  decoder are not included; the user's FFmpeg reads every video. With Vship's
-  CUDA build, a video NVIDIA's decoder decodes is decoded by `nvdec_frames.dll`
-  in Vship's process, FFmpeg only copying its compressed stream out of the
-  container; other videos FFmpeg decodes. Vship and metric notices are
-  packaged beside the libraries.
+  decoder are not included; the user's FFmpeg reads every video. A video the
+  GPU's own decoder decodes -- NVIDIA's with Vship's CUDA build, Intel's or
+  AMD's with any build -- is decoded by the frame decoders above in Vship's
+  process, FFmpeg only copying its compressed stream out of the container;
+  other videos FFmpeg decodes. Vship and metric notices are packaged beside
+  the libraries.
 - **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`), for VMAF and
   VMAF NEG on NVIDIA GPUs only: libvmaf master with the open pull requests
   that let it build with MSVC and fix its CUDA code, built by

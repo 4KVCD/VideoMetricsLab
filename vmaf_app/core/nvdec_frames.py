@@ -1,6 +1,9 @@
-"""Decoding a video on an NVIDIA GPU straight into GPU memory for the GPU
-metrics (vmaf_app/native/nvdec_frames.dll, built by
-scripts/build_nvdec_frames.ps1 from native/nvdec_frames.cpp).
+"""Decoding a video on the GPU in the scoring process for the GPU metrics:
+on NVIDIA GPUs straight into GPU memory (vmaf_app/native/nvdec_frames.dll),
+on Intel's and AMD's into system memory through their makers' decoder
+libraries (vpl_frames.dll with oneVPL, amf_frames.dll with AMF) -- all built
+by scripts/build_gpu_frames.ps1 from native/, with one C API
+(native/gpu_frames.h).
 
 The GPU metrics used to get their frames from FFmpeg: FFmpeg decoded on the
 GPU, copied each picture back to system memory, converted it and wrote it
@@ -8,13 +11,16 @@ to a pipe, which the scoring process read into memory the GPU then copied it
 from again. At 4K that is several CPU copies of 25 MB per frame and per
 video -- most of a GPU metric's CPU use, and at 200 frames per second more
 than a pipe carries. Here FFmpeg only copies the compressed stream out of
-its container (-c:v copy: a few MB per second), NVIDIA's decoder decodes it
-in this process, and the pictures stay on the GPU: libvmaf reads them there,
-and Vship's page-locked buffers are filled by the GPU's copy engine.
+its container (-c:v copy: a few MB per second) and the GPU's decoder decodes
+it in this process. NVIDIA's pictures stay on the GPU: libvmaf reads them
+there, and Vship's page-locked buffers are filled by the GPU's copy engine.
+Intel's and AMD's decoders hand their pictures over in system memory, and
+one CPU pass puts each into Vship's buffer (on Intel's integrated GPUs,
+system memory is the GPU's own).
 
 The pictures are the ones FFmpeg's decode gives, sample for sample: the same
 decoder hardware, the stream's display area, a crop rounded as FFmpeg's crop
-filter rounds it (left and top to even, for 4:2:0), and P016's 10-bit samples
+filter rounds it (its edges to even, for 4:2:0), and P016's 10-bit samples
 either kept in the top bits (Vship reads them as 16-bit) or shifted down,
 which is FFmpeg's conversion to yuv420p10le exactly. Which pictures come out,
 and with which timestamps, is checked against the packets that went in
@@ -50,7 +56,12 @@ from vmaf_app.core.models import CropBox, VideoInfo
 
 _log = logging.getLogger(__name__)
 
-LIBRARY_PATH = Path(__file__).resolve().parents[1] / "native" / "nvdec_frames.dll"
+_NATIVE = Path(__file__).resolve().parents[1] / "native"
+#: Each GPU maker's decoder library, all with one C API (native/gpu_frames.h):
+#: NVIDIA's decoder through nvcuvid, Intel's through oneVPL, AMD's through AMF.
+LIBRARIES = {"nvidia": _NATIVE / "nvdec_frames.dll", "intel": _NATIVE / "vpl_frames.dll",
+             "amd": _NATIVE / "amf_frames.dll"}
+LIBRARY_PATH = LIBRARIES["nvidia"]
 
 #: FFmpeg's codec names -> NVDEC's (cudaVideoCodec), and the bitstream filters
 #: that turn the container's packets into what NVDEC's parser reads: Annex B
@@ -103,20 +114,20 @@ class _Info(ctypes.Structure):
                 ("decoded", ctypes.c_longlong), ("displayed", ctypes.c_longlong), ("frame_bytes", ctypes.c_longlong)]
 
 
-_library: ctypes.CDLL | None = None
+_libraries: dict[str, ctypes.CDLL] = {}
 _library_lock = threading.Lock()
 
 
-def _load() -> ctypes.CDLL:
-    global _library
+def _load(backend: str = "nvidia") -> ctypes.CDLL:
     with _library_lock:
-        if _library is None:
-            if not LIBRARY_PATH.is_file():
-                raise NvdecUnavailableError("the NVIDIA frame decoder (nvdec_frames.dll) is not bundled")
+        if backend not in _libraries:
+            path = LIBRARY_PATH if backend == "nvidia" else LIBRARIES[backend]
+            if not path.is_file():
+                raise NvdecUnavailableError(f"the GPU frame decoder ({path.name}) is not bundled")
             try:
-                lib = ctypes.CDLL(str(LIBRARY_PATH))
+                lib = ctypes.CDLL(str(path))
             except OSError as error:
-                raise NvdecUnavailableError(f"the NVIDIA frame decoder could not be loaded: {error}") from error
+                raise NvdecUnavailableError(f"the GPU frame decoder could not be loaded: {error}") from error
             handle, text = ctypes.c_void_p, ctypes.c_char_p
             for name, restype, argtypes in (
                 ("nvf_open", handle, [ctypes.POINTER(_Params), text, ctypes.c_int]),
@@ -137,8 +148,8 @@ def _load() -> ctypes.CDLL:
             ):
                 function = getattr(lib, name)
                 function.restype, function.argtypes = restype, argtypes
-            _library = lib
-        return _library
+            _libraries[backend] = lib
+        return _libraries[backend]
 
 
 # ------------------------------------------------------------------- plans
@@ -198,19 +209,19 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
                       shift if depth > 8 else 0, luma_only)
 
 
-def available() -> bool:
+def available(backend: str = "nvidia") -> bool:
     """Whether the decoder library is bundled and loads (the GPU is not asked)."""
     try:
-        _load()
+        _load(backend)
     except NvdecUnavailableError:
         return False
     return True
 
 
-def decoder_supports(device: int, plan: DecodePlan) -> tuple[bool, str]:
+def decoder_supports(device: int, plan: DecodePlan, backend: str = "nvidia") -> tuple[bool, str]:
     """Whether GPU `device`'s decoder takes the plan's codec, depth and size."""
     try:
-        lib = _load()
+        lib = _load(backend)
     except NvdecUnavailableError as error:
         return False, str(error)
     error = ctypes.create_string_buffer(512)
@@ -471,10 +482,11 @@ class NvdecStream:
     back with release() once its picture has been copied on."""
 
     def __init__(self, info: VideoInfo, plan: DecodePlan, device: int = 0, *, pool: int = 4,
-                 process_handle=None) -> None:
+                 process_handle=None, backend: str = "nvidia") -> None:
         self.info = info
         self.plan = plan
-        self._lib = _load()
+        self.backend = backend
+        self._lib = _load(backend)
         self._handle = None
         self._reader = _PacketReader(info.path, plan.codec, process_handle)
         self._extradata = _av1_sequence_header(info.path) if plan.codec == "av1" else b""

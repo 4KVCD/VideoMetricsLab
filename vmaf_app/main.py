@@ -79,10 +79,12 @@ def self_test() -> str:
 
     from vmaf_app.core import nvdec_frames
 
-    if nvdec_frames.available():
-        lines.append(f"  OK    NVIDIA frame decoder for the GPU metrics ({nvdec_frames.LIBRARY_PATH.name})")
-    else:
-        lines.append("  WARN  NVIDIA frame decoder absent; FFmpeg decodes the GPU metrics' videos")
+    for backend, maker in (("nvidia", "NVIDIA"), ("intel", "Intel"), ("amd", "AMD")):
+        library = nvdec_frames.LIBRARIES[backend].name
+        if nvdec_frames.available(backend):
+            lines.append(f"  OK    {maker} frame decoder for the GPU metrics ({library})")
+        else:
+            lines.append(f"  WARN  {maker} frame decoder absent ({library}); FFmpeg decodes the GPU metrics' videos")
 
     from vmaf_app.core.perceptual_cpu import find_metric_executable
 

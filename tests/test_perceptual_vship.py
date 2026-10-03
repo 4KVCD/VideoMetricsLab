@@ -557,15 +557,16 @@ def test_a_gpu_decode_failing_partway_makes_the_pass_again_through_ffmpeg(monkey
     assert any(status.startswith("GPU decoding failed (the GPU's decoder found an error") for status in statuses)
 
 
-def test_only_vships_cuda_build_and_nvidia_decode_take_gpu_decoded_pictures(monkeypatch):
+def test_nvidias_decoder_feeds_only_vships_cuda_build(monkeypatch):
+    """NVIDIA's decoder copies each picture with the GPU into the ring, which
+    must be CUDA's page-locked memory: with Vship's Vulkan build FFmpeg
+    decodes, as before (_decoded_here, tested above for every pairing)."""
     calls = []
     monkeypatch.setattr(vship, "_native_decoder", lambda *args: calls.append(args) or None)
     vulkan = vship.VshipDevice("vulkan", "fake GPU", 0, "5.1.1",
                                SimpleNamespace(library=SimpleNamespace(Vship_FreeHandler=lambda _handle: 0)))
     _run(monkeypatch, children=_both(_frames_command(3, _FRAME_BYTES)), metrics=("ssimulacra2",), gpu_decode=True,
          hwaccel=lambda _vendor, _codec: "cuda", device=vulkan)
-    _run(monkeypatch, children=_both(_frames_command(3, _FRAME_BYTES)), metrics=("ssimulacra2",), gpu_decode=True,
-         hwaccel=lambda _vendor, _codec: "qsv")
     assert calls == []
 
 
@@ -578,6 +579,7 @@ def test_the_gpu_decoder_gives_the_layout_vship_is_told(monkeypatch, pixel_forma
         return "decoder"
 
     monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", stream)
+    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports", lambda *_args: (True, ""))
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "hevc",
                      pix_fmt="yuv420p" if pixel_format == "yuv420p" else "yuv420p10le")
     image = vship._ImageFormat(pixel_format, 0, vship._VSHIP_ENUMS[8 if pixel_format == "yuv420p" else 16], 1, 1)
@@ -586,11 +588,26 @@ def test_the_gpu_decoder_gives_the_layout_vship_is_told(monkeypatch, pixel_forma
     assert plans[0].shift == shift
 
 
+@pytest.mark.parametrize(("hwaccel", "build", "expected"), [
+    ("cuda", "cuda", "nvidia"),
+    ("cuda", "vulkan", None),     # NVIDIA's decoder copies into CUDA's page-locked memory only
+    ("qsv", "vulkan", "intel"),
+    ("qsv", "cuda", "intel"),     # Intel's and AMD's hand over system memory: any build
+    ("d3d11va", "hip", "amd"),
+    ("d3d11va", "vulkan", "amd"),
+    (None, "cuda", None),         # FFmpeg decodes in software
+])
+def test_each_gpu_makers_decoder_takes_what_ffmpeg_would_decode_with_it(hwaccel, build, expected):
+    device = vship.VshipDevice(build, "GPU", 0, "5.1.1", None)
+    assert vship._decoded_here(hwaccel, device) == expected
+
+
 def test_a_scaled_video_or_one_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise nvdec_frames.NvdecUnavailableError("this GPU's decoder cannot decode this video")
 
     monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", refuse)
+    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports", lambda *_args: (True, ""))
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
     image = vship._image_format(info)
     frame_bytes = image.frame_layout(64, 48)[0]
@@ -664,6 +681,20 @@ def test_the_selection_is_the_ffmpeg_chains(tmp_path, name, clip, step, limit):
     expected = _ffmpeg_piped(path, step, limit)
     assert expected
     assert _selected(path, step, limit) == expected
+
+
+def test_a_video_the_decoder_says_it_cannot_decode_is_left_to_ffmpeg_before_the_pass(monkeypatch):
+    """Asked before the pass: refused once the pass had started (10-bit
+    H.264 on Intel's decoder), the whole pass was made again through FFmpeg."""
+    opened = []
+    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", lambda *args, **kwargs: opened.append(args) or "decoder")
+    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports",
+                        lambda *_args: (False, "Intel's GPU decoder does not decode this codec at 10 bits"))
+    info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p10le")
+    image = vship._ImageFormat("yuv420p16le", 0, vship._VSHIP_ENUMS[16], 1, 1)
+    frame_bytes = image.frame_layout(64, 48)[0]
+    assert _real_native_decoder(info, None, (64, 48), image, frame_bytes, 0, None, "x", "intel") is None
+    assert opened == []
 
 
 def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeypatch):

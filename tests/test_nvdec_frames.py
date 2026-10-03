@@ -1,6 +1,7 @@
-"""nvdec_frames: decoding on an NVIDIA GPU into GPU memory for the GPU
+"""nvdec_frames: decoding on the GPU in the scoring process for the GPU
 metrics. The plan and arithmetic are checked everywhere; the decoded
-pictures against FFmpeg's decode on a PC with an NVIDIA GPU."""
+pictures against FFmpeg's decode with each GPU maker's decoder the PC has
+(NVIDIA's, Intel's, AMD's)."""
 from __future__ import annotations
 
 import hashlib
@@ -81,12 +82,21 @@ def test_a_limit_is_read_to_the_microsecond_and_held_in_the_time_base():
     assert nv.duration_in("10.000500", Fraction(1001, 24000)) == 240
 
 
-# ----------------------------------------- decoding, on an NVIDIA GPU
+# ----------------------------------------- decoding, on the PC's GPUs
 
-def _gpu_decodes(plan: nv.DecodePlan) -> bool:
-    if not nv.LIBRARY_PATH.is_file():
+#: Each GPU maker's decoder: its tests run where the PC has one.
+BACKENDS = pytest.mark.parametrize("backend", ["nvidia", "intel", "amd"])
+
+
+def _gpu_decodes(plan: nv.DecodePlan, backend: str = "nvidia") -> bool:
+    if not nv.LIBRARIES[backend].is_file():
         return False
-    return nv.decoder_supports(0, plan)[0]
+    return nv.decoder_supports(0, plan, backend)[0]
+
+
+def _need(plan: nv.DecodePlan, backend: str) -> None:
+    if not _gpu_decodes(plan, backend):
+        pytest.skip(f"no {backend} GPU decoder for this on this PC")
 
 
 def _clip(path: Path, codec: str, pix_fmt: str, extra: list[str] | None = None, seconds: float = 2.0) -> Path:
@@ -98,8 +108,8 @@ def _clip(path: Path, codec: str, pix_fmt: str, extra: list[str] | None = None, 
     return path
 
 
-def _decode(info: VideoInfo, plan: nv.DecodePlan) -> tuple[list[str], list[int]]:
-    stream = nv.NvdecStream(info, plan)
+def _decode(info: VideoInfo, plan: nv.DecodePlan, backend: str = "nvidia") -> tuple[list[str], list[int]]:
+    stream = nv.NvdecStream(info, plan, backend=backend)
     out = np.empty(plan.frame_bytes, dtype=np.uint8)
     sums, stamps = [], []
     try:
@@ -134,27 +144,27 @@ def _ffmpeg_decode(path: Path, plan: nv.DecodePlan) -> list[str]:
     ("h264", "yuv420p", CropBox(600, 300, 20, 30)),
     ("hevc", "yuv420p10le", CropBox(638, 358, 2, 2)),
 ])
-def test_pictures_are_ffmpegs_decode(tmp_path, codec, pix_fmt, crop):
+@BACKENDS
+def test_pictures_are_ffmpegs_decode(tmp_path, backend, codec, pix_fmt, crop):
     path = _clip(tmp_path / "clip.mkv", codec, pix_fmt)
     info = probe_video(path)
     plan = nv.plan_decode(info, crop, shift=6)
-    if not _gpu_decodes(plan):
-        pytest.skip("no NVIDIA GPU decoder for this")
-    sums, stamps = _decode(info, plan)
+    _need(plan, backend)
+    sums, stamps = _decode(info, plan, backend)
     assert len(sums) == round(2.0 * 24000 / 1001)
     assert sums == _ffmpeg_decode(path, plan)
     assert stamps == sorted(stamps)
 
 
-def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path):
+@BACKENDS
+def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path, backend):
     path = _clip(tmp_path / "clip.mkv", "hevc", "yuv420p10le", seconds=0.5)
     info = probe_video(path)
     shifted, kept = nv.plan_decode(info, None, shift=6), nv.plan_decode(info, None, shift=0)
-    if not _gpu_decodes(shifted):
-        pytest.skip("no NVIDIA GPU decoder for this")
+    _need(shifted, backend)
     pictures = []
     for plan in (shifted, kept):
-        stream = nv.NvdecStream(info, plan)
+        stream = nv.NvdecStream(info, plan, backend=backend)
         out = np.empty(plan.frame_bytes // 2, dtype=np.uint16)
         try:
             stream.start()
@@ -172,7 +182,8 @@ def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path):
     assert np.array_equal(pictures[1], pictures[0] << 6)
 
 
-def test_frames_an_mp4_edit_list_cuts_off_are_not_handed_out(tmp_path):
+@BACKENDS
+def test_frames_an_mp4_edit_list_cuts_off_are_not_handed_out(tmp_path, backend):
     """A copy cut out of an MP4 starts at a keyframe before the cut, and its
     edit list marks the frames before the cut discard: FFmpeg decodes them
     (the frames after refer to them) and drops them."""
@@ -182,33 +193,32 @@ def test_frames_an_mp4_edit_list_cuts_off_are_not_handed_out(tmp_path):
                     str(cut)], check=True)
     info = probe_video(cut)
     plan = nv.plan_decode(info, None)
-    if not _gpu_decodes(plan):
-        pytest.skip("no NVIDIA GPU decoder for this")
-    sums, _stamps = _decode(info, plan)
+    _need(plan, backend)
+    sums, _stamps = _decode(info, plan, backend)
     expected = _ffmpeg_decode(cut, plan)
     assert sums == expected
 
 
-def test_a_stream_that_does_not_start_with_a_keyframe_fails(tmp_path):
+@BACKENDS
+def test_a_stream_that_does_not_start_with_a_keyframe_fails(tmp_path, backend):
     whole = _clip(tmp_path / "whole.mkv", "h264", "yuv420p", seconds=1.0)
     headless = tmp_path / "headless.mkv"
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-i", str(whole), "-c", "copy",
                     "-bsf:v", "noise=drop=eq(n\\,0)", str(headless)], check=True)
     info = probe_video(headless)
     plan = nv.plan_decode(info, None)
-    if not _gpu_decodes(plan):
-        pytest.skip("no NVIDIA GPU decoder for this")
+    _need(plan, backend)
     with pytest.raises(nv.NvdecFailedError):
-        _decode(info, plan)
+        _decode(info, plan, backend)
 
 
-def test_a_stream_without_timestamps_fails(tmp_path):
+@BACKENDS
+def test_a_stream_without_timestamps_fails(tmp_path, backend):
     """A raw H.264 stream with B-frames: FFmpeg copies packets without
     timestamps (and says so), so which picture is which cannot be told."""
     raw = _clip(tmp_path / "clip.264", "h264", "yuv420p", seconds=1.0)
     info = probe_video(raw)
     plan = nv.plan_decode(info, None)
-    if not _gpu_decodes(plan):
-        pytest.skip("no NVIDIA GPU decoder for this")
+    _need(plan, backend)
     with pytest.raises(nv.NvdecFailedError):
-        _decode(info, plan)
+        _decode(info, plan, backend)

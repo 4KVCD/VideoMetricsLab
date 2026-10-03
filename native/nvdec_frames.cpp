@@ -43,8 +43,7 @@
 
 #include "ffnvcodec/dynlink_cuda.h"
 #include "ffnvcodec/dynlink_nvcuvid.h"
-
-#define NVF_API extern "C" __declspec(dllexport)
+#include "gpu_frames.h"
 
 namespace {
 
@@ -267,30 +266,6 @@ PLANE16_DONE:
 constexpr unsigned kBlockX = 32, kBlockY = 8;
 
 // ----------------------------------------------------------------- decoder
-
-enum Status { NVF_FRAME = 1, NVF_END = 0, NVF_ERROR = -1, NVF_ABORTED = -2, NVF_TIMEOUT = 2 };
-
-struct Params {
-    int device;          // CUDA device ordinal
-    int codec;           // cudaVideoCodec
-    int bit_depth;       // 8 or 10: what the stream must have
-    int width, height;   // the displayed size the stream must have
-    int crop_x, crop_y;  // even
-    int crop_w, crop_h;  // the size of the pictures handed back
-    int shift;           // right shift of 16-bit samples: 0 or 6
-    int luma_only;       // only the Y plane is produced
-    int pool;            // pictures decoded ahead
-    const unsigned char *extradata;  // AV1: the sequence header OBUs (may be null)
-    int extradata_size;
-};
-
-struct Info {
-    int coded_width, coded_height;
-    int display_left, display_top, display_right, display_bottom;
-    int bit_depth, chroma_format, progressive;
-    int decode_surfaces;
-    long long decoded, displayed, frame_bytes;
-};
 
 struct Ready {
     int slot;
@@ -595,8 +570,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     const Driver &cu = g_driver;
     Params p = *params;
-    if ((p.bit_depth != 8 && p.bit_depth != 10) || (p.crop_x & 1) || (p.crop_y & 1) || p.crop_w <= 0 || p.crop_h <= 0
-        || p.pool < 1 || (p.shift != 0 && p.shift != 6) || (p.bit_depth == 8 && p.shift)) {
+    if (!params_valid(p)) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }

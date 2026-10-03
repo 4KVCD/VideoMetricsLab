@@ -10,11 +10,12 @@ temporal and scores the video (see _CvvdpLane).
 FFmpeg decodes, crops, samples and scales -- the same FFmpeg as the rest of
 the app, so every codec it reads works, VVC included, with hardware decode
 per input where the GPU has one. It streams tightly packed frames into rings
-of pinned host buffers (see _FrameStream). With Vship's CUDA build, a video
-NVIDIA's decoder decodes is decoded in the scoring process instead
-(nvdec_frames, _NativeFrameStream): FFmpeg only copies its packets out of
-the container, and the GPU copies each picture into the ring itself -- the
-same pictures, without the CPU copies and the pipe. Vship converts each
+of pinned host buffers (see _FrameStream). A video the GPU's decoder
+decodes -- NVIDIA's with Vship's CUDA build, Intel's or AMD's with any -- is
+decoded in the scoring process instead (nvdec_frames, _NativeFrameStream):
+FFmpeg only copies its packets out of the container, and each picture goes
+into the ring without FFmpeg's CPU copies and the pipe -- the same pictures.
+Vship converts each
 frame from the colorspace it is described in (_vship_colorspace) and
 computes the metric on
 the GPU -- through Vship's CUDA build on NVIDIA, its HIP build on AMD, or
@@ -1152,11 +1153,12 @@ class _FrameSelection:
 
 
 class _NativeFrameStream:
-    """One input decoded in this process by NVIDIA's decoder
+    """One input decoded in this process by the GPU's decoder
     (nvdec_frames.NvdecStream), feeding a ring of pinned frame buffers as
     _FrameStream does: each picture FFmpeg's chain would pipe
-    (_FrameSelection) is copied by the GPU straight into a free slot. A
-    decoding failure after the start is raised from next() as
+    (_FrameSelection) goes straight into a free slot -- copied there by the
+    GPU from NVIDIA's decoder, by the CPU in one pass from Intel's or AMD's.
+    A decoding failure after the start is raised from next() as
     NvdecFailedError: the pass is then made again through FFmpeg."""
 
     def __init__(self, lib: ctypes.CDLL, frame_bytes: int, decoder: nvdec_frames.NvdecStream, step: int,
@@ -1225,12 +1227,30 @@ class _NativeFrameStream:
             _log.error("The %s's GPU decoding thread did not stop; its memory is left allocated", self._label)
 
 
+#: The GPU decoder that decodes in the scoring process what FFmpeg would
+#: decode with each -hwaccel the app picks (gpu.pick_hwaccel): NVIDIA's
+#: through nvcuvid, Intel's through oneVPL, AMD's through AMF.
+_GPU_DECODERS = {"cuda": "nvidia", "qsv": "intel", "d3d11va": "amd"}
+
+
+def _decoded_here(hwaccel: str | None, device: VshipDevice) -> str | None:
+    """The GPU decoder an input FFmpeg would decode with `hwaccel` is decoded
+    by in the scoring process, or None. NVIDIA's copies each picture with the
+    GPU into the ring, which must then be CUDA's page-locked memory (Vship's
+    CUDA build); Intel's and AMD's hand pictures over in system memory, and
+    the CPU copies them into any build's ring in one pass."""
+    backend = _GPU_DECODERS.get(hwaccel or "")
+    if backend == "nvidia" and device.backend != "cuda":
+        return None
+    return backend
+
+
 def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int], image_format: _ImageFormat,
                     frame_bytes: int, gpu_id: int, process_handle: ProcessHandle | None,
-                    label: str) -> nvdec_frames.NvdecStream | None:
-    """The decoder for one input of a pass, when NVIDIA's decoder can give
-    it in the layout Vship is told (8-bit planes, P016's 16-bit samples as
-    they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
+                    label: str, backend: str = "nvidia") -> nvdec_frames.NvdecStream | None:
+    """The decoder for one input of a pass, when GPU decoder `backend` can
+    give it in the layout Vship is told (8-bit planes, P016's 16-bit samples
+    as they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
     unscaled. None, with the reason logged, when FFmpeg decodes it."""
     shifts = {"yuv420p": 0, "yuv420p16le": 0, "yuv420p10le": 6}
     reason = None
@@ -1244,11 +1264,17 @@ def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int]
             if plan.frame_bytes != frame_bytes:
                 raise nvdec_frames.NvdecUnavailableError(
                     f"its frames would be {plan.frame_bytes} bytes, not {frame_bytes}")
-            decoder = nvdec_frames.NvdecStream(info, plan, gpu_id, pool=4, process_handle=process_handle)
+            # Asked first: a stream the decoder refuses once the pass has
+            # started (10-bit H.264, say) makes the whole pass again.
+            supported, refusal = nvdec_frames.decoder_supports(gpu_id, plan, backend)
+            if not supported:
+                raise nvdec_frames.NvdecUnavailableError(refusal)
+            decoder = nvdec_frames.NvdecStream(info, plan, gpu_id, pool=4, process_handle=process_handle,
+                                               backend=backend)
         except nvdec_frames.NvdecUnavailableError as error:
             reason = str(error)
         else:
-            _log.info("Vship: the %s is decoded on the GPU in the scoring process", label)
+            _log.info("Vship: the %s is decoded on the GPU (%s) in the scoring process", label, backend)
             return decoder
     _log.info("Vship: the %s is decoded by FFmpeg (%s)", label, reason)
     return None
@@ -1903,11 +1929,11 @@ def _score_vship_pass_with(
 
     try:
         def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label, side):
-            # Decoded here, when NVIDIA's decoder would decode it in FFmpeg
-            # and Vship's buffers are CUDA's (its CUDA build).
-            if native and hwaccel == "cuda" and device.backend == "cuda":
+            # Decoded here, by the GPU decoder FFmpeg would decode it with.
+            backend = _decoded_here(hwaccel, device) if native else None
+            if backend is not None:
                 decoder = _native_decoder(info, crop, size, image_format, frame_bytes, device.gpu_id,
-                                          process_handle, label)
+                                          process_handle, label, backend)
                 if decoder is not None:
                     limit = (f"{request.recipe.duration_limit:.6f}"
                              if request.recipe.duration_limit > 0 else None)
