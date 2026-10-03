@@ -41,6 +41,20 @@ try {
                        'to include the GPU shader.')
     }
 
+    # 1b. The NVIDIA decoder the GPU metrics read their frames from. Optional
+    #     in the same way: without it FFmpeg decodes those videos, with the
+    #     CPU copies and pipes that costs.
+    $nvdec = Join-Path $projectDirectory 'vmaf_app/native/nvdec_frames.dll'
+    if (Get-Command g++ -ErrorAction SilentlyContinue) {
+        Write-Host '==> Building nvdec_frames.dll' -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot 'build_nvdec_frames.ps1')
+    } elseif (Test-Path $nvdec) {
+        Write-Warning 'g++ not found; reusing the existing nvdec_frames.dll.'
+    } else {
+        Write-Warning ('g++ not found and no nvdec_frames.dll present. FFmpeg will ' +
+                       'decode the GPU metrics'' videos. Install MinGW-w64 to include it.')
+    }
+
     # 2. Freeze. --noconfirm so a rebuild does not stop to ask about dist/.
     Write-Host '==> Running PyInstaller' -ForegroundColor Cyan
     # Resolve Windows system DLLs before anything injected into the calling

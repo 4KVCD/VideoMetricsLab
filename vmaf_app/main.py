@@ -77,6 +77,13 @@ def self_test() -> str:
     else:
         lines.append("  WARN  GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
 
+    from vmaf_app.core import nvdec_frames
+
+    if nvdec_frames.available():
+        lines.append(f"  OK    NVIDIA frame decoder for the GPU metrics ({nvdec_frames.LIBRARY_PATH.name})")
+    else:
+        lines.append("  WARN  NVIDIA frame decoder absent; FFmpeg decodes the GPU metrics' videos")
+
     from vmaf_app.core.perceptual_cpu import find_metric_executable
 
     for metric in ("ssimulacra2", "butteraugli"):

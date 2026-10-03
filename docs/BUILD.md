@@ -47,6 +47,14 @@ case anyone overrides that.
   style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
+- **`nvdec_frames.dll`**, the NVIDIA decoder the GPU metrics read their
+  frames from (`vmaf_app/core/nvdec_frames.py`), built from
+  `native/nvdec_frames.cpp` by `scripts/build_nvdec_frames.ps1` (MinGW-w64
+  g++, as for the tone mapper) as part of the build. It links nothing: the
+  NVIDIA driver's `nvcuda.dll` and `nvcuvid.dll` are loaded at run time, and
+  its conversion kernels are PTX in the source, so no CUDA toolkit is needed
+  to build it. It contains nv-codec-headers' definitions (MIT), whose notice
+  is packaged beside it. Without it, FFmpeg decodes those videos as before.
 - **SSIMULACRA2 and Butteraugli**, the official libjxl 0.12.0 static Windows
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.

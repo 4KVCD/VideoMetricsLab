@@ -50,6 +50,18 @@ else:
     print("WARNING: d3d11_tonemap.dll is missing; the build will fall back "
           "to FFmpeg tone mapping. Run scripts/build_d3d11_tonemap.ps1 first.")
 
+# The NVIDIA decoder the GPU metrics read their frames from
+# (scripts/build_nvdec_frames.ps1), with the notice of the NVIDIA headers
+# compiled into it. Without it FFmpeg decodes those videos, as before.
+NVDEC_DLL = PROJECT / "vmaf_app" / "native" / "nvdec_frames.dll"
+if NVDEC_DLL.is_file():
+    datas.append((str(NVDEC_DLL), "vmaf_app/native"))
+    datas.append((str(PROJECT / "native" / "ffnvcodec" / "LICENSE.nv-codec-headers.txt"),
+                  "vmaf_app/native/licenses"))
+else:
+    print("WARNING: nvdec_frames.dll is missing; FFmpeg will decode the GPU metrics' "
+          "videos. Run scripts/build_nvdec_frames.ps1 first.")
+
 # Netflix's VMAF v1 models are data files, not part of the external FFmpeg
 # installation.  Keep them beside the package so the app can pass a portable
 # path= model to any compatible libvmaf build.
