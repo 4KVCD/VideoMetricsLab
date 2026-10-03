@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "请至少勾选一个测试视频以计算指标。",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "请为每个勾选的视频至少选择一个指标，或取消勾选不想计算的视频。",
   "Still reading videos": "仍在读取视频",
-  "Unreadable video": "无法读取的视频",
   "Wait for every checked test video to finish loading before running.": "请等待所有勾选的测试视频加载完成后再运行。",
-  "{name} could not be read. Remove it or add the file again to retry.": "无法读取 {name}。请将其移除，或重新添加该文件后重试。",
-  "Invalid options": "无效的选项",
   "Queued": "排队中",
   "Cancelling...": "正在取消...",
   "Resume": "继续",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "预计 {expected} 帧中只有 {compared} 帧可以比较：其中一个视频在 {time} 后就结束了，而文件声明它更长。它可能被截断了：提前停止的编码，或没有复制完成的文件。",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} 排队中（等待此视频的 {other} 完成）",
   "calculating...": "计算中...",
-  "{kind} failed": "{kind} 失败"
+  "{kind} failed": "{kind} 失败",
+  "Cannot compare": "无法比较",
+  "Cannot be compared with the reference:": "无法与参考视频比较：",
+  "Calculate the rest?": "计算其余的视频？",
+  "It could not be read. Remove it or add the file again to retry.": "无法读取。请将其移除，或重新添加该文件后重试。"
  },
  "plurals": {
   "about {count} day": [

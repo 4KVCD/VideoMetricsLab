@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Vink minstens één testvideo aan om metrieken te berekenen.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Kies minstens één metriek voor elke aangevinkte video, of vink de video's uit die u niet wilt berekenen.",
   "Still reading videos": "Video's worden nog gelezen",
-  "Unreadable video": "Onleesbare video",
   "Wait for every checked test video to finish loading before running.": "Wacht tot alle aangevinkte testvideo's zijn geladen voordat u start.",
-  "{name} could not be read. Remove it or add the file again to retry.": "{name} kon niet worden gelezen. Verwijder het, of voeg het bestand opnieuw toe om het nog eens te proberen.",
-  "Invalid options": "Ongeldige opties",
   "Queued": "In wachtrij",
   "Cancelling...": "Annuleren...",
   "Resume": "Hervatten",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Slechts {compared} van de {expected} verwachte frames konden worden vergeleken: een van de video's eindigt na {time}, hoewel het bestand zegt dat het langer is. Het is mogelijk afgekapt: een codering die te vroeg stopte, of een kopie die niet af is.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} in wachtrij (wacht tot de {other} van deze video klaar zijn)",
   "calculating...": "wordt berekend...",
-  "{kind} failed": "{kind}: mislukt"
+  "{kind} failed": "{kind}: mislukt",
+  "Cannot compare": "Kan niet vergelijken",
+  "Cannot be compared with the reference:": "Kan niet worden vergeleken met de referentie:",
+  "Calculate the rest?": "De rest berekenen?",
+  "It could not be read. Remove it or add the file again to retry.": "Kon niet worden gelezen. Verwijder het, of voeg het bestand opnieuw toe om het nog eens te proberen."
  },
  "plurals": {
   "about {count} day": [

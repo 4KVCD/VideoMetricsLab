@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Marca al menos un video de prueba para calcular métricas.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Selecciona al menos una métrica para cada video marcado, o desmarca los videos que no quieras calcular.",
   "Still reading videos": "Todavía se están leyendo videos",
-  "Unreadable video": "Video ilegible",
   "Wait for every checked test video to finish loading before running.": "Espera a que terminen de cargarse todos los videos de prueba marcados antes de ejecutar.",
-  "{name} could not be read. Remove it or add the file again to retry.": "No se pudo leer {name}. Quítalo o vuelve a agregar el archivo para reintentarlo.",
-  "Invalid options": "Opciones no válidas",
   "Queued": "En cola",
   "Cancelling...": "Cancelando...",
   "Resume": "Reanudar",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Solo se pudieron comparar {compared} de los {expected} fotogramas esperados: uno de los videos termina a los {time}, aunque su archivo indica que es más largo. Puede haberse cortado: una codificación que se detuvo antes de tiempo o una copia que no terminó.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} en cola (esperando a que terminen las {other} de este video)",
   "calculating...": "calculando...",
-  "{kind} failed": "{kind}: error"
+  "{kind} failed": "{kind}: error",
+  "Cannot compare": "No se puede comparar",
+  "Cannot be compared with the reference:": "No se pueden comparar con la referencia:",
+  "Calculate the rest?": "¿Calcular el resto?",
+  "It could not be read. Remove it or add the file again to retry.": "No se pudo leer. Quítalo o vuelve a agregar el archivo para reintentarlo."
  },
  "plurals": {
   "about {count} day": [

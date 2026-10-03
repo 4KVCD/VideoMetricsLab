@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Đánh dấu ít nhất một video thử để tính chỉ số.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Chọn ít nhất một chỉ số cho mỗi video đã đánh dấu, hoặc bỏ đánh dấu các video bạn không muốn tính.",
   "Still reading videos": "Vẫn đang đọc video",
-  "Unreadable video": "Video không đọc được",
   "Wait for every checked test video to finish loading before running.": "Hãy đợi mọi video thử đã đánh dấu tải xong trước khi chạy.",
-  "{name} could not be read. Remove it or add the file again to retry.": "Không đọc được {name}. Hãy xóa nó, hoặc thêm lại tệp để thử lại.",
-  "Invalid options": "Tùy chọn không hợp lệ",
   "Queued": "Đang xếp hàng",
   "Cancelling...": "Đang hủy...",
   "Resume": "Tiếp tục",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Chỉ so sánh được {compared} trên {expected} khung hình dự kiến: một trong hai video kết thúc sau {time}, dù tệp của nó ghi là dài hơn. Có thể nó đã bị cắt ngắn: bản mã hóa dừng sớm, hoặc bản sao chưa chép xong.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} đang xếp hàng (chờ {other} của video này xong)",
   "calculating...": "đang tính...",
-  "{kind} failed": "{kind}: lỗi"
+  "{kind} failed": "{kind}: lỗi",
+  "Cannot compare": "Không thể so sánh",
+  "Cannot be compared with the reference:": "Không thể so sánh với video tham chiếu:",
+  "Calculate the rest?": "Tính các video còn lại?",
+  "It could not be read. Remove it or add the file again to retry.": "Không đọc được. Hãy xóa nó, hoặc thêm lại tệp để thử lại."
  },
  "plurals": {
   "about {count} day": [

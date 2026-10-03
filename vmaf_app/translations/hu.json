@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Jelöljön be legalább egy tesztvideót a metrikák számításához.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Válasszon legalább egy metrikát minden bejelölt videóhoz, vagy törölje azoknak a videóknak a jelölését, amelyeket nem kell számolni.",
   "Still reading videos": "A videók olvasása folyamatban",
-  "Unreadable video": "Olvashatatlan videó",
   "Wait for every checked test video to finish loading before running.": "Futtatás előtt várja meg, amíg minden bejelölt tesztvideó betöltődik.",
-  "{name} could not be read. Remove it or add the file again to retry.": "Nem olvasható: {name}. Távolítsa el, vagy adja hozzá újra a fájlt az újrapróbáláshoz.",
-  "Invalid options": "Érvénytelen beállítások",
   "Queued": "Sorban áll",
   "Cancelling...": "Megszakítás...",
   "Resume": "Folytatás",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "A várt {expected} képkockából csak {compared} volt összehasonlítható: az egyik videó {time} után véget ér, pedig a fájlja szerint hosszabb. Lehet, hogy csonka: idő előtt leállt kódolás vagy befejezetlen másolat.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} sorban áll (megvárja ennek a videónak ezt a részét: {other})",
   "calculating...": "számítás...",
-  "{kind} failed": "{kind}: sikertelen"
+  "{kind} failed": "{kind}: sikertelen",
+  "Cannot compare": "Nem hasonlítható össze",
+  "Cannot be compared with the reference:": "Nem hasonlítható össze a referenciával:",
+  "Calculate the rest?": "Kiszámítja a többit?",
+  "It could not be read. Remove it or add the file again to retry.": "Nem olvasható. Távolítsa el, vagy adja hozzá újra a fájlt az újrapróbáláshoz."
  },
  "plurals": {
   "about {count} day": [

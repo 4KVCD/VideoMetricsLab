@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Позначте принаймні одне тестове відео, щоб обчислити метрики.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Виберіть принаймні одну метрику для кожного позначеного відео або зніміть позначку з відео, які не треба обчислювати.",
   "Still reading videos": "Відео ще читаються",
-  "Unreadable video": "Нечитабельне відео",
   "Wait for every checked test video to finish loading before running.": "Зачекайте, доки всі позначені тестові відео завантажаться, перш ніж запускати.",
-  "{name} could not be read. Remove it or add the file again to retry.": "Не вдалося прочитати {name}. Приберіть його або додайте файл знову, щоб повторити.",
-  "Invalid options": "Неприпустимі параметри",
   "Queued": "У черзі",
   "Cancelling...": "Скасування...",
   "Resume": "Продовжити",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Вдалося порівняти лише {compared} з {expected} очікуваних кадрів: одне з відео закінчується після {time}, хоча за його файлом воно довше. Можливо, його обрізано: кодування зупинилося раніше часу або копія не завершилася.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} у черзі (чекає, поки завершаться {other} цього відео)",
   "calculating...": "обчислюється...",
-  "{kind} failed": "{kind}: помилка"
+  "{kind} failed": "{kind}: помилка",
+  "Cannot compare": "Порівняння неможливе",
+  "Cannot be compared with the reference:": "Не можна порівняти з еталоном:",
+  "Calculate the rest?": "Обчислити решту?",
+  "It could not be read. Remove it or add the file again to retry.": "Не вдалося прочитати. Приберіть його або додайте файл знову, щоб повторити."
  },
  "plurals": {
   "about {count} day": [

@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "ทำเครื่องหมายวิดีโอทดสอบอย่างน้อยหนึ่งรายการเพื่อคำนวณเมตริก",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "เลือกเมตริกอย่างน้อยหนึ่งรายการสำหรับทุกวิดีโอที่ทำเครื่องหมาย หรือยกเลิกเครื่องหมายวิดีโอที่ไม่ต้องการคำนวณ",
   "Still reading videos": "ยังอ่านวิดีโออยู่",
-  "Unreadable video": "อ่านวิดีโอไม่ได้",
   "Wait for every checked test video to finish loading before running.": "รอจนวิดีโอทดสอบที่ทำเครื่องหมายทั้งหมดโหลดเสร็จก่อนเริ่ม",
-  "{name} could not be read. Remove it or add the file again to retry.": "อ่าน {name} ไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่",
-  "Invalid options": "ตัวเลือกไม่ถูกต้อง",
   "Queued": "อยู่ในคิว",
   "Cancelling...": "กำลังยกเลิก...",
   "Resume": "ทำต่อ",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "เปรียบเทียบได้เพียง {compared} จาก {expected} เฟรมที่คาดไว้: วิดีโอหนึ่งจบหลัง {time} ทั้งที่ไฟล์ระบุว่ายาวกว่านั้น อาจถูกตัดสั้น เช่น การเข้ารหัสที่หยุดก่อนเสร็จ หรือการคัดลอกที่ไม่เสร็จ",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} อยู่ในคิว (รอให้ {other} ของวิดีโอนี้เสร็จ)",
   "calculating...": "กำลังคำนวณ...",
-  "{kind} failed": "{kind}: ล้มเหลว"
+  "{kind} failed": "{kind}: ล้มเหลว",
+  "Cannot compare": "เปรียบเทียบไม่ได้",
+  "Cannot be compared with the reference:": "เปรียบเทียบกับวิดีโออ้างอิงไม่ได้:",
+  "Calculate the rest?": "คำนวณที่เหลือไหม?",
+  "It could not be read. Remove it or add the file again to retry.": "อ่านไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่"
  },
  "plurals": {
   "about {count} day": [

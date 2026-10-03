@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Centang setidaknya satu video uji untuk menghitung metrik.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Pilih setidaknya satu metrik untuk tiap video yang dicentang, atau hapus centang video yang tidak ingin dihitung.",
   "Still reading videos": "Video masih dibaca",
-  "Unreadable video": "Video tidak terbaca",
   "Wait for every checked test video to finish loading before running.": "Tunggu hingga semua video uji yang dicentang selesai dimuat sebelum memulai.",
-  "{name} could not be read. Remove it or add the file again to retry.": "{name} tidak dapat dibaca. Hapus, atau tambahkan file lagi untuk mencoba ulang.",
-  "Invalid options": "Opsi tidak valid",
   "Queued": "Dalam antrean",
   "Cancelling...": "Membatalkan...",
   "Resume": "Lanjutkan",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Hanya {compared} dari {expected} frame yang diharapkan dapat dibandingkan: salah satu video berakhir setelah {time}, padahal filenya menyebut lebih panjang. Mungkin terpotong: encode yang berhenti lebih awal, atau salinan yang tidak selesai.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} mengantre (menunggu {other} video ini selesai)",
   "calculating...": "menghitung...",
-  "{kind} failed": "{kind}: gagal"
+  "{kind} failed": "{kind}: gagal",
+  "Cannot compare": "Tidak dapat dibandingkan",
+  "Cannot be compared with the reference:": "Tidak dapat dibandingkan dengan referensi:",
+  "Calculate the rest?": "Hitung sisanya?",
+  "It could not be read. Remove it or add the file again to retry.": "Tidak dapat dibaca. Hapus, atau tambahkan file lagi untuk mencoba ulang."
  },
  "plurals": {
   "about {count} day": [

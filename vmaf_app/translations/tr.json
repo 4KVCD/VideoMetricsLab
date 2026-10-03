@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Metrik hesaplamak için en az bir test videosunu işaretleyin.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "İşaretli her video için en az bir metrik seçin veya hesaplamak istemediğiniz videoların işaretini kaldırın.",
   "Still reading videos": "Videolar hâlâ okunuyor",
-  "Unreadable video": "Okunamayan video",
   "Wait for every checked test video to finish loading before running.": "Çalıştırmadan önce işaretli tüm test videolarının yüklenmesinin bitmesini bekleyin.",
-  "{name} could not be read. Remove it or add the file again to retry.": "Okunamadı: {name}. Kaldırın veya yeniden denemek için dosyayı tekrar ekleyin.",
-  "Invalid options": "Geçersiz seçenekler",
   "Queued": "Sırada",
   "Cancelling...": "İptal ediliyor...",
   "Resume": "Sürdür",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Beklenen {expected} kareden yalnızca {compared} tanesi karşılaştırılabildi: videolardan biri, dosyası daha uzun olduğunu söylese de {time} sonra bitiyor. Yarım kalmış olabilir: erken duran bir kodlama ya da tamamlanmamış bir kopya.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} sırada (bu videonun {other} bitmesini bekliyor)",
   "calculating...": "hesaplanıyor...",
-  "{kind} failed": "{kind}: başarısız"
+  "{kind} failed": "{kind}: başarısız",
+  "Cannot compare": "Karşılaştırılamıyor",
+  "Cannot be compared with the reference:": "Referansla karşılaştırılamıyor:",
+  "Calculate the rest?": "Geri kalanlar hesaplansın mı?",
+  "It could not be read. Remove it or add the file again to retry.": "Okunamadı. Kaldırın veya yeniden denemek için dosyayı tekrar ekleyin."
  },
  "plurals": {
   "about {count} day": [

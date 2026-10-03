@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Zaznacz co najmniej jedno wideo testowe, aby policzyć metryki.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Wybierz co najmniej jedną metrykę dla każdego zaznaczonego wideo albo odznacz wideo, których nie chcesz liczyć.",
   "Still reading videos": "Wideo są jeszcze wczytywane",
-  "Unreadable video": "Nieczytelne wideo",
   "Wait for every checked test video to finish loading before running.": "Przed uruchomieniem poczekaj, aż wszystkie zaznaczone wideo testowe się wczytają.",
-  "{name} could not be read. Remove it or add the file again to retry.": "Nie można odczytać {name}. Usuń je lub dodaj plik ponownie, aby spróbować jeszcze raz.",
-  "Invalid options": "Nieprawidłowe opcje",
   "Queued": "W kolejce",
   "Cancelling...": "Anulowanie...",
   "Resume": "Wznów",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Udało się porównać tylko {compared} z {expected} oczekiwanych klatek: jedno z wideo kończy się po {time}, choć jego plik podaje większą długość. Mogło zostać ucięte: kodowanie przerwane przed końcem lub niedokończona kopia.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind}: w kolejce (czeka, aż skończą się {other} tego wideo)",
   "calculating...": "obliczanie...",
-  "{kind} failed": "{kind}: błąd"
+  "{kind} failed": "{kind}: błąd",
+  "Cannot compare": "Nie można porównać",
+  "Cannot be compared with the reference:": "Nie można porównać z odniesieniem:",
+  "Calculate the rest?": "Obliczyć pozostałe?",
+  "It could not be read. Remove it or add the file again to retry.": "Nie można go odczytać. Usuń je lub dodaj plik ponownie, aby spróbować jeszcze raz."
  },
  "plurals": {
   "about {count} day": [

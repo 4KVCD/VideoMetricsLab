@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Zaškrtněte alespoň jedno testovací video pro výpočet metrik.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Zvolte alespoň jednu metriku pro každé zaškrtnuté video, nebo zrušte zaškrtnutí videí, která počítat nechcete.",
   "Still reading videos": "Videa se stále načítají",
-  "Unreadable video": "Nečitelné video",
   "Wait for every checked test video to finish loading before running.": "Před spuštěním počkejte, až se načtou všechna zaškrtnutá testovací videa.",
-  "{name} could not be read. Remove it or add the file again to retry.": "{name} nelze přečíst. Odeberte jej nebo přidejte soubor znovu a zkuste to znovu.",
-  "Invalid options": "Neplatné možnosti",
   "Queued": "Ve frontě",
   "Cancelling...": "Rušení...",
   "Resume": "Pokračovat",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Porovnat šlo jen {compared} z očekávaných {expected} snímků: jedno z videí končí po {time}, ačkoli jeho soubor udává větší délku. Mohlo být zkráceno: kódování, které skončilo předčasně, nebo nedokončená kopie.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} ve frontě (čeká na dokončení: {other} tohoto videa)",
   "calculating...": "počítá se...",
-  "{kind} failed": "{kind}: selhalo"
+  "{kind} failed": "{kind}: selhalo",
+  "Cannot compare": "Nelze porovnat",
+  "Cannot be compared with the reference:": "Nelze porovnat s referencí:",
+  "Calculate the rest?": "Spočítat ostatní?",
+  "It could not be read. Remove it or add the file again to retry.": "Nelze jej přečíst. Odeberte jej nebo přidejte soubor znovu a zkuste to znovu."
  },
  "plurals": {
   "about {count} day": [

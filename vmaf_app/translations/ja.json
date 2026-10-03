@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "指標を計算するには、少なくとも 1 本のテスト動画にチェックを入れてください。",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "チェックを入れた動画それぞれに少なくとも 1 つの指標を選ぶか、計算しない動画のチェックを外してください。",
   "Still reading videos": "動画を読み込み中です",
-  "Unreadable video": "読み込めない動画",
   "Wait for every checked test video to finish loading before running.": "実行する前に、チェックを入れたすべてのテスト動画の読み込みが終わるまでお待ちください。",
-  "{name} could not be read. Remove it or add the file again to retry.": "{name} を読み込めませんでした。削除するか、ファイルを追加し直してやり直してください。",
-  "Invalid options": "無効なオプション",
   "Queued": "待機中",
   "Cancelling...": "キャンセル中...",
   "Resume": "再開",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "比較できたのは予定の {expected} フレームのうち {compared} フレームだけです：ファイル上はもっと長いはずの動画の一方が {time} で終わっています。途中で切れている可能性があります（途中で止まったエンコードや、完了しなかったコピーなど）。",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} 待機中（この動画の {other} の完了待ち）",
   "calculating...": "計算中...",
-  "{kind} failed": "{kind} 失敗"
+  "{kind} failed": "{kind} 失敗",
+  "Cannot compare": "比較できません",
+  "Cannot be compared with the reference:": "参照動画と比較できません：",
+  "Calculate the rest?": "残りを計算しますか？",
+  "It could not be read. Remove it or add the file again to retry.": "読み込めませんでした。削除するか、ファイルを追加し直してやり直してください。"
  },
  "plurals": {
   "about {count} day": [

@@ -4032,21 +4032,17 @@ class MainWindow(QMainWindow):
         job_rows = []
         job_total_frames = []
         job_megapixels = []
+        skipped: list[tuple[RowData, str]] = []  # cannot be compared, and why
         for row in rows_to_run:
             row_data = self._rows[row]
             dist_info = row_data.video_info
             if dist_info is None:
-                still_reading = any(worker.isRunning() for worker in self._probe_workers)
-                QMessageBox.information(
-                    self,
-                    tr("Still reading videos") if still_reading else tr("Unreadable video"),
-                    (
-                        tr("Wait for every checked test video to finish loading before running.")
-                        if still_reading else
-                        tr("{name} could not be read. Remove it or add the file again to retry.", name=row_data.path.name)
-                    ),
-                )
-                return
+                if any(worker.isRunning() for worker in self._probe_workers):
+                    QMessageBox.information(self, tr("Still reading videos"),
+                                            tr("Wait for every checked test video to finish loading before running."))
+                    return
+                skipped.append((row_data, N_("It could not be read. Remove it or add the file again to retry.")))
+                continue
             try:
                 if row_data.options.resample_test is None:
                     validate_video_pair(self._source_info, dist_info, row_data.options)
@@ -4066,8 +4062,8 @@ class MainWindow(QMainWindow):
                     )
                 model = resolve_model(row_data.options, *analysis_size) if row_data.options.compute_vmaf else ""
             except (ValueError, VmafRunError) as e:
-                QMessageBox.warning(self, tr("Invalid options"), f"{row_data.path.name}: {e}")
-                return
+                skipped.append((row_data, str(e)))
+                continue
             job_options = replace(row_data.options, model=model)
             jobs.append(VmafJob(
                 self._source_info, dist_info, job_options, label=row_data.path.stem,
@@ -4087,6 +4083,8 @@ class MainWindow(QMainWindow):
             reference_for_frames = self._source_info if job_options.resample_test is not None else dist_info
             job_total_frames.append(estimate_total_frames(reference_for_frames, job_options))
 
+        if skipped and not self._confirm_skipping(skipped, bool(jobs)):
+            return
         if not jobs:
             return
         if not self._confirm_long_cpu_perceptual(job_rows):
@@ -4151,6 +4149,27 @@ class MainWindow(QMainWindow):
         self._worker.cancelled.connect(self._on_run_cancelled)
         self._worker.all_finished.connect(self._on_all_finished)
         self._worker.start()
+
+    def _confirm_skipping(self, skipped: list[tuple[RowData, str]], others: bool) -> bool:
+        """Names every checked video that cannot be compared with the
+        reference and why, at once, and asks whether to calculate the rest;
+        each is marked failed with its reason.
+
+        The first such video used to stop the whole run with "Invalid
+        options" and its reason alone: the videos that could be compared
+        were not calculated, and the next problem showed only on the next
+        try."""
+        for row_data, why in skipped:
+            row = self._row_index_of(row_data)
+            if row is not None:
+                self._set_row_status(row, N_("Failed"), why)
+        listed = "\n".join(f"\u2022 {row_data.path.name}: {tr_message(why)}" for row_data, why in skipped)
+        text = tr("Cannot be compared with the reference:") + "\n\n" + listed
+        if not others:
+            QMessageBox.warning(self, tr("Cannot compare"), text)
+            return False
+        answer = QMessageBox.question(self, tr("Cannot compare"), text + "\n\n" + tr("Calculate the rest?"))
+        return answer == QMessageBox.StandardButton.Yes
 
     def _set_run_ui_active(self, active: bool) -> None:
         """Freezes every input that can change the meaning of a live job."""

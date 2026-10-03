@@ -1760,6 +1760,87 @@ def test_failed_run_reports_failure_instead_of_done(qapp):
     assert "Done" not in win.status_label.text()
 
 
+def _videos_that_cannot_all_be_compared(win):
+    """A 10-second 23.976 fps source; a test video that can be compared,
+    one at 25 fps and one 5 seconds long."""
+    def info(name, fps=23.976, duration=10.0):
+        return VideoInfo(path=Path(name), width=1920, height=1080, fps=fps, duration=duration,
+                         nb_frames=round(fps * duration), codec_name="hevc")
+
+    win._source_info = info("source.mkv")
+    for name, fps, duration in (("ok.mkv", 23.976, 10.0), ("25fps.mkv", 25.0, 10.0), ("short.mkv", 23.976, 5.0)):
+        row = win._add_table_row(Path(name))
+        win._rows[row].video_info = info(name, fps, duration)
+
+
+class _FakeRunWorker:
+    """Takes the jobs and never runs them."""
+    started_with: list[list[str]] = []
+
+    class _Signal:
+        def connect(self, *_args):
+            pass
+
+    def __init__(self, jobs, *_args, **_kwargs):
+        _FakeRunWorker.started_with.append([job.label for job in jobs])
+        for name in ("job_started", "halves", "task_progress", "planned", "progress", "status", "job_finished",
+                     "job_failed", "job_partially_failed", "result_updated", "cancelled", "all_finished"):
+            setattr(self, name, self._Signal())
+
+    def start(self):
+        pass
+
+    def isRunning(self):
+        return False
+
+
+@pytest.mark.parametrize("answer", ["yes", "no"])
+def test_videos_that_cannot_be_compared_are_named_together_and_the_rest_can_run(qapp, monkeypatch, answer):
+    """The first such video stopped the whole run with "Invalid options" and
+    its reason alone: the ones that could be compared were not calculated,
+    and the next problem showed only on the next try."""
+    from PySide6.QtWidgets import QMessageBox
+
+    asked = []
+
+    def question(_parent, title, text, *_args, **_kwargs):
+        asked.append((title, text))
+        return QMessageBox.StandardButton.Yes if answer == "yes" else QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(question))
+    monkeypatch.setattr(main_window_module, "VmafWorker", _FakeRunWorker)
+    _FakeRunWorker.started_with = []
+    win = MainWindow()
+    _videos_that_cannot_all_be_compared(win)
+    win._on_run_clicked()
+    [(title, text)] = asked
+    assert title == "Cannot compare" and text.endswith("Calculate the rest?")
+    assert "25fps.mkv: Frame rates do not match (23.976 vs 25.000 fps)." in text
+    assert "short.mkv: Durations do not match" in text and "ok.mkv" not in text
+    assert _FakeRunWorker.started_with == ([["ok"]] if answer == "yes" else [])
+    for row in (1, 2):
+        assert "Failed" in win.distorted_table.item(row, COL_PATH).toolTip()
+    win._set_run_ui_active(False)
+    win.close()
+
+
+def test_with_no_video_that_can_be_compared_nothing_runs(qapp, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda _p, title, text, *a, **k: warned.append(text)))
+    monkeypatch.setattr(main_window_module, "VmafWorker", _FakeRunWorker)
+    _FakeRunWorker.started_with = []
+    win = MainWindow()
+    _videos_that_cannot_all_be_compared(win)
+    win._rows[0].video_info = None  # it could not be read
+    win._probe_workers = []
+    win._on_run_clicked()
+    assert len(warned) == 1 and "ok.mkv: It could not be read." in warned[0]
+    assert _FakeRunWorker.started_with == []
+    win.close()
+
+
 def test_estimate_total_frames_used_when_building_jobs(qapp):
     win = MainWindow()
     win._source_info = _fake_video_info("source.mp4")

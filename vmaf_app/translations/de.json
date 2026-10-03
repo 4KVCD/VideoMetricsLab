@@ -302,10 +302,7 @@
   "Check at least one test video to calculate metrics.": "Haken Sie mindestens ein Testvideo an, um Metriken zu berechnen.",
   "Select at least one metric for every checked video, or uncheck videos you do not want to calculate.": "Wählen Sie für jedes angehakte Video mindestens eine Metrik, oder entfernen Sie den Haken bei Videos, die Sie nicht berechnen möchten.",
   "Still reading videos": "Videos werden noch gelesen",
-  "Unreadable video": "Video nicht lesbar",
   "Wait for every checked test video to finish loading before running.": "Warten Sie vor dem Start, bis alle angehakten Testvideos fertig geladen sind.",
-  "{name} could not be read. Remove it or add the file again to retry.": "{name} konnte nicht gelesen werden. Entfernen Sie es oder fügen Sie die Datei erneut hinzu.",
-  "Invalid options": "Ungültige Optionen",
   "Queued": "In der Warteschlange",
   "Cancelling...": "Wird abgebrochen...",
   "Resume": "Fortsetzen",
@@ -695,7 +692,11 @@
   "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "Nur {compared} der erwarteten {expected} Frames konnten verglichen werden: Eines der Videos endet nach {time}, obwohl seine Datei eine größere Länge angibt. Es wurde womöglich abgeschnitten: eine vorzeitig beendete Kodierung oder eine unvollständige Kopie.",
   "{kind} queued (waiting for this video's {other} to finish)": "{kind} wartet (bis die {other} dieses Videos fertig sind)",
   "calculating...": "wird berechnet...",
-  "{kind} failed": "{kind} fehlgeschlagen"
+  "{kind} failed": "{kind} fehlgeschlagen",
+  "Cannot compare": "Vergleich nicht möglich",
+  "Cannot be compared with the reference:": "Nicht mit der Referenz vergleichbar:",
+  "Calculate the rest?": "Die übrigen berechnen?",
+  "It could not be read. Remove it or add the file again to retry.": "Es konnte nicht gelesen werden. Entfernen Sie es oder fügen Sie die Datei erneut hinzu."
  },
  "plurals": {
   "about {count} day": [
