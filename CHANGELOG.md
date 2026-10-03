@@ -49,16 +49,56 @@
   of marking them Cancelled.
 - Included various small bug fixes and reliability improvements.
 
+### How VMAF on the GPU works
+
+libvmaf, the library that calculates VMAF, has CUDA versions of the features
+VMAF is made from (VIF, ADM and motion), but they can't simply be used. No
+FFmpeg build the app can rely on includes them, and as merged they score
+differently from the CPU: libvmaf's issues and pull requests report randomly
+low motion scores, NaN VIF scores, and ADM differing from the CPU's at the
+frame edges.
+
+So VideoMetricsLab bundles its own libvmaf with CUDA, built from libvmaf
+master ([cea2b4d8](https://github.com/Netflix/vmaf/commit/cea2b4d832a105116a3f16f56d6f5d953421952c))
+with 12 open pull requests merged in, each pinned to the commit we tested:
+
+- [#1477](https://github.com/Netflix/vmaf/pull/1477): a native Windows (MSVC)
+  build.
+- [#1573](https://github.com/Netflix/vmaf/pull/1573): CUDA build fixes, and a
+  crash with pinned picture memory.
+- [#1583](https://github.com/Netflix/vmaf/pull/1583): a race in the motion
+  feature that gave randomly low motion scores, and a double flush at the end
+  of a video.
+- [#1644](https://github.com/Netflix/vmaf/pull/1644) and
+  [#1612](https://github.com/Netflix/vmaf/pull/1612): motion at the frame
+  edges, which now mirrors them as the CPU does, and on the first frame.
+- [#1614](https://github.com/Netflix/vmaf/pull/1614): a race in VIF that gave
+  NaN scores.
+- [#1647](https://github.com/Netflix/vmaf/pull/1647) to
+  [#1651](https://github.com/Netflix/vmaf/pull/1651): five places where ADM's
+  CUDA code differed from the CPU's (contrast masking, rounding, border
+  clamping, an angle constant and a denominator shift).
+- [#1652](https://github.com/Netflix/vmaf/pull/1652): both frames released
+  when one fails to score.
+
+With them, VIF and ADM on the GPU are identical to the CPU's. Motion differs
+by about 0.00003, because its CUDA kernel rounds its blur in a different
+order ([libvmaf issue 1562](https://github.com/Netflix/vmaf/issues/1562),
+not fixed yet). Every frame's VMAF is within 0.00006 of the CPU's, and VMAF
+NEG within 0.0008, so a saved score is reused whichever calculated it.
+
+`scripts/build_libvmaf_cuda.ps1` builds it from exactly these commits, and two
+builds give the same file. FFmpeg still decodes the videos; libvmaf scores
+them on the GPU in a process of its own, so a crash in it or in the NVIDIA
+driver calculates that video's VMAF on the CPU instead of closing the app.
+VMAF v1 (which has no CUDA version), custom models, resolution tests and
+12-bit videos stay on the CPU.
+
+Thanks to the authors of these pull requests. We hope they are merged, so that
+everyone gets accurate VMAF on the GPU.
+
 ### Known issues
 
-- VMAF on the GPU still copies every frame from the GPU's decoder through the
-  CPU and back to the GPU, which takes several CPU cores (about 6.5 at 4K and
-  55 fps on a Core Ultra 9 285K). CPU metrics calculated at the same time slow
-  it down, to about 42 fps beside PSNR and SSIM.
-- Vship's CUDA (NVIDIA) and HIP (AMD) builds are still 5.1.1 until 5.1.2 is
-  released. For them, 4:1:0 videos are converted to 4:4:4 before scoring,
-  which gives slightly different scores than the Vulkan build (SSIMULACRA2
-  72.82 against 72.98 on one test video).
 - On the integrated Intel GPU of a Core Ultra 9 285K, CVVDP fails on 4K videos
   ("A GPU Call failed inside Vship"). SSIMULACRA2 and Butteraugli are not
   affected.
