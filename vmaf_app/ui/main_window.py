@@ -653,7 +653,8 @@ class MainWindow(QMainWindow):
         # Each video's halves as the worker planned them (VmafWorker.planned).
         self._job_plan: dict[int, list[tuple[str, int]]] = {}
         # The last rate seen this run on the CPU and on the GPU lane, for
-        # the queue ETA while a lane has no current rate.
+        # the queue ETA while a lane has no current rate: "CPU", "GPU"
+        # (Vship) and "GPU VMAF" (FFmpeg's half with VMAF on the GPU).
         self._lane_rates: dict[str, float] = {}
         # Each GPU metric's last rate this run: what its pass will take on
         # the next video, for the GPU half's total time remaining.
@@ -4392,6 +4393,11 @@ class MainWindow(QMainWindow):
             fps = float(task.get("fps") or 0.0)
             if task.get("state") == "running" and fps > 0:
                 kind = self._task_kind(index, task)
+                if kind == "GPU" and task.get("backend") == "ffmpeg":
+                    # VMAF on the GPU: FFmpeg's rate, kept apart from
+                    # Vship's -- the next such video is timed by it.
+                    self._lane_rates["GPU VMAF"] = fps
+                    continue
                 self._lane_rates[kind] = fps
                 keys = tuple(task.get("metric_keys", ()))
                 if kind != "GPU":
@@ -4417,9 +4423,12 @@ class MainWindow(QMainWindow):
         self._update_run_status()
 
     def _task_kind(self, index: int, task: dict[str, object]) -> str:
-        """"CPU" or "GPU": where a half of a video's work runs."""
+        """"CPU" or "GPU": where a half of a video's work runs. FFmpeg's half
+        by its queue (lane, from the worker): the GPU's when it scores VMAF
+        there -- one video at a time, as Vship's halves -- also after a
+        failure hands VMAF to the CPU in that same turn."""
         if task.get("backend") == "ffmpeg":
-            return "CPU"
+            return "GPU" if task.get("lane") == "gpu" else "CPU"
         if index in self._job_gpu_fallback:
             return "CPU"
         row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
@@ -4753,6 +4762,7 @@ class MainWindow(QMainWindow):
         cpu_waiting: list[float] = []  # frames left, no rate of their own yet
         cpu_rates: list[float] = []
         gpu_seconds, gpu_frames, gpu_rate = 0.0, 0.0, 0.0  # gpu_frames: no rate of their own yet
+        vmaf_frames, vmaf_rate = 0.0, 0.0  # the same for FFmpeg's halves with VMAF on the GPU
         for job, frames in enumerate(self._job_total_frames):
             if job in self._finished_jobs:
                 continue
@@ -4769,6 +4779,16 @@ class MainWindow(QMainWindow):
                 halves = [(pool.upper(), None, passes) for pool, passes in planned]
             for kind, task, passes in halves:
                 fps = float(task.get("fps") or 0.0) if task is not None else 0.0
+                if kind == "GPU" and task is not None and task.get("backend") == "ffmpeg":
+                    # VMAF on the GPU: FFmpeg's one pass, in the GPU's queue.
+                    total = int(task.get("total") or 0)
+                    left = max(0, total - int(task.get("current") or 0)) if total > 0 else frames
+                    if total > 0 and fps > 0:
+                        gpu_seconds += left / fps
+                        vmaf_rate = fps
+                    else:
+                        vmaf_frames += left
+                    continue
                 if kind == "GPU":
                     seconds, unknown = self._gpu_work(task, frames, passes)
                     gpu_seconds += seconds
@@ -4797,6 +4817,11 @@ class MainWindow(QMainWindow):
             if gpu_rate <= 0:
                 return None
             gpu_seconds += gpu_frames / gpu_rate
+        if vmaf_frames > 0:
+            vmaf_rate = vmaf_rate or self._lane_rates.get("GPU VMAF", 0.0)
+            if vmaf_rate <= 0:
+                return None
+            gpu_seconds += vmaf_frames / vmaf_rate
         return max(cpu_seconds, gpu_seconds)
 
     def _on_job_status(self, index: int, message: str) -> None:

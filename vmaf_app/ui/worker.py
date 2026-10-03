@@ -303,10 +303,13 @@ class VmafWorker(QThread):
                   ", each video's in one pass" if self.gpu_metrics_together else "")
         for run in runs:
             _log.info("%s", run.describe())
+        # Each half's queue, and its passes over the video: Vship's GPU half
+        # one per pass (vship_passes), FFmpeg's one, also in the GPU's queue
+        # with VMAF on the GPU -- where Vship's count made it one per metric.
         self.planned.emit({
             run.index: [(run.pool_of(task),
                          len(vship_passes(task.requested_specs, self.gpu_metrics_together))
-                         if run.pool_of(task) == _GPU else 1)
+                         if run.pool_of(task) == _GPU and task.backend_id == "perceptual" else 1)
                         for task in run.plan.tasks]
             for run in runs
         })
@@ -592,6 +595,7 @@ class _JobRun:
                 "backend": task.backend_id,
                 "metric_keys": task.metric_keys,
                 "gpu_keys": self.gpu_keys(task),
+                "lane": self.pool_of(task),
                 "current": cur,
                 "total": total,
                 "fps": fps,

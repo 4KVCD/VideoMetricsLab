@@ -4463,6 +4463,32 @@ def test_each_half_is_named_by_where_its_metrics_run(qapp):
     win.close()
 
 
+def test_vmaf_on_the_gpu_is_timed_in_the_gpus_queue_one_video_at_a_time(qapp):
+    """FFmpeg's half with VMAF on the GPU waits for the GPU like Vship's
+    halves, but was timed as CPU work, beside them: the queue's time was
+    the longer of the two, not their sum. A video's waiting for its turn is
+    timed at FFmpeg's own rate, not Vship's."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [1000, 1000]
+    win._job_plan = {0: [("gpu", 1), ("gpu", 1)], 1: [("gpu", 1)]}
+    for index, label in ((0, "a"), (1, "b")):
+        win._on_job_started(index, label)
+    win._metric_rates["ssimulacra2"] = 20.0
+    vmaf = {**_half("ffmpeg", ("vmaf", "psnr")), "gpu_keys": ("vmaf",), "lane": "gpu"}
+    win._on_task_progress(0, [{**vmaf, "current": 600, "total": 1000, "fps": 40.0},
+                              {**_half("perceptual", ("ssimulacra2",), state="waiting", current=0, total=0,
+                                       fps=0.0), "waiting_for": "GPU"}])
+    win._on_task_progress(1, [{**vmaf, "state": "waiting", "waiting_for": "GPU", "current": 0, "total": 0,
+                               "fps": 0.0}])
+    # a's VMAF (400 frames at 40 fps), then its SSIMULACRA2 (1000 at 20), then b's VMAF (1000 at 40)
+    assert win._queue_eta_by_lane() == pytest.approx(400 / 40 + 1000 / 20 + 1000 / 40)
+    assert win._metric_rates == {"ssimulacra2": 20.0}  # FFmpeg's rate is not taken for Vship's
+    win.close()
+
+
 def test_vmaf_failing_on_the_gpu_leaves_vships_half_named_gpu(qapp):
     """The fallback's "calculating it on the CPU" marked the whole video as
     fallen back to the CPU, Vship's half on the GPU with it."""

@@ -891,6 +891,22 @@ def test_the_worker_reports_each_videos_halves_and_gpu_passes(qapp, monkeypatch)
     assert plans == [{0: [("cpu", 1), ("gpu", 2)], 1: [("cpu", 1)]}]
 
 
+def test_ffmpegs_half_with_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
+    """Vship's pass count, used for every half in the GPU's queue, made it
+    one pass per FFmpeg metric."""
+    from vmaf_app.core import vmaf_cuda
+
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    worker = VmafWorker([_split_job("d.mp4", ("vmaf", "vmaf_neg", "psnr", "ssimulacra2"))])
+    plans = []
+    worker.planned.connect(plans.append)
+    worker.run()
+    _drain(qapp)
+    assert plans == [{0: [("gpu", 1), ("gpu", 1)]}]
+
+
 def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):
     def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
         on_status("Detecting black bars in source...")
