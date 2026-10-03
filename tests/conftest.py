@@ -118,6 +118,12 @@ def isolate_user_state(tmp_path, monkeypatch):
     from vmaf_app.core import vmaf_cuda
 
     monkeypatch.setattr(vmaf_cuda, "_probed", (False, "off in tests"))
+    # Likewise decoding in the scoring process with NVIDIA's decoder
+    # (nvdec_frames): FFmpeg decodes unless a test asks for it, so a test
+    # faking NVIDIA decode does not reach a real GPU where there is one.
+    from vmaf_app.core import perceptual_vship
+
+    monkeypatch.setattr(perceptual_vship, "_native_decoder", lambda *_args, **_kwargs: None)
     # Detected black bars are remembered per file for the life of the
     # process; a test's answer must not leak into the next one's.
     crop_detect.clear_cache()

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,9 +16,10 @@ import numpy as np
 import pytest
 
 from tests.factories import STDLIB_PYTHON
-from vmaf_app.core import perceptual_cpu
+from vmaf_app.core import nvdec_frames, perceptual_cpu
 from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
+from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
@@ -391,7 +393,7 @@ def _both(command):
 
 def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_decode=False,
          source=None, test=None, cancel_after=None, hwaccel=lambda _vendor, _codec: None,
-         inspect=None, fail=None, on_status=None, together=False, on_progress=None):
+         inspect=None, fail=None, on_status=None, together=False, on_progress=None, options=None, device=None):
     """run_vship_task where each spawned 'FFmpeg' is the next child for its input.
 
     `children` maps "source"/"test" to the commands that input's successive
@@ -434,9 +436,9 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     monkeypatch.setattr(vship, "_spawn_raw_ffmpeg", fake_spawn)
     monkeypatch.setattr(vship, "_compute_metric", fake_compute)
     request = analysis_request_from_vmaf_options(
-        VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode), metrics)
+        VmafOptions(crop_mode=CropMode.NONE, gpu_decode=gpu_decode, **(options or {})), metrics)
     output = vship.run_vship_task(source or _hevc("source.mkv"), test or _hevc("test.mkv"), request,
-                                  request.metrics, _fake_device(), None, None, cancel_event=cancel,
+                                  request.metrics, device or _fake_device(), None, None, cancel_event=cancel,
                                   on_status=on_status, together=together, on_progress=on_progress)
     return output, spawned
 
@@ -451,6 +453,217 @@ def test_frames_arrive_in_order_through_the_ring_and_both_lanes(monkeypatch):
     assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
     assert list(output.metrics.get("butteraugli").values) == [i + 0.5 for i in range(count)]
     assert list(output.metrics.get("ssimulacra2").frame) == list(range(count))
+
+
+# ------------------------------------- videos decoded in the scoring process
+
+class _FakeDecoder:
+    """nvdec_frames.NvdecStream's part in a pass: `count` pictures, each
+    stamped pts(number), whose download writes the picture's number into the
+    slot's first byte (the fake score reads it back)."""
+
+    def __init__(self, count, *, pts=lambda number: number * 42, fail_at=None):
+        self.count, self.pts, self.fail_at = count, pts, fail_at
+        self.time_base = Fraction(1, 1000)
+        self.number = 0
+        self.held: dict[int, int] = {}
+        self.released, self.verified, self.closed = 0, 0, False
+
+    def start(self):
+        pass
+
+    def next(self, _timeout_ms=100):
+        if self.number == self.fail_at:
+            raise nvdec_frames.NvdecFailedError("the GPU's decoder found an error in the video")
+        if self.number >= self.count:
+            self.verified += 1
+            return None
+        slot = self.number % 4
+        assert slot not in self.held, "a slot was handed out again before it was released"
+        self.held[slot] = self.number
+        self.number += 1
+        return slot, self.pts(self.number - 1)
+
+    def download(self, slot, address):
+        ctypes.c_uint8.from_address(address).value = self.held[slot] % 256
+
+    def release(self, slot):
+        del self.held[slot]
+        self.released += 1
+
+    def verify(self):
+        self.verified += 1
+
+    def abort(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+#: The real one: the suite's conftest makes FFmpeg decode everywhere else.
+_real_native_decoder = vship._native_decoder
+
+
+def _decoded_here(monkeypatch, **kwargs) -> dict[str, _FakeDecoder]:
+    """Each input decoded by a _FakeDecoder(**kwargs) of its own."""
+    made: dict[str, _FakeDecoder] = {}
+
+    def native(info, *_args):
+        made[info.path.stem] = _FakeDecoder(**kwargs)
+        return made[info.path.stem]
+
+    monkeypatch.setattr(vship, "_native_decoder", native)
+    return made
+
+
+def test_videos_nvidia_decodes_reach_the_lanes_without_an_ffmpeg_decode(monkeypatch):
+    made = _decoded_here(monkeypatch, count=vship._RING_SLOTS * 3 + 2)
+    output, spawned = _run(monkeypatch, children=_both(_frames_command(0, _FRAME_BYTES)), metrics=("ssimulacra2",),
+                           gpu_decode=True, hwaccel=lambda _vendor, _codec: "cuda")
+    count = vship._RING_SLOTS * 3 + 2
+    assert spawned == {"source": [], "test": []}
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(count)]
+    assert all(d.closed and d.released == count and not d.held for d in made.values())
+
+
+def test_a_gpu_decoded_video_gives_every_step_th_picture_up_to_the_limit(monkeypatch):
+    """FFmpeg's chain: select every 3rd picture, then -t 0.5 (trim): with
+    pictures 42 ms apart, pictures 0, 3, 6 and 9 -- 12 is at 504 ms."""
+    made = _decoded_here(monkeypatch, count=40)
+    output, _spawned = _run(monkeypatch, children=_both(_frames_command(0, _FRAME_BYTES)), metrics=("ssimulacra2",),
+                            gpu_decode=True, hwaccel=lambda _vendor, _codec: "cuda",
+                            options={"n_subsample": 3, "duration_limit": 0.5})
+    result = output.metrics.get("ssimulacra2")
+    assert list(result.values) == [0.0, 3.0, 6.0, 9.0]
+    assert list(result.frame) == [0, 3, 6, 9]
+    assert all(d.verified for d in made.values())  # the pictures up to the limit were checked
+
+
+def test_a_gpu_decode_failing_partway_makes_the_pass_again_through_ffmpeg(monkeypatch):
+    calls = []
+
+    def native(info, *_args):
+        calls.append(info.path.stem)
+        return _FakeDecoder(20, fail_at=5 if info.path.stem == "source" else None)
+
+    monkeypatch.setattr(vship, "_native_decoder", native)
+    statuses = []
+    output, spawned = _run(monkeypatch, children=_both(_frames_command(20, _FRAME_BYTES)), metrics=("ssimulacra2",),
+                           gpu_decode=True, hwaccel=lambda _vendor, _codec: "cuda", on_status=statuses.append)
+    assert sorted(calls) == ["source", "test"]  # tried once, then FFmpeg
+    assert len(spawned["source"]) == 1 and len(spawned["test"]) == 1
+    assert list(output.metrics.get("ssimulacra2").values) == [float(i) for i in range(20)]
+    assert any(status.startswith("GPU decoding failed (the GPU's decoder found an error") for status in statuses)
+
+
+def test_only_vships_cuda_build_and_nvidia_decode_take_gpu_decoded_pictures(monkeypatch):
+    calls = []
+    monkeypatch.setattr(vship, "_native_decoder", lambda *args: calls.append(args) or None)
+    vulkan = vship.VshipDevice("vulkan", "fake GPU", 0, "5.1.1",
+                               SimpleNamespace(library=SimpleNamespace(Vship_FreeHandler=lambda _handle: 0)))
+    _run(monkeypatch, children=_both(_frames_command(3, _FRAME_BYTES)), metrics=("ssimulacra2",), gpu_decode=True,
+         hwaccel=lambda _vendor, _codec: "cuda", device=vulkan)
+    _run(monkeypatch, children=_both(_frames_command(3, _FRAME_BYTES)), metrics=("ssimulacra2",), gpu_decode=True,
+         hwaccel=lambda _vendor, _codec: "qsv")
+    assert calls == []
+
+
+@pytest.mark.parametrize(("pixel_format", "shift"), [("yuv420p", 0), ("yuv420p16le", 0), ("yuv420p10le", 6)])
+def test_the_gpu_decoder_gives_the_layout_vship_is_told(monkeypatch, pixel_format, shift):
+    plans = []
+
+    def stream(info, plan, *_args, **_kwargs):
+        plans.append(plan)
+        return "decoder"
+
+    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", stream)
+    info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "hevc",
+                     pix_fmt="yuv420p" if pixel_format == "yuv420p" else "yuv420p10le")
+    image = vship._ImageFormat(pixel_format, 0, vship._VSHIP_ENUMS[8 if pixel_format == "yuv420p" else 16], 1, 1)
+    frame_bytes = image.frame_layout(64, 48)[0]
+    assert _real_native_decoder(info, None, (64, 48), image, frame_bytes, 0, None, "source") == "decoder"
+    assert plans[0].shift == shift
+
+
+def test_a_scaled_video_or_one_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch):
+    def refuse(*_args, **_kwargs):
+        raise nvdec_frames.NvdecUnavailableError("this GPU's decoder cannot decode this video")
+
+    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", refuse)
+    info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
+    image = vship._image_format(info)
+    frame_bytes = image.frame_layout(64, 48)[0]
+    assert _real_native_decoder(info, None, (32, 24), image, image.frame_layout(32, 24)[0], 0, None, "x") is None
+    assert _real_native_decoder(info, None, (64, 48), image, frame_bytes, 0, None, "x") is None
+    rgb = vship._ImageFormat("gbrp", 1, vship._VSHIP_ENUMS[8], 0, 0, True, (2, 0, 1))
+    assert _real_native_decoder(info, None, (64, 48), rgb, rgb.frame_layout(64, 48)[0], 0, None, "x") is None
+
+
+# ----------------- which pictures a video decoded in the scoring process gives
+
+_W, _H = 64, 32
+
+
+def _numbered_clip(path: Path, count: int, pts_expression: str, time_base: str = "1/1000") -> Path:
+    """`count` frames whose luma is their number + 3, coded losslessly."""
+    container = ["-video_track_timescale", time_base.split("/")[1]] if path.suffix == ".mp4" else []
+    subprocess.run([
+        ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
+        "-i", f"nullsrc=s={_W}x{_H}:r=24:d={count / 24 + 1}",
+        "-vf", f"geq=lum='mod(N\\,250)+3':cb=128:cr=128,settb={time_base},setpts='{pts_expression}'",
+        "-frames:v", str(count), "-fps_mode", "passthrough", "-enc_time_base", "filter",
+        "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p", *container, str(path),
+    ], check=True)
+    return path
+
+
+def _ffmpeg_piped(path: Path, step: int, limit: str | None) -> list[int]:
+    """The frames the Vship command (perceptual_vship) pipes, by number."""
+    chain = (f"select=not(mod(n\\,{step})),setpts=PTS-STARTPTS,format=yuv420p" if step > 1
+             else "setpts=PTS-STARTPTS,format=yuv420p")
+    raw = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
+                          *(["-t", limit] if limit else []), "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
+                          "-f", "rawvideo", "pipe:1"], capture_output=True, check=True).stdout
+    frames = np.frombuffer(raw, dtype=np.uint8).reshape(-1, _W * _H * 3 // 2)
+    return (frames[:, 0].astype(int) - 3).tolist()
+
+
+def _selected(path: Path, step: int, limit: str | None) -> list[int]:
+    out = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=time_base:frame=pts", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True, check=True).stdout.split()
+    num, den = next(line for line in out if "/" in line).split("/")
+    stamps = [int(line.strip(",")) for line in out if "/" not in line and line.strip(",")]
+    selection = vship._FrameSelection(step, limit)
+    kept = []
+    for number, pts in enumerate(stamps):
+        taken = selection.take(pts, Fraction(int(num), int(den)))
+        if taken is None:
+            break
+        if taken:
+            kept.append(number)
+    return kept
+
+
+@pytest.mark.parametrize(("name", "clip", "step", "limit"), [
+    ("every frame", (48, "N*42"), 1, None),
+    ("every third", (48, "N*42"), 3, None),
+    ("every seventh, a limit", (60, "N*42"), 7, "1.500000"),
+    ("a limit on a frame", (48, "N*42"), 1, "1.008000"),
+    ("a limit just past a frame", (48, "N*42"), 1, "1.008001"),
+    ("a limit between frames", (48, "N*42"), 2, "1.000000"),
+    ("variable rate", (50, "N*40+mod(N*7\\,13)"), 3, "1.300000"),
+    ("mp4, 1/90000", (48, "N*3754", "1/90000", "mp4"), 2, "1.250000"),
+])
+def test_the_selection_is_the_ffmpeg_chains(tmp_path, name, clip, step, limit):
+    count, expression, *rest = clip
+    time_base = rest[0] if rest else "1/1000"
+    suffix = rest[1] if len(rest) > 1 else "mkv"
+    path = _numbered_clip(tmp_path / f"clip.{suffix}", count, expression, time_base)
+    expected = _ffmpeg_piped(path, step, limit)
+    assert expected
+    assert _selected(path, step, limit) == expected
 
 
 def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeypatch):

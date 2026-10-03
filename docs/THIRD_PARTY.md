@@ -25,8 +25,9 @@ does not describe every linked codec dependency. Qt's LGPL distribution
 requirements also need attention when producing a frozen application.
 
 The Vship command-line executable and FFMS2 DLL are intentionally not bundled;
-the app feeds FFmpeg-decoded frames to Vship's library API (the 5.1 C API)
-instead. The Vulkan build needs only the GPU driver's `vulkan-1.dll`. When no
+the app feeds frames to Vship's library API (the 5.1 C API) instead, decoded by
+FFmpeg or, on NVIDIA GPUs, by `nvdec_frames.dll` from the compressed stream
+FFmpeg copies out of the container. The Vulkan build needs only the GPU driver's `vulkan-1.dll`. When no
 build can use a GPU -- no driver or runtime, or initialization fails -- GPU
 scoring is off for that run: SSIMULACRA2 and Butteraugli use the bundled libjxl
 CPU tools, and CVVDP, which has no CPU implementation, is not calculated.

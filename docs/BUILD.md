@@ -76,8 +76,11 @@ case anyone overrides that.
   re-measure every build when updating Vship. Where no build can use the GPU,
   the input format is unsupported, or GPU processing fails, SSIMULACRA2 and
   Butteraugli fall back to the bundled CPU tools. The Vship CLI and FFMS2
-  decoder are not included; video frames continue to come from the user's FFmpeg
-  installation. Vship and metric notices are packaged beside the libraries.
+  decoder are not included; the user's FFmpeg reads every video. With Vship's
+  CUDA build, a video NVIDIA's decoder decodes is decoded by `nvdec_frames.dll`
+  in Vship's process, FFmpeg only copying its compressed stream out of the
+  container; other videos FFmpeg decodes. Vship and metric notices are
+  packaged beside the libraries.
 - **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`), for VMAF and
   VMAF NEG on NVIDIA GPUs only: libvmaf master with the open pull requests
   that let it build with MSVC and fix its CUDA code, built by

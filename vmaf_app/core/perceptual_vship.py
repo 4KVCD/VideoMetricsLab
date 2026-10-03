@@ -10,8 +10,13 @@ temporal and scores the video (see _CvvdpLane).
 FFmpeg decodes, crops, samples and scales -- the same FFmpeg as the rest of
 the app, so every codec it reads works, VVC included, with hardware decode
 per input where the GPU has one. It streams tightly packed frames into rings
-of pinned host buffers (see _FrameStream). Vship converts each frame from the
-colorspace it is described in (_vship_colorspace) and computes the metric on
+of pinned host buffers (see _FrameStream). With Vship's CUDA build, a video
+NVIDIA's decoder decodes is decoded in the scoring process instead
+(nvdec_frames, _NativeFrameStream): FFmpeg only copies its packets out of
+the container, and the GPU copies each picture into the ring itself -- the
+same pictures, without the CPU copies and the pipe. Vship converts each
+frame from the colorspace it is described in (_vship_colorspace) and
+computes the metric on
 the GPU -- through Vship's CUDA build on NVIDIA, its HIP build on AMD, or
 its Vulkan build, which runs on any GPU with a Vulkan driver (see
 VSHIP_BUILDS). Vship takes a frame as three planes, so a hardware-decoded
@@ -34,10 +39,12 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core import nvdec_frames
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
@@ -944,18 +951,7 @@ class _FrameStream:
         interleaved_chroma: tuple[int, int, type[np.integer]] | None = None,
         on_software: Callable[[], None] | None = None, gpu_id: int = 0,
     ) -> None:
-        # Allocated one by one so a failure part-way frees what was already
-        # allocated: a list comprehension left those buffers -- pinned
-        # RAM, 25 MB each for 4K 10-bit -- allocated for the rest of the
-        # session, once per failed attempt.
-        self.buffers: list[_PinnedBuffer] = []
-        try:
-            for _ in range(_RING_SLOTS):
-                self.buffers.append(_PinnedBuffer(lib, frame_bytes, gpu_id))
-        except BaseException:
-            for buffer in self.buffers:
-                buffer.close()
-            raise
+        self.buffers = _pinned_ring(lib, frame_bytes, gpu_id)
         self.views = [memoryview(buffer.array).cast("B") for buffer in self.buffers]
         # (luma bytes, bytes of one chroma plane, sample type) when FFmpeg
         # pipes NV12/P010: the luma goes straight into the slot, the U/V pairs
@@ -1106,6 +1102,156 @@ class _FrameStream:
         if not self._thread.is_alive():
             for buffer in self.buffers:
                 buffer.close()
+
+
+def _pinned_ring(lib: ctypes.CDLL, frame_bytes: int, gpu_id: int) -> list[_PinnedBuffer]:
+    """_RING_SLOTS pinned frame buffers, allocated one by one so a failure
+    part-way frees what was already allocated: a list comprehension left
+    those buffers -- pinned RAM, 25 MB each for 4K 10-bit -- allocated for
+    the rest of the session, once per failed attempt."""
+    buffers: list[_PinnedBuffer] = []
+    try:
+        for _ in range(_RING_SLOTS):
+            buffers.append(_PinnedBuffer(lib, frame_bytes, gpu_id))
+    except BaseException:
+        for buffer in buffers:
+            buffer.close()
+        raise
+    return buffers
+
+
+class _FrameSelection:
+    """Which decoded pictures an input's FFmpeg chain pipes to Vship
+    (_filter_chain and the command's -t): its select filter keeps every
+    step-th picture, setpts starts them at 0, and the output's -t is FFmpeg's
+    trim filter, which keeps a picture while its time is below the limit in
+    the stream's time base (nvdec_frames.duration_in) and ends the output at
+    the first that is not."""
+
+    def __init__(self, step: int, duration_limit: str | None) -> None:
+        self._step = step
+        self._duration_limit = duration_limit
+        self._index = 0
+        self._first: int | None = None
+        self._limit: int | None = None
+
+    def take(self, pts: int, time_base: Fraction) -> bool | None:
+        """For the next decoded picture: True if it is piped, False if it is
+        skipped, None if the output has ended at it."""
+        index = self._index
+        self._index += 1
+        if index % self._step:
+            return False
+        if self._first is None:
+            self._first = pts
+            if self._duration_limit is not None:
+                self._limit = nvdec_frames.duration_in(self._duration_limit, time_base)
+        if self._limit is not None and pts - self._first >= self._limit:
+            return None
+        return True
+
+
+class _NativeFrameStream:
+    """One input decoded in this process by NVIDIA's decoder
+    (nvdec_frames.NvdecStream), feeding a ring of pinned frame buffers as
+    _FrameStream does: each picture FFmpeg's chain would pipe
+    (_FrameSelection) is copied by the GPU straight into a free slot. A
+    decoding failure after the start is raised from next() as
+    NvdecFailedError: the pass is then made again through FFmpeg."""
+
+    def __init__(self, lib: ctypes.CDLL, frame_bytes: int, decoder: nvdec_frames.NvdecStream, step: int,
+                 duration_limit: str | None, label: str, gpu_id: int = 0) -> None:
+        self.buffers = _pinned_ring(lib, frame_bytes, gpu_id)
+        self._decoder = decoder
+        self._selection = _FrameSelection(step, duration_limit)
+        self._label = label
+        self._free: queue.Queue[int] = queue.Queue()
+        self._filled: queue.Queue[int | BaseException] = queue.Queue()
+        for slot in range(_RING_SLOTS):
+            self._free.put(slot)
+        self._stopping = threading.Event()
+        self._thread = threading.Thread(target=self._run, name=f"vship-nvdec-{label}", daemon=True)
+
+    def start(self) -> None:
+        self._decoder.start()
+        self._thread.start()
+
+    def _run(self) -> None:
+        decoder = self._decoder
+        try:
+            while not self._stopping.is_set():
+                try:
+                    item = decoder.next(100)
+                except TimeoutError:
+                    continue
+                if item is None:
+                    break  # the end, checked (NvdecStream.verify)
+                picture, pts = item
+                try:
+                    taken = self._selection.take(pts, decoder.time_base)
+                    if taken is None:
+                        decoder.verify()  # the pictures up to here
+                        break
+                    if not taken:
+                        continue
+                    slot = self._free.get()
+                    if slot == _EOF:
+                        return
+                    decoder.download(picture, self.buffers[slot].address.value)
+                    self._filled.put(slot)
+                finally:
+                    decoder.release(picture)
+            self._filled.put(_EOF)
+        except BaseException as error:  # handed to the scoring thread, never lost
+            self._filled.put(error)
+
+    next = _FrameStream.next
+
+    def release(self, slot: int) -> None:
+        self._free.put(slot)
+
+    def close(self) -> None:
+        self._stopping.set()
+        self._free.put(_EOF)  # wake a reader waiting for a slot
+        self._decoder.abort()
+        if self._thread.ident is not None:
+            self._thread.join(timeout=30)
+        if not self._thread.is_alive():
+            self._decoder.close()
+            # Pinned memory is freed only once nothing can be copying to it.
+            for buffer in self.buffers:
+                buffer.close()
+        else:
+            _log.error("The %s's GPU decoding thread did not stop; its memory is left allocated", self._label)
+
+
+def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int], image_format: _ImageFormat,
+                    frame_bytes: int, gpu_id: int, process_handle: ProcessHandle | None,
+                    label: str) -> nvdec_frames.NvdecStream | None:
+    """The decoder for one input of a pass, when NVIDIA's decoder can give
+    it in the layout Vship is told (8-bit planes, P016's 16-bit samples as
+    they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
+    unscaled. None, with the reason logged, when FFmpeg decodes it."""
+    shifts = {"yuv420p": 0, "yuv420p16le": 0, "yuv420p10le": 6}
+    reason = None
+    if image_format.pixel_format not in shifts:
+        reason = f"Vship reads it as {image_format.pixel_format}"
+    elif _content_size(info, crop) != size:
+        reason = "it is scaled"
+    if reason is None:
+        try:
+            plan = nvdec_frames.plan_decode(info, crop, shift=shifts[image_format.pixel_format])
+            if plan.frame_bytes != frame_bytes:
+                raise nvdec_frames.NvdecUnavailableError(
+                    f"its frames would be {plan.frame_bytes} bytes, not {frame_bytes}")
+            decoder = nvdec_frames.NvdecStream(info, plan, gpu_id, pool=4, process_handle=process_handle)
+        except nvdec_frames.NvdecUnavailableError as error:
+            reason = str(error)
+        else:
+            _log.info("Vship: the %s is decoded on the GPU in the scoring process", label)
+            return decoder
+    _log.info("Vship: the %s is decoded by FFmpeg (%s)", label, reason)
+    return None
 
 
 class _PinnedBuffer:
@@ -1634,6 +1780,33 @@ def _score_vship_pass(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
+    """One Vship pass, with the videos NVIDIA's decoder takes decoded in
+    this process (_NativeFrameStream). If that decoding fails after it has
+    started -- a damaged stream, pictures that are not the packets' -- the
+    pass is made again with FFmpeg decoding, as before."""
+    kwargs = {"on_progress": on_progress, "on_status": on_status, "cancel_event": cancel_event,
+              "process_handle": process_handle}
+    try:
+        return _score_vship_pass_with(source, distorted, request, specs, device, source_crop, distorted_crop,
+                                      native=True, **kwargs)
+    except nvdec_frames.NvdecFailedError as error:
+        _log.warning("GPU decoding in the Vship pass failed; decoding through FFmpeg instead: %s", error)
+        if on_status:
+            on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
+    return _score_vship_pass_with(source, distorted, request, specs, device, source_crop, distorted_crop,
+                                  native=False, **kwargs)
+
+
+def _score_vship_pass_with(
+    source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
+    specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+    native: bool,
+    on_progress: Callable[[int, int, float], None] | None = None,
+    on_status: Callable[[str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    process_handle: ProcessHandle | None = None,
+) -> PerceptualTaskOutput:
     if not specs or any(spec.backend_id != BACKEND_ID or spec.key not in _METRICS for spec in specs):
         raise ValueError("Vship task requires supported perceptual metric specs")
     if request.recipe.resample_test is not None:
@@ -1691,7 +1864,7 @@ def _score_vship_pass(
         on_status(f"Vship GPU ({device.name}): calculating {labels} "
                   f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
 
-    streams: list[_FrameStream] = []
+    streams: list[_FrameStream | _NativeFrameStream] = []
     lanes: list[_MetricLane | _CvvdpLane] = []
     cvvdp_lane: _CvvdpLane | None = None
     started = time.perf_counter()
@@ -1730,6 +1903,19 @@ def _score_vship_pass(
 
     try:
         def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label, side):
+            # Decoded here, when NVIDIA's decoder would decode it in FFmpeg
+            # and Vship's buffers are CUDA's (its CUDA build).
+            if native and hwaccel == "cuda" and device.backend == "cuda":
+                decoder = _native_decoder(info, crop, size, image_format, frame_bytes, device.gpu_id,
+                                          process_handle, label)
+                if decoder is not None:
+                    limit = (f"{request.recipe.duration_limit:.6f}"
+                             if request.recipe.duration_limit > 0 else None)
+                    try:
+                        return _NativeFrameStream(lib, frame_bytes, decoder, step, limit, label, device.gpu_id)
+                    except BaseException:
+                        decoder.close()
+                        raise
             split = None
             if passthrough is not None:
                 dtype = np.uint16 if image_format.sample != _VSHIP_ENUMS[8] else np.uint8
@@ -1898,8 +2084,10 @@ def _score_vship_pass(
             # figure: its whole length.
             on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame * step / elapsed)
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
-    except (PerceptualCancelled, ComparisonCutShortError):
-        raise  # the file's fault, not the GPU's: the CPU would stop as short
+    except (PerceptualCancelled, ComparisonCutShortError, nvdec_frames.NvdecFailedError):
+        # The file's fault, not the GPU's: the CPU would stop as short. A
+        # failed GPU decode is made again through FFmpeg (_score_vship_pass).
+        raise
     except VshipUnavailableError as error:
         _log.error("Vship pass (%s) failed: %s", ", ".join(metric_definition(spec.key).label for spec in specs),
                    error, exc_info=error)
