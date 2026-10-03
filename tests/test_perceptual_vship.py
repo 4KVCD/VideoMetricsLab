@@ -119,7 +119,7 @@ def test_a_pixel_format_the_gpu_metrics_cannot_read_is_a_cpu_fallback_condition(
     # type. The "Vship supports these layouts" table allowed 4:4:0 only up
     # to 12 bits and 4:1:0 / 4:1:1 only at 8 -- FFmpeg's formats, not Vship's.
     ("yuv440p12le", "yuv440p12le", 12, (0, 1), False),
-    ("yuv410p", "yuv410p", 8, (2, 1), False),
+    ("yuv410p", "yuv410p", 8, (2, 2), False),
     ("yuv444p14le", "yuv444p14le", 14, (0, 0), False),
     ("yuv422p16be", "yuv422p16le", 16, (1, 0), False),
     ("yuva420p10le", "yuv420p10le", 10, (1, 1), False),  # alpha dropped
@@ -130,10 +130,30 @@ def test_a_pixel_format_the_gpu_metrics_cannot_read_is_a_cpu_fallback_condition(
     ("bgr48le", "gbrp16le", 16, (0, 0), True),
 ])
 def test_every_ffmpeg_layout_reaches_vship_as_a_planar_one(pixel_format, piped, sample, shifts, rgb):
-    image = vship._image_format(_info("video.mkv", pix_fmt=pixel_format))
+    image = vship._image_format(_info("video.mkv", pix_fmt=pixel_format), "5.1.2")
     assert image.pixel_format == piped
     assert image.sample == vship._VSHIP_ENUMS[sample]
     assert (image.subw, image.subh) == shifts and (image.family == 1) == rgb
+
+
+@pytest.mark.parametrize(("version", "piped", "shifts"), [
+    ("5.1.2", "yuv410p", (2, 2)), ("5.2.0", "yuv410p", (2, 2)), ("6.0.0", "yuv410p", (2, 2)),
+    ("5.1.1", "yuv444p", (0, 0)), ("4.0.2", "yuv444p", (0, 0)), (None, "yuv444p", (0, 0)), ("dev", "yuv444p", (0, 0)),
+])
+def test_4_1_0_goes_as_it_is_only_to_a_vship_that_reads_it(version, piped, shifts):
+    """4:1:0 is one chroma sample per 4x4 block, subsampling (2, 2); it was
+    (2, 1), as in FFVship 5.1.1, and the run stopped partway through the
+    first frame. Vship before 5.1.2 scores (2, 2) as nonsense, so FFmpeg
+    upsamples 4:1:0 to 4:4:4 for it (Vship issue 21)."""
+    for pix_fmt, full_range in (("yuv410p", False), ("yuvj410p", True)):
+        image = vship._image_format(_info("video.mkv", pix_fmt=pix_fmt), version)
+        assert (image.pixel_format, (image.subw, image.subh)) == (piped, shifts)
+        assert image.full_range == full_range
+    # The frame FFmpeg pipes is the size Vship reads: 640x480 4:1:0 has
+    # 160x120 chroma planes.
+    if piped == "yuv410p":
+        assert vship._image_format(_info("video.mkv", pix_fmt="yuv410p"), version).frame_layout(640, 480)[0] == \
+            640 * 480 + 2 * 160 * 120
 
 
 def _colorspace(width=1920, height=1080, pix_fmt="yuv420p10le", **tags):

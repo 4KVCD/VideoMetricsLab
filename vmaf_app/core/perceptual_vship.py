@@ -189,8 +189,15 @@ _I64_3 = ctypes.c_int64 * 3
 #: any chroma subsampling (Vship_ColorSpace_t.subsampling is two shifts),
 #: and half and float samples too; the layouts are FFmpeg's.
 _VSHIP_ENUMS = {8: 2, 9: 3, 10: 5, 12: 7, 14: 9, 16: 11}
-#: Subsampling shifts (width, height) of FFmpeg's planar YUV layouts.
-_SUBSAMPLING = {"410": (2, 1), "411": (2, 0), "420": (1, 1), "422": (1, 0), "440": (0, 1), "444": (0, 0)}
+#: Subsampling shifts (width, height) of FFmpeg's planar YUV layouts. 4:1:0
+#: (yuv410p) has one chroma sample per 4x4 block, (2, 2). It was (2, 1), as
+#: in FFVship 5.1.1 (Vship issue 21): Vship then read chroma planes twice the
+#: height FFmpeg wrote, and the run stopped partway through the first frame.
+_SUBSAMPLING = {"410": (2, 2), "411": (2, 0), "420": (1, 1), "422": (1, 0), "440": (0, 1), "444": (0, 0)}
+#: The first Vship that reads 4:1:0 (Vship issue 21). Before it, subsampling
+#: (2, 2) gave nonsense on the same frames -- SSIMULACRA2 -52477, Butteraugli
+#: not finite -- so for an older build FFmpeg upsamples 4:1:0 to 4:4:4.
+_READS_410_SINCE = (5, 1, 2)
 
 
 @dataclass(frozen=True, slots=True)
@@ -624,11 +631,21 @@ def _library(device: VshipDevice) -> ctypes.CDLL:
     return loaded.library
 
 
-def _image_format(info: VideoInfo) -> _ImageFormat:
+def _reads_410(version: str | None) -> bool:
+    """Whether Vship `version` ("5.1.2") reads 4:1:0 (_READS_410_SINCE); an
+    unknown version is taken not to."""
+    try:
+        return tuple(int(part) for part in (version or "").split(".")[:3]) >= _READS_410_SINCE
+    except ValueError:
+        return False
+
+
+def _image_format(info: VideoInfo, version: str | None = None) -> _ImageFormat:
     """The planar layout FFmpeg pipes a decoded video in, and how Vship
-    reads it. FFmpeg converts to it exactly: a semi-planar or big-endian
-    layout to the planar little-endian one, alpha dropped, a monochrome
-    video given neutral chroma."""
+    `version` reads it. FFmpeg converts to it exactly: a semi-planar or
+    big-endian layout to the planar little-endian one, alpha dropped, a
+    monochrome video given neutral chroma. 4:1:0 goes as it is to a Vship
+    that reads it, upsampled to 4:4:4 for an older one (_READS_410_SINCE)."""
     name = (info.pix_fmt or "").strip().casefold()
     if name in {"nv12", "nv21"}:
         return _format_yuv("420", 8)
@@ -642,7 +659,10 @@ def _image_format(info: VideoInfo) -> _ImageFormat:
     # yuv, yuvj (full range when untagged) and yuva (alpha dropped).
     yuv = re.fullmatch(r"yuv(j|a)?(410|411|420|422|440|444)p(?:(9|10|12|14|16)(?:le|be)?)?", name)
     if yuv:
-        image = _format_yuv(yuv.group(2), int(yuv.group(3) or 8))
+        sampling = yuv.group(2)
+        if sampling == "410" and not _reads_410(version):
+            sampling = "444"
+        image = _format_yuv(sampling, int(yuv.group(3) or 8))
         return replace(image, full_range=yuv.group(1) == "j")
     # Monochrome (AV1 can be): the luma as it is, chroma neutral.
     gray = re.fullmatch(r"gray(?:(9|10|12|14|16)(?:le|be)?)?", name)
@@ -1632,8 +1652,8 @@ def _score_vship_pass(
     dist_hwaccel = pick_hwaccel(vendor, distorted.codec_name)
     src_passthrough = _passthrough_format(source, src_hwaccel)
     dist_passthrough = _passthrough_format(distorted, dist_hwaccel)
-    src_format = src_passthrough[0] if src_passthrough else _image_format(source)
-    dist_format = dist_passthrough[0] if dist_passthrough else _image_format(distorted)
+    src_format = src_passthrough[0] if src_passthrough else _image_format(source, device.version)
+    dist_format = dist_passthrough[0] if dist_passthrough else _image_format(distorted, device.version)
     src_size, dist_size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)
     src_color = _vship_colorspace(source, src_format, *src_size)
     dist_color = _vship_colorspace(distorted, dist_format, *dist_size)
