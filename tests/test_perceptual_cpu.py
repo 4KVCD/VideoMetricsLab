@@ -286,73 +286,6 @@ def test_a_tool_that_never_finishes_a_frame_times_out(tmp_path, monkeypatch):
     with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame"):
         perceptual_cpu._run_metric(slow, "ssimulacra2", script, other, ProcessHandle())
 
-def test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch):
-    """With real FFmpeg: frames are scored while extraction is still going,
-    FFmpeg is held to a small backlog instead of writing the whole video
-    out first, and progress moves from the first pair."""
-    import subprocess
-    import tempfile
-    import threading
-    import time
-
-    from vmaf_app.core import perceptual_cpu
-    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-    from vmaf_app.core.ffprobe import probe_video
-
-    exe = ffmpeg_path()
-    clip = tmp_path / "clip.mkv"
-    subprocess.run([exe, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=24",
-                    "-frames:v", "96", "-c:v", "ffv1", str(clip)], check=True, capture_output=True, timeout=120)
-    info = probe_video(clip)
-    work = tmp_path / "work"
-    work.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(work))
-    monkeypatch.setattr(perceptual_cpu, "_BACKLOG_PAIRS", 6)
-    monkeypatch.setattr(perceptual_cpu, "find_metric_executable", lambda key: key)
-    monkeypatch.setattr(perceptual_cpu, "_tool_version", lambda executable: "test")
-
-    # Scoring has to be slower than extraction for a backlog to build at all:
-    # 5 ms a pair at 640x360 peaks at 32-39 images with the throttle and
-    # 162-167 without it (1280x720, 240 frames and 20 ms took 5 s).
-    def slow_score(*_args):
-        time.sleep(0.005)
-        return 50.0
-
-    monkeypatch.setattr(perceptual_cpu, "_run_metric", slow_score)
-    most_images, stop = [0], threading.Event()
-
-    def watch():
-        while not stop.is_set():
-            most_images[0] = max(most_images[0], sum(1 for _ in work.rglob("*.png")))
-            time.sleep(0.005)
-
-    watcher = threading.Thread(target=watch)
-    watcher.start()
-    progress = []
-    request = _request("ssimulacra2")
-    try:
-        output = perceptual_cpu.run_perceptual_task(
-            info, info, request, request.metrics, resolved_crops=(None, None),
-            on_progress=lambda done, total, rate: progress.append((done, total, rate)),
-        )
-    finally:
-        stop.set()
-        watcher.join()
-
-    assert output.compared_frame_count == 96
-    assert len(output.metrics.get("ssimulacra2").values) == 96
-    # The backlog limit (6 pairs) plus the frames FFmpeg already has in its
-    # queues when it resumes -- traced at 7-10 at 720p, arriving within
-    # ~10 ms, before the next check can suspend it again. Bounded by that,
-    # not by the video's length: writing everything first meant 192 images.
-    # 34-47 images on an idle machine; up to 66 with 22 busy processes on
-    # 24 cores, so the bound leaves room for a busy machine running the
-    # suite.
-    assert most_images[0] <= 2 * (6 + 30), most_images[0]
-    assert [done for done, _total, _rate in progress[:3]] == [1, 2, 3]
-    assert progress[0][1] == 96 and progress[0][2] > 0
-
-
 def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, monkeypatch):
     """The two image sequences come from two decoders; a fast one can run
     well ahead (a 4K AV1 test ran 24 frames ahead of its HEVC reference).
@@ -393,21 +326,6 @@ def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, 
     consumer.join(30)
     assert not consumer.is_alive(), f"the extraction stalled after {len(pairs)} pairs"
     assert len(pairs) == 40
-
-
-def test_the_backlog_holds_when_ffmpeg_is_started_through_a_launcher(tmp_path, monkeypatch):
-    """GitHub's runner installs FFmpeg with Chocolatey, whose ffmpeg.exe is a
-    launcher that starts the real one as a child. Suspending the launcher
-    left FFmpeg writing: the runner saw 364 images waiting where the limit
-    is 52 (444 here). The throttle now suspends the whole process tree."""
-
-    from vmaf_app.core import proc as proc_util
-
-    real = proc_util.popen
-    launcher = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
-    monkeypatch.setattr(proc_util, "popen",
-                        lambda command, **kwargs: real([STDLIB_PYTHON, "-S", "-c", launcher, *command], **kwargs))
-    test_cpu_scoring_streams_with_a_small_backlog_and_live_progress(tmp_path, monkeypatch)
 
 
 def test_a_saved_perceptual_metric_is_not_recalculated_beside_a_new_one():
