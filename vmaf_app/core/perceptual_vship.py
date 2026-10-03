@@ -43,6 +43,7 @@ from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
@@ -63,6 +64,7 @@ from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import CropBox, GpuVendor, ScaleDirection, VideoInfo
 from vmaf_app.core.perceptual_cpu import (
     LONG_CPU_RUN_SECONDS,
+    ComparisonCutShortError,
     PerceptualCancelled,
     PerceptualRunError,
     PerceptualTaskOutput,
@@ -1799,6 +1801,8 @@ def _score_vship_pass(
             lane.join()
         if frame == 0:
             raise VshipUnavailableError("FFmpeg produced no frame pairs for Vship.")
+        if (short := short_comparison(expected_frames, frame * step, source.fps, step)) is not None:
+            raise ComparisonCutShortError(short)
         # A metric whose handler failed (out of VRAM on a smaller card, say)
         # is reported on its own; the others keep their scores. A SSIMULACRA2
         # or Butteraugli failure used to end the pass and take CVVDP with it.
@@ -1867,8 +1871,8 @@ def _score_vship_pass(
             # figure: its whole length.
             on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame * step / elapsed)
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
-    except PerceptualCancelled:
-        raise
+    except (PerceptualCancelled, ComparisonCutShortError):
+        raise  # the file's fault, not the GPU's: the CPU would stop as short
     except VshipUnavailableError as error:
         _log.error("Vship pass (%s) failed: %s", ", ".join(metric_definition(spec.key).label for spec in specs),
                    error, exc_info=error)

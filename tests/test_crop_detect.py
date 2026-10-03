@@ -27,10 +27,27 @@ def test_auto_crop_failure_is_reported_instead_of_silently_using_full_frame(monk
         path=Path("broken.mp4"), width=1920, height=1080, fps=30.0,
         duration=10.0, nb_frames=300, codec_name="h264",
     )
-    monkeypatch.setattr(crop_detect, "_run_single_window", lambda *a, **kw: None)
+    def window(*a, **kw):
+        raise CropDetectError("ffmpeg exited with code 1")
+
+    monkeypatch.setattr(crop_detect, "_run_single_window", window)
 
     with pytest.raises(CropDetectError, match=r"None \(use full frame\)"):
         crop_detect.detect_crop(info)
+
+
+def test_a_video_with_no_pictures_where_sampled_is_not_told_to_turn_cropping_off(monkeypatch):
+    """A file cut short decodes nothing where its length says it has
+    pictures. Cropping off would only score the few it has."""
+    info = VideoInfo(
+        path=Path("broken.mp4"), width=1920, height=1080, fps=30.0,
+        duration=10.0, nb_frames=300, codec_name="h264",
+    )
+    monkeypatch.setattr(crop_detect, "_run_single_window", lambda *a, **kw: None)
+
+    with pytest.raises(CropDetectError, match="damaged or cut short") as raised:
+        crop_detect.detect_crop(info)
+    assert "None (use full frame)" not in str(raised.value)
 
 
 def test_cancel_wins_over_windows_that_already_answered(monkeypatch):

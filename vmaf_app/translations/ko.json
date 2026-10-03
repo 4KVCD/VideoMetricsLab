@@ -690,7 +690,9 @@
   "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "NVIDIA GPU를 찾지 못했습니다. VMAF v0.6.1과 VMAF NEG는 CPU에서 계산합니다.",
   "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "NVIDIA GPU를 선택하면 VMAF v0.6.1과 VMAF NEG를 번들된 libvmaf로 NVIDIA GPU에서 계산합니다. VMAF v1, PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산합니다. VMAF v1에는 GPU 버전이 없습니다. GPU 점수는 모든 프레임에서 CPU 값과 1000분의 1점 이내로 일치하므로, 저장된 점수는 무엇을 선택하든 그대로 유지됩니다. GPU 계산이 실패하면 CPU에서 계산합니다.",
   "GPU and CPU metrics": "GPU 및 CPU 지표",
-  "{gpu} on the GPU; {cpu} on the CPU": "{gpu}은(는) GPU에서, {cpu}은(는) CPU에서"
+  "{gpu} on the GPU; {cpu} on the CPU": "{gpu}은(는) GPU에서, {cpu}은(는) CPU에서",
+  "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. The file may be damaged or cut short.": "{path}의 검은 띠를 자동 감지할 수 없습니다: 샘플링한 구간에서 FFmpeg가 영상을 찾지 못했습니다. 파일이 손상되었거나 잘렸을 수 있습니다.",
+  "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that did not finish.": "예상한 {expected}개 프레임 중 {compared}개만 비교할 수 있었습니다: 영상 하나가 파일에 적힌 길이보다 이른 {time}에 끝납니다. 잘렸을 수 있습니다: 중간에 멈춘 인코딩이나 끝나지 않은 복사본 등."
  },
  "plurals": {
   "about {count} day": [

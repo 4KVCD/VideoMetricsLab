@@ -390,10 +390,17 @@ def _detect_uncached(
     if cancel_event is not None and cancel_event.is_set():
         raise CropDetectCancelled("Crop detection cancelled")
 
-    if not boxes:
-        detail = failures[-1] if failures else "ffmpeg produced no crop measurements"
+    if not boxes and not failures:
+        # FFmpeg decoded nothing where the video says it has pictures: not
+        # a question of black bars, and cropping off would only score the
+        # pictures it does have (see frame_coverage).
         raise CropDetectError(
-            f"Could not auto-detect black bars in {info.path}: {detail}. "
+            f"Could not auto-detect black bars in {info.path}: FFmpeg found no pictures in the parts of it "
+            "that were sampled. The file may be damaged or cut short."
+        )
+    if not boxes:
+        raise CropDetectError(
+            f"Could not auto-detect black bars in {info.path}: {failures[-1]}. "
             "Choose 'None (use full frame)' for this video to continue without cropping."
         )
 

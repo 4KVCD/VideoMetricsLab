@@ -28,6 +28,7 @@ from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
@@ -42,6 +43,12 @@ class PerceptualRunError(RuntimeError):
     def __init__(self, message: str, stderr_tail: str = "") -> None:
         super().__init__(message)
         self.stderr_tail = stderr_tail
+
+
+class ComparisonCutShortError(PerceptualRunError):
+    """A video whose pictures end long before its length says
+    (frame_coverage): a fault of the file, which no other backend can mend --
+    not one of the GPU's, to retry on the CPU."""
 
 
 class PerceptualCancelled(RuntimeError):  # noqa: N818 - mirrors the established runner exception
@@ -527,6 +534,8 @@ def run_perceptual_task(
                     on_progress(done, max(total_units, done + step), rate)
         finally:
             pairs.close()  # stops FFmpeg if the scoring ended early
+    if (short := short_comparison(expected, total * step, source.fps, step)) is not None:
+        raise ComparisonCutShortError(short)
     if on_progress:
         on_progress(total * step, total * step, total * step / max(time.perf_counter() - started, 1e-6))
     frame = np.arange(total, dtype=np.int32) * step

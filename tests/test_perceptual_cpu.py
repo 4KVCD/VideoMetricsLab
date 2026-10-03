@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from tests.factories import STDLIB_PYTHON
+from vmaf_app.core import perceptual_cpu
 from vmaf_app.core.analysis_request import AnalysisRequest, ExecutionPreferences, FrameCoverage, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.execution import build_execution_plan
@@ -15,6 +16,14 @@ from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, Me
 from vmaf_app.core.metrics import METRIC_BY_KEY, MetricDirection, MetricKind
 from vmaf_app.core.models import CropMode, GpuVendor, ScaleDirection, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualRunError, parse_score, run_perceptual_task
+
+
+@pytest.fixture(autouse=True)
+def _fakes_are_not_cut_short(monkeypatch):
+    """The fakes here produce a few frames for videos whose lengths promise
+    more: frame_coverage would rightly call them cut short. Tested in
+    test_frame_coverage.py."""
+    monkeypatch.setattr(perceptual_cpu, "short_comparison", lambda *a, **k: None)
 
 
 def _info(path: str) -> VideoInfo:

@@ -177,6 +177,7 @@ def test_a_run_records_the_model_it_actually_used(monkeypatch):
     monkeypatch.setattr(
         vmaf_runner, "_execute_run", lambda *a, **k: vmaf_runner.FrameScores.empty()
     )
+    monkeypatch.setattr(vmaf_runner, "short_comparison", lambda *a, **k: None)  # no frames: a fake
 
     options = VmafOptions(
         model_choice=AUTO_MODEL_CHOICE, model=DEFAULT_MODEL,

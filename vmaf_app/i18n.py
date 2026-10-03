@@ -278,6 +278,11 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "Crop detection timed out",
     "Could not run crop detection: {error}",
     "Crop detection failed for {path}: {detail}",
+    "Could not auto-detect black bars in {path}: FFmpeg found no pictures in the parts of it that were sampled. "
+    "The file may be damaged or cut short.",
+    "Only {compared} of the {expected} frames expected could be compared: one of the videos ends after {time}, "
+    "though its file says it is longer. It may have been cut short: an encode that stopped early, or a copy that "
+    "did not finish.",
     "Could not auto-detect black bars in {path}: {detail}. Choose 'None (use full frame)' for this video to "
     "continue without cropping.",
     # --- reading files, settings, tools

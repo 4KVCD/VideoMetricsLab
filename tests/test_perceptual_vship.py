@@ -25,6 +25,14 @@ from vmaf_app.core.models import CropMode, GpuVendor, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualTaskOutput
 
 
+@pytest.fixture(autouse=True)
+def _fakes_are_not_cut_short(monkeypatch):
+    """The fakes here produce a few frames for videos whose lengths promise
+    more: frame_coverage would rightly call them cut short. Tested in
+    test_frame_coverage.py."""
+    monkeypatch.setattr(vship, "short_comparison", lambda *a, **k: None)
+
+
 def _info(path: str, *, pix_fmt: str = "yuv420p") -> VideoInfo:
     return VideoInfo(Path(path), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt=pix_fmt)
 

@@ -22,6 +22,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core import vmaf_cuda
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
+from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
@@ -1144,6 +1145,9 @@ def run_vmaf(
             cancel_event=cancel_event,
             process_handle=process_handle,
         )
+    compared = int(frames.frame[-1]) + 1 if len(frames) else 0
+    if (short := short_comparison(total_frames, compared, distorted_info.fps, options.n_subsample)) is not None:
+        raise VmafRunError(short)
 
     return ComparisonResult(
         source=source_info.path,

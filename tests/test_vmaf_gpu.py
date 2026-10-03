@@ -17,6 +17,14 @@ from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VideoInf
 from vmaf_app.ui import worker as worker_module
 
 
+@pytest.fixture(autouse=True)
+def _fakes_are_not_cut_short(monkeypatch):
+    """The fakes here produce a few frames for videos whose lengths promise
+    more: frame_coverage would rightly call them cut short. Tested in
+    test_frame_coverage.py."""
+    monkeypatch.setattr(vr, "short_comparison", lambda *a, **k: None)
+
+
 def _info(path: str, width: int = 1920, height: int = 1080) -> VideoInfo:
     return VideoInfo(Path(path), width, height, 24.0, 10.0, 240, "hevc", pix_fmt="yuv420p")
 
