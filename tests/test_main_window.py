@@ -4435,6 +4435,53 @@ def test_each_half_of_a_video_has_its_own_percentage(qapp):
     win.close()
 
 
+def test_each_half_is_named_by_where_its_metrics_run(qapp):
+    """FFmpeg's half was "CPU metrics" also while its VMAF and NEG ran on the
+    GPU, and so read "CPU metrics queued (another video is using the GPU)"."""
+    win = MainWindow()
+    for name in ("a.mkv", "b.mkv", "c.mkv"):
+        win._add_table_row(Path(name))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100, 100, 100]
+    for index, label in enumerate(("a", "b", "c")):
+        win._on_job_started(index, label)
+    vship = {**_half("perceptual", ("ssimulacra2", "butteraugli"), state="waiting"), "waiting_for": "GPU"}
+    win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf", "vmaf_neg", "vmaf_v1", "psnr"), state="waiting"),
+                               "waiting_for": "GPU", "gpu_keys": ("vmaf", "vmaf_neg")}])
+    win._on_task_progress(1, [{**_half("ffmpeg", ("vmaf", "vmaf_neg")), "gpu_keys": ("vmaf", "vmaf_neg")}, vship])
+    win._on_task_progress(2, [{**_half("ffmpeg", ("vmaf", "psnr")), "gpu_keys": ()}])
+    first, second, third = (label.text() for label in win.job_progress_labels[:3])
+    assert "GPU and CPU metrics queued (another video is using the GPU)" in first
+    assert "CPU metrics queued" not in first.replace("GPU and CPU metrics", "")
+    assert ("GPU and CPU metrics: VMAF v0.6.1, VMAF NEG on the GPU; VMAF v1, PSNR on the CPU"
+            in win.job_progress_labels[0].toolTip())
+    # VMAF and NEG alone on the GPU, beside Vship's GPU metrics: told apart by their metrics.
+    assert "GPU metrics (VMAF v0.6.1, VMAF NEG) 20.0%" in second
+    assert "GPU metrics (SSIMULACRA2, Butteraugli) queued" in second
+    # Set to CPU, or VMAF on the GPU failed: FFmpeg's libvmaf, on the CPU.
+    assert "CPU metrics 20.0%" in third and "GPU" not in third.split("Decoder")[0]
+    win.close()
+
+
+def test_vmaf_failing_on_the_gpu_leaves_vships_half_named_gpu(qapp):
+    """The fallback's "calculating it on the CPU" marked the whole video as
+    fallen back to the CPU, Vship's half on the GPU with it."""
+    win = MainWindow()
+    win._add_table_row(Path("a.mkv"))
+    win._job_rows = list(win._rows)
+    win._job_total_frames = [100]
+    win._on_job_started(0, "a")
+    win._on_job_status(0, "VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…")
+    win._on_task_progress(0, [{**_half("ffmpeg", ("vmaf",)), "gpu_keys": ()},
+                              _half("perceptual", ("ssimulacra2",))])
+    line = win.job_progress_labels[0].text()
+    assert "CPU metrics 20.0%" in line and "GPU metrics 20.0%" in line
+    win._on_job_status(0, "SSIMULACRA2 failed on the GPU; calculating it on the CPU…")  # Vship's own fallback
+    win._render_job_progress(0)
+    assert "GPU metrics" not in win.job_progress_labels[0].text()
+    win.close()
+
+
 def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
     """"Running 3 of 3" named a position for one video in progress, "Running
     2 of 3 together" a count for two; and the start's "Skipping N

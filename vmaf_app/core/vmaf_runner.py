@@ -1130,6 +1130,12 @@ def run_vmaf(
     )
 
 
+#: How the status line a run sends when VMAF on the GPU fails begins: FFmpeg's
+#: libvmaf calculates it from then on. The worker recognises it, so the run
+#: line stops showing that video's VMAF as GPU work.
+VMAF_GPU_FAILED = "VMAF on the GPU failed"
+
+
 def _run_on_gpu(
     plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None, model: str, hwaccel: HwAccelPlan,
@@ -1160,7 +1166,7 @@ def _run_on_gpu(
     except Exception as error:
         _log.error("VMAF on the GPU failed; calculating it on the CPU: %s", error, exc_info=error)
         if on_status:
-            on_status(f"VMAF on the GPU failed ({error}); calculating it on the CPU…")
+            on_status(f"{VMAF_GPU_FAILED} ({error}); calculating it on the CPU…")
         return None
     finally:
         GPU_PASS.release()

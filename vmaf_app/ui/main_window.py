@@ -103,6 +103,7 @@ from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import aggregate_scores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
+    VMAF_GPU_FAILED,
     VmafRunError,
     analysis_dimensions,
     estimate_total_frames,
@@ -4426,6 +4427,32 @@ class MainWindow(QMainWindow):
                      for key in task.get("metric_keys", ()))
         return "GPU" if on_gpu else "CPU"
 
+    def _metrics_kind(self, index: int, task: dict[str, object]) -> str:
+        """A half's name on the run line, from where its metrics are
+        calculated: "GPU metrics", "CPU metrics", or "GPU and CPU metrics"
+        for FFmpeg's half with VMAF and NEG on the GPU (gpu_keys, from the
+        worker) beside VMAF v1, PSNR, SSIM or XPSNR on the CPU. Every
+        FFmpeg half used to be "CPU metrics", also while its VMAF ran on the
+        GPU: "CPU metrics queued (another video is using the GPU)"."""
+        if task.get("backend") == "ffmpeg":
+            on_gpu = set(task.get("gpu_keys") or ())
+            if not on_gpu:
+                return N_("CPU metrics")
+            return N_("GPU and CPU metrics") if set(task.get("metric_keys", ())) - on_gpu else N_("GPU metrics")
+        return N_("GPU metrics") if self._task_kind(index, task) == "GPU" else N_("CPU metrics")
+
+    def _metric_labels(self, task: dict[str, object]) -> str:
+        """A half's metrics for its line in the tooltip; FFmpeg's half says
+        which run on the GPU when they do not all run in one place."""
+        keys = tuple(task.get("metric_keys", ()))
+        on_gpu = set(task.get("gpu_keys") or ())
+        def labels(chosen) -> str:
+            return ", ".join(metric_definition(key).label for key in chosen)
+        if task.get("backend") == "ffmpeg" and on_gpu and set(keys) - on_gpu:
+            return tr("{gpu} on the GPU; {cpu} on the CPU", gpu=labels(k for k in keys if k in on_gpu),
+                      cpu=labels(k for k in keys if k not in on_gpu))
+        return labels(keys)
+
     def _gpu_passes(self, task: dict[str, object]) -> _GpuPasses | None:
         """A GPU half's passes, one metric each, and the time each still
         needs -- None when its figures do not split that way (one metric,
@@ -4581,15 +4608,19 @@ class MainWindow(QMainWindow):
             # half was half done.
             # "CPU metrics", not "CPU": the bare word read as the processor's
             # load, "CPU 46.0%" like Task Manager's figure.
-            on_gpu = [self._task_kind(index, task) == "GPU" for task in snapshots]
-            kinds = [N_("GPU metrics") if gpu else N_("CPU metrics") for gpu in on_gpu]
-            shown = [tr(kind) for kind in kinds]
-            labels = [", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
+            # Vship's passes, one metric each: the half's `gpu` below.
+            on_gpu = [task.get("backend") != "ffmpeg" and self._task_kind(index, task) == "GPU"
                       for task in snapshots]
-            names = shown
-            if kinds.count("CPU metrics") > 1:  # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics
-                names = [name if task.get("backend") == "ffmpeg" else f"{name} ({label})"
-                         for name, task, label in zip(shown, snapshots, labels, strict=True)]
+            kinds = [self._metrics_kind(index, task) for task in snapshots]
+            shown = [tr(kind) for kind in kinds]
+            labels = [self._metric_labels(task) for task in snapshots]
+            # Two halves of one kind are told apart by their metrics:
+            # SSIMULACRA2/Butteraugli set to CPU beside FFmpeg's metrics, or
+            # Vship's GPU metrics beside VMAF and NEG alone on the GPU. FFmpeg's
+            # "CPU metrics" keeps the plain name it has always had.
+            names = [name if kinds.count(kind) == 1 or (task.get("backend") == "ffmpeg" and kind == "CPU metrics")
+                     else f"{name} ({label})"
+                     for name, kind, task, label in zip(shown, kinds, snapshots, labels, strict=True)]
             parts += [self._task_detail(name, task, paused, gpu)
                       for name, task, gpu in zip(names, snapshots, on_gpu, strict=True)]
             tooltip = "\n".join(self._task_tooltip(name, task, label, paused, gpu)
@@ -4781,7 +4812,10 @@ class MainWindow(QMainWindow):
             "using CPU" in message
             or "calculating it on the CPU" in message
             or "on CPU" in message
-        ):
+        ) and not message.startswith(VMAF_GPU_FAILED):
+            # Vship's half fell back to the CPU. Not a failed GPU VMAF: that
+            # is FFmpeg's half (its gpu_keys), and Vship's half was then
+            # shown as CPU metrics while it ran on the GPU.
             self._job_gpu_fallback.add(index)
         if index in self._job_line_text:
             # The runner sends the active plan on each attempt, including

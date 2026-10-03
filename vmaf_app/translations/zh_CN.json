@@ -688,7 +688,9 @@
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF 在 GPU 上失败（{error}）；正在 CPU 上计算…",
   "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 和 NEG 计算：",
   "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "未找到 NVIDIA GPU：VMAF v0.6.1 和 VMAF NEG 在 CPU 上计算。",
-  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "选择 NVIDIA GPU 时，VMAF v0.6.1 和 VMAF NEG 使用内置的 libvmaf 在 NVIDIA GPU 上计算。VMAF v1、PSNR、SSIM 和 XPSNR 无论如何都在 CPU 上计算：VMAF v1 没有 GPU 版本。GPU 的分数在每一帧都与 CPU 的结果相差不超过千分之一分，因此无论选择哪一项，已保存的分数都会保留。如果 GPU 计算失败，则改在 CPU 上计算。"
+  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "选择 NVIDIA GPU 时，VMAF v0.6.1 和 VMAF NEG 使用内置的 libvmaf 在 NVIDIA GPU 上计算。VMAF v1、PSNR、SSIM 和 XPSNR 无论如何都在 CPU 上计算：VMAF v1 没有 GPU 版本。GPU 的分数在每一帧都与 CPU 的结果相差不超过千分之一分，因此无论选择哪一项，已保存的分数都会保留。如果 GPU 计算失败，则改在 CPU 上计算。",
+  "GPU and CPU metrics": "GPU 和 CPU 指标",
+  "{gpu} on the GPU; {cpu} on the CPU": "{gpu} 在 GPU 上；{cpu} 在 CPU 上"
  },
  "plurals": {
   "about {count} day": [

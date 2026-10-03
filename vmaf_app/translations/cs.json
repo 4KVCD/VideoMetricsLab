@@ -688,7 +688,9 @@
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF na GPU selhalo ({error}); počítá se na CPU…",
   "VMAF v0.6.1 and NEG compute:": "Výpočet VMAF v0.6.1 a NEG:",
   "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "Nebyla nalezena GPU NVIDIA: VMAF v0.6.1 a VMAF NEG se počítají na CPU.",
-  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Při volbě NVIDIA GPU se VMAF v0.6.1 a VMAF NEG počítají na GPU NVIDIA pomocí přibalené knihovny libvmaf. VMAF v1, PSNR, SSIM a XPSNR se v každém případě počítají na CPU: VMAF v1 nemá verzi pro GPU. Skóre z GPU se od výsledků CPU liší na každém snímku nejvýše o tisícinu bodu, takže uložené skóre zůstává, ať je zvoleno cokoli. Pokud výpočet na GPU selže, spočítají se na CPU."
+  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Při volbě NVIDIA GPU se VMAF v0.6.1 a VMAF NEG počítají na GPU NVIDIA pomocí přibalené knihovny libvmaf. VMAF v1, PSNR, SSIM a XPSNR se v každém případě počítají na CPU: VMAF v1 nemá verzi pro GPU. Skóre z GPU se od výsledků CPU liší na každém snímku nejvýše o tisícinu bodu, takže uložené skóre zůstává, ať je zvoleno cokoli. Pokud výpočet na GPU selže, spočítají se na CPU.",
+  "GPU and CPU metrics": "Metriky GPU a CPU",
+  "{gpu} on the GPU; {cpu} on the CPU": "{gpu} na GPU; {cpu} na CPU"
  },
  "plurals": {
   "about {count} day": [

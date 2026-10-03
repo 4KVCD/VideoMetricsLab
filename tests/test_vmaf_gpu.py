@@ -153,6 +153,27 @@ def test_ffmpegs_half_queues_for_the_gpu_when_it_scores_vmaf_there(monkeypatch):
     assert pool(("vmaf", "psnr"), VmafOptions(vmaf_on_gpu=False)) == "cpu"  # the video set to CPU
 
 
+def test_the_run_line_is_told_which_of_ffmpegs_metrics_run_on_the_gpu(monkeypatch):
+    """VMAF and NEG while the GPU scores them; none once a failure hands
+    them to FFmpeg's libvmaf, or for a video set to CPU."""
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+
+    def run_of(options):
+        job = worker_module.VmafJob(_info("s.mp4"), _info("d.mp4"), options, label="d",
+                                    metric_keys=("vmaf", "vmaf_neg", "psnr"))
+        return worker_module._JobRun(worker_module.VmafWorker([job]), 0, job)
+
+    def ffmpeg_half(run):
+        with run.lock:
+            return next(task for task in run.task_snapshots() if task["backend"] == "ffmpeg")
+
+    run = run_of(VmafOptions())
+    assert ffmpeg_half(run)["gpu_keys"] == ("vmaf", "vmaf_neg")
+    run.report_status("ffmpeg", "VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…")
+    assert ffmpeg_half(run)["gpu_keys"] == ()
+    assert ffmpeg_half(run_of(VmafOptions(vmaf_on_gpu=False)))["gpu_keys"] == ()
+
+
 def test_a_pipe_ffmpeg_never_opened_does_not_hold_the_run():
     """An output that gets no frame is never opened: its reader waited for
     FFmpeg forever, and the run with it."""

@@ -688,7 +688,9 @@
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU에서 VMAF 실패({error}). CPU로 계산 중…",
   "VMAF v0.6.1 and NEG compute:": "VMAF v0.6.1 및 NEG 계산:",
   "No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU.": "NVIDIA GPU를 찾지 못했습니다. VMAF v0.6.1과 VMAF NEG는 CPU에서 계산합니다.",
-  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "NVIDIA GPU를 선택하면 VMAF v0.6.1과 VMAF NEG를 번들된 libvmaf로 NVIDIA GPU에서 계산합니다. VMAF v1, PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산합니다. VMAF v1에는 GPU 버전이 없습니다. GPU 점수는 모든 프레임에서 CPU 값과 1000분의 1점 이내로 일치하므로, 저장된 점수는 무엇을 선택하든 그대로 유지됩니다. GPU 계산이 실패하면 CPU에서 계산합니다."
+  "With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "NVIDIA GPU를 선택하면 VMAF v0.6.1과 VMAF NEG를 번들된 libvmaf로 NVIDIA GPU에서 계산합니다. VMAF v1, PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산합니다. VMAF v1에는 GPU 버전이 없습니다. GPU 점수는 모든 프레임에서 CPU 값과 1000분의 1점 이내로 일치하므로, 저장된 점수는 무엇을 선택하든 그대로 유지됩니다. GPU 계산이 실패하면 CPU에서 계산합니다.",
+  "GPU and CPU metrics": "GPU 및 CPU 지표",
+  "{gpu} on the GPU; {cpu} on the CPU": "{gpu}은(는) GPU에서, {cpu}은(는) CPU에서"
  },
  "plurals": {
   "about {count} day": [

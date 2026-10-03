@@ -28,7 +28,14 @@ from vmaf_app.core.perceptual_vship import (
 )
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.time_format import format_hms
-from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError, auto_threads, run_resample_test, run_vmaf
+from vmaf_app.core.vmaf_runner import (
+    VMAF_GPU_FAILED,
+    Cancelled,
+    VmafRunError,
+    auto_threads,
+    run_resample_test,
+    run_vmaf,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -448,6 +455,8 @@ class _JobRun:
         # connected directly may report again.
         self.emit_lock = threading.RLock()
         self._begun = False
+        # FFmpeg's VMAF on the GPU failed and its libvmaf took over (VMAF_GPU_FAILED).
+        self.vmaf_gpu_failed = False
         self.task_results: dict[str, object] = {}
         self.task_errors: list[tuple[object, Exception]] = []
         self.task_progress: dict[str, tuple[int, int, float]] = {}
@@ -526,6 +535,15 @@ class _JobRun:
         return vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
                                        options.vmaf_on_gpu) is not None
 
+    def gpu_keys(self, task) -> tuple[str, ...]:
+        """The half's metrics calculated on the GPU as the run stands, for
+        the run line: FFmpeg's VMAF and NEG while they are scored there
+        (vmaf_on_gpu), until a failure hands them to FFmpeg's libvmaf.
+        Vship's half is the window's to describe (its GPU/CPU choices)."""
+        if task.backend_id != "ffmpeg" or self.vmaf_gpu_failed or not self.vmaf_on_gpu(task):
+            return ()
+        return tuple(key for key in task.metric_keys if key in ("vmaf", "vmaf_neg"))
+
     def begin(self) -> bool:
         """Starts the video when its first half is taken: its process
         handle, its share of the cores, and job_started. False if the run
@@ -573,6 +591,7 @@ class _JobRun:
             found.append({
                 "backend": task.backend_id,
                 "metric_keys": task.metric_keys,
+                "gpu_keys": self.gpu_keys(task),
                 "current": cur,
                 "total": total,
                 "fps": fps,
@@ -593,6 +612,8 @@ class _JobRun:
                     self.task_decode[backend] = plan.group(1)
                 if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
                     self.task_waiting[backend] = "GPU"
+                if backend == "ffmpeg" and message.startswith(VMAF_GPU_FAILED):
+                    self.vmaf_gpu_failed = True
                 phase = re.match(r"^GPU metric (\d+)/(\d+): (.+)$", message)
                 if phase:
                     self.task_phases[backend] = (int(phase.group(1)), int(phase.group(2)), phase.group(3))
