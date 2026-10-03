@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PySide6.QtCore import Qt
 
 from vmaf_app.core import vmaf_cuda
 from vmaf_app.core import vmaf_runner as vr
@@ -225,7 +226,9 @@ def test_vmaf_from_its_own_run_joins_ffmpegs_other_metrics(monkeypatch):
                                 label="d", metric_keys=("vmaf", "psnr"))
     worker = worker_module.VmafWorker([job])
     finished = []
-    worker.job_finished.connect(lambda _index, result: finished.append(result))
+    # Direct: the job finishes on whichever lane ends last, a CPU lane's
+    # thread included, where a queued call would wait for an event loop.
+    worker.job_finished.connect(lambda _index, result: finished.append(result), Qt.ConnectionType.DirectConnection)
     worker.run()
     assert sorted(calls) == [(False, False, True), (True, False, False)]  # each on its own
     [result] = finished
@@ -257,7 +260,8 @@ def test_the_result_keeps_vmafs_model_when_vmaf_had_a_run_of_its_own(monkeypatch
             job.cached_result, job.cached_metrics = saved, saved.metric_results
         worker = worker_module.VmafWorker([job])
         finished = []
-        worker.job_finished.connect(lambda _index, result: finished.append(result))
+        worker.job_finished.connect(lambda _index, result: finished.append(result),
+                                    Qt.ConnectionType.DirectConnection)
         worker.run()
         [result] = finished
         return result
