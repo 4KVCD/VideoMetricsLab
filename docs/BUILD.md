@@ -12,8 +12,8 @@ the packaged executable's self-test, and zips the result.
 
 | | |
 |---|---|
-| Folder | ~203 MB |
-| Zip | ~72 MB |
+| Folder | Previous baseline ~203 MB; native GPU VMAF adds ~155 MB |
+| Zip | Previous baseline ~72 MB; remeasure after building |
 | Output | `%LOCALAPPDATA%\VideoMetricsLab-build\` |
 
 Pass `-OutputRoot <path>` to build somewhere else, and `-VerifyMedia
@@ -81,13 +81,35 @@ case anyone overrides that.
   1 MB compressed. libvmaf and Vship each run in a process of their own
   (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,
   falls back to the CPU instead of closing the app.
+- **GPU-native VMAF helper** (`vmaf_app/tools/vmaf_native/`): the MIT helper,
+  its luma-preparation PTX, the same patched libvmaf, and stock BtbN
+  FFmpeg 9.0.2 shared LGPL libraries (not a custom FFmpeg build). It keeps
+  CUDA-decoded pixels on the GPU and uploads only luma for software inputs.
+  Windows, 8/10-bit 4:2:0, equal compared dimensions after even-aligned
+  crops are qualified. Resizing, mixed depths, auto-rotation and unavailable
+  decoders keep the existing external-FFmpeg path. Its untrimmed shared
+  libraries add about 155 MB installed; no new release size is claimed
+  until an actual packaged build is measured.
+
+To reproduce the native helper, first run `scripts/build_libvmaf_cuda.ps1`,
+then `scripts/build_vmaf_native.ps1 -CudaPath <CUDA Toolkit folder>`.
+The latter verifies the shared FFmpeg archive's pinned SHA-256, uses its
+headers/import libraries, and copies only the runtime DLL closure. It needs
+VS 2022 C++ tools and the CUDA Toolkit on the **build** machine, not the
+user's machine. Library versions, build configuration and license notices
+are beside the helper in `licenses/`.
+
+Before publishing a release containing the new FFmpeg DLLs, supply the
+corresponding source/dependency materials required by their exact LGPL
+build, as well as these notices. The DLLs remain dynamically linked and
+replaceable. Building locally does not publish a release.
 
 ## What is not, and why
 
-**FFmpeg and libvmaf.** The app finds them at runtime and prompts for their
-location if they are missing. They are left out deliberately (the bundled
-libvmaf above scores only VMAF and VMAF NEG on NVIDIA GPUs, from frames the
-user's FFmpeg decodes):
+**The FFmpeg and ffprobe command-line tools.** The app still finds these
+at runtime and prompts for their location if missing. Native GPU VMAF uses
+the shared libraries above; VMAF v1, CPU scoring, other metrics, probing
+and fallback paths still use the user's external tools:
 
 - A libvmaf-enabled FFmpeg is another ~80 MB on an already large download.
 - FFmpeg licensing depends on its build configuration and linked libraries.
@@ -161,8 +183,9 @@ GStreamer failing on `No module named 'optparse'`.
 
 Complete [RELEASING.md](RELEASING.md), including the third-party license review.
 The bundle ships no GPL GStreamer plugins (the GPL wheels are left out
-entirely and the bundled FFmpeg is LGPL 2.1), but leaving FFmpeg external
-does not remove the need to review the remaining third-party components.
+entirely). The new native VMAF helper's shared FFmpeg build is LGPL 3.0;
+the external FFmpeg CLI can have different licensing. Review and provide
+the exact bundled libraries' required source materials before distribution.
 
 The executable is unsigned, so SmartScreen will warn on first run. Signing
 needs a certificate; without one, "More info → Run anyway" is the path, and
