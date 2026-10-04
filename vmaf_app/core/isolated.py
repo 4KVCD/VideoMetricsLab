@@ -36,9 +36,9 @@ import threading
 import traceback
 import uuid
 from collections.abc import Callable, Iterable
-from pathlib import Path
 from multiprocessing.connection import wait
 from multiprocessing.reduction import ForkingPickler
+from pathlib import Path
 
 import psutil
 
