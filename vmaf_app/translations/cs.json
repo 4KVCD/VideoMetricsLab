@@ -685,7 +685,9 @@
   "Calculate the rest?": "Spočítat ostatní?",
   "It could not be read. Remove it or add the file again to retry.": "Nelze jej přečíst. Odeberte jej nebo přidejte soubor znovu a zkuste to znovu.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Datový tok celého souboru včetně zvuku: soubor neuvádí datový tok samotného videa.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name} už je v seznamu. Zobrazit místo toho skóre uloženého běhu?"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} už je v seznamu. Zobrazit místo toho skóre uloženého běhu?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg neudal časovou značku snímku {side}.",
+  "The source has no frame at the test video's first.": "Zdroj nemá žádný snímek v čase prvního snímku testovacího videa."
  },
  "plurals": {
   "about {count} day": [

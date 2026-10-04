@@ -685,7 +685,9 @@
   "Calculate the rest?": "나머지를 계산할까요?",
   "It could not be read. Remove it or add the file again to retry.": "읽을 수 없습니다. 제거하거나 파일을 다시 추가해 재시도하세요.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "오디오 트랙을 포함한 파일 전체의 비트레이트입니다. 파일에 영상 자체의 비트레이트가 기록되어 있지 않습니다.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name}은(는) 이미 목록에 있습니다. 대신 저장된 실행의 점수를 표시할까요?"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name}은(는) 이미 목록에 있습니다. 대신 저장된 실행의 점수를 표시할까요?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg가 {side} 프레임의 타임스탬프를 주지 않았습니다.",
+  "The source has no frame at the test video's first.": "테스트 영상의 첫 프레임 시점에 원본의 프레임이 없습니다."
  },
  "plurals": {
   "about {count} day": [

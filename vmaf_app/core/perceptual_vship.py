@@ -506,9 +506,6 @@ def _vulkan_unavailable() -> str | None:
         vulkan.vkDestroyInstance(instance, None)
 
 
-#: PCI vendor IDs, as Vulkan reports them.
-
-
 def _vulkan_vendor(name: str) -> GpuVendor | None:
     """Who made the Vulkan GPU called `name`, from the Vulkan loader: Vship
     names a GPU by its VkPhysicalDeviceProperties.deviceName. Asked of the
@@ -876,22 +873,27 @@ class _Timestamps:
             now = self._clock()
             deadline = now + _TIMESTAMP_WAIT_SECONDS if deadline is None else deadline
             if ended or now >= deadline:
-                raise VshipUnavailableError(f"FFmpeg did not give the timestamp of a {self._label} frame.")
+                raise self._missing("FFmpeg wrote none")
             time.sleep(0.001)
+
+    def _missing(self, what: str) -> VshipUnavailableError:
+        """The pass's failure for a frame without a usable timestamp: one
+        message for the window (it has a translation), `what` in the log."""
+        _log.error("Vship: no timestamp for a %s frame: %s", self._label, what)
+        return VshipUnavailableError(f"FFmpeg did not give the timestamp of a {self._label} frame.")
 
     def _parse(self, line: bytes) -> int:
         try:
             pts_text, base_text = line.decode("ascii").split()
             pts, time_base = int(pts_text), Fraction(base_text)
         except (UnicodeDecodeError, ValueError, ZeroDivisionError) as error:
-            raise VshipUnavailableError(
-                f"FFmpeg gave a {self._label} frame's timestamp as {line[:80]!r}.") from error
+            raise self._missing(f"FFmpeg wrote {line[:80]!r}") from error
         if pts == _NO_PTS or time_base <= 0:
-            raise VshipUnavailableError(f"FFmpeg gave a {self._label} frame no timestamp.")
+            raise self._missing(f"FFmpeg wrote {line[:80]!r}: no timestamp")
         if self.time_base is None:
             self.time_base = time_base
         elif time_base != self.time_base:
-            raise VshipUnavailableError(f"The {self._label}'s time base changed from {self.time_base} to {time_base}.")
+            raise self._missing(f"its time base changed from {self.time_base} to {time_base}")
         return pts
 
     def close(self) -> None:

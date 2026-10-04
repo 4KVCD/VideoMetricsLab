@@ -685,7 +685,9 @@
   "Calculate the rest?": "¿Calcular el resto?",
   "It could not be read. Remove it or add the file again to retry.": "No se pudo leer. Quítalo o vuelve a agregar el archivo para reintentarlo.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "La tasa de bits de todo el archivo, con el audio incluido: el archivo no registra la del video.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name} ya está en la lista. ¿Mostrar en su lugar las puntuaciones de la ejecución guardada?"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} ya está en la lista. ¿Mostrar en su lugar las puntuaciones de la ejecución guardada?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg no dio la marca de tiempo de un fotograma de {side}.",
+  "The source has no frame at the test video's first.": "El original no tiene ningún fotograma en el momento del primer fotograma del video de prueba."
  },
  "plurals": {
   "about {count} day": [

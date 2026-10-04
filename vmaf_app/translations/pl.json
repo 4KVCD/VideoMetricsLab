@@ -685,7 +685,9 @@
   "Calculate the rest?": "Obliczyć pozostałe?",
   "It could not be read. Remove it or add the file again to retry.": "Nie można go odczytać. Usuń je lub dodaj plik ponownie, aby spróbować jeszcze raz.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate całego pliku, łącznie ze ścieżką dźwiękową: plik nie zapisuje bitrate samego wideo.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name} jest już na liście. Pokazać zamiast tego wyniki zapisanego przebiegu?"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} jest już na liście. Pokazać zamiast tego wyniki zapisanego przebiegu?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg nie podał znacznika czasu klatki {side}.",
+  "The source has no frame at the test video's first.": "Źródło nie ma klatki w chwili pierwszej klatki wideo testowego."
  },
  "plurals": {
   "about {count} day": [

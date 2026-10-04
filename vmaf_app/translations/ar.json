@@ -685,7 +685,9 @@
   "Calculate the rest?": "هل تريد حساب البقية؟",
   "It could not be read. Remove it or add the file again to retry.": "تعذّرت قراءته. أزِله أو أضف الملف من جديد لإعادة المحاولة.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "معدل البت للملف كله بما فيه الصوت: لا يسجّل الملف معدل الفيديو وحده.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name} موجود في القائمة بالفعل. هل تُعرض درجات التشغيل المحفوظ مكانه؟"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} موجود في القائمة بالفعل. هل تُعرض درجات التشغيل المحفوظ مكانه؟",
+  "FFmpeg did not give the timestamp of a {side} frame.": "لم يُعطِ FFmpeg الطابع الزمني لإطار من {side}.",
+  "The source has no frame at the test video's first.": "لا يحتوي المصدر على إطار عند وقت الإطار الأول من فيديو الاختبار."
  },
  "plurals": {
   "about {count} day": [

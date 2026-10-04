@@ -685,7 +685,9 @@
   "Calculate the rest?": "Tính các video còn lại?",
   "It could not be read. Remove it or add the file again to retry.": "Không đọc được. Hãy xóa nó, hoặc thêm lại tệp để thử lại.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate của cả tệp, gồm cả âm thanh: tệp không ghi bitrate riêng của video.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name} đã có trong danh sách. Hiển thị điểm của lần chạy đã lưu thay thế?"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} đã có trong danh sách. Hiển thị điểm của lần chạy đã lưu thay thế?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg không cho biết dấu thời gian của một khung {side}.",
+  "The source has no frame at the test video's first.": "Nguồn không có khung nào tại thời điểm khung đầu tiên của video thử."
  },
  "plurals": {
   "about {count} day": [

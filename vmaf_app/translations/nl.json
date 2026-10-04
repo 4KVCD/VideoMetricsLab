@@ -685,7 +685,9 @@
   "Calculate the rest?": "De rest berekenen?",
   "It could not be read. Remove it or add the file again to retry.": "Kon niet worden gelezen. Verwijder het, of voeg het bestand opnieuw toe om het nog eens te proberen.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "De bitrate van het hele bestand, inclusief geluid: het bestand vermeldt die van de video niet.",
-  "{name} is already in the list. Show the saved run's scores in its place?": "{name} staat al in de lijst. In plaats daarvan de scores van de opgeslagen run tonen?"
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} staat al in de lijst. In plaats daarvan de scores van de opgeslagen run tonen?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg gaf de tijdstempel van een {side}-frame niet.",
+  "The source has no frame at the test video's first.": "De bron heeft geen frame op het moment van het eerste frame van de testvideo."
  },
  "plurals": {
   "about {count} day": [

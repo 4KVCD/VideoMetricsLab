@@ -236,6 +236,8 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "FFmpeg failed while decoding the {side} for Vship.",
     "Could not start FFmpeg for Vship: {error}",
     "FFmpeg ended partway through a {side} frame.",
+    "FFmpeg did not give the timestamp of a {side} frame.",
+    "The source has no frame at the test video's first.",
     "Could not allocate Vship pinned frame memory: {error}",
     "Could not initialize Vship {metric}: {error}",
     "Vship {metric} failed: {error}",
