@@ -54,6 +54,7 @@ from vmaf_app.ui.main_window import (
     CompletedRun,
     MainWindow,
 )
+from vmaf_app.ui.row_state import RowState
 
 
 def _cache_request(options):
@@ -282,9 +283,7 @@ def test_a_result_finished_for_other_settings_is_marked_rather_than_silent(qapp)
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
 
-    win._set_row_status(
-        row, "Finished with the previous settings; change them back to see the result."
-    )
+    win._set_row_status(row, RowState.FOR_PREVIOUS_SETTINGS)
 
     name = win.distorted_table.item(row, COL_PATH)
     assert "Finished with the previous settings" in name.toolTip()
@@ -294,10 +293,10 @@ def test_a_result_finished_for_other_settings_is_marked_rather_than_silent(qapp)
 def test_a_row_returning_to_normal_loses_its_mark(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
-    win._set_row_status(row, "Failed", "some error")
+    win._set_row_status(row, RowState.FAILED, "some error")
     assert win.distorted_table.item(row, COL_PATH).foreground().color().name() == "#a03030"
 
-    win._set_row_status(row, "")
+    win._set_row_status(row, None)
 
     name = win.distorted_table.item(row, COL_PATH)
     assert name.foreground().color() == win.distorted_table.palette().text().color()
@@ -1691,8 +1690,8 @@ def test_a_cancelled_run_leaves_the_videos_it_never_reached_as_they_were(qapp):
     win = MainWindow()
     running, queued = (win._add_table_row(Path(name)) for name in ("a.mkv", "b.mkv"))
     win._job_rows = [win._rows[running], win._rows[queued]]
-    win._set_row_status(running, "Calculating")
-    win._set_row_status(queued, "Queued")
+    win._set_row_status(running, RowState.CALCULATING)
+    win._set_row_status(queued, RowState.QUEUED)
     win._on_run_cancelled()
     win._on_all_finished()
     assert "Cancelled" in win.distorted_table.item(running, COL_PATH).toolTip()
@@ -1701,8 +1700,10 @@ def test_a_cancelled_run_leaves_the_videos_it_never_reached_as_they_were(qapp):
     win.close()
 
 
-@pytest.mark.parametrize("state, detail", [("Complete", "240 scored frames; metrics: VMAF v0.6.1"),
-                                            ("Failed", "Frame rates do not match (23.976 vs 25.000 fps).")])
+@pytest.mark.parametrize("state, detail", [
+    (RowState.COMPLETE, "240 scored frames; metrics: VMAF v0.6.1"),
+    (RowState.FAILED, "Frame rates do not match (23.976 vs 25.000 fps)."),
+])
 def test_a_changed_setting_clears_the_old_state_and_its_detail_together(qapp, state, detail):
     """The tooltip said "Not calculated" over the old result's detail."""
     win = MainWindow()
@@ -5077,7 +5078,7 @@ def test_a_videos_result_so_far_is_shown_saved_and_graphed_during_its_run(qapp, 
     rd = win._rows[row]
     win._job_rows = [rd]
     win._on_job_started(0, "distorted")
-    rd.analysis_status = "Calculating"
+    rd.analysis_status = RowState.CALCULATING
     so_far = _fake_completed_run(str(distorted)).result
     so_far.source, so_far.distorted = source, distorted
 
@@ -5353,7 +5354,7 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         win._update_run_status()
         assert win.status_label.text().startswith("[[")
         assert win._run_end_message().startswith("[[")
-        win._set_row_status(0, "Failed", "Frame rates do not match (23.976 vs 24.000 fps).")
+        win._set_row_status(0, RowState.FAILED, "Frame rates do not match (23.976 vs 24.000 fps).")
         win._refresh_row_state(0)
         assert "[[Failed]]" in win.distorted_table.item(0, COL_PATH).toolTip()
         assert "[[Frame rates do not match ({source} vs {test} fps).]]" not in \

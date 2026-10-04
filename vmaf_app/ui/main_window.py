@@ -117,6 +117,7 @@ from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_stri
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
+from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
 from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
 
@@ -416,10 +417,6 @@ _PERCEPTUAL_METRIC_KEYS = ("ssimulacra2", "butteraugli")
 #: CVVDP runs in the same GPU pass but has no CPU choice.
 _EXTRA_METRIC_KEYS = (*_PERCEPTUAL_METRIC_KEYS, "cvvdp")
 
-#: A row whose job finished some metrics and failed others (see
-#: MainWindow._on_job_partially_failed).
-_PARTLY_FAILED = N_("Partly failed")
-
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
 #: CPU tool seconds per megapixel of a compared frame pair, measured with the
@@ -519,7 +516,7 @@ class RowData:
     # [(CvvdpSettings, JOD)]: named in the tooltip of an empty CVVDP cell,
     # never shown as the row's score.
     cvvdp_elsewhere: list = field(default_factory=list)
-    analysis_status: str = ""
+    analysis_status: RowState | None = None
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
     # is the only cell that is always present and always about the row as a
@@ -2191,7 +2188,7 @@ class MainWindow(QMainWindow):
                         Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
                     )
                     item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
-                    failed = enabled and row_data.analysis_status in {"Failed", _PARTLY_FAILED}
+                    failed = enabled and row_data.analysis_status in (RowState.FAILED, RowState.PARTLY_FAILED)
                     item.setText(tr("Failed") if failed else "")
                     item.setToolTip((
                         self._failed_metric_tooltip(row_data, metric_column.key)
@@ -2238,7 +2235,7 @@ class MainWindow(QMainWindow):
         self._set_row_black_bars(row)
         self._set_row_scaling(row)
 
-    def _row_state(self, row_data: RowData) -> str:
+    def _row_state(self, row_data: RowData) -> RowState:
         """How this row's analysis stands, in one phrase.
 
         No longer a column of its own: the metric cells already answer it.
@@ -2250,10 +2247,10 @@ class MainWindow(QMainWindow):
         is at, and why a finished job is not being shown.
         """
         return row_data.analysis_status or (
-            N_("No metrics selected") if not self._requested_metrics(row_data) else
-            N_("Complete") if self._has_requested_results(row_data) else
-            N_("Partially calculated") if row_data.completed_run is not None
-            else N_("Not calculated")
+            RowState.NO_METRICS if not self._requested_metrics(row_data) else
+            RowState.COMPLETE if self._has_requested_results(row_data) else
+            RowState.PARTIAL if row_data.completed_run is not None
+            else RowState.NOT_CALCULATED
         )
 
     def _refresh_row_state(self, row: int) -> None:
@@ -2265,16 +2262,16 @@ class MainWindow(QMainWindow):
             return
         row_data = self._rows[row]
         state = self._row_state(row_data)
-        # The state is kept in English -- it is compared below -- and shown
-        # in the window's language; a detail from the core modules (a
-        # failure's reason) is translated where its shape is known.
+        # The state is shown in the window's language; a detail from the
+        # core modules (a failure's reason) is translated where its shape is
+        # known.
         lines = [str(row_data.path), tr(state)]
         if row_data.status_detail:
             lines.append(tr_message(row_data.status_detail))
         item.setToolTip("\n\n".join(lines))
-        if state == "Failed":
+        if state is RowState.FAILED:
             colour = _STATE_COLOURS["failed"]
-        elif state.startswith("Finished"):
+        elif state.finished_not_shown:
             # Done, cached, and deliberately not displayed -- see
             # _on_job_finished. Without a mark the row would look untouched.
             colour = _STATE_COLOURS["stale"]
@@ -2520,7 +2517,7 @@ class MainWindow(QMainWindow):
         item = self.distorted_table.item(row, COL_INFO)
         scaling_item = self.distorted_table.item(row, COL_SCALING)
         if error:
-            self._set_row_status(row, N_("Failed"), error)
+            self._set_row_status(row, RowState.FAILED, error)
             item.setText(tr("Probe failed"))
             item.setToolTip(error)
             item.setForeground(Qt.red)
@@ -2539,8 +2536,8 @@ class MainWindow(QMainWindow):
             self.distorted_table.item(row, COL_BITRATE).setToolTip(bitrate_note(info))
             self._rows[row].video_info = info
             self._set_row_scaling(row)
-            if self._rows[row].analysis_status == "Reading...":
-                self._rows[row].analysis_status = ""
+            if self._rows[row].analysis_status is RowState.READING:
+                self._rows[row].analysis_status = None
                 self._set_row_metrics(row)
             self._set_row_black_bars(row)
         # Keeps these snug to whatever's actually in them (never wider than
@@ -2639,7 +2636,7 @@ class MainWindow(QMainWindow):
         # the window for the whole time.
         for path in new_paths:
             row = self._add_table_row(path)
-            self._set_row_status(row, N_("Reading..."))
+            self._set_row_status(row, RowState.READING)
         self._start_media_probe(new_paths)
         self._start_cache_lookup(new_paths)
 
@@ -2668,8 +2665,8 @@ class MainWindow(QMainWindow):
         if paths:
             self._start_cache_lookup(paths)
 
-    def _set_row_status(self, row: int, text: str, detail: str = "") -> None:
-        self._rows[row].analysis_status = text
+    def _set_row_status(self, row: int, state: RowState, detail: str = "") -> None:
+        self._rows[row].analysis_status = state
         self._rows[row].status_detail = detail
         self._refresh_row_state(row)
 
@@ -2841,8 +2838,7 @@ class MainWindow(QMainWindow):
             # saved CVVDP score.
             run.graph_identity = previous.graph_identity
         row_data.completed_run = run
-        row_data.analysis_status = ""
-        row_data.analysis_status = N_("Complete (cached)") if self._has_requested_results(row_data) else ""
+        row_data.analysis_status = RowState.CACHED if self._has_requested_results(row_data) else None
         # Scores/crops come from the cache, current media descriptors do not.
         # Older runs omitted HDR tags; replacing a fresh probe with that
         # snapshot silently disabled tone mapping in Frame Compare.
@@ -2933,7 +2929,7 @@ class MainWindow(QMainWindow):
         result, label = cached
         run = CompletedRun(result, label)
         row_data.completed_run = run
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         row_data.video_info = result.distorted_info
         if row_data.options.resample_test is not None:
             self._set_resample_row_info(row, row_data.options.resample_test)
@@ -2978,7 +2974,7 @@ class MainWindow(QMainWindow):
             # Only the metrics being recalculated leave the row: saved scores
             # of unticked metrics are neither recalculated nor deleted, and
             # clearing the whole row hid them until the video was re-added.
-            row_data.analysis_status = ""
+            row_data.analysis_status = None
             self._drop_metric_results(row, set(self._requested_metrics(row_data)))
             row_data.status_detail = ""
             if self._source_info is not None:
@@ -3518,7 +3514,7 @@ class MainWindow(QMainWindow):
                     rd.extra_metric_keys.discard(key)
             else:
                 self._set_metric_option(rd.options, column, checked)
-            rd.analysis_status = ""
+            rd.analysis_status = None
             # The existing scores remain valid: selecting another metric
             # changes the requested output, not the measured pictures.
             self._set_row_metrics(row)
@@ -3655,7 +3651,7 @@ class MainWindow(QMainWindow):
         tooltip said "Not calculated" over the old result's "240 scored
         frames; metrics: ...", or over a failure's reason."""
         row_data = self._rows[row]
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         row_data.status_detail = ""
         if row_data.completed_run is None:
             self._set_row_metrics(row)
@@ -3776,7 +3772,7 @@ class MainWindow(QMainWindow):
             value for key in run.result.metric_results
             if key not in keys and (value := run.result.metric_results.get(key)) is not None
         )
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         if kept:
             result = copy.copy(run.result)
             result.metric_results = kept
@@ -4058,7 +4054,7 @@ class MainWindow(QMainWindow):
 
         self._job_rows = job_rows
         for rd in job_rows:
-            self._set_row_status(self._row_index_of(rd), N_("Queued"))
+            self._set_row_status(self._row_index_of(rd), RowState.QUEUED)
         self._job_cache_options = [clone_options(rd.options) for rd in job_rows]
         self._job_cvvdp = [rd.cvvdp for rd in job_rows]
         # Held as RowData, not indices, so removing a row mid-run can't
@@ -4118,7 +4114,7 @@ class MainWindow(QMainWindow):
         for row_data, why in skipped:
             row = self._row_index_of(row_data)
             if row is not None:
-                self._set_row_status(row, N_("Failed"), why)
+                self._set_row_status(row, RowState.FAILED, why)
         listed = "\n".join(f"\u2022 {row_data.path.name}: {tr_message(why)}" for row_data, why in skipped)
         text = tr("Cannot be compared with the reference:") + "\n\n" + listed
         if not others:
@@ -4203,7 +4199,7 @@ class MainWindow(QMainWindow):
     def _on_job_started(self, index: int, label: str) -> None:
         row = self._row_index_of(self._job_rows[index])
         if row is not None:
-            self._set_row_status(row, N_("Calculating"))
+            self._set_row_status(row, RowState.CALCULATING)
         if index not in self._running_jobs:
             self._running_jobs.append(index)
         self._job_frames_done.setdefault(index, 0)
@@ -4741,7 +4737,7 @@ class MainWindow(QMainWindow):
         cell said only "This metric failed on the last run" -- the reason
         was on the file name's tooltip, one text for all the row's metrics."""
         reason = row_data.metric_failures.get(key)
-        if reason is None and row_data.analysis_status == "Failed":
+        if reason is None and row_data.analysis_status is RowState.FAILED:
             reason = row_data.status_detail.split("\n\n", 1)[0]  # the whole video failed: its reason
         text = (tr("Failed on the last run: {reason}", reason=tr_message(reason)) if reason
                 else tr("This metric failed on the last run."))
@@ -4806,7 +4802,7 @@ class MainWindow(QMainWindow):
             self.bitrate_panel.add_and_analyze(bitrate_infos)
         if self._source_info is None or self._source_info.path != result.source:
             if final:
-                self._set_row_status(row, N_("Finished for the previous source; select it again to load the result."))
+                self._set_row_status(row, RowState.FOR_PREVIOUS_SOURCE)
             return None
         if cache_options != row_data.options or not cache_cvvdp.same_as(row_data.cvvdp):
             # The row's settings changed after this job was launched, so the
@@ -4817,7 +4813,7 @@ class MainWindow(QMainWindow):
             if final:
                 self._set_row_status(
                     row,
-                    N_("Finished with the previous settings; change them back to see the result."),
+                    RowState.FOR_PREVIOUS_SETTINGS,
                 )
             return None
         previous = row_data.completed_run
@@ -4847,7 +4843,7 @@ class MainWindow(QMainWindow):
         run.partial = not final
         row_data.completed_run = run
         if final:  # a result so far leaves the video in progress
-            row_data.analysis_status = ""
+            row_data.analysis_status = None
         if row_data.options.resample_test is None:
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         if final:
@@ -4875,7 +4871,7 @@ class MainWindow(QMainWindow):
             return
         self._rows[row].metric_failures = dict(reasons or {})
         self._set_row_status(
-            row, _PARTLY_FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
+            row, RowState.PARTLY_FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )
         self._set_row_metrics(row)
 
@@ -4887,7 +4883,7 @@ class MainWindow(QMainWindow):
             return  # the row was removed mid-run
         self._rows[row].metric_failures = {}  # the video's reason is every metric's
         self._set_row_status(
-            row, N_("Failed"), f"{message}\n\n{stderr_tail}" if stderr_tail else message
+            row, RowState.FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )
         self._set_row_metrics(row)
 
@@ -4897,10 +4893,10 @@ class MainWindow(QMainWindow):
     def _on_all_finished(self) -> None:
         for rd in self._job_rows:
             row = self._row_index_of(rd)
-            if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
+            if row is not None and rd.analysis_status in (RowState.CALCULATING, RowState.QUEUED):
                 # A video the run never reached is as it was, not cancelled.
-                rd.analysis_status = (N_("Cancelled") if self._run_was_cancelled and rd.analysis_status == "Calculating"
-                                      else "")
+                rd.analysis_status = (RowState.CANCELLED if self._run_was_cancelled
+                                      and rd.analysis_status is RowState.CALCULATING else None)
                 self._set_row_metrics(row)
         self._run_elapsed_timer.stop()
         self._run_hold = ""
@@ -4987,7 +4983,7 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         row_data.video_info = result.distorted_info
         row_data.completed_run = run
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         # The optional-metric columns are driven by row options. Seed those
         # flags from the data that is actually present in the saved result,
         # otherwise valid PSNR/SSIM/XPSNR arrays render as "N/A".
