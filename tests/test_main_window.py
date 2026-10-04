@@ -2224,8 +2224,8 @@ def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypat
     monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
     win = MainWindow()
     combo = win.vmaf_backend_combo
-    assert [combo.itemText(i) for i in range(combo.count())] == ["NVIDIA GPU", "CPU"]
-    assert combo.currentText() == "NVIDIA GPU" and combo.isEnabledTo(win.options_box)
+    assert [combo.itemText(i) for i in range(combo.count())] == ["GPU", "CPU"]
+    assert combo.currentText() == "GPU" and combo.isEnabledTo(win.options_box)
     assert "VMAF v1 has no GPU version" in combo.toolTip()
 
     win._source_info = _fake_video_info("source.mp4")
@@ -2250,19 +2250,30 @@ def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypat
     win.close()
 
 
-def test_without_an_nvidia_gpu_vmaf_compute_shows_cpu_and_is_greyed_out(qapp, monkeypatch):
-    """libvmaf's GPU code is CUDA: elsewhere VMAF is calculated on the CPU,
-    and the panel says so. The video keeps its own choice, for a PC with one."""
+def test_with_any_gpu_vmaf_compute_offers_the_gpu(qapp, monkeypatch):
+    """VMAF is calculated with CUDA on an NVIDIA GPU and with Vulkan on any
+    other: the choice is open with an Intel GPU alone."""
     from vmaf_app.core.models import GpuVendor
 
     monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor.INTEL])
+    win = MainWindow()
+    combo = win.vmaf_backend_combo
+    assert [combo.itemText(i) for i in range(combo.count())] == ["GPU", "CPU"]
+    assert combo.isEnabledTo(win.options_box) and "Vulkan on any other" in combo.toolTip()
+    win.close()
+
+
+def test_without_a_gpu_vmaf_compute_shows_cpu_and_is_greyed_out(qapp, monkeypatch):
+    """With no GPU VMAF is calculated on the CPU, and the panel says so. The
+    video keeps its own choice, for a PC with one."""
+    monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [])
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._panel_target_rows = [row]
     win._write_panel_options(win._rows[row].options)
     combo = win.vmaf_backend_combo
     assert combo.currentText() == "CPU" and not combo.isEnabledTo(win.options_box)
-    assert "No NVIDIA GPU was found" in combo.toolTip()
+    assert "No GPU was found" in combo.toolTip()
     assert win._rows[row].options.vmaf_on_gpu is True
     win.close()
 
@@ -5238,9 +5249,14 @@ def test_choosing_a_gpu_backend_is_saved_and_probed_again(qapp, monkeypatch):
     probes = []
     monkeypatch.setattr(perceptual_vship, "start_vship_probe", lambda: probes.append(perceptual_vship.vship_backend()))
     monkeypatch.setattr(perceptual_vship, "_backend", "auto")
+    from vmaf_app.core import vmaf_cuda
+
+    monkeypatch.setattr(vmaf_cuda, "_preference", "auto")
+    monkeypatch.setattr(vmaf_cuda, "start_gpu_vmaf_probe", lambda: probes.append("vmaf " + vmaf_cuda._preference))
     win = MainWindow()
     win.settings_gpu_backend.setCurrentIndex(win.settings_gpu_backend.findData("vulkan"))
-    assert Settings.load().gpu_backend == "vulkan" and probes == ["vulkan"]
+    # VMAF on the GPU follows the same setting: CUDA or Vulkan.
+    assert Settings.load().gpu_backend == "vulkan" and probes == ["vulkan", "vmaf vulkan"]
     win.close()
 
 

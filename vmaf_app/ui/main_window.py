@@ -59,7 +59,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__, i18n
-from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check
+from vmaf_app.core import app_log, perceptual_vship, result_cache, update_check, vmaf_cuda
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
@@ -542,7 +542,7 @@ class MainWindow(QMainWindow):
             "Butteraugli on %s, GPU metrics %s on the %s backend, saved results %s (%s)",
             "on" if self._settings.parallel_jobs > 1 else "off",
             "on" if self._settings.default_gpu_decode else "off",
-            "NVIDIA GPU" if self._settings.default_vmaf_on_gpu else "CPU",
+            "GPU" if self._settings.default_vmaf_on_gpu else "CPU",
             self._settings.default_ssimulacra2_backend.upper(), self._settings.default_butteraugli_backend.upper(),
             "together in one pass" if self._settings.gpu_metrics_together else "one pass each",
             self._settings.gpu_backend,
@@ -1135,6 +1135,8 @@ class MainWindow(QMainWindow):
             # what the table says about GPU metrics.
             perceptual_vship.set_vship_backend(backend)
             perceptual_vship.start_vship_probe()
+            vmaf_cuda.set_gpu_backend(backend)  # VMAF follows it: CUDA or Vulkan
+            vmaf_cuda.start_gpu_vmaf_probe()
 
         if self._settings.cache_dir != before_cache:
             result_cache.set_cache_dir_override(self._settings.cache_dir_path())
@@ -1554,18 +1556,18 @@ class MainWindow(QMainWindow):
         gpu_row.addWidget(self.gpu_vendor_combo)
         performance_form.addRow(tr("GPU decode:"), gpu_row)
 
-        # VMAF v0.6.1 and NEG only: libvmaf has CUDA code for their features,
-        # and none for VMAF v1's (see vmaf_cuda.gpu_models).
+        # VMAF v0.6.1 and NEG only: libvmaf has GPU code (CUDA) for their
+        # features, ported to Vulkan for other GPUs (vmaf_vulkan), and none
+        # for VMAF v1's (see vmaf_cuda.gpu_models).
         self.vmaf_backend_combo = QComboBox()
-        # "NVIDIA GPU", not "GPU" as for SSIMULACRA2 and Butteraugli: libvmaf's
-        # GPU code is CUDA, where Vship runs on any GPU.
-        self.vmaf_backend_combo.addItems(["NVIDIA GPU", "CPU"])
+        self.vmaf_backend_combo.addItems(["GPU", "CPU"])
         self.vmaf_backend_combo.setToolTip(
-            tr("With NVIDIA GPU, VMAF v0.6.1 and VMAF NEG are calculated on the NVIDIA GPU with the bundled "
-            "libvmaf. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no GPU "
-            "version. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, "
-            "so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated "
-            "on the CPU instead.")
+            tr("With GPU, VMAF v0.6.1 and VMAF NEG are calculated on the GPU: with CUDA on an NVIDIA GPU and with "
+            "Vulkan on any other, or on every GPU when Settings > GPU metrics > GPU backend is Vulkan. Both give "
+            "the same scores. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no "
+            "GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every "
+            "frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are "
+            "calculated on the CPU instead.")
         )
         self.vmaf_backend_combo.currentIndexChanged.connect(
             lambda _index: self._on_panel_field_edited("vmaf_on_gpu")
@@ -1599,13 +1601,13 @@ class MainWindow(QMainWindow):
         # Kept for Settings > GPU metrics, which offers the Vship builds for
         # the GPUs here (built after this panel).
         self._detected_gpu_vendors = detected = detected_gpu_vendors()
-        # Without an NVIDIA GPU there is no choice: it shows CPU, which is
-        # where VMAF is calculated (see _write_panel_options).
-        self._vmaf_gpu_possible = GpuVendor.NVIDIA in detected
+        # Without a GPU there is no choice: it shows CPU, which is where VMAF
+        # is calculated (see _write_panel_options).
+        self._vmaf_gpu_possible = bool(detected)
         if not self._vmaf_gpu_possible:
             self.vmaf_backend_combo.setEnabled(False)
             self.vmaf_backend_combo.setToolTip(
-                tr("No NVIDIA GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU."))
+                tr("No GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU."))
         if detected:
             names = ", ".join(v.value.upper() for v in detected)
             performance_form.addRow("", QLabel(tr("Detected GPU(s): {names}", names=names)))
@@ -3218,7 +3220,7 @@ class MainWindow(QMainWindow):
 
     def _show_vmaf_backend(self, on_gpu: bool) -> None:
         """The VMAF GPU/CPU choice as a run would take it: CPU when there is
-        no NVIDIA GPU, whatever the video is set to."""
+        no GPU, whatever the video is set to."""
         self.vmaf_backend_combo.setCurrentIndex(0 if on_gpu and self._vmaf_gpu_possible else 1)
 
     def _read_panel_options(self) -> VmafOptions:

@@ -156,6 +156,7 @@ def self_test() -> SelfTestReport:
 
     from vmaf_app.core import vmaf_cuda
 
+    vmaf_cuda.set_gpu_backend(Settings.load().gpu_backend)
     available, text = vmaf_cuda.gpu_vmaf_available()
     if available:
         report.ok(f"VMAF on the GPU ({text})")
@@ -295,6 +296,7 @@ def main() -> int:
     start_vship_probe()  # done by the time the first video is added
     from vmaf_app.core import vmaf_cuda
 
+    vmaf_cuda.set_gpu_backend(Settings.load().gpu_backend)
     vmaf_cuda.start_gpu_vmaf_probe()
     window = MainWindow()
     window.show()
