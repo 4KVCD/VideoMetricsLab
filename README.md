@@ -1,6 +1,6 @@
 # VideoMetricsLab
 
-A Windows desktop app for measuring and comparing video encode quality.
+Calculate VMAF and VMAF NEG on NVIDIA GPUs, and SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly.
 
 ## Features
 
