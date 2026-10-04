@@ -5,7 +5,7 @@ import pytest
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
-    supplemental_metric_specs,
+    displayable_metric_specs,
 )
 from vmaf_app.core.models import (
     ComparisonResult,
@@ -29,7 +29,7 @@ def _cache_key(source, distorted, options):
 def _load_cached(source, distorted, options, directory=None):
     return result_cache.load_cached(
         source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
+        displayable_metric_specs(options),
     )
 
 
@@ -40,10 +40,8 @@ def _store_cached(source, distorted, result, label, options, directory=None):
 
 
 def _clear_cached(source, distorted, options, directory=None):
-    return result_cache.clear(
-        source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
-    )
+    # The ticked metrics only, as the window clears them for a recalculation.
+    return result_cache.clear(source, distorted, _cache_request(options), directory)
 
 OPTIONS = VmafOptions()
 

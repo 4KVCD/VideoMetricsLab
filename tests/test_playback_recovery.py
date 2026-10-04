@@ -6,7 +6,7 @@ import pytest
 from vmaf_app.core.frame_extract import PreviewColorSettings
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.ui import playback_worker
-from vmaf_app.ui.native_playback_pool import _StopNative
+from vmaf_app.ui.locked_native_pool import _StopNative
 
 
 class FakeProcess:

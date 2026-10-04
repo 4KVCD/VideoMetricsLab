@@ -266,7 +266,6 @@ class GstComparePipeline:
         distorted_window_handle: int,
         settings: PreviewColorSettings,
         *,
-        show_source: bool = False,
         audio_enabled: bool = True,
         single_side: str | None = None,
         sample_output: bool = False,
@@ -319,9 +318,9 @@ class GstComparePipeline:
         except Exception:
             self.stop()
             raise
-        # Window stacking controls visibility; both sinks remain clocked and
-        # presenting so switching never changes either branch's playback state.
-        self.set_show_source(show_source)
+        # Window stacking controls visibility (the view raises the matching
+        # window); both sinks remain clocked and presenting, so switching
+        # never changes either branch's playback state.
         self._bus = self._pipeline.get_bus()
 
     def _make(self, factory: str, name: str):
@@ -569,12 +568,6 @@ class GstComparePipeline:
             self.Gst.Format.TIME, flags, max(0, int(position_ms)) * self.Gst.MSECOND
         ):
             raise GStreamerPlaybackError("GStreamer could not seek to that frame.")
-
-    def set_show_source(self, showing: bool) -> None:
-        # The UI raises the matching HWND.  Keeping this method makes source
-        # selection an intentional no-op at the pipeline layer: both branches
-        # must continue presenting against the same clock.
-        del showing
 
     def set_audio_enabled(self, enabled: bool) -> None:
         self._audio_enabled = bool(enabled)

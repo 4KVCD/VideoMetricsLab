@@ -125,17 +125,11 @@ def clear(
     distorted: Path,
     request: AnalysisRequest,
     directory: Path | None = None,
-    supplemental_specs: tuple[MetricRequestSpec, ...] = (),
 ) -> None:
-    """Forget cached metrics this request could load without touching other recipes."""
+    """Forget the cached scores of the request's metrics, without touching
+    other recipes or the other metrics on show."""
     base = directory if directory is not None else _cache_dir()
-    specs_by_identity = {
-        metric_cache.metric_identity_hash(spec): spec
-        for spec in (*request.metrics, *supplemental_specs)
-    }
-    metric_cache.clear_metrics(
-        base, source, distorted, request.recipe, tuple(specs_by_identity.values())
-    )
+    metric_cache.clear_metrics(base, source, distorted, request.recipe, request.metrics)
 
 
 def clear_all(directory: Path | None = None) -> int:

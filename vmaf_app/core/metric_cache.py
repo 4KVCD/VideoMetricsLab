@@ -761,18 +761,6 @@ def clear_metrics(
     return removed
 
 
-def clear_recipe(base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe) -> int:
-    directory = recipe_directory(base, source, distorted, recipe)
-    if not directory.exists():
-        return 0
-    count = sum(1 for path in directory.rglob("*") if path.is_file())
-    try:
-        shutil.rmtree(directory)
-    except OSError:
-        return 0
-    return count
-
-
 def clear_all(base: Path) -> int:
     root = Path(base) / _V2_DIR
     if not root.exists():

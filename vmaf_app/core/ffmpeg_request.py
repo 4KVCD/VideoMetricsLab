@@ -147,22 +147,6 @@ def analysis_request_from_vmaf_options(
     )
 
 
-def supplemental_metric_specs(options: VmafOptions) -> tuple[MetricRequestSpec, ...]:
-    """Compatible current FFmpeg metrics worth probing in addition to a row's request.
-
-    The UI shows already-cached companion scores when their scientific recipe
-    matches. XPSNR-only requests stay isolated because their full-frame coverage
-    differs from mixed libvmaf runs when subsampling is enabled.
-    """
-    if not any(key != "xpsnr" for key in options.requested_metrics()):
-        return ()
-    fuller = clone_options(options)
-    for metric in FRAME_METRICS:
-        if metric.ffmpeg_binding is not None:
-            fuller.set_metric_enabled(metric.key, True)
-    return metric_request_specs(fuller)
-
-
 def displayable_metric_specs(
     options: VmafOptions, cvvdp: CvvdpSettings | None = None,
 ) -> tuple[MetricRequestSpec, ...]:

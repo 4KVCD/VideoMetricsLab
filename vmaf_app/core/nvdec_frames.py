@@ -144,7 +144,6 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                  [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_longlong)]),
                 ("nvf_download", ctypes.c_int, [handle, ctypes.c_int, ctypes.c_void_p]),
                 ("nvf_copy_luma", ctypes.c_int, [handle, ctypes.c_int, ctypes.c_ulonglong, ctypes.c_longlong]),
-                ("nvf_slot_pointer", ctypes.c_ulonglong, [handle, ctypes.c_int]),
                 ("nvf_release", None, [handle, ctypes.c_int]),
                 ("nvf_abort", None, [handle]),
                 ("nvf_close", None, [handle]),

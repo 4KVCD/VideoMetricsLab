@@ -19,13 +19,12 @@ from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
     comparison_recipe_from_vmaf_options,
+    displayable_metric_specs,
     metric_request_specs,
-    supplemental_metric_specs,
 )
 from vmaf_app.core.metric_cache import (
     VSHIP_COLOR_TAGS,
     clear_metrics,
-    clear_recipe,
     load_metric,
     load_metrics,
     load_other_parameters,
@@ -51,7 +50,7 @@ def _request(options: VmafOptions) -> AnalysisRequest:
 def _load_cached(source, distorted, options, directory=None):
     return result_cache.load_cached(
         source, distorted, _request(options), directory,
-        supplemental_metric_specs(options),
+        displayable_metric_specs(options),
     )
 
 
@@ -60,9 +59,8 @@ def _store_cached(source, distorted, result, label, options, directory=None):
 
 
 def _clear_cached(source, distorted, options, directory=None):
-    return result_cache.clear(
-        source, distorted, _request(options), directory, supplemental_metric_specs(options)
-    )
+    # The ticked metrics only, as the window clears them for a recalculation.
+    return result_cache.clear(source, distorted, _request(options), directory)
 
 PROVENANCE = MetricProvenance("test", "1.0", "cpu", "test-v1", {"window": 7})
 
@@ -230,18 +228,6 @@ def test_coverage_and_compatibility_id_produce_independent_direct_entries(tmp_pa
     neg_a = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model_choice="version=vmaf_v0.6.1"))[0]
     neg_b = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model_choice="version=vmaf_4k_v0.6.1"))[0]
     assert neg_a == neg_b, "standard VMAF model choice must not invalidate fixed-model NEG"
-
-
-def test_clear_recipe_is_scoped(tmp_path):
-    source, first = _paths(tmp_path)
-    second = tmp_path / "second.mkv"
-    second.write_bytes(b"second")
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
-    one, two = recipe_directory(tmp_path, source, first, recipe), recipe_directory(tmp_path, source, second, recipe)
-    store_metric(one, _frame(), _spec())
-    store_metric(two, _frame(), _spec())
-    assert clear_recipe(tmp_path, source, first, recipe) > 0
-    assert not one.exists() and two.exists()
 
 
 def test_generic_results_can_have_independent_axes_without_corrupting_shared_frame_view():

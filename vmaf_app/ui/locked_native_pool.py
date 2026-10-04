@@ -3,14 +3,29 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 
 from vmaf_app.core.frame_extract import comparison_dimensions
 from vmaf_app.core.gstreamer_playback import GstComparePipeline, _load_gstreamer
 from vmaf_app.core.locked_presentation import LockedPresentation, SingleSoundtrack
 from vmaf_app.core.video_playback import neighbour_indices, source_playback_comparison
-from vmaf_app.ui.native_playback_pool import _StopNative
 from vmaf_app.ui.video_compare_view import _PairedFrameWidget
+
+
+class _StopNative(QThread):
+    def __init__(self, pipeline, parent):
+        super().__init__(parent)
+        self.pipeline = pipeline
+
+    def run(self):
+        self.pipeline.stop()
+
+    def cancel(self):
+        """Already stopping: allow teardown to finish, never terminate it.
+
+        The main window cancels all live workers during shutdown, including
+        this one. Interrupting D3D11 teardown could destroy live resources.
+        """
 
 
 class LockedNativePool:

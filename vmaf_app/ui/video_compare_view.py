@@ -391,7 +391,6 @@ class VideoCompareView(QWidget):
         self._showing_source = bool(showing)
         self.video.show_source(showing)
         if self._gst is not None:
-            self._gst.set_show_source(showing)
             if showing:
                 self.source_video.raise_()
             else:
@@ -444,7 +443,6 @@ class VideoCompareView(QWidget):
             int(self.source_video.winId()),
             int(self.distorted_video.winId()),
             self._color_settings,
-            show_source=self._showing_source,
             audio_enabled=self._audio_enabled,
         )
         self._gst = pipeline

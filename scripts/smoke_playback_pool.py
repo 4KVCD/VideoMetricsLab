@@ -36,11 +36,6 @@ def main():
     parser.add_argument("--locked", action="store_true")
     parser.add_argument("--stall", action="store_true")
     args = parser.parse_args()
-    if args.locked:
-        from vmaf_app.ui import native_playback_pool
-        from vmaf_app.ui.locked_native_pool import LockedNativePool
-
-        native_playback_pool.NativePlaybackPool = LockedNativePool
     app = QApplication.instance() or QApplication([])
     source = probe_video(args.source)
 
