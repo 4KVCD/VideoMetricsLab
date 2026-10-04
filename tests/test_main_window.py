@@ -5171,12 +5171,14 @@ def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
     win = MainWindow()
     started = []
     monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self.name))
+    # Only the update check's own thread counts: anything else the test
+    # process starts meanwhile (a background probe) is recorded too.
     win.settings_check_updates.setChecked(False)
     win.check_for_updates()
-    assert started == [] and win._settings.check_for_updates is False
+    assert "update-check" not in started and win._settings.check_for_updates is False
     win.settings_check_updates.setChecked(True)
     win.check_for_updates()
-    assert started == ["update-check"]
+    assert started.count("update-check") == 1
     win.close()
 
 
