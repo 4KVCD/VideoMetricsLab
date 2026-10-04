@@ -358,6 +358,22 @@ def test_frames_written_before_the_reader_connected_are_still_read():
     assert frames == [b"abcd", b"efgh"]
 
 
+def test_the_pipe_reader_keeps_its_names_off_the_threads():
+    """It kept its pipe as _handle, the name Thread keeps its own handle
+    under since Python 3.13: start() then failed with "'handle' must be a
+    _ThreadHandle", on 3.13 only -- the pipe reader never started there."""
+    import threading
+
+    reader = vmaf_cuda._PipeReader("names", 4)
+    try:
+        own = set(vars(reader)) - set(vars(threading.Thread()))
+        assert "_pipe" in own
+        assert not own & {"_handle", "_os_thread_handle", "_started", "_target", "_tstate_lock"}
+    finally:
+        reader.stop()
+        vmaf_cuda._winapi.CloseHandle(reader._pipe)
+
+
 def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
     """Each video's own choice (Performance > VMAF v0.6.1 and NEG compute),
     taken with its options when the run starts."""

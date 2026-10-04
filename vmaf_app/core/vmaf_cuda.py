@@ -294,7 +294,9 @@ class _PipeReader(threading.Thread):
     def __init__(self, name: str, frame_bytes: int) -> None:
         super().__init__(name=f"vmaf-gpu-{name}", daemon=True)
         self.path = rf"\\.\pipe\vml-vmaf-{os.getpid()}-{uuid.uuid4().hex[:12]}-{name}"
-        self._handle = _winapi.CreateNamedPipe(
+        # _pipe, not _handle: Thread has a _handle of its own since Python
+        # 3.13, which start() needs ("'handle' must be a _ThreadHandle").
+        self._pipe = _winapi.CreateNamedPipe(
             self.path, _winapi.PIPE_ACCESS_INBOUND, _winapi.PIPE_WAIT,  # byte mode: PIPE_TYPE_BYTE is 0
             1, _PIPE_BYTES, _PIPE_BYTES, 0, _winapi.NULL)
         self.frames: queue.Queue[bytearray | None] = queue.Queue()
@@ -307,7 +309,7 @@ class _PipeReader(threading.Thread):
     def run(self) -> None:
         try:
             try:
-                _winapi.ConnectNamedPipe(self._handle, _winapi.NULL)
+                _winapi.ConnectNamedPipe(self._pipe, _winapi.NULL)
             except OSError as error:
                 # ERROR_PIPE_CONNECTED: FFmpeg was first. ERROR_NO_DATA: it
                 # came, wrote and went before this connected -- what it
@@ -317,8 +319,8 @@ class _PipeReader(threading.Thread):
                     raise
             if self._stopped.is_set():
                 return
-            fd = msvcrt.open_osfhandle(self._handle, os.O_RDONLY)
-            self._handle = None
+            fd = msvcrt.open_osfhandle(self._pipe, os.O_RDONLY)
+            self._pipe = None
             with open(fd, "rb", buffering=0) as stream:
                 while not self._stopped.is_set():
                     buffer = self.free.get()
@@ -333,9 +335,9 @@ class _PipeReader(threading.Thread):
         except BaseException as error:  # reported by the attempt
             self.error = error
         finally:
-            if self._handle is not None:
-                _winapi.CloseHandle(self._handle)
-                self._handle = None
+            if self._pipe is not None:
+                _winapi.CloseHandle(self._pipe)
+                self._pipe = None
             self.frames.put(None)
 
     def stop(self) -> None:
