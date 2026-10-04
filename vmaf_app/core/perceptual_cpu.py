@@ -137,8 +137,6 @@ def _resolve_crops(
 ) -> tuple[CropBox | None, CropBox | None]:
     if recipe.crop_mode is CropMode.NONE:
         return None, None
-    if recipe.crop_mode is CropMode.MANUAL:
-        return recipe.manual_source_crop, recipe.manual_distorted_crop
     try:
         if on_status:
             # Worded as the FFmpeg metrics' detection is: the two halves of a

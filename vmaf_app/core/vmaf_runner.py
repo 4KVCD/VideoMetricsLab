@@ -220,9 +220,6 @@ def _resolve_crops(
     if options.crop_mode == CropMode.NONE:
         return None, None
 
-    if options.crop_mode == CropMode.MANUAL:
-        return options.manual_source_crop, options.manual_distorted_crop
-
     plan = hwaccel or HwAccelPlan()
     if status_callback:
         status_callback("Detecting black bars in source and distorted...")
@@ -1302,8 +1299,6 @@ def run_resample_test(
             )
         except CropDetectCancelled as e:
             raise Cancelled("Cancelled by user") from e
-    elif options.crop_mode == CropMode.MANUAL:
-        source_crop = options.manual_source_crop
 
     dimensions = resample_analysis_dimensions(source_info, source_crop)
     effective_model = _auto_model_or(options, dimensions)

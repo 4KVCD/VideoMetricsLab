@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "No se pudieron comprobar las barras negras porque no se pudo leer el video.",
   "Off": "Desactivado",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "La detección de barras negras está desactivada en esta fila; se compararán los fotogramas completos.",
-  "Manual": "Manual",
-  "A manual crop is configured; the detected sides appear after the run.": "Hay un recorte manual configurado; los lados detectados aparecen después de la ejecución.",
   "Pending": "Pendiente",
   "Black bars will be detected when this row is run.": "Las barras negras se detectarán cuando se ejecute esta fila.",
   "Test video": "Video de prueba",

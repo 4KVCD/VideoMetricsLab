@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Чорні смуги не вдалося перевірити, бо відео нечитабельне.",
   "Off": "Вимкн.",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Виявлення чорних смуг вимкнено для цього рядка; кадри порівнюються повністю.",
-  "Manual": "Вручну",
-  "A manual crop is configured; the detected sides appear after the run.": "Задано ручне обрізання; виявлені сторони з'являються після запуску.",
   "Pending": "Очікує",
   "Black bars will be detected when this row is run.": "Чорні смуги визначаються під час обробки цього рядка.",
   "Test video": "Тестове відео",

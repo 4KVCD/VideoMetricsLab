@@ -14,11 +14,7 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE
-from vmaf_app.core.models import CropBox, ResampleTarget, VmafOptions, clone_options
-
-
-def _copy_crop(crop: CropBox | None) -> CropBox | None:
-    return None if crop is None else CropBox(crop.w, crop.h, crop.x, crop.y)
+from vmaf_app.core.models import ResampleTarget, VmafOptions, clone_options
 
 
 def _copy_resample(target: ResampleTarget | None) -> ResampleTarget | None:
@@ -29,8 +25,6 @@ def comparison_recipe_from_vmaf_options(options: VmafOptions) -> ComparisonRecip
     """Snapshot the common scientific preprocessing represented by the UI row."""
     return ComparisonRecipe(
         crop_mode=options.crop_mode,
-        manual_source_crop=_copy_crop(options.manual_source_crop),
-        manual_distorted_crop=_copy_crop(options.manual_distorted_crop),
         scale_algorithm=options.scale_algorithm,
         scale_direction=options.scale_direction,
         duration_limit=options.duration_limit,

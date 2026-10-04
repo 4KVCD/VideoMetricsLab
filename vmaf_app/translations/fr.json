@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Les bandes noires n'ont pas pu être vérifiées car la vidéo est illisible.",
   "Off": "Désactivé",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "La détection des bandes noires est désactivée pour cette ligne ; les images entières seront comparées.",
-  "Manual": "Manuel",
-  "A manual crop is configured; the detected sides appear after the run.": "Un recadrage manuel est configuré ; les côtés détectés apparaîtront après l'exécution.",
   "Pending": "En attente",
   "Black bars will be detected when this row is run.": "Les bandes noires seront détectées à l'exécution de cette ligne.",
   "Test video": "Vidéo de test",

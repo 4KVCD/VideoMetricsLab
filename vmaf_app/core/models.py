@@ -19,7 +19,6 @@ from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 
 class CropMode(str, Enum):
     AUTO = "auto"
-    MANUAL = "manual"
     NONE = "none"
 
 
@@ -179,8 +178,6 @@ class VmafOptions:
     vmaf_on_gpu: bool = True
 
     crop_mode: CropMode = CropMode.AUTO
-    manual_source_crop: CropBox | None = None
-    manual_distorted_crop: CropBox | None = None
 
     # When set, this row is a resolution round-trip test (see ResampleTarget)
     # instead of a normal comparison against a second, already-encoded file.

@@ -3,14 +3,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-from vmaf_app.core.models import CropBox, CropMode, ResampleTarget, ScaleDirection
+from vmaf_app.core.models import CropMode, ResampleTarget, ScaleDirection
 
 
 @dataclass(frozen=True, slots=True)
 class ComparisonRecipe:
     crop_mode: CropMode
-    manual_source_crop: CropBox | None
-    manual_distorted_crop: CropBox | None
     scale_algorithm: str
     scale_direction: ScaleDirection
     duration_limit: float
@@ -27,4 +25,8 @@ class ComparisonRecipe:
         scaled with stays recorded with it."""
         identity = asdict(self)
         del identity["scale_algorithm"]
+        # A manual crop was once part of a recipe; no recipe has had one
+        # since. Kept, always empty, so every saved comparison keeps the
+        # name its identity gave it.
+        identity.update(manual_source_crop=None, manual_distorted_crop=None)
         return identity

@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Video okunamadığı için siyah bantlar kontrol edilemedi.",
   "Off": "Kapalı",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Bu satır için siyah bant algılama kapalı; tam kareler karşılaştırılacak.",
-  "Manual": "Elle",
-  "A manual crop is configured; the detected sides appear after the run.": "Elle kırpma ayarlanmış; algılanan kenarlar çalıştırmadan sonra görünür.",
   "Pending": "Bekliyor",
   "Black bars will be detected when this row is run.": "Siyah bantlar bu satır çalıştırıldığında algılanacak.",
   "Test video": "Test videosu",

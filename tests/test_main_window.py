@@ -3580,7 +3580,7 @@ def test_an_unscored_rows_timeline_stops_at_the_shorter_input(qapp):
 
 @pytest.mark.parametrize(
     ("crop_mode", "pending"),
-    [(CropMode.AUTO, True), (CropMode.NONE, False), (CropMode.MANUAL, False)],
+    [(CropMode.AUTO, True), (CropMode.NONE, False)],
 )
 def test_only_auto_crop_is_reported_as_pending(qapp, crop_mode, pending):
     win = MainWindow()
@@ -3592,25 +3592,6 @@ def test_only_auto_crop_is_reported_as_pending(qapp, crop_mode, pending):
     win._sync_frame_compare()
 
     assert win.frame_compare_panel._entries[0].comparison.auto_crop_pending is pending
-
-
-def test_a_manual_crop_is_applied_to_an_unscored_preview(qapp):
-    from vmaf_app.core.models import CropBox
-
-    win = MainWindow()
-    win._source_info = _fake_video_info_res("source.mkv", 1920, 1080)
-    row = win._add_table_row(Path("encode.mkv"))
-    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
-    win._rows[row].options.crop_mode = CropMode.MANUAL
-    win._rows[row].options.manual_source_crop = CropBox(w=1920, h=816, x=0, y=132)
-    win._rows[row].options.manual_distorted_crop = CropBox(w=1920, h=816, x=0, y=132)
-
-    win._sync_frame_compare()
-    comparison = win.frame_compare_panel._entries[0].comparison
-
-    # Manual crops are known without running anything, so they are exact.
-    assert comparison.source_crop.h == 816
-    assert comparison.distorted_crop.h == 816
 
 
 def test_a_resolution_test_row_can_be_previewed_before_it_runs(qapp, tmp_path, monkeypatch):

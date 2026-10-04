@@ -2404,8 +2404,6 @@ class MainWindow(QMainWindow):
         if completed is None:
             if row_data.options.crop_mode == CropMode.NONE:
                 show(tr("Off"), tr("Black-bar detection is disabled for this row; the full frames will be compared."), muted=True)
-            elif row_data.options.crop_mode == CropMode.MANUAL:
-                show(tr("Manual"), tr("A manual crop is configured; the detected sides appear after the run."), muted=True)
             else:
                 show(tr("Pending"), tr("Black bars will be detected when this row is run."), muted=True)
             return
@@ -4035,15 +4033,9 @@ class MainWindow(QMainWindow):
                 # the other before libvmaf sees it. The runner re-resolves
                 # this after auto-crop, which it cannot know here.
                 if row_data.options.resample_test is not None:
-                    analysis_size = resample_analysis_dimensions(
-                        self._source_info, row_data.options.manual_source_crop
-                    )
+                    analysis_size = resample_analysis_dimensions(self._source_info, None)
                 else:
-                    analysis_size = analysis_dimensions(
-                        self._source_info, dist_info, row_data.options,
-                        row_data.options.manual_source_crop,
-                        row_data.options.manual_distorted_crop,
-                    )
+                    analysis_size = analysis_dimensions(self._source_info, dist_info, row_data.options, None, None)
                 model = resolve_model(row_data.options, *analysis_size) if row_data.options.compute_vmaf else ""
             except (ValueError, VmafRunError) as e:
                 skipped.append((row_data, str(e)))
@@ -5212,13 +5204,10 @@ class MainWindow(QMainWindow):
             return None  # the test file has not been read yet
 
         # Crops that a run would apply are only known once it has run:
-        # auto-detection measures the video. Manual and "none" are known
-        # now, so those are exact; auto is previewed uncropped and says so.
+        # auto-detection measures the video. "None" is known now, so it is
+        # exact; auto is previewed uncropped and says so.
         auto_crop_pending = options.crop_mode == CropMode.AUTO
         source_crop = distorted_crop = None
-        if options.crop_mode == CropMode.MANUAL:
-            source_crop = options.manual_source_crop
-            distorted_crop = options.manual_distorted_crop
 
         distorted_info = self._source_info if resample is not None else row.video_info
         reference = self._source_info if resample is not None else distorted_info

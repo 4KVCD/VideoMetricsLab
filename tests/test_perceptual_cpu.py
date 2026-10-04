@@ -32,7 +32,7 @@ def _info(path: str) -> VideoInfo:
 
 def _request(*keys: str) -> AnalysisRequest:
     return AnalysisRequest(
-        recipe=ComparisonRecipe(CropMode.NONE, None, None, "bicubic", ScaleDirection.SOURCE_TO_DISTORTED, 0.0, None),
+        recipe=ComparisonRecipe(CropMode.NONE, "bicubic", ScaleDirection.SOURCE_TO_DISTORTED, 0.0, None),
         metrics=tuple(MetricRequestSpec(key, "perceptual", (), FrameCoverage("full"), f"{key}-reference-cli-v1") for key in keys),
         execution=ExecutionPreferences(False, GpuVendor.NONE, 1),
     )

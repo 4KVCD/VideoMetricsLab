@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Bilah hitam tidak dapat diperiksa karena video tidak terbaca.",
   "Off": "Nonaktif",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Deteksi bilah hitam dinonaktifkan untuk baris ini; bingkai dibandingkan utuh.",
-  "Manual": "Manual",
-  "A manual crop is configured; the detected sides appear after the run.": "Pemotongan manual diatur; sisi yang terdeteksi tampil setelah proses.",
   "Pending": "Tertunda",
   "Black bars will be detected when this row is run.": "Bilah hitam dideteksi saat baris ini diproses.",
   "Test video": "Video uji",

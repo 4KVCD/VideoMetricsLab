@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Nie można było sprawdzić czarnych pasów, bo wideo jest nieczytelne.",
   "Off": "Wyłączone",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Wykrywanie czarnych pasów jest wyłączone dla tego wiersza; porównywane będą całe klatki.",
-  "Manual": "Ręcznie",
-  "A manual crop is configured; the detected sides appear after the run.": "Ustawiono ręczne kadrowanie; wykryte krawędzie pojawią się po obliczeniach.",
   "Pending": "Oczekuje",
   "Black bars will be detected when this row is run.": "Czarne pasy zostaną wykryte przy obliczaniu tego wiersza.",
   "Test video": "Wideo testowe",
