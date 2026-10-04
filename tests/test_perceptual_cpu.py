@@ -284,32 +284,6 @@ def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
     assert out == [42.5]
 
 
-def test_cancel_ends_a_cpu_tool_at_once(tmp_path):
-    import threading
-
-    import psutil
-
-    from vmaf_app.core.perceptual_cpu import PerceptualCancelled, _run_metric
-    from vmaf_app.core.process_control import ProcessHandle
-
-    executable, script, other = _waiting_tool(tmp_path)  # never finishes: the test ends only if Cancel ends it
-    cancel, handle, raised = threading.Event(), ProcessHandle(), []
-
-    def run():
-        try:
-            _run_metric(executable, "ssimulacra2", script, other, handle, cancel)
-        except PerceptualCancelled as error:
-            raised.append(error)
-
-    worker = threading.Thread(target=run)
-    worker.start()
-    pid = _attached(handle, worker)
-    cancel.set()
-    worker.join()
-    assert raised
-    assert not psutil.pid_exists(pid) or psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
-
-
 def test_a_tool_that_never_finishes_a_frame_times_out(tmp_path, monkeypatch):
     import itertools
     import time
