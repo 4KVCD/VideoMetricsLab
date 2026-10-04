@@ -778,6 +778,11 @@ def _filter_chain(
     pixel_format: str, step: int, algorithm: str, hwaccel: str | None = None,
 ) -> str:
     operations: list[str] = []
+    if step > 1:
+        # First: the frames it drops are not downloaded, cropped or scaled
+        # (they were: at step 24, 23 of every 24). Nothing after it drops a
+        # frame, so n counts the same frames wherever it stands.
+        operations.append(f"select=not(mod(n\\,{step}))")
     if hwaccel:
         # A hardware-decoded surface is brought to system memory in its
         # native layout first; crop, scale and the final format conversion
@@ -789,8 +794,6 @@ def _filter_chain(
     current_size = _content_size(info, crop)
     if current_size != target_size:
         operations.append(f"scale={target_size[0]}:{target_size[1]}:flags={algorithm}")
-    if step > 1:
-        operations.append(f"select=not(mod(n\\,{step}))")
     operations.extend(("setpts=PTS-STARTPTS", f"format={pixel_format}"))
     return ",".join(operations)
 

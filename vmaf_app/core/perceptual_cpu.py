@@ -291,7 +291,8 @@ def _image_filtergraph(
 
         def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo,
                   target: tuple[int, int] | None) -> str:
-            ops = [*prepare(crop, info, target), *sample, "setpts=PTS-STARTPTS", *to_rgb(info)]
+            # select first: the frames it drops are not cropped or scaled.
+            ops = [*sample, *prepare(crop, info, target), "setpts=PTS-STARTPTS", *to_rgb(info)]
             return f"[{input_label}]{','.join(ops)}[{output_label}]"
 
         return ";".join((
