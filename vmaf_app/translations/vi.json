@@ -687,7 +687,8 @@
   "Cannot be compared with the reference:": "Không thể so sánh với video tham chiếu:",
   "Calculate the rest?": "Tính các video còn lại?",
   "It could not be read. Remove it or add the file again to retry.": "Không đọc được. Hãy xóa nó, hoặc thêm lại tệp để thử lại.",
-  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate của cả tệp, gồm cả âm thanh: tệp không ghi bitrate riêng của video."
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate của cả tệp, gồm cả âm thanh: tệp không ghi bitrate riêng của video.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} đã có trong danh sách. Hiển thị điểm của lần chạy đã lưu thay thế?"
  },
  "plurals": {
   "about {count} day": [

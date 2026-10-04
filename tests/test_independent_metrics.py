@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
@@ -220,7 +220,11 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     path = tmp_path / "results.metrics.json"
     save_run(result, path)
     monkeypatch.setattr("vmaf_app.ui.main_window.QFileDialog.getOpenFileName", lambda *_: (str(path), ""))
+    # The same video: its row shows the saved run's scores (one row a video).
+    monkeypatch.setattr("vmaf_app.ui.main_window.QMessageBox.question",
+                        lambda *_a, **_k: QMessageBox.Yes)
     win._on_load_saved_run()
+    assert len(win._rows) == 1
     assert win._rows[-1].options.requested_metrics() == ("psnr",)
     assert win._row_state(win._rows[-1]) == "Complete"
     win.close()

@@ -687,7 +687,8 @@
   "Cannot be compared with the reference:": "無法與參考影片比較：",
   "Calculate the rest?": "計算其餘的影片？",
   "It could not be read. Remove it or add the file again to retry.": "無法讀取。請將其移除，或重新新增該檔案後再試一次。",
-  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整個檔案的位元率，包含音軌：檔案中沒有記錄影片本身的位元率。"
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整個檔案的位元率，包含音軌：檔案中沒有記錄影片本身的位元率。",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} 已在清單中。改為顯示已儲存執行的分數嗎？"
  },
  "plurals": {
   "about {count} day": [

@@ -4982,12 +4982,28 @@ class MainWindow(QMainWindow):
         # the table under whatever source happens to be selected presents a
         # comparison that was never made -- the row showed one video's score
         # underneath a different reference.
+        # One row per video: two rows with one path, and every lookup by path
+        # (cached scores, probes, a run's result) found only the first.
+        existing = self._row_index_of_path(result.distorted)
+        if existing is not None and QMessageBox.question(
+                self, tr("Already added"),
+                tr("{name} is already in the list. Show the saved run's scores in its place?",
+                   name=result.distorted.name)) != QMessageBox.Yes:
+            return
         if self._source_info is None:
             # Nothing to contradict: adopt the run's own reference, so the
             # window and the result agree about what was compared.
             self._adopt_source_from_run(result)
-        elif not self._same_source(self._source_info.path, result.source)                 and not self._offer_to_switch_source(result):
+        elif (not self._same_source(self._source_info.path, result.source)
+                and not self._offer_to_switch_source(result)):
             return
+        existing = self._row_index_of_path(result.distorted)
+        if existing is not None:
+            previous = self._rows[existing].completed_run
+            if previous is not None and not self.graph_panel.remove_by_identity(previous.graph_identity):
+                self.graph_panel.remove_by_path(self._rows[existing].path)
+            self.distorted_table.removeRow(existing)
+            del self._rows[existing]
 
         run = CompletedRun(result, label)
         row = self._add_table_row(result.distorted)

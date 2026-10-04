@@ -687,7 +687,8 @@
   "Cannot be compared with the reference:": "Tidak dapat dibandingkan dengan referensi:",
   "Calculate the rest?": "Hitung sisanya?",
   "It could not be read. Remove it or add the file again to retry.": "Tidak dapat dibaca. Hapus, atau tambahkan file lagi untuk mencoba ulang.",
-  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate seluruh file, termasuk audio: file tidak mencatat bitrate videonya sendiri."
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate seluruh file, termasuk audio: file tidak mencatat bitrate videonya sendiri.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} sudah ada di daftar. Tampilkan skor dari proses tersimpan sebagai gantinya?"
  },
  "plurals": {
   "about {count} day": [

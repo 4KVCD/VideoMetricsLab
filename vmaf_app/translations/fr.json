@@ -687,7 +687,8 @@
   "Cannot be compared with the reference:": "Impossible de comparer avec la référence :",
   "Calculate the rest?": "Calculer les autres ?",
   "It could not be read. Remove it or add the file again to retry.": "Impossible de la lire. Retirez-la ou ajoutez à nouveau le fichier pour réessayer.",
-  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Le débit du fichier entier, piste audio comprise : le fichier n'indique pas celui de la vidéo."
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Le débit du fichier entier, piste audio comprise : le fichier n'indique pas celui de la vidéo.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} est déjà dans la liste. Afficher à la place les scores de l'exécution enregistrée ?"
  },
  "plurals": {
   "about {count} day": [

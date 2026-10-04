@@ -978,6 +978,34 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
     assert win.distorted_table.item(0, COL_BLACK_BARS).text() == "No"
 
 
+@pytest.mark.parametrize("answer", ["yes", "no"])
+def test_loading_a_saved_run_of_a_video_already_listed_keeps_one_row(qapp, monkeypatch, answer):
+    """A second row with the same path was added, and every lookup by path
+    found only the first."""
+    win = MainWindow()
+    info = _fake_video_info("saved.mp4")
+
+    def result(vmaf):
+        return ComparisonResult(
+            source=Path("source.mp4"), distorted=Path("saved.mp4"),
+            frames=[FrameScore(0, 0.0, vmaf)], fps=30.0, model="version=vmaf_v0.6.1",
+            source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+        )
+
+    monkeypatch.setattr(main_window_module.QFileDialog, "getOpenFileName",
+                        lambda *a, **kw: ("saved.metrics.json", ""))
+    monkeypatch.setattr(main_window_module, "load_run", lambda _path: (result(90.0), "saved"))
+    win._on_load_saved_run()
+    monkeypatch.setattr(main_window_module, "load_run", lambda _path: (result(70.0), "saved"))
+    monkeypatch.setattr(main_window_module.QMessageBox, "question", lambda *a, **k: (
+        main_window_module.QMessageBox.Yes if answer == "yes" else main_window_module.QMessageBox.No))
+    win._on_load_saved_run()
+
+    assert len(win._rows) == win.distorted_table.rowCount() == 1
+    assert win.distorted_table.item(0, COL_VMAF).text() == ("70.00" if answer == "yes" else "90.00")
+    win.close()
+
+
 def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
 
