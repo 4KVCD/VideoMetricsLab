@@ -65,6 +65,14 @@ _VMAF_LOG_LEVEL_ERROR = 1
 #: the GPU without holding more host memory than it needs (25 MB each at
 #: 4K 10-bit).
 _PICTURES = 8
+#: The CUDA device GPU VMAF runs on, its decoders included: CUDA's first,
+#: which by its default order (CUDA_DEVICE_ORDER=FASTEST_FIRST) is the
+#: fastest NVIDIA GPU. It is the one FFmpeg's -hwaccel cuda takes, and the
+#: one Vship's CUDA build picks (the first discrete GPU it lists;
+#: perceptual_vship._probe_vship_device), so on a PC with two NVIDIA GPUs
+#: every GPU metric and decode still lands on the same card. The app offers
+#: no choice of GPU.
+_GPU = 0
 #: Frames each reader may hold ready before the feeder takes them.
 _READ_AHEAD = 3
 _PIPE_BYTES = 64 * 1024 * 1024
@@ -462,15 +470,15 @@ def score_decoded(
         if plan.bit_depth > bit_depth:
             raise nvdec_frames.NvdecUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        supported, refusal = nvdec_frames.decoder_supports(0, plan)
+        supported, refusal = nvdec_frames.decoder_supports(_GPU, plan)
         if not supported:
             raise nvdec_frames.NvdecUnavailableError(refusal)
         plans.append(plan)
     # The decoders first: the first to start CUDA sets its waits to sleep
     # rather than spin (nvdec_frames), and libvmaf's then do too.
-    test = nvdec_frames.NvdecStream(distorted, plans[0], 0, pool=4, process_handle=process_handle)
+    test = nvdec_frames.NvdecStream(distorted, plans[0], _GPU, pool=4, process_handle=process_handle)
     try:
-        ref = nvdec_frames.NvdecStream(source, plans[1], 0, pool=4, process_handle=process_handle)
+        ref = nvdec_frames.NvdecStream(source, plans[1], _GPU, pool=4, process_handle=process_handle)
     except BaseException:
         test.close()
         raise
