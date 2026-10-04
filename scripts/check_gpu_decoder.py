@@ -43,9 +43,13 @@ VENDORS = {"nvidia": GpuVendor.NVIDIA, "intel": GpuVendor.INTEL, "amd": GpuVendo
 
 def clip(path: Path, encoder: list[str], pix_fmt: str, seconds: float = 2.0, size: str = "1280x720",
          extra: list[str] | None = None) -> Path:
-    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
-                    "-i", f"testsrc2=s={size}:r=24000/1001:d={seconds}", "-pix_fmt", pix_fmt, *encoder,
-                    *(extra or []), str(path)], check=True)
+    # Captured: SVT-AV1 writes its settings whatever FFmpeg's log level is,
+    # thirty lines into the report this prints.
+    made = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
+                           "-i", f"testsrc2=s={size}:r=24000/1001:d={seconds}", "-pix_fmt", pix_fmt, *encoder,
+                           *(extra or []), str(path)], capture_output=True, text=True)
+    if made.returncode != 0:
+        sys.exit(f"FFmpeg could not make {path.name}:\n{made.stderr[-2000:]}")
     return path
 
 
@@ -131,7 +135,9 @@ def check_speed(path: Path, backend: str, frames: int = 600) -> str:
     finally:
         stream.close()
     if len(marks) < 2:
-        return f"speed: too few pictures ({n})"
+        # The 2-second clip made here when no VIDEO is given: too short to
+        # time. It read as a failure of the decoder.
+        return f"speed: not measured ({path.name} has {n} pictures; give a longer VIDEO to time the decoder)"
     (t0, c0, n0), (t1, c1, n1) = marks[0], marks[-1]
     return (f"speed on {path.name} ({info.width}x{info.height} {info.codec_name} {info.pix_fmt}): "
             f"{(n1 - n0) / (t1 - t0):.0f} fps, {(c1 - c0) / (t1 - t0):.2f} CPU cores, "
@@ -147,7 +153,12 @@ def check_scores(source: Path, backend: str, work: Path) -> str:
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-i", str(source), "-map", "0:V:0", "-t", "10",
                     "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "30", "-preset", "veryfast", str(test)],
                    check=True)
-    options = VmafOptions(crop_mode=CropMode.NONE, gpu_decode=True, gpu_vendor=VENDORS[backend], duration_limit=10.0)
+    # The limit is the test clip's own length: at 10 s, with the 2-second clip
+    # made here as the source, the comparison was refused ("The duration
+    # limit extends beyond the end of one of the videos").
+    limit = min(10.0, probe_video(test).duration)
+    options = VmafOptions(crop_mode=CropMode.NONE, gpu_decode=True, gpu_vendor=VENDORS[backend],
+                          duration_limit=limit)
     request = analysis_request_from_vmaf_options(options, ("ssimulacra2",))
     device, reason = vship.detect_vship_device()
     if device is None:
