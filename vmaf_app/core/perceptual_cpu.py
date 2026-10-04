@@ -297,6 +297,13 @@ def _image_filtergraph(
         ))
 
     width, height = source_target or source_size
+    # pad keeps a subsampled picture on whole chroma samples: asked for an
+    # odd size it gives the even one below, and blend then refused the two
+    # inputs ("size 852x480 do not match ... 853x480"). An odd-sized clock
+    # is padded to the even size above and cut to the picture's exactly.
+    clock_size = f"pad={width + (width & 1)}:{height + (height & 1)}"
+    if width & 1 or height & 1:
+        clock_size += f",crop={width}:{height}:0:0:exact=1"
     test_chain = [*prepare(distorted_crop, distorted, distorted_target), "setpts=PTS-STARTPTS",
                   "split=2[test_frames][test_times]"]
     source_chain = [*prepare(source_crop, source, source_target),
@@ -306,7 +313,7 @@ def _image_filtergraph(
         # Its own scale: the format the clock is made in is not the test
         # frames', which reach the split -- and the test's pictures -- as
         # they are decoded.
-        f"[test_times]crop=2:2:0:0,scale,format={source_format},pad={width}:{height},"
+        f"[test_times]crop=2:2:0:0,scale,format={source_format},{clock_size},"
         "lut=c0=0:c1=0:c2=0:c3=0[clock]",
         f"[1:{VIDEO_STREAM}]{','.join(source_chain)}[source_frames]",
         f"[clock][source_frames]blend=all_mode=or:{':'.join(FRAMESYNC_OPTS)},{restore},"

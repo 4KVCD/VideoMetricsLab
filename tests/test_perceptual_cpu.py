@@ -541,6 +541,45 @@ def test_a_frame_dropped_from_the_test_video_pairs_the_rest_by_time(tmp_path, st
     assert hashes["distorted"] == hashes["reference"]
 
 
+@pytest.mark.parametrize("size, pix_fmt", [("63x48", "yuv420p"), ("64x47", "yuv420p10le"), ("63x47", "yuv422p"),
+                                           ("63x47", "yuv444p"), ("64x48", "yuv420p")])
+def test_videos_of_an_odd_size_are_paired_with_their_pictures_unchanged(tmp_path, size, pix_fmt):
+    """The pairing's clock was padded to the pictures' size, and FFmpeg's pad
+    gives a subsampled picture an even one: at an odd width or height blend
+    refused its two inputs ("size 852x480 do not match ... 853x480") and the
+    CPU tools failed. The pictures are the ones pairing by position gives."""
+    import re
+    import subprocess
+
+    from vmaf_app.core import perceptual_cpu
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+
+    run = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+           "testsrc2=size=128x96:rate=24:duration=0.25"]
+    width, height = size.split("x")
+    for name, noise in (("source.mkv", ""), ("test.mkv", "noise=alls=3:allf=t,")):
+        subprocess.run([*run, "-vf", f"{noise}scale={width}:{height},format={pix_fmt}", "-c:v", "ffv1",
+                        str(tmp_path / name)], check=True)
+    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
+    assert (source.width, source.height) == (int(width), int(height))
+    inputs = ["-i", str(test.path), "-i", str(source.path)]
+    graph = perceptual_cpu._image_filtergraph(source, test, _request().recipe, None, None, 1)
+    assert "blend=" in graph
+
+    paired = _frame_hashes(inputs, graph)
+
+    by_position = pytest.MonkeyPatch()
+    by_position.setattr(perceptual_cpu, "_BLEND_FORMAT", re.compile("never"))
+    try:
+        unpaired = _frame_hashes(inputs, perceptual_cpu._image_filtergraph(source, test, _request().recipe, None,
+                                                                           None, 1))
+    finally:
+        by_position.undo()
+    assert len(paired["reference"]) == 6
+    assert paired == unpaired
+
+
 @pytest.mark.parametrize("change", [{"pix_fmt": "nv12"}, {"pix_fmt": "yuvj420p"}, {"color_space": "reserved"}])
 def test_a_source_blend_cannot_carry_unchanged_is_paired_by_position(change):
     from dataclasses import replace
