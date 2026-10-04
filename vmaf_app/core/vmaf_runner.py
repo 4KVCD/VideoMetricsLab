@@ -512,9 +512,13 @@ def _build_filtergraph(
         # needs its own separate format filter afterwards.
         ref_ops.append("hwdownload")
         ref_ops.append(f"format={_hw_native_format(source_info.pix_fmt)}")
-    ref_ops.append(f"format={analysis_format}")
+    # Cropped before the format conversion, as the distorted chain is (and
+    # Vship's, the CPU tools' and the GPU decoders'): converted first, a
+    # 4:2:2 or 4:4:4 source's chroma at the crop's edges was filtered with
+    # samples of the bars cut off.
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
         ref_ops.append(source_crop.as_filter())
+    ref_ops.append(f"format={analysis_format}")
 
     if resolutions_differ and not upscale_distorted:
         ref_ops.append(f"scale={dist_content_w}:{dist_content_h}:flags={options.scale_algorithm}")
@@ -567,9 +571,9 @@ def _build_resample_test_filtergraph(
         # emit the hw surface's native format, not the analysis format.
         base_ops.append("hwdownload")
         base_ops.append(f"format={_hw_native_format(source_info.pix_fmt)}")
-    base_ops.append(f"format={analysis_format}")
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
-        base_ops.append(source_crop.as_filter())
+        base_ops.append(source_crop.as_filter())  # before the conversion, as _build_filtergraph
+    base_ops.append(f"format={analysis_format}")
     base_chain = f"[0:{VIDEO_STREAM}]{','.join(base_ops)}[base]"
 
     split_chain = "[base]split=2[ref_src][dist_src]"

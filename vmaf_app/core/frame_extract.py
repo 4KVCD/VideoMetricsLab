@@ -243,17 +243,11 @@ def frame_filter(
     if comparison.resample_target is None:
         pixel_formats.append(comparison.distorted_info.pix_fmt)
     analysis_format = analysis_pix_fmt(*pixel_formats)
-    # Match the scorer's ordering: normal distorted frames crop before the
-    # common format conversion; source and resolution-test branches convert
-    # first. This matters slightly when the inputs have different bit depths.
-    if side == "distorted" and comparison.resample_target is None:
-        if crop_filter:
-            ops.append(crop_filter)
-        ops.append(f"format={analysis_format}")
-    else:
-        ops.append(f"format={analysis_format}")
-        if crop_filter:
-            ops.append(crop_filter)
+    # The scorer's order: every branch is cropped before the common format
+    # conversion.
+    if crop_filter:
+        ops.append(crop_filter)
+    ops.append(f"format={analysis_format}")
 
     content_w, content_h = _content_size(info, crop)
     if comparison.resample_target is not None and side == "distorted":

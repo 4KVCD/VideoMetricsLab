@@ -1255,3 +1255,19 @@ def test_each_ffmpeg_attempt_and_its_failure_are_logged(monkeypatch, caplog):
     assert ("FFmpeg exited with code 1 (GPU decode: source cuda, distorted cuda); retrying. Last output:\n"
             "[hevc @ 0x1] hardware decoder refused the stream") in text
     assert "FFmpeg exited with code 1 (GPU decode: off). Last output:" in text
+
+
+def test_both_inputs_are_cropped_before_the_format_conversion():
+    """The source was converted to the analysis format first and cropped
+    after, the test video the other way round: a 4:2:2 or 4:4:4 source's
+    chroma at the crop's edges was filtered with samples of the bars."""
+    from vmaf_app.core.models import CropBox, VideoInfo, VmafOptions
+    from vmaf_app.core.vmaf_runner import _build_filtergraph, HwAccelPlan
+
+    source = VideoInfo(Path("s.mov"), 1920, 1080, 24.0, 1.0, 24, "prores", pix_fmt="yuv422p10le")
+    test = VideoInfo(Path("t.mkv"), 1920, 1080, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p10le")
+    box = CropBox(1920, 800, 0, 140)
+    graph = _build_filtergraph(source, test, VmafOptions(), box, box, HwAccelPlan(), Path("log.json"))
+    main, ref = graph.split(";")[:2]
+    assert "crop=1920:800:0:140,format=yuv420p10le" in main
+    assert "crop=1920:800:0:140,format=yuv420p10le" in ref
