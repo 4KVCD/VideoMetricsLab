@@ -141,16 +141,6 @@ try {
         }
     }
 
-    # A release must not silently lose the zero-pixel-pipe scoring path.
-    $nativeVmaf = Join-Path $output '_internal/vmaf_app/tools/vmaf_native'
-    foreach ($file in @('vmaf_native.exe', 'vmaf_prepare.ptx', 'libvmaf.dll', 'avcodec-63.dll',
-                        'avformat-63.dll', 'avfilter-12.dll', 'avutil-61.dll', 'swscale-10.dll',
-                        'swresample-7.dll', 'licenses/LICENSE.FFmpeg.txt', 'licenses/BUILD.txt')) {
-        if (-not (Test-Path (Join-Path $nativeVmaf $file))) {
-            throw "Native GPU VMAF runtime missing: $file (run scripts/build_vmaf_native.ps1)"
-        }
-    }
-
     # Distributions must carry the project's MIT terms and the notices for
     # the third-party components bundled alongside the executable.
     Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt') -Force
@@ -169,7 +159,7 @@ try {
     Write-Host "  $output"
     Write-Host "  $zip"
     Write-Host ''
-    Write-Host 'The external FFmpeg CLI is still required; shared libraries for native GPU VMAF are bundled. See docs/BUILD.md.' -ForegroundColor Yellow
+    Write-Host 'FFmpeg is not bundled. See docs/BUILD.md.' -ForegroundColor Yellow
 } finally {
     Pop-Location
 }

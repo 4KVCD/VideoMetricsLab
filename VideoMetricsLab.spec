@@ -1,8 +1,7 @@
 # PyInstaller spec for a self-contained Windows build.
 #
 # Everything the app needs at runtime is inside the output folder except
-# the external FFmpeg CLI. Shared libraries for GPU-native VMAF are bundled
-# separately; all other FFmpeg work still uses that CLI -- see docs/BUILD.md.
+# FFmpeg, which is deliberately not bundled -- see docs/BUILD.md.
 #
 # Build it with scripts/build_release.ps1 rather than calling pyinstaller
 # directly: the tone-map DLL has to exist before this file is read.
@@ -89,13 +88,6 @@ if LIBVMAF_TOOLS.is_dir():
     datas.append((str(LIBVMAF_TOOLS), "vmaf_app/tools/libvmaf"))
 else:
     print("WARNING: bundled libvmaf (CUDA) is missing; VMAF will be calculated on the CPU")
-
-# GPU-native decode -> luma preparation -> scoring in one CUDA context.
-# These replaceable LGPL shared libraries are NOT a custom FFmpeg build;
-# CPU filters and unsupported input layouts still use external FFmpeg.
-VMAF_NATIVE_TOOLS = PROJECT / "vmaf_app" / "tools" / "vmaf_native"
-if VMAF_NATIVE_TOOLS.is_dir():
-    datas.append((str(VMAF_NATIVE_TOOLS), "vmaf_app/tools/vmaf_native"))
 
 a = Analysis(
     [str(PROJECT / "vmaf_app" / "main.py")],

@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core import vmaf_cuda, vmaf_native
+from vmaf_app.core import vmaf_cuda
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
@@ -1221,31 +1221,6 @@ def _score_on_gpu(
     """Run by _run_on_gpu in its own process: FFmpeg as on the CPU, its
     filters scoring the rest, and the compared frames fed to libvmaf."""
     cpu_output = bool(plan.cpu_options.requested_metrics())
-
-    if vmaf_native.eligible(source_info, distorted_info, source_crop, distorted_crop, plan.width, plan.height,
-                            plan.bit_depth, cpu_output, hwaccel):
-        with tempfile.TemporaryDirectory(prefix="vmaf_native_run_") as folder:
-            log = Path(folder) / "vmaf_log.json"
-            # Preserve the existing GPU pass's duration boundary, including
-            # the first pair at/past the CPU libvmaf output's limit.
-            limit = options.duration_limit + 1 / distorted_info.fps if options.duration_limit > 0 else 0.0
-            for attempt, hw in enumerate(_fallback_ladder(hwaccel)):
-                if on_status:
-                    prefix = "Running ffmpeg native GPU VMAF" if not attempt else "GPU decode failed, retrying"
-                    on_status(f"{prefix} (GPU decode: {hw.describe()})...")
-                command = vmaf_native.command(source_info, distorted_info, source_crop, distorted_crop,
-                                              plan.bit_depth, plan.models, options.n_subsample, limit, hw, log)
-                _log.info("Native GPU VMAF: %s", _command_text(command))
-                result = _run_ffmpeg(command, total_frames, on_progress, cancel_event, Path(folder), process_handle)
-                if result.returncode == 0 and log.is_file():
-                    frames = _parse_log(log, distorted_info.fps)
-                    if len(frames):
-                        return frames
-                _log.warning("Native GPU VMAF failed; discarding log before retry: %s", result.stderr[-4000:])
-                log.unlink(missing_ok=True)
-        # A shared FFmpeg build may lack a decoder/profile the external
-        # FFmpeg has. Retain the old GPU-scoring path before CPU fallback.
-        _log.warning("Native GPU VMAF unavailable for this input; using raw-pipe GPU scoring")
 
     def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
         filtergraph = _build_filtergraph(
