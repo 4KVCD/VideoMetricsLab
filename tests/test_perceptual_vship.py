@@ -618,7 +618,9 @@ def test_videos_that_line_up_are_both_subsampled_and_only_the_test_video_cut(mon
     assert "select=not(mod(n\\,3))" in test[test.index("-vf") + 1] and "-t" in test
     assert "select=not(mod(n\\,3))" in source[source.index("-vf") + 1] and "-t" not in source
     for command in (test, source):
-        assert command[command.index("-stats_enc_pre_fmt") + 1] == "{ptsi} {tbi}"
+        # The timestamps at the end of the filter chain, in its time base.
+        assert command[command.index("-stats_enc_pre_fmt") + 1] == "{pts} {tb}"
+        assert command[command.index("-enc_time_base") + 1] == "filter"
         assert command[-1] == "pipe:1"
 
 
@@ -685,7 +687,7 @@ def test_a_timestamp_that_never_comes_fails_the_pass(tmp_path, monkeypatch):
 @pytest.mark.parametrize(("step", "limit"), [(1, None), (3, "1.500000")])
 def test_ffmpeg_gives_each_piped_frames_own_timestamp(tmp_path, monkeypatch, step, limit):
     """Through real FFmpeg: the timestamp read for each piped frame is the
-    one ffprobe gives that frame."""
+    one ffprobe gives that frame, from the first frame's."""
     monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
     path = _numbered_clip(tmp_path / "clip.mkv", 60, "N*40+mod(N*7\\,13)", "1/1000")
     chain = (f"select=not(mod(n\\,{step})),setpts=PTS-STARTPTS,format=yuv420p" if step > 1
@@ -707,8 +709,40 @@ def test_ffmpeg_gives_each_piped_frames_own_timestamp(tmp_path, monkeypatch, ste
                           "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True).stdout
     probed = [int(line.strip(",")) for line in out.split() if line.strip(",")]
     assert stream.time_base == Fraction(1, 1000)
-    assert stamps and all(pts == probed[number] for number, pts in stamps)
+    assert stamps and all(pts == probed[number] - probed[0] for number, pts in stamps)
     assert [number for number, _pts in stamps] == _ffmpeg_piped(path, step, limit)
+
+
+def test_frames_of_a_file_that_stores_no_presentation_times_have_timestamps(tmp_path, monkeypatch):
+    """H.264 with B-frames in AVI: the decoder has no timestamp for its
+    pictures, and FFmpeg works their times out after decoding. Every GPU
+    pass on such a file failed with "FFmpeg gave a test video frame no
+    timestamp" while the decoder's timestamp was the one asked for."""
+    monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
+    path = tmp_path / "clip.avi"
+    subprocess.run([
+        ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"nullsrc=s={_W}x{_H}:r=24:d=1",
+        "-vf", "geq=lum='mod(N\\,250)+3':cb=128:cr=128", "-frames:v", "20", "-c:v", "libx264", "-qp", "0",
+        "-bf", "2", "-pix_fmt", "yuv420p", str(path),
+    ], check=True)
+    decoder = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts",
+                              "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True).stdout
+    assert "N/A" in decoder  # the case: packets without presentation times
+    command = [ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf",
+               "setpts=PTS-STARTPTS,format=yuv420p", "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
+               "-f", "rawvideo", "pipe:1"]
+    stream = vship._FrameStream(None, _W * _H * 3 // 2, [command], None, "test video")
+    stream.start()
+    stamps = []
+    try:
+        while (slot := stream.next(None)) != vship._EOF:
+            stamps.append((int(stream.buffers[slot].array[0]) - 3, stream.pts[slot]))
+            stream.release(slot)
+    finally:
+        stream.close()
+
+    assert stamps == [(number, number) for number in range(20)]  # in display order, a frame apart
+    assert stream.time_base == Fraction(1, 24)
 
 
 def test_a_gpu_decode_failing_partway_makes_the_pass_again_through_ffmpeg(monkeypatch):

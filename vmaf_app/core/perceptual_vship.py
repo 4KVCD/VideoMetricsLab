@@ -820,9 +820,17 @@ _RING_SLOTS = _LANES_PER_METRIC + 3
 _PIPE_BYTES = 64 * 1024 * 1024
 _EOF = -1
 #: What FFmpeg writes about each frame it pipes to Vship (-stats_enc_pre):
-#: the decoded picture's timestamp, in its stream's time base. The frames
+#: the picture's timestamp as it leaves the filter chain, in the chain's
+#: time base (-enc_time_base filter: the stream's) -- the timestamp
+#: libvmaf's frame sync is given at the end of the same chain. The frames
 #: are paired by it, as libvmaf pairs them (frame_sync).
-_TIMESTAMP_FORMAT = "{ptsi} {tbi}"
+#:
+#: It was the decoder's ({ptsi} {tbi}), which is the same number less the
+#: first frame's where the file stores presentation times. A file that
+#: stores none (H.264 with B-frames in AVI) has no decoder timestamp --
+#: FFmpeg works its frames' times out after decoding -- and every GPU pass
+#: on one failed with "FFmpeg gave a test video frame no timestamp".
+_TIMESTAMP_FORMAT = "{pts} {tb}"
 #: How long a frame's timestamp may be missing once the frame has arrived.
 #: FFmpeg writes it, and flushes it, before the frame: it is there at once.
 _TIMESTAMP_WAIT_SECONDS = 10.0
@@ -832,7 +840,8 @@ _NO_PTS = -(1 << 63)  # AV_NOPTS_VALUE
 def _with_timestamps(command: list[str], path: Path) -> list[str]:
     """`command`, whose last argument is its output, also writing each piped
     frame's timestamp to `path` (_TIMESTAMP_FORMAT), a line per frame."""
-    return [*command[:-1], "-stats_enc_pre", str(path), "-stats_enc_pre_fmt", _TIMESTAMP_FORMAT, command[-1]]
+    return [*command[:-1], "-enc_time_base", "filter", "-stats_enc_pre", str(path),
+            "-stats_enc_pre_fmt", _TIMESTAMP_FORMAT, command[-1]]
 
 
 class _Timestamps:
