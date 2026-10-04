@@ -91,11 +91,11 @@ def test_switch_uses_same_frame_from_new_encode():
     assert output == ["d10", "new10", "s10"]
 
 
-def test_decoding_branches_never_select_audio_in_sample_mode():
+def test_decoding_branches_never_select_audio():
+    """The soundtrack plays on its own (SingleSoundtrack)."""
     from vmaf_app.core.gstreamer_playback import GstComparePipeline
 
     player = object.__new__(GstComparePipeline)
-    player._sample_output = True
     player._stream_caps_name = lambda stream: "audio/x-raw"
     assert player._select_stream(None, None, None, "source") == 0
     assert player._select_stream(None, None, None, "distorted") == 0

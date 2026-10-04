@@ -111,9 +111,7 @@ class LockedNativePool:
         for key, (comparison, side) in self.desired.items():
             if key in self.entries or occupied >= self.view.decoder_limit or self.closed:
                 continue
-            player = GstComparePipeline(comparison, 0, 0, self.settings,
-                                        single_side=side, audio_enabled=False,
-                                        sample_output=True, device=self.device)
+            player = GstComparePipeline(comparison, self.settings, side, device=self.device)
             self.entries[key] = [player, None, self.position, False]
             self.frames[key] = {}
             player.start(max(0, self.position - round(1000 / self.fps)), True)

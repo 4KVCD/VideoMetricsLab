@@ -45,7 +45,7 @@ _GST_ERROR: str | None = None
 #: path cannot be built at all, so _load_gstreamer refuses and playback uses
 #: FFmpeg instead.
 _PIPELINE_ELEMENTS = (
-    "filesrc", "decodebin3", "d3d11upload", "d3d11convert", "d3d11videosink", "videocrop",
+    "filesrc", "decodebin3", "d3d11upload", "d3d11convert", "videocrop",
 )
 
 #: What a complete GStreamer installation provides for this app: the pipeline
@@ -257,29 +257,30 @@ def output_caps_string(
 
 
 class GstComparePipeline:
-    """One clocked pipeline rendering two synchronized native child windows."""
+    """One video of a comparison -- its `side`, "source" or "distorted" --
+    decoded, cropped, scaled and converted on the GPU into an appsink, as
+    D3D11 textures LockedNativePool presents.
+
+    It could also draw both videos itself, into two window handles through
+    d3d11videosink, with the test video's soundtrack: the way of the view
+    playback was before LockedNativePool, which nothing used any more."""
 
     def __init__(
         self,
         comparison: FrameComparison,
-        source_window_handle: int,
-        distorted_window_handle: int,
         settings: PreviewColorSettings,
+        side: str,
         *,
-        audio_enabled: bool = True,
-        single_side: str | None = None,
-        sample_output: bool = False,
         device=None,
     ) -> None:
-        gst, gst_video = _load_gstreamer()
+        if side not in ("source", "distorted"):
+            raise ValueError("invalid video side")
+        gst, _gst_video = _load_gstreamer()
         self.Gst = gst
         self._comparison = comparison
-        self._sample_output = sample_output
         self._pipeline = gst.Pipeline.new("comparison")
         if self._pipeline is None:
             raise GStreamerPlaybackError("Could not create the GStreamer pipeline.")
-        self._audio_enabled = bool(audio_enabled)
-        self._audio_volume = None
         self._video_linked = {"source": False, "distorted": False}
         self._decoder_status_reported = False
         self._wanted_playing = False
@@ -304,23 +305,11 @@ class GstComparePipeline:
 
         self._decoders: dict[str, Any] = {}
         self._sinks: dict[str, Any] = {}
-        handles = {
-            "source": int(source_window_handle),
-            "distorted": int(distorted_window_handle),
-        }
-        if single_side is not None:
-            if single_side not in handles:
-                raise ValueError("invalid video side")
-            handles = {single_side: handles[single_side]}
         try:
-            for side, handle in handles.items():
-                self._build_video_branch(side, handle, settings, gst_video)
+            self._build_video_branch(side, settings)
         except Exception:
             self.stop()
             raise
-        # Window stacking controls visibility (the view raises the matching
-        # window); both sinks remain clocked and presenting, so switching
-        # never changes either branch's playback state.
         self._bus = self._pipeline.get_bus()
 
     def _make(self, factory: str, name: str):
@@ -333,9 +322,7 @@ class GstComparePipeline:
         for element in elements:
             self._pipeline.add(element)
 
-    def _build_video_branch(
-        self, side: str, window_handle: int, settings, gst_video
-    ) -> None:
+    def _build_video_branch(self, side: str, settings) -> None:
         info = (
             self._comparison.source_info
             if side == "source" else self._comparison.distorted_info
@@ -428,27 +415,13 @@ class GstComparePipeline:
                 self._tone_probe, (mapper, retag),
             )
         capsfilter.set_property("caps", caps)
-        sink = self._make("appsink" if self._sample_output else "d3d11videosink", f"{side}-video-sink")
-        if self._sample_output:
-            # Retain references to GPU textures, not CPU-mapped pixel arrays.
-            sink.set_property("sync", False)
-            sink.set_property("max-buffers", 3)
-            sink.set_property("drop", False)
-            sink.set_property("wait-on-eos", False)
-        else:
-            sink.set_property("force-aspect-ratio", True)
+        sink = self._make("appsink", f"{side}-video-sink")
+        # Retain references to GPU textures, not CPU-mapped pixel arrays.
+        sink.set_property("sync", False)
+        sink.set_property("max-buffers", 3)
+        sink.set_property("drop", False)
+        sink.set_property("wait-on-eos", False)
         sink.set_property("enable-last-sample", False)
-        # HDR and wide-gamut content needs a 10-bit DXGI swapchain.  The sink
-        # chooses the matching Windows colour space from the negotiated caps.
-        if (
-            not self._sample_output and not tone_map and settings.display_hdr_enabled is True
-            and _native_colorimetry(info) is not None
-        ):
-            sink.set_property("display-format", 24)  # R10G10B10A2_UNORM
-        if tone_map and not self._sample_output:
-            sink.set_property("display-format", 28)  # R8G8B8A8_UNORM SDR
-        if not self._sample_output:
-            gst_video.VideoOverlay.set_window_handle(sink, window_handle)
         # CPU-only decoders (including H.266) upload once, before GPU cropping.
         chain = [queue, upload, gpu_memory, crop, convert, capsfilter]
         if retag is not None:
@@ -497,12 +470,9 @@ class GstComparePipeline:
         return caps.get_structure(0).get_name()
 
     def _select_stream(self, _decoder, _collection, stream, side: str) -> int:
-        name = self._stream_caps_name(stream)
-        if name.startswith("video/"):
-            return 1
-        if not self._sample_output and side == "distorted" and name.startswith("audio/"):
-            return 1
-        return 0
+        # The video only: the soundtrack plays on its own
+        # (locked_presentation.SingleSoundtrack).
+        return 1 if self._stream_caps_name(stream).startswith("video/") else 0
 
     def _pad_added(self, _decoder, pad, side: str) -> None:
         name = pad.get_name()
@@ -511,31 +481,6 @@ class GstComparePipeline:
             sink_pad = queue.get_static_pad("sink")
             if pad.link(sink_pad) == self.Gst.PadLinkReturn.OK:
                 self._video_linked[side] = True
-            return
-        if side == "distorted" and name.startswith("audio_") and self._audio_volume is None:
-            self._build_audio_branch(pad)
-
-    def _build_audio_branch(self, source_pad) -> None:
-        """Add audio only if the distorted file actually exposes a track."""
-        queue = self._make("queue", "distorted-audio-queue")
-        convert = self._make("audioconvert", "distorted-audio-convert")
-        resample = self._make("audioresample", "distorted-audio-resample")
-        volume = self._make("volume", "distorted-audio-volume")
-        sink = self._make("autoaudiosink", "distorted-audio-sink")
-        volume.set_property("mute", not self._audio_enabled)
-        self._add(queue, convert, resample, volume, sink)
-        if not (
-            queue.link(convert)
-            and convert.link(resample)
-            and resample.link(volume)
-            and volume.link(sink)
-        ):
-            return
-        if source_pad.link(queue.get_static_pad("sink")) != self.Gst.PadLinkReturn.OK:
-            return
-        self._audio_volume = volume
-        for element in (queue, convert, resample, volume, sink):
-            element.sync_state_with_parent()
 
     def start(self, position_ms: int, playing: bool) -> None:
         # Preroll both sinks before seeking or playing.  decodebin3 cannot
@@ -568,29 +513,6 @@ class GstComparePipeline:
             self.Gst.Format.TIME, flags, max(0, int(position_ms)) * self.Gst.MSECOND
         ):
             raise GStreamerPlaybackError("GStreamer could not seek to that frame.")
-
-    def set_audio_enabled(self, enabled: bool) -> None:
-        self._audio_enabled = bool(enabled)
-        if self._audio_volume is not None:
-            self._audio_volume.set_property("mute", not self._audio_enabled)
-
-    def align_clock(self, clock, base_time: int, media_offset_ms: int) -> None:
-        """Join a rolling pool's clock without resetting the retained streams.
-
-        A seek makes this stream's segment running-time start at zero. Sink
-        offsets place it back on the pool timeline; explicit base time keeps
-        independently prerolled pipelines synchronized, including after pause.
-        """
-        self._pipeline.use_clock(clock)
-        self._pipeline.set_start_time(self.Gst.CLOCK_TIME_NONE)
-        self._pipeline.set_base_time(base_time)
-        offset = int(media_offset_ms) * self.Gst.MSECOND
-        for sink in self._sinks.values():
-            sink.set_property("ts-offset", offset)
-        audio_sink = self._pipeline.get_by_name("distorted-audio-sink")
-        # autoaudiosink forwards ts-offset to its chosen audio sink.
-        if audio_sink is not None and audio_sink.find_property("ts-offset") is not None:
-            audio_sink.set_property("ts-offset", offset)
 
     def _decoder_factories(self, decoder) -> list[str]:
         factories: list[str] = []
