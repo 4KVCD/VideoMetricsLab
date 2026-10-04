@@ -46,9 +46,7 @@ def eligible(source: VideoInfo, test: VideoInfo, source_crop: CropBox | None, te
 
 def command(source: VideoInfo, test: VideoInfo, source_crop: CropBox | None, test_crop: CropBox | None,
             depth: int, models: dict[str, str], subsample: int, duration: float, hw, log: Path,
-            *, wait: str = "blocking") -> list[str]:
-    # An owned CUDA context lets GPU waits sleep rather than consume CPU.
-    # Keep the automatic mode available for reproducible A/B benchmarks.
+            *, wait: str = "auto") -> list[str]:
     def rect(info, box):
         c = crop(info, box)
         return f"{c.w}:{c.h}:{c.x}:{c.y}"

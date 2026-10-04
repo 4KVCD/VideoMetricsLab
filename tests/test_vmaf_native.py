@@ -64,16 +64,8 @@ def test_command_preserves_models_crop_subsample_and_unicode(pair, tmp_path):
     assert value("--reference-decode") == "cuda" and value("--test-decode") == "cpu"
     assert value("--duration") == "2.250" and value("--subsample") == "3"
     assert value("--output") == "scores.json"
-    assert value("--wait") == "blocking"
     assert [cmd[i+1] for i, token in enumerate(cmd) if token == "--model"] == [
         "vmaf=vmaf_4k_v0.6.1", "vmaf_neg=vmaf_v0.6.1neg"]
-
-
-def test_benchmark_can_override_blocking_default(pair, tmp_path):
-    ref, test, rc, tc = pair
-    cmd = native.command(ref, test, rc, tc, 10, {"vmaf": "vmaf_v0.6.1"}, 1, 0,
-                         HwAccelPlan(), tmp_path / "scores.json", wait="auto")
-    assert cmd[cmd.index("--wait") + 1] == "auto"
 
 
 def test_native_runner_discards_failed_log_keeps_decode_ladder_and_status(pair, tmp_path, monkeypatch):
