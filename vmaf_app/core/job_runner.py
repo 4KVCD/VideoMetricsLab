@@ -48,7 +48,7 @@ _log = logging.getLogger(__name__)
 #: The backend of VMAF and NEG calculated on the GPU, a half of their own
 #: (JobRun._by_place): run_vmaf with those two alone.
 GPU_VMAF = "vmaf_gpu"
-_GPU_VMAF_KEYS = ("vmaf", "vmaf_neg")
+_GPU_VMAF_KEYS = ("vmaf", "vmaf_neg", "vmaf_v1")
 #: The backend of SSIMULACRA2 and Butteraugli chosen for the CPU, apart from
 #: Vship's metrics on the GPU ("perceptual"): see JobRun._by_place.
 PERCEPTUAL_CPU = "perceptual_cpu"
@@ -548,18 +548,22 @@ class JobRun:
                 continue
             vmaf = tuple(spec for spec in task.requested_specs if spec.key in _GPU_VMAF_KEYS)
             keys = {spec.key for spec in vmaf}
-            if (task.backend_id != "ffmpeg" or not vmaf or options.resample_test is not None
-                    or vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
-                                               options.vmaf_on_gpu, analysis_bit_depth(
-                                                   self.job.source_info, self.job.distorted_info),
-                                               size=size) is None):
+            on_gpu = None
+            if task.backend_id == "ffmpeg" and vmaf and options.resample_test is None:
+                on_gpu = vmaf_cuda.scores_on_gpu(
+                    "vmaf" in keys, "vmaf_neg" in keys, options.model, options.vmaf_on_gpu,
+                    analysis_bit_depth(self.job.source_info, self.job.distorted_info), size=size,
+                    compute_vmaf_v1="vmaf_v1" in keys, model_v1=options.model_v1)
+            if on_gpu is None:
                 tasks.append(task)
                 continue
+            # What the GPU scores of them (VMAF with a custom model is the CPU's).
+            vmaf = tuple(spec for spec in vmaf if spec.key in on_gpu)
             # The planner keeps FFmpeg's metrics together, so a saved one is
             # calculated again with the rest; split, a part whose metrics are
             # all saved is not.
             for backend_id, specs in (("ffmpeg", tuple(spec for spec in task.requested_specs
-                                                       if spec.key not in _GPU_VMAF_KEYS)),
+                                                       if spec not in vmaf)),
                                       (GPU_VMAF, vmaf)):
                 if specs and not (self.cached is not None and all(self.cached.has(spec.key) for spec in specs)):
                     tasks.append(MetricTask(backend_id, tuple(spec.key for spec in specs), specs))

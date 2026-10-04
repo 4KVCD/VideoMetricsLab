@@ -13,6 +13,9 @@ struct Params {
     int inStride, outStride;
     int gainLimit;
     uint rfactor0, rfactor1, rfactor2;  // scalars: Intel's driver reads an array here as zeros
+#if V1
+    uint cosMantissa;  // the CPU code's cos_1deg_sq as a float: mantissa * 2^-24
+#endif
 };
 [[vk::push_constant]] Params pc;
 [[vk::binding(0, 0)]] StructuredBuffer<uint> refBands;
@@ -23,6 +26,17 @@ struct Params {
 // (int32_t)(2^30 / (float)(i - 32768)), from the host: the CUDA kernel's
 // float division, which is correctly rounded there and on the host alike.
 [[vk::binding(5, 0)]] StructuredBuffer<uint> divTable;
+#if V1
+// VMAF v1 (libvmaf's CPU integer_adm.c with ADM3's additive impairment
+// measure): the additive image itself, and the restored image through the
+// same contrast sensitivity filter, which masks it.
+[[vk::binding(6, 0)]] RWStructuredBuffer<int> additiveOut;
+[[vk::binding(7, 0)]] RWStructuredBuffer<int> csfR;
+[[vk::binding(8, 0)]] RWStructuredBuffer<int> csfRF;
+#define COS_MANTISSA pc.cosMantissa
+#else
+#define COS_MANTISSA 0xFFEC0Au
+#endif
 
 // (float)v of a non-negative integer: m * 2^e, m below 2^24.
 void to_float(uint64_t v, out uint m, out int e)
@@ -65,7 +79,8 @@ bool within_one_degree(int64_t otDp, int64_t oMagSq, int64_t tMagSq)
     // two sides differ by more than float's error can explain, exactly
     // otherwise.
     const float ot = approximately(otDp);
-    const float left_ = ot * ot, right_ = 0.99969541 * approximately(oMagSq) * approximately(tMagSq);
+    const float left_ = ot * ot;
+    const float right_ = (float(COS_MANTISSA) / 16777216.0) * approximately(oMagSq) * approximately(tMagSq);
     if (left_ > right_ * 1.0001)
         return true;
     if (left_ < right_ * 0.9999)
@@ -82,7 +97,7 @@ bool within_one_degree(int64_t otDp, int64_t oMagSq, int64_t tMagSq)
     uint64_t left = uint64_t(mot) * mot;           // exact in a double
     uint64_t right;
     int re;
-    round53(mul64(uint64_t(0xFFEC0Au) * mo, uint64_t(mt)), right, re);
+    round53(mul64(uint64_t(COS_MANTISSA) * mo, uint64_t(mt)), right, re);
     re += eo + et - 24;
     int leftTop = msb64(left), topLeft = leftTop + 2 * eot, topRight = 52 + re;
     if (topLeft != topRight)
@@ -136,6 +151,12 @@ void main(uint3 id : SV_DispatchThreadID)
         int filtered = sext16((int(rfactor[b] * uint(additive)) + kAdd[b]) >> kShift[b]);
         csfA[to + b] = filtered;
         csfF[to + b] = sext16((4369 * abs(filtered) + 2048) >> 12);
+#if V1
+        additiveOut[to + b] = additive;
+        int filteredR = sext16((int(rfactor[b] * uint(sext16(rest))) + kAdd[b]) >> kShift[b]);
+        csfR[to + b] = filteredR;
+        csfRF[to + b] = sext16((4369 * abs(filteredR) + 2048) >> 12);
+#endif
 #else
         uint magnitude = uint(abs(o[b]));
         int shift = 0;
@@ -162,6 +183,12 @@ void main(uint3 id : SV_DispatchThreadID)
         csfA[to + b] = filtered;
         // The CUDA kernel's rounding term is (int32_t)(1u << 31): negative.
         csfF[to + b] = int((int64_t(143165577) * abs(filtered) - 2147483648ll) >> 32);
+#if V1
+        additiveOut[to + b] = additive;
+        int filteredR = int((int64_t(rfactor[b]) * int64_t(rest) + 134217728) >> 28);
+        csfR[to + b] = filteredR;
+        csfRF[to + b] = int((int64_t(143165577) * abs(filteredR) - 2147483648ll) >> 32);
+#endif
 #endif
     }
 }

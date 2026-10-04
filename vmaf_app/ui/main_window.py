@@ -1556,23 +1556,24 @@ class MainWindow(QMainWindow):
         gpu_row.addWidget(self.gpu_vendor_combo)
         performance_form.addRow(tr("GPU decode:"), gpu_row)
 
-        # VMAF v0.6.1 and NEG only: libvmaf has GPU code (CUDA) for their
-        # features, ported to Vulkan for other GPUs (vmaf_vulkan), and none
-        # for VMAF v1's (see vmaf_cuda.gpu_models).
+        # VMAF v0.6.1 and NEG: libvmaf has GPU code (CUDA) for their features,
+        # ported to Vulkan for other GPUs (vmaf_vulkan). VMAF v1: two of its
+        # four features on the GPU, with Vulkan (vmaf_v1_gpu).
         self.vmaf_backend_combo = QComboBox()
         self.vmaf_backend_combo.addItems(["GPU", "CPU"])
         self.vmaf_backend_combo.setToolTip(
-            tr("With GPU, VMAF v0.6.1 and VMAF NEG are calculated on the GPU: with CUDA on an NVIDIA GPU and with "
-            "Vulkan on any other, or on every GPU when Settings > GPU metrics > GPU backend is Vulkan. Both give "
-            "the same scores. VMAF v1, PSNR, SSIM and XPSNR are calculated on the CPU either way: VMAF v1 has no "
-            "GPU version. The GPU's scores agree with the CPU's to within a thousandth of a point on every "
-            "frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are "
-            "calculated on the CPU instead.")
+            tr("With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU. VMAF v0.6.1 and NEG: with "
+            "CUDA on an NVIDIA GPU and with Vulkan on any other, or on every GPU when Settings > GPU metrics > GPU "
+            "backend is Vulkan. Both give the same scores. VMAF v1: its detail and motion features on the GPU "
+            "with Vulkan, its banding and colour features (CAMBI, SpEED) on the CPU, so it gains less speed. "
+            "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to "
+            "within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If "
+            "the GPU calculation fails, they are calculated on the CPU instead.")
         )
         self.vmaf_backend_combo.currentIndexChanged.connect(
             lambda _index: self._on_panel_field_edited("vmaf_on_gpu")
         )
-        performance_form.addRow(tr("VMAF v0.6.1 and NEG compute:"), self.vmaf_backend_combo)
+        performance_form.addRow(tr("VMAF compute:"), self.vmaf_backend_combo)
 
         self.ssimulacra2_backend_combo = QComboBox()
         self.ssimulacra2_backend_combo.addItems(["GPU", "CPU"])

@@ -23,6 +23,52 @@ struct Params {
 
 groupshared uint64_t gSums[128 * 3];
 
+#if ROWWISE
+// VMAF v1 follows libvmaf's CPU code (adm_csf_den_scale, adm_csf_den_s123 of
+// integer_adm.c), which rounds each row's sum, not each warp's: one block of
+// threads takes a row.
+[shader("compute")]
+[numthreads(128, 1, 1)]
+void main(uint3 group : SV_GroupID, uint local : SV_GroupIndex)
+{
+    int row = (pc.top + int(group.y)) * pc.stride;
+    uint64_t sums[3] = { 0, 0, 0 };
+    for (int j = pc.left + int(local); j < pc.right; j += 128) {
+        for (int b = 0; b < 3; ++b) {
+            int value = int(refBands[(row + j) * 4 + 1 + b]);
+#if SCALE0
+            uint64_t t = uint64_t(uint(abs(value)) & 0xFFFFu);
+            sums[b] += t * t * t;
+#else
+            uint64_t t = uint64_t(uint(abs(value)));
+            sums[b] += ((((t * t + pc.addSq) >> pc.shiftSq) * t) + pc.addCub) >> pc.shiftCub;
+#endif
+        }
+    }
+    for (int b = 0; b < 3; ++b)
+        gSums[local * 3 + b] = sums[b];
+    GroupMemoryBarrierWithGroupSync();
+    if ((local & 15) == 0) {
+        for (int b = 0; b < 3; ++b) {
+            uint64_t sum = 0;
+            for (uint t = 0; t < 16; ++t)
+                sum += gSums[(local + t) * 3 + b];
+            gSums[local * 3 + b] = sum;
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (local == 0) {
+        for (int b = 0; b < 3; ++b) {
+            uint64_t sum = 0;
+            for (uint t = 0; t < 128; t += 16)
+                sum += gSums[t * 3 + b];
+            sum = (sum + pc.addAccum) >> pc.shiftAccum;
+            if (sum != 0)
+                acc_add64(acc, pc.slot + uint(b), sum);
+        }
+    }
+}
+#else
 [shader("compute")]
 [numthreads(128, 1, 1)]
 void main(uint3 group : SV_GroupID, uint local : SV_GroupIndex)
@@ -59,3 +105,4 @@ void main(uint3 group : SV_GroupID, uint local : SV_GroupIndex)
         }
     }
 }
+#endif

@@ -73,7 +73,7 @@ class Settings:
     # choice, which is also what a newly added video starts with.
     default_ssimulacra2_backend: str = "gpu"
     default_butteraugli_backend: str = "gpu"
-    # VMAF v0.6.1 and NEG on an NVIDIA GPU (VmafOptions.vmaf_on_gpu). Set from
+    # VMAF v0.6.1, NEG and v1 on the GPU (VmafOptions.vmaf_on_gpu). Set from
     # the Options panel's GPU/CPU choice, which is also what a newly added
     # video starts with.
     default_vmaf_on_gpu: bool = True

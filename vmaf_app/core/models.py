@@ -171,8 +171,9 @@ class VmafOptions:
     # and each falls back to software decode on its own.
     gpu_decode: bool = True
     gpu_vendor: GpuVendor = GpuVendor.AUTO
-    # VMAF v0.6.1 and VMAF NEG on an NVIDIA GPU (vmaf_cuda) when one can be
-    # used, else on the CPU; VMAF v1 has no GPU version. Execution only, like
+    # VMAF v0.6.1 and VMAF NEG on the GPU (vmaf_cuda, vmaf_vulkan) and VMAF
+    # v1 with it (vmaf_v1_gpu) when one can be used, else on the CPU.
+    # Execution only, like
     # gpu_decode: the two agree to within a thousandth of a point per frame,
     # so it is no part of cache identity and a saved score is kept either way.
     vmaf_on_gpu: bool = True

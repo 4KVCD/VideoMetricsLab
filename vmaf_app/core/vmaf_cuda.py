@@ -385,7 +385,11 @@ class GpuAttempt:
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
                  backend: str = "cuda", device: int | None = None):
-        if backend == "vulkan":
+        if "vmaf_v1" in models:
+            from vmaf_app.core import vmaf_v1_gpu
+
+            self._scorer = vmaf_v1_gpu.MultiScorer(width, height, bit_depth, models, n_subsample, backend, device)
+        elif backend == "vulkan":
             from vmaf_app.core import vmaf_vulkan
 
             self._scorer = vmaf_vulkan.VulkanScorer(width, height, bit_depth, models, n_subsample, device=device)
@@ -565,18 +569,22 @@ def score_decoded(
 
 # ------------------------------------------------------------ availability
 
-def gpu_models(compute_vmaf: bool, compute_vmaf_neg: bool, model: str) -> dict[str, str] | None:
-    """{log name: libvmaf model} for a run's VMAF and NEG, or None when the
-    GPU cannot score them: neither is requested, or VMAF uses a custom
-    model file."""
+def gpu_models(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
+               compute_vmaf_v1: bool = False, model_v1: str = "") -> dict[str, str] | None:
+    """{log name: libvmaf model} for a run's VMAF, NEG and VMAF v1 on the
+    GPU, or None when it scores none of them. VMAF with a custom model file
+    is calculated on the CPU, and VMAF NEG with it; VMAF v1 ("vmaf_v1": its
+    model's "path=<file>", for vmaf_v1_gpu) has bundled models only."""
     models = {}
-    if compute_vmaf:
-        version = _GPU_MODELS.get(model)
-        if version is None:
-            return None
-        models["vmaf"] = version
-    if compute_vmaf_neg:
-        models["vmaf_neg"] = _NEG_MODEL
+    if compute_vmaf or compute_vmaf_neg:
+        version = _GPU_MODELS.get(model) if compute_vmaf else ""
+        if version is not None:
+            if compute_vmaf:
+                models["vmaf"] = version
+            if compute_vmaf_neg:
+                models["vmaf_neg"] = _NEG_MODEL
+    if compute_vmaf_v1:
+        models["vmaf_v1"] = model_v1
     return models or None
 
 
@@ -726,7 +734,8 @@ def start_gpu_vmaf_probe() -> None:
 
 def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
                   enabled: bool = True, bit_depth: int = 8,
-                  size: tuple[int, int] | None = None) -> dict[str, str] | None:
+                  size: tuple[int, int] | None = None,
+                  compute_vmaf_v1: bool = False, model_v1: str = "") -> dict[str, str] | None:
     """The models a run scores on the GPU (gpu_models), or None when its
     VMAF is calculated on the CPU:
     - the video set to CPU (`enabled`, its VmafOptions.vmaf_on_gpu);
@@ -741,10 +750,20 @@ def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
       size and blacks out an odd picture's last column and row. The
       attempt used to be made, fail in FFmpeg, and VMAF be calculated
       again on the CPU after a "VMAF on the GPU failed";
-    - no GPU that scores it (CUDA or Vulkan)."""
+    - no GPU that scores it (CUDA or Vulkan).
+    VMAF v1 (`compute_vmaf_v1`, its model `model_v1`) is among them where
+    vmaf_v1_gpu calculates it here; what the GPU does not score is left out,
+    and FFmpeg's libvmaf calculates it."""
     if not enabled or bit_depth > 10 or (size is not None and (size[0] & 1 or size[1] & 1)):
         return None
-    models = gpu_models(compute_vmaf, compute_vmaf_neg, model)
-    if models is None or not gpu_vmaf_available()[0]:
+    models = gpu_models(compute_vmaf, compute_vmaf_neg, model, compute_vmaf_v1, model_v1)
+    if models is None:
         return None
-    return models
+    if "vmaf_v1" in models:
+        from vmaf_app.core import vmaf_v1_gpu
+
+        if not vmaf_v1_gpu.scores(models["vmaf_v1"], size):
+            del models["vmaf_v1"]
+    if set(models) - {"vmaf_v1"} and not gpu_vmaf_available()[0]:
+        models = {key: value for key, value in models.items() if key == "vmaf_v1"}
+    return models or None

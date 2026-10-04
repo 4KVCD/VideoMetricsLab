@@ -117,8 +117,15 @@ case anyone overrides that.
   as libvmaf's; the shaders are compiled with Slang, which the script
   downloads, and embedded). It needs only Windows and a Vulkan driver, and
   gives the same feature values as the CUDA code bit for bit; the score is
-  predicted from them by the libvmaf above, on the CPU. It adds about 0.5 MB.
+  predicted from them by the libvmaf above, on the CPU. It adds about 0.6 MB.
   It runs in the same process of its own as libvmaf does.
+- **VMAF v1 with the GPU** (`vmaf_app/core/vmaf_v1_gpu.py`) needs no library of
+  its own: the same `vmaf_vulkan.dll` has a VMAF v1 mode, which follows
+  libvmaf's CPU code for ADM3 and motion3 (`integer_adm.c`,
+  `integer_motion.c`) and gives its values bit for bit on any GPU, NVIDIA's
+  included; CAMBI and SpEED are calculated by the CPU extractors of the
+  libvmaf above, on its thread pool, and the same libvmaf predicts the score
+  from the four. Check it with `python scripts/compare_vmaf_v1.py --matrix`.
 
 ## What is not, and why
 

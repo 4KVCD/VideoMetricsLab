@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import gpu_frames, vmaf_cuda, vmaf_vulkan
+from vmaf_app.core import gpu_frames, vmaf_cuda, vmaf_v1_gpu, vmaf_vulkan
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
@@ -94,8 +94,11 @@ def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: s
                       else {"model": model_v1} if key == "vmaf_v1" else None)
         made = current_ffmpeg_provenance(key, version, parameters)
         if key in (gpu_keys or ()):
-            made = replace(made, implementation=f"libvmaf/{gpu_backend}",
-                           implementation_version=_gpu_build(gpu_backend), compute_backend="gpu")
+            # VMAF v1's GPU half is Vulkan's on every GPU (vmaf_v1_gpu).
+            backend = "vulkan" if key == "vmaf_v1" else gpu_backend
+            made = replace(made, implementation=f"libvmaf/{backend}", compute_backend="gpu",
+                           implementation_version=vmaf_v1_gpu.LIBRARY_BUILD if key == "vmaf_v1"
+                           else _gpu_build(gpu_backend))
         return made
 
     return results_from_frame_scores(frames, {key: provenance(key) for key in frames.metric_keys})
@@ -759,7 +762,9 @@ def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
     if not len(numbers):
         raise vmaf_cuda.VmafGpuError("GPU VMAF scored no frames")
     time = numbers / fps if fps > 0 else np.zeros(len(numbers), dtype=np.float64)
-    return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"))
+    v1 = scores.get("vmaf_v1")
+    return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"),
+                       metrics=None if v1 is None else {"vmaf_v1": np.asarray(v1, dtype=np.float32)})
 
 
 def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
@@ -985,10 +990,14 @@ def run_vmaf(
     # the whole run made again on the CPU.
     gpu_models = None
     gpu_backend = "cuda"
-    if not set(options.requested_metrics()) - {"vmaf", "vmaf_neg"}:
+    requested = set(options.requested_metrics())
+    if not requested - {"vmaf", "vmaf_neg", "vmaf_v1"}:
         gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
                                              options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info),
-                                             size=dimensions)
+                                             size=dimensions, compute_vmaf_v1=options.compute_vmaf_v1,
+                                             model_v1=options.model_v1)
+        if gpu_models is not None and set(gpu_models) != requested:
+            gpu_models = None  # one of them is the CPU's: FFmpeg's libvmaf calculates them together
     if gpu_models is not None:
         plan = _GpuPlan(gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info),
                         *vmaf_cuda.gpu_vmaf_backend())
@@ -1100,7 +1109,7 @@ def _score_on_gpu(
     it uploads. If that decoding fails after it has started, the run is
     made again with FFmpeg's, as before."""
     decoder = _DECODED_HERE.get(hwaccel.source or "") if hwaccel.source == hwaccel.distorted else None
-    if decoder is not None and (plan.backend == "vulkan" or decoder == "nvidia"):
+    if decoder is not None and ("vmaf_v1" in plan.models or plan.backend == "vulkan" or decoder == "nvidia"):
         try:
             return _score_decoded_on_gpu(
                 plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
@@ -1152,7 +1161,10 @@ def _score_decoded_on_gpu(
         if cancel_event is not None and cancel_event.is_set():
             raise Cancelled("Cancelled by user")
 
-    if plan.backend == "vulkan":
+    if "vmaf_v1" in plan.models:  # whole frames, for its scorers and any of VMAF v0.6.1's beside them
+        score_decoded = functools.partial(vmaf_v1_gpu.score_decoded, backend=plan.backend, device=plan.device,
+                                          decoder=_DECODED_HERE[hwaccel.source])
+    elif plan.backend == "vulkan":
         score_decoded = functools.partial(vmaf_vulkan.score_decoded, device=plan.device,
                                           decoder=_DECODED_HERE[hwaccel.source])
     else:

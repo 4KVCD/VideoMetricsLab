@@ -406,7 +406,20 @@ struct Slot {
     unsigned index = 0;
 };
 
-enum { kPushBytes = 128, kMaxBindings = 6 };
+enum { kPushBytes = 128, kMaxBindings = 9 };
+
+// VMAF v1's options for ADM3 and motion3 (the model's feature_opts_dicts).
+struct V1Options {
+    double viewDistance = 3.0;   // adm_norm_view_dist
+    int displayHeight = 1080;    // adm_ref_display_height
+    int csfMode = 0;             // adm_csf_mode: 0 Watson97, 2 Barten-Watson blend
+    double noiseWeight = 0.03125;
+    double dlmWeight = 1.0;
+    double minValue = 0.0;       // adm_min_val
+    double motionMax = 10000.0;  // motion_max_val
+    bool fiveFrameWindow = false;
+    bool movingAverage = false;
+};
 
 } // namespace
 
@@ -424,6 +437,12 @@ struct vv_context {
 
     int w = 0, h = 0, bpc = 8;
     bool nativeDouble = false;
+    // VMAF v1: ADM3 and motion3 as libvmaf's CPU code calculates them.
+    bool v1 = false;
+    V1Options options;
+    Buffer picPrev[2], admAdditive, admCsfR, admCsfRF;
+    float rfactorV1[kScales][3] = {};
+    int build_passes_v1();
     int skip = 0;  // timing tests: 1 = no motion, 2 = no VIF, 4 = no ADM
     int passLimit = 0;  // timing tests: only the first N scored passes
     uint32_t strideBytes = 0, planeBytes = 0;
@@ -653,6 +672,8 @@ int vv_context::upload(Buffer &target, const void *data, size_t bytes)
 
 int vv_context::build_passes()
 {
+    if (v1)
+        return build_passes_v1();
     const bool deep = bpc > 8;
     const int strideWords = (int)(strideBytes / 4);
     int error = 0;
@@ -833,6 +854,317 @@ int vv_context::build_passes()
     return error;
 }
 
+namespace {
+
+// barten_watson_blend_csf() of libvmaf's barten_csf_tools.h: [theta][scale].
+const float BLENDED_CSF_1080_3H[2][4] = { { 0.01183, 0.025026, 0.04295, 0.058621 },
+                                          { 0.004302, 0.011778, 0.023918, 0.035901 } };
+const float BLENDED_CSF_1080_5H[2][4] = { { 0.004212, 0.014809, 0.029642, 0.047464 },
+                                          { 0.000984, 0.005852, 0.0146, 0.027574 } };
+const float BLENDED_CSF_2160_3H[2][4] = { { 0.00226, 0.01183, 0.025026, 0.04295 },
+                                          { 0.000479, 0.004302, 0.011778, 0.023918 } };
+const float BLENDED_CSF_2160_5H[2][4] = { { 0.000092, 0.004212, 0.014809, 0.029642 },
+                                          { 0.000050, 0.000984, 0.005852, 0.0146 } };
+
+// The contrast sensitivity factors of a scale ({h, v, d}) as libvmaf's CPU
+// code takes them (adm_csf and the others of integer_adm.c). False when the
+// options are ones it has no table for.
+bool v1_rfactors(const V1Options &o, int scale, float rfactor[3])
+{
+    float factor1, factor2;
+    if (o.csfMode == 2) {
+        const float (*table)[4] =
+            (o.displayHeight == 1080 && o.viewDistance == 3.0) ? BLENDED_CSF_1080_3H :
+            (o.displayHeight == 1080 && o.viewDistance == 5.0) ? BLENDED_CSF_1080_5H :
+            (o.displayHeight == 2160 && o.viewDistance == 1.5) ? BLENDED_CSF_1080_3H :
+            (o.displayHeight == 2160 && o.viewDistance == 3.0) ? BLENDED_CSF_2160_3H :
+            (o.displayHeight == 2160 && o.viewDistance == 5.0) ? BLENDED_CSF_2160_5H : nullptr;
+        if (!table)
+            return false;
+        factor1 = table[0][scale];
+        factor2 = table[1][scale];
+    } else if (o.csfMode == 0) {
+        factor1 = 1.0f / dwt_quant_step(&dwt_7_9_YCbCr_threshold[0], scale, 1, o.viewDistance, o.displayHeight);
+        factor2 = 1.0f / dwt_quant_step(&dwt_7_9_YCbCr_threshold[0], scale, 2, o.viewDistance, o.displayHeight);
+    } else {
+        return false;
+    }
+    rfactor[0] = factor1;
+    rfactor[1] = factor1;
+    rfactor[2] = factor2;
+    return true;
+}
+
+} // namespace
+
+// VMAF v1's passes: motion and ADM as libvmaf's CPU code calculates them
+// (integer_motion.c, integer_adm.c), which is what the shaders' V1 and
+// ROWWISE variants follow where the CUDA kernels differ from it.
+int vv_context::build_passes_v1()
+{
+    const bool deep = bpc > 8;
+    const int strideWords = (int)(strideBytes / 4);
+    int error = 0;
+
+    // motion_score_pipeline_8 / _16: against the previous reference frame,
+    // or the one before it (the five-frame window). Frame i's reference is
+    // kept in picPrev[i % 2] once the frame is done.
+    for (int parity = 0; parity < 2 && !error; ++parity) {
+        const int32_t constants[] = { w, h, strideWords, bpc, 1 << (bpc - 1), kSlotSad };
+        Buffer *previous = &picPrev[options.fiveFrameWindow ? parity : 1 - parity];
+        error = add_pass(motion[parity], deep ? kShader_motion_v1_16 : kShader_motion_v1_8,
+                         { &picRef, previous, &acc }, constants, sizeof constants, groups(w, 16), groups(h, 16));
+    }
+
+    const float cos_1deg_sq = cos(1.0 * M_PI / 180.0) * cos(1.0 * M_PI / 180.0);
+    uint32_t cosBits;
+    memcpy(&cosBits, &cos_1deg_sq, sizeof cosBits);
+    const uint32_t cosMantissa = (cosBits & 0x7FFFFFu) | 0x800000u;  // cos_1deg_sq = mantissa * 2^-24
+
+    int inW = w, inH = h, inStride = strideWords;
+    for (int scale = 0; scale < kScales && !error; ++scale) {
+        const int set = scale % 2;
+        Buffer *inRef = scale == 0 ? &picRef : &bandsRef[1 - set];
+        Buffer *inDis = scale == 0 ? &picDis : &bandsDis[1 - set];
+        const int bw = (inW + 1) / 2, bh = (inH + 1) / 2;
+        const int bandStride = set == 0 ? (w + 1) / 2 : ((w + 1) / 2 + 1) / 2;
+        const int outStride = (w + 1) / 2;
+        if (!v1_rfactors(options, scale, rfactorV1[scale]))
+            return fail(-3, "VMAF v1: no contrast sensitivity table for this viewing distance and display height");
+        const float *rfactor = rfactorV1[scale];
+        uint32_t i_rfactor[3];
+        if (scale == 0) {
+            if (fabs(options.viewDistance * options.displayHeight - kAdmNormViewDist * kAdmRefDisplayHeight) < 1.0e-8 &&
+                options.csfMode == 0) {
+                i_rfactor[0] = 36453;
+                i_rfactor[1] = 36453;
+                i_rfactor[2] = 49417;
+            } else {
+                const double pow2_21 = pow(2, 21);
+                const double pow2_23 = pow(2, 23);
+                i_rfactor[0] = (uint16_t)(rfactor[0] * pow2_21);
+                i_rfactor[1] = (uint16_t)(rfactor[1] * pow2_21);
+                i_rfactor[2] = (uint16_t)(rfactor[2] * pow2_23);
+            }
+        } else {
+            const double pow2_32 = pow(2, 32);
+            for (int band = 0; band < 3; ++band)
+                i_rfactor[band] = (uint32_t)(rfactor[band] * pow2_32);
+        }
+
+        {   // the wavelet transform, as for VMAF v0.6.1
+            static const int kV[4][2] = { { 0, 0 }, { 0, 0 }, { 16, 32768 }, { 16, 32768 } };
+            static const int kH[4][2] = { { 16, 32768 }, { 15, 16384 }, { 16, 32768 }, { 15, 16384 } };
+            const int32_t constants[] = { inW, inH, inStride, bandStride,
+                                          scale == 0 ? bpc : kV[scale][0], scale == 0 ? 1 << (bpc - 1) : kV[scale][1],
+                                          kH[scale][0], kH[scale][1] };
+            const int shader = scale == 0 ? (deep ? kShader_adm_dwt_0_16 : kShader_adm_dwt_0_8) : kShader_adm_dwt;
+            error = add_pass(scored, shader, { inRef, inDis, &bandsRef[set], &bandsDis[set] }, constants,
+                             sizeof constants, groups(bw, 16), groups(bh, 8));
+            if (error)
+                break;
+        }
+        {   // adm_csf_den_scale / adm_csf_den_s123
+            const int left = bw * ADM_BORDER_FACTOR - 0.5;
+            const int top = bh * ADM_BORDER_FACTOR - 0.5;
+            const int right = bw - left;
+            const int bottom = bh - top;
+            uint32_t shiftSq = 0, addSq = 0, shiftCub = 0, addCub = 0, shiftAccum, addAccum;
+            if (scale == 0) {
+                int32_t shift_accum = (int32_t)ceil(log2((bottom - top) * (right - left)) - 20);
+                shift_accum = shift_accum > 0 ? shift_accum : 0;
+                shiftAccum = (uint32_t)shift_accum;
+                addAccum = shift_accum > 0 ? (1u << (shift_accum - 1)) : 0;
+            } else {
+                static const uint32_t shift_sq[3] = { 31, 30, 31 };
+                shiftSq = shift_sq[scale - 1];
+                addSq = 1u << shiftSq;
+                shiftCub = (uint32_t)ceil(log2(right - left));
+                addCub = (uint32_t)pow(2, ((double)shiftCub - 1));
+                shiftAccum = (uint32_t)ceil(log2(bottom - top));
+                addAccum = (uint32_t)pow(2, ((double)shiftAccum - 1));
+            }
+            const uint32_t constants[] = { (uint32_t)top, (uint32_t)left, (uint32_t)right, (uint32_t)bandStride,
+                                           shiftSq, addSq, shiftCub, addCub, shiftAccum, addAccum,
+                                           (uint32_t)(kSlotCsfDen + scale * 3) };
+            error = add_pass(scored, scale == 0 ? kShader_adm_csf_den_v1_0 : kShader_adm_csf_den_v1,
+                             { &bandsRef[set], &acc }, constants, sizeof constants, 1,
+                             (uint32_t)std::max(0, bottom - top));
+            if (error)
+                break;
+        }
+        {   // adm_decouple / adm_decouple_s123, and adm_csf / i4_adm_csf of both images
+            int left = bw * ADM_BORDER_FACTOR - 0.5 - 1;
+            int top = bh * ADM_BORDER_FACTOR - 0.5 - 1;
+            int right = bw - left + 2;
+            int bottom = bh - top + 2;
+            if (left < 0) left = 0;
+            if (right > bw) right = bw;
+            if (top < 0) top = 0;
+            if (bottom > bh) bottom = bh;
+            const uint32_t constants[] = { (uint32_t)top, (uint32_t)bottom, (uint32_t)left, (uint32_t)right,
+                                           (uint32_t)bandStride, (uint32_t)outStride, 1u,
+                                           i_rfactor[0], i_rfactor[1], i_rfactor[2], cosMantissa };
+            error = add_pass(scored, scale == 0 ? kShader_adm_decouple_v1_0 : kShader_adm_decouple_v1,
+                             { &bandsRef[set], &bandsDis[set], &admR, &admA, &admF, &divTable,
+                               &admAdditive, &admCsfR, &admCsfRF }, constants, sizeof constants,
+                             groups(right - left, 16), groups(bottom - top, 8));
+            if (error)
+                break;
+        }
+        // adm_cm / i4_adm_cm: the restored image masked by the additive one,
+        // then (the additive impairment measure) the additive image masked
+        // by the restored one.
+        for (int aim = 0; aim < 2 && !error; ++aim) {
+            const int left = bw * ADM_BORDER_FACTOR - 0.5;
+            const int top = bh * ADM_BORDER_FACTOR - 0.5;
+            const int right = bw - left;
+            const int bottom = bh - top;
+            const int start_col = (left > 1) ? left : 1;
+            const int end_col = (right < (bw - 1)) ? right : (bw - 1);
+            const int start_row = (top > 1) ? top : 1;
+            const int end_row = (bottom < (bh - 1)) ? bottom : (bh - 1);
+            struct {
+                int32_t w, h, startRow, startCol, endCol, stride;
+                uint32_t rfactor[3];
+                int32_t shiftSub[3], shiftSq[3], addSq[3], shiftCub[3], addCub[3];
+                int32_t shiftInner, addInner;
+                uint32_t slot;
+            } constants = {};
+            constants.w = bw;
+            constants.h = bh;
+            constants.startRow = start_row;
+            constants.startCol = start_col;
+            constants.endCol = end_col;
+            constants.stride = outStride;
+            static const int shift_sub[3] = { 10, 10, 12 }, fixed_shift[3] = { 4, 4, 3 };
+            static const int shift_xsq[3] = { 29, 29, 30 };
+            for (int band = 0; band < 3; ++band) {
+                constants.rfactor[band] = i_rfactor[band];
+                constants.shiftSub[band] = scale == 0 ? shift_sub[band] : 0;
+                constants.shiftSq[band] = scale == 0 ? shift_xsq[band] : 30;
+                constants.addSq[band] = 1 << (constants.shiftSq[band] - 1);
+                const uint32_t shift = scale == 0 ? (uint32_t)ceil(log2(bw) - fixed_shift[band])
+                                                  : (uint32_t)ceil(log2(bw));
+                constants.shiftCub[band] = (int32_t)shift;
+                constants.addCub[band] = (int32_t)(uint32_t)pow(2, ((double)shift - 1));
+            }
+            const uint32_t shift_inner_accum = (uint32_t)ceil(log2(bh));
+            constants.shiftInner = (int32_t)shift_inner_accum;
+            constants.addInner = (int32_t)(uint32_t)pow(2, ((double)shift_inner_accum - 1));
+            constants.slot = (uint32_t)(kSlotCm + aim * kScales * 3 + scale * 3);
+            error = aim ? add_pass(scored, scale == 0 ? kShader_adm_cm_0 : kShader_adm_cm,
+                                   { &admAdditive, &admCsfR, &admCsfRF, &acc }, &constants, sizeof constants, 1,
+                                   (uint32_t)std::max(0, end_row - start_row))
+                        : add_pass(scored, scale == 0 ? kShader_adm_cm_0 : kShader_adm_cm,
+                                   { &admR, &admA, &admF, &acc }, &constants, sizeof constants, 1,
+                                   (uint32_t)std::max(0, end_row - start_row));
+        }
+        inW = bw;
+        inH = bh;
+        inStride = bandStride;
+    }
+    return error;
+}
+
+namespace {
+
+// As libvmaf's CPU code (integer_adm.c): a scale's numerator from adm_cm /
+// i4_adm_cm's sums, with the noise weight the caller gives (0 for the
+// additive impairment measure).
+float v1_cm(const int64_t *accum, int w, int h, int scale, double adm_noise_weight)
+{
+    const int left = w * ADM_BORDER_FACTOR - 0.5;
+    const int top = h * ADM_BORDER_FACTOR - 0.5;
+    const int right = w - left;
+    const int bottom = h - top;
+    const uint32_t shift_inner_accum = (uint32_t)ceil(log2(h));
+    float f_accum[3];
+    if (scale == 0) {
+        const uint32_t shift_xhcub = (uint32_t)ceil(log2(w) - 4);
+        const uint32_t shift_xdcub = (uint32_t)ceil(log2(w) - 3);
+        f_accum[0] = (float)(accum[0] / pow(2, (52 - shift_xhcub - shift_inner_accum)));
+        f_accum[1] = (float)(accum[1] / pow(2, (52 - shift_xhcub - shift_inner_accum)));
+        f_accum[2] = (float)(accum[2] / pow(2, (57 - shift_xdcub - shift_inner_accum)));
+    } else {
+        const uint32_t shift_cub = (uint32_t)ceil(log2(w));
+        float final_shift[3] = { (float)pow(2, (45 - shift_cub - shift_inner_accum)),
+                                 (float)pow(2, (39 - shift_cub - shift_inner_accum)),
+                                 (float)pow(2, (36 - shift_cub - shift_inner_accum)) };
+        for (int i = 0; i < 3; ++i)
+            f_accum[i] = (float)(accum[i] / final_shift[scale - 1]);
+    }
+    float num_scale_h = powf(f_accum[0], 1.0f / 3.0f) + powf((bottom - top) * (right - left) * adm_noise_weight, 1.0f / 3.0f);
+    float num_scale_v = powf(f_accum[1], 1.0f / 3.0f) + powf((bottom - top) * (right - left) * adm_noise_weight, 1.0f / 3.0f);
+    float num_scale_d = powf(f_accum[2], 1.0f / 3.0f) + powf((bottom - top) * (right - left) * adm_noise_weight, 1.0f / 3.0f);
+    return (num_scale_h + num_scale_v + num_scale_d);
+}
+
+// As libvmaf's CPU code: adm_csf_den_scale / adm_csf_den_s123's conclusion.
+float v1_csf_den(const uint64_t *accum, int w, int h, int scale, const float rfactor[3], double adm_noise_weight)
+{
+    const int left = w * ADM_BORDER_FACTOR - 0.5;
+    const int top = h * ADM_BORDER_FACTOR - 0.5;
+    const int right = w - left;
+    const int bottom = h - top;
+    double shift_csf;
+    if (scale == 0) {
+        int32_t shift_accum = (int32_t)ceil(log2((bottom - top) * (right - left)) - 20);
+        shift_accum = shift_accum > 0 ? shift_accum : 0;
+        shift_csf = pow(2, (18 - shift_accum));
+    } else {
+        const uint32_t accum_convert_float[3] = { 32, 27, 23 };
+        uint32_t shift_cub = (uint32_t)ceil(log2(right - left));
+        uint32_t shift_accum = (uint32_t)ceil(log2(bottom - top));
+        shift_csf = pow(2, (accum_convert_float[scale - 1] - shift_accum - shift_cub));
+    }
+    double csf_h = (double)(accum[0] / shift_csf) * pow(rfactor[0], 3);
+    double csf_v = (double)(accum[1] / shift_csf) * pow(rfactor[1], 3);
+    double csf_d = (double)(accum[2] / shift_csf) * pow(rfactor[2], 3);
+    float powf_add = powf((bottom - top) * (right - left) * adm_noise_weight, 1.0f / 3.0f);
+    float den_scale_h = powf(csf_h, 1.0f / 3.0f) + powf_add;
+    float den_scale_v = powf(csf_v, 1.0f / 3.0f) + powf_add;
+    float den_scale_d = powf(csf_d, 1.0f / 3.0f) + powf_add;
+    return (den_scale_h + den_scale_v + den_scale_d);
+}
+
+// As libvmaf's CPU code: integer_compute_adm's sums and extract()'s ADM3.
+// out: adm3, aim, adm2.
+void v1_adm(const vv_context &context, const uint64_t *slots, double out[3])
+{
+    const V1Options &o = context.options;
+    int w = context.w, h = context.h;
+    const double numden_limit = 1e-10 * (w * h) / (1920.0 * 1080.0);
+    double num = 0, den = 0, aim_num = 0;
+    for (int scale = 0; scale < 4; ++scale) {
+        w = (w + 1) / 2;
+        h = (h + 1) / 2;
+        const int64_t *cm = (const int64_t *)&slots[kSlotCm + scale * 3];
+        const int64_t *aim = (const int64_t *)&slots[kSlotCm + kScales * 3 + scale * 3];
+        float den_scale = v1_csf_den(&slots[kSlotCsfDen + scale * 3], w, h, scale, context.rfactorV1[scale], o.noiseWeight);
+        float num_scale = v1_cm(cm, w, h, scale, o.noiseWeight);
+        float aim_num_scale = v1_cm(aim, w, h, scale, 0.0);
+        num += num_scale;
+        den += den_scale;
+        aim_num += aim_num_scale;
+    }
+    num = num < numden_limit ? 0 : num;
+    den = den < numden_limit ? 0 : den;
+    double score, score_aim = 0;
+    if (den == 0.0) {
+        score = 1.0f;
+    } else {
+        score_aim = aim_num / den;
+        score = num / den;
+    }
+    const double adm3 = score * o.dlmWeight + (1 - score_aim) * (1 - o.dlmWeight);
+    out[0] = adm3 > o.minValue ? adm3 : o.minValue;
+    out[1] = score_aim;
+    out[2] = score;
+}
+
+} // namespace
+
 int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int flags)
 {
     api = instance_api();
@@ -918,11 +1250,15 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     const VkDeviceSize pixels = (VkDeviceSize)w * h;
     const int w1 = (w + 1) / 2, h1 = (h + 1) / 2, w2 = (w1 + 1) / 2, h2 = (h1 + 1) / 2;
     const int rw1 = (w / 2 + 1) / 2, rh1 = (h / 2 + 1) / 2;
+    const VkDeviceSize v0 = v1 ? 0 : 1, only1 = v1 ? 1 : 0;  // buffers one of the two uses hold 4 bytes in the other
     struct { Buffer *buffer; VkDeviceSize bytes; } sized[] = {
         { &picRef, planeBytes }, { &picDis, planeBytes },
-        { &blur[0], pixels * 4 }, { &blur[1], pixels * 4 }, { &vifTmp, pixels * 32 },
-        { &rdRef[0], (VkDeviceSize)w1 * h1 * 4 }, { &rdDis[0], (VkDeviceSize)w1 * h1 * 4 },
-        { &rdRef[1], (VkDeviceSize)rw1 * rh1 * 4 }, { &rdDis[1], (VkDeviceSize)rw1 * rh1 * 4 },
+        { &blur[0], pixels * 4 * v0 + 4 }, { &blur[1], pixels * 4 * v0 + 4 }, { &vifTmp, pixels * 32 * v0 + 4 },
+        { &rdRef[0], (VkDeviceSize)w1 * h1 * 4 * v0 + 4 }, { &rdDis[0], (VkDeviceSize)w1 * h1 * 4 * v0 + 4 },
+        { &rdRef[1], (VkDeviceSize)rw1 * rh1 * 4 * v0 + 4 }, { &rdDis[1], (VkDeviceSize)rw1 * rh1 * 4 * v0 + 4 },
+        { &picPrev[0], planeBytes * only1 + 4 }, { &picPrev[1], planeBytes * only1 + 4 },
+        { &admAdditive, (VkDeviceSize)w1 * h1 * 16 * only1 + 4 }, { &admCsfR, (VkDeviceSize)w1 * h1 * 16 * only1 + 4 },
+        { &admCsfRF, (VkDeviceSize)w1 * h1 * 16 * only1 + 4 },
         { &logTable, 32768 * 4 }, { &divTable, 65536 * 4 },
         { &bandsRef[0], (VkDeviceSize)w1 * h1 * 16 }, { &bandsDis[0], (VkDeviceSize)w1 * h1 * 16 },
         { &bandsRef[1], (VkDeviceSize)w2 * h2 * 16 }, { &bandsDis[1], (VkDeviceSize)w2 * h2 * 16 },
@@ -963,8 +1299,12 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     if (int error = upload(logTable, table.data(), 32768 * 4))
         return error;
     const float div_Q_factor = 1073741824;  // 2^30
-    for (int i = -32768; i < 32768; ++i)
-        table[(size_t)(i + 32768)] = i == 0 ? 0 : (uint32_t)(int32_t)(div_Q_factor / float(i));
+    for (int i = -32768; i < 32768; ++i) {
+        // The CUDA kernel divides in float; the CPU code's table (div_lookup
+        // of integer_adm.h), which VMAF v1 follows, in integers.
+        table[(size_t)(i + 32768)] = i == 0 ? 0 : v1 ? (uint32_t)(1073741824 / i)
+                                                    : (uint32_t)(int32_t)(div_Q_factor / float(i));
+    }
     if (int error = upload(divTable, table.data(), 65536 * 4))
         return error;
     {
@@ -973,7 +1313,8 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vk.vkBeginCommandBuffer(cb, &begin);
         for (Buffer *buffer : { &blur[0], &blur[1], &vifTmp, &rdRef[0], &rdDis[0], &rdRef[1], &rdDis[1],
-                                &bandsRef[0], &bandsDis[0], &bandsRef[1], &bandsDis[1], &admR, &admA, &admF })
+                                &bandsRef[0], &bandsDis[0], &bandsRef[1], &bandsDis[1], &admR, &admA, &admF,
+                                &picPrev[0], &picPrev[1], &admAdditive, &admCsfR, &admCsfRF })
             vk.vkCmdFillBuffer(cb, buffer->buffer, 0, VK_WHOLE_SIZE, 0);
         vk.vkEndCommandBuffer(cb);
         VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -1072,7 +1413,8 @@ int vv_context::commit(bool score)
     }
     vk.vkCmdFillBuffer(cb, acc.buffer, 0, VK_WHOLE_SIZE, 0);
     barrier(vk, cb, kTransfer, kCompute);
-    const std::vector<Pass> *lists[2] = { &motion[index % 2], score ? &scored : nullptr };
+    const bool moves = !v1 || index >= (options.fiveFrameWindow ? 2u : 1u);
+    const std::vector<Pass> *lists[2] = { moves ? &motion[index % 2] : nullptr, score ? &scored : nullptr };
     for (const std::vector<Pass> *list : lists) {
         if (!list)
             continue;
@@ -1089,6 +1431,11 @@ int vv_context::commit(bool score)
             vk.vkCmdDispatch(cb, pass.groups[0], pass.groups[1], pass.groups[2]);
             barrier(vk, cb, kCompute, kCompute | kTransfer);
         }
+    }
+    if (v1) {
+        barrier(vk, cb, kCompute, kTransfer);
+        VkBufferCopy keep = { 0, 0, planeBytes };
+        vk.vkCmdCopyBuffer(cb, picRef.buffer, picPrev[index % 2].buffer, 1, &keep);
     }
     VkBufferCopy back = { 0, 0, kSlots * 8 };
     vk.vkCmdCopyBuffer(cb, acc.buffer, slot.result.buffer, 1, &back);
@@ -1268,4 +1615,99 @@ VV_EXPORT int vv_read_buffer(vv_context *context, int which, void *out, uint64_t
     vk.vkFreeMemory(context->device, staging.memory, nullptr);
     context->buffers.pop_back();
     return result == VK_SUCCESS ? 0 : fail(-1, "reading a GPU buffer failed");
+}
+
+// VMAF v1: a context that calculates ADM3 and motion3 as libvmaf's CPU code
+// does (integer_adm.c, integer_motion.c). `options`: adm_norm_view_dist,
+// adm_ref_display_height, adm_csf_mode, adm_noise_weight, adm_dlm_weight,
+// adm_min_val, motion_max_val, motion_five_frame_window,
+// motion_moving_average (nine doubles). Frames go in with vv_submit or
+// vv_staging / vv_commit as for VMAF v0.6.1.
+VV_EXPORT int vv_create_v1(vv_context **out, int device, int width, int height, int bitDepth, int flags,
+                           const double *options)
+{
+    vv_context *context = new vv_context();
+    context->v1 = true;
+    V1Options &o = context->options;
+    o.viewDistance = options[0];
+    o.displayHeight = (int)options[1];
+    o.csfMode = (int)options[2];
+    o.noiseWeight = options[3];
+    o.dlmWeight = options[4];
+    o.minValue = options[5];
+    o.motionMax = options[6];
+    o.fiveFrameWindow = options[7] != 0;
+    o.movingAverage = options[8] != 0;
+    int error = o.viewDistance * o.displayHeight < kAdmNormViewDist * kAdmRefDisplayHeight
+        ? fail(-3, "VMAF v1: the viewing distance is nearer than ADM's 16-bit pipeline takes")
+        : context->init(device, width, height, bitDepth, flags);
+    if (error) {
+        delete context;
+        *out = nullptr;
+        return error;
+    }
+    *out = context;
+    return 0;
+}
+
+// Every frame's VMAF v1 features, after vv_flush: six doubles per frame --
+// adm3, aim, adm2 (0 for a frame that was not scored), motion3, motion2 and
+// the motion SAD score. Motion as libvmaf's flush() of integer_motion.c
+// derives it from all the frames' SAD scores. Returns the number of frames.
+VV_EXPORT int vv_features_v1(vv_context *context, double *out, unsigned frames)
+{
+    const std::vector<FrameSums> &sums = context->sums;
+    const V1Options &o = context->options;
+    const unsigned n = (unsigned)std::min<size_t>(frames, sums.size());
+    const unsigned w = (unsigned)context->w, h = (unsigned)context->h;
+    const unsigned min_idx = o.fiveFrameWindow ? 2 : 1, stride = o.fiveFrameWindow ? 2 : 1;
+    std::vector<double> sad(sums.size());
+    for (size_t i = 0; i < sums.size(); ++i) {
+        double score = 0.;
+        if (i >= min_idx) {
+            const double scaled = (double)sums[i].slots[kSlotSad] / 256. / (w * h) * 1.0;  // motion_fps_weight
+            score = scaled < o.motionMax ? scaled : o.motionMax;
+        }
+        sad[i] = score;
+    }
+    // motion_blend() with the default blend factor 1: the score itself.
+    double stamp_value = 0.;
+    if (sums.size() > min_idx)
+        stamp_value = sad[min_idx] < o.motionMax ? sad[min_idx] : o.motionMax;
+    double prev_processed = 0.;
+    for (size_t i = 0; i < sums.size(); ++i) {
+        double motion2;
+        if (i < min_idx) {
+            motion2 = 0.;
+        } else {
+            const int lo_idx = (int)i - (int)(stride - 1);
+            const size_t hi_idx = i + 1;
+            if (hi_idx >= sums.size()) {
+                motion2 = sad[i];
+            } else if (lo_idx >= (int)min_idx) {
+                motion2 = sad[(size_t)lo_idx] < sad[hi_idx] ? sad[(size_t)lo_idx] : sad[hi_idx];
+            } else {
+                motion2 = sad[hi_idx];
+            }
+        }
+        double motion3;
+        if (i < min_idx) {
+            motion3 = stamp_value;
+            prev_processed = stamp_value;
+        } else {
+            const double processed = motion2 < o.motionMax ? motion2 : o.motionMax;
+            motion3 = o.movingAverage ? (processed + prev_processed) / 2.0 : processed;
+            prev_processed = processed;
+        }
+        if (i < n) {
+            double *row = out + i * 6;
+            row[0] = row[1] = row[2] = 0.0;
+            if (sums[i].scored)
+                v1_adm(*context, sums[i].slots, row);
+            row[3] = motion3;
+            row[4] = motion2;
+            row[5] = sad[i];
+        }
+    }
+    return (int)sums.size();
 }

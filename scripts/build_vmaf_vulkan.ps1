@@ -43,12 +43,19 @@ $shaders = [ordered]@{
     'adm_dwt_0_8'       = 'adm_dwt', 'SCALE0=1', 'BPC16=0'
     'adm_dwt_0_16'      = 'adm_dwt', 'SCALE0=1', 'BPC16=1'
     'adm_dwt'           = 'adm_dwt', 'SCALE0=0', 'BPC16=0'
-    'adm_decouple_0'    = 'adm_decouple', 'SCALE0=1', 'BPC16=0'
-    'adm_decouple'      = 'adm_decouple', 'SCALE0=0', 'BPC16=0'
-    'adm_csf_den_0'     = 'adm_csf_den', 'SCALE0=1', 'BPC16=0'
-    'adm_csf_den'       = 'adm_csf_den', 'SCALE0=0', 'BPC16=0'
+    'adm_decouple_0'    = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'V1=0'
+    'adm_decouple'      = 'adm_decouple', 'SCALE0=0', 'BPC16=0', 'V1=0'
+    'adm_csf_den_0'     = 'adm_csf_den', 'SCALE0=1', 'BPC16=0', 'ROWWISE=0'
+    'adm_csf_den'       = 'adm_csf_den', 'SCALE0=0', 'BPC16=0', 'ROWWISE=0'
     'adm_cm_0'          = 'adm_cm', 'SCALE0=1', 'BPC16=0'
     'adm_cm'            = 'adm_cm', 'SCALE0=0', 'BPC16=0'
+    # VMAF v1: libvmaf's CPU code, not its CUDA kernels
+    'motion_v1_8'       = 'motion_v1', 'BPC16=0'
+    'motion_v1_16'      = 'motion_v1', 'BPC16=1'
+    'adm_decouple_v1_0' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'V1=1'
+    'adm_decouple_v1'   = 'adm_decouple', 'SCALE0=0', 'BPC16=0', 'V1=1'
+    'adm_csf_den_v1_0'  = 'adm_csf_den', 'SCALE0=1', 'BPC16=0', 'ROWWISE=1'
+    'adm_csf_den_v1'    = 'adm_csf_den', 'SCALE0=0', 'BPC16=0', 'ROWWISE=1'
 }
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {

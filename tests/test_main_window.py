@@ -2215,7 +2215,7 @@ def test_perceptual_compute_controls_default_to_gpu_and_apply_per_metric(qapp):
 
 
 def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypatch):
-    """Performance > VMAF v0.6.1 and NEG compute, beside SSIMULACRA2's and
+    """Performance > VMAF compute, beside SSIMULACRA2's and
     Butteraugli's: per video, what new videos and the next session start
     with, and execution only -- the GPU's VMAF agrees with the CPU's to
     within a thousandth of a point, so a video keeps the scores it has."""
@@ -2226,7 +2226,7 @@ def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypat
     combo = win.vmaf_backend_combo
     assert [combo.itemText(i) for i in range(combo.count())] == ["GPU", "CPU"]
     assert combo.currentText() == "GPU" and combo.isEnabledTo(win.options_box)
-    assert "VMAF v1 has no GPU version" in combo.toolTip()
+    assert "VMAF v1: its detail and motion features on the GPU" in combo.toolTip()
 
     win._source_info = _fake_video_info("source.mp4")
     row = win._add_table_row(Path("a.mp4"))

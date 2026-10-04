@@ -375,7 +375,7 @@ def test_the_pipe_reader_keeps_its_names_off_the_threads():
 
 
 def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
-    """Each video's own choice (Performance > VMAF v0.6.1 and NEG compute),
+    """Each video's own choice (Performance > VMAF compute),
     taken with its options when the run starts."""
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
     monkeypatch.setattr(vr, "_run_on_gpu", lambda *a, **k: pytest.fail("set to CPU, but scored on the GPU"))

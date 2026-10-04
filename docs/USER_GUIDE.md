@@ -32,15 +32,27 @@ built with CUDA on an NVIDIA GPU (GeForce GTX 16 and RTX 20 series or newer),
 and with a Vulkan version of the same calculation on any other GPU, such as
 Intel's and AMD's, or on every GPU when Settings > GPU metrics > GPU backend is
 Vulkan. The two give the same scores to the last decimal. The choice is each
-video's Performance > VMAF v0.6.1 and NEG compute, GPU by default and greyed out
+video's Performance > VMAF compute, GPU by default and greyed out
 at CPU without a GPU. A small integrated GPU can be slower at it than a fast
 CPU: choose CPU there. Like
 SSIMULACRA2's and Butteraugli's, the last choice is what newly added videos
 start with. The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a
 thousandth of a point on every frame, so unlike those two, a saved VMAF score is
-reused whichever is chosen. VMAF v1, PSNR, SSIM and XPSNR have no GPU code and
+reused whichever is chosen. PSNR, SSIM and XPSNR have no GPU code and
 are still calculated by FFmpeg on the CPU, in a run of their own beside the
-GPU's, so they do not slow VMAF down. A video's VMAF on the GPU waits for the
+GPU's, so they do not slow VMAF down.
+
+VMAF v1 follows the same choice, with any GPU that has a Vulkan driver. Two of
+its four features, detail loss (ADM) and motion, are calculated on the GPU with
+Vulkan -- on an NVIDIA GPU too, whatever the GPU backend setting -- and give
+libvmaf's CPU values to the last bit. The other two, banding (CAMBI) and colour
+(SpEED), are calculated by the bundled libvmaf on the CPU, and libvmaf's own
+model turns the four into the score, so VMAF v1 with the GPU is the score
+FFmpeg's libvmaf gives. Because half of it stays on the CPU it gains less than
+VMAF v0.6.1 does: about 2.5 times the CPU's speed on 4K video and 5 times on
+1080p with a fast GPU. A video too small for SpEED
+(under about 160 pixels a side, more with the models that scale it down) is
+calculated on the CPU. A video's VMAF on the GPU waits for the
 GPU like its other GPU metrics, one video at a time, and goes before them. If the GPU calculation fails, or crashes, that
 video's VMAF is calculated on the CPU instead, as it is when the GPU's driver
 fails the self-test the app runs on it when it starts. Without a GPU, FFmpeg's

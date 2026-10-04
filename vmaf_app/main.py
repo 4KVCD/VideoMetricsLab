@@ -162,6 +162,13 @@ def self_test() -> SelfTestReport:
         report.ok(f"VMAF on the GPU ({text})")
     else:
         report.warn(f"VMAF on the GPU unavailable; FFmpeg's libvmaf is used ({text})")
+    from vmaf_app.core import vmaf_v1_gpu
+
+    available, text = vmaf_v1_gpu.available()
+    if available:
+        report.ok(f"VMAF v1 with the GPU ({text})")
+    else:
+        report.warn(f"VMAF v1 with the GPU unavailable; FFmpeg's libvmaf is used ({text})")
 
     return report
 
@@ -298,6 +305,9 @@ def main() -> int:
 
     vmaf_cuda.set_gpu_backend(Settings.load().gpu_backend)
     vmaf_cuda.start_gpu_vmaf_probe()
+    from vmaf_app.core import vmaf_v1_gpu
+
+    vmaf_v1_gpu.start_probe()
     window = MainWindow()
     window.show()
     window.check_for_updates()  # once, now, and at no other time
