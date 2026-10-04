@@ -47,23 +47,17 @@ def test_the_videos_choice_and_the_probe_decide(monkeypatch):
     assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1") is None
 
 
-def test_the_graph_gives_the_gpu_libvmafs_frame_pairs_and_ffmpegs_filters_the_same_frames():
-    """VMAF v1, PSNR, SSIM and XPSNR stay in FFmpeg and get the same frames
-    through a split. The GPU's pairs come through overlay's frame sync with
-    libvmaf's options -- by position, they were not always libvmaf's pairs."""
-    rest = VmafOptions(compute_vmaf=False, compute_vmaf_neg=False, compute_xpsnr=True, extra_features=["name=psnr"])
-    graph = vr._build_filtergraph(_info("d.mkv"), _info("s.mkv"), rest, None, None, HwAccelPlan(),
-                                  Path("vmaf_log.json"), xpsnr_log_path=Path("xpsnr.txt"), gpu_vmaf=True)
-    assert "[main]split=2[main_cpu][main_gpu];[ref]split=2[ref_cpu][ref_gpu]" in graph
-    assert ("[main_gpu]pad=3840:1080[vmaf_canvas];[vmaf_canvas][ref_gpu]overlay=x=1920:y=0:eval=init:"
+def test_the_graph_gives_the_gpu_libvmafs_frame_pairs_and_nothing_else():
+    """The GPU's pairs come through overlay's frame sync with libvmaf's
+    options -- by position, they were not always libvmaf's pairs. FFmpeg's
+    own filters score nothing in a GPU run: VMAF and NEG are all it has."""
+    graph = vr._build_filtergraph(_info("d.mkv"), _info("s.mkv"), VmafOptions(compute_vmaf_neg=True), None, None,
+                                  HwAccelPlan(), Path("vmaf_log.json"), gpu_vmaf=True)
+    assert ("[main]pad=3840:1080[vmaf_canvas];[vmaf_canvas][ref]overlay=x=1920:y=0:eval=init:"
             "format=yuv420:shortest=1:repeatlast=0:ts_sync_mode=nearest,split=2[vmaf_left][vmaf_right];"
             "[vmaf_left]crop=1920:1080:0:0[vmaf_dist];[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]") in graph
-    assert "[ref_cpu]split=2[ref_xpsnr][ref_vmaf]" in graph and "[main_cpu][ref_xpsnr]xpsnr=" in graph
-    assert graph.endswith("[cpu_out]") and "model=''" in graph  # no VMAF model left in FFmpeg
-    alone = vr._build_filtergraph(_info("d.mkv"), _info("s.mkv"), VmafOptions(compute_vmaf=False), None, None,
-                                  HwAccelPlan(), Path("vmaf_log.json"), gpu_vmaf=True)
-    assert "[main]pad=3840:1080[vmaf_canvas];[vmaf_canvas][ref]overlay=" in alone
-    assert alone.endswith("[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]")
+    assert graph.endswith("[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]")
+    assert "libvmaf" not in graph and "xpsnr" not in graph
 
 
 def test_an_odd_width_puts_the_source_on_a_chroma_sample():
@@ -81,11 +75,10 @@ def test_a_12_bit_comparison_is_scored_on_the_cpu(monkeypatch):
 
 def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through():
     raw = ["-map", "[vmaf_dist]", "D", "-map", "[vmaf_ref]", "R"]
-    args = vr._build_ffmpeg_output_args("G", 30.0, raw, cpu_output=True)
-    assert args == ["-lavfi", "G", "-progress", "pipe:1", "-nostats",
-                    "-map", "[cpu_out]", "-t", "30.000", "-f", "null", "-", *raw]
-    assert vr._build_ffmpeg_output_args("G", 30.0, raw, cpu_output=False) == [
+    assert vr._build_ffmpeg_output_args("G", 30.0, raw) == [
         "-lavfi", "G", "-progress", "pipe:1", "-nostats", *raw]
+    assert vr._build_ffmpeg_output_args("G", 30.0) == [
+        "-lavfi", "G", "-progress", "pipe:1", "-nostats", "-t", "30.000", "-f", "null", "-"]
     attempt = object.__new__(vmaf_cuda.GpuAttempt)
     attempt.distorted, attempt.reference = SimpleNamespace(path="D"), SimpleNamespace(path="R")
     assert attempt.output_args(30.5) == [
@@ -93,21 +86,25 @@ def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through():
         "-map", "[vmaf_ref]", "-fps_mode", "passthrough", "-t", "30.500", "-f", "rawvideo", "R"]
 
 
-def test_the_gpus_scores_join_ffmpegs_and_must_cover_the_same_frames():
-    """A frame one side lacked was kept as NaN: a VMAF with holes in it. The
-    GPU result is refused instead, and the run is made again on the CPU."""
-    ffmpeg = FrameScores(np.array([0, 1, 2]), np.array([0.0, 0.1, 0.2]), psnr=np.array([40, 41, 42], dtype=np.float32))
-    gpu = (np.array([0, 1, 2], dtype=np.int32), {"vmaf": np.array([90.0, 91.0, 92.0])})
-    joined = vr._with_gpu_scores(ffmpeg, gpu, 10.0)
-    assert joined.values("vmaf").tolist() == [90.0, 91.0, 92.0]
-    assert joined.values("psnr").tolist() == [40.0, 41.0, 42.0]
-    alone = vr._with_gpu_scores(None, (np.array([0, 2], dtype=np.int32), {"vmaf_neg": np.array([80.0, 81.0])}), 10.0)
-    assert alone.frame.tolist() == [0, 2] and alone.time.tolist() == [0.0, 0.2]
-    assert alone.values("vmaf_neg").tolist() == [80.0, 81.0]
-    with pytest.raises(vmaf_cuda.VmafGpuError, match="not the same"):
-        vr._with_gpu_scores(ffmpeg, (np.array([0, 1], dtype=np.int32), {"vmaf": np.array([90.0, 91.0])}), 10.0)
+def test_the_gpus_scores_are_the_runs_frame_scores():
+    scores = vr._gpu_frame_scores((np.array([0, 2], dtype=np.int32), {"vmaf_neg": np.array([80.0, 81.0])}), 10.0)
+    assert scores.frame.tolist() == [0, 2] and scores.time.tolist() == [0.0, 0.2]
+    assert scores.values("vmaf_neg").tolist() == [80.0, 81.0]
     with pytest.raises(vmaf_cuda.VmafGpuError, match="no frames"):
-        vr._with_gpu_scores(ffmpeg, (np.array([], dtype=np.int32), {"vmaf": np.array([])}), 10.0)
+        vr._gpu_frame_scores((np.array([], dtype=np.int32), {"vmaf": np.array([])}), 10.0)
+
+
+def test_vmaf_with_other_ffmpeg_metrics_in_one_call_is_calculated_by_ffmpeg(monkeypatch):
+    """The window gives VMAF and NEG a run of their own on the GPU. Asked
+    for beside PSNR in one call, VMAF stays in FFmpeg with it: the run that
+    fed both to the GPU and FFmpeg's filters at once is gone."""
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    monkeypatch.setattr(vr, "_run_on_gpu", lambda *a, **k: pytest.fail("VMAF beside PSNR went to the GPU"))
+    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: FrameScores(
+        np.array([0]), np.array([0.0]), vmaf=np.array([93.0]), psnr=np.array([40.0])))
+    result = vr.run_vmaf(_info("s.mkv"), _info("d.mkv"),
+                         VmafOptions(crop_mode=CropMode.NONE, gpu_decode=False, extra_features=["name=psnr"]))
+    assert result.metric_results.get("vmaf").provenance.compute_backend == "cpu"
 
 
 def test_a_duration_limit_gives_the_raw_outputs_one_frame_more(monkeypatch):
@@ -131,7 +128,7 @@ def test_a_duration_limit_gives_the_raw_outputs_one_frame_more(monkeypatch):
     monkeypatch.setattr(vmaf_cuda, "GpuAttempt", Attempt)
     monkeypatch.setattr(vr, "_run_ffmpeg", lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 0, "", ""))
     commands = []
-    plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 64, 48, 8, VmafOptions(compute_vmaf=False))
+    plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 64, 48, 8)
     frames = vr._execute_run(
         lambda *args: commands.append(args) or ["ffmpeg"], options=VmafOptions(duration_limit=30.0), fps=24.0,
         total_frames=10, hwaccel=HwAccelPlan(), tmp_prefix="vmaf_test_", on_progress=None, on_status=None,
@@ -334,8 +331,8 @@ def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
 _real_score_decoded_on_gpu = vr._score_decoded_on_gpu
 
 
-def _gpu_plan(**cpu) -> vr._GpuPlan:
-    return vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 1920, 1080, 8, VmafOptions(compute_vmaf=False, **cpu))
+def _gpu_plan() -> vr._GpuPlan:
+    return vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 1920, 1080, 8)
 
 
 def _decoded_frames() -> FrameScores:
@@ -351,17 +348,12 @@ def test_vmaf_alone_with_nvidia_decoding_both_videos_decodes_them_in_libvmafs_pr
     assert frames is decoded
 
 
-@pytest.mark.parametrize(("hwaccel", "cpu"), [
-    (HwAccelPlan("cuda", None), {}),
-    (HwAccelPlan(None, "cuda"), {}),
-    (HwAccelPlan("qsv", "qsv"), {}),
-    (HwAccelPlan("cuda", "cuda"), {"compute_xpsnr": True}),  # FFmpeg's filters score in the same run
-])
-def test_ffmpeg_decodes_when_nvidia_does_not_decode_both_or_ffmpeg_scores_more(monkeypatch, hwaccel, cpu):
+@pytest.mark.parametrize("hwaccel", [HwAccelPlan("cuda", None), HwAccelPlan(None, "cuda"), HwAccelPlan("qsv", "qsv")])
+def test_ffmpeg_decodes_when_nvidia_does_not_decode_both(monkeypatch, hwaccel):
     monkeypatch.setattr(vr, "_score_decoded_on_gpu", lambda *a, **k: pytest.fail("decoded in libvmaf's process"))
     by_ffmpeg = _decoded_frames()
     monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: by_ffmpeg)
-    frames = vr._score_on_gpu(_gpu_plan(**cpu), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
+    frames = vr._score_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
                               "version=vmaf_v0.6.1", hwaccel, 2)
     assert frames is by_ffmpeg
 
