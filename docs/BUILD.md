@@ -61,6 +61,10 @@ case anyone overrides that.
   notices are packaged beside them. Without one, FFmpeg decodes those
   videos as before. `scripts/check_gpu_decoder.py` checks one of them on the
   PC it runs on: pictures against FFmpeg's decode, speed, and GPU scores.
+  The build makes these four from the commit's own source every time -- they
+  are not in git, so ones left from another commit would be stale -- and so
+  needs MinGW-w64 g++ on PATH; it stops without it, and checks all four and
+  their notices are in the package.
 - **SSIMULACRA2 and Butteraugli**, the official libjxl 0.12.0 static Windows
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.
