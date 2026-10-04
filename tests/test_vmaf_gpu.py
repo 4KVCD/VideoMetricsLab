@@ -313,6 +313,23 @@ def test_frames_left_in_a_pipe_after_ffmpeg_ended_are_still_read():
     assert frames == [b"abcd", b"efgh"]
 
 
+def test_frames_written_before_the_reader_connected_are_still_read():
+    """FFmpeg can open the pipe, write and close it before the reader's
+    thread connects -- a short run on a busy machine. Windows then answers
+    ConnectNamedPipe with ERROR_NO_DATA, which was taken for an error: the
+    frames, still in the pipe, were lost."""
+    reader = vmaf_cuda._PipeReader("test", 4)
+    with open(reader.path, "wb") as ffmpeg:
+        ffmpeg.write(b"abcdefgh")
+    reader.start()
+    reader.join(5)
+    frames = []
+    while (frame := reader.frames.get(timeout=1)) is not None:
+        frames.append(bytes(frame))
+    assert reader.error is None
+    assert frames == [b"abcd", b"efgh"]
+
+
 def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
     """Each video's own choice (Performance > VMAF v0.6.1 and NEG compute),
     taken with its options when the run starts."""

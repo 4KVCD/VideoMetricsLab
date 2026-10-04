@@ -61,6 +61,9 @@ from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path, ffprobe_path
 from vmaf_app.core.models import CropBox, VideoInfo
 
 _log = logging.getLogger(__name__)
+#: ConnectNamedPipe's answers when the writer has already connected (535),
+#: or has connected, written and closed (232).
+_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA = 535, 232
 
 _NATIVE = Path(__file__).resolve().parents[1] / "native"
 #: Each GPU maker's decoder library, all with one C API (native/gpu_frames.h):
@@ -361,7 +364,11 @@ class _PacketReader:
             try:
                 _winapi.ConnectNamedPipe(self._pipe, _winapi.NULL)
             except OSError as error:
-                if error.winerror != 535:  # ERROR_PIPE_CONNECTED: FFmpeg was first
+                # ERROR_PIPE_CONNECTED: FFmpeg was first. ERROR_NO_DATA: it
+                # came, wrote and went before this connected -- what it
+                # wrote is still there to read. Taken for an error, a short
+                # run on a busy machine lost all of it.
+                if error.winerror not in (_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA):
                     raise
             fd = msvcrt.open_osfhandle(self._pipe, os.O_RDONLY)
             self._pipe = None
