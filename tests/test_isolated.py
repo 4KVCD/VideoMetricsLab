@@ -59,10 +59,23 @@ def _start_and_wait(process_handle=None, cancel_event=None):
     time.sleep(60)
 
 
-def test_a_crash_in_the_child_is_an_error_here():
-    """An access violation in Vship or the GPU driver ended the app."""
-    with pytest.raises(IsolatedCrashError, match="Vship crashed"):
+def test_a_crash_in_the_child_is_an_error_here(caplog, tmp_path, monkeypatch):
+    """An access violation in Vship or the GPU driver ended the app. Ending
+    the child instead, it left no trace of where: its threads at the crash
+    are now logged with the error, and the file they were written to is
+    removed."""
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    with caplog.at_level(logging.ERROR, logger="vmaf_app.core.isolated"),             pytest.raises(IsolatedCrashError, match="Vship crashed"):
         run_isolated(faulthandler._sigsegv, what="Vship")
+    assert "its threads at the crash" in caplog.text
+    assert "_child_main" in caplog.text  # the crashed thread's Python stack
+    assert list(tmp_path.glob("vml-isolated-*")) == []
+
+
+def test_a_child_that_ends_normally_leaves_no_crash_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    assert run_isolated(_report, 21, what="test", callbacks=("on_status",), on_status=lambda _text: None) == 42
+    assert list(tmp_path.glob("vml-isolated-*")) == []
 
 
 def test_the_result_callbacks_logs_and_errors_come_back(caplog):
