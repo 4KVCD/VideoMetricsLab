@@ -336,10 +336,10 @@ def test_a_picture_the_decoder_drops_fails_at_the_next_one():
 
 
 def test_a_picture_the_packets_do_not_have_fails_at_once():
-    stream = _stream_fed(0, 1000)
+    stream = _stream_fed(0, 2000)
     stream._take(0)
     with pytest.raises(nv.NvdecFailedError, match="packets do not have"):
-        stream._take(1500)
+        stream._take(1000)
 
 
 def test_pictures_in_order_pass_and_the_end_counts_them():
