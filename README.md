@@ -297,6 +297,10 @@ Third-party components retain their own licenses; see
   crash cannot leave half a file.
 - The window fits its default width in every language with wider system
   fonts.
+- VMAF NEG now sits beside VMAF v0.6.1, before VMAF v1, in the Videos table,
+  Metric Graphs and exported CSV files.
+- Video Compare's status line no longer fills with playback diagnostics when
+  the reference has no soundtrack.
 - Included various small bug fixes and reliability improvements.
 
 ### How VMAF on the GPU works
