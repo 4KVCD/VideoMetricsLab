@@ -9,7 +9,7 @@ Qt at all. Native playback in core does load GI bindings.
 
 | Concern | Main modules |
 | --- | --- |
-| Media metadata and geometry | `core/ffprobe.py`, `crop_detect.py`, `model_select.py` |
+| Media metadata and geometry | `core/ffprobe.py`, `geometry.py`, `crop_detect.py`, `model_select.py` |
 | Metric requests and execution | `core/analysis_request.py`, `ffmpeg_request.py`, `execution.py`, `vmaf_runner.py`, `ui/worker.py` |
 | Metric registry and packed scores | `core/metrics.py`, `core/models.py` |
 | Results and persistence | `core/run_io.py`, `core/result_cache.py` |
