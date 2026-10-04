@@ -35,6 +35,7 @@ from vmaf_app.core.models import (
 from vmaf_app.core.settings import Settings, default_parallel_jobs
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
+from vmaf_app.ui import run_line
 from vmaf_app.ui.main_window import (
     COL_BITRATE,
     COL_BLACK_BARS,
@@ -4809,7 +4810,7 @@ def test_both_halves_name_their_black_bar_detection_alike(qapp, monkeypatch):
     cpu, gpu = [], []
     vmaf_runner._resolve_crops(info, info, VmafOptions(crop_mode=CropMode.AUTO), cpu.append)
     perceptual_cpu._resolve_crops(info, info, SimpleNamespace(crop_mode=CropMode.AUTO), None, None, gpu.append)
-    assert MainWindow._step_text(cpu[0]) == MainWindow._step_text(gpu[0]) == \
+    assert run_line.step_text(cpu[0]) == run_line.step_text(gpu[0]) == \
         "Detecting black bars in source and test video"
 
 
