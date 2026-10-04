@@ -8,12 +8,16 @@ and the decoders built (scripts/build_gpu_frames.ps1):
 1. Pictures: small clips it makes itself (H.264 8-bit, HEVC 10-bit, AV1
    10-bit; cropped; an MP4 cut with an edit list), and each VIDEO given,
    decoded by the GPU decoder and by FFmpeg on the CPU, frame by frame
-   (MD5): they must be identical, timestamps too.
+   (MD5): they must be identical, and so must their timestamps, each from
+   its first picture.
 2. Speed: the first VIDEO (or the 10-bit clip) decoded on its own, with the
    copy into a host buffer the GPU metrics make: frames per second and CPU.
 3. Scores: SSIMULACRA2 on the GPU (Vship) for the first VIDEO against its
    first 10 s re-encoded (8-bit H.264, which every GPU decodes), with the GPU
-   decoder and with FFmpeg decoding: identical.
+   decoder and with FFmpeg decoding (its hardware decode, as the app runs
+   it): identical. The FFmpeg pass's status lines say where FFmpeg decoded:
+   "GPU decode failed ... decoding it in software" means its hardware decode
+   did not work on this PC.
 
 It prints a report to send back. Nothing is written outside a temporary
 folder.
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import logging
 import subprocess
 import sys
 import tempfile
@@ -76,12 +81,16 @@ def gpu_sums(info, plan, backend):
 
 
 def cpu_sums(path, plan, frames=None):
+    """Each picture of FFmpeg's CPU decode: its MD5 and its timestamp, in the
+    stream's time base (-enc_time_base filter; the encoder's own is 1/rate)."""
     fmt = "yuv420p10le" if plan.bit_depth > 8 else "yuv420p"
     out = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:V:0", "-vf",
                           f"crop={plan.crop_w}:{plan.crop_h}:{plan.crop_x}:{plan.crop_y},format={fmt}",
-                          "-fps_mode", "passthrough", *(["-frames:v", str(frames)] if frames else []),
+                          "-fps_mode", "passthrough", "-enc_time_base", "filter",
+                          *(["-frames:v", str(frames)] if frames else []),
                           "-f", "framemd5", "-"], capture_output=True, text=True, check=True).stdout
-    return [line.split(",")[5].strip() for line in out.splitlines() if line and not line.startswith("#")]
+    rows = [line.split(",") for line in out.splitlines() if line and not line.startswith("#")]
+    return [row[5].strip() for row in rows], [int(row[2]) for row in rows]
 
 
 def check_pictures(path: Path, backend: str, crop: CropBox | None = None) -> str:
@@ -94,13 +103,17 @@ def check_pictures(path: Path, backend: str, crop: CropBox | None = None) -> str
     if not supported:
         return f"{path.name}: the GPU decoder refuses it ({reason})"
     try:
-        sums, _stamps = gpu_sums(info, plan, backend)
+        sums, stamps = gpu_sums(info, plan, backend)
     except nv.GpuDecodeFailedError as error:
         return f"{path.name}: FAILED on the GPU decoder: {error}"
-    want = cpu_sums(path, plan)
+    want, want_stamps = cpu_sums(path, plan)
     differ = sum(a != b for a, b in zip(sums, want, strict=False))
-    verdict = "IDENTICAL" if len(sums) == len(want) and not differ else "DIFFERENT"
-    return f"{path.name}: {verdict} ({len(sums)} GPU pictures, {len(want)} CPU, {differ} differ)"
+    # From each one's first picture: FFmpeg's start at 0, the decoder's are
+    # the file's own.
+    late = sum(a - stamps[0] != b - want_stamps[0] for a, b in zip(stamps, want_stamps, strict=False))
+    verdict = "IDENTICAL" if len(sums) == len(want) and not differ and not late else "DIFFERENT"
+    return (f"{path.name}: {verdict} ({len(sums)} GPU pictures, {len(want)} CPU, {differ} differ, "
+            f"{late} timestamps differ)")
 
 
 def check_speed(path: Path, backend: str, frames: int = 600) -> str:
@@ -160,26 +173,56 @@ def check_scores(source: Path, backend: str, work: Path) -> str:
     options = VmafOptions(crop_mode=CropMode.NONE, gpu_decode=True, gpu_vendor=VENDORS[backend],
                           duration_limit=limit)
     request = analysis_request_from_vmaf_options(options, ("ssimulacra2",))
-    device, reason = vship.detect_vship_device()
+    # Probed in this process, so that the passes are scored in it too. The
+    # app's device (detect_vship_device) is scored in a process of its own,
+    # which loads perceptual_vship afresh: the "FFmpeg" pass below, made by
+    # replacing _native_decoder here, was decoded by the GPU decoder there,
+    # and the step compared the decoder with itself.
+    device, reason = vship._probe_vship_device()
     if device is None:
         return f"scores: no GPU for Vship ({reason})"
-    results, statuses = {}, []
+    native_lines: list[str] = []
+
+    class Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if "in the scoring process" in record.getMessage():
+                native_lines.append(record.getMessage())
+
+    capture = Capture(level=logging.INFO)
+    vship_log = logging.getLogger(vship.__name__)
+    level = vship_log.level
+    vship_log.addHandler(capture)
+    vship_log.setLevel(logging.INFO)
+    results, statuses, used = {}, {}, {}
     real = vship._native_decoder
-    for mode in ("GPU decoder", "FFmpeg"):
-        if mode == "FFmpeg":
-            vship._native_decoder = lambda *_args, **_kwargs: None
-        started = time.perf_counter()
-        try:
-            output = vship.run_vship_task(probe_video(source), probe_video(test), request, request.metrics, device,
-                                          None, None, on_status=statuses.append)
-        finally:
-            vship._native_decoder = real
-        results[mode] = (np.asarray(output.metrics.get("ssimulacra2").values), time.perf_counter() - started)
+    try:
+        for mode in ("GPU decoder", "FFmpeg"):
+            if mode == "FFmpeg":
+                vship._native_decoder = lambda *_args, **_kwargs: None
+            native_lines.clear()
+            statuses[mode] = []
+            started = time.perf_counter()
+            try:
+                output = vship.run_vship_task(probe_video(source), probe_video(test), request, request.metrics,
+                                              device, None, None, on_status=statuses[mode].append)
+            finally:
+                vship._native_decoder = real
+            results[mode] = (np.asarray(output.metrics.get("ssimulacra2").values), time.perf_counter() - started)
+            used[mode] = len(native_lines)
+    finally:
+        vship_log.removeHandler(capture)
+        vship_log.setLevel(level)
     (a, ta), (b, tb) = results["GPU decoder"], results["FFmpeg"]
     same = a.shape == b.shape and np.array_equal(a, b)
-    return (f"scores: SSIMULACRA2 on {device.name} ({device.backend}), {len(a)} frames: "
-            f"{'IDENTICAL' if same else 'DIFFERENT'}; {ta:.1f} s with the GPU decoder, {tb:.1f} s with FFmpeg"
-            + "".join(f"\n  status: {s}" for s in statuses if "decod" in s.lower()))
+    lines = [f"scores: SSIMULACRA2 on {device.name} ({device.backend}), {len(a)} frames: "
+             f"{'IDENTICAL' if same else 'DIFFERENT'}; {ta:.1f} s with the GPU decoder, {tb:.1f} s with FFmpeg"]
+    if used["GPU decoder"] != 2:
+        lines.append(f"  NOT A COMPARISON: the GPU decoder decoded {used['GPU decoder']} of the 2 videos in its pass")
+    if used["FFmpeg"]:
+        lines.append(f"  NOT A COMPARISON: the GPU decoder decoded {used['FFmpeg']} of the 2 videos in FFmpeg's pass")
+    for mode in ("GPU decoder", "FFmpeg"):
+        lines += [f"  {mode} pass: {s}" for s in statuses[mode] if "decod" in s.lower()]
+    return "\n".join(lines)
 
 
 def main() -> None:
