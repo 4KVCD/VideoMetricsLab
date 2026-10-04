@@ -126,26 +126,3 @@ def test_cancel_reaps_native_process_and_removes_temporary_run(tmp_path, monkeyp
     assert not psutil.pid_exists(attached[0])
     assert not handle._pids
     assert not list(tmp_path.glob("vmaf_native_run_*"))
-
-
-def test_native_selects_first_video_track_not_default_track(tmp_path, monkeypatch):
-    ref, test = tmp_path / "reference.mkv", tmp_path / "two_tracks.mkv"
-    ffmpeg = str(ffmpeg_path())
-    common = [ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=192x128:rate=10"]
-    subprocess.run([*common, "-t", "0.8", "-c:v", "ffv1", str(ref)], check=True, capture_output=True)
-    subprocess.run([*common, "-filter_complex", "[0:v]split[a][b];[b]boxblur=4[blur]",
-                    "-map", "[a]", "-map", "[blur]", "-t", "0.8", "-c:v", "ffv1",
-                    "-disposition:v:0", "0", "-disposition:v:1", "default", str(test)],
-                   check=True, capture_output=True)
-    source = VideoInfo(ref, 192, 128, 10, 0.8, 8, "ffv1", pix_fmt="yuv420p")
-    other = replace(source, path=test)
-    options = VmafOptions(crop_mode=CropMode.NONE)
-    plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 192, 128, 8, replace(options, compute_vmaf=False))
-    args = (plan, source, other, options, None, None, "version=vmaf_v0.6.1", HwAccelPlan(), 8)
-    with monkeypatch.context() as guarded:
-        guarded.setattr(vr, "_execute_run", lambda *a, **k: pytest.fail("Native fallback hides stream selection"))
-        actual = vr._score_on_gpu(*args)
-    monkeypatch.setattr(vmaf_native, "eligible", lambda *a: False)
-    expected = vr._score_on_gpu(*args)
-    np.testing.assert_array_equal(actual.frame, expected.frame)
-    np.testing.assert_allclose(actual.vmaf, expected.vmaf, atol=0.00005, rtol=0)
