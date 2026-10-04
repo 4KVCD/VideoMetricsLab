@@ -42,6 +42,7 @@ from __future__ import annotations
 import _winapi
 import contextlib
 import ctypes
+import heapq
 import logging
 import msvcrt
 import os
@@ -546,13 +547,17 @@ class NvdecStream:
         self._handle = handle
         self.frame_bytes = plan.frame_bytes
         self._feed_error: BaseException | None = None
-        self._fed: list[int] = []
+        #: The timestamps of the packets fed whose pictures have not come out
+        #: yet, smallest first (a heap), and how many were fed.
+        self._waiting: list[int] = []
+        self._fed_count = 0
         self._fed_lock = threading.Lock()
         #: Timestamps of packets the demuxer marked discard -- the frames an
         #: MP4 edit list cuts off: decoded (later frames may refer to them),
         #: never handed out, as FFmpeg's decode drops them.
         self._discard: set[int] = set()
-        self._shown: list[int] = []
+        self._shown_count = 0
+        self._last_shown: int | None = None
         self._finished = False
         self._closing = False
         self._feeder = threading.Thread(target=self._feed, name="nvdec-feed", daemon=True)
@@ -579,7 +584,8 @@ class NvdecStream:
         try:
             for data, pts, flags in self._reader.packets():
                 with self._fed_lock:
-                    self._fed.append(pts)
+                    heapq.heappush(self._waiting, pts)
+                    self._fed_count += 1
                     if flags & _DISCARD:
                         self._discard.add(pts)
                 buffer = (ctypes.c_ubyte * len(data)).from_buffer(data)
@@ -607,12 +613,11 @@ class NvdecStream:
             code = self._lib.nvf_pop(self._handle, timeout_ms, ctypes.byref(slot), ctypes.byref(pts))
             if code != _NVF_FRAME:
                 break
-            if self._shown and pts.value <= self._shown[-1]:
+            try:
+                discarded = self._take(pts.value)
+            except NvdecFailedError:
                 self.release(slot.value)
-                raise NvdecFailedError("the GPU's decoder gave pictures out of order")
-            self._shown.append(pts.value)
-            with self._fed_lock:
-                discarded = pts.value in self._discard
+                raise
             if not discarded:
                 return slot.value, pts.value
             self.release(slot.value)
@@ -628,25 +633,40 @@ class NvdecStream:
             raise NvdecFailedError("decoding was stopped")
         raise NvdecFailedError(self._error() or "the GPU's decoder failed")
 
-    def verify(self) -> None:
-        """NvdecFailedError unless the pictures handed out so far are the
-        packets', one each, in timestamp order -- what FFmpeg's decode of the
-        stream gives. After the end, all of them; before it, every packet
-        stamped before the last picture."""
+    def _take(self, pts: int) -> bool:
+        """Checks the picture stamped `pts`, as it comes out, against the
+        packets fed: in timestamp order, and the next packet's -- every
+        packet stamped earlier has had its picture already. A picture the
+        decoder dropped or made up failed the run only at its end, a whole
+        pass later. Whether the picture is one the demuxer discards."""
+        if self._last_shown is not None and pts <= self._last_shown:
+            raise NvdecFailedError("the GPU's decoder gave pictures out of order")
         with self._fed_lock:
-            fed = list(self._fed)
-        if self._finished:
-            expected = sorted(fed)
-        else:
-            if not self._shown:
-                return
-            last = self._shown[-1]
-            expected = sorted(pts for pts in fed if pts <= last)
-        if expected != self._shown:
-            missing = len(expected) - len(self._shown)
-            raise NvdecFailedError(
-                f"the GPU's decoder gave {len(self._shown)} pictures for {len(expected)} packets"
-                if missing else "the GPU's decoder gave pictures the packets do not have")
+            # A packet stamped earlier is in the heap only if it was fed: its
+            # picture is owed before this one. One fed after this picture
+            # came out would come out of order, which fails above.
+            if self._waiting and self._waiting[0] < pts:
+                raise NvdecFailedError(
+                    f"the GPU's decoder gave {self._shown_count} pictures for {self._shown_count + 1} packets")
+            if not self._waiting or self._waiting[0] != pts:
+                raise NvdecFailedError("the GPU's decoder gave pictures the packets do not have")
+            heapq.heappop(self._waiting)
+            discarded = pts in self._discard
+        self._shown_count += 1
+        self._last_shown = pts
+        return discarded
+
+    def verify(self) -> None:
+        """NvdecFailedError unless the pictures handed out are the packets',
+        one each, in timestamp order -- what FFmpeg's decode of the stream
+        gives. Each picture is checked as it comes out (_take); after the
+        end, no packet may be left without its picture."""
+        if not self._finished:
+            return
+        with self._fed_lock:
+            fed = self._fed_count
+        if self._shown_count != fed:
+            raise NvdecFailedError(f"the GPU's decoder gave {self._shown_count} pictures for {fed} packets")
 
     def release(self, slot: int) -> None:
         self._lib.nvf_release(self._handle, slot)

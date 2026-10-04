@@ -311,3 +311,45 @@ def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path, backend):
         pytest.skip("only NVIDIA's decoder widens (for VMAF on the GPU)")
     ours = _frames(info, plan, backend)
     assert np.array_equal(ours, _ffmpeg_frames(path, "format=yuv420p10le", 10))
+
+
+def _stream_fed(*timestamps):
+    """An NvdecStream's picture bookkeeping alone, with these packets fed."""
+    import heapq
+    import threading
+
+    stream = nv.NvdecStream.__new__(nv.NvdecStream)
+    stream._waiting, stream._fed_count, stream._fed_lock = [], 0, threading.Lock()
+    stream._discard, stream._shown_count, stream._last_shown, stream._finished = set(), 0, None, False
+    for pts in timestamps:
+        heapq.heappush(stream._waiting, pts)
+        stream._fed_count += 1
+    return stream
+
+
+def test_a_picture_the_decoder_drops_fails_at_the_next_one():
+    """A dropped picture failed the run only at its end, a whole pass later."""
+    stream = _stream_fed(0, 3000, 1000, 2000)
+    stream._take(0)
+    with pytest.raises(nv.NvdecFailedError, match="1 pictures for 2 packets"):
+        stream._take(2000)
+
+
+def test_a_picture_the_packets_do_not_have_fails_at_once():
+    stream = _stream_fed(0, 1000)
+    stream._take(0)
+    with pytest.raises(nv.NvdecFailedError, match="packets do not have"):
+        stream._take(1500)
+
+
+def test_pictures_in_order_pass_and_the_end_counts_them():
+    stream = _stream_fed(0, 3000, 1000, 2000)
+    stream._discard.add(0)
+    assert [stream._take(pts) for pts in (0, 1000, 2000)] == [True, False, False]
+    stream._finished = True
+    with pytest.raises(nv.NvdecFailedError, match="3 pictures for 4 packets"):
+        stream.verify()
+    stream._take(3000)
+    stream.verify()
+    with pytest.raises(nv.NvdecFailedError, match="out of order"):
+        stream._take(2500)
