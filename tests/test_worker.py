@@ -10,12 +10,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from tests.factories import decode_plan, status
+from vmaf_app.core import job_runner
+from vmaf_app.core.job_runner import JobRun, JobScheduler, VmafJob
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import ComparisonResult, FrameScore, ResampleTarget, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError
-from vmaf_app.ui import worker as worker_module
-from vmaf_app.ui.worker import VmafJob, VmafWorker
+from vmaf_app.ui.worker import VmafWorker
 
 
 @pytest.fixture(scope="module")
@@ -38,8 +39,8 @@ def _fake_result(name: str) -> ComparisonResult:
 
 def test_worker_dispatches_to_run_vmaf_for_a_normal_job(qapp, monkeypatch):
     calls = []
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda *a, **kw: calls.append("run_vmaf") or _fake_result("d.mp4"))
-    monkeypatch.setattr(worker_module, "run_resample_test", lambda *a, **kw: calls.append("run_resample_test"))
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda *a, **kw: calls.append("run_vmaf") or _fake_result("d.mp4"))
+    monkeypatch.setattr(job_runner, "run_resample_test", lambda *a, **kw: calls.append("run_resample_test"))
 
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d")
     w = VmafWorker([job])
@@ -50,9 +51,9 @@ def test_worker_dispatches_to_run_vmaf_for_a_normal_job(qapp, monkeypatch):
 
 def test_worker_dispatches_to_run_resample_test_when_resample_target_is_set(qapp, monkeypatch):
     calls = []
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda *a, **kw: calls.append("run_vmaf"))
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda *a, **kw: calls.append("run_vmaf"))
     monkeypatch.setattr(
-        worker_module, "run_resample_test",
+        job_runner, "run_resample_test",
         lambda *a, **kw: calls.append("run_resample_test") or _fake_result("s [downscale-1080p-upscale].mp4"),
     )
 
@@ -68,7 +69,7 @@ def test_worker_reports_cancellation_as_a_distinct_terminal_state(qapp, monkeypa
     def cancelled_run(*args, **kwargs):
         raise Cancelled("cancelled")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", cancelled_run)
+    monkeypatch.setattr(job_runner, "run_vmaf", cancelled_run)
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d")
     worker = VmafWorker([job])
     reported = []
@@ -104,8 +105,8 @@ def test_ffmpeg_and_vship_run_at_the_same_time_and_merge(qapp, monkeypatch):
         assert release.wait(5)
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d",
                   metric_keys=("vmaf", "ssimulacra2"))
     worker = VmafWorker([job])
@@ -127,8 +128,8 @@ def test_ffmpeg_and_vship_run_at_the_same_time_and_merge(qapp, monkeypatch):
 
 
 def _run_one(qapp, monkeypatch, ffmpeg, vship, keys=("vmaf", "ssimulacra2")):
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=keys)])
     events = []
     worker.job_finished.connect(lambda _, result: events.append(("finished", result)))
@@ -213,8 +214,8 @@ def test_user_cancel_reaches_both_concurrent_backends(qapp, monkeypatch):
         observed.append(("vship", token.is_set()))
         raise PerceptualCancelled("user cancelled")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d",
                   metric_keys=("vmaf", "ssimulacra2"))
     worker = VmafWorker([job])
@@ -245,7 +246,7 @@ def _threads_asked_for(monkeypatch) -> dict[str, int]:
         seen[distorted.path.name] = options.n_threads
         return _fake_result(distorted.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", record)
+    monkeypatch.setattr(job_runner, "run_vmaf", record)
     return seen
 
 
@@ -302,7 +303,7 @@ def test_a_resample_test_shares_the_cores_like_any_other_job(qapp, monkeypatch):
         seen.append(options.n_threads)
         return _fake_result("s [downscale-1080p-upscale].mp4")
 
-    monkeypatch.setattr(worker_module, "run_resample_test", record)
+    monkeypatch.setattr(job_runner, "run_resample_test", record)
     options = VmafOptions(resample_test=ResampleTarget(width=1920, label="1080p"))
     jobs = [VmafJob(_info("s.mp4"), _info("s.mp4"), options, label=f"t{n}") for n in range(2)]
 
@@ -326,7 +327,7 @@ def test_a_video_started_after_the_count_was_raised_gets_half(qapp, monkeypatch)
         release.wait(10)
         return _fake_result(distorted.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", blocking)
+    monkeypatch.setattr(job_runner, "run_vmaf", blocking)
     worker = VmafWorker(_jobs(4), parallel_jobs=1)
     runner = threading.Thread(target=worker.run)
     runner.start()
@@ -394,7 +395,7 @@ def _concurrency_probe(monkeypatch):
             state["live"] -= 1
         return _fake_result(distorted.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", counted)
+    monkeypatch.setattr(job_runner, "run_vmaf", counted)
     return state
 
 
@@ -445,9 +446,9 @@ def test_more_lanes_than_jobs_does_not_start_empty_lanes(qapp, monkeypatch):
 
 
 def test_the_parallel_count_is_clamped_to_something_sane(qapp):
-    assert VmafWorker(_jobs(1), parallel_jobs=0)._parallel_jobs == 1
-    assert VmafWorker(_jobs(1), parallel_jobs=-3)._parallel_jobs == 1
-    assert VmafWorker(_jobs(1), parallel_jobs=99)._parallel_jobs == worker_module.MAX_PARALLEL_JOBS
+    assert JobScheduler(_jobs(1), parallel_jobs=0)._parallel_jobs == 1
+    assert JobScheduler(_jobs(1), parallel_jobs=-3)._parallel_jobs == 1
+    assert JobScheduler(_jobs(1), parallel_jobs=99)._parallel_jobs == job_runner.MAX_PARALLEL_JOBS
 
 
 def test_pausing_reaches_every_running_job(qapp, monkeypatch):
@@ -465,7 +466,7 @@ def test_pausing_reaches_every_running_job(qapp, monkeypatch):
         release.wait(10)
         return _fake_result(distorted.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", capture)
+    monkeypatch.setattr(job_runner, "run_vmaf", capture)
     worker = VmafWorker(_jobs(2), parallel_jobs=2)
     runner = threading.Thread(target=worker.run)
     runner.start()
@@ -487,7 +488,7 @@ def test_pausing_reaches_every_running_job(qapp, monkeypatch):
 def test_a_job_that_starts_while_paused_comes_up_paused(qapp, monkeypatch):
     # Otherwise pressing Pause and waiting would quietly let the next video
     # start at full speed.
-    worker = VmafWorker(_jobs(1), parallel_jobs=1)
+    worker = JobScheduler(_jobs(1), parallel_jobs=1)
     worker.pause()
 
     handle = worker._claim_handle(0)
@@ -512,7 +513,7 @@ def test_cancelling_terminates_every_running_job(qapp, monkeypatch):
         release.wait(10)
         raise Cancelled("cancelled")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", capture)
+    monkeypatch.setattr(job_runner, "run_vmaf", capture)
     worker = VmafWorker(_jobs(2), parallel_jobs=2)
     reported = []
     worker.cancelled.connect(lambda: reported.append(True))
@@ -537,7 +538,7 @@ def test_a_failing_job_does_not_take_the_other_lane_with_it(qapp, monkeypatch):
             raise VmafRunError("boom", "stderr tail")
         return _fake_result(distorted.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", sometimes_fails)
+    monkeypatch.setattr(job_runner, "run_vmaf", sometimes_fails)
     worker = VmafWorker(_jobs(3), parallel_jobs=2)
     failed, finished = [], []
     worker.job_failed.connect(lambda i, m, t: failed.append(i))
@@ -564,13 +565,13 @@ def test_resume_cannot_be_overtaken_by_a_lane_starting_paused(qapp):
     """
     import threading
 
-    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker = JobScheduler(_jobs(2), parallel_jobs=2)
     worker.pause()
 
     claimed = []
     inside = threading.Event()
     proceed = threading.Event()
-    real_pause = worker_module.ProcessHandle.pause
+    real_pause = job_runner.ProcessHandle.pause
 
     def slow_pause(self):
         inside.set()
@@ -579,7 +580,7 @@ def test_resume_cannot_be_overtaken_by_a_lane_starting_paused(qapp):
 
     # Widen the window the race needs, then try to resume through it.
     monkey = threading.Thread(target=lambda: claimed.append(worker._claim_handle(0)))
-    worker_module.ProcessHandle.pause = slow_pause
+    job_runner.ProcessHandle.pause = slow_pause
     try:
         monkey.start()
         assert inside.wait(5)
@@ -589,7 +590,7 @@ def test_resume_cannot_be_overtaken_by_a_lane_starting_paused(qapp):
         monkey.join(timeout=5)
         resumed.join(timeout=5)
     finally:
-        worker_module.ProcessHandle.pause = real_pause
+        job_runner.ProcessHandle.pause = real_pause
 
     assert not worker.is_paused
     assert claimed and claimed[0] is not None
@@ -601,14 +602,14 @@ def test_a_lane_cannot_start_a_job_after_cancel(qapp):
     ran and found no handle to terminate, then the lane registered one and
     launched ffmpeg anyway. Claiming is now refused once cancel has been
     seen, under the same lock cancel collects handles with."""
-    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker = JobScheduler(_jobs(2), parallel_jobs=2)
     worker.cancel()
 
     assert worker._claim_handle(0) is None
 
 
 def test_cancel_terminates_handles_claimed_before_it(qapp):
-    worker = VmafWorker(_jobs(2), parallel_jobs=2)
+    worker = JobScheduler(_jobs(2), parallel_jobs=2)
     handle = worker._claim_handle(0)
     terminated = []
     handle.terminate = lambda: terminated.append(True)
@@ -623,7 +624,7 @@ def test_a_lane_blocked_on_a_slot_is_released_by_cancel(qapp):
     # thread never joins and the window cannot close.
     import threading
 
-    worker = VmafWorker(_jobs(4), parallel_jobs=1)
+    worker = JobScheduler(_jobs(4), parallel_jobs=1)
     worker._busy["cpu"] = 1  # pretend the single slot is taken
     worker._queues["cpu"].append((SimpleNamespace(started=True, admitted=set()), None))
     outcome = []
@@ -657,8 +658,8 @@ def test_the_lane_count_can_be_raised_while_running(qapp):
             live["count"] -= 1
         return _fake_result(distorted.path.name)
 
-    monkeypatch_target = worker_module.run_vmaf
-    worker_module.run_vmaf = blocking
+    monkeypatch_target = job_runner.run_vmaf
+    job_runner.run_vmaf = blocking
     try:
         worker = VmafWorker(_jobs(4), parallel_jobs=1)
         runner = threading.Thread(target=worker.run)
@@ -674,13 +675,13 @@ def test_the_lane_count_can_be_raised_while_running(qapp):
         assert live["peak"] == 2, "raising the count did not start another video"
     finally:
         release.set()
-        worker_module.run_vmaf = monkeypatch_target
+        job_runner.run_vmaf = monkeypatch_target
         runner.join(timeout=10)
 
 
 def test_lowering_the_lane_count_does_not_interrupt_a_running_job(qapp):
-    worker = VmafWorker(_jobs(4), parallel_jobs=2)
-    worker._active = 2
+    worker = JobScheduler(_jobs(4), parallel_jobs=2)
+    worker._busy["cpu"] = 2  # both lanes running
 
     worker.set_parallel_jobs(1)
 
@@ -699,8 +700,8 @@ def test_a_row_with_saved_vmaf_runs_only_the_new_perceptual_metric(qapp, monkeyp
     """Adding SSIMULACRA2 to a row that already had VMAF recalculated VMAF
     too: the planner was never told what was saved."""
     calls = []
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda *a, **kw: calls.append("ffmpeg") or _fake_result("d.mp4"))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda *a, **kw: calls.append("ffmpeg") or _fake_result("d.mp4"))
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback",
                         lambda *a, **kw: calls.append("perceptual") or _perceptual_output())
     saved = _fake_result("d.mp4")
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=("vmaf", "ssimulacra2"),
@@ -721,8 +722,8 @@ def test_a_row_with_saved_vmaf_runs_only_the_new_perceptual_metric(qapp, monkeyp
 def test_a_row_with_a_saved_perceptual_score_runs_only_ffmpeg(qapp, monkeypatch):
     calls = []
     fresh = _fake_result("d.mp4")
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda *a, **kw: calls.append("ffmpeg") or fresh)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda *a, **kw: calls.append("ffmpeg") or fresh)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback",
                         lambda *a, **kw: calls.append("perceptual") or _perceptual_output())
     butteraugli = FrameMetricResult("butteraugli", [0, 1], [0.0, 0.033], [1.5, 2.5],
                                     MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1"))
@@ -767,7 +768,7 @@ def test_the_jobs_cvvdp_settings_reach_the_request(qapp, monkeypatch):
         seen.append(dict(specs[0].parameters)["display"]["peak_luminance"])
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=("cvvdp",),
                   cvvdp=with_display(DEFAULT_PRESET.settings, peak_luminance=321))
     VmafWorker([job]).run()
@@ -795,8 +796,8 @@ def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, mo
         on_progress(50, 100, 40.0)
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(vmaf_on_gpu=False), "d",
                                  metric_keys=("vmaf", "ssimulacra2"))])
     seen = []
@@ -834,8 +835,8 @@ def test_cpu_lanes_take_the_next_cpu_work_and_the_gpu_goes_in_list_order(qapp, m
             overlap.wait()
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4", ("ssimulacra2",)), _split_job("d2.mp4")],
                         parallel_jobs=2)
     finished = []
@@ -858,8 +859,8 @@ def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
             release.wait(5)
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job(f"d{n}.mp4") for n in range(6)], parallel_jobs=2)
     worker.job_started.connect(lambda index, _label: started.append(index))
     runner = threading.Thread(target=worker.run)
@@ -883,7 +884,7 @@ def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
 
 def _halves(job, together=False):
     """Each half's backend, queue and passes, as the run line is told them."""
-    run = worker_module._JobRun(VmafWorker([job], gpu_metrics_together=together), 0, job)
+    run = JobRun(JobScheduler([job], gpu_metrics_together=together), 0, job)
     with run.lock:
         return [(task["backend"], task["lane"], task["passes"]) for task in run.task_snapshots()]
 
@@ -900,10 +901,10 @@ def test_metrics_chosen_for_the_cpu_are_a_half_of_their_own_in_the_cpus_queue(qa
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d",
                   metric_keys=("ssimulacra2", "butteraugli", "cvvdp"), metric_backends={"ssimulacra2": "cpu"})
     assert _halves(job) == [("perceptual", "gpu", (("butteraugli",), ("cvvdp",))),
-                            (worker_module.PERCEPTUAL_CPU, "cpu", (("ssimulacra2",),))]
+                            (job_runner.PERCEPTUAL_CPU, "cpu", (("ssimulacra2",),))]
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d", metric_keys=("ssimulacra2",),
                   metric_backends={"ssimulacra2": "cpu"})
-    assert _halves(job) == [(worker_module.PERCEPTUAL_CPU, "cpu", (("ssimulacra2",),))]
+    assert _halves(job) == [(job_runner.PERCEPTUAL_CPU, "cpu", (("ssimulacra2",),))]
 
 
 def test_the_cpus_and_the_gpus_perceptual_scores_make_one_result(qapp, monkeypatch):
@@ -918,7 +919,7 @@ def test_the_cpus_and_the_gpus_perceptual_scores_make_one_result(qapp, monkeypat
         calls.append(keys)
         return output(keys[0], "cpu" if keys == ("ssimulacra2",) else "gpu")
 
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", perceptual)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", perceptual)
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d",
                   metric_keys=("ssimulacra2", "butteraugli"), metric_backends={"ssimulacra2": "cpu"})
     worker = VmafWorker([job])
@@ -939,7 +940,7 @@ def test_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
 
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
     assert _halves(_split_job("d.mp4", ("vmaf", "vmaf_neg", "psnr", "ssimulacra2"))) == [
-        ("ffmpeg", "cpu", (("psnr",),)), (worker_module.GPU_VMAF, "gpu", (("vmaf", "vmaf_neg"),)),
+        ("ffmpeg", "cpu", (("psnr",),)), (job_runner.GPU_VMAF, "gpu", (("vmaf", "vmaf_neg"),)),
         ("perceptual", "gpu", (("ssimulacra2",),))]
 
 
@@ -949,8 +950,8 @@ def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypa
         on_progress(10, 100, 5.0)
         return _fake_result(d.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
     worker = VmafWorker([_split_job("d.mp4")])
     steps = []
     worker.task_progress.connect(
@@ -969,8 +970,8 @@ def test_a_failed_half_is_reported_failed_while_the_other_goes_on(qapp, monkeypa
         on_status("Detecting black bars in source...")
         raise VmafRunError("Could not auto-detect black bars")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
     worker = VmafWorker([_split_job("d.mp4")])
     states = []
     worker.task_progress.connect(
@@ -991,8 +992,8 @@ def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp,
         on_progress(10, 100, 2.0)
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", gpu)
     worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))])
     seen = []
     worker.task_progress.connect(lambda _index, snapshot: seen.extend(
@@ -1006,12 +1007,12 @@ def test_a_gpu_metric_retried_on_the_cpu_no_longer_shows_the_last_gpu_pass(qapp,
 @pytest.mark.parametrize("together", [False, True])
 def test_the_gpu_metrics_together_setting_reaches_the_gpu_half_and_its_passes(qapp, monkeypatch, together):
     calls = []
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback",
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback",
                         lambda *a, **k: calls.append(k["together"]) or _perceptual_output())
     worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"))],
                         gpu_metrics_together=together)
-    run = worker_module._JobRun(worker, 0, worker._jobs[0])
+    run = JobRun(worker.scheduler, 0, worker.scheduler.jobs[0])
     with run.lock:
         [vship] = [task for task in run.task_snapshots() if task["backend"] == "perceptual"]
     assert vship["passes"] == ((("ssimulacra2", "butteraugli", "cvvdp"),) if together else
@@ -1040,8 +1041,8 @@ def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
         on_status(status("GPU metric 1/1: SSIMULACRA2"))
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", gpu)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", gpu)
     worker = VmafWorker([_split_job("d.mp4")])
     snapshots = []
     worker.task_progress.connect(lambda _index, snapshot: snapshots.append(snapshot))
@@ -1074,8 +1075,8 @@ def test_cancelling_keeps_a_videos_finished_gpu_metrics(qapp, monkeypatch):
             time.sleep(0.01)
         raise PerceptualCancelled("Cancelled by user")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4")], parallel_jobs=2)
     finished, failed, cancelled = [], [], []
     worker.job_finished.connect(lambda index, result: finished.append((index, result)))
@@ -1112,8 +1113,8 @@ def test_cancelling_keeps_the_gpu_metrics_of_a_video_whose_cpu_half_never_starte
             second_gpu_done.set()
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4")], parallel_jobs=1)
     finished = []
     worker.job_finished.connect(lambda index, result: finished.append((index, result)))
@@ -1139,8 +1140,8 @@ def test_a_new_gpu_pass_does_not_carry_the_last_passs_rate(qapp, monkeypatch):
         on_progress(150, 200, 20.0)
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d.mp4", ("vmaf", "ssimulacra2", "butteraugli"))])
     seen = []
     worker.task_progress.connect(lambda _index, snapshot: seen.extend(
@@ -1167,8 +1168,8 @@ def test_a_runs_plan_steps_and_failures_are_written_to_the_log(qapp, monkeypatch
         return PerceptualTaskOutput(_perceptual_output().metrics, None, None, 10,
                                     {"cvvdp": "CVVDP handler failed: out of memory"})
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d.mp4", keys=("vmaf", "ssimulacra2", "cvvdp"))])
     worker.run()
     _drain(qapp)
@@ -1196,8 +1197,8 @@ def test_each_failed_metric_is_sent_with_its_own_reason(qapp, monkeypatch):
         return PerceptualTaskOutput(_perceptual_output().metrics, None, None, 10,
                                     {"cvvdp": "CVVDP handler failed: out of memory"})
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d.mp4", keys=("vmaf", "psnr", "ssimulacra2", "cvvdp"))])
     sent = []
     worker.job_partially_failed.connect(lambda *args: sent.append(args))
@@ -1217,8 +1218,8 @@ def test_a_videos_finished_half_is_sent_while_its_other_half_runs(qapp, monkeypa
         assert gpu_sent.wait(10), "the GPU half's scores were held back"
         return _fake_result(d.path.name)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", lambda *a, **k: _perceptual_output())
     worker = VmafWorker([_split_job("d.mp4")], parallel_jobs=2)
     updates, finished = [], []
     worker.result_updated.connect(lambda index, result: (updates.append(result), gpu_sent.set()),
@@ -1235,8 +1236,8 @@ def test_each_gpu_metric_is_sent_as_its_pass_finishes(qapp, monkeypatch):
         on_pass_done(_perceptual_output())  # SSIMULACRA2's pass, before the half's next one
         return _perceptual_output()
 
-    monkeypatch.setattr(worker_module, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d.mp4")])
     updates = []
     worker.result_updated.connect(lambda index, result: updates.append(result), Qt.DirectConnection)
@@ -1261,8 +1262,8 @@ def test_cancelling_keeps_the_gpu_metrics_whose_passes_had_finished(qapp, monkey
             time.sleep(0.01)
         raise PerceptualCancelled("Cancelled by user")
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
-    monkeypatch.setattr(worker_module, "apply_vship_cpu_fallback", vship)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job("d.mp4")], parallel_jobs=2)
     finished = []
     worker.job_finished.connect(lambda index, result: finished.append(result))
@@ -1303,7 +1304,7 @@ def test_xpsnr_scored_beside_vmaf_on_the_gpu_covers_the_same_sampled_frames(qapp
         seen.setdefault("keys", []).append(keys)
         return result
 
-    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
     job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(n_subsample=3, compute_xpsnr=True),
                   label="d", metric_keys=("vmaf", "xpsnr"))
     worker = VmafWorker([job])

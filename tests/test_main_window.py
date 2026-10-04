@@ -1287,8 +1287,8 @@ def test_run_clicked_builds_a_job_for_a_resample_row_without_probing(qapp, monke
     win._on_run_clicked()
 
     assert win._worker is not None
-    assert len(win._worker._jobs) == 1
-    assert win._worker._jobs[0].options.resample_test == ResampleTarget(width=854, label="480p")
+    assert len(win._worker.scheduler.jobs) == 1
+    assert win._worker.scheduler.jobs[0].options.resample_test == ResampleTarget(width=854, label="480p")
 
     win._worker.cancel()
     win._worker.wait(5000)
@@ -1435,7 +1435,7 @@ def test_run_clicked_gives_the_opposite_direction_row_a_distinct_result_identity
     win._on_run_clicked()
 
     assert win._worker is not None
-    jobs_by_direction = {j.options.scale_direction: j for j in win._worker._jobs}
+    jobs_by_direction = {j.options.scale_direction: j for j in win._worker.scheduler.jobs}
     assert jobs_by_direction[ScaleDirection.SOURCE_TO_DISTORTED].result_distorted_path == Path("a.mp4")
     assert jobs_by_direction[ScaleDirection.DISTORTED_TO_SOURCE].result_distorted_path == synthetic_scale_direction_variant_path(
         Path("a.mp4"), ScaleDirection.DISTORTED_TO_SOURCE
@@ -4086,7 +4086,7 @@ def test_perceptual_metrics_are_unavailable_on_a_resolution_round_trip_row(qapp,
     monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
     win._on_run_clicked()
     assert win._worker is not None
-    (job,) = win._worker._jobs
+    (job,) = win._worker.scheduler.jobs
     assert "ssimulacra2" not in job.metric_keys and "vmaf" in job.metric_keys
     win._worker = None
     win.close()
@@ -4154,7 +4154,7 @@ def test_a_run_hands_the_worker_what_the_row_already_has(qapp, monkeypatch):
 
     win._on_run_clicked()
 
-    job, = win._worker._jobs
+    job, = win._worker.scheduler.jobs
     assert job.metric_keys == ("vmaf", "ssimulacra2")
     assert job.cached_metrics.keys() == ("vmaf",)
     assert job.cached_result is win._rows[row].completed_run.result
@@ -5293,7 +5293,7 @@ def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkey
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     _long_row(win, "clip.mkv", minutes=1, backend="gpu")
     win._on_run_clicked()
-    assert win._worker is not None and win._worker.gpu_metrics_together
+    assert win._worker is not None and win._worker.scheduler.gpu_metrics_together
     win._worker = None
     win._set_run_ui_active(False)
     win.close()

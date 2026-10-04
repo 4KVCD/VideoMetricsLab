@@ -12,7 +12,7 @@ import pytest
 from PySide6.QtCore import Qt
 
 from tests.factories import status
-from vmaf_app.core import gpu_frames, vmaf_cuda
+from vmaf_app.core import gpu_frames, job_runner, vmaf_cuda
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VideoInfo, VmafOptions
@@ -160,11 +160,11 @@ def test_a_crash_in_libvmaf_ends_its_own_process_and_the_cpu_calculates_vmaf(mon
 
 
 def _halves(keys, options=None, cached=None):
-    job = worker_module.VmafJob(_info("s.mp4"), _info("d.mp4"), options or VmafOptions(), label="d",
+    job = job_runner.VmafJob(_info("s.mp4"), _info("d.mp4"), options or VmafOptions(), label="d",
                                 metric_keys=keys)
     if cached is not None:
         job.cached_result, job.cached_metrics = object(), cached
-    run = worker_module._JobRun(worker_module.VmafWorker([job]), 0, job)
+    run = job_runner.JobRun(job_runner.JobScheduler([job]), 0, job)
     return [(task.backend_id, task.metric_keys, run.pool_of(task)) for task in run.plan.tasks]
 
 
@@ -174,7 +174,7 @@ def test_vmaf_on_the_gpu_is_a_half_of_its_own_in_the_gpus_queue(monkeypatch):
     Now FFmpeg's half keeps the CPU's metrics, in the CPU's queue, and VMAF
     and NEG go ahead of Vship's metrics in the GPU's."""
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    gpu_vmaf = worker_module.GPU_VMAF
+    gpu_vmaf = job_runner.GPU_VMAF
     assert _halves(("vmaf", "vmaf_neg", "psnr", "ssimulacra2")) == [
         ("ffmpeg", ("psnr",), "cpu"), (gpu_vmaf, ("vmaf", "vmaf_neg"), "gpu"), ("perceptual", ("ssimulacra2",), "gpu")]
     assert _halves(("vmaf",)) == [(gpu_vmaf, ("vmaf",), "gpu")]
@@ -202,7 +202,7 @@ def test_a_saved_part_of_ffmpegs_metrics_is_not_calculated_again(monkeypatch):
             return True
 
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    assert _halves(("vmaf", "psnr"), cached=Saved("psnr")) == [(worker_module.GPU_VMAF, ("vmaf",), "gpu")]
+    assert _halves(("vmaf", "psnr"), cached=Saved("psnr")) == [(job_runner.GPU_VMAF, ("vmaf",), "gpu")]
     assert _halves(("vmaf", "psnr"), cached=Saved("vmaf")) == [("ffmpeg", ("psnr",), "cpu")]
 
 
@@ -219,8 +219,8 @@ def test_vmaf_from_its_own_run_joins_ffmpegs_other_metrics(monkeypatch):
             fps=24.0, model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
             source_info=source, distorted_info=distorted)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", run_vmaf)
-    job = worker_module.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(extra_features=["name=psnr"]),
+    monkeypatch.setattr(job_runner, "run_vmaf", run_vmaf)
+    job = job_runner.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(extra_features=["name=psnr"]),
                                 label="d", metric_keys=("vmaf", "psnr"))
     worker = worker_module.VmafWorker([job])
     finished = []
@@ -249,10 +249,10 @@ def test_the_result_keeps_vmafs_model_when_vmaf_had_a_run_of_its_own(monkeypatch
             fps=24.0, model=model if options.compute_vmaf else "", source_crop=None, distorted_crop=None,
             source_info=source, distorted_info=distorted)
 
-    monkeypatch.setattr(worker_module, "run_vmaf", run_vmaf)
+    monkeypatch.setattr(job_runner, "run_vmaf", run_vmaf)
 
     def result_of(keys, saved=None):
-        job = worker_module.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(extra_features=["name=psnr"]),
+        job = job_runner.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(extra_features=["name=psnr"]),
                                     label="d", metric_keys=keys)
         if saved is not None:
             job.cached_result, job.cached_metrics = saved, saved.metric_results
@@ -275,16 +275,16 @@ def test_the_run_line_is_told_when_vmaf_is_on_the_gpu(monkeypatch):
     """VMAF and NEG in the GPU's queue, on the GPU; once a failure hands them
     to FFmpeg's libvmaf, the CPU's (cpu_keys), with its figures from 0."""
     monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    job = worker_module.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d",
+    job = job_runner.VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d",
                                 metric_keys=("vmaf", "vmaf_neg", "psnr"))
-    run = worker_module._JobRun(worker_module.VmafWorker([job]), 0, job)
+    run = job_runner.JobRun(job_runner.JobScheduler([job]), 0, job)
 
     def halves():
         with run.lock:
             return {task["backend"]: (task["lane"], task["cpu_keys"], task["current"])
                     for task in run.task_snapshots()}
 
-    gpu_vmaf = worker_module.GPU_VMAF
+    gpu_vmaf = job_runner.GPU_VMAF
     run.report_progress(gpu_vmaf, 40, 100, 50.0)
     assert halves() == {"ffmpeg": ("cpu", (), 0), gpu_vmaf: ("gpu", (), 40)}
     run.report_status(gpu_vmaf, status("VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…"))

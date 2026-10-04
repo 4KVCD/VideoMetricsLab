@@ -81,6 +81,7 @@ from vmaf_app.core.ffmpeg_request import (
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.geometry import analysis_dimensions, content_size, resample_analysis_dimensions
 from vmaf_app.core.gpu import HwAccelPlan, detected_gpu_vendors
+from vmaf_app.core.job_runner import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob
 from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, is_v1_choice, resolve_model
@@ -119,7 +120,7 @@ from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
-from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
+from vmaf_app.ui.worker import VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
 # own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
