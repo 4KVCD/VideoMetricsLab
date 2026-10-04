@@ -215,8 +215,32 @@ exe = EXE(
     entitlements_file=None,
 )
 
+# The command line (vmaf_app/cli.py): the same program with a console, beside
+# the app in the same folder and sharing all of it. A windowed program cannot
+# print to the terminal that started it -- the prompt returns before its
+# output -- so the command line is a program of its own; main.py runs the CLI
+# when started under this name.
+cli = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="VideoMetricsLab-cli",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
     exe,
+    cli,
     a.binaries,
     a.datas,
     strip=False,

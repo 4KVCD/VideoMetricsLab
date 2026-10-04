@@ -152,6 +152,13 @@ It reports FFmpeg, GStreamer and its plugins, and the GPU shader, in a dialog
 and at `~\.videometricslab\self-test.txt`. `--quiet` skips the dialog and
 sets the exit code instead, which is how `build_release.ps1` uses it.
 
+The build has a second program, `VideoMetricsLab-cli.exe`: the same code with
+a console, for the command line (`vmaf_app/cli.py`; see the user guide). A
+windowed program cannot print to the terminal that started it, so it is a
+program of its own; it shares everything else in the folder.
+`build_release.ps1` runs its `devices` command, which must find FFmpeg and
+load the GPU libraries.
+
 This exists because a broken bundle is not obvious from the outside. GStreamer
 failing to load makes playback fall back to FFmpeg silently — the app opens,
 the tabs work, and nothing looks wrong until someone plays a video and
