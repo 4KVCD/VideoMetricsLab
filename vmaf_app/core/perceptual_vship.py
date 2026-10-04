@@ -1928,10 +1928,17 @@ def _score_vship_pass_with(
 
     # Decode follows the row's GPU-decode setting, per input and per codec:
     # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
-    # decoder (VVC). Hardware decode is bit-exact, so it changes speed only.
+    # decoder (VVC) or where FFmpeg's hardware decode does not give the
+    # video's own pictures (gpu.downloads_from_gpu: 4:2:2, 4:4:4, 12-bit, an
+    # odd size). Hardware decode is otherwise bit-exact: it changes speed only.
     vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
-    src_hwaccel = pick_hwaccel(vendor, source.codec_name)
-    dist_hwaccel = pick_hwaccel(vendor, distorted.codec_name)
+
+    def decoder_of(info: VideoInfo) -> str | None:
+        if not downloads_from_gpu(info.pix_fmt, info.width, info.height):
+            return None
+        return pick_hwaccel(vendor, info.codec_name)
+
+    src_hwaccel, dist_hwaccel = decoder_of(source), decoder_of(distorted)
     src_passthrough = _passthrough_format(source, src_hwaccel)
     dist_passthrough = _passthrough_format(distorted, dist_hwaccel)
     src_format = src_passthrough[0] if src_passthrough else _image_format(source, device.version)
@@ -2033,13 +2040,6 @@ def _score_vship_pass_with(
                     except BaseException:
                         decoder.close()
                         raise
-            if hwaccel and not downloads_from_gpu(info.pix_fmt):
-                # Through FFmpeg, its hardware decode cannot give this
-                # format (gpu.downloads_from_gpu): decoded in software from
-                # the start, rather than after a failed start every pass.
-                hwaccel = None
-                with decode_lock:
-                    decode[side] = None
             split = None
             if passthrough is not None:
                 dtype = np.uint16 if image_format.sample != _VSHIP_ENUMS[8] else np.uint8
@@ -2055,9 +2055,6 @@ def _score_vship_pass_with(
                               src_frame_bytes, src_plane_sizes, "reference", "source"))
         streams.append(stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format,
                               dist_passthrough, dist_frame_bytes, dist_plane_sizes, "test video", "distorted"))
-        # Once the streams are made: until then, where each video is decoded
-        # is not known (a format FFmpeg's hardware decode cannot give is
-        # decoded in software; see stream()).
         if on_status:
             labels = ", ".join(metric_definition(spec.key).label for spec in specs)
             on_status(Status.decoding(f"Vship GPU ({device.name}): calculating {labels}", HwAccelPlan(**decode)))

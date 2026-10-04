@@ -198,14 +198,28 @@ class HwAccelPlan:
         return f"source {self.source or 'cpu'}, distorted {self.distorted or 'cpu'}"
 
 
-def downloads_from_gpu(pix_fmt: str) -> bool:
+def downloads_from_gpu(pix_fmt: str, width: int = 0, height: int = 0) -> bool:
     """Whether FFmpeg's hardware decode as the app runs it (-hwaccel X
-    -hwaccel_output_format X, then hwdownload,format=hw_native_format) can
-    give a video of this pixel format: 4:2:0 at 8 or 10 bits, the NV12 and
-    P010 surfaces. A 4:2:2, 4:4:4 or 12-bit video decodes to another surface,
-    the download fails, and the run started again in software -- every run
-    (checked on an RTX 5090 with HEVC, H.264 and AV1). An unknown format is
-    left to try."""
+    -hwaccel_output_format X, then hwdownload,format=hw_native_format) gives
+    a video of this pixel format and size as its software decode does.
+
+    The format: 4:2:0 at 8 or 10 bits, the NV12 and P010 surfaces. A 4:2:2,
+    4:4:4 or 12-bit video decodes to another surface, the download fails,
+    and the run started again in software -- every run (checked on an RTX
+    5090 with HEVC, H.264 and AV1). An unknown format is left to try.
+
+    The size: an even width and height. Of an odd-sized video (AV1 and VP9
+    can be) FFmpeg's NVIDIA decode gives the decoder's own picture, a sample
+    wider or a row taller -- 854x480 for 853x479 -- with whatever the decoder
+    left in the added column and row, and for an odd height its chroma a row
+    out (FFmpeg 9.0.1, RTX 5090: luma identical to the software decode,
+    chroma 26 dB PSNR from it). With default settings an 854x479 AV1 pair
+    scored SSIMULACRA2 20.4 where its pictures score 45.1, and 853x480, its
+    black bars measured on the padded picture, 16.1 for 44.0. Intel's decode
+    gave the video's own picture; AMD's is unchecked, and a size this rare
+    is not worth a rule per maker. An unknown size (0) is left to try."""
+    if width & 1 or height & 1:
+        return False
     name = (pix_fmt or "").casefold()
     if not name:
         return True
@@ -216,19 +230,22 @@ def downloads_from_gpu(pix_fmt: str) -> bool:
 def plan_hwaccel(
     vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None, *,
     source_pix_fmt: str = "", distorted_pix_fmt: str = "",
+    source_size: tuple[int, int] = (0, 0), distorted_size: tuple[int, int] = (0, 0),
 ) -> HwAccelPlan:
     """Chooses FFmpeg's hardware decode for each input separately: by codec,
-    and only for a pixel format it can give (downloads_from_gpu).
+    and only for a pixel format and a size (width, height) it gives as the
+    software decode does (downloads_from_gpu).
 
     `distorted_codec` of None is the round-trip-test case: there is only one
     input file, so there is nothing to decide for the distorted side.
     """
-    def pick(codec: str, pix_fmt: str) -> str | None:
-        return pick_hwaccel(vendor, codec) if downloads_from_gpu(pix_fmt) else None
+    def pick(codec: str, pix_fmt: str, size: tuple[int, int]) -> str | None:
+        return pick_hwaccel(vendor, codec) if downloads_from_gpu(pix_fmt, *size) else None
 
     return HwAccelPlan(
-        source=pick(source_codec, source_pix_fmt),
-        distorted=pick(distorted_codec, distorted_pix_fmt) if distorted_codec is not None else None,
+        source=pick(source_codec, source_pix_fmt, source_size),
+        distorted=(pick(distorted_codec, distorted_pix_fmt, distorted_size)
+                   if distorted_codec is not None else None),
     )
 
 

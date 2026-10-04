@@ -50,7 +50,9 @@ def test_eight_bit_has_no_shift_and_packs_three_planes():
 
 @pytest.mark.parametrize(("field", "value"), [("codec_name", "vvc"), ("codec_name", "vp9"),
                                               ("pix_fmt", "yuv422p10le"), ("pix_fmt", "yuv420p12le"),
-                                              ("pix_fmt", "yuv444p"), ("width", 0)])
+                                              ("pix_fmt", "yuv444p"), ("width", 0),
+                                              # An odd size: refused here, not once the pass has started.
+                                              ("width", 1919), ("height", 1079)])
 def test_what_the_gpu_decoders_do_not_decode_is_left_to_ffmpeg(field, value):
     with pytest.raises(nv.GpuDecodeUnavailableError):
         nv.plan_decode(_info(**{field: value}), None)

@@ -140,6 +140,27 @@ def test_only_4_2_0_at_8_or_10_bits_comes_back_from_ffmpegs_hardware_decode(pix_
     assert gpu.downloads_from_gpu(pix_fmt) is downloads
 
 
+@pytest.mark.parametrize(("size", "downloads"), [
+    ((854, 480), True), ((0, 0), True), ((853, 480), False), ((854, 479), False), ((853, 479), False),
+])
+def test_only_an_even_sized_video_comes_back_from_ffmpegs_hardware_decode_as_it_is(size, downloads):
+    """Checked with real FFmpeg 9.0.1 on an RTX 5090, AV1 and VP9: an odd
+    width or height came back padded to even (854x480 for 853x479), and
+    with an odd height the chroma a row out -- 26 dB PSNR from the software
+    decode, where the luma was identical."""
+    assert gpu.downloads_from_gpu("yuv420p", *size) is downloads
+
+
+def test_an_odd_sized_video_is_planned_in_software(monkeypatch):
+    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
+    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
+
+    plan = plan_hwaccel(GpuVendor.AUTO, "av1", "av1", source_pix_fmt="yuv420p", distorted_pix_fmt="yuv420p",
+                        source_size=(1920, 1080), distorted_size=(1920, 803))
+
+    assert plan == HwAccelPlan(source="cuda", distorted=None)
+
+
 def test_a_format_ffmpegs_hardware_decode_cannot_give_is_planned_in_software(monkeypatch):
     monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
     monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])

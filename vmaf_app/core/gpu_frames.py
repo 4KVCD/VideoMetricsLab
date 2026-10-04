@@ -235,6 +235,10 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
         raise GpuDecodeUnavailableError(f"{info.pix_fmt or 'this pixel format'} is decoded by FFmpeg")
     if info.width <= 0 or info.height <= 0:
         raise GpuDecodeUnavailableError("the video's size is unknown")
+    if info.width & 1 or info.height & 1:
+        # The decoders refuse it once started (NVIDIA's decodes to an even
+        # size); asked there, the pass was started, failed and made again.
+        raise GpuDecodeUnavailableError("an odd-sized video is decoded by FFmpeg")
     if crop is None or crop.is_noop(info.width, info.height):
         x, y, w, h = 0, 0, info.width, info.height
     else:
