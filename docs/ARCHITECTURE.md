@@ -15,7 +15,7 @@ Qt at all. Native playback in core does load GI bindings.
 | Results and persistence | `core/run_io.py`, `core/result_cache.py` |
 | Statistics and plotting | `core/stats.py`, `ui/graph_panel.py`, `chart.py` |
 | Still comparison | `core/frame_extract.py`, `ui/frame_extract_worker.py` |
-| Playback orchestration | `ui/rolling_video_view.py`, `video_compare_view.py` |
+| Playback orchestration | `ui/video_compare_view.py`, `playback_worker.py` |
 | Native playback and synchronization | `core/gstreamer_playback.py`, `locked_presentation.py`, `ui/locked_native_pool.py` |
 | FFmpeg playback fallback | `core/video_playback.py`, `ui/playback_worker.py` |
 | Bitrate analysis | `core/bitrate.py`, `ui/bitrate_worker.py`, `bitrate_panel.py` |

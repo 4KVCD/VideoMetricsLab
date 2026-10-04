@@ -404,13 +404,13 @@ def test_video_mode_keeps_two_surfaces_ready_for_instant_s_switch(qapp, tmp_path
     panel.show()
     panel.show()
     assert panel.video_view is not None
-    QTest.keyPress(panel.video_view.distorted_video, Qt.Key_S)
+    QTest.keyPress(panel.video_view, Qt.Key_S)
     assert panel._showing_source is True
-    assert panel.video_view.video._show_source is True
+    assert panel.video_view._showing_source is True
 
-    QTest.keyRelease(panel.video_view.source_video, Qt.Key_S)
+    QTest.keyRelease(panel.video_view, Qt.Key_S)
     assert panel._showing_source is False
-    assert panel.video_view.video._show_source is False
+    assert panel.video_view._showing_source is False
     panel.close()
 
 
@@ -518,22 +518,23 @@ def test_frame_controls_seek_both_video_players(qapp, tmp_path, monkeypatch):
     panel.close()
 
 
-def test_s_switches_halves_of_the_same_decoded_frame_pair(qapp, tmp_path):
+def test_s_switches_between_the_same_frames_of_the_two_videos(qapp, tmp_path):
     panel = FrameComparePanel()
     panel.set_runs([_physical_entry(tmp_path)])
     panel.show()
     assert panel.video_view is not None
     view = panel.video_view
-    payload = bytes(range(12))
-    view.video.set_pair(payload, 2, 1)
+    source, test = bytes(16), bytes(range(16))
+    view._source_surface.set_frame(source, (2, 2))
+    view._distorted_surface.set_frame(test, (2, 2))
 
     view.show_source(True)
 
-    assert view.video._show_source is True
-    assert view.video._payload is payload
+    assert view._showing_source is True
+    assert view._source_surface._payload is source and view._distorted_surface._payload is test
     view.show_source(False)
-    assert view.video._show_source is False
-    assert view.video._payload is payload
+    assert view._showing_source is False
+    assert view._source_surface._payload is source and view._distorted_surface._payload is test
     panel.close()
 
 

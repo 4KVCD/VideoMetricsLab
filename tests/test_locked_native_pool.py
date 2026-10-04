@@ -55,10 +55,10 @@ def test_seek_reuses_cached_pairs_and_existing_decoders():
 def test_native_frame_step_does_not_restart_playback():
     from unittest.mock import Mock
 
-    from vmaf_app.ui.rolling_video_view import RollingVideoCompareView
+    from vmaf_app.ui.video_compare_view import VideoCompareView
     native = Mock(frame=42)
     view = SimpleNamespace(_native_pool=native, _restart_decoder=Mock())
-    RollingVideoCompareView.set_position(view, 1750)
+    VideoCompareView.set_position(view, 1750)
     native.seek.assert_called_once_with(1750)
     view._restart_decoder.assert_not_called()
     assert view._frame == 42

@@ -1,9 +1,21 @@
-"""Frame-locked source/distorted playback with native GPU presentation."""
+"""Frame-locked playback of the source against the test videos.
+
+A shared source and the selected encode, with the encodes beside it decoding
+ahead so that switching between test videos is instant. Where GStreamer can
+play them on the GPU, they play natively (LockedNativePool: D3D11, frame
+locked, one soundtrack); otherwise FFmpeg workers decode them
+(StreamDecodeWorker) and their frames are presented here, on one clock.
+
+This is the one playback view. It used to be two stacked by inheritance: a
+base that played one pair through a single GStreamer pipeline or one FFmpeg
+process, and a rolling view built on it that replaced how it decoded -- so
+the base's own decoding could no longer be reached.
+"""
 from __future__ import annotations
 
 import subprocess
-import threading
-from collections import deque
+import time
+from dataclasses import replace
 
 from PySide6.QtCore import QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
@@ -11,238 +23,82 @@ from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings, frame_input_path
-from vmaf_app.core.gpu import GpuVendor, HwAccelPlan, plan_hwaccel
-from vmaf_app.core.gstreamer_playback import (
-    GstComparePipeline,
-    GStreamerPlaybackError,
-    uses_native_gstreamer,
-)
+from vmaf_app.core.gpu import GpuVendor, plan_hwaccel
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.video_playback import (
+    DEFAULT_COMPARE_DECODED_VIDEOS,
     build_audio_command,
-    build_video_pair_command,
+    neighbour_indices,
     playback_dimensions,
+    source_playback_comparison,
 )
-
-
-def _read_exact(stream, size: int) -> bytes:
-    chunks: list[bytes] = []
-    remaining = size
-    while remaining:
-        chunk = stream.read(remaining)
-        if not chunk:
-            break
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
-
-
-class _PairDecodeWorker(QThread):
-    frame_available = Signal(int)
-    decode_started = Signal(int, str)
-    decode_failed = Signal(int, str)
-    playback_ended = Signal(int)
-
-    def __init__(
-        self,
-        generation: int,
-        comparison: FrameComparison,
-        start_frame: int,
-        color_settings: PreviewColorSettings,
-        output_size: tuple[int, int],
-        hwaccel: HwAccelPlan,
-        *,
-        realtime: bool,
-        parent=None,
-    ) -> None:
-        super().__init__(parent)
-        self.generation = generation
-        self._comparison = comparison
-        self._start_frame = start_frame
-        self._color_settings = color_settings
-        self._output_size = output_size
-        self._preferred_hwaccel = hwaccel
-        self._realtime = realtime
-        self._cancelled = threading.Event()
-        self._process = ProcessHandle()
-        self._frame_lock = threading.Lock()
-        self._latest_frame: tuple[int, bytes, int, int] | None = None
-        self._notification_pending = False
-
-    def take_latest_frame(self) -> tuple[int, bytes, int, int] | None:
-        """Return the newest decoded frame without copying it through a Qt signal.
-
-        PySide converts a ``bytes`` signal argument to and from ``QByteArray``.
-        For a UHD comparison preview that made the GUI thread copy roughly 9 MB
-        per frame, while also allowing an unbounded queue of stale frames.  The
-        worker now owns one replaceable slot and signals only that data is ready.
-        """
-        with self._frame_lock:
-            frame = self._latest_frame
-            self._latest_frame = None
-            self._notification_pending = False
-            return frame
-
-    def _publish_frame(
-        self, frame_number: int, payload: bytes, width: int, height: int
-    ) -> None:
-        notify = False
-        with self._frame_lock:
-            self._latest_frame = (frame_number, payload, width, height)
-            if not self._notification_pending:
-                self._notification_pending = True
-                notify = True
-        if notify:
-            self.frame_available.emit(self.generation)
-
-    def cancel(self) -> None:
-        self._cancelled.set()
-        self._process.terminate()
-
-    def pause(self) -> None:
-        self._process.pause()
-
-    def resume(self) -> None:
-        self._process.resume()
-
-    @staticmethod
-    def _plans(preferred: HwAccelPlan) -> list[HwAccelPlan]:
-        return [preferred, HwAccelPlan()] if preferred.uses_gpu else [preferred]
-
-    def run(self) -> None:
-        width, height = self._output_size
-        frame_bytes = width * 2 * height * 3
-        last_error = "ffmpeg returned no video frame."
-        for plan in self._plans(self._preferred_hwaccel):
-            if self._cancelled.is_set():
-                return
-            command = build_video_pair_command(
-                self._comparison,
-                self._start_frame,
-                self._color_settings,
-                plan,
-                self._output_size,
-                realtime=self._realtime,
-            )
-            process = proc_util.popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                # Let BufferedReader assemble each raw frame in C.  An
-                # unbuffered Windows pipe often returns only a few KiB per
-                # read, which made Python loop thousands of times per UHD
-                # preview frame and starved the GUI thread of the GIL.
-                bufsize=frame_bytes,
-            )
-            assert process.stdout is not None
-            assert process.stderr is not None
-            self._process.attach(process.pid)
-            stderr_tail: deque[bytes] = deque(maxlen=80)
-
-            def drain_stderr(pipe=process.stderr, tail=stderr_tail) -> None:
-                for line in iter(pipe.readline, b""):
-                    tail.append(line)
-
-            stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
-            stderr_reader.start()
-            frame_number = self._start_frame
-            first = True
-            try:
-                while not self._cancelled.is_set():
-                    payload = _read_exact(process.stdout, frame_bytes)
-                    if len(payload) != frame_bytes:
-                        break
-                    if first:
-                        first = False
-                        self.decode_started.emit(
-                            self.generation, f"GPU decode: {plan.describe()}"
-                        )
-                    self._publish_frame(frame_number, payload, width, height)
-                    frame_number += 1
-                    if not self._realtime:
-                        break
-            finally:
-                if process.poll() is None:
-                    proc_util.terminate(process)
-                process.wait()
-                self._process.detach()
-                process.stdout.close()
-                stderr_reader.join(timeout=2)
-                process.stderr.close()
-
-            if self._cancelled.is_set():
-                return
-            if not first:
-                if self._realtime:
-                    self.playback_ended.emit(self.generation)
-                return
-            detail = b"".join(stderr_tail).decode("utf-8", errors="replace").strip()
-            if detail:
-                last_error = detail[-2000:]
-        self.decode_failed.emit(self.generation, last_error)
+from vmaf_app.ui.playback_worker import StreamDecodeWorker
 
 
 class _PairedFrameWidget(QWidget):
-    """Native D3D11 target, with a QImage surface for FFmpeg fallback."""
+    """A native window a GPU swapchain presents into (LockedNativePool),
+    painted dark by Qt while no native playback owns it."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_NativeWindow)
         self.setAttribute(Qt.WA_DontCreateNativeAncestors)
-        self._payload: bytes | None = None
-        self._image = QImage()
-        self._side_width = 0
-        self._height = 0
-        self._show_source = False
         self._native_playback = False
 
     def set_native_playback(self, enabled: bool) -> None:
         self._native_playback = bool(enabled)
-        if enabled:
-            self._payload = None
-            self._image = QImage()
-        self.update()
-
-    def set_pair(self, payload: bytes, side_width: int, height: int) -> None:
-        self._payload = payload
-        self._side_width = side_width
-        self._height = height
-        self._image = QImage(
-            payload, side_width * 2, height, side_width * 2 * 3,
-            QImage.Format_RGB888,
-        )
-        self.update()
-
-    def show_source(self, showing: bool) -> None:
-        self._show_source = bool(showing)
         self.update()
 
     def paintEvent(self, _event) -> None:
-        # d3d11videosink owns this child HWND while native playback is active.
-        # Painting it from Qt would erase or flash over the swapchain.
+        # The swapchain owns this child HWND while native playback is active.
+        # Painting it from Qt would erase or flash over it.
+        if self._native_playback:
+            return
+        QPainter(self).fillRect(self.rect(), QColor("#171717"))
+
+
+class _StreamSurface(_PairedFrameWidget):
+    """Where FFmpeg's decoded frames are drawn, fitted to the view."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._payload: bytes | None = None
+        self._image = QImage()
+        self._side_width = 0
+        self._height = 0
+
+    def set_frame(self, payload, size):
+        self._payload = payload
+        self._side_width, self._height = size
+        self._image = QImage(payload, *size, size[0] * 4, QImage.Format_RGBA8888)
+        self.update()
+
+    def clear_frame(self):
+        self._payload = None
+        self._image = QImage()
+        self.update()
+
+    def paintEvent(self, event):
         if self._native_playback:
             return
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#171717"))
-        if self._image.isNull() or self._side_width <= 0 or self._height <= 0:
+        if self._image.isNull():
             return
         scale = min(self.width() / self._side_width, self.height() / self._height)
-        target_w = self._side_width * scale
-        target_h = self._height * scale
-        target = QRectF(
-            (self.width() - target_w) / 2,
-            (self.height() - target_h) / 2,
-            target_w,
-            target_h,
-        )
-        source_x = 0 if self._show_source else self._side_width
-        source = QRectF(source_x, 0, self._side_width, self._height)
-        painter.drawImage(target, self._image, source)
+        w, h = self._side_width * scale, self._height * scale
+        painter.drawImage(QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h), self._image)
 
 
 class VideoCompareView(QWidget):
-    """Play one synchronized source/distorted stream with instant A/B switching."""
+    """The source and the test videos, with bounded decode-ahead and instant
+    selection.
+
+    FFmpeg workers are producers, not clocks. A frame is presented only when
+    both source and selected encode have that exact comparison frame number.
+    Neighbours advance on that same clock but never hold up the selected pair.
+    """
 
     position_changed = Signal(int)
     playing_changed = Signal(bool)
@@ -252,18 +108,13 @@ class VideoCompareView(QWidget):
         super().__init__(parent)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("background: #171717;")
-        self.source_video = _PairedFrameWidget(self)
-        self.source_video.show_source(True)
-        self.distorted_video = _PairedFrameWidget(self)
-        self.distorted_video.show_source(False)
-        # FFmpeg fallback still paints its packed pair on this surface.  Keep
-        # the public alias used by the panel and older tests.
-        self.video = self.distorted_video
-        self.source_video.hide()
         self._comparison: FrameComparison | None = None
         self._color_settings = PreviewColorSettings()
-        self._worker: _PairDecodeWorker | None = None
-        self._retired_workers: set[_PairDecodeWorker] = set()
+        #: Decoders being stopped, which still count against the limit
+        #: while they exit (LockedNativePool's too).
+        self._retired_workers: set[QThread] = set()
+        #: How many times the decoders have been started: a change that
+        #: should keep them running (another test video) leaves it as it is.
         self._generation = 0
         self._frame = 0
         self._wanted_playing = False
@@ -272,15 +123,46 @@ class VideoCompareView(QWidget):
         self._audio_enabled = True
         self._audio_process: subprocess.Popen | None = None
         self._audio_handle: ProcessHandle | None = None
-        self._gst: GstComparePipeline | None = None
-        self._gst_timer = QTimer(self)
-        self._gst_timer.setInterval(40)
-        self._gst_timer.timeout.connect(self._poll_gstreamer)
+        self._series: list[FrameComparison] = []
+        self._selected = 0
+        self._source_native = True
+        self._pool = {}
+        self._history = {}
+        self._details = {}
+        self._failures = {}
+        self._desired = {}
+        self._clock_frame = 0
+        self._clock_started = None
+        self._presented = -1
+        self._buffering = True
+        self._pool_active = False
+        self._pool_reason = ""
+        self._pool_maximum = None
+        self._native_pool = None
+        self._last_status = ""
+        self._decoded_videos = DEFAULT_COMPARE_DECODED_VIDEOS
+        self._pool_timer = QTimer(self)
+        self._pool_timer.setInterval(10)
+        self._pool_timer.timeout.connect(self._tick)
+        self._source_surface = _StreamSurface(self)
+        self._distorted_surface = _StreamSurface(self)
+        self._source_surface.hide()
+        self._distorted_surface.hide()
 
-    def resizeEvent(self, event) -> None:
-        self.source_video.setGeometry(self.rect())
-        self.distorted_video.setGeometry(self.rect())
+    def resizeEvent(self, event):
+        for surface in (self._source_surface, self._distorted_surface):
+            surface.setGeometry(self.rect())
+        if self._native_pool is not None:
+            self._native_pool.resize()
         super().resizeEvent(event)
+
+    def closeEvent(self, event):
+        self.clear()
+        if self.live_workers():
+            event.ignore()
+            QTimer.singleShot(20, self.close)
+            return
+        super().closeEvent(event)
 
     @staticmethod
     def can_play(comparison: FrameComparison) -> tuple[bool, str]:
@@ -312,29 +194,54 @@ class VideoCompareView(QWidget):
         return round(self._frame / self._comparison.fps * 1000)
 
     def live_workers(self) -> list[QThread]:
-        workers = list(self._retired_workers)
-        if self._worker is not None:
-            workers.append(self._worker)
-        return [worker for worker in workers if worker.isRunning()]
+        running = [worker for worker in self._retired_workers if worker.isRunning()]
+        return list(dict.fromkeys([*running, *self._pool.values()]))
 
-    def load(
-        self,
-        comparison: FrameComparison,
-        position_ms: int,
-        *,
-        playing: bool = False,
-        color_settings: PreviewColorSettings | None = None,
-    ) -> bool:
+    def load(self, comparison, position_ms, *, playing=False, color_settings=None, series=None, source_native=True):
         available, reason = self.can_play(comparison)
         if not available:
-            self.set_playing(False)
+            self.clear()
             self.status_changed.emit(reason)
             return False
+        series = list(series or [comparison])
+        settings = color_settings or PreviewColorSettings()
+        selected = series.index(comparison)
+        if self._series == series and self._color_settings == settings and self._comparison is not None and self._source_native == source_native:
+            timestamp = self.position
+            changed = self._selected != selected
+            self._selected = selected
+            self._comparison = comparison
+            self._frame = round(timestamp / 1000 * comparison.fps)
+            if self._native_pool is not None:
+                if changed:
+                    try:
+                        self._native_pool.sync(selected)
+                    except Exception as exc:
+                        self._native_pool.stop()
+                        self._native_pool = None
+                        self._start_ffmpeg(playing, str(exc))
+                self.set_playing(playing)
+                return True
+            if self._pool_active:
+                if changed:
+                    self._distorted_surface.clear_frame()
+                    self._sync_pool()
+                    self._presented = -1
+                    self._tick()
+                if bool(playing) != self._wanted_playing:
+                    self.set_playing(playing)
+                return True
+            if changed:
+                self._restart_decoder(realtime=playing)
+            return True
+        self._series = series
+        self._source_native = source_native
+        self._selected = selected
         self._comparison = comparison
-        self._color_settings = color_settings or PreviewColorSettings()
-        self._frame = max(0, round(position_ms / 1000 * comparison.fps))
+        self._color_settings = settings
+        self._frame = round(position_ms / 1000 * comparison.fps)
         self._wanted_playing = bool(playing)
-        self._restart_decoder(realtime=bool(playing))
+        self._restart_decoder(realtime=playing)
         return True
 
     def clear(self) -> None:
@@ -344,62 +251,58 @@ class VideoCompareView(QWidget):
         self._stop_decoder()
         self._stop_audio()
         self.playing_changed.emit(False)
+        self._series = []
 
     def set_position(self, position_ms: int) -> None:
+        if self._native_pool is not None:
+            self._native_pool.seek(position_ms)
+            self._frame = self._native_pool.frame
+            return
         comparison = self._comparison
         if comparison is None or comparison.fps <= 0:
             return
         self._frame = max(0, round(position_ms / 1000 * comparison.fps))
-        if self._gst is not None:
-            try:
-                self._gst.seek(position_ms)
-            except Exception as exc:
-                self._fall_back_from_gstreamer(str(exc))
-            return
         self._restart_decoder(realtime=self._wanted_playing)
 
     def set_playing(self, playing: bool) -> None:
         playing = bool(playing)
-        self._wanted_playing = playing
-        if self._gst is not None:
-            self._gst.set_playing(playing)
-            self._is_playing = playing
+        if self._native_pool is not None:
+            self._native_pool.set_playing(playing)
+            self._wanted_playing = self._is_playing = playing
             self.playing_changed.emit(playing)
-            self.status_changed.emit(
-                ("Playing" if playing else "Paused") + " · GStreamer · D3D11"
-            )
             return
-        worker = self._worker
-        if playing:
-            if worker is not None and worker.isRunning() and not self._is_playing:
-                worker.resume()
+        if not self._pool_active:
+            # Nothing decoding: playing starts the decoders.
+            self._wanted_playing = playing
+            if playing:
+                if not self._is_playing and self._comparison is not None:
+                    self._restart_decoder(realtime=True)
+            else:
                 if self._audio_handle is not None:
-                    self._audio_handle.resume()
-                self._is_playing = True
-                self.playing_changed.emit(True)
-            elif not self._is_playing and self._comparison is not None:
-                self._restart_decoder(realtime=True)
-        else:
-            if worker is not None and worker.isRunning():
-                worker.pause()
-            if self._audio_handle is not None:
-                self._audio_handle.pause()
-            self._is_playing = False
-            self.playing_changed.emit(False)
+                    self._audio_handle.pause()
+                self._is_playing = False
+                self.playing_changed.emit(False)
+            return
+        self._clock_frame = self._presented if not playing and self._presented >= 0 else self._target_frame()
+        self._wanted_playing = self._is_playing = playing
+        self._clock_started = time.monotonic() if playing and not self._buffering else None
+        if not playing:
+            self._stop_audio()
+        elif not self._buffering:
+            self._start_audio(self._frame)
+        self.playing_changed.emit(playing)
 
     def show_source(self, showing: bool) -> None:
         self._showing_source = bool(showing)
-        self.video.show_source(showing)
-        if self._gst is not None:
-            if showing:
-                self.source_video.raise_()
-            else:
-                self.distorted_video.raise_()
+        if self._native_pool is not None:
+            self._native_pool.show_source(showing)
+        if self._pool_active:
+            (self._source_surface if showing else self._distorted_surface).raise_()
 
     def set_audio_enabled(self, enabled: bool) -> None:
         self._audio_enabled = bool(enabled)
-        if self._gst is not None:
-            self._gst.set_audio_enabled(enabled)
+        if self._native_pool is not None:
+            self._native_pool.set_audio_enabled(enabled)
             return
         if not enabled:
             self._stop_audio()
@@ -413,65 +316,32 @@ class VideoCompareView(QWidget):
         if self._comparison is not None:
             self._restart_decoder(realtime=self._wanted_playing)
 
-    def _restart_decoder(self, *, realtime: bool) -> None:
-        comparison = self._comparison
-        if comparison is None:
+    def _restart_decoder(self, *, realtime):
+        if self._comparison is None:
             return
-        self._stop_decoder()
-        self._stop_audio()
         self._generation += 1
-        native, reason = uses_native_gstreamer(comparison, self._color_settings)
+        from vmaf_app.core.gstreamer_playback import uses_native_gstreamer
+
+        native, reason = uses_native_gstreamer(self._comparison, self._color_settings)
         if native:
+            from vmaf_app.ui.locked_native_pool import LockedNativePool
+
+            self._stop_decoder()
+            self._stop_audio()
             try:
-                self._start_gstreamer(realtime)
+                self._native_pool = LockedNativePool(self, self._series, self._selected,
+                                                     self.position, self._color_settings, realtime,
+                                                     source_native=self._source_native)
+                self._is_playing = self._wanted_playing = bool(realtime)
+                self._native_pool.show_source(self._showing_source)
+                self._pool_timer.start()
+                self.playing_changed.emit(realtime)
                 return
             except Exception as exc:
                 reason = str(exc)
-                self._stop_decoder()
+        self._stop_decoder()
+        self._stop_audio()
         self._start_ffmpeg(realtime, reason)
-
-    def _start_gstreamer(self, realtime: bool) -> None:
-        comparison = self._comparison
-        if comparison is None:
-            return
-        self.source_video.show()
-        self.distorted_video.show()
-        # winId() forces two real child HWNDs. Both GPU swapchains remain live
-        # on one GStreamer clock; S only changes their Z-order.
-        pipeline = GstComparePipeline(
-            comparison,
-            int(self.source_video.winId()),
-            int(self.distorted_video.winId()),
-            self._color_settings,
-            audio_enabled=self._audio_enabled,
-        )
-        self._gst = pipeline
-        self.source_video.set_native_playback(True)
-        self.distorted_video.set_native_playback(True)
-        if self._showing_source:
-            self.source_video.raise_()
-        else:
-            self.distorted_video.raise_()
-        try:
-            pipeline.start(self.position, realtime)
-        except Exception as exc:
-            # Construction can succeed while the asynchronous D3D11 state
-            # change or initial seek cannot.  Never leave a half-started
-            # swapchain owning the child HWND before FFmpeg takes it back.
-            self._gst = None
-            pipeline.stop()
-            self.source_video.set_native_playback(False)
-            self.distorted_video.set_native_playback(False)
-            self.source_video.hide()
-            if isinstance(exc, GStreamerPlaybackError):
-                raise
-            raise GStreamerPlaybackError(
-                f"GStreamer could not start native playback: {exc}"
-            ) from exc
-        self._is_playing = realtime
-        self.status_changed.emit("Opening with GStreamer/D3D11…")
-        self.playing_changed.emit(realtime)
-        self._gst_timer.start()
 
     def _display_pixel_size(self) -> tuple[int, int] | None:
         handle = self.window().windowHandle()
@@ -482,154 +352,229 @@ class VideoCompareView(QWidget):
         ratio = screen.devicePixelRatio()
         return round(geometry.width() * ratio), round(geometry.height() * ratio)
 
-    def _start_ffmpeg(self, realtime: bool, reason: str = "") -> None:
-        comparison = self._comparison
-        if comparison is None:
-            return
-        generation = self._generation
-        output_size = playback_dimensions(comparison, self._display_pixel_size())
-        plan = plan_hwaccel(
-            GpuVendor.AUTO,
-            comparison.source_info.codec_name,
-            comparison.distorted_info.codec_name,
-            source_pix_fmt=comparison.source_info.pix_fmt,
-            distorted_pix_fmt=comparison.distorted_info.pix_fmt,
-        )
-        worker = _PairDecodeWorker(
-            generation,
-            comparison,
-            self._frame,
-            self._color_settings,
-            output_size,
-            plan,
-            realtime=realtime,
-            parent=self,
-        )
-        worker.frame_available.connect(self._on_frame_available)
-        worker.decode_started.connect(self._on_decode_started)
-        worker.decode_failed.connect(self._on_decode_failed)
-        worker.playback_ended.connect(self._on_playback_ended)
-        worker.finished.connect(lambda w=worker: self._on_worker_finished(w))
-        self._worker = worker
-        self._is_playing = realtime
-        suffix = f" ({reason})" if reason else ""
-        self.status_changed.emit(f"Opening with FFmpeg tone-map fallback…{suffix}")
+    def _start_ffmpeg(self, realtime, reason=""):
+        self._pool_reason = reason
+        self._pool_maximum = self._display_pixel_size()
+        self._pool_active = True
+        self._wanted_playing = bool(realtime)
+        self._is_playing = bool(realtime)
+        self._clock_frame = round(self.position / 1000 * self._series[0].fps)
+        self._clock_started = None
+        self._buffering = True
+        self._presented = -1
+        for surface in (self._source_surface, self._distorted_surface):
+            surface.clear_frame()
+            surface.setGeometry(self.rect())
+            surface.show()
+        self.show_source(self._showing_source)
+        self._status("Preparing source/current/adjacent videos · GPU tone mapping and RGB"
+                     + (f" · native fallback: {reason}" if reason else ""))
+        self._sync_pool()
+        self._pool_timer.start()
         self.playing_changed.emit(realtime)
-        worker.start()
 
-    def _stop_decoder(self) -> None:
-        self._gst_timer.stop()
-        pipeline = self._gst
-        self._gst = None
-        if pipeline is not None:
-            pipeline.stop()
-        self.source_video.set_native_playback(False)
-        self.distorted_video.set_native_playback(False)
-        self.source_video.hide()
-        self.distorted_video.show()
-        self.distorted_video.raise_()
-        self.distorted_video.show_source(self._showing_source)
-        worker = self._worker
-        self._worker = None
-        if worker is not None:
-            worker.cancel()
-            self._retired_workers.add(worker)
+    def _status(self, text):
+        if text != self._last_status:
+            self._last_status = text
+            self.status_changed.emit(text)
 
-    def _poll_gstreamer(self) -> None:
-        pipeline = self._gst
-        comparison = self._comparison
-        if pipeline is None or comparison is None:
+    @property
+    def decoded_videos(self) -> int:
+        """How many test videos are kept decoding: the selected one and its neighbours."""
+        return self._decoded_videos
+
+    @property
+    def decoder_limit(self) -> int:
+        """Decoders that may run at once: the source plus the test videos."""
+        return 1 + self._decoded_videos
+
+    def set_decoded_videos(self, count: int) -> None:
+        """Applies immediately to whatever is playing: extra neighbours are
+        retired, missing ones started, the selected pair is never touched."""
+        count = max(1, int(count))
+        if count == self._decoded_videos:
             return
-        try:
-            update = pipeline.poll()
-        except Exception as exc:
-            self._fall_back_from_gstreamer(str(exc))
-            return
-        if update.position_ms is not None and comparison.fps > 0:
-            self._frame = max(0, round(update.position_ms / 1000 * comparison.fps))
-            self.position_changed.emit(update.position_ms)
-        if update.status:
-            state = "Playing" if self._wanted_playing else "Paused"
-            self.status_changed.emit(f"{state} · GStreamer · {update.status}")
-        if update.error:
-            self._fall_back_from_gstreamer(update.error)
-            return
-        if update.ended:
-            self._wanted_playing = False
-            self._is_playing = False
-            self.playing_changed.emit(False)
-            self.status_changed.emit("Playback ended")
+        self._decoded_videos = count
+        if self._native_pool is not None:
+            self._native_pool.sync(self._selected)
+        elif self._pool_active:
+            self._sync_pool()
 
-    def _fall_back_from_gstreamer(self, error: str) -> None:
-        pipeline = self._gst
-        self._gst = None
-        self._gst_timer.stop()
-        if pipeline is not None:
-            pipeline.stop()
-        self.source_video.set_native_playback(False)
-        self.distorted_video.set_native_playback(False)
-        self.source_video.hide()
-        self.distorted_video.show()
-        self.distorted_video.raise_()
-        self.distorted_video.show_source(self._showing_source)
-        self.status_changed.emit(
-            f"GStreamer playback failed; trying FFmpeg fallback: {error}"
-        )
-        self._start_ffmpeg(self._wanted_playing, error)
+    def _source_recipe(self):
+        return replace(source_playback_comparison(self._comparison, self._source_native),
+                       fps=self._series[0].fps)
 
-    def _on_worker_finished(self, worker: _PairDecodeWorker) -> None:
+    def _sync_pool(self):
+        if not self._pool_active:
+            return
+        source = self._source_recipe()
+        crop = source.source_crop
+        source_key = ("source", str(source.source_info.path), None if crop is None else (crop.w, crop.h, crop.x, crop.y), playback_dimensions(source, self._pool_maximum))
+        desired = {source_key: (source, "source")}
+        for index in neighbour_indices(len(self._series), self._selected, self._decoded_videos):
+            desired[("distorted", index)] = (replace(self._series[index], fps=self._series[0].fps), "distorted")
+        self._desired = desired
+        for key in list(self._pool):
+            if key not in desired:
+                worker = self._pool.pop(key)
+                worker.cancel()
+                self._retired_workers.add(worker)
+                self._history.pop(key, None)
+                self._details.pop(key, None)
+                self._failures.pop(key, None)
+        self._launch_missing()
+
+    def _launch_missing(self):
+        if not self._pool_active:
+            return
+        # Retiring workers count too: rapid navigation may not transiently
+        # spawn one video decoder more than allowed while the old process is exiting.
+        occupied = sum(w.isRunning() for w in self._retired_workers) + len(self._pool)
+        for key, (comparison, side) in self._desired.items():
+            if key in self._pool or occupied >= self.decoder_limit:
+                continue
+            plan = plan_hwaccel(GpuVendor.AUTO, comparison.source_info.codec_name, comparison.distorted_info.codec_name,
+                                source_pix_fmt=comparison.source_info.pix_fmt,
+                                distorted_pix_fmt=comparison.distorted_info.pix_fmt)
+            worker = StreamDecodeWorker(comparison, side, self._target_frame(), self._color_settings,
+                                        plan, self._pool_maximum, self)
+            worker.ready.connect(lambda detail, k=key, w=worker: self._stream_ready(k, w, detail))
+            worker.failed.connect(lambda error, k=key, w=worker: self._stream_failed(k, w, error))
+            worker.finished.connect(lambda k=key, w=worker: self._stream_finished(k, w))
+            self._pool[key] = worker
+            self._history[key] = {}
+            worker.start()
+            occupied += 1
+
+    def _stream_ready(self, key, worker, detail):
+        if self._pool.get(key) is worker:
+            self._details[key] = detail
+
+    def _stream_failed(self, key, worker, error):
+        if self._pool.get(key) is worker:
+            self._failures[key] = error
+            self.status_changed.emit(f"Video {key} could not play: {error}")
+
+    def _stream_finished(self, key, worker):
         self._retired_workers.discard(worker)
-        if self._worker is worker:
-            self._worker = None
-        worker.deleteLater()
+        # Keep queued frames from a naturally completed short clip until
+        # consumed. Obsolete workers may be destroyed immediately.
+        if self._pool.get(key) is not worker:
+            worker.deleteLater()
+        self._launch_missing()
 
-    def _on_frame_available(self, generation: int) -> None:
-        if generation != self._generation:
-            return
-        worker = self._worker
-        if worker is None:
-            return
-        latest = worker.take_latest_frame()
-        if latest is None:
-            return
-        frame, payload, width, height = latest
-        self._frame = frame
-        self.video.set_pair(payload, width, height)
-        comparison = self._comparison
-        if comparison is not None and comparison.fps > 0:
-            self.position_changed.emit(round(frame / comparison.fps * 1000))
+    def _target_frame(self):
+        if self._clock_started is None or not self._wanted_playing:
+            return self._clock_frame
+        return self._clock_frame + int((time.monotonic() - self._clock_started) * self._series[0].fps)
 
-    def _on_decode_started(self, generation: int, detail: str) -> None:
-        if generation != self._generation:
+    def _tick(self):
+        if self._native_pool is not None:
+            try:
+                position = self._native_pool.poll()
+                frame = round(position / 1000 * self._comparison.fps)
+                if frame != self._frame:
+                    self._frame = frame
+                    self.position_changed.emit(position)
+                if self._native_pool.ended and self._wanted_playing:
+                    self.set_playing(False)
+                self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(self._native_pool.entries)}/{self.decoder_limit} streams · {self._native_pool.description}")
+                self._check_end()
+            except Exception as exc:
+                self._native_pool.stop()
+                self._native_pool = None
+                self._start_ffmpeg(self._wanted_playing, str(exc))
             return
-        state = "Playing" if self._wanted_playing else "Paused"
-        self.status_changed.emit(f"{state} · ffmpeg · {detail}")
-        if self._wanted_playing:
+        if not self._pool_active:
+            return
+        if self._display_pixel_size() != self._pool_maximum:
+            self._restart_decoder(realtime=self._wanted_playing)
+            return
+        self._launch_missing()
+        target = self._target_frame()
+        source_key = next((key for key in self._desired if key[0] == "source"), None)
+        distorted_key = ("distorted", self._selected)
+        # Do not discard fast-stream frames while its partner is still
+        # decoding them. Backpressure holds that producer at three frames.
+        limits = []
+        for key in (source_key, distorted_key):
+            worker = self._pool.get(key)
+            available = worker.latest_frame_number() if worker is not None else None
+            if available is None:
+                available = max(self._history.get(key, {}), default=self._clock_frame)
+            limits.append(available)
+        paired_target = min(target, *limits)
+        for key, worker in self._pool.items():
+            history = self._history[key]
+            due = paired_target if key in (source_key, distorted_key) else target
+            for number, payload in worker.drain_through(due):
+                history[number] = payload
+            # Three past frames plus the worker's three future frames bound
+            # RAM regardless of movie duration or number of files in the list.
+            for number in sorted(history)[:-3]:
+                del history[number]
+        source = self._history.get(source_key, {})
+        distorted = self._history.get(distorted_key, {})
+        common = source.keys() & distorted.keys()
+        if not common:
+            self._buffering = True
+            if self._wanted_playing and target - max(0, self._presented) > 2:
+                self._stop_audio()
+            error = self._failures.get(source_key) or self._failures.get(distorted_key)
+            self._status(f"Selected video failed: {error}" if error else
+                         "Buffering selected comparison; adjacent videos are preparing in the background")
+            return
+        frame = max(common)
+        if frame == self._presented:
+            if self._wanted_playing and target - frame > 2:
+                # Don't let audio run arbitrarily ahead during sustained
+                # starvation. Resume it from the next displayed frame.
+                self._stop_audio()
+                self._buffering = True
+            return
+        self._presented = frame
+        fps = self._series[0].fps
+        if self._wanted_playing and target - frame > 2:
+            # A decoder that cannot sustain real time must not create an
+            # ever-growing queue or let the comparison drift away from audio.
+            self._clock_frame = frame
+            self._clock_started = time.monotonic()
+            self._stop_audio()
+            self._buffering = True
+        self._frame = round(frame / fps * self._comparison.fps)
+        self._source_surface.set_frame(source[frame], playback_dimensions(self._desired[source_key][0], self._pool_maximum))
+        self._distorted_surface.set_frame(distorted[frame], playback_dimensions(self._comparison, self._pool_maximum))
+        if self._clock_started is None and self._wanted_playing:
+            self._clock_frame = frame
+            self._clock_started = time.monotonic()
+        if self._buffering and self._wanted_playing:
             self._start_audio(self._frame)
+        self._buffering = False
+        self.position_changed.emit(round(frame / fps * 1000))
+        detail = self._details.get(distorted_key, "GPU processing starting")
+        if self._pool_reason:
+            detail += " · SDR preview (native playback unavailable)"
+        self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · {len(self._pool)}/{self.decoder_limit} streams · {detail}")
+        self._check_end()
 
-    def _on_decode_failed(self, generation: int, error: str) -> None:
-        if generation != self._generation:
-            return
-        self._wanted_playing = False
-        self._is_playing = False
-        self._stop_audio()
-        self.playing_changed.emit(False)
-        self.status_changed.emit(f"Could not decode comparison with ffmpeg: {error}")
-
-    def _on_playback_ended(self, generation: int) -> None:
-        if generation != self._generation:
-            return
-        self._wanted_playing = False
-        self._is_playing = False
-        self._stop_audio()
-        self.playing_changed.emit(False)
-        self.status_changed.emit("Playback ended")
+    def _check_end(self):
+        counts = [item.frame_count / item.fps for item in self._series if item.frame_count > 0 and item.fps > 0]
+        if counts and self._wanted_playing and self.position / 1000 >= min(counts) - 1 / self._series[0].fps:
+            self.set_playing(False)
+            self._status("Playback ended")
 
     def _start_audio(self, frame: int) -> None:
-        if not self._audio_enabled or self._comparison is None:
+        comparison = self._comparison
+        if self._pool_active and self._series:
+            # Keep one soundtrack alive across visual switches: this is a
+            # visual comparison, and several soundtracks at once would mix.
+            # It is the source's, from the frame on screen.
+            comparison = self._series[0]
+            frame = max(0, round(self._presented / self._series[0].fps * comparison.fps))
+        if not self._audio_enabled or comparison is None:
             return
         self._stop_audio()
-        command = build_audio_command(self._comparison, frame)
+        command = build_audio_command(comparison, frame)
         if command is None:
             return
         process = proc_util.popen(
@@ -653,3 +598,25 @@ class VideoCompareView(QWidget):
             handle.detach()
         if process is not None and process.poll() is None:
             proc_util.terminate(process)
+
+    def _stop_decoder(self):
+        if self._native_pool is not None:
+            self._native_pool.stop()
+            self._native_pool = None
+        self._pool_active = False
+        self._pool_timer.stop()
+        for worker in self._pool.values():
+            worker.cancel()
+            if worker.isRunning():
+                self._retired_workers.add(worker)
+            else:
+                worker.deleteLater()
+        self._pool.clear()
+        self._history.clear()
+        self._desired.clear()
+        self._details.clear()
+        self._failures.clear()
+        self._source_surface.clear_frame()
+        self._distorted_surface.clear_frame()
+        self._source_surface.hide()
+        self._distorted_surface.hide()

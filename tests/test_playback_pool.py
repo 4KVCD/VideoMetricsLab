@@ -8,7 +8,7 @@ from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import CropBox, VideoInfo
 from vmaf_app.core.video_playback import build_video_series_command, neighbour_indices
-from vmaf_app.ui import rolling_video_view
+from vmaf_app.ui import video_compare_view
 from vmaf_app.ui.playback_worker import StreamDecodeWorker
 
 
@@ -113,9 +113,9 @@ class FakeWorker(QThread):
 
 
 def make_view(monkeypatch, tmp_path, count=5):
-    monkeypatch.setattr(rolling_video_view, "StreamDecodeWorker", FakeWorker)
-    monkeypatch.setattr(rolling_video_view, "plan_hwaccel", lambda *args, **kwargs: HwAccelPlan())
-    view = rolling_video_view.RollingVideoCompareView()
+    monkeypatch.setattr(video_compare_view, "StreamDecodeWorker", FakeWorker)
+    monkeypatch.setattr(video_compare_view, "plan_hwaccel", lambda *args, **kwargs: HwAccelPlan())
+    view = video_compare_view.VideoCompareView()
     view.set_audio_enabled(False)
     items = series(tmp_path, count)
     view.load(items[0], 1000, series=items)
