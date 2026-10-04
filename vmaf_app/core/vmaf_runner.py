@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import nvdec_frames, vmaf_cuda
+from vmaf_app.core import gpu_frames, vmaf_cuda
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
@@ -1081,9 +1081,9 @@ def _score_on_gpu(
                 plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
                 on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
                 process_handle=process_handle)
-        except nvdec_frames.NvdecUnavailableError as error:
+        except gpu_frames.GpuDecodeUnavailableError as error:
             _log.info("VMAF on the GPU: the videos are decoded by FFmpeg (%s)", error)
-        except nvdec_frames.NvdecFailedError as error:
+        except gpu_frames.GpuDecodeFailedError as error:
             _log.warning("GPU decoding for VMAF on the GPU failed; decoding through FFmpeg instead: %s", error)
             if on_status:
                 on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")

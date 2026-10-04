@@ -29,13 +29,13 @@ scale_filter.h; by the GPU on NVIDIA's, the CPU on Intel's and AMD's): not
 FFmpeg's to the sample -- within 1 of it on film -- which the user decided is
 the same comparison (ComparisonRecipe.identity_dict). Which pictures come out,
 and with which timestamps, is checked against the packets that went in
-(NvdecStream.verify): a picture the decoder dropped or added fails the run,
+(GpuFrameStream.verify): a picture the decoder dropped or added fails the run,
 and the caller makes it again through FFmpeg.
 
 What is not decoded here -- another GPU, a codec or format the decoder
 does not take, an interlaced or damaged stream -- goes the
-FFmpeg way as before (NvdecUnavailableError before the first picture,
-NvdecFailedError after it).
+FFmpeg way as before (GpuDecodeUnavailableError before the first picture,
+GpuDecodeFailedError after it).
 """
 from __future__ import annotations
 
@@ -92,11 +92,11 @@ _ES_PIPE_BYTES = 8 * 1024 * 1024
 _NOPTS = -(1 << 63)
 
 
-class NvdecUnavailableError(RuntimeError):
+class GpuDecodeUnavailableError(RuntimeError):
     """This video is not decoded here; FFmpeg decodes it, as before."""
 
 
-class NvdecFailedError(RuntimeError):
+class GpuDecodeFailedError(RuntimeError):
     """Decoding failed after it had started; the caller decodes the video
     again through FFmpeg."""
 
@@ -130,11 +130,11 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
         if backend not in _libraries:
             path = LIBRARY_PATH if backend == "nvidia" else LIBRARIES[backend]
             if not path.is_file():
-                raise NvdecUnavailableError(f"the GPU frame decoder ({path.name}) is not bundled")
+                raise GpuDecodeUnavailableError(f"the GPU frame decoder ({path.name}) is not bundled")
             try:
                 lib = ctypes.CDLL(str(path))
             except OSError as error:
-                raise NvdecUnavailableError(f"the GPU frame decoder could not be loaded: {error}") from error
+                raise GpuDecodeUnavailableError(f"the GPU frame decoder could not be loaded: {error}") from error
             handle, text = ctypes.c_void_p, ctypes.c_char_p
             for name, restype, argtypes in (
                 ("nvf_open", handle, [ctypes.POINTER(_Params), text, ctypes.c_int]),
@@ -220,18 +220,18 @@ class DecodePlan:
 def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_only: bool = False,
                 size: tuple[int, int] | None = None, algorithm: str = "bicubic", widen: int = 0) -> DecodePlan:
     """The plan for decoding `info` here, cropped to `crop` and scaled to
-    `size` with `algorithm`, or NvdecUnavailableError with the reason it is
+    `size` with `algorithm`, or GpuDecodeUnavailableError with the reason it is
     decoded by FFmpeg. Scaled here, a picture is not FFmpeg's scale filter's
     to the sample, but the user decided (2026-10-03) that a comparison scaled
     any way is the same comparison (ComparisonRecipe.identity_dict)."""
     codec = (info.codec_name or "").casefold()
     if codec not in _CODECS:
-        raise NvdecUnavailableError(f"{info.codec_name or 'this codec'} is decoded by FFmpeg")
+        raise GpuDecodeUnavailableError(f"{info.codec_name or 'this codec'} is decoded by FFmpeg")
     depth = _DEPTHS.get((info.pix_fmt or "").casefold())
     if depth is None:
-        raise NvdecUnavailableError(f"{info.pix_fmt or 'this pixel format'} is decoded by FFmpeg")
+        raise GpuDecodeUnavailableError(f"{info.pix_fmt or 'this pixel format'} is decoded by FFmpeg")
     if info.width <= 0 or info.height <= 0:
-        raise NvdecUnavailableError("the video's size is unknown")
+        raise GpuDecodeUnavailableError("the video's size is unknown")
     if crop is None or crop.is_noop(info.width, info.height):
         x, y, w, h = 0, 0, info.width, info.height
     else:
@@ -240,12 +240,12 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
         # and an odd width or height loses its last column or row.
         x, y, w, h = crop.x & ~1, crop.y & ~1, crop.w & ~1, crop.h & ~1
     if w <= 0 or h <= 0 or x + w > info.width or y + h > info.height:
-        raise NvdecUnavailableError("the crop is outside the picture")
+        raise GpuDecodeUnavailableError("the crop is outside the picture")
     out_w, out_h = size if size is not None else (w, h)
     if out_w <= 0 or out_h <= 0:
-        raise NvdecUnavailableError("the size it is scaled to is empty")
+        raise GpuDecodeUnavailableError("the size it is scaled to is empty")
     if widen and depth != 8:
-        raise NvdecUnavailableError("only 8-bit video is widened")
+        raise GpuDecodeUnavailableError("only 8-bit video is widened")
     return DecodePlan(codec, depth, info.width, info.height, x, y, w, h,
                       shift if depth > 8 else 0, luma_only, out_w, out_h,
                       algorithm if algorithm in _SCALERS else "bicubic", widen)
@@ -255,7 +255,7 @@ def available(backend: str = "nvidia") -> bool:
     """Whether the decoder library is bundled and loads (the GPU is not asked)."""
     try:
         _load(backend)
-    except NvdecUnavailableError:
+    except GpuDecodeUnavailableError:
         return False
     return True
 
@@ -264,7 +264,7 @@ def decoder_supports(device: int, plan: DecodePlan, backend: str = "nvidia") -> 
     """Whether GPU `device`'s decoder takes the plan's codec, depth and size."""
     try:
         lib = _load(backend)
-    except NvdecUnavailableError as error:
+    except GpuDecodeUnavailableError as error:
         return False, str(error)
     error = ctypes.create_string_buffer(512)
     ok = lib.nvf_supports(device, _CODECS[plan.codec][0], plan.bit_depth, plan.width, plan.height, error, len(error))
@@ -309,7 +309,7 @@ class _PacketReader:
     def __init__(self, path: Path, codec: str, process_handle=None) -> None:
         bsf = _CODECS[codec][1]
         filters = ["-bsf:v", bsf] if bsf else []
-        self.pipe_path = rf"\\.\pipe\vml-nvdec-{os.getpid()}-{uuid.uuid4().hex[:12]}"
+        self.pipe_path = rf"\\.\pipe\vml-gpu-frames-{os.getpid()}-{uuid.uuid4().hex[:12]}"
         self._pipe = _winapi.CreateNamedPipe(
             self.pipe_path, _winapi.PIPE_ACCESS_INBOUND, _winapi.PIPE_WAIT,
             1, 1024 * 1024, 1024 * 1024, 0, _winapi.NULL)
@@ -352,7 +352,7 @@ class _PacketReader:
         if self._process_handle is not None:
             self._process_handle.attach(self.process.pid)
         for target, name in ((self._read_listing, "listing"), (self._drain_stderr, "stderr")):
-            thread = threading.Thread(target=target, name=f"nvdec-{name}", daemon=True)
+            thread = threading.Thread(target=target, name=f"gpu-frames-{name}", daemon=True)
             thread.start()
             self._threads.append(thread)
 
@@ -389,7 +389,7 @@ class _PacketReader:
                     dts = int(fields[1])
                     if dts != _NOPTS:
                         if last_dts is not None and dts <= last_dts:
-                            raise NvdecFailedError("the video's decode timestamps do not go up")
+                            raise GpuDecodeFailedError("the video's decode timestamps do not go up")
                         last_dts = dts
                     self._listing.put((int(fields[2]), int(fields[4]), flags))
         except BaseException as error:  # handed to the reader of packets
@@ -431,17 +431,17 @@ class _PacketReader:
             item = self._next_listing()
             if item is None:
                 break
-            if isinstance(item, NvdecFailedError):
+            if isinstance(item, GpuDecodeFailedError):
                 raise item
             if isinstance(item, BaseException):
-                raise NvdecFailedError(f"reading FFmpeg's packet list failed: {item}") from item
+                raise GpuDecodeFailedError(f"reading FFmpeg's packet list failed: {item}") from item
             pts, size, flags = item
             if pts == _NOPTS:
-                raise NvdecFailedError("a packet has no timestamp")
+                raise GpuDecodeFailedError("a packet has no timestamp")
             if first and not flags & _KEY:
-                raise NvdecFailedError("the video does not start with a keyframe")
+                raise GpuDecodeFailedError("the video does not start with a keyframe")
             if self.timestamp_warning is not None:
-                raise NvdecFailedError(f"FFmpeg rewrote the video's timestamps: {self.timestamp_warning}")
+                raise GpuDecodeFailedError(f"FFmpeg rewrote the video's timestamps: {self.timestamp_warning}")
             first = False
             data = bytearray(size)
             view = memoryview(data)
@@ -449,7 +449,7 @@ class _PacketReader:
             while filled < size:
                 count = self._stdout.readinto(view[filled:])
                 if not count:
-                    raise NvdecFailedError("FFmpeg's packets ended before its packet list")
+                    raise GpuDecodeFailedError("FFmpeg's packets ended before its packet list")
                 filled += count
             yield data, pts, flags
         code = self.process.wait() if self.process is not None else 0
@@ -458,11 +458,11 @@ class _PacketReader:
         if self._closed:
             return
         if self.timestamp_warning is not None:
-            raise NvdecFailedError(f"FFmpeg rewrote the video's timestamps: {self.timestamp_warning}")
+            raise GpuDecodeFailedError(f"FFmpeg rewrote the video's timestamps: {self.timestamp_warning}")
         if code != 0 or first:
             # No packet at all is a failure too: FFmpeg can exit with 0 when
             # it refused to open an output.
-            raise NvdecFailedError(f"FFmpeg failed copying the video's packets (exit code {code})"
+            raise GpuDecodeFailedError(f"FFmpeg failed copying the video's packets (exit code {code})"
                                    + (f": {self.stderr_text()}" if self.stderr_text() else ""))
 
     def wait_time_base(self, timeout: float) -> Fraction | None:
@@ -517,7 +517,7 @@ def _av1_sequence_header(path: Path) -> bytes:
 
 # ----------------------------------------------------------------- streams
 
-class NvdecStream:
+class GpuFrameStream:
     """One video decoded on GPU `device`, its pictures in a pool of
     `pool` slots in GPU memory, in display order. A thread feeds FFmpeg's
     packets to the decoder; next() hands out the pictures, each slot given
@@ -542,7 +542,7 @@ class NvdecStream:
         handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
         if not handle:
             self._reader.close()  # its pipe
-            raise NvdecUnavailableError(error.value.decode(errors="replace") or "the GPU's decoder could not start")
+            raise GpuDecodeUnavailableError(error.value.decode(errors="replace") or "the GPU's decoder could not start")
         self._handle = handle
         self.frame_bytes = plan.frame_bytes
         self._feed_error: BaseException | None = None
@@ -559,7 +559,7 @@ class NvdecStream:
         self._last_shown: int | None = None
         self._finished = False
         self._closing = False
-        self._feeder = threading.Thread(target=self._feed, name="nvdec-feed", daemon=True)
+        self._feeder = threading.Thread(target=self._feed, name="gpu-frames-feed", daemon=True)
 
     def wait_time_base(self, timeout: float = 60.0) -> Fraction:
         """The stream's time base, once FFmpeg has reported it (before its
@@ -571,7 +571,7 @@ class NvdecStream:
     def time_base(self) -> Fraction:
         time_base = self._reader.time_base
         if time_base is None:
-            raise NvdecFailedError("FFmpeg did not report the stream's time base")
+            raise GpuDecodeFailedError("FFmpeg did not report the stream's time base")
         return time_base
 
     def start(self) -> None:
@@ -605,7 +605,7 @@ class NvdecStream:
     def next(self, timeout_ms: int = 100) -> tuple[int, int] | None:
         """The next picture's (slot, pts), None at the end of the video, or
         TimeoutError after `timeout_ms` (so the caller can look at Cancel).
-        NvdecFailedError when decoding failed, or the decoder's pictures are
+        GpuDecodeFailedError when decoding failed, or the decoder's pictures are
         not the packets' (see verify)."""
         slot, pts = ctypes.c_int(), ctypes.c_longlong()
         while True:
@@ -614,7 +614,7 @@ class NvdecStream:
                 break
             try:
                 discarded = self._take(pts.value)
-            except NvdecFailedError:
+            except GpuDecodeFailedError:
                 self.release(slot.value)
                 raise
             if not discarded:
@@ -627,10 +627,10 @@ class NvdecStream:
             self.verify()
             return None
         if self._feed_error is not None:
-            raise NvdecFailedError(str(self._feed_error)) from self._feed_error
+            raise GpuDecodeFailedError(str(self._feed_error)) from self._feed_error
         if code == _NVF_ABORTED:
-            raise NvdecFailedError("decoding was stopped")
-        raise NvdecFailedError(self._error() or "the GPU's decoder failed")
+            raise GpuDecodeFailedError("decoding was stopped")
+        raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
     def _take(self, pts: int) -> bool:
         """Checks the picture stamped `pts`, as it comes out, against the
@@ -639,16 +639,16 @@ class NvdecStream:
         decoder dropped or made up failed the run only at its end, a whole
         pass later. Whether the picture is one the demuxer discards."""
         if self._last_shown is not None and pts <= self._last_shown:
-            raise NvdecFailedError("the GPU's decoder gave pictures out of order")
+            raise GpuDecodeFailedError("the GPU's decoder gave pictures out of order")
         with self._fed_lock:
             # A packet stamped earlier is in the heap only if it was fed: its
             # picture is owed before this one. One fed after this picture
             # came out would come out of order, which fails above.
             if self._waiting and self._waiting[0] < pts:
-                raise NvdecFailedError(
+                raise GpuDecodeFailedError(
                     f"the GPU's decoder gave {self._shown_count} pictures for {self._shown_count + 1} packets")
             if not self._waiting or self._waiting[0] != pts:
-                raise NvdecFailedError("the GPU's decoder gave pictures the packets do not have")
+                raise GpuDecodeFailedError("the GPU's decoder gave pictures the packets do not have")
             heapq.heappop(self._waiting)
             discarded = pts in self._discard
         self._shown_count += 1
@@ -656,7 +656,7 @@ class NvdecStream:
         return discarded
 
     def verify(self) -> None:
-        """NvdecFailedError unless the pictures handed out are the packets',
+        """GpuDecodeFailedError unless the pictures handed out are the packets',
         one each, in timestamp order -- what FFmpeg's decode of the stream
         gives. Each picture is checked as it comes out (_take); after the
         end, no packet may be left without its picture."""
@@ -665,7 +665,7 @@ class NvdecStream:
         with self._fed_lock:
             fed = self._fed_count
         if self._shown_count != fed:
-            raise NvdecFailedError(f"the GPU's decoder gave {self._shown_count} pictures for {fed} packets")
+            raise GpuDecodeFailedError(f"the GPU's decoder gave {self._shown_count} pictures for {fed} packets")
 
     def release(self, slot: int) -> None:
         self._lib.nvf_release(self._handle, slot)
@@ -674,12 +674,12 @@ class NvdecStream:
         """Copies the slot's picture, planes packed, to page-locked memory at
         `address` (frame_bytes long)."""
         if self._lib.nvf_download(self._handle, slot, address) != 0:
-            raise NvdecFailedError(self._error() or "the GPU's decoder failed")
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
     def copy_luma(self, slot: int, address: int, pitch: int) -> None:
         """Copies the slot's luma plane to GPU memory at `address`, rows `pitch` bytes apart."""
         if self._lib.nvf_copy_luma(self._handle, slot, address, pitch) != 0:
-            raise NvdecFailedError(self._error() or "the GPU's decoder failed")
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
     def abort(self) -> None:
         """Ends every wait in next() and in the feeding thread; from any thread."""

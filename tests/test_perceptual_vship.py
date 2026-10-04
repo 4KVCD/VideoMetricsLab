@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from tests.factories import STDLIB_PYTHON
-from vmaf_app.core import nvdec_frames, perceptual_cpu
+from vmaf_app.core import gpu_frames, perceptual_cpu
 from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
@@ -475,7 +475,7 @@ def test_frames_arrive_in_order_through_the_ring_and_both_lanes(monkeypatch):
 # ------------------------------------- videos decoded in the scoring process
 
 class _FakeDecoder:
-    """nvdec_frames.NvdecStream's part in a pass: `count` pictures, each
+    """gpu_frames.GpuFrameStream's part in a pass: `count` pictures, each
     stamped pts(number), whose download writes the picture's number into the
     slot's first byte (the fake score reads it back)."""
 
@@ -491,7 +491,7 @@ class _FakeDecoder:
 
     def next(self, _timeout_ms=100):
         if self.number == self.fail_at:
-            raise nvdec_frames.NvdecFailedError("the GPU's decoder found an error in the video")
+            raise gpu_frames.GpuDecodeFailedError("the GPU's decoder found an error in the video")
         if self.number >= self.count:
             self.verified += 1
             return None
@@ -749,8 +749,8 @@ def test_the_gpu_decoder_gives_the_layout_vship_is_told(monkeypatch, pixel_forma
         plans.append(plan)
         return "decoder"
 
-    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", stream)
-    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports", lambda *_args: (True, ""))
+    monkeypatch.setattr(vship.gpu_frames, "GpuFrameStream", stream)
+    monkeypatch.setattr(vship.gpu_frames, "decoder_supports", lambda *_args: (True, ""))
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "hevc",
                      pix_fmt="yuv420p" if pixel_format == "yuv420p" else "yuv420p10le")
     image = vship._ImageFormat(pixel_format, 0, vship._VSHIP_ENUMS[8 if pixel_format == "yuv420p" else 16], 1, 1)
@@ -777,8 +777,8 @@ def test_a_scaled_video_is_scaled_by_the_gpu_decoder_with_the_rows_algorithm(mon
     """Scaled any way, a comparison is the same comparison (the user's
     decision): a video FFmpeg would scale is scaled where it is decoded."""
     plans = []
-    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", lambda _info, plan, *a, **k: plans.append(plan) or "decoder")
-    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports", lambda *_args: (True, ""))
+    monkeypatch.setattr(vship.gpu_frames, "GpuFrameStream", lambda _info, plan, *a, **k: plans.append(plan) or "decoder")
+    monkeypatch.setattr(vship.gpu_frames, "decoder_supports", lambda *_args: (True, ""))
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
     image = vship._image_format(info)
     assert _real_native_decoder(info, None, (32, 24), image, image.frame_layout(32, 24)[0], 0, None, "x",
@@ -788,10 +788,10 @@ def test_a_scaled_video_is_scaled_by_the_gpu_decoder_with_the_rows_algorithm(mon
 
 def test_a_video_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch):
     def refuse(*_args, **_kwargs):
-        raise nvdec_frames.NvdecUnavailableError("this GPU's decoder cannot decode this video")
+        raise gpu_frames.GpuDecodeUnavailableError("this GPU's decoder cannot decode this video")
 
-    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", refuse)
-    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports", lambda *_args: (True, ""))
+    monkeypatch.setattr(vship.gpu_frames, "GpuFrameStream", refuse)
+    monkeypatch.setattr(vship.gpu_frames, "decoder_supports", lambda *_args: (True, ""))
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
     image = vship._image_format(info)
     frame_bytes = image.frame_layout(64, 48)[0]
@@ -870,8 +870,8 @@ def test_a_video_the_decoder_says_it_cannot_decode_is_left_to_ffmpeg_before_the_
     """Asked before the pass: refused once the pass had started (10-bit
     H.264 on Intel's decoder), the whole pass was made again through FFmpeg."""
     opened = []
-    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", lambda *args, **kwargs: opened.append(args) or "decoder")
-    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports",
+    monkeypatch.setattr(vship.gpu_frames, "GpuFrameStream", lambda *args, **kwargs: opened.append(args) or "decoder")
+    monkeypatch.setattr(vship.gpu_frames, "decoder_supports",
                         lambda *_args: (False, "Intel's GPU decoder does not decode this codec at 10 bits"))
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p10le")
     image = vship._ImageFormat("yuv420p16le", 0, vship._VSHIP_ENUMS[16], 1, 1)

@@ -12,7 +12,7 @@ the app, so every codec it reads works, VVC included, with hardware decode
 per input where the GPU has one. It streams tightly packed frames into rings
 of pinned host buffers (see _FrameStream). A video the GPU's decoder
 decodes -- NVIDIA's with Vship's CUDA build, Intel's or AMD's with any -- is
-decoded in the scoring process instead (nvdec_frames, _NativeFrameStream):
+decoded in the scoring process instead (gpu_frames, _NativeFrameStream):
 FFmpeg only copies its packets out of the container, and each picture goes
 into the ring without FFmpeg's CPU copies and the pipe -- the same pictures.
 Vship converts each
@@ -46,7 +46,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import nvdec_frames
+from vmaf_app.core import gpu_frames
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.colour import UnsupportedColourError, video_colour
@@ -1195,7 +1195,7 @@ class _FrameSelection:
     (_filter_chain and the command's -t): its select filter keeps every
     step-th picture, setpts starts them at 0, and the output's -t is FFmpeg's
     trim filter, which keeps a picture while its time is below the limit in
-    the stream's time base (nvdec_frames.duration_in) and ends the output at
+    the stream's time base (gpu_frames.duration_in) and ends the output at
     the first that is not."""
 
     def __init__(self, step: int, duration_limit: str | None) -> None:
@@ -1215,7 +1215,7 @@ class _FrameSelection:
         if self._first is None:
             self._first = pts
             if self._duration_limit is not None:
-                self._limit = nvdec_frames.duration_in(self._duration_limit, time_base)
+                self._limit = gpu_frames.duration_in(self._duration_limit, time_base)
         if self._limit is not None and pts - self._first >= self._limit:
             return None
         return True
@@ -1223,14 +1223,14 @@ class _FrameSelection:
 
 class _NativeFrameStream:
     """One input decoded in this process by the GPU's decoder
-    (nvdec_frames.NvdecStream), feeding a ring of pinned frame buffers as
+    (gpu_frames.GpuFrameStream), feeding a ring of pinned frame buffers as
     _FrameStream does: each picture FFmpeg's chain would pipe
     (_FrameSelection) goes straight into a free slot -- copied there by the
     GPU from NVIDIA's decoder, by the CPU in one pass from Intel's or AMD's.
     A decoding failure after the start is raised from next() as
-    NvdecFailedError: the pass is then made again through FFmpeg."""
+    GpuDecodeFailedError: the pass is then made again through FFmpeg."""
 
-    def __init__(self, lib: ctypes.CDLL, frame_bytes: int, decoder: nvdec_frames.NvdecStream, step: int,
+    def __init__(self, lib: ctypes.CDLL, frame_bytes: int, decoder: gpu_frames.GpuFrameStream, step: int,
                  duration_limit: str | None, label: str, gpu_id: int = 0) -> None:
         self.buffers = _pinned_ring(lib, frame_bytes, gpu_id)
         self._decoder = decoder
@@ -1243,7 +1243,7 @@ class _NativeFrameStream:
         for slot in range(_RING_SLOTS):
             self._free.put(slot)
         self._stopping = threading.Event()
-        self._thread = threading.Thread(target=self._run, name=f"vship-nvdec-{label}", daemon=True)
+        self._thread = threading.Thread(target=self._run, name=f"vship-gpu-decode-{label}", daemon=True)
 
     def start(self) -> None:
         self._decoder.start()
@@ -1258,7 +1258,7 @@ class _NativeFrameStream:
                 except TimeoutError:
                     continue
                 if item is None:
-                    break  # the end, checked (NvdecStream.verify)
+                    break  # the end, checked (GpuFrameStream.verify)
                 picture, pts = item
                 try:
                     taken = self._selection.take(pts, decoder.time_base)
@@ -1319,7 +1319,7 @@ def _decoded_here(hwaccel: str | None, device: VshipDevice) -> str | None:
 
 def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int], image_format: _ImageFormat,
                     frame_bytes: int, gpu_id: int, process_handle: ProcessHandle | None,
-                    label: str, backend: str = "nvidia", algorithm: str = "bicubic") -> nvdec_frames.NvdecStream | None:
+                    label: str, backend: str = "nvidia", algorithm: str = "bicubic") -> gpu_frames.GpuFrameStream | None:
     """The decoder for one input of a pass, when GPU decoder `backend` can
     give it in the layout Vship is told (8-bit planes, P016's 16-bit samples
     as they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
@@ -1331,19 +1331,19 @@ def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int]
         reason = f"Vship reads it as {image_format.pixel_format}"
     if reason is None:
         try:
-            plan = nvdec_frames.plan_decode(info, crop, shift=shifts[image_format.pixel_format], size=size,
+            plan = gpu_frames.plan_decode(info, crop, shift=shifts[image_format.pixel_format], size=size,
                                             algorithm=algorithm)
             if plan.frame_bytes != frame_bytes:
-                raise nvdec_frames.NvdecUnavailableError(
+                raise gpu_frames.GpuDecodeUnavailableError(
                     f"its frames would be {plan.frame_bytes} bytes, not {frame_bytes}")
             # Asked first: a stream the decoder refuses once the pass has
             # started (10-bit H.264, say) makes the whole pass again.
-            supported, refusal = nvdec_frames.decoder_supports(gpu_id, plan, backend)
+            supported, refusal = gpu_frames.decoder_supports(gpu_id, plan, backend)
             if not supported:
-                raise nvdec_frames.NvdecUnavailableError(refusal)
-            decoder = nvdec_frames.NvdecStream(info, plan, gpu_id, pool=4, process_handle=process_handle,
+                raise gpu_frames.GpuDecodeUnavailableError(refusal)
+            decoder = gpu_frames.GpuFrameStream(info, plan, gpu_id, pool=4, process_handle=process_handle,
                                                backend=backend)
-        except nvdec_frames.NvdecUnavailableError as error:
+        except gpu_frames.GpuDecodeUnavailableError as error:
             reason = str(error)
         else:
             _log.info("Vship: the %s is decoded on the GPU (%s) in the scoring process", label, backend)
@@ -1889,7 +1889,7 @@ def _score_vship_pass(
         try:
             return _score_vship_pass_with(source, distorted, request, specs, device, source_crop, distorted_crop,
                                           native=native, every_source_frame=every_source_frame, **kwargs)
-        except nvdec_frames.NvdecFailedError as error:
+        except gpu_frames.GpuDecodeFailedError as error:
             if not native:
                 raise
             _log.warning("GPU decoding in the Vship pass failed; decoding through FFmpeg instead: %s", error)
@@ -2259,7 +2259,7 @@ def _score_vship_pass_with(
             # figure: its whole length.
             on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame * step / elapsed)
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
-    except (PerceptualCancelled, ComparisonCutShortError, nvdec_frames.NvdecFailedError, _FramesApartError):
+    except (PerceptualCancelled, ComparisonCutShortError, gpu_frames.GpuDecodeFailedError, _FramesApartError):
         # The file's fault, not the GPU's: the CPU would stop as short. A
         # failed GPU decode is made again through FFmpeg, and a subsampled
         # pass whose frames do not line up with every source frame

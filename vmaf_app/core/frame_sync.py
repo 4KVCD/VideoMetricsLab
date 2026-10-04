@@ -29,7 +29,7 @@ from collections.abc import Callable, Iterator
 from fractions import Fraction
 from typing import Generic, TypeVar
 
-from vmaf_app.core.nvdec_frames import rescale
+from vmaf_app.core.gpu_frames import rescale
 
 T = TypeVar("T")
 U = TypeVar("U")

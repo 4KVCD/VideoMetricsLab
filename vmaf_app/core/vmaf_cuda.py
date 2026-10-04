@@ -12,7 +12,7 @@ feeds to libvmaf frame pair by frame pair (see vmaf_runner._run_on_gpu).
 
 Where NVIDIA's decoder decodes both videos, VMAF is scored without FFmpeg's
 decode (score_decoded): the videos are decoded in libvmaf's process
-(nvdec_frames), scaled and widened on the GPU to the size and depth they
+(gpu_frames), scaled and widened on the GPU to the size and depth they
 are compared at, the frames paired as libvmaf's filter pairs them
 (frame_sync), and each frame's luma -- all VMAF reads -- copied on the GPU
 into a picture of libvmaf's on the GPU. No frame crosses to system memory;
@@ -44,7 +44,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import nvdec_frames
+from vmaf_app.core import gpu_frames
 from vmaf_app.core.frame_sync import frame_pairs
 from vmaf_app.core.models import CropBox, VideoInfo
 
@@ -447,7 +447,7 @@ def score_decoded(
     FFmpeg's graph for those outputs -- the decoded frames cropped, scaled to
     the size compared at, converted to its depth, paired by overlay with
     libvmaf's frame sync, cut by each output's -t -- is done here:
-    nvdec_frames crops as FFmpeg's crop filter does, shifts 10-bit samples and
+    gpu_frames crops as FFmpeg's crop filter does, shifts 10-bit samples and
     widens 8-bit ones as FFmpeg converts them, and scales on the GPU with the
     same filter (not to the sample: the user decided a comparison scaled any
     way is the same one); frame_sync.frame_pairs pairs as the overlay does,
@@ -455,30 +455,30 @@ def score_decoded(
     `duration_limit` (the outputs' -t, as text) in the test video's time
     base, as FFmpeg's trim filter cuts.
 
-    NvdecUnavailableError when the videos are not decoded here (FFmpeg then
+    GpuDecodeUnavailableError when the videos are not decoded here (FFmpeg then
     decodes them, as before): another decoder, a codec or size it does not
-    take. NvdecFailedError when decoding failed after the start -- the run
+    take. GpuDecodeFailedError when decoding failed after the start -- the run
     is then made again through FFmpeg."""
     plans = []
     for info, crop in ((distorted, distorted_crop), (source, source_crop)):
-        plan = nvdec_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
+        plan = gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
                                         algorithm=scale_algorithm)
         if plan.bit_depth < bit_depth:
             full = (info.color_range or "").casefold() in {"pc", "jpeg", "full"} or (
                 not info.color_range and (info.pix_fmt or "").casefold().startswith("yuvj"))
-            plan = replace(plan, widen=nvdec_frames.WIDEN_REPEAT if full else nvdec_frames.WIDEN_SHIFT)
+            plan = replace(plan, widen=gpu_frames.WIDEN_REPEAT if full else gpu_frames.WIDEN_SHIFT)
         if plan.bit_depth > bit_depth:
-            raise nvdec_frames.NvdecUnavailableError(
+            raise gpu_frames.GpuDecodeUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        supported, refusal = nvdec_frames.decoder_supports(_GPU, plan)
+        supported, refusal = gpu_frames.decoder_supports(_GPU, plan)
         if not supported:
-            raise nvdec_frames.NvdecUnavailableError(refusal)
+            raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
     # The decoders first: the first to start CUDA sets its waits to sleep
-    # rather than spin (nvdec_frames), and libvmaf's then do too.
-    test = nvdec_frames.NvdecStream(distorted, plans[0], _GPU, pool=4, process_handle=process_handle)
+    # rather than spin (gpu_frames), and libvmaf's then do too.
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], _GPU, pool=4, process_handle=process_handle)
     try:
-        ref = nvdec_frames.NvdecStream(source, plans[1], _GPU, pool=4, process_handle=process_handle)
+        ref = gpu_frames.GpuFrameStream(source, plans[1], _GPU, pool=4, process_handle=process_handle)
     except BaseException:
         test.close()
         raise
@@ -488,7 +488,7 @@ def score_decoded(
         test.start()
         ref.start()
         test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
-        stop = nvdec_frames.duration_in(duration_limit, test_base) if duration_limit else None
+        stop = gpu_frames.duration_in(duration_limit, test_base) if duration_limit else None
 
         def puller(stream):
             def pull():
@@ -508,7 +508,7 @@ def score_decoded(
                 if stop is not None and when >= stop:
                     break
                 if ref_slot is None:
-                    raise nvdec_frames.NvdecFailedError("the source has no frame for the test video's first")
+                    raise gpu_frames.GpuDecodeFailedError("the source has no frame for the test video's first")
                 scorer.add_on_device(lambda address, pitch, slot=ref_slot: ref.copy_luma(slot, address, pitch),
                                      lambda address, pitch, slot=test_slot: test.copy_luma(slot, address, pitch))
                 count += 1

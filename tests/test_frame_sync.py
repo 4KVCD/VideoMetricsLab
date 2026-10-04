@@ -14,13 +14,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tests.test_nvdec_frames import _clip as _coded_clip
-from tests.test_nvdec_frames import _gpu_decodes
-from vmaf_app.core import nvdec_frames as nv
+from tests.test_gpu_frames import _clip as _coded_clip
+from tests.test_gpu_frames import _gpu_decodes
+from vmaf_app.core import gpu_frames as nv
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.frame_sync import frame_pairs
-from vmaf_app.core.nvdec_frames import duration_in
+from vmaf_app.core.gpu_frames import duration_in
 from vmaf_app.core.vmaf_runner import _gpu_pairs_stage
 
 W, H = 64, 32

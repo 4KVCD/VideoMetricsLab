@@ -111,11 +111,11 @@ def self_test() -> SelfTestReport:
     else:
         report.warn("GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
 
-    from vmaf_app.core import nvdec_frames
+    from vmaf_app.core import gpu_frames
 
     for backend, maker in (("nvidia", "NVIDIA"), ("intel", "Intel"), ("amd", "AMD")):
-        library = nvdec_frames.LIBRARIES[backend].name
-        if nvdec_frames.available(backend):
+        library = gpu_frames.LIBRARIES[backend].name
+        if gpu_frames.available(backend):
             report.ok(f"{maker} frame decoder for the GPU metrics ({library})")
         else:
             report.warn(f"{maker} frame decoder absent ({library}); FFmpeg decodes the GPU metrics' videos")

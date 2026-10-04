@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 
-from vmaf_app.core import nvdec_frames, vmaf_cuda
+from vmaf_app.core import gpu_frames, vmaf_cuda
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VideoInfo, VmafOptions
@@ -358,8 +358,8 @@ def test_ffmpeg_decodes_when_nvidia_does_not_decode_both(monkeypatch, hwaccel):
     assert frames is by_ffmpeg
 
 
-@pytest.mark.parametrize("error", [nvdec_frames.NvdecUnavailableError("a video is scaled"),
-                                   nvdec_frames.NvdecFailedError("the GPU's decoder found an error in the video")])
+@pytest.mark.parametrize("error", [gpu_frames.GpuDecodeUnavailableError("a video is scaled"),
+                                   gpu_frames.GpuDecodeFailedError("the GPU's decoder found an error in the video")])
 def test_when_decoding_in_libvmafs_process_is_refused_or_fails_ffmpeg_decodes(monkeypatch, error):
     def refuse(*_args, **_kwargs):
         raise error
@@ -373,7 +373,7 @@ def test_when_decoding_in_libvmafs_process_is_refused_or_fails_ffmpeg_decodes(mo
     assert frames is by_ffmpeg
     failed = [status for status in statuses if status.startswith("GPU decoding failed")]
     assert failed == ([f"GPU decoding failed ({error}); decoding through FFmpeg instead…"]
-                      if isinstance(error, nvdec_frames.NvdecFailedError) else [])
+                      if isinstance(error, gpu_frames.GpuDecodeFailedError) else [])
 
 
 def test_decoded_in_libvmafs_process_the_limit_is_that_of_ffmpegs_raw_outputs(monkeypatch):

@@ -1,4 +1,4 @@
-"""nvdec_frames: decoding on the GPU in the scoring process for the GPU
+"""gpu_frames: decoding on the GPU in the scoring process for the GPU
 metrics. The plan and arithmetic are checked everywhere; the decoded
 pictures against FFmpeg's decode with each GPU maker's decoder the PC has
 (NVIDIA's, Intel's, AMD's)."""
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vmaf_app.core import nvdec_frames as nv
+from vmaf_app.core import gpu_frames as nv
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import CropBox, VideoInfo
@@ -51,8 +51,8 @@ def test_eight_bit_has_no_shift_and_packs_three_planes():
 @pytest.mark.parametrize(("field", "value"), [("codec_name", "vvc"), ("codec_name", "vp9"),
                                               ("pix_fmt", "yuv422p10le"), ("pix_fmt", "yuv420p12le"),
                                               ("pix_fmt", "yuv444p"), ("width", 0)])
-def test_what_nvdec_frames_does_not_decode_is_left_to_ffmpeg(field, value):
-    with pytest.raises(nv.NvdecUnavailableError):
+def test_what_the_gpu_decoders_do_not_decode_is_left_to_ffmpeg(field, value):
+    with pytest.raises(nv.GpuDecodeUnavailableError):
         nv.plan_decode(_info(**{field: value}), None)
 
 
@@ -69,12 +69,12 @@ def test_eight_bit_widened_to_ten_hands_back_16_bit_samples():
     plan = nv.plan_decode(_info(pix_fmt="yuv420p", codec_name="h264"), None, luma_only=True,
                           widen=nv.WIDEN_SHIFT)
     assert plan.bytes_per_sample == 2 and plan.frame_bytes == 1920 * 1080 * 2
-    with pytest.raises(nv.NvdecUnavailableError):
+    with pytest.raises(nv.GpuDecodeUnavailableError):
         nv.plan_decode(_info(), None, widen=nv.WIDEN_SHIFT)  # 10-bit: nothing to widen
 
 
 def test_a_crop_outside_the_picture_is_refused():
-    with pytest.raises(nv.NvdecUnavailableError):
+    with pytest.raises(nv.GpuDecodeUnavailableError):
         nv.plan_decode(_info(), CropBox(1920, 1000, 0, 100))
 
 
@@ -126,7 +126,7 @@ def _clip(path: Path, codec: str, pix_fmt: str, extra: list[str] | None = None, 
 
 
 def _decode(info: VideoInfo, plan: nv.DecodePlan, backend: str = "nvidia") -> tuple[list[str], list[int]]:
-    stream = nv.NvdecStream(info, plan, backend=backend)
+    stream = nv.GpuFrameStream(info, plan, backend=backend)
     out = np.empty(plan.frame_bytes, dtype=np.uint8)
     sums, stamps = [], []
     try:
@@ -181,7 +181,7 @@ def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path, 
     _need(shifted, backend)
     pictures = []
     for plan in (shifted, kept):
-        stream = nv.NvdecStream(info, plan, backend=backend)
+        stream = nv.GpuFrameStream(info, plan, backend=backend)
         out = np.empty(plan.frame_bytes // 2, dtype=np.uint16)
         try:
             stream.start()
@@ -225,7 +225,7 @@ def test_a_stream_that_does_not_start_with_a_keyframe_fails(tmp_path, backend):
     info = probe_video(headless)
     plan = nv.plan_decode(info, None)
     _need(plan, backend)
-    with pytest.raises(nv.NvdecFailedError):
+    with pytest.raises(nv.GpuDecodeFailedError):
         _decode(info, plan, backend)
 
 
@@ -237,7 +237,7 @@ def test_a_stream_without_timestamps_fails(tmp_path, backend):
     info = probe_video(raw)
     plan = nv.plan_decode(info, None)
     _need(plan, backend)
-    with pytest.raises(nv.NvdecFailedError):
+    with pytest.raises(nv.GpuDecodeFailedError):
         _decode(info, plan, backend)
 
 
@@ -249,7 +249,7 @@ def _ffmpeg_frames(path: Path, chain: str, depth: int) -> np.ndarray:
 
 
 def _frames(info: VideoInfo, plan: nv.DecodePlan, backend: str) -> np.ndarray:
-    stream = nv.NvdecStream(info, plan, backend=backend)
+    stream = nv.GpuFrameStream(info, plan, backend=backend)
     dtype = np.uint16 if plan.bytes_per_sample == 2 else np.uint8
     pictures = []
     try:
@@ -314,11 +314,11 @@ def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path, backend):
 
 
 def _stream_fed(*timestamps):
-    """An NvdecStream's picture bookkeeping alone, with these packets fed."""
+    """An GpuFrameStream's picture bookkeeping alone, with these packets fed."""
     import heapq
     import threading
 
-    stream = nv.NvdecStream.__new__(nv.NvdecStream)
+    stream = nv.GpuFrameStream.__new__(nv.GpuFrameStream)
     stream._waiting, stream._fed_count, stream._fed_lock = [], 0, threading.Lock()
     stream._discard, stream._shown_count, stream._last_shown, stream._finished = set(), 0, None, False
     for pts in timestamps:
@@ -331,14 +331,14 @@ def test_a_picture_the_decoder_drops_fails_at_the_next_one():
     """A dropped picture failed the run only at its end, a whole pass later."""
     stream = _stream_fed(0, 3000, 1000, 2000)
     stream._take(0)
-    with pytest.raises(nv.NvdecFailedError, match="1 pictures for 2 packets"):
+    with pytest.raises(nv.GpuDecodeFailedError, match="1 pictures for 2 packets"):
         stream._take(2000)
 
 
 def test_a_picture_the_packets_do_not_have_fails_at_once():
     stream = _stream_fed(0, 2000)
     stream._take(0)
-    with pytest.raises(nv.NvdecFailedError, match="packets do not have"):
+    with pytest.raises(nv.GpuDecodeFailedError, match="packets do not have"):
         stream._take(1000)
 
 
@@ -347,9 +347,9 @@ def test_pictures_in_order_pass_and_the_end_counts_them():
     stream._discard.add(0)
     assert [stream._take(pts) for pts in (0, 1000, 2000)] == [True, False, False]
     stream._finished = True
-    with pytest.raises(nv.NvdecFailedError, match="3 pictures for 4 packets"):
+    with pytest.raises(nv.GpuDecodeFailedError, match="3 pictures for 4 packets"):
         stream.verify()
     stream._take(3000)
     stream.verify()
-    with pytest.raises(nv.NvdecFailedError, match="out of order"):
+    with pytest.raises(nv.GpuDecodeFailedError, match="out of order"):
         stream._take(2500)

@@ -33,7 +33,7 @@ import psutil
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vmaf_app.core import nvdec_frames as nv
+from vmaf_app.core import gpu_frames as nv
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import CropBox, GpuVendor
@@ -50,7 +50,7 @@ def clip(path: Path, encoder: list[str], pix_fmt: str, seconds: float = 2.0, siz
 
 
 def gpu_sums(info, plan, backend):
-    stream = nv.NvdecStream(info, plan, backend=backend)
+    stream = nv.GpuFrameStream(info, plan, backend=backend)
     out = np.empty(plan.frame_bytes, dtype=np.uint8)
     sums, stamps = [], []
     try:
@@ -84,14 +84,14 @@ def check_pictures(path: Path, backend: str, crop: CropBox | None = None) -> str
     info = probe_video(path)
     try:
         plan = nv.plan_decode(info, crop, shift=6)
-    except nv.NvdecUnavailableError as error:
+    except nv.GpuDecodeUnavailableError as error:
         return f"{path.name}: not decoded by the GPU decoder ({error})"
     supported, reason = nv.decoder_supports(0, plan, backend)
     if not supported:
         return f"{path.name}: the GPU decoder refuses it ({reason})"
     try:
         sums, _stamps = gpu_sums(info, plan, backend)
-    except nv.NvdecFailedError as error:
+    except nv.GpuDecodeFailedError as error:
         return f"{path.name}: FAILED on the GPU decoder: {error}"
     want = cpu_sums(path, plan)
     differ = sum(a != b for a, b in zip(sums, want, strict=False))
@@ -102,7 +102,7 @@ def check_pictures(path: Path, backend: str, crop: CropBox | None = None) -> str
 def check_speed(path: Path, backend: str, frames: int = 600) -> str:
     info = probe_video(path)
     plan = nv.plan_decode(info, None)
-    stream = nv.NvdecStream(info, plan, backend=backend)
+    stream = nv.GpuFrameStream(info, plan, backend=backend)
     out = np.empty(plan.frame_bytes, dtype=np.uint8)
     me = psutil.Process()
 
