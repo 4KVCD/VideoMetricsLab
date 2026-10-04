@@ -552,3 +552,15 @@ def test_a_missing_box_is_left_alone():
 
     assert common_picture(_sized(1920, 1080), _sized(1920, 1080), None, CropBox(1920, 800, 0, 140)) == (
         None, CropBox(1920, 800, 0, 140))
+
+
+def test_equally_common_boxes_go_to_the_larger(monkeypatch):
+    """A dark stretch reads its dark picture as bar: its box is too tight.
+    A tie went to whichever window answered first."""
+    crop_detect.clear_cache()
+    boxes = iter([CropBox(1920, 696, 0, 192), CropBox(1920, 800, 0, 140), CropBox(1920, 696, 0, 192),
+                  CropBox(1920, 800, 0, 140), None])
+    monkeypatch.setattr(crop_detect, "_run_single_window", lambda *a, **k: next(boxes))
+    info = VideoInfo(path=Path("tie.mkv"), width=1920, height=1080, fps=24.0, duration=600.0, nb_frames=14400,
+                     codec_name="hevc")
+    assert crop_detect.detect_crop(info) == CropBox(1920, 800, 0, 140)

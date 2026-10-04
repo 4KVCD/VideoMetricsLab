@@ -469,6 +469,9 @@ def _detect_uncached(
     for b in boxes:
         key = (b.w, b.h, b.x, b.y)
         counts[key] = counts.get(key, 0) + 1
-    best_key = max(counts, key=lambda k: counts[k])
+    # The most common box; between equally common ones the largest. A box
+    # from a dark stretch is too tight -- dark picture reads as bar -- and a
+    # tie went to whichever window came first, which could crop picture off.
+    best_key = max(counts, key=lambda k: (counts[k], k[0] * k[1]))
     w, h, x, y = best_key
     return CropBox(w=w, h=h, x=x, y=y)
