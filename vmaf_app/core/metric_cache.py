@@ -158,10 +158,27 @@ _OLD_VSHIP_RGB = re.compile(
 _UNTAGGED = {"", "unknown", "unspecified", "reserved"}
 
 
+#: Every CPU SSIMULACRA2 and Butteraugli score records how its pictures'
+#: colours were read, as provenance parameter "color_tags": since the CPU
+#: tools are given them as Vship reads them (colour.describe_png) and
+#: Butteraugli's 3-norm is Vship's. One without it was made with FFmpeg's
+#: own conversion and the tool's norm -- a tagged BT.709 film scored 15
+#: SSIMULACRA2 points below the GPU -- and is calculated again.
+CPU_COLOR_TAGS = "vship-5.1.1"
+
+
+def _stale_cpu_score(provenance) -> bool:
+    return (provenance.compute_backend == "cpu" and provenance.implementation in {"ssimulacra2", "butteraugli"}
+            and provenance.parameters.get("color_tags") != CPU_COLOR_TAGS)
+
+
 def _stale_vship_score(provenance, infos: tuple[object, ...]) -> bool:
     """Whether a saved score is a GPU score of v1.2 / v1.2.1 for a pair with
-    an RGB video without a transfer tag (VSHIP_COLOR_TAGS). `infos` are the
-    two videos' context.json entries."""
+    an RGB video without a transfer tag (VSHIP_COLOR_TAGS), or a CPU score
+    from before the CPU tools read colours as Vship does (CPU_COLOR_TAGS).
+    `infos` are the two videos' context.json entries."""
+    if _stale_cpu_score(provenance):
+        return True
     if (provenance.compute_backend != "gpu" or not provenance.implementation.startswith("Vship/")
             or provenance.parameters.get("color_tags") == VSHIP_COLOR_TAGS):
         return False
@@ -524,7 +541,7 @@ def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str =
     def stale(result) -> bool:
         nonlocal infos
         if result.provenance.compute_backend != "gpu":
-            return False
+            return _stale_cpu_score(result.provenance)
         if infos is None:
             infos = _context_infos(directory)
         return _stale_vship_score(result.provenance, infos)

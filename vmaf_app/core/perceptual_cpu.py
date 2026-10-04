@@ -25,6 +25,8 @@ import numpy as np
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
+from vmaf_app.core.colour import FFMPEG_MATRICES, colour_of, describe_png
+from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
@@ -218,7 +220,15 @@ def _image_filtergraph(
         # select keeps a generic sampling axis distinct from FFmpeg/libvmaf.
         if step > 1:
             ops.append(f"select=not(mod(n\\,{step}))")
-        ops += ["setpts=PTS-STARTPTS", "format=rgb48le"]
+        ops.append("setpts=PTS-STARTPTS")
+        # Converted to RGB with the matrix and range Vship reads the video
+        # with (colour.video_colour): FFmpeg's own choice for an untagged
+        # video is BT.601's, where Vship takes an HD one as BT.709.
+        colour = colour_of(info)
+        if colour is not None and colour.matrix in FFMPEG_MATRICES:
+            ops.append(f"setparams=colorspace={FFMPEG_MATRICES[colour.matrix]}:"
+                       f"range={'pc' if colour.full_range else 'tv'}")
+        ops.append("format=rgb48le")
         return f"[{input_label}]{','.join(ops)}[{output_label}]"
 
     return ";".join((
@@ -430,11 +440,34 @@ def parse_score(metric: str, output: str) -> float:
 #: not paused. The bundled tools take 1-2 s for a 4K pair.
 _TOOL_TIMEOUT_SECONDS = 120.0
 
+#: The display Butteraugli models for SDR pictures, in nits: Vship's
+#: default, which the GPU is given (perceptual_vship._init_handler). The
+#: tool's own is 80. An HDR picture's brightness is its own (PQ and HLG are
+#: absolute): the tool takes it from the picture, as Vship does -- its
+#: scores then agree with Vship's (2.892 against 2.881 on a PQ film),
+#: where 203 gave 0.815.
+BUTTERAUGLI_INTENSITY_NITS = 203.0
+
+
+def _butteraugli_norm3(distortion_map: Path) -> float:
+    """The 3-norm of a Butteraugli distortion map (the tool's --rawdistmap,
+    a PFM): (mean of d^3)^(1/3), as Vship reports it. The tool prints its
+    own "3-norm", the mean of the 3-, 6- and 12-norms, which read about 1.8
+    times Vship's on the same frames."""
+    data = distortion_map.read_bytes()
+    header, size, scale, rest = data.split(b"\n", 3)
+    if header.strip() != b"Pf":
+        raise PerceptualRunError("butteraugli wrote a distortion map that is not a greyscale PFM.")
+    width, height = (int(part) for part in size.split())
+    values = np.frombuffer(rest, dtype="<f4" if float(scale) < 0 else ">f4", count=width * height)
+    return float(np.mean(np.abs(values.astype(np.float64)) ** 3) ** (1.0 / 3.0))
+
 
 def _run_metric(
     executable: str, metric: str, reference: Path, test: Path,
     process_handle: ProcessHandle | None = None,
     cancel_event: threading.Event | None = None,
+    hdr: bool = False,
 ) -> float:
     """Score one frame pair with a still-image tool.
 
@@ -443,10 +476,16 @@ def _run_metric(
     handle: pausing a CPU run left the tools scoring while the app said
     "Paused", and Cancel waited for the frame in progress.
     """
+    command = [executable, str(reference), str(test)]
+    distortion_map = None
+    if metric == "butteraugli":
+        distortion_map = test.with_name(test.stem + "-distortion.pfm")
+        if not hdr:
+            command += ["--intensity_target", f"{BUTTERAUGLI_INTENSITY_NITS:g}"]
+        command += ["--rawdistmap", str(distortion_map)]
     try:
         process = proc_util.popen(
-            [executable, str(reference), str(test)],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
     except OSError as exc:
         raise PerceptualRunError(f"Could not run {metric}: {exc}") from exc
@@ -476,10 +515,19 @@ def _run_metric(
     finally:
         if process_handle is not None:
             process_handle.detach(process.pid)
-    combined = (stdout or "") + "\n" + (stderr or "")
-    if process.returncode != 0:
-        raise PerceptualRunError(f"{metric} failed for a frame.", combined[-2000:])
-    return parse_score(metric, combined)
+    try:
+        combined = (stdout or "") + "\n" + (stderr or "")
+        if process.returncode != 0:
+            raise PerceptualRunError(f"{metric} failed for a frame.", combined[-2000:])
+        if distortion_map is not None:
+            try:
+                return _butteraugli_norm3(distortion_map)
+            except (OSError, ValueError) as exc:
+                raise PerceptualRunError("butteraugli wrote no readable distortion map.", combined[-2000:]) from exc
+        return parse_score(metric, combined)
+    finally:
+        if distortion_map is not None:
+            distortion_map.unlink(missing_ok=True)
 
 
 def run_perceptual_task(
@@ -522,6 +570,13 @@ def run_perceptual_task(
     started = time.perf_counter()
     values: dict[str, list[float]] = {spec.key: [] for spec in specs}
     total = 0
+    # How the tools are to read each picture's values: as Vship reads the
+    # video's (colour.describe_png). FFmpeg tags a BT.709 picture with
+    # H.273's BT.709 curve -- the camera's -- where Vship and a display use
+    # a 2.4 gamma, and an untagged one not at all (sRGB): a tagged BT.709
+    # film scored 40.4 SSIMULACRA2 here against 55.1 on the GPU.
+    source_colour, distorted_colour = colour_of(source), colour_of(distorted)
+    hdr = any(colour is not None and colour.hdr for colour in (source_colour, distorted_colour))
     with tempfile.TemporaryDirectory(prefix="videometricslab-perceptual-") as temp:
         pairs = _png_pairs(
             source, distorted, request.recipe, source_crop, distorted_crop, step,
@@ -532,9 +587,12 @@ def run_perceptual_task(
                 if cancel_event is not None and cancel_event.is_set():
                     raise PerceptualCancelled("Cancelled by user")
                 try:
+                    for picture, colour in ((reference, source_colour), (test, distorted_colour)):
+                        if colour is not None:
+                            describe_png(picture, colour)
                     for spec in specs:
                         values[spec.key].append(_run_metric(
-                            executables[spec.key], spec.key, reference, test, process_handle, cancel_event,
+                            executables[spec.key], spec.key, reference, test, process_handle, cancel_event, hdr,
                         ))
                 finally:
                     # Each pair is deleted once every selected tool has
@@ -568,7 +626,13 @@ def run_perceptual_task(
                 implementation_version=version,
                 compute_backend="cpu",
                 implementation_compatibility_id=compatibility,
-                parameters={"intermediate": "png/rgb48le", "coverage_step": step},
+                parameters={"intermediate": "png/rgb48le", "coverage_step": step,
+                            # Read as Vship reads the colours, with its
+                            # Butteraugli 3-norm and display (metric_cache).
+                            "color_tags": CPU_COLOR_TAGS,
+                            **({"butteraugli_norm": "3-norm",
+                                "intensity_target": "picture's own" if hdr else BUTTERAUGLI_INTENSITY_NITS}
+                               if spec.key == "butteraugli" else {})},
             ),
         ))
     return PerceptualTaskOutput(results, source_crop, distorted_crop, total * step)

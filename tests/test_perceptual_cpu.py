@@ -73,6 +73,8 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     request = _request("ssimulacra2", "butteraugli")
     references = [tmp_path / f"r-{i}.png" for i in range(3)]
     tests = [tmp_path / f"t-{i}.png" for i in range(3)]
+    for picture in (*references, *tests):
+        picture.write_bytes(bytes([0x89]) + b"PNG")  # their colours are described before scoring
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu.find_metric_executable", lambda key: key)
     def fake_pairs(*_args):
         yield from zip(references, tests, strict=True)
@@ -370,3 +372,49 @@ def test_a_failed_frame_extraction_says_what_ffmpeg_said(tmp_path, monkeypatch):
                         tmp_path, None, None))
     assert "could not prepare" in str(raised.value)
     assert "Error opening input file" in raised.value.stderr_tail
+
+
+def test_pictures_are_converted_with_the_matrix_vship_reads_the_video_with():
+    """FFmpeg converts an untagged video with BT.601's matrix; Vship takes an
+    HD one as BT.709. The CPU tools' pictures are converted as Vship reads
+    the video, before they become RGB."""
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    hd = VideoInfo(Path("hd.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
+    full = VideoInfo(Path("j.mkv"), 640, 480, 24.0, 1.0, 24, "mjpeg", pix_fmt="yuvj420p")
+    graph = _image_filtergraph(full, hd, _request().recipe, None, None, 1)
+    distorted, reference = graph.split(";")
+    assert "setparams=colorspace=bt709:range=tv,format=rgb48le" in distorted
+    assert "setparams=colorspace=bt470bg:range=pc,format=rgb48le" in reference
+
+
+def test_butteraugli_is_vships_3_norm_on_vships_display(tmp_path, monkeypatch):
+    """The tool's own "3-norm" (the mean of the 3-, 6- and 12-norms, at 80
+    nits) read about 1.8 times Vship's 3-norm (at 203) on the same frames."""
+    import numpy as np
+
+    from vmaf_app.core import perceptual_cpu
+
+    seen = []
+
+    class Done:
+        pid, returncode = 7, 0
+
+        def communicate(self, timeout=None):
+            return "3-norm: 9.99\n", ""
+
+    def popen(command, **_kwargs):
+        seen.append(command)
+        path = Path(command[command.index("--rawdistmap") + 1])
+        values = np.array([1.0, 2.0, 3.0, 4.0], dtype="<f4")
+        path.write_bytes(b"Pf\n2 2\n-1.0\n" + values.tobytes())
+        return Done()
+
+    monkeypatch.setattr(perceptual_cpu.proc_util, "popen", popen)
+    reference, test = tmp_path / "r.png", tmp_path / "t.png"
+    score = perceptual_cpu._run_metric("butteraugli_main", "butteraugli", reference, test)
+    assert score == pytest.approx((np.mean([1, 8, 27, 64])) ** (1 / 3))
+    assert seen[0][seen[0].index("--intensity_target") + 1] == "203"
+    assert not (tmp_path / "t-distortion.pfm").exists()
+    perceptual_cpu._run_metric("butteraugli_main", "butteraugli", reference, test, hdr=True)
+    assert "--intensity_target" not in seen[1]  # an HDR picture's brightness is its own

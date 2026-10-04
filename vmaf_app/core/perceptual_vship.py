@@ -48,6 +48,7 @@ import numpy as np
 from vmaf_app.core import nvdec_frames
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
+from vmaf_app.core.colour import UnsupportedColourError, video_colour
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
@@ -731,62 +732,18 @@ def _format_yuv(sampling: str, depth: int) -> _ImageFormat:
     return _ImageFormat(f"yuv{sampling}p{suffix}", 0, _VSHIP_ENUMS[depth], subw, subh)
 
 
-#: FFmpeg's tag names (as ffprobe prints them, and their aliases) for the
-#: values of Vship's enums in VshipColor.h -- the H.273 numbers. The
-#: mapping is FFVship's (src/ffvship_utility/ffmpegToVshipColorFormat.hpp,
-#: Vship 5.1.1); a tag missing here has no Vship value.
-_MATRICES = {"gbr": 0, "rgb": 0, "bt709": 1, "bt470bg": 5, "smpte170m": 6, "ycgco": 8, "ycocg": 8,
-             "bt2020nc": 9, "bt2020ncl": 9, "bt2020c": 10, "bt2020cl": 10, "ictcp": 14,
-             "ycgco-re": 16, "ycgco-ro": 17}
-#: BT.2020's own 10- and 12-bit curves are BT.709's (H.273), as FFVship maps them.
-_TRANSFERS = {"bt709": 1, "bt470m": 4, "gamma22": 4, "bt470bg": 5, "gamma28": 5, "smpte170m": 6,
-              "smpte240m": 7, "linear": 8, "iec61966-2-1": 13, "srgb": 13, "iec61966_2_1": 13,
-              "bt2020-10": 1, "bt2020_10bit": 1, "bt2020-12": 1, "bt2020_12bit": 1,
-              "smpte2084": 16, "smpte428": 17, "smpte428_1": 17, "arib-std-b67": 18}
-_PRIMARIES = {"bt709": 1, "bt470m": 4, "bt470bg": 5, "smpte170m": 6, "smpte240m": 7, "bt2020": 9,
-              "smpte432": 12}
-_UNTAGGED = {"", "unknown", "unspecified", "reserved"}
-
-
 def _vship_colorspace(info: VideoInfo, image: _ImageFormat, width: int, height: int) -> _Colorspace:
-    """The frame's colorspace for Vship, from the stream's tags. Untagged
-    values are guessed as FFVship guesses them: the matrix by height
-    (BT.709 above 650 lines, else BT.470BG), and the transfer and primaries
-    from the matrix (BT.470BG's, or PQ and BT.2020 for BT.2020 and ICtCp);
-    untagged RGB is sRGB, full range."""
-    matrix_name = (info.color_space or "").casefold()
-    if image.family == 1:
-        matrix = 0
-    elif matrix_name in _UNTAGGED:
-        matrix = 1 if height > 650 else 5
-    elif matrix_name in _MATRICES:
-        matrix = _MATRICES[matrix_name]
-    else:
-        raise VshipUnavailableError(f"Vship does not support the {info.color_space} color matrix.")
-
-    transfer_name = (info.color_transfer or "").casefold()
-    if transfer_name in _UNTAGGED:
-        transfer = 13 if matrix == 0 else 5 if matrix == 5 else 16 if matrix in {9, 10, 14} else 1
-    elif transfer_name in _TRANSFERS:
-        transfer = _TRANSFERS[transfer_name]
-    else:
-        raise VshipUnavailableError(f"Vship does not support the {info.color_transfer} transfer function.")
-
-    primaries_name = (info.color_primaries or "").casefold()
-    if primaries_name in _UNTAGGED:
-        primaries = 5 if matrix == 5 else 9 if matrix in {9, 10, 14} else 1
-    elif primaries_name in _PRIMARIES:
-        primaries = _PRIMARIES[primaries_name]
-    else:
-        raise VshipUnavailableError(f"Vship does not support the {info.color_primaries} color primaries.")
-
-    range_name = (info.color_range or "").casefold()
-    if range_name in {"pc", "jpeg", "full"} or (not range_name and image.full_range):
-        value_range = 1
-    elif range_name in {"", "unknown", "unspecified", "tv", "mpeg", "limited"}:
-        value_range = 1 if image.family == 1 else 0
-    else:
-        raise VshipUnavailableError(f"Vship does not support the {info.color_range} range tag.")
+    """The frame's colorspace for Vship, from the stream's tags, read as
+    colour.video_colour reads them for both implementations."""
+    try:
+        colour = video_colour(info, rgb=image.family == 1, full_range_untagged=image.full_range)
+    except UnsupportedColourError as error:
+        raise VshipUnavailableError({
+            "matrix": f"Vship does not support the {error.value} color matrix.",
+            "transfer": f"Vship does not support the {error.value} transfer function.",
+            "primaries": f"Vship does not support the {error.value} color primaries.",
+            "range": f"Vship does not support the {error.value} range tag.",
+        }[error.kind]) from error
     location = (info.chroma_location or "left").casefold().replace("-", "")
     # Vship_ChromaLocation_t has no bottom or bottom-left siting.
     locations = {"left": 0, "center": 1, "topleft": 2, "top": 3,
@@ -795,9 +752,9 @@ def _vship_colorspace(info: VideoInfo, image: _ImageFormat, width: int, height: 
         raise VshipUnavailableError(f"Vship does not support {info.chroma_location} chroma siting.")
 
     return _Colorspace(
-        width, height, -1, -1, image.sample, value_range,
+        width, height, -1, -1, image.sample, int(colour.full_range),
         _Subsampling(image.subw, image.subh), locations[location], image.family,
-        matrix, transfer, primaries, _Crop(0, 0, 0, 0),
+        colour.matrix, colour.transfer, colour.primaries, _Crop(0, 0, 0, 0),
     )
 
 

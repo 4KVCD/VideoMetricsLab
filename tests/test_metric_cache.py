@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vmaf_app.core import result_cache
+from vmaf_app.core import metric_cache, result_cache
 from vmaf_app.core.analysis_request import (
     AnalysisRequest,
     ExecutionPreferences,
@@ -554,7 +554,8 @@ def test_choosing_cpu_never_loads_a_gpu_score(tmp_path):
     options = VmafOptions()
     info = VideoInfo(test, 640, 360, 24.0, 1.0, 24, "h264")
     gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
-    cpu = MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1")
+    cpu = MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1",
+                           {"color_tags": metric_cache.CPU_COLOR_TAGS})
 
     def store(provenance, value):
         result = ComparisonResult(
@@ -584,11 +585,26 @@ def test_a_gpu_choice_still_finds_a_cpu_fallback_score(tmp_path):
     source, test = _paths(tmp_path)
     directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
     spec = metric_request_specs(VmafOptions(), ("butteraugli",))[0]
-    cpu = MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1")
+    cpu = MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1",
+                           {"color_tags": metric_cache.CPU_COLOR_TAGS})
     store_metric(directory, FrameMetricResult("butteraugli", [0], [0.0], [1.5], cpu), spec)
 
     assert load_metric(directory, spec, "gpu").provenance.compute_backend == "cpu"
     assert load_metric(directory, spec, "cpu").provenance.compute_backend == "cpu"
+
+
+def test_a_cpu_score_from_before_colours_were_read_as_vships_is_calculated_again(tmp_path):
+    """The CPU tools were given FFmpeg's own RGB and tags: a tagged BT.709
+    film scored 15 SSIMULACRA2 points below the GPU, and Butteraugli was the
+    tool's own norm. Such a score is passed over."""
+    source, test = _paths(tmp_path)
+    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
+    spec = metric_request_specs(VmafOptions(), ("ssimulacra2",))[0]
+    old = MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1",
+                           {"intermediate": "png/rgb48le"})
+    store_metric(directory, FrameMetricResult("ssimulacra2", [0], [0.0], [40.4], old), spec)
+    assert load_metric(directory, spec, "cpu") is None
+    assert load_metric(directory, spec, "gpu") is None
 
 
 
