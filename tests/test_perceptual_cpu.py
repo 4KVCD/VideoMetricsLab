@@ -460,3 +460,60 @@ def test_a_scaled_untagged_hd_source_is_converted_with_bt709(tmp_path):
 
     assert made == converted("bt709")
     assert made != converted("bt601")
+
+
+def _frame_hashes(inputs: list[str], graph: str) -> dict[str, list[str]]:
+    import subprocess
+    import tempfile
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+
+    with tempfile.TemporaryDirectory() as directory:
+        files = {label: Path(directory) / f"{label}.txt" for label in ("distorted", "reference")}
+        command = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", *inputs, "-filter_complex", graph]
+        for label, path in files.items():
+            command += ["-map", f"[{label}]", "-fps_mode", "passthrough", "-f", "framemd5", str(path)]
+        subprocess.run(command, capture_output=True, check=True)
+        return {label: [line.rsplit(",", 1)[-1].strip() for line in path.read_text().splitlines()
+                        if line and not line.startswith("#")] for label, path in files.items()}
+
+
+@pytest.mark.parametrize("step, pairs", [(1, 23), (3, 8)])
+def test_a_frame_dropped_from_the_test_video_pairs_the_rest_by_time(tmp_path, step, pairs):
+    """The test video is the source with its sixth frame dropped, the others'
+    times kept. Paired by position, every frame after the gap was compared
+    with the source's next one; by time, as libvmaf pairs them, each frame
+    is compared with itself."""
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    run = [ffmpeg_path(), "-hide_banner", "-loglevel", "error"]
+    subprocess.run([*run, "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=24:duration=1", "-vf", "format=yuv420p10le",
+                    "-c:v", "ffv1", str(tmp_path / "source.mkv")], check=True)
+    subprocess.run([*run, "-i", str(tmp_path / "source.mkv"), "-vf", "select='not(eq(n,5))'", "-fps_mode",
+                    "passthrough", "-c:v", "ffv1", str(tmp_path / "test.mkv")], check=True)
+    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
+    graph = _image_filtergraph(source, test, _request().recipe, None, None, step)
+    assert "blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest" in graph
+
+    hashes = _frame_hashes(["-i", str(test.path), "-i", str(source.path)], graph)
+
+    assert len(hashes["distorted"]) == len(hashes["reference"]) == pairs
+    assert hashes["distorted"] == hashes["reference"]
+
+
+@pytest.mark.parametrize("change", [{"pix_fmt": "nv12"}, {"pix_fmt": "yuvj420p"}, {"color_space": "reserved"}])
+def test_a_source_blend_cannot_carry_unchanged_is_paired_by_position(change):
+    from dataclasses import replace
+
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    source = replace(VideoInfo(Path("source.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p"), **change)
+    test = VideoInfo(Path("test.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
+    graph = _image_filtergraph(source, test, _request().recipe, None, None, 1)
+
+    assert "blend" not in graph
+    assert graph.count(";") == 1  # a chain each

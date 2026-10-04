@@ -9,6 +9,7 @@ exists only for the lifetime of the task.
 from __future__ import annotations
 
 import contextlib
+import logging
 import math
 import os
 import re
@@ -31,11 +32,13 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
+from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
 
 BACKEND_ID = "perceptual"
+_log = logging.getLogger(__name__)
 _NUMBER = re.compile(r"(?<![\w.])([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)")
 
 
@@ -192,6 +195,37 @@ def _crop_filter(crop: CropBox | None, info: VideoInfo) -> list[str]:
     return [crop.as_filter()]
 
 
+#: Pixel formats FFmpeg's blend filter takes as they are, so it can carry a
+#: source frame through unchanged (_image_filtergraph): the planar YUV, GBR
+#: and gray ones, each checked frame by frame against the source's own.
+_BLEND_FORMAT = re.compile(r"(yuv(420|422|444)p|gbrp|gray)(9|10|12|14|16)?(le)?")
+#: The names setparams knows for each colour tag, as ffprobe prints them.
+_SETPARAMS_NAMES = {
+    "range": {"unknown", "tv", "pc"},
+    "color_primaries": {"bt709", "unknown", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020",
+                        "smpte428", "smpte431", "smpte432", "jedec-p22", "ebu3213", "vgamut"},
+    "color_trc": {"bt709", "unknown", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316",
+                  "iec61966-2-4", "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12", "smpte2084", "smpte428",
+                  "arib-std-b67", "vlog"},
+    "colorspace": {"gbr", "bt709", "unknown", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco", "ycgco-re",
+                   "ycgco-ro", "bt2020nc", "bt2020c", "smpte2085", "chroma-derived-nc", "chroma-derived-c",
+                   "ictcp", "ipt-c2"},
+    "chroma_location": {"unspecified", "left", "center", "topleft", "top", "bottomleft", "bottom"},
+}
+
+
+def _frame_tags(info: VideoInfo) -> str | None:
+    """A setparams giving frames `info`'s colour tags again, or None for a
+    tag setparams has no name for."""
+    tags = {"range": info.color_range or "unknown", "color_primaries": info.color_primaries or "unknown",
+            "color_trc": info.color_transfer or "unknown", "colorspace": info.color_space or "unknown",
+            "chroma_location": info.chroma_location or "unspecified"}
+    tags = {option: value.casefold() for option, value in tags.items()}
+    if any(value not in _SETPARAMS_NAMES[option] for option, value in tags.items()):
+        return None
+    return "setparams=" + ":".join(f"{option}={value}" for option, value in tags.items())
+
+
 def _image_filtergraph(
     source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe,
     source_crop: CropBox | None, distorted_crop: CropBox | None, step: int,
@@ -202,6 +236,18 @@ def _image_filtergraph(
     single decoder pass for each input, then both requested image metrics use
     each resulting pair, so adding Butteraugli to SSIMULACRA2 does not decode
     the videos again.
+
+    The n-th pictures of the two streams are a pair: the test video's n-th
+    frame and the source frame libvmaf pairs it with, by timestamp
+    (frame_sync.FRAMESYNC_OPTS). blend makes the pairs, with the same frame
+    sync: one frame for each test frame, from a "clock" of all-zero frames at
+    the test frames' times OR'd with the source's frames -- the source's
+    pixels unchanged, then its own colour tags (blend's frame takes the
+    clock's, the test video's). Every step-th pair is kept. The two streams
+    used to be paired by position, which a frame dropped from the test video
+    put one frame apart for the rest of the video. A source in a format
+    blend does not take as it is (packed RGB, NV12, full-range "yuvj") is
+    still paired by position.
     """
     source_size = _content_size(source, source_crop)
     distorted_size = _content_size(distorted, distorted_crop)
@@ -213,34 +259,64 @@ def _image_filtergraph(
     else:
         distorted_target = source_target = None
 
-    def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo, target: tuple[int, int] | None) -> str:
+    def prepare(crop: CropBox | None, info: VideoInfo, target: tuple[int, int] | None) -> list[str]:
         ops = _crop_filter(crop, info)
         if target is not None:
             # Scaled in the video's own format, as Vship's pictures are, and
-            # converted to RGB only after its tags are set (below). Left to
+            # converted to RGB only after its tags are set (to_rgb). Left to
             # FFmpeg, the scale filter made the RGB itself, before the tags:
             # an untagged HD source scaled to its encode's size was converted
             # with BT.601's matrix, not BT.709's.
             ops += [f"scale={target[0]}:{target[1]}:flags={recipe.scale_algorithm}", f"format={info.pix_fmt}"]
-        # select keeps a generic sampling axis distinct from FFmpeg/libvmaf.
-        if step > 1:
-            ops.append(f"select=not(mod(n\\,{step}))")
-        ops.append("setpts=PTS-STARTPTS")
+        return ops
+
+    def to_rgb(info: VideoInfo) -> list[str]:
         # Converted to RGB with the matrix and range Vship reads the video
         # with (colour.video_colour): FFmpeg's own choice for an untagged
         # video is BT.601's, where Vship takes an HD one as BT.709. The
         # conversion is the scale filter here, after the tags, not one FFmpeg
         # puts wherever its format negotiation lands.
         colour = colour_of(info)
+        ops = []
         if colour is not None and colour.matrix in FFMPEG_MATRICES:
             ops.append(f"setparams=colorspace={FFMPEG_MATRICES[colour.matrix]}:"
                        f"range={'pc' if colour.full_range else 'tv'}")
-        ops += ["scale", "format=rgb48le"]
-        return f"[{input_label}]{','.join(ops)}[{output_label}]"
+        return [*ops, "scale", "format=rgb48le"]
 
+    sample = [f"select=not(mod(n\\,{step}))"] if step > 1 else []
+    source_format = (source.pix_fmt or "").casefold()
+    restore = _frame_tags(source)
+    if _BLEND_FORMAT.fullmatch(source_format) is None or restore is None:
+        _log.info("The CPU tools' frames are paired by position: %s",
+                  f"blend cannot carry the source's {source_format} frames unchanged" if restore else
+                  "setparams has no name for one of the source's colour tags")
+
+        def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo,
+                  target: tuple[int, int] | None) -> str:
+            ops = [*prepare(crop, info, target), *sample, "setpts=PTS-STARTPTS", *to_rgb(info)]
+            return f"[{input_label}]{','.join(ops)}[{output_label}]"
+
+        return ";".join((
+            chain(f"0:{VIDEO_STREAM}", "distorted", distorted_crop, distorted, distorted_target),
+            chain(f"1:{VIDEO_STREAM}", "reference", source_crop, source, source_target),
+        ))
+
+    width, height = source_target or source_size
+    test_chain = [*prepare(distorted_crop, distorted, distorted_target), "setpts=PTS-STARTPTS",
+                  "split=2[test_frames][test_times]"]
+    source_chain = [*prepare(source_crop, source, source_target),
+                    *([] if source_target else [f"format={source_format}"]), "setpts=PTS-STARTPTS"]
     return ";".join((
-        chain(f"0:{VIDEO_STREAM}", "distorted", distorted_crop, distorted, distorted_target),
-        chain(f"1:{VIDEO_STREAM}", "reference", source_crop, source, source_target),
+        f"[0:{VIDEO_STREAM}]{','.join(test_chain)}",
+        # Its own scale: the format the clock is made in is not the test
+        # frames', which reach the split -- and the test's pictures -- as
+        # they are decoded.
+        f"[test_times]crop=2:2:0:0,scale,format={source_format},pad={width}:{height},"
+        "lut=c0=0:c1=0:c2=0:c3=0[clock]",
+        f"[1:{VIDEO_STREAM}]{','.join(source_chain)}[source_frames]",
+        f"[clock][source_frames]blend=all_mode=or:{':'.join(FRAMESYNC_OPTS)},{restore},"
+        f"{','.join([*sample, *to_rgb(source)])}[reference]",
+        f"[test_frames]{','.join([*sample, *to_rgb(distorted)])}[distorted]",
     ))
 
 

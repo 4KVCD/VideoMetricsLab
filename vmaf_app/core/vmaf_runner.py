@@ -23,6 +23,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
+from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
@@ -311,7 +312,7 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
         opts.append(f"n_subsample={options.n_subsample}")
     if options.extra_features:
         opts.append("feature=" + "|".join(options.extra_features))
-    opts += _FRAMESYNC_OPTS
+    opts += FRAMESYNC_OPTS
     return opts
 
 
@@ -326,27 +327,6 @@ def _v1_model_file(options: VmafOptions) -> Path | None:
     return None
 
 
-#: Both libvmaf and xpsnr are framesync filters, and framesync's defaults are
-#: wrong for measurement: repeatlast=true extends the last frame of the
-#: secondary input past its EOF, and eof_action=repeat keeps the comparison
-#: going. A distorted file two frames longer than the source -- routine
-#: encoder padding, and well inside the duration tolerance -- therefore got
-#: two extra "scores" comparing real distorted frames against a frozen copy
-#: of the source's final frame. Those frames score terribly (48 and 31 on a
-#: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
-#: the run silently reports a worse encode than was delivered.
-#:
-#: The default ts_sync_mode pairs each distorted frame with the last source
-#: frame at or before its timestamp. Two files with the same frames can have
-#: timestamps a millisecond apart -- MKV stores whole milliseconds, and each
-#: program rounds frame times from its own clock -- and a distorted frame
-#: stamped 1 ms early was compared with the source's previous frame: VMAF 0
-#: and XPSNR ~16 dB at scene cuts and in motion, on an anime episode whose
-#: SSIMULACRA2 (paired frame by frame) was 93 on the same frame. "nearest"
-#: takes the source frame nearest in time, the same frame whichever way the
-#: two timestamps are off by less than half a frame.
-_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
-
 #: overlay's name for each analysis format it holds unchanged. It has none
 #: for 12-bit, which is therefore scored on the CPU (vmaf_cuda.scores_on_gpu).
 _OVERLAY_FORMAT = {"yuv420p": "yuv420", "yuv420p10le": "yuv420p10"}
@@ -356,7 +336,7 @@ def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: 
     """The frame pairs FFmpeg's libvmaf filter compares, as the raw outputs
     [vmaf_dist] and [vmaf_ref] that VMAF on the GPU reads: the two streams
     are synchronized by overlay with libvmaf's own frame sync options
-    (_FRAMESYNC_OPTS), side by side in one frame, and cut apart again,
+    (FRAMESYNC_OPTS), side by side in one frame, and cut apart again,
     every pixel unchanged.
 
     The two outputs used to come straight from the two streams, paired by
@@ -369,7 +349,7 @@ def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: 
     The source goes at an even offset, so that an odd width still puts it
     on a chroma sample."""
     offset = width + (width & 1)
-    sync = ":".join(_FRAMESYNC_OPTS)
+    sync = ":".join(FRAMESYNC_OPTS)
     return (f"[{main_label}]pad={offset + width}:{height}[vmaf_canvas];"
             f"[vmaf_canvas][{ref_label}]overlay=x={offset}:y=0:eval=init:"
             f"format={_OVERLAY_FORMAT[analysis_format]}:{sync},split=2[vmaf_left][vmaf_right];"
@@ -399,7 +379,7 @@ def _build_libvmaf_stage(
     if not _uses_vmaf_model(options) and not options.extra_features:
         assert xpsnr_log_path is not None
         return (f"[{main_label}][{ref_label}]xpsnr=stats_file={xpsnr_log_path.name}:"
-                + ":".join(_FRAMESYNC_OPTS) + output)
+                + ":".join(FRAMESYNC_OPTS) + output)
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
     chains = []
     if options.compute_xpsnr and xpsnr_log_path is not None:
@@ -413,7 +393,7 @@ def _build_libvmaf_stage(
         chains.append(f"[{ref_label}]split=2[ref_xpsnr][ref_vmaf]")
         chains.append(
             f"[{main_label}][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}:"
-            + ":".join(_FRAMESYNC_OPTS) + "[xmain]"
+            + ":".join(FRAMESYNC_OPTS) + "[xmain]"
         )
         main_label = "xmain"
         ref_label = "ref_vmaf"
@@ -754,7 +734,7 @@ def estimate_total_frames(
     both ETAs. Used to size progress and estimate the queued work.
 
     `other_info` is the second input of a two-input comparison. The graph now
-    stops at whichever input ends first (see _FRAMESYNC_OPTS), so a distorted
+    stops at whichever input ends first (see FRAMESYNC_OPTS), so a distorted
     file longer than its source produces fewer frames than its own length
     suggests -- without this the progress bar would stop short of 100% and
     the ETA would never be reached.

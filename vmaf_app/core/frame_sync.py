@@ -1,7 +1,7 @@
 """The frame pairs FFmpeg's libvmaf filter compares, worked out from the two
 videos' timestamps: FFmpeg's frame sync (libavfilter/framesync.c) with the
 options vmaf_runner gives libvmaf and the GPU's overlay pairing
-(_FRAMESYNC_OPTS: shortest=1, repeatlast=0, ts_sync_mode=nearest). VMAF on
+(FRAMESYNC_OPTS: shortest=1, repeatlast=0, ts_sync_mode=nearest). VMAF on
 the GPU uses it for the videos decoded in its own process
 (vmaf_cuda.score_decoded), where no FFmpeg filter graph pairs them.
 
@@ -33,6 +33,27 @@ from vmaf_app.core.nvdec_frames import rescale
 
 T = TypeVar("T")
 U = TypeVar("U")
+
+#: Both libvmaf and xpsnr are framesync filters, and framesync's defaults are
+#: wrong for measurement: repeatlast=true extends the last frame of the
+#: secondary input past its EOF, and eof_action=repeat keeps the comparison
+#: going. A distorted file two frames longer than the source -- routine
+#: encoder padding, and well inside the duration tolerance -- therefore got
+#: two extra "scores" comparing real distorted frames against a frozen copy
+#: of the source's final frame. Those frames score terribly (48 and 31 on a
+#: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
+#: the run silently reports a worse encode than was delivered.
+#:
+#: The default ts_sync_mode pairs each distorted frame with the last source
+#: frame at or before its timestamp. Two files with the same frames can have
+#: timestamps a millisecond apart -- MKV stores whole milliseconds, and each
+#: program rounds frame times from its own clock -- and a distorted frame
+#: stamped 1 ms early was compared with the source's previous frame: VMAF 0
+#: and XPSNR ~16 dB at scene cuts and in motion, on an anime episode whose
+#: SSIMULACRA2 (paired frame by frame) was 93 on the same frame. "nearest"
+#: takes the source frame nearest in time, the same frame whichever way the
+#: two timestamps are off by less than half a frame.
+FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
 
 _END = (1 << 63) - 1  # INT64_MAX: an input that ended with nothing to extrapolate from
 
