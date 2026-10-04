@@ -1,4 +1,3 @@
-import contextlib
 import os
 import threading
 import time
@@ -127,10 +126,12 @@ def test_ffmpeg_and_vship_run_at_the_same_time_and_merge(qapp, monkeypatch):
     assert finished[0].has_metric("ssimulacra2")
 
 
-def _run_one(qapp, monkeypatch, ffmpeg, vship, keys=("vmaf", "ssimulacra2")):
+def _run_one(qapp, monkeypatch, ffmpeg, vship, keys=("vmaf", "ssimulacra2"), on_worker=None):
     monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
     monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), "d", metric_keys=keys)])
+    if on_worker is not None:
+        on_worker(worker)
     events = []
     worker.job_finished.connect(lambda _, result: events.append(("finished", result)))
     worker.job_partially_failed.connect(
@@ -147,16 +148,23 @@ def test_a_perceptual_failure_keeps_the_ffmpeg_metrics(qapp, monkeypatch):
     cancel the libvmaf pass and fail the video, discarding VMAF. The FFmpeg
     task now finishes and its metrics are the result."""
     ffmpeg_saw_cancel = []
+    perceptual_failed = threading.Event()
 
     def ffmpeg(*args, **kwargs):
-        time.sleep(0.2)  # still running when the perceptual task fails
+        assert perceptual_failed.wait(5)  # still running when the perceptual task has failed
         ffmpeg_saw_cancel.append(kwargs["cancel_event"].is_set())
         return _fake_result("d.mp4")
 
     def vship(*args, **kwargs):
         raise PerceptualRunError("Variable-frame-rate video is not supported safely yet.", "tail")
 
-    events = _run_one(qapp, monkeypatch, ffmpeg, vship)
+    def watch(worker):
+        def seen(_index, snapshots):
+            if any(task["backend"] == "perceptual" and task["state"] == "failed" for task in snapshots):
+                perceptual_failed.set()
+        worker.task_progress.connect(seen, Qt.ConnectionType.DirectConnection)
+
+    events = _run_one(qapp, monkeypatch, ffmpeg, vship, on_worker=watch)
     (kind, result, message, tail), = events
     assert kind == "partly"
     assert result.has_metric("vmaf") and not result.has_metric("ssimulacra2")
@@ -369,17 +377,13 @@ def _jobs(count: int) -> list[VmafJob]:
     ]
 
 
-def _concurrency_probe(monkeypatch):
-    """Records how many jobs were ever inside run_vmaf simultaneously."""
-    import threading
-
+def _concurrency_probe(monkeypatch, *, gate_two: bool = False):
+    """Records how many jobs were ever inside run_vmaf simultaneously, and
+    in what order. With gate_two, the first two wait for each other: they
+    must be in run_vmaf at the same time to go on."""
     state = {"live": 0, "peak": 0, "order": [], "entered": 0}
     lock = threading.Lock()
-    # Only the first two callers gate on each other: that is enough to prove
-    # they overlap, and making every job wait would cost a barrier timeout
-    # per job on the single-lane runs. Two parallel jobs meet within
-    # milliseconds; a single-lane run waits out the whole timeout once.
-    gate = threading.Barrier(2, timeout=0.25)
+    gate = threading.Barrier(2, timeout=5)
 
     def counted(source, distorted, *a, **kw):
         with lock:
@@ -387,10 +391,9 @@ def _concurrency_probe(monkeypatch):
             state["entered"] += 1
             state["peak"] = max(state["peak"], state["live"])
             state["order"].append(distorted.path.name)
-            gating = state["entered"] <= 2
+            gating = gate_two and state["entered"] <= 2
         if gating:
-            with contextlib.suppress(threading.BrokenBarrierError):
-                gate.wait()
+            gate.wait()
         with lock:
             state["live"] -= 1
         return _fake_result(distorted.path.name)
@@ -403,7 +406,7 @@ def test_two_jobs_really_run_at_the_same_time(qapp, monkeypatch):
     """libvmaf leaves much of a many-core CPU idle, so a second video fills
     the gap rather than competing for it -- but only if they genuinely
     overlap."""
-    state = _concurrency_probe(monkeypatch)
+    state = _concurrency_probe(monkeypatch, gate_two=True)
     worker = VmafWorker(_jobs(4), parallel_jobs=2)
 
     worker.run()
@@ -412,13 +415,33 @@ def test_two_jobs_really_run_at_the_same_time(qapp, monkeypatch):
     assert state["live"] == 0
 
 
-def test_one_at_a_time_stays_one_at_a_time(qapp, monkeypatch):
-    state = _concurrency_probe(monkeypatch)
-    worker = VmafWorker(_jobs(2), parallel_jobs=1)
+def _queued(scheduler: JobScheduler, *started: bool) -> list:
+    """Puts a CPU half in the scheduler's queue for each video, its video
+    started or not; returns the stand-in videos."""
+    runs = [SimpleNamespace(index=n, started=flag, admitted=set()) for n, flag in enumerate(started)]
+    for run in runs:
+        scheduler._queues["cpu"].append((run, SimpleNamespace(backend_id="ffmpeg")))
+    return runs
 
-    worker.run()
 
-    assert state["peak"] == 1
+def test_one_at_a_time_stays_one_at_a_time():
+    scheduler = JobScheduler(_jobs(2), parallel_jobs=1)
+    first, second = _queued(scheduler, False, False)
+
+    assert scheduler._take_next("cpu")[0] is first
+    assert scheduler._take_next("cpu") is None  # the one lane is busy
+    scheduler._busy["cpu"] -= 1  # the first is done
+    assert scheduler._take_next("cpu")[0] is second
+
+
+def test_the_gpu_runs_one_half_at_a_time_whatever_the_count():
+    scheduler = JobScheduler(_jobs(2), parallel_jobs=2)
+    for n in range(2):
+        scheduler._queues["gpu"].append((SimpleNamespace(index=n, started=False, admitted=set()),
+                                         SimpleNamespace(backend_id="perceptual")))
+
+    assert scheduler._take_next("gpu") is not None
+    assert scheduler._take_next("gpu") is None
 
 
 def test_every_job_runs_exactly_once_across_the_lanes(qapp, monkeypatch):
@@ -638,12 +661,10 @@ def test_a_lane_blocked_on_a_slot_is_released_by_cancel(qapp):
     assert outcome == [None]
 
 
-def test_the_lane_count_can_be_raised_while_running(qapp):
+def test_the_lane_count_can_be_raised_while_running(qapp, monkeypatch):
     # The whole reason the control sits next to Run: a long queue is when
     # someone notices the CPU is idle.
-    import threading
-
-    started = threading.Event()
+    started, second = threading.Event(), threading.Event()
     release = threading.Event()
     live = {"count": 0, "peak": 0}
     lock = threading.Lock()
@@ -652,30 +673,30 @@ def test_the_lane_count_can_be_raised_while_running(qapp):
         with lock:
             live["count"] += 1
             live["peak"] = max(live["peak"], live["count"])
+            if live["count"] == 2:
+                second.set()
         started.set()
         release.wait(10)
         with lock:
             live["count"] -= 1
         return _fake_result(distorted.path.name)
 
-    monkeypatch_target = job_runner.run_vmaf
-    job_runner.run_vmaf = blocking
+    monkeypatch.setattr(job_runner, "run_vmaf", blocking)
+    worker = VmafWorker(_jobs(4), parallel_jobs=1)
+    scheduler = worker.scheduler
+    runner = threading.Thread(target=worker.run)
+    runner.start()
     try:
-        worker = VmafWorker(_jobs(4), parallel_jobs=1)
-        runner = threading.Thread(target=worker.run)
-        runner.start()
         assert started.wait(5)
-        time.sleep(0.2)
-        assert live["peak"] == 1, "more than one ran before the count was raised"
+        with scheduler._sched:
+            assert scheduler._take_next("cpu") is None, "a second video may start before the count was raised"
 
         worker.set_parallel_jobs(2)
-        deadline = time.monotonic() + 5
-        while live["peak"] < 2 and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert live["peak"] == 2, "raising the count did not start another video"
+
+        assert second.wait(5), "raising the count did not start another video"
+        assert live["peak"] == 2
     finally:
         release.set()
-        job_runner.run_vmaf = monkeypatch_target
         runner.join(timeout=10)
 
 
@@ -779,21 +800,21 @@ def test_the_jobs_cvvdp_settings_reach_the_request(qapp, monkeypatch):
 def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, monkeypatch):
     from vmaf_app.core.perceptual_vship import GPU_WAIT_MESSAGE
 
-    ffmpeg_reported, gpu_waiting = threading.Event(), threading.Event()
+    ffmpeg_reported, gpu_waiting, gpu_reported = threading.Event(), threading.Event(), threading.Event()
 
     def ffmpeg(*args, on_progress=None, **kwargs):
-        gpu_waiting.wait(5)
+        assert gpu_waiting.wait(5)
         on_progress(10, 100, 11.0)
         ffmpeg_reported.set()
-        time.sleep(0.2)
+        assert gpu_reported.wait(5)  # still running when the GPU half's figures come
         return _fake_result("d.mp4")
 
     def vship(*args, on_status=None, on_progress=None, **kwargs):
         on_status(status(GPU_WAIT_MESSAGE))
         gpu_waiting.set()
-        ffmpeg_reported.wait(5)
-        time.sleep(0.05)
+        assert ffmpeg_reported.wait(5)
         on_progress(50, 100, 40.0)
+        gpu_reported.set()
         return _perceptual_output()
 
     monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
@@ -862,18 +883,16 @@ def test_no_more_than_three_videos_are_in_progress_at_once(qapp, monkeypatch):
     monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _fake_result(d.path.name))
     monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
     worker = VmafWorker([_split_job(f"d{n}.mp4") for n in range(6)], parallel_jobs=2)
-    worker.job_started.connect(lambda index, _label: started.append(index))
+    worker.job_started.connect(lambda index, _label: started.append(index), Qt.ConnectionType.DirectConnection)
+    scheduler = worker.scheduler
     runner = threading.Thread(target=worker.run)
     runner.start()
-    # Until three have started, then a while longer for a fourth that must not.
-    deadline = time.monotonic() + 5
-    while len(started) < 3 and time.monotonic() < deadline:
-        qapp.processEvents()
-        time.sleep(0.02)
-    settle = time.monotonic() + 0.3
-    while time.monotonic() < settle:
-        qapp.processEvents()
-        time.sleep(0.02)
+    # Until the CPU lanes have done what they may -- the first three
+    # videos' CPU halves -- while the first video holds the GPU.
+    with scheduler._sched:
+        assert scheduler._sched.wait_for(
+            lambda: scheduler._busy["cpu"] == 0 and len(scheduler._queues["cpu"]) == 3, timeout=5)
+        assert scheduler._take_next("cpu") is None, "a fourth video may start"
     in_progress_while_blocked = sorted(started)
     release.set()
     runner.join(10)
@@ -1118,10 +1137,13 @@ def test_cancelling_keeps_the_gpu_metrics_of_a_video_whose_cpu_half_never_starte
     worker = VmafWorker([_split_job("d0.mp4"), _split_job("d1.mp4")], parallel_jobs=1)
     finished = []
     worker.job_finished.connect(lambda index, result: finished.append((index, result)))
+    recorded = threading.Event()  # the GPU lane has the second video's GPU metrics as its result so far
+    worker.result_updated.connect(lambda index, _result: index == 1 and recorded.set(),
+                                  Qt.ConnectionType.DirectConnection)
     runner = threading.Thread(target=worker.run)
     runner.start()
     assert second_gpu_done.wait(10)
-    time.sleep(0.2)  # let the GPU lane record it
+    assert recorded.wait(10)
     worker.cancel()
     runner.join(10)
     _drain(qapp)

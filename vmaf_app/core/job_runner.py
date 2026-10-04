@@ -369,30 +369,37 @@ class JobScheduler:
     def _next_task(self, pool: str):
         """The next half this pool may run, in list order, or None once the
         queue is empty or the run was cancelled. Waits for room."""
-        queue = self._queues[pool]
         with self._sched:
             while True:
-                if self._cancel_event.is_set() or not queue:
+                if self._cancel_event.is_set() or not self._queues[pool]:
                     return None
-                capacity = self._parallel_jobs if pool == _CPU else 1
-                if self._busy[pool] < capacity:
-                    # The first half whose video is already in progress, or
-                    # that may start a new one. Later ones may pass an earlier
-                    # video only when that one cannot start yet, so the
-                    # videos in progress always have a way to finish.
-                    for position, (run, task) in enumerate(queue):
-                        if run.started or len(self._in_flight) < MAX_VIDEOS_IN_FLIGHT:
-                            del queue[position]
-                            self._busy[pool] += 1
-                            run.admitted.add(task.backend_id)
-                            if not run.started:
-                                run.started = True
-                                self._in_flight.add(run.index)
-                            return run, task
+                if (picked := self._take_next(pool)) is not None:
+                    return picked
                 # A timeout rather than a pure wait: cancellation is
                 # signalled through an Event that cannot notify this
                 # condition, so the wait has to come up for air.
                 self._sched.wait(0.1)
+
+    def _take_next(self, pool: str):
+        """The half this pool may start now, taken off its queue -- or None
+        when there is no room for one. Called with self._sched held."""
+        if self._busy[pool] >= (self._parallel_jobs if pool == _CPU else 1):
+            return None
+        # The first half whose video is already in progress, or that may
+        # start a new one. Later ones may pass an earlier video only when
+        # that one cannot start yet, so the videos in progress always have
+        # a way to finish.
+        queue = self._queues[pool]
+        for position, (run, task) in enumerate(queue):
+            if run.started or len(self._in_flight) < MAX_VIDEOS_IN_FLIGHT:
+                del queue[position]
+                self._busy[pool] += 1
+                run.admitted.add(task.backend_id)
+                if not run.started:
+                    run.started = True
+                    self._in_flight.add(run.index)
+                return run, task
+        return None
 
     def _drain_queue(self, pool: str) -> None:
         while (picked := self._next_task(pool)) is not None:
