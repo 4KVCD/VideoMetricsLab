@@ -10,13 +10,13 @@ FFmpeg's graph ends in its CPU filters as before and, beside them, in two raw
 outputs, one per video, written to named pipes that this module reads and
 feeds to libvmaf frame pair by frame pair (see vmaf_runner._run_on_gpu).
 
-Where NVIDIA's decoder decodes both videos and they are compared as they
-are, unscaled, VMAF is scored without FFmpeg's decode (score_decoded): the
-videos are decoded in libvmaf's process (nvdec_frames), the frames paired as
-libvmaf's filter pairs them (frame_sync), and each frame's luma -- all VMAF
-reads -- copied on the GPU into a picture of libvmaf's on the GPU. No frame
-crosses to system memory; FFmpeg only copies the compressed streams out of
-their containers.
+Where NVIDIA's decoder decodes both videos, VMAF is scored without FFmpeg's
+decode (score_decoded): the videos are decoded in libvmaf's process
+(nvdec_frames), scaled and widened on the GPU to the size and depth they
+are compared at, the frames paired as libvmaf's filter pairs them
+(frame_sync), and each frame's luma -- all VMAF reads -- copied on the GPU
+into a picture of libvmaf's on the GPU. No frame crosses to system memory;
+FFmpeg only copies the compressed streams out of their containers.
 
 Scores against the CPU (vmaf.exe of the same build, frame by frame): VIF and
 ADM identical; motion within about 3e-5, from the order the CUDA kernel
@@ -39,6 +39,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -426,7 +427,7 @@ class GpuAttempt:
 def score_decoded(
     source: VideoInfo, distorted: VideoInfo, source_crop: CropBox | None, distorted_crop: CropBox | None, *,
     width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
-    duration_limit: str | None, total_frames: int,
+    duration_limit: str | None, total_frames: int, scale_algorithm: str = "bicubic",
     on_progress: Callable[[int, int, float], None] | None = None,
     check_cancel: Callable[[], None] = lambda: None,
     process_handle=None,
@@ -435,26 +436,32 @@ def score_decoded(
     process: what GpuAttempt scores from FFmpeg's raw outputs, the same
     frames compared.
 
-    FFmpeg's graph for those outputs -- the decoded frames cropped, paired by
-    overlay with libvmaf's frame sync, cut by each output's -t -- is done
-    here: nvdec_frames crops as FFmpeg's crop filter does and shifts 10-bit
-    samples as FFmpeg converts them, frame_sync.frame_pairs pairs as the
-    overlay does, and a pair is scored while the test frame's time from the
-    first is below `duration_limit` (the outputs' -t, as text) in the test
-    video's time base, as FFmpeg's trim filter cuts.
+    FFmpeg's graph for those outputs -- the decoded frames cropped, scaled to
+    the size compared at, converted to its depth, paired by overlay with
+    libvmaf's frame sync, cut by each output's -t -- is done here:
+    nvdec_frames crops as FFmpeg's crop filter does, shifts 10-bit samples and
+    widens 8-bit ones as FFmpeg converts them, and scales on the GPU with the
+    same filter (not to the sample: the user decided a comparison scaled any
+    way is the same one); frame_sync.frame_pairs pairs as the overlay does,
+    and a pair is scored while the test frame's time from the first is below
+    `duration_limit` (the outputs' -t, as text) in the test video's time
+    base, as FFmpeg's trim filter cuts.
 
     NvdecUnavailableError when the videos are not decoded here (FFmpeg then
-    decodes them, as before): another decoder, a scaled video, a depth other
-    than the one compared at. NvdecFailedError when decoding failed after
-    the start -- the run is then made again through FFmpeg."""
+    decodes them, as before): another decoder, a codec or size it does not
+    take. NvdecFailedError when decoding failed after the start -- the run
+    is then made again through FFmpeg."""
     plans = []
     for info, crop in ((distorted, distorted_crop), (source, source_crop)):
-        plan = nvdec_frames.plan_decode(info, crop, shift=6, luma_only=True)
-        if plan.bit_depth != bit_depth:
+        plan = nvdec_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
+                                        algorithm=scale_algorithm)
+        if plan.bit_depth < bit_depth:
+            full = (info.color_range or "").casefold() in {"pc", "jpeg", "full"} or (
+                not info.color_range and (info.pix_fmt or "").casefold().startswith("yuvj"))
+            plan = replace(plan, widen=nvdec_frames.WIDEN_REPEAT if full else nvdec_frames.WIDEN_SHIFT)
+        if plan.bit_depth > bit_depth:
             raise nvdec_frames.NvdecUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        if (plan.crop_w, plan.crop_h) != (width, height):
-            raise nvdec_frames.NvdecUnavailableError("a video is scaled")
         supported, refusal = nvdec_frames.decoder_supports(0, plan)
         if not supported:
             raise nvdec_frames.NvdecUnavailableError(refusal)

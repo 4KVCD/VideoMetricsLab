@@ -44,6 +44,7 @@
 #include "ffnvcodec/dynlink_cuda.h"
 #include "ffnvcodec/dynlink_nvcuvid.h"
 #include "gpu_frames.h"
+#include "scale_filter.h"
 
 namespace {
 
@@ -63,6 +64,7 @@ struct Driver {
     tcuMemFree_v2 *cuMemFree;
     tcuMemcpy2DAsync_v2 *cuMemcpy2DAsync;
     tcuMemcpyDtoHAsync_v2 *cuMemcpyDtoHAsync;
+    tcuMemcpyHtoD_v2 *cuMemcpyHtoD;
     tcuStreamCreate *cuStreamCreate;
     tcuStreamDestroy_v2 *cuStreamDestroy;
     tcuEventCreate *cuEventCreate;
@@ -121,6 +123,7 @@ bool load_driver() {
         && load_symbol(d.cuda, d.cuMemFree, "cuMemFree_v2")
         && load_symbol(d.cuda, d.cuMemcpy2DAsync, "cuMemcpy2DAsync_v2")
         && load_symbol(d.cuda, d.cuMemcpyDtoHAsync, "cuMemcpyDtoHAsync_v2")
+        && load_symbol(d.cuda, d.cuMemcpyHtoD, "cuMemcpyHtoD_v2")
         && load_symbol(d.cuda, d.cuStreamCreate, "cuStreamCreate")
         && load_symbol(d.cuda, d.cuStreamDestroy, "cuStreamDestroy_v2")
         && load_symbol(d.cuda, d.cuEventCreate, "cuEventCreate")
@@ -165,6 +168,14 @@ std::string cuda_error(CUresult result) {
 // One thread per output sample: dst[y][x] = src[y * src_pitch + x * src_step]
 // (bytes), and for 16-bit samples shifted right by `shift`. U and V are two
 // launches over the interleaved chroma plane, src_step 2 samples apart.
+//
+// Scaling (scale_filter.h) is two passes: hpass filters each input row into
+// floats at the output width (taps from starts[x], weights[x * taps + k],
+// edges repeated; 16-bit samples shifted right by in_shift first), capped
+// where swscale's 15-bit intermediate saturates (kIntermediateCap), vpass
+// filters those down each column to the output height, rounds, multiplies by
+// gain, clamps to max and shifts left by out_shift. widen8 makes an 8-bit
+// plane 16-bit as FFmpeg does: v << 2, with the top bits repeated if asked.
 const char kKernels[] = R"PTX(
 .version 6.0
 .target sm_30
@@ -261,6 +272,236 @@ PLANE8_DONE:
 PLANE16_DONE:
     ret;
 }
+
+.visible .entry hpass(
+    .param .u64 p_src, .param .u32 p_src_pitch, .param .u32 p_src_step, .param .u32 p_wide, .param .u32 p_in_shift,
+    .param .u32 p_src_w, .param .u64 p_dst, .param .u32 p_dst_pitch, .param .u32 p_width, .param .u32 p_height,
+    .param .u64 p_starts, .param .u64 p_weights, .param .u32 p_taps)
+{
+    .reg .pred %p<6>;
+    .reg .b16 %rs<3>;
+    .reg .b32 %r<24>;
+    .reg .f32 %f<6>;
+    .reg .b64 %rd<20>;
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.s32 %r4, %r1, %r2, %r3;
+    mov.u32 %r1, %ctaid.y;
+    mov.u32 %r2, %ntid.y;
+    mov.u32 %r3, %tid.y;
+    mad.lo.s32 %r5, %r1, %r2, %r3;
+    ld.param.u32 %r6, [p_width];
+    ld.param.u32 %r7, [p_height];
+    setp.ge.u32 %p1, %r4, %r6;
+    setp.ge.u32 %p2, %r5, %r7;
+    or.pred %p1, %p1, %p2;
+    @%p1 bra HPASS_DONE;
+    ld.param.u64 %rd1, [p_src];
+    ld.param.u32 %r8, [p_src_pitch];
+    ld.param.u32 %r9, [p_src_step];
+    ld.param.u32 %r10, [p_wide];
+    ld.param.u32 %r11, [p_in_shift];
+    ld.param.u32 %r12, [p_src_w];
+    ld.param.u64 %rd2, [p_starts];
+    ld.param.u64 %rd3, [p_weights];
+    ld.param.u32 %r13, [p_taps];
+    cvta.to.global.u64 %rd1, %rd1;
+    cvta.to.global.u64 %rd2, %rd2;
+    cvta.to.global.u64 %rd3, %rd3;
+    mul.wide.u32 %rd4, %r5, %r8;
+    add.s64 %rd5, %rd1, %rd4;
+    mul.wide.u32 %rd6, %r4, 4;
+    add.s64 %rd7, %rd2, %rd6;
+    ld.global.s32 %r14, [%rd7];
+    mul.lo.s32 %r15, %r4, %r13;
+    mul.wide.u32 %rd8, %r15, 4;
+    add.s64 %rd9, %rd3, %rd8;
+    sub.s32 %r16, %r12, 1;
+    setp.ne.u32 %p3, %r10, 0;
+    mov.f32 %f1, 0f00000000;
+    mov.u32 %r17, 0;
+HPASS_LOOP:
+    setp.ge.u32 %p4, %r17, %r13;
+    @%p4 bra HPASS_STORE;
+    add.s32 %r18, %r14, %r17;
+    max.s32 %r18, %r18, 0;
+    min.s32 %r18, %r18, %r16;
+    mul.wide.s32 %rd10, %r18, %r9;
+    add.s64 %rd11, %rd5, %rd10;
+    @%p3 bra HPASS_WIDE;
+    ld.global.u8 %rs1, [%rd11];
+    cvt.u32.u16 %r19, %rs1;
+    bra HPASS_ADD;
+HPASS_WIDE:
+    ld.global.u16 %rs1, [%rd11];
+    cvt.u32.u16 %r19, %rs1;
+    shr.u32 %r19, %r19, %r11;
+HPASS_ADD:
+    cvt.rn.f32.u32 %f2, %r19;
+    mul.wide.u32 %rd12, %r17, 4;
+    add.s64 %rd13, %rd9, %rd12;
+    ld.global.f32 %f3, [%rd13];
+    fma.rn.f32 %f1, %f3, %f2, %f1;
+    add.u32 %r17, %r17, 1;
+    bra HPASS_LOOP;
+HPASS_STORE:
+    selp.f32 %f4, 0f447FFE00, 0f437FFE00, %p3;
+    min.f32 %f1, %f1, %f4;
+    ld.param.u64 %rd14, [p_dst];
+    ld.param.u32 %r20, [p_dst_pitch];
+    cvta.to.global.u64 %rd14, %rd14;
+    mul.wide.u32 %rd15, %r5, %r20;
+    add.s64 %rd16, %rd14, %rd15;
+    add.s64 %rd16, %rd16, %rd6;
+    st.global.f32 [%rd16], %f1;
+HPASS_DONE:
+    ret;
+}
+
+.visible .entry vpass(
+    .param .u64 p_src, .param .u32 p_src_pitch, .param .u32 p_src_h, .param .u64 p_dst, .param .u32 p_dst_pitch,
+    .param .u32 p_wide, .param .u32 p_out_shift, .param .f32 p_gain, .param .f32 p_max,
+    .param .u32 p_width, .param .u32 p_height, .param .u64 p_starts, .param .u64 p_weights, .param .u32 p_taps)
+{
+    .reg .pred %p<6>;
+    .reg .b16 %rs<3>;
+    .reg .b32 %r<24>;
+    .reg .f32 %f<8>;
+    .reg .b64 %rd<20>;
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.s32 %r4, %r1, %r2, %r3;
+    mov.u32 %r1, %ctaid.y;
+    mov.u32 %r2, %ntid.y;
+    mov.u32 %r3, %tid.y;
+    mad.lo.s32 %r5, %r1, %r2, %r3;
+    ld.param.u32 %r6, [p_width];
+    ld.param.u32 %r7, [p_height];
+    setp.ge.u32 %p1, %r4, %r6;
+    setp.ge.u32 %p2, %r5, %r7;
+    or.pred %p1, %p1, %p2;
+    @%p1 bra VPASS_DONE;
+    ld.param.u64 %rd1, [p_src];
+    ld.param.u32 %r8, [p_src_pitch];
+    ld.param.u32 %r9, [p_src_h];
+    ld.param.u64 %rd2, [p_starts];
+    ld.param.u64 %rd3, [p_weights];
+    ld.param.u32 %r13, [p_taps];
+    cvta.to.global.u64 %rd1, %rd1;
+    cvta.to.global.u64 %rd2, %rd2;
+    cvta.to.global.u64 %rd3, %rd3;
+    mul.wide.u32 %rd4, %r4, 4;
+    add.s64 %rd5, %rd1, %rd4;
+    mul.wide.u32 %rd6, %r5, 4;
+    add.s64 %rd7, %rd2, %rd6;
+    ld.global.s32 %r14, [%rd7];
+    mul.lo.s32 %r15, %r5, %r13;
+    mul.wide.u32 %rd8, %r15, 4;
+    add.s64 %rd9, %rd3, %rd8;
+    sub.s32 %r16, %r9, 1;
+    mov.f32 %f1, 0f00000000;
+    mov.u32 %r17, 0;
+VPASS_LOOP:
+    setp.ge.u32 %p4, %r17, %r13;
+    @%p4 bra VPASS_STORE;
+    add.s32 %r18, %r14, %r17;
+    max.s32 %r18, %r18, 0;
+    min.s32 %r18, %r18, %r16;
+    mul.wide.s32 %rd10, %r18, %r8;
+    add.s64 %rd11, %rd5, %rd10;
+    ld.global.f32 %f2, [%rd11];
+    mul.wide.u32 %rd12, %r17, 4;
+    add.s64 %rd13, %rd9, %rd12;
+    ld.global.f32 %f3, [%rd13];
+    fma.rn.f32 %f1, %f3, %f2, %f1;
+    add.u32 %r17, %r17, 1;
+    bra VPASS_LOOP;
+VPASS_STORE:
+    ld.param.f32 %f4, [p_gain];
+    ld.param.f32 %f5, [p_max];
+    mul.rn.f32 %f1, %f1, %f4;
+    cvt.rni.f32.f32 %f1, %f1;
+    max.f32 %f1, %f1, 0f00000000;
+    min.f32 %f1, %f1, %f5;
+    cvt.rzi.u32.f32 %r19, %f1;
+    ld.param.u32 %r20, [p_out_shift];
+    shl.b32 %r19, %r19, %r20;
+    ld.param.u64 %rd14, [p_dst];
+    ld.param.u32 %r21, [p_dst_pitch];
+    ld.param.u32 %r22, [p_wide];
+    cvta.to.global.u64 %rd14, %rd14;
+    mul.wide.u32 %rd15, %r5, %r21;
+    add.s64 %rd16, %rd14, %rd15;
+    cvt.u16.u32 %rs1, %r19;
+    setp.ne.u32 %p5, %r22, 0;
+    @%p5 bra VPASS_WIDE;
+    cvt.u64.u32 %rd17, %r4;
+    add.s64 %rd18, %rd16, %rd17;
+    st.global.u8 [%rd18], %rs1;
+    bra VPASS_DONE;
+VPASS_WIDE:
+    mul.wide.u32 %rd17, %r4, 2;
+    add.s64 %rd18, %rd16, %rd17;
+    st.global.u16 [%rd18], %rs1;
+VPASS_DONE:
+    ret;
+}
+
+.visible .entry widen8(
+    .param .u64 p_src, .param .u32 p_src_pitch, .param .u32 p_src_step,
+    .param .u64 p_dst, .param .u32 p_dst_pitch,
+    .param .u32 p_width, .param .u32 p_height, .param .u32 p_repeat)
+{
+    .reg .pred %p<4>;
+    .reg .b16 %rs<3>;
+    .reg .b32 %r<20>;
+    .reg .b64 %rd<12>;
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.s32 %r4, %r1, %r2, %r3;
+    mov.u32 %r5, %ctaid.y;
+    mov.u32 %r6, %ntid.y;
+    mov.u32 %r7, %tid.y;
+    mad.lo.s32 %r8, %r5, %r6, %r7;
+    ld.param.u32 %r9, [p_width];
+    ld.param.u32 %r10, [p_height];
+    setp.ge.u32 %p1, %r4, %r9;
+    setp.ge.u32 %p2, %r8, %r10;
+    or.pred %p1, %p1, %p2;
+    @%p1 bra WIDEN_DONE;
+    ld.param.u64 %rd1, [p_src];
+    ld.param.u32 %r11, [p_src_pitch];
+    ld.param.u32 %r12, [p_src_step];
+    ld.param.u64 %rd2, [p_dst];
+    ld.param.u32 %r13, [p_dst_pitch];
+    ld.param.u32 %r14, [p_repeat];
+    cvta.to.global.u64 %rd1, %rd1;
+    cvta.to.global.u64 %rd2, %rd2;
+    mul.wide.u32 %rd3, %r8, %r11;
+    mul.wide.u32 %rd4, %r4, %r12;
+    add.s64 %rd5, %rd1, %rd3;
+    add.s64 %rd5, %rd5, %rd4;
+    ld.global.u8 %rs1, [%rd5];
+    cvt.u32.u16 %r15, %rs1;
+    shl.b32 %r16, %r15, 2;
+    setp.ne.u32 %p3, %r14, 0;
+    shr.u32 %r17, %r15, 6;
+    @%p3 or.b32 %r16, %r16, %r17;
+    cvt.u16.u32 %rs2, %r16;
+    mul.wide.u32 %rd6, %r8, %r13;
+    mul.wide.u32 %rd7, %r4, 2;
+    add.s64 %rd8, %rd2, %rd6;
+    add.s64 %rd8, %rd8, %rd7;
+    st.global.u16 [%rd8], %rs2;
+WIDEN_DONE:
+    ret;
+}
 )PTX";
 
 constexpr unsigned kBlockX = 32, kBlockY = 8;
@@ -282,7 +523,14 @@ struct Decoder {
     CUstream decode_stream = nullptr, output_stream = nullptr;
     CUevent decode_event = nullptr, output_event = nullptr;
     CUmodule module = nullptr;
-    CUfunction plane8 = nullptr, plane16 = nullptr;
+    CUfunction plane8 = nullptr, plane16 = nullptr, hpass = nullptr, vpass = nullptr, widen8 = nullptr;
+    // Scaling: each filter's tables in GPU memory, and the rows between the passes.
+    struct DeviceFilter {
+        CUdeviceptr starts = 0, weights = 0;
+        unsigned taps = 0;
+    } luma_h, luma_v, chroma_h, chroma_v;
+    CUdeviceptr scratch = 0;
+    int out_w = 0, out_h = 0;
     CUvideoctxlock lock = nullptr;
     CUvideoparser parser = nullptr;
     CUvideodecoder decoder = nullptr;
@@ -457,6 +705,39 @@ bool launch(Decoder *d, CUfunction kernel, CUdeviceptr src, unsigned src_pitch, 
                     "Converting a picture");
 }
 
+// One plane through the two scaling passes: `src` (w x h samples, `step`
+// bytes apart in rows `pitch` bytes apart) to `dst` (ow x oh, packed).
+bool scale(Decoder *d, CUdeviceptr src, unsigned pitch, unsigned step, unsigned w, unsigned h, CUdeviceptr dst,
+           unsigned ow, unsigned oh, const Decoder::DeviceFilter &fh, const Decoder::DeviceFilter &fv, float gain) {
+    const Params &p = d->params;
+    unsigned wide = p.bit_depth > 8, in_shift = p.bit_depth > 8 ? 6 : 0;
+    unsigned out_wide = wide_out(p), out_shift = p.bit_depth > 8 && p.shift == 0 ? 6 : 0;
+    float max = wide_out(p) ? 1023.0f : 255.0f;
+    unsigned scratch_pitch = ow * 4, out_pitch = ow * (out_wide ? 2 : 1);
+    CUdeviceptr scratch = d->scratch;
+    void *h_args[] = {&src, &pitch, &step, &wide, &in_shift, &w, &scratch, &scratch_pitch, &ow, &h,
+                      const_cast<CUdeviceptr *>(&fh.starts), const_cast<CUdeviceptr *>(&fh.weights),
+                      const_cast<unsigned *>(&fh.taps)};
+    void *v_args[] = {&scratch, &scratch_pitch, &h, &dst, &out_pitch, &out_wide, &out_shift, &gain, &max, &ow, &oh,
+                      const_cast<CUdeviceptr *>(&fv.starts), const_cast<CUdeviceptr *>(&fv.weights),
+                      const_cast<unsigned *>(&fv.taps)};
+    const Driver &cu = g_driver;
+    return d->check(cu.cuLaunchKernel(d->hpass, (ow + kBlockX - 1) / kBlockX, (h + kBlockY - 1) / kBlockY, 1,
+                                      kBlockX, kBlockY, 1, 0, d->decode_stream, h_args, nullptr), "Scaling a picture")
+           && d->check(cu.cuLaunchKernel(d->vpass, (ow + kBlockX - 1) / kBlockX, (oh + kBlockY - 1) / kBlockY, 1,
+                                         kBlockX, kBlockY, 1, 0, d->decode_stream, v_args, nullptr),
+                       "Scaling a picture");
+}
+
+bool widen(Decoder *d, CUdeviceptr src, unsigned pitch, unsigned step, CUdeviceptr dst, unsigned w, unsigned h,
+           unsigned repeat) {
+    unsigned dst_pitch = w * 2;
+    void *args[] = {&src, &pitch, &step, &dst, &dst_pitch, &w, &h, &repeat};
+    return d->check(g_driver.cuLaunchKernel(d->widen8, (w + kBlockX - 1) / kBlockX, (h + kBlockY - 1) / kBlockY, 1,
+                                            kBlockX, kBlockY, 1, 0, d->decode_stream, args, nullptr),
+                    "Converting a picture");
+}
+
 int CUDAAPI on_display(void *user, CUVIDPARSERDISPINFO *display) {
     Decoder *d = static_cast<Decoder *>(user);
     const Driver &cu = g_driver;
@@ -502,16 +783,36 @@ int CUDAAPI on_display(void *user, CUVIDPARSERDISPINFO *display) {
     const unsigned bps = d->bytes_per_sample;
     CUdeviceptr dst = d->pool + static_cast<size_t>(slot) * d->frame_bytes;
     CUdeviceptr luma = surface + static_cast<size_t>(p.crop_y) * pitch + static_cast<size_t>(p.crop_x) * bps;
+    CUdeviceptr chroma = surface + static_cast<size_t>(pitch) * d->surface_height
+                         + static_cast<size_t>(p.crop_y / 2) * pitch + static_cast<size_t>(p.crop_x / 2) * 2 * bps;
+    const unsigned chroma_w = (p.crop_w + 1) / 2, chroma_h = (p.crop_h + 1) / 2;
     bool ok;
-    if (bps == 1) {
+    if (is_scaled(p)) {
+        // Widened 8-bit: the filtered value times 4, as near FFmpeg's v << 2
+        // as a filtered value can be (full-range luma: to 1023 for 255).
+        const float luma_gain = p.widen == 2 ? 1023.0f / 255.0f : p.widen ? 4.0f : 1.0f;
+        const float chroma_gain = p.widen ? 4.0f : 1.0f;
+        const unsigned ow = d->out_w, oh = d->out_h, ocw = (ow + 1) / 2, och = (oh + 1) / 2;
+        ok = scale(d, luma, pitch, bps, p.crop_w, p.crop_h, dst, ow, oh, d->luma_h, d->luma_v, luma_gain);
+        if (ok && !p.luma_only) {
+            CUdeviceptr u = dst + d->luma_bytes, v = u + d->chroma_bytes;
+            ok = scale(d, chroma, pitch, 2 * bps, chroma_w, chroma_h, u, ocw, och, d->chroma_h, d->chroma_v,
+                       chroma_gain)
+                 && scale(d, chroma + bps, pitch, 2 * bps, chroma_w, chroma_h, v, ocw, och, d->chroma_h, d->chroma_v,
+                          chroma_gain);
+        }
+    } else if (p.widen) {
+        ok = widen(d, luma, pitch, 1, dst, p.crop_w, p.crop_h, p.widen == 2);
+        if (ok && !p.luma_only) {
+            CUdeviceptr u = dst + d->luma_bytes, v = u + d->chroma_bytes;
+            ok = widen(d, chroma, pitch, 2, u, chroma_w, chroma_h, 0) && widen(d, chroma + 1, pitch, 2, v, chroma_w, chroma_h, 0);
+        }
+    } else if (bps == 1) {
         ok = launch(d, d->plane8, luma, pitch, 1, dst, p.crop_w, p.crop_w, p.crop_h, 0);
     } else {
         ok = launch(d, d->plane16, luma, pitch, 2, dst, p.crop_w * 2, p.crop_w, p.crop_h, p.shift);
     }
-    if (ok && !p.luma_only) {
-        unsigned chroma_w = (p.crop_w + 1) / 2, chroma_h = (p.crop_h + 1) / 2;
-        CUdeviceptr chroma = surface + static_cast<size_t>(pitch) * d->surface_height
-                             + static_cast<size_t>(p.crop_y / 2) * pitch + static_cast<size_t>(p.crop_x / 2) * 2 * bps;
+    if (ok && !p.luma_only && !is_scaled(p) && !p.widen) {
         CUdeviceptr u = dst + d->luma_bytes, v = u + d->chroma_bytes;
         CUfunction kernel = bps == 1 ? d->plane8 : d->plane16;
         ok = launch(d, kernel, chroma, pitch, 2 * bps, u, chroma_w * bps, chroma_w, chroma_h, p.shift)
@@ -544,6 +845,11 @@ void destroy(Decoder *d) {
         if (d->decoder) cu.cuvidDestroyDecoder(d->decoder);
         if (d->lock) cu.cuvidCtxLockDestroy(d->lock);
         if (d->pool) cu.cuMemFree(d->pool);
+        if (d->scratch) cu.cuMemFree(d->scratch);
+        for (Decoder::DeviceFilter *f : {&d->luma_h, &d->luma_v, &d->chroma_h, &d->chroma_v}) {
+            if (f->starts) cu.cuMemFree(f->starts);
+            if (f->weights) cu.cuMemFree(f->weights);
+        }
         if (d->module) cu.cuModuleUnload(d->module);
         if (d->decode_event) cu.cuEventDestroy(d->decode_event);
         if (d->output_event) cu.cuEventDestroy(d->output_event);
@@ -578,9 +884,12 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->params = p;
     if (p.extradata && p.extradata_size > 0) d->extradata.assign(p.extradata, p.extradata + p.extradata_size);
     d->params.extradata = nullptr;
-    d->bytes_per_sample = p.bit_depth > 8 ? 2 : 1;
-    d->luma_bytes = static_cast<size_t>(p.crop_w) * p.crop_h * d->bytes_per_sample;
-    d->chroma_bytes = p.luma_only ? 0 : static_cast<size_t>((p.crop_w + 1) / 2) * ((p.crop_h + 1) / 2) * d->bytes_per_sample;
+    d->bytes_per_sample = p.bit_depth > 8 ? 2 : 1;  // in the decoder's picture
+    d->out_w = out_width(p);
+    d->out_h = out_height(p);
+    const size_t out_sample = wide_out(p) ? 2 : 1;  // in the pictures handed back
+    d->luma_bytes = static_cast<size_t>(d->out_w) * d->out_h * out_sample;
+    d->chroma_bytes = p.luma_only ? 0 : static_cast<size_t>((d->out_w + 1) / 2) * ((d->out_h + 1) / 2) * out_sample;
     d->frame_bytes = d->luma_bytes + 2 * d->chroma_bytes;
     d->info.frame_bytes = static_cast<long long>(d->frame_bytes);
 
@@ -612,6 +921,33 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         }
         if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->plane8, d->module, "plane8");
         if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->plane16, d->module, "plane16");
+        if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->hpass, d->module, "hpass");
+        if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->vpass, d->module, "vpass");
+        if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->widen8, d->module, "widen8");
+        if (result == CUDA_SUCCESS && is_scaled(p)) {
+            step = "Preparing the scaling filters";
+            const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
+            const int ocw = (d->out_w + 1) / 2, och = (d->out_h + 1) / 2;
+            const Filter filters[4] = {
+                plane_filter(p.crop_w, d->out_w, p.scaler), plane_filter(p.crop_h, d->out_h, p.scaler),
+                plane_filter(cw, ocw, p.scaler), plane_filter(ch, och, p.scaler)};
+            Decoder::DeviceFilter *targets[4] = {&d->luma_h, &d->luma_v, &d->chroma_h, &d->chroma_v};
+            for (int i = 0; i < 4 && result == CUDA_SUCCESS; i++) {
+                const Filter &f = filters[i];
+                Decoder::DeviceFilter &t = *targets[i];
+                t.taps = static_cast<unsigned>(f.taps);
+                result = cu.cuMemAlloc(&t.starts, f.starts.size() * sizeof(int32_t));
+                if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&t.weights, f.weights.size() * sizeof(float));
+                if (result == CUDA_SUCCESS)
+                    result = cu.cuMemcpyHtoD(t.starts, f.starts.data(), f.starts.size() * sizeof(int32_t));
+                if (result == CUDA_SUCCESS)
+                    result = cu.cuMemcpyHtoD(t.weights, f.weights.data(), f.weights.size() * sizeof(float));
+            }
+            // The rows between the passes: the widest plane's output width
+            // by its input height.
+            size_t rows = static_cast<size_t>(d->out_w) * p.crop_h;
+            if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&d->scratch, rows * sizeof(float));
+        }
         if (result == CUDA_SUCCESS) {
             step = "Allocating GPU memory for the decoded pictures";
             result = cu.cuMemAlloc(&d->pool, d->frame_bytes * p.pool);
@@ -731,12 +1067,12 @@ NVF_API int nvf_copy_luma(void *handle, int slot, unsigned long long dst, long l
     CUDA_MEMCPY2D copy{};
     copy.srcMemoryType = CU_MEMORYTYPE_DEVICE;
     copy.srcDevice = d->pool + static_cast<size_t>(slot) * d->frame_bytes;
-    copy.srcPitch = static_cast<size_t>(d->params.crop_w) * d->bytes_per_sample;
+    copy.srcPitch = static_cast<size_t>(d->out_w) * (wide_out(d->params) ? 2 : 1);
     copy.dstMemoryType = CU_MEMORYTYPE_DEVICE;
     copy.dstDevice = static_cast<CUdeviceptr>(dst);
     copy.dstPitch = static_cast<size_t>(dst_pitch);
     copy.WidthInBytes = copy.srcPitch;
-    copy.Height = d->params.crop_h;
+    copy.Height = d->out_h;
     bool ok = d->check(cu.cuMemcpy2DAsync(&copy, d->output_stream), "Copying a picture on the GPU")
               && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture on the GPU")
               && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture on the GPU");

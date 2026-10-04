@@ -22,13 +22,18 @@ The pictures are the ones FFmpeg's decode gives, sample for sample: the same
 decoder hardware, the stream's display area, a crop rounded as FFmpeg's crop
 filter rounds it (its edges to even, for 4:2:0), and P016's 10-bit samples
 either kept in the top bits (Vship reads them as 16-bit) or shifted down,
-which is FFmpeg's conversion to yuv420p10le exactly. Which pictures come out,
+which is FFmpeg's conversion to yuv420p10le exactly -- and 8-bit samples
+widened to 10 bits as FFmpeg widens them. A picture the comparison scales is
+scaled here with FFmpeg's filter for the algorithm chosen (native/
+scale_filter.h; by the GPU on NVIDIA's, the CPU on Intel's and AMD's): not
+FFmpeg's to the sample -- within 1 of it on film -- which the user decided is
+the same comparison (ComparisonRecipe.identity_dict). Which pictures come out,
 and with which timestamps, is checked against the packets that went in
 (NvdecStream.verify): a picture the decoder dropped or added fails the run,
 and the caller makes it again through FFmpeg.
 
 What is not decoded here -- another GPU, a codec or format the decoder
-does not take, a scaled input, an interlaced or damaged stream -- goes the
+does not take, an interlaced or damaged stream -- goes the
 FFmpeg way as before (NvdecUnavailableError before the first picture,
 NvdecFailedError after it).
 """
@@ -102,7 +107,8 @@ class _Params(ctypes.Structure):
                 ("width", ctypes.c_int), ("height", ctypes.c_int),
                 ("crop_x", ctypes.c_int), ("crop_y", ctypes.c_int), ("crop_w", ctypes.c_int), ("crop_h", ctypes.c_int),
                 ("shift", ctypes.c_int), ("luma_only", ctypes.c_int), ("pool", ctypes.c_int),
-                ("extradata", ctypes.c_void_p), ("extradata_size", ctypes.c_int)]
+                ("extradata", ctypes.c_void_p), ("extradata_size", ctypes.c_int),
+                ("out_w", ctypes.c_int), ("out_h", ctypes.c_int), ("scaler", ctypes.c_int), ("widen", ctypes.c_int)]
 
 
 class _Info(ctypes.Structure):
@@ -154,10 +160,20 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
 
 # ------------------------------------------------------------------- plans
 
+#: The app's scaling algorithms (VmafOptions.scale_algorithm) -> the
+#: decoders' filters (native/scale_filter.h).
+_SCALERS = {"bilinear": 0, "bicubic": 1, "lanczos": 2, "spline": 3}
+#: How an 8-bit video is widened to the 10 bits it is compared at: as FFmpeg
+#: converts it, shifted left by 2 -- full range's luma with its top bits
+#: repeated in the bottom ones.
+WIDEN_SHIFT, WIDEN_REPEAT = 1, 2
+
+
 @dataclass(frozen=True)
 class DecodePlan:
     """How one video is decoded here: its codec, depth, the rectangle handed
-    on (FFmpeg's crop, rounded as FFmpeg rounds it) and the sample layout."""
+    on (FFmpeg's crop, rounded as FFmpeg rounds it), the size it is scaled to
+    and with which filter, and the sample layout."""
 
     codec: str
     bit_depth: int
@@ -172,22 +188,42 @@ class DecodePlan:
     shift: int = 0
     #: Only the luma plane (VMAF reads nothing else).
     luma_only: bool = False
+    #: The size the crop is scaled to (0: not scaled), and the filter.
+    out_w: int = 0
+    out_h: int = 0
+    scaler: str = "bicubic"
+    #: 8-bit pictures handed back as 10-bit (WIDEN_SHIFT, WIDEN_REPEAT; 0: not).
+    widen: int = 0
 
     @property
     def bytes_per_sample(self) -> int:
-        return 2 if self.bit_depth > 8 else 1
+        """Of the pictures handed back."""
+        return 2 if self.bit_depth > 8 or self.widen else 1
+
+    @property
+    def output_size(self) -> tuple[int, int]:
+        return (self.out_w or self.crop_w, self.out_h or self.crop_h)
+
+    @property
+    def scaled(self) -> bool:
+        return self.output_size != (self.crop_w, self.crop_h)
 
     @property
     def frame_bytes(self) -> int:
-        luma = self.crop_w * self.crop_h * self.bytes_per_sample
+        width, height = self.output_size
+        luma = width * height * self.bytes_per_sample
         if self.luma_only:
             return luma
-        return luma + 2 * ((self.crop_w + 1) // 2) * ((self.crop_h + 1) // 2) * self.bytes_per_sample
+        return luma + 2 * ((width + 1) // 2) * ((height + 1) // 2) * self.bytes_per_sample
 
 
-def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_only: bool = False) -> DecodePlan:
-    """The plan for decoding `info` here, cropped to `crop`, or
-    NvdecUnavailableError with the reason it is decoded by FFmpeg."""
+def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_only: bool = False,
+                size: tuple[int, int] | None = None, algorithm: str = "bicubic", widen: int = 0) -> DecodePlan:
+    """The plan for decoding `info` here, cropped to `crop` and scaled to
+    `size` with `algorithm`, or NvdecUnavailableError with the reason it is
+    decoded by FFmpeg. Scaled here, a picture is not FFmpeg's scale filter's
+    to the sample, but the user decided (2026-10-03) that a comparison scaled
+    any way is the same comparison (ComparisonRecipe.identity_dict)."""
     codec = (info.codec_name or "").casefold()
     if codec not in _CODECS:
         raise NvdecUnavailableError(f"{info.codec_name or 'this codec'} is decoded by FFmpeg")
@@ -205,8 +241,14 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
         x, y, w, h = crop.x & ~1, crop.y & ~1, crop.w & ~1, crop.h & ~1
     if w <= 0 or h <= 0 or x + w > info.width or y + h > info.height:
         raise NvdecUnavailableError("the crop is outside the picture")
+    out_w, out_h = size if size is not None else (w, h)
+    if out_w <= 0 or out_h <= 0:
+        raise NvdecUnavailableError("the size it is scaled to is empty")
+    if widen and depth != 8:
+        raise NvdecUnavailableError("only 8-bit video is widened")
     return DecodePlan(codec, depth, info.width, info.height, x, y, w, h,
-                      shift if depth > 8 else 0, luma_only)
+                      shift if depth > 8 else 0, luma_only, out_w, out_h,
+                      algorithm if algorithm in _SCALERS else "bicubic", widen)
 
 
 def available(backend: str = "nvidia") -> bool:
@@ -494,7 +536,8 @@ class NvdecStream:
         params = _Params(device, _CODECS[plan.codec][0], plan.bit_depth, plan.width, plan.height,
                          plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.shift, int(plan.luma_only),
                          pool, ctypes.cast(self._extradata_buffer, ctypes.c_void_p) if self._extradata_buffer else None,
-                         len(self._extradata))
+                         len(self._extradata), plan.output_size[0], plan.output_size[1], _SCALERS[plan.scaler],
+                         plan.widen)
         error = ctypes.create_string_buffer(1024)
         handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
         if not handle:

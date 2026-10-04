@@ -56,6 +56,23 @@ def test_what_nvdec_frames_does_not_decode_is_left_to_ffmpeg(field, value):
         nv.plan_decode(_info(**{field: value}), None)
 
 
+def test_a_scaled_plan_hands_back_the_size_it_is_scaled_to():
+    plan = nv.plan_decode(_info(width=3840, height=2160), None, shift=6, size=(1920, 1080), algorithm="lanczos")
+    assert plan.scaled and plan.output_size == (1920, 1080) and plan.scaler == "lanczos"
+    assert plan.frame_bytes == (1920 * 1080 + 2 * 960 * 540) * 2
+    unscaled = nv.plan_decode(_info(), None, size=(1920, 1080))
+    assert not unscaled.scaled and unscaled.output_size == (1920, 1080)
+    assert nv.plan_decode(_info(), None, algorithm="nonsense").scaler == "bicubic"
+
+
+def test_eight_bit_widened_to_ten_hands_back_16_bit_samples():
+    plan = nv.plan_decode(_info(pix_fmt="yuv420p", codec_name="h264"), None, luma_only=True,
+                          widen=nv.WIDEN_SHIFT)
+    assert plan.bytes_per_sample == 2 and plan.frame_bytes == 1920 * 1080 * 2
+    with pytest.raises(nv.NvdecUnavailableError):
+        nv.plan_decode(_info(), None, widen=nv.WIDEN_SHIFT)  # 10-bit: nothing to widen
+
+
 def test_a_crop_outside_the_picture_is_refused():
     with pytest.raises(nv.NvdecUnavailableError):
         nv.plan_decode(_info(), CropBox(1920, 1000, 0, 100))
@@ -222,3 +239,75 @@ def test_a_stream_without_timestamps_fails(tmp_path, backend):
     _need(plan, backend)
     with pytest.raises(nv.NvdecFailedError):
         _decode(info, plan, backend)
+
+
+def _ffmpeg_frames(path: Path, chain: str, depth: int) -> np.ndarray:
+    raw = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
+                          "-fps_mode", "passthrough", "-f", "rawvideo", "pipe:1"],
+                         capture_output=True, check=True).stdout
+    return np.frombuffer(raw, dtype=np.uint16 if depth > 8 else np.uint8)
+
+
+def _frames(info: VideoInfo, plan: nv.DecodePlan, backend: str) -> np.ndarray:
+    stream = nv.NvdecStream(info, plan, backend=backend)
+    dtype = np.uint16 if plan.bytes_per_sample == 2 else np.uint8
+    pictures = []
+    try:
+        stream.start()
+        while True:
+            try:
+                item = stream.next(1000)
+            except TimeoutError:
+                continue
+            if item is None:
+                break
+            out = np.empty(plan.frame_bytes // plan.bytes_per_sample, dtype=dtype)
+            stream.download(item[0], out.ctypes.data)
+            stream.release(item[0])
+            pictures.append(out)
+    finally:
+        stream.close()
+    return np.concatenate(pictures)
+
+
+@pytest.mark.parametrize(("pix_fmt", "size", "algorithm"), [
+    ("yuv420p10le", (320, 180), "bicubic"),
+    ("yuv420p", (1280, 720), "lanczos"),
+    ("yuv420p", (426, 240), "bilinear"),
+    ("yuv420p10le", (960, 540), "spline"),
+])
+@BACKENDS
+def test_scaled_pictures_are_ffmpegs_but_for_rounding(tmp_path, backend, pix_fmt, size, algorithm):
+    """Not FFmpeg's scale filter's to the sample (a comparison scaled any way
+    is the same comparison), but the same filter: on this synthetic picture's
+    hard edges and odd sizes, where they differ most -- the CPU scaler of
+    Intel's and AMD's decoders filters down the columns first where that is
+    faster, so its cap falls after the other pass -- all but 1 in 200
+    samples within 1, none more than 6 (on film, every sample within 1). A
+    wrong plane, siting or filter is tens to hundreds off."""
+    codec = "hevc" if pix_fmt == "yuv420p10le" else "h264"
+    path = _clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=0.5)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, shift=6, size=size, algorithm=algorithm)
+    _need(plan, backend)
+    ours = _frames(info, plan, backend).astype(np.int32)
+    depth = 10 if pix_fmt == "yuv420p10le" else 8
+    fmt = "yuv420p10le" if depth > 8 else "yuv420p"
+    want = _ffmpeg_frames(path, f"scale={size[0]}:{size[1]}:flags={algorithm},format={fmt}", depth).astype(np.int32)
+    assert ours.shape == want.shape
+    difference = np.abs(ours - want)
+    assert difference.max() <= 6
+    assert np.mean(difference > 1) < 0.005
+
+
+@BACKENDS
+def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path, backend):
+    """Widening is exact: v << 2, as FFmpeg converts limited-range 8-bit."""
+    path = _clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=0.5)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, widen=nv.WIDEN_SHIFT)
+    _need(plan, backend)
+    if backend != "nvidia":
+        pytest.skip("only NVIDIA's decoder widens (for VMAF on the GPU)")
+    ours = _frames(info, plan, backend)
+    assert np.array_equal(ours, _ffmpeg_frames(path, "format=yuv420p10le", 10))

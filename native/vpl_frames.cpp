@@ -162,6 +162,7 @@ struct Decoder {
     Params params{};
     Info info{};
     std::vector<unsigned char> extradata;
+    PlaneScaler scaler;  // when the pictures are scaled (on the CPU)
     mfxLoader loader = nullptr;
     mfxSession session = nullptr;
     mfxVideoParam video{};
@@ -418,7 +419,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         copy_text(error, error_size, g_vpl_error);
         return nullptr;
     }
-    if (!params_valid(*params) || !vpl_codec(params->codec)) {
+    if (!params_valid(*params) || params->widen || !vpl_codec(params->codec)) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }
@@ -428,6 +429,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         d->extradata.assign(params->extradata, params->extradata + params->extradata_size);
     d->params.extradata = nullptr;
     d->info.frame_bytes = static_cast<long long>(frame_bytes(d->params));
+    if (is_scaled(d->params)) prepare_scaler(d->params, d->scaler);
     std::string text;
     if (!open_session(vpl_codec(params->codec), &d->loader, &d->session, text)) {
         copy_text(error, error_size, text);
@@ -498,7 +500,7 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
     return NVF_FRAME;
 }
 
-// Copies the slot's picture, cropped and planes packed, into `host`.
+// Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
     Decoder *d = static_cast<Decoder *>(handle);
     mfxFrameSurface1 *surface;
@@ -510,7 +512,11 @@ NVF_API int nvf_download(void *handle, int slot, void *host) {
     const mfxFrameData &data = surface->Data;
     size_t pitch = (static_cast<size_t>(data.PitchHigh) << 16) | data.PitchLow;
     bool msb = d->params.bit_depth > 8 && surface->Info.Shift;
-    convert_frame(d->params, data.Y, data.UV, pitch, msb, static_cast<uint8_t *>(host));
+    if (is_scaled(d->params)) {
+        scale_frame(d->params, d->scaler, data.Y, data.UV, pitch, msb, static_cast<uint8_t *>(host));
+    } else {
+        convert_frame(d->params, data.Y, data.UV, pitch, msb, static_cast<uint8_t *>(host));
+    }
     return 0;
 }
 

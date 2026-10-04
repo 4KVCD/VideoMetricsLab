@@ -94,10 +94,10 @@ case anyone overrides that.
   `scripts/build_libvmaf_cuda.ps1` (MSVC, CUDA 13.4, meson and ninja; the
   script lists each pull request and the commit of it merged). The C runtime
   is linked in, so it needs only Windows and the NVIDIA driver; no CUDA
-  runtime ships. Where NVIDIA's decoder decodes both videos and neither is
-  scaled, they are decoded by `nvdec_frames.dll` in libvmaf's process, the
-  user's FFmpeg only copying their compressed streams out of the containers;
-  otherwise FFmpeg decodes them. VMAF on any other GPU or the CPU, VMAF v1,
+  runtime ships. Where NVIDIA's decoder decodes both videos, they are
+  decoded, scaled and widened on the GPU by `nvdec_frames.dll` in libvmaf's
+  process, the user's FFmpeg only copying their compressed streams out of
+  the containers; otherwise FFmpeg decodes them. VMAF on any other GPU or the CPU, VMAF v1,
   PSNR, SSIM and XPSNR still come from the user's FFmpeg. It adds about 3.3 MB installed,
   1 MB compressed. libvmaf and Vship each run in a process of their own
   (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,

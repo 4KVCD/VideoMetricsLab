@@ -191,6 +191,7 @@ struct Decoder {
     Params params{};
     Info info{};
     std::vector<unsigned char> extradata;
+    PlaneScaler scaler;  // when the pictures are scaled (on the CPU)
     Session session;
 
     std::mutex mutex;
@@ -334,7 +335,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         copy_text(error, error_size, g_amf_error);
         return nullptr;
     }
-    if (!params_valid(*params) || !amf_codec(params->codec)) {
+    if (!params_valid(*params) || params->widen || !amf_codec(params->codec)) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }
@@ -348,6 +349,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         d->extradata.assign(params->extradata, params->extradata + params->extradata_size);
     d->params.extradata = nullptr;
     d->info.frame_bytes = static_cast<long long>(frame_bytes(d->params));
+    if (is_scaled(d->params)) prepare_scaler(d->params, d->scaler);
     d->info.bit_depth = params->bit_depth;
     d->info.chroma_format = 1;
     d->info.display_right = params->width;
@@ -433,7 +435,7 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
     return NVF_FRAME;
 }
 
-// Copies the slot's picture, cropped and planes packed, into `host`.
+// Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
     Decoder *d = static_cast<Decoder *>(handle);
     amf::AMFSurface *surface;
@@ -451,7 +453,11 @@ NVF_API int nvf_download(void *handle, int slot, void *host) {
                        + luma->GetOffsetX() * sample;
     const uint8_t *uv = static_cast<const uint8_t *>(chroma->GetNative()) + chroma->GetOffsetY() * pitch
                         + chroma->GetOffsetX() * 2 * sample;
-    convert_frame(d->params, y, uv, pitch, true, static_cast<uint8_t *>(host));  // P010: the top bits
+    if (is_scaled(d->params)) {  // P010: the top bits
+        scale_frame(d->params, d->scaler, y, uv, pitch, true, static_cast<uint8_t *>(host));
+    } else {
+        convert_frame(d->params, y, uv, pitch, true, static_cast<uint8_t *>(host));
+    }
     return 0;
 }
 

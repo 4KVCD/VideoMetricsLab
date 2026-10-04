@@ -1277,6 +1277,7 @@ def _score_decoded_on_gpu(
         source_info, distorted_info, source_crop, distorted_crop, width=plan.width, height=plan.height,
         bit_depth=plan.bit_depth, models=plan.models, n_subsample=options.n_subsample,
         duration_limit=f"{limit:.3f}" if limit > 0 else None, total_frames=total_frames,
+        scale_algorithm=options.scale_algorithm,
         on_progress=on_progress, check_cancel=check_cancel, process_handle=process_handle)
     frames = _with_gpu_scores(None, scores, fps)
     missing = [m for m in options.requested_metrics() if not frames.has(m)]

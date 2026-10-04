@@ -1247,20 +1247,20 @@ def _decoded_here(hwaccel: str | None, device: VshipDevice) -> str | None:
 
 def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int], image_format: _ImageFormat,
                     frame_bytes: int, gpu_id: int, process_handle: ProcessHandle | None,
-                    label: str, backend: str = "nvidia") -> nvdec_frames.NvdecStream | None:
+                    label: str, backend: str = "nvidia", algorithm: str = "bicubic") -> nvdec_frames.NvdecStream | None:
     """The decoder for one input of a pass, when GPU decoder `backend` can
     give it in the layout Vship is told (8-bit planes, P016's 16-bit samples
     as they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
-    unscaled. None, with the reason logged, when FFmpeg decodes it."""
+    scaled to `size` with `algorithm` where it is (by the GPU on NVIDIA, the
+    CPU on Intel and AMD). None, with the reason logged, when FFmpeg decodes it."""
     shifts = {"yuv420p": 0, "yuv420p16le": 0, "yuv420p10le": 6}
     reason = None
     if image_format.pixel_format not in shifts:
         reason = f"Vship reads it as {image_format.pixel_format}"
-    elif _content_size(info, crop) != size:
-        reason = "it is scaled"
     if reason is None:
         try:
-            plan = nvdec_frames.plan_decode(info, crop, shift=shifts[image_format.pixel_format])
+            plan = nvdec_frames.plan_decode(info, crop, shift=shifts[image_format.pixel_format], size=size,
+                                            algorithm=algorithm)
             if plan.frame_bytes != frame_bytes:
                 raise nvdec_frames.NvdecUnavailableError(
                     f"its frames would be {plan.frame_bytes} bytes, not {frame_bytes}")
@@ -1933,7 +1933,7 @@ def _score_vship_pass_with(
             backend = _decoded_here(hwaccel, device) if native else None
             if backend is not None:
                 decoder = _native_decoder(info, crop, size, image_format, frame_bytes, device.gpu_id,
-                                          process_handle, label, backend)
+                                          process_handle, label, backend, request.recipe.scale_algorithm)
                 if decoder is not None:
                     limit = (f"{request.recipe.duration_limit:.6f}"
                              if request.recipe.duration_limit > 0 else None)

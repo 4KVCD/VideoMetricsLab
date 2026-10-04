@@ -398,6 +398,7 @@ def test_decoded_in_libvmafs_process_the_limit_is_that_of_ffmpegs_raw_outputs(mo
     frames = _real_score_decoded_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"),
                                         VmafOptions(duration_limit=30.0), None, None, HwAccelPlan("cuda", "cuda"), 721)
     assert seen["duration_limit"] == "30.042"
+    assert seen["scale_algorithm"] == "bicubic"  # the row's, for a video scaled on the GPU
     assert (seen["width"], seen["height"], seen["bit_depth"], seen["n_subsample"]) == (1920, 1080, 8, 1)
     assert frames.values("vmaf").tolist() == [90.0, 91.0]
     frames = _real_score_decoded_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,

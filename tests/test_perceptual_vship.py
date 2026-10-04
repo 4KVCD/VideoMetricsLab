@@ -602,7 +602,20 @@ def test_each_gpu_makers_decoder_takes_what_ffmpeg_would_decode_with_it(hwaccel,
     assert vship._decoded_here(hwaccel, device) == expected
 
 
-def test_a_scaled_video_or_one_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch):
+def test_a_scaled_video_is_scaled_by_the_gpu_decoder_with_the_rows_algorithm(monkeypatch):
+    """Scaled any way, a comparison is the same comparison (the user's
+    decision): a video FFmpeg would scale is scaled where it is decoded."""
+    plans = []
+    monkeypatch.setattr(vship.nvdec_frames, "NvdecStream", lambda _info, plan, *a, **k: plans.append(plan) or "decoder")
+    monkeypatch.setattr(vship.nvdec_frames, "decoder_supports", lambda *_args: (True, ""))
+    info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
+    image = vship._image_format(info)
+    assert _real_native_decoder(info, None, (32, 24), image, image.frame_layout(32, 24)[0], 0, None, "x",
+                                "nvidia", "lanczos") == "decoder"
+    assert (plans[0].output_size, plans[0].scaler, plans[0].scaled) == ((32, 24), "lanczos", True)
+
+
+def test_a_video_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise nvdec_frames.NvdecUnavailableError("this GPU's decoder cannot decode this video")
 
@@ -611,7 +624,6 @@ def test_a_scaled_video_or_one_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch
     info = VideoInfo(Path("v.mkv"), 64, 48, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
     image = vship._image_format(info)
     frame_bytes = image.frame_layout(64, 48)[0]
-    assert _real_native_decoder(info, None, (32, 24), image, image.frame_layout(32, 24)[0], 0, None, "x") is None
     assert _real_native_decoder(info, None, (64, 48), image, frame_bytes, 0, None, "x") is None
     rgb = vship._ImageFormat("gbrp", 1, vship._VSHIP_ENUMS[8], 0, 0, True, (2, 0, 1))
     assert _real_native_decoder(info, None, (64, 48), rgb, rgb.frame_layout(64, 48)[0], 0, None, "x") is None
