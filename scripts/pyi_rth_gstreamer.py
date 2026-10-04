@@ -39,12 +39,13 @@ def _setup() -> None:
         return
     # A registry cached next to a previous install (or from the build
     # machine) makes GStreamer look for plugins at paths that do not exist
-    # here. Keep it beside the user's own data instead.
-    os.environ.setdefault(
-        "GST_REGISTRY_1_0",
-        os.path.join(
-            os.path.expanduser("~"), ".videometricslab", "gstreamer-registry.bin"
-        ),
+    # here. Keep it beside the user's own data instead. Set outright: the
+    # setup above has always set it already -- to one in the shared temp
+    # folder, %TEMP%/gstreamer-1.0, which any app built on the same wheels
+    # rescans and rewrites for its own plugins -- so a setdefault here never
+    # took effect.
+    os.environ["GST_REGISTRY_1_0"] = os.path.join(
+        os.path.expanduser("~"), ".videometricslab", "gstreamer-registry.bin"
     )
 
 
