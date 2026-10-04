@@ -7,7 +7,33 @@
   less CPU.
 - Updated Vship's Vulkan build to 5.1.2, with SSIMULACRA2 on Intel GPUs.
 - A crash in the GPU libraries no longer closes the app.
-- Various bug fixes and reliability improvements.
+- Reworked the progress line, with each metric's progress and time remaining.
+
+### Bug fixes
+
+- Fixed Intel GPUs getting no GPU metrics.
+- Fixed a crash on exit on PCs with a Vulkan loader but no Vulkan driver.
+- Fixed FFmpeg's GPU decoding not being used on AMD GPUs.
+- Fixed wrong SSIMULACRA2, Butteraugli and CVVDP scores for odd-sized AV1 and
+  VP9 videos with GPU decoding on.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP comparing the wrong frames after a
+  dropped frame.
+- Fixed CPU SSIMULACRA2 and Butteraugli scores differing from the GPU's on SDR
+  video. Saved CPU scores are recalculated once.
+- Fixed 24 fps videos being accepted against 23.976 fps ones.
+- Fixed XPSNR missing with frame subsampling and VMAF on the GPU.
+- Fixed videos that end early being scored on the frames they have.
+- Fixed MP4 cover art being compared or played instead of the video.
+- Fixed videos with a soundtrack longer than the picture failing with
+  "Durations do not match".
+- Fixed the Video bitrate column showing the whole file's bitrate for MKV files.
+- Fixed adding videos whose name or title contains curly quotes or Chinese,
+  Japanese or Korean text.
+- Fixed an occasional crash at startup or when opening Video Compare.
+- Fixed loading a saved run of a listed video adding a second row.
+- Fixed the window opening wider than the screen in some languages.
+- Fixed Video Compare's status line for references without a soundtrack.
+- VMAF NEG now sits beside VMAF v0.6.1.
 
 ### How VMAF on the GPU works
 
