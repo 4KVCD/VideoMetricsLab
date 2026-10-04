@@ -5368,3 +5368,30 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
     finally:
         i18n.set_language("en")
 
+
+
+def test_locating_ffmpeg_keeps_the_folder_in_settings(qapp, monkeypatch, tmp_path):
+    # "Locate ffmpeg.exe" kept the folder only in the registry, so the
+    # Settings tab showed no folder while one was in use.
+    from vmaf_app.core import ffmpeg_locate
+    from vmaf_app.core.ffmpeg_locate import ToolsStatus, ToolStatus
+    from vmaf_app.core.settings import Settings
+
+    for name in ("ffmpeg", "ffprobe"):
+        (tmp_path / ffmpeg_locate.exe_name(name)).write_bytes(b"")
+    good = ToolsStatus(
+        ffmpeg=ToolStatus("ffmpeg", "ffmpeg.exe", True, (9, 0, 1)),
+        ffprobe=ToolStatus("ffprobe", "ffprobe.exe", True, (9, 0, 1)),
+    )
+    monkeypatch.setattr(main_window_module, "check_tools", lambda: good)
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getOpenFileName",
+        lambda *a, **k: (str(tmp_path / ffmpeg_locate.exe_name("ffmpeg")), ""),
+    )
+    win = MainWindow()
+    try:
+        assert win._on_locate_ffmpeg() is True
+        assert Settings.load().ffmpeg_dir == str(tmp_path)
+        assert win.settings_ffmpeg_edit.text() == str(tmp_path)
+    finally:
+        ffmpeg_locate.ffmpeg_dir_changed()

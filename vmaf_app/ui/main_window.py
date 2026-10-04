@@ -74,7 +74,7 @@ from vmaf_app.core.cvvdp import (
     without_user_preset,
 )
 from vmaf_app.core.cvvdp import presets as cvvdp_presets
-from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
+from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, ffmpeg_dir_changed, format_version
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
     displayable_metric_specs,
@@ -578,11 +578,8 @@ class MainWindow(QMainWindow):
         self._file_writes = FileWriteQueue(self)
         self._file_writes.write_failed.connect(self._on_file_write_failed)
         self._file_writes.became_idle.connect(self._on_file_writes_idle)
-        # Only when one is actually configured. Calling this unconditionally
-        # wrote to persistent QSettings on every launch, and each call clears
-        # the tool-lookup cache -- which re-probes ffmpeg by spawning it.
-        if self._settings.ffmpeg_dir_path() is not None:
-            self._apply_ffmpeg_setting()
+        # The ffmpeg folder needs nothing applied: the lookup reads it from
+        # the settings file (ffmpeg_locate._configured_dir).
         result_cache.set_cache_dir_override(self._settings.cache_dir_path())
         if self._settings.remember_window_size:
             self.resize(self._settings.window_width, self._settings.window_height)
@@ -843,15 +840,6 @@ class MainWindow(QMainWindow):
         format."""
         return default_settings(self._settings.cvvdp_presets, self._settings.cvvdp_default_preset)
 
-    def _apply_ffmpeg_setting(self) -> None:
-        """Points the finder at the configured folder, or clears the override
-        so it goes back to searching PATH and the known install locations.
-
-        set_ffmpeg_dir_override writes to persistent QSettings, so this is
-        only called when the setting actually changes -- not on every launch.
-        """
-        configured = self._settings.ffmpeg_dir_path()
-        set_ffmpeg_dir_override(str(configured) if configured else "")
 
     def _build_settings_panel(self) -> QWidget:
         page = QWidget()
@@ -1172,9 +1160,6 @@ class MainWindow(QMainWindow):
             perceptual_vship.set_vship_backend(backend)
             perceptual_vship.start_vship_probe()
 
-        if self._settings.ffmpeg_dir != before_ffmpeg:
-            self._apply_ffmpeg_setting()
-            self._check_ffmpeg(prompt=False)
         if self._settings.cache_dir != before_cache:
             result_cache.set_cache_dir_override(self._settings.cache_dir_path())
 
@@ -1184,6 +1169,10 @@ class MainWindow(QMainWindow):
         self._default_extra_metric_keys = self._extra_metrics_from_settings()
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
+        if self._settings.ffmpeg_dir != before_ffmpeg:
+            # After the save: the lookup reads the folder from the file.
+            ffmpeg_dir_changed()
+            self._check_ffmpeg(prompt=False)
         self.settings_status.setText(
             tr_message(error) if error else
             tr("Settings saved. The new language shows when the app is next started.")
@@ -1951,7 +1940,13 @@ class MainWindow(QMainWindow):
                 )
                 return False
 
-        set_ffmpeg_dir_override(str(directory))
+        # Kept as the Settings tab's folder: the one place it is kept.
+        self._settings.ffmpeg_dir = str(directory)
+        self.settings_ffmpeg_edit.setText(str(directory))
+        if error := self._settings.save():
+            self.status_label.setText(tr_message(error))
+            return False
+        ffmpeg_dir_changed()
         status = check_tools()
         if not status.ok:
             QMessageBox.warning(self, tr("Still not usable"), "\n".join(status.problems))

@@ -167,6 +167,35 @@ def _log_qt_message(mode, _context, message: str) -> None:
     logging.getLogger("vmaf_app.qt").log(_QT_LOG_LEVELS.get(getattr(mode, "name", ""), logging.WARNING), message)
 
 
+#: Where the ffmpeg folder was kept before settings.json held it: the
+#: registry, under the app's old name.
+_REGISTRY_ORG = "VmafApp"
+_REGISTRY_APP = "VmafCalculator"
+
+
+def adopt_registry_ffmpeg_dir() -> str | None:
+    """Moves an ffmpeg folder still kept in the registry into settings.json,
+    unless settings.json names one already; the registry's copy is removed
+    either way, so this happens once. The folder adopted, or None."""
+    from PySide6.QtCore import QSettings
+
+    from vmaf_app.core.settings import Settings
+
+    registry = QSettings(_REGISTRY_ORG, _REGISTRY_APP)
+    value = str(registry.value("ffmpeg_dir") or "").strip()
+    if not value:
+        return None
+    settings = Settings.load()
+    adopted = None
+    if not settings.ffmpeg_dir.strip():
+        settings.ffmpeg_dir = value
+        if settings.save():
+            return None  # not saved: the registry keeps it for next time
+        adopted = value
+    registry.remove("ffmpeg_dir")
+    return adopted
+
+
 def start_session_log() -> None:
     """The log file for this session, headed with what it runs on."""
     if app_log.start_logging() is None:
@@ -219,6 +248,8 @@ def apply_language(app: QApplication, chosen: str) -> str:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    # Before anything looks for ffmpeg, the self-test included.
+    adopted = adopt_registry_ffmpeg_dir()
 
     if "--self-test" in sys.argv:
         report = self_test()
@@ -243,6 +274,8 @@ def main() -> int:
         return 1 if report.failed else 0
 
     start_session_log()
+    if adopted:
+        logging.getLogger("vmaf_app.main").info("ffmpeg folder moved from the registry to the settings: %s", adopted)
     from vmaf_app.core.settings import Settings
 
     apply_language(app, Settings.load().language)

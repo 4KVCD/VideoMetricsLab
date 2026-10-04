@@ -4,8 +4,8 @@
 
 `vmaf_app.main` creates the Qt application. `ui/main_window.py` owns video rows,
 options and orchestration. The UI imports `core`; core does not import UI.
-`tests/test_architecture.py` checks this boundary. Core is not completely
-Qt-free: tool discovery uses QSettings and native playback loads GI bindings.
+`tests/test_architecture.py` checks this boundary, and that core imports no
+Qt at all. Native playback in core does load GI bindings.
 
 | Concern | Main modules |
 | --- | --- |
