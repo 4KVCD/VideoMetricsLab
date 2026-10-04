@@ -163,8 +163,10 @@ _UNTAGGED = {"", "unknown", "unspecified", "reserved"}
 #: tools are given them as Vship reads them (colour.describe_png) and
 #: Butteraugli's 3-norm is Vship's. One without it was made with FFmpeg's
 #: own conversion and the tool's norm -- a tagged BT.709 film scored 15
-#: SSIMULACRA2 points below the GPU -- and is calculated again.
-CPU_COLOR_TAGS = "vship-5.1.1"
+#: SSIMULACRA2 points below the GPU -- and is calculated again. "/2": a
+#: scaled video is converted to RGB after its tags are set; before, FFmpeg
+#: converted it while scaling, an untagged HD source with BT.601's matrix.
+CPU_COLOR_TAGS = "vship-5.1.1/2"
 
 
 def _stale_cpu_score(provenance) -> bool:

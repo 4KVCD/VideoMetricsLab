@@ -216,19 +216,26 @@ def _image_filtergraph(
     def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo, target: tuple[int, int] | None) -> str:
         ops = _crop_filter(crop, info)
         if target is not None:
-            ops.append(f"scale={target[0]}:{target[1]}:flags={recipe.scale_algorithm}")
+            # Scaled in the video's own format, as Vship's pictures are, and
+            # converted to RGB only after its tags are set (below). Left to
+            # FFmpeg, the scale filter made the RGB itself, before the tags:
+            # an untagged HD source scaled to its encode's size was converted
+            # with BT.601's matrix, not BT.709's.
+            ops += [f"scale={target[0]}:{target[1]}:flags={recipe.scale_algorithm}", f"format={info.pix_fmt}"]
         # select keeps a generic sampling axis distinct from FFmpeg/libvmaf.
         if step > 1:
             ops.append(f"select=not(mod(n\\,{step}))")
         ops.append("setpts=PTS-STARTPTS")
         # Converted to RGB with the matrix and range Vship reads the video
         # with (colour.video_colour): FFmpeg's own choice for an untagged
-        # video is BT.601's, where Vship takes an HD one as BT.709.
+        # video is BT.601's, where Vship takes an HD one as BT.709. The
+        # conversion is the scale filter here, after the tags, not one FFmpeg
+        # puts wherever its format negotiation lands.
         colour = colour_of(info)
         if colour is not None and colour.matrix in FFMPEG_MATRICES:
             ops.append(f"setparams=colorspace={FFMPEG_MATRICES[colour.matrix]}:"
                        f"range={'pc' if colour.full_range else 'tv'}")
-        ops.append("format=rgb48le")
+        ops += ["scale", "format=rgb48le"]
         return f"[{input_label}]{','.join(ops)}[{output_label}]"
 
     return ";".join((

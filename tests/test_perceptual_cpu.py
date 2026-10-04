@@ -384,8 +384,8 @@ def test_pictures_are_converted_with_the_matrix_vship_reads_the_video_with():
     full = VideoInfo(Path("j.mkv"), 640, 480, 24.0, 1.0, 24, "mjpeg", pix_fmt="yuvj420p")
     graph = _image_filtergraph(full, hd, _request().recipe, None, None, 1)
     distorted, reference = graph.split(";")
-    assert "setparams=colorspace=bt709:range=tv,format=rgb48le" in distorted
-    assert "setparams=colorspace=bt470bg:range=pc,format=rgb48le" in reference
+    assert "setparams=colorspace=bt709:range=tv,scale,format=rgb48le" in distorted
+    assert "setparams=colorspace=bt470bg:range=pc,scale,format=rgb48le" in reference
 
 
 def test_butteraugli_is_vships_3_norm_on_vships_display(tmp_path, monkeypatch):
@@ -418,3 +418,45 @@ def test_butteraugli_is_vships_3_norm_on_vships_display(tmp_path, monkeypatch):
     assert not (tmp_path / "t-distortion.pfm").exists()
     perceptual_cpu._run_metric("butteraugli_main", "butteraugli", reference, test, hdr=True)
     assert "--intensity_target" not in seen[1]  # an HDR picture's brightness is its own
+
+
+def _rgb_frames(command_inputs: list[str], graph: str, label: str) -> bytes:
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+
+    command = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", *command_inputs, "-filter_complex", graph,
+               "-map", f"[{label}]", "-f", "rawvideo", "-"]
+    for other in {"distorted", "reference"} - {label}:
+        if f"[{other}]" in graph:
+            command += ["-map", f"[{other}]", "-f", "null", "-"]
+    return subprocess.run(command, capture_output=True, check=True).stdout
+
+
+def test_a_scaled_untagged_hd_source_is_converted_with_bt709(tmp_path):
+    """Converted while FFmpeg scaled it -- before the tags were set -- an
+    untagged HD source scaled to its encode's size was made RGB with
+    BT.601's matrix. Scaled in its own format, it is converted after."""
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    clips = {"source.mkv": "96x656", "test.mkv": "48x328"}
+    for name, size in clips.items():
+        subprocess.run([ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                        f"testsrc2=size={size}:rate=24:duration=0.125", "-vf", "format=yuv420p",
+                        "-c:v", "ffv1", str(tmp_path / name)], check=True)
+    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
+    inputs = ["-i", str(test.path), "-i", str(source.path)]
+    graph = _image_filtergraph(source, test, _request().recipe, None, None, 1)
+    made = _rgb_frames(inputs, graph, "reference")
+
+    def converted(matrix: str) -> bytes:
+        return _rgb_frames(inputs, "[0:V:0]nullsink;[1:V:0]scale=48:328:flags=bicubic,format=yuv420p,"
+                                   f"scale=in_color_matrix={matrix}:in_range=tv,format=rgb48le[reference]",
+                           "reference")
+
+    assert made == converted("bt709")
+    assert made != converted("bt601")
