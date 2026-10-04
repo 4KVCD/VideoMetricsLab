@@ -153,7 +153,7 @@ class GpuScorer:
         except BaseException:
             self.close()
             raise
-        sample = 1 if bit_depth <= 8 else 2
+        self._sample = sample = 1 if bit_depth <= 8 else 2
         chroma_w, chroma_h = (width + 1) // 2, (height + 1) // 2
         #: (plane offset in a frame, rows, bytes per row) for Y, U and V.
         self._planes = [(0, height, width * sample)]
@@ -190,9 +190,15 @@ class GpuScorer:
         source = np.frombuffer(frame, dtype=np.uint8)
         for plane, (offset, rows, row_bytes) in enumerate(self._planes):
             stride = picture.stride[plane]
+            # Of an odd size FFmpeg rounds the chroma planes up and libvmaf
+            # down (w >> 1, h >> 1): FFmpeg's last row and last sample have
+            # no place in the picture. VMAF reads the luma plane only.
+            kept_rows = min(rows, picture.h[plane])
+            kept_bytes = min(row_bytes, picture.w[plane] * self._sample)
             target = np.ctypeslib.as_array(
-                ctypes.cast(picture.data[plane], ctypes.POINTER(ctypes.c_uint8)), shape=(rows, stride))
-            target[:, :row_bytes] = source[offset:offset + rows * row_bytes].reshape(rows, row_bytes)
+                ctypes.cast(picture.data[plane], ctypes.POINTER(ctypes.c_uint8)), shape=(kept_rows, stride))
+            plane_rows = source[offset:offset + rows * row_bytes].reshape(rows, row_bytes)
+            target[:, :kept_bytes] = plane_rows[:kept_rows, :kept_bytes]
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
         """The frame numbers scored (every n_subsample-th) and each model's

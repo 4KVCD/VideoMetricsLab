@@ -322,3 +322,54 @@ def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
     result = vr.run_vmaf(_info("s.mkv"), _info("d.mkv"),
                          VmafOptions(crop_mode=CropMode.NONE, gpu_decode=False, vmaf_on_gpu=False))
     assert result.metric_results.get("vmaf").provenance.compute_backend == "cpu"
+
+
+def _libvmaf_picture(width: int, height: int, bit_depth: int):
+    """A picture as libvmaf allocates it (vmaf_picture_alloc): the chroma
+    planes of 4:2:0 are half the size rounded *down*, the strides whole
+    multiples of 32 samples, the planes one after another in one block.
+    Returns it with that block, which has a guard of 0xAA bytes behind it."""
+    sample = 1 if bit_depth <= 8 else 2
+    picture = vmaf_cuda._Picture(bpc=bit_depth)
+    picture.w[:] = width, width >> 1, width >> 1
+    picture.h[:] = height, height >> 1, height >> 1
+    picture.stride[:] = [(w + 31 & ~31) * sample for w in picture.w]
+    sizes = [picture.stride[plane] * picture.h[plane] for plane in range(3)]
+    block = np.zeros(sum(sizes) + 4096, dtype=np.uint8)
+    block[sum(sizes):] = 0xAA
+    picture.data[:] = [block.ctypes.data + sum(sizes[:plane]) for plane in range(3)]
+    return picture, block, sizes
+
+
+@pytest.mark.parametrize("width, height, bit_depth", [
+    (641, 361, 8),    # half the width is a whole stride: the chroma row FFmpeg writes is longer than it
+    (641, 361, 10),
+    (1365, 767, 8),   # an odd height: FFmpeg writes a chroma row more than libvmaf's plane has
+    (1365, 767, 10),
+    (1920, 1080, 8),
+])
+def test_a_frame_of_an_odd_size_is_copied_within_libvmafs_picture(monkeypatch, width, height, bit_depth):
+    """FFmpeg rounds the chroma planes of an odd size up, libvmaf down. The
+    row that is too long failed the GPU's attempt ("could not broadcast"),
+    the row too many was written behind the picture's memory."""
+    calls = ("vmaf_init", "vmaf_cuda_state_init", "vmaf_cuda_import_state", "vmaf_model_load",
+             "vmaf_use_features_from_model", "vmaf_preallocate_pictures", "vmaf_model_destroy")
+    monkeypatch.setattr(vmaf_cuda, "_load", lambda: SimpleNamespace(**{name: lambda *a: 0 for name in calls}))
+    scorer = vmaf_cuda.GpuScorer(width, height, bit_depth, {"vmaf": "vmaf_v0.6.1"})
+    sample = 1 if bit_depth <= 8 else 2
+    chroma_w, chroma_h = (width + 1) // 2, (height + 1) // 2
+    assert scorer.frame_bytes == (width * height + 2 * chroma_w * chroma_h) * sample  # all of FFmpeg's frame
+    frame = np.random.default_rng(1).integers(1, 256, scorer.frame_bytes, dtype=np.uint8)
+    picture, block, sizes = _libvmaf_picture(width, height, bit_depth)
+
+    scorer._fill(picture, bytearray(frame.tobytes()))
+
+    assert np.all(block[sum(sizes):] == 0xAA)  # nothing behind the picture
+    offset = start = 0
+    for plane, (rows, row_bytes) in enumerate([(height, width * sample)] + [(chroma_h, chroma_w * sample)] * 2):
+        stride, kept_rows, kept_bytes = picture.stride[plane], picture.h[plane], picture.w[plane] * sample
+        written = block[start:start + sizes[plane]].reshape(kept_rows, stride)
+        source = frame[offset:offset + rows * row_bytes].reshape(rows, row_bytes)
+        assert np.array_equal(written[:, :kept_bytes], source[:kept_rows, :kept_bytes])
+        assert not written[:, kept_bytes:].any()  # the padding of each row is left alone
+        offset, start = offset + rows * row_bytes, start + sizes[plane]
