@@ -7,6 +7,8 @@ video stream spends its bits, not how large the whole file is.
 from __future__ import annotations
 
 import subprocess
+import threading
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -165,6 +167,13 @@ def analyze_video_bitrate(
         raise BitrateError(f"Could not start ffprobe: {exc}") from exc
 
     handle.attach(process.pid)
+    # ffprobe's complaints, read as they come: a damaged file can report an
+    # error for every packet, and read only after the packets, they filled
+    # the pipe and ffprobe stopped -- waiting on it -- with the scan.
+    complaints: deque[str] = deque(maxlen=200)
+    assert process.stderr is not None
+    drain = threading.Thread(target=complaints.extend, args=(process.stderr,), name="bitrate-stderr", daemon=True)
+    drain.start()
     packets: list[tuple[float | None, float | None, float, int, int, bool]] = []
     total = max(1, info.estimated_frame_count)
     try:
@@ -187,9 +196,10 @@ def analyze_video_bitrate(
             if on_progress is not None and len(packets) % 500 == 0:
                 on_progress(len(packets), total)
         return_code = process.wait()
-        stderr = process.stderr.read() if process.stderr is not None else ""
     finally:
         handle.detach()
+        drain.join(timeout=5)
+    stderr = "".join(complaints)
 
     if return_code != 0:
         if handle.was_terminated:
