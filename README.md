@@ -204,38 +204,46 @@ Third-party components retain their own licenses; see
 
 ## v1.4 changelog
 
-- Added VMAF v0.6.1 and VMAF NEG on NVIDIA GPUs.
+- VMAF v0.6.1 and VMAF NEG can now be calculated on NVIDIA GPUs.
 - GPU metrics now take frames straight from the GPU's video decoder (NVIDIA,
   Intel and AMD) instead of through FFmpeg, using much less CPU.
 - Updated Vship's Vulkan build to 5.1.2, with SSIMULACRA2 on Intel GPUs.
-- A crash in the GPU libraries no longer closes the app.
+- A crash in Vship, libvmaf or the GPU driver while calculating metrics no
+  longer closes the app.
 - Reworked the progress line, with each metric's progress and time remaining.
 - VMAF NEG now sits beside VMAF v0.6.1.
-- Fixed wrong SSIMULACRA2, Butteraugli and CVVDP scores for odd-sized AV1 and
-  VP9 videos with GPU decoding on.
-- Fixed SSIMULACRA2, Butteraugli and CVVDP comparing the wrong frames after a
-  dropped frame.
-- Fixed CPU SSIMULACRA2 and Butteraugli scores differing from the GPU's on SDR
+- Fixed wrong scores for videos with an odd width or height when decoded on
+  NVIDIA GPUs.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP comparing mismatched frames when a
+  video has dropped or extra frames.
+- Fixed CPU SSIMULACRA2 and Butteraugli scores being far from the GPU's on SDR
   video. Saved CPU scores are recalculated once.
-- Fixed 24 fps videos being accepted against 23.976 fps ones.
-- Fixed Intel GPUs getting no GPU metrics.
+- Fixed 24 fps videos being accepted against 23.976 fps ones (and 30 against
+  29.97, 60 against 59.94).
+- Fixed GPU metrics on PCs whose only GPU is Intel's.
 - Fixed FFmpeg's GPU decoding not being used on AMD GPUs.
-- Fixed an occasional crash at startup or when opening Video Compare.
 
 ### Minor bug fixes
 
-- Fixed videos that end early being scored on the frames they have.
-- Fixed XPSNR missing with frame subsampling and VMAF on the GPU.
-- Fixed videos with a soundtrack longer than the picture failing with
+- A video whose pictures end long before its stated length now fails instead
+  of being scored.
+- Fixed XPSNR missing from the table and CSV with frame subsampling and VMAF on
+  the GPU.
+- Fixed MKV videos with a soundtrack longer than the picture failing with
   "Durations do not match".
-- Fixed MP4 cover art being compared or played instead of the video.
+- Fixed MP4 files whose cover art comes before the video comparing or playing
+  the cover.
 - Fixed a crash on exit on PCs with a Vulkan loader but no Vulkan driver.
-- Fixed adding videos whose name or title contains curly quotes or Chinese,
-  Japanese or Korean text.
-- Fixed the Video bitrate column showing the whole file's bitrate for MKV files.
+- Fixed adding videos whose name or title contains curly quotes, some accented
+  letters, or Chinese, Japanese or Korean text.
+- Fixed the Video bitrate column including the soundtrack for MKV files (marked
+  ≈ where it can't be separated).
 - Fixed loading a saved run of a listed video adding a second row.
-- Fixed the window opening wider than the screen in some languages.
+- Fixed the window opening wider than its default size in Spanish and
+  Portuguese with some system fonts.
 - Fixed Video Compare's status line for references without a soundtrack.
+- Fixed an occasional crash when running from source, started from another
+  Python program.
 
 ### How VMAF on the GPU works
 
