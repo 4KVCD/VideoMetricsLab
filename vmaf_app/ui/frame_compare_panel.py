@@ -247,6 +247,16 @@ class FrameComparePanel(QWidget):
         self.source_resolution_combo.currentIndexChanged.connect(self._on_source_resolution_changed)
         color_row.addWidget(QLabel(tr("Reference playback:")))
         color_row.addWidget(self.source_resolution_combo)
+        # This row set the window's least width: a drop-down is by default
+        # never narrower than its longest choice, and in Spanish, with a wide
+        # system font (Microsoft YaHei UI), the two took the window past the
+        # 1280 pixels it opens at (1298). They may now be squeezed -- their
+        # lists still open at full width -- and keep their size while there
+        # is room.
+        for combo in (self.color_mode_combo, self.source_resolution_combo):
+            full = combo.sizeHint().width()
+            combo.setMinimumWidth(min(full, 170))
+            combo.view().setMinimumWidth(full)
         color_row.addWidget(self.color_status_label, stretch=1)
         self.advanced_info_btn = QPushButton(tr("Advanced info"))
         self.advanced_info_btn.setToolTip(tr("Playback details will appear here when a video is loaded."))

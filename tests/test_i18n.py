@@ -131,6 +131,13 @@ from vmaf_app.core.settings import Settings
 settings = Path(tempfile.mkdtemp()) / "settings.json"
 Settings.path = staticmethod(lambda: settings)
 app = QApplication([])
+import sys
+if len(sys.argv) > 1:  # a font family to measure with instead of Qt's choice
+    font = app.font()
+    font.setFamily(sys.argv[1])
+    app.setFont(font)
+    from PySide6.QtGui import QFontInfo
+    print("font", QFontInfo(app.font()).family().replace(" ", "_"))  # what it resolved to
 from vmaf_app import i18n
 from vmaf_app.ui.main_window import MainWindow
 
@@ -145,19 +152,29 @@ for code in i18n.LANGUAGES:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="measured with Windows' own fonts")
-def test_the_window_fits_its_default_1280_pixels_in_every_language():
+@pytest.mark.parametrize("family", ["", "Microsoft YaHei UI"])
+def test_the_window_fits_its_default_1280_pixels_in_every_language(family):
     """A new window opens 1280 pixels wide. Text that is longer in some
     language must still fit, or the window opens wider than that and runs
     off smaller screens (German first needed 1,590). Measured in a process
     of its own on the Windows platform: the suite's offscreen platform has
-    other fonts, about twice as wide."""
+    other fonts, about twice as wide.
+
+    Also with Microsoft YaHei UI, which Qt takes as the window's font on a
+    PC with Chinese installed and which is wider than Segoe UI: Spanish
+    needed 1298 pixels with it and Portuguese 1290."""
     result = subprocess.run(
-        [sys.executable, "-c", _MEASURE_WINDOW], capture_output=True, text=True, timeout=120,
-        cwd=Path(__file__).resolve().parents[1], env={**os.environ, "QT_QPA_PLATFORM": "windows"},
+        [sys.executable, "-c", _MEASURE_WINDOW, *([family] if family else [])], capture_output=True, text=True,
+        timeout=120, cwd=Path(__file__).resolve().parents[1], env={**os.environ, "QT_QPA_PLATFORM": "windows"},
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
     assert result.returncode == 0, result.stderr[-2000:]
-    widths = {code: int(width) for code, width in (line.split() for line in result.stdout.splitlines())}
+    lines = result.stdout.splitlines()
+    if family:
+        if lines[0] != "font " + family.replace(" ", "_"):
+            pytest.skip(f"{family} is not installed")
+        lines = lines[1:]
+    widths = {code: int(width) for code, width in (line.split() for line in lines)}
     assert set(widths) == set(i18n.LANGUAGES)
     too_wide = {code: width for code, width in widths.items() if width > 1280}
     assert not too_wide, f"minimum width over 1280 px: {too_wide}"
