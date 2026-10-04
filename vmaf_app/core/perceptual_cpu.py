@@ -27,12 +27,12 @@ import numpy as np
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.colour import FFMPEG_MATRICES, colour_of, describe_png
-from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
+from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle

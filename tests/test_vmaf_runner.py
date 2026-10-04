@@ -1262,7 +1262,7 @@ def test_both_inputs_are_cropped_before_the_format_conversion():
     after, the test video the other way round: a 4:2:2 or 4:4:4 source's
     chroma at the crop's edges was filtered with samples of the bars."""
     from vmaf_app.core.models import CropBox, VideoInfo, VmafOptions
-    from vmaf_app.core.vmaf_runner import _build_filtergraph, HwAccelPlan
+    from vmaf_app.core.vmaf_runner import HwAccelPlan, _build_filtergraph
 
     source = VideoInfo(Path("s.mov"), 1920, 1080, 24.0, 1.0, 24, "prores", pix_fmt="yuv422p10le")
     test = VideoInfo(Path("t.mkv"), 1920, 1080, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p10le")

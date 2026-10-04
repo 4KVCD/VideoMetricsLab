@@ -609,7 +609,7 @@ def test_a_sampled_test_frame_is_paired_with_the_source_frame_nearest_it(monkeyp
 
 
 def test_videos_that_line_up_are_both_subsampled_and_only_the_test_video_cut(monkeypatch):
-    output, spawned = _run(monkeypatch, metrics=("ssimulacra2",), children=_both(_frames_command(6, _FRAME_BYTES)),
+    _output, spawned = _run(monkeypatch, metrics=("ssimulacra2",), children=_both(_frames_command(6, _FRAME_BYTES)),
                            timestamps={"source": lambda n: n * 3 * 42, "test": lambda n: n * 3 * 42},
                            options={"n_subsample": 3, "duration_limit": 0.5})
 
