@@ -9,6 +9,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
+from tests.factories import decode_plan, status
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import ComparisonResult, FrameScore, ResampleTarget, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
@@ -787,7 +788,7 @@ def test_a_half_waiting_for_the_gpu_is_reported_beside_the_running_half(qapp, mo
         return _fake_result("d.mp4")
 
     def vship(*args, on_status=None, on_progress=None, **kwargs):
-        on_status(GPU_WAIT_MESSAGE)
+        on_status(status(GPU_WAIT_MESSAGE))
         gpu_waiting.set()
         ffmpeg_reported.wait(5)
         time.sleep(0.05)
@@ -1029,14 +1030,14 @@ def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
     half's only at the drain, so "the last snapshot" was a matter of which
     half finished first."""
     def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
-        on_status("Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
-        on_status("GPU decode failed, retrying (GPU decode: source cuda, distorted cpu)...")
+        on_status(status("Running ffmpeg (GPU decode: source cuda, distorted cuda)..."))
+        on_status(status("GPU decode failed, retrying (GPU decode: source cuda, distorted cpu)..."))
         on_progress(10, 100, 5.0)
         return _fake_result(d.path.name)
 
     def gpu(s, d, *a, on_status=None, **k):
-        on_status("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…")
-        on_status("GPU metric 1/1: SSIMULACRA2")
+        on_status(status("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cuda)…"))
+        on_status(status("GPU metric 1/1: SSIMULACRA2"))
         return _perceptual_output()
 
     monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
@@ -1049,7 +1050,8 @@ def test_each_halfs_decode_plan_reaches_its_snapshot(qapp, monkeypatch):
     runner.join(10)
     _drain(qapp)
     last = {task["backend"]: task["decode"] for task in snapshots[-1]}
-    assert last == {"ffmpeg": "source cuda, distorted cpu", "perceptual": "source cuda, distorted cuda"}
+    assert last == {"ffmpeg": decode_plan("source cuda, distorted cpu"),
+                    "perceptual": decode_plan("source cuda, distorted cuda")}
     assert all("decode" in task for snapshot in snapshots for task in snapshot)
 
 

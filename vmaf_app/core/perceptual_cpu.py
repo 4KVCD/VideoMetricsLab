@@ -33,10 +33,12 @@ from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
 from vmaf_app.core.geometry import content_size, pair_problem
+from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.status import Status
 
 BACKEND_ID = "perceptual"
 _log = logging.getLogger(__name__)
@@ -642,7 +644,8 @@ def run_perceptual_task(
         expected = min(expected, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
     total_units = max(1, math.ceil(expected / step)) * step
     if on_status:
-        on_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted (GPU decode: off)…")
+        on_status(Status.decoding("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
+                                  HwAccelPlan()))
     started = time.perf_counter()
     values: dict[str, list[float]] = {spec.key: [] for spec in specs}
     total = 0

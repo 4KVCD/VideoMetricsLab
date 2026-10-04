@@ -19,7 +19,6 @@ import contextlib
 import copy
 import logging
 import os
-import re
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -81,7 +80,7 @@ from vmaf_app.core.ffmpeg_request import (
 )
 from vmaf_app.core.frame_extract import FrameComparison
 from vmaf_app.core.geometry import analysis_dimensions, content_size, resample_analysis_dimensions
-from vmaf_app.core.gpu import detected_gpu_vendors
+from vmaf_app.core.gpu import HwAccelPlan, detected_gpu_vendors
 from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, is_v1_choice, resolve_model
@@ -103,6 +102,8 @@ from vmaf_app.core.power import keep_system_awake
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import aggregate_scores
+from vmaf_app.core.status import GPU_PASS as GPU_PASS_STATUS
+from vmaf_app.core.status import STARTING, brief_of, kind_of, plan_of
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
@@ -4219,16 +4220,15 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _step_text(message: str) -> str:
         """A half's status message as its step before figures arrive, e.g.
-        "Detecting black bars in source" -- "" for the message that only
-        says FFmpeg is starting. A decode plan, "(GPU decode: ...)", is left
-        out: it is shown on its own, as "Decoder: ...". Before, a video with
+        "Detecting black bars in source" -- "" for one that only says FFmpeg
+        or a GPU pass is starting. The decode plan is left out (its brief):
+        it is shown on its own, as "Decoder: ...". Before, a video with
         CPU and GPU halves said only "CPU starting" for as long as black
         bars on a 4K source were being looked for."""
-        text = re.sub(r"\s*\(GPU decode: [^)]*\)", "", message)
-        text = text.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
-        if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
+        if kind_of(message) in (STARTING, GPU_PASS_STATUS):
             return ""
-        return tr_message(text)
+        text = brief_of(message).strip().rstrip(".\u2026").strip().replace("distorted", "test video")
+        return tr_message(text) if text else ""
 
     def _redraw_job_lines(self) -> None:
         """Every video line with figures, now: on Pause and Resume."""
@@ -4604,7 +4604,7 @@ class MainWindow(QMainWindow):
                    for other, where in zip(decoding, places, strict=True)):
                 keys = task.get("cpu_keys") or task.get("metric_keys", ())
                 name += " " + self._numbers_text([order[place].index(key) + 1 for key in keys if key in order[place]])
-            plans[name] = str(task["decode"])
+            plans[name] = task["decode"]
         return parts, "\n".join(lines), plans
 
     def _unit_text(self, head: str, unit: _MetricUnit, paused: bool, holder: str) -> str:
@@ -4617,7 +4617,7 @@ class MainWindow(QMainWindow):
                 return tr("{kind} queued (waiting for this video's {other} to finish)", kind=head, other=holder)
             return tr("{kind} queued (another video is using the GPU)", kind=head)
         if unit.state in ("starting", "queued"):
-            step = self._step_text(str(unit.task.get("step") or "")) if unit.state == "starting" else ""
+            step = self._step_text(unit.task.get("step") or "") if unit.state == "starting" else ""
             return tr("{kind} ({step})", kind=head, step=step) if step else tr("{kind} starting", kind=head)
         if unit.state == "done":
             return tr("{kind} done", kind=head)
@@ -4671,7 +4671,7 @@ class MainWindow(QMainWindow):
         else:
             self._job_lines_due.add(index)  # see _on_run_tick
 
-    def _on_job_status(self, index: int, message: str) -> None:
+    def _on_job_status(self, index: int, message: str) -> None:  # message: often a core.status.Status
         """Phase messages belong to the video they came from.
 
         Putting them all in the one status line meant that with two videos
@@ -4684,9 +4684,7 @@ class MainWindow(QMainWindow):
             # The runner sends the active plan on each attempt, including
             # software fallbacks. Keep it when progress replaces this phase
             # message; each parallel job owns its own decode plan.
-            marker = "(GPU decode: "
-            if marker in message:
-                plan = message.split(marker, 1)[1].split(")", 1)[0]
+            if (plan := plan_of(message)) is not None:
                 self._job_decode_status[index] = self._decoder_text(index, {"": plan})
             if index in self._job_task_progress:
                 # Keep backend-specific rates and pass progress visible. A
@@ -4705,16 +4703,14 @@ class MainWindow(QMainWindow):
         Source: GPU, test video: CPU".
 
         `plans` holds each half's decode plan by the half's name on the line
-        ("CPU metrics"), as the half reports it: "source cuda, distorted
-        cpu" or "off". The line showed it nearly as it came, "Decode:
+        ("CPU metrics"). The line showed it nearly as it came, "Decode:
         source cuda, test cuda": the decoder API's name where the question
         is only whether the GPU or the CPU decodes each video. Where the
         halves differ -- one fell back to software -- each is named: "test
         video: CPU (CPU metrics) / GPU (GPU metrics)".
         """
-        def where(plan: str) -> dict[str, str]:
-            sides = dict(part.split(" ", 1) for part in plan.split(", ") if " " in part)
-            return {side: "CPU" if sides.get(side, "cpu") == "cpu" else "GPU" for side in ("source", "distorted")}
+        def where(plan: HwAccelPlan) -> dict[str, str]:
+            return {"source": "GPU" if plan.source else "CPU", "distorted": "GPU" if plan.distorted else "CPU"}
 
         by_half = {half: where(plan) for half, plan in plans.items()}
 

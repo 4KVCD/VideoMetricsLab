@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 
+from tests.factories import status
 from vmaf_app.core import gpu_frames, vmaf_cuda
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.gpu import HwAccelPlan
@@ -286,7 +287,7 @@ def test_the_run_line_is_told_when_vmaf_is_on_the_gpu(monkeypatch):
     gpu_vmaf = worker_module.GPU_VMAF
     run.report_progress(gpu_vmaf, 40, 100, 50.0)
     assert halves() == {"ffmpeg": ("cpu", (), 0), gpu_vmaf: ("gpu", (), 40)}
-    run.report_status(gpu_vmaf, "VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…")
+    run.report_status(gpu_vmaf, status("VMAF on the GPU failed (libvmaf crashed); calculating it on the CPU…"))
     assert halves() == {"ffmpeg": ("cpu", (), 0), gpu_vmaf: ("gpu", ("vmaf", "vmaf_neg"), 0)}
 
 

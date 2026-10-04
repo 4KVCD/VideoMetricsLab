@@ -61,6 +61,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.status import GPU_VMAF_FAILED, GPU_WAIT, STARTING, Status
 
 _log = logging.getLogger(__name__)
 
@@ -865,12 +866,10 @@ def _execute_run(
         for attempt, plan in enumerate(ladder):
             if on_status:
                 if attempt == 0:
-                    on_status(f"Running ffmpeg{', VMAF on the GPU' if gpu is not None else ''} "
-                              f"(GPU decode: {plan.describe()})...")
+                    on_status(Status.decoding(f"Running ffmpeg{', VMAF on the GPU' if gpu is not None else ''}",
+                                              plan, ending="...", kind=STARTING))
                 else:
-                    on_status(
-                        f"GPU decode failed, retrying (GPU decode: {plan.describe()})..."
-                    )
+                    on_status(Status.decoding("GPU decode failed, retrying", plan, ending="..."))
             result = run_with(plan)
             if result.returncode == 0:
                 break
@@ -1041,7 +1040,7 @@ def _run_on_gpu(
     _log.info("VMAF on the GPU (%s): %s", ", ".join(plan.models.values()), vmaf_cuda.LIBRARY_BUILD)
     if not GPU_PASS.acquire(blocking=False):
         if on_status:
-            on_status(GPU_WAIT_MESSAGE)
+            on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
         while not GPU_PASS.acquire(timeout=0.1):
             if cancel_event is not None and cancel_event.is_set():
                 raise Cancelled("Cancelled by user")
@@ -1056,7 +1055,7 @@ def _run_on_gpu(
     except Exception as error:
         _log.error("VMAF on the GPU failed; calculating it on the CPU: %s", error, exc_info=error)
         if on_status:
-            on_status(f"{VMAF_GPU_FAILED} ({error}); calculating it on the CPU…")
+            on_status(Status(f"{VMAF_GPU_FAILED} ({error}); calculating it on the CPU…", kind=GPU_VMAF_FAILED))
         return None
     finally:
         GPU_PASS.release()
@@ -1115,7 +1114,7 @@ def _score_decoded_on_gpu(
     # filter scores before its output stops.
     limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
     if on_status:
-        on_status(f"Running VMAF on the GPU (GPU decode: {hwaccel.describe()})...")
+        on_status(Status.decoding("Running VMAF on the GPU", hwaccel, ending="..."))
 
     def check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import re
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -16,20 +15,20 @@ from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import ExecutionPlan, MetricTask, build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.metric_results import MetricResultSet, as_requested, frame_scores_from_results
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
 from vmaf_app.core.perceptual_vship import (
     GPU_ONLY_METRICS,
-    GPU_WAIT_MESSAGE,
     apply_vship_cpu_fallback,
     vship_passes,
 )
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.status import GPU_VMAF_FAILED, GPU_WAIT, kind_of, plan_of
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
-    VMAF_GPU_FAILED,
     Cancelled,
     VmafRunError,
     analysis_bit_depth,
@@ -122,7 +121,7 @@ class VmafWorker(QThread):
     # Each of a video's halves as it stands (_JobRun.task_snapshots): the
     # window's run line is built from them, metric by metric.
     task_progress = Signal(int, object)
-    status = Signal(int, str)               # job_index, status text
+    status = Signal(int, object)            # job_index, status text: a str, often a core.status.Status
     job_finished = Signal(int, object)      # job_index, ComparisonResult
     job_failed = Signal(int, str, str)      # job_index, message, stderr_tail
     # One metric group failed, the other finished: the finished metrics are
@@ -471,11 +470,10 @@ class _JobRun:
         # Each half's latest status message: what a half not yet reporting
         # figures is doing (black-bar detection, say).
         self.task_steps: dict[str, str] = {}
-        # Each half's latest decode plan, "source cuda, distorted cpu" or
-        # "off", from its "(GPU decode: ...)" messages: the halves decode
-        # separately, and one can fall back to software while the other
-        # does not.
-        self.task_decode: dict[str, str] = {}
+        # Each half's latest decode plan (core.status.Status.plan): the
+        # halves decode separately, and one can fall back to software while
+        # the other does not.
+        self.task_decode: dict[str, HwAccelPlan] = {}
         # The GPU half's finished passes, one metric each, while the half
         # runs on (see perceptual_so_far).
         self.pass_outputs: list[PerceptualTaskOutput] = []
@@ -637,11 +635,11 @@ class _JobRun:
         with self.emit_lock:
             with self.lock:
                 self.task_steps[backend] = message
-                if plan := re.search(r"\(GPU decode: ([^)]*)\)", message):
-                    self.task_decode[backend] = plan.group(1)
-                if len(self.plan.tasks) > 1 and message == GPU_WAIT_MESSAGE:
+                if (plan := plan_of(message)) is not None:
+                    self.task_decode[backend] = plan
+                if len(self.plan.tasks) > 1 and kind_of(message) == GPU_WAIT:
                     self.task_waiting[backend] = "GPU"
-                if backend == GPU_VMAF and message.startswith(VMAF_GPU_FAILED):
+                if backend == GPU_VMAF and kind_of(message) == GPU_VMAF_FAILED:
                     # FFmpeg's libvmaf takes over, on the CPU, from frame 0.
                     self._to_cpu(backend, next(task.metric_keys for task in self.plan.tasks
                                                if task.backend_id == backend))

@@ -86,6 +86,8 @@ from vmaf_app.core.perceptual_cpu import (
     compared_seconds,
 )
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.status import GPU_PASS as GPU_PASS_STATUS
+from vmaf_app.core.status import GPU_WAIT, Status
 
 BACKEND_ID = "perceptual"
 _METRICS = {"ssimulacra2", "butteraugli", "cvvdp"}
@@ -1736,7 +1738,7 @@ def run_vship_task(
     """
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
-            on_status(GPU_WAIT_MESSAGE)
+            on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
         while not _gpu_pass.acquire(timeout=0.1):
             if cancel_event is not None and cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")
@@ -1776,7 +1778,7 @@ def run_vship_task(
                 number = first + offset
                 labels = " + ".join(metric_definition(spec.key).label for spec in group)
                 if on_status and count > 1:
-                    on_status(f"GPU metric {number + 1}/{count}: {labels}")
+                    on_status(Status(f"GPU metric {number + 1}/{count}: {labels}", kind=GPU_PASS_STATUS))
                 if on_pass is not None:
                     on_pass(number + 1, count, tuple(spec.key for spec in group))
                 reached.append(0)
@@ -1961,9 +1963,9 @@ def _score_vship_pass_with(
             with decode_lock:  # the two inputs' threads can both fall back
                 decode[side] = None
                 if on_status:
-                    on_status(f"GPU decode failed for the {'test video' if side == 'distorted' else side}, "
-                              "decoding it in software "
-                              f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
+                    on_status(Status.decoding(
+                        f"GPU decode failed for the {'test video' if side == 'distorted' else side}, "
+                        "decoding it in software", HwAccelPlan(**decode)))
         return report
 
     streams: list[_FrameStream | _NativeFrameStream] = []
@@ -2058,8 +2060,7 @@ def _score_vship_pass_with(
         # decoded in software; see stream()).
         if on_status:
             labels = ", ".join(metric_definition(spec.key).label for spec in specs)
-            on_status(f"Vship GPU ({device.name}): calculating {labels} "
-                      f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
+            on_status(Status.decoding(f"Vship GPU ({device.name}): calculating {labels}", HwAccelPlan(**decode)))
         for stream in streams:
             stream.start()
         source_stream, distorted_stream = streams

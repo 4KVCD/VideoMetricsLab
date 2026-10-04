@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
+from tests.factories import decode_plan, status
 from tests.factories import (
     fake_completed_run as _fake_completed_run,
 )
@@ -3718,7 +3719,7 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
     win._job_rows = list(win._rows)
     for i in range(job_count):
         win._on_job_started(i, f"encode-{i}")
-        win._on_job_status(i, "Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
+        win._on_job_status(i, status("Running ffmpeg (GPU decode: source cuda, distorted cuda)..."))
         win._on_job_progress(i, current=20, total=100, fps=10.0)
         text = win.job_progress_labels[win._job_line_slot[i]].text()
         assert "Decoder: Source: GPU, test video: GPU" in text
@@ -3729,7 +3730,7 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
         ("source cpu, distorted d3d11va", "Decoder: Source: CPU, test video: GPU"),
         ("off", "Decoder: Source: CPU, test video: CPU"),
     ):
-        win._on_job_status(0, f"GPU decode failed, retrying (GPU decode: {plan})...")
+        win._on_job_status(0, status(f"GPU decode failed, retrying (GPU decode: {plan})..."))
         win._on_job_progress(0, current=30, total=100, fps=5.0)
         assert expected in win.job_progress_labels[win._job_line_slot[0]].text()
         if job_count == 2:
@@ -3756,7 +3757,7 @@ def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
 
-    win._on_job_status(0, "Running ffmpeg (GPU decode: off)...")
+    win._on_job_status(0, status("Running ffmpeg (GPU decode: off)..."))
 
     assert "GPU decode" in win.job_progress_labels[0].text()
     assert win.status_label.text().startswith("1 video: 1 in progress")
@@ -4642,7 +4643,7 @@ def test_a_starting_half_names_its_step(qapp, step, shown):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
-        {**_half("ffmpeg", ("vmaf",), state="starting", current=0, total=0, fps=0.0), "step": step},
+        {**_half("ffmpeg", ("vmaf",), state="starting", current=0, total=0, fps=0.0), "step": status(step)},
         _half("perceptual", ("ssimulacra2",), state="starting", current=0, total=0, fps=0.0),
     ])
     text = win.job_progress_labels[0].text()
@@ -4705,7 +4706,8 @@ def _half(backend, keys, *, state="running", decode="", current=20, total=100, f
           passes=None, cpu_keys=(), done_keys=(), lane=None):
     """A half's snapshot as the worker sends it (VmafWorker.task_progress)."""
     return {"backend": backend, "metric_keys": keys, "current": current, "total": total, "fps": fps,
-            "state": state, "phase": phase, "waiting_for": None, "step": "", "decode": decode,
+            "state": state, "phase": phase, "waiting_for": None, "step": "",
+            "decode": decode_plan(decode) if decode else None,
             "lane": lane or ("cpu" if backend in ("ffmpeg", "perceptual_cpu") else "gpu"),
             "passes": passes or (keys,), "cpu_keys": cpu_keys, "done_keys": done_keys}
 
@@ -4718,7 +4720,7 @@ def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cpu")])
-    win._on_job_status(0, "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…")
+    win._on_job_status(0, status("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…"))
     assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: CPU")
     win.close()
 
@@ -4768,7 +4770,7 @@ def test_a_starting_gpu_half_shows_its_step_without_the_decode_plan(qapp, step, 
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [{**_half("perceptual", ("ssimulacra2",), state="starting",
-                                       decode="source cuda, distorted cuda"), "step": step}])
+                                       decode="source cuda, distorted cuda"), "step": status(step)}])
     assert win.job_progress_labels[0].text().startswith(f"a — {shown}   ·   Decoder: ")
     win.close()
 
@@ -4783,7 +4785,7 @@ def test_a_resolution_tests_decoder_names_only_the_source(qapp):
     win._rows[0].options.resample_test = ResampleTarget(width=1920, label="1080p")
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    win._on_job_status(0, "Running ffmpeg (GPU decode: source cuda, distorted cpu)...")
+    win._on_job_status(0, status("Running ffmpeg (GPU decode: source cuda, distorted cpu)..."))
     win._on_job_progress(0, current=20, total=100, fps=10.0)
     text = win.job_progress_labels[0].text()
     assert text.endswith("   ·   Decoder: Source: GPU")
