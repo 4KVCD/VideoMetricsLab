@@ -539,7 +539,6 @@
   "Cancelled by user": "Anulowane przez użytkownika",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Ocena na GPU nie powiodła się ({error}). Nie powtórzono jej na CPU, co dla wideo dłuższego niż 10 minut trwałoby od godzin do dni. Wybierz CPU dla {metrics}, aby mimo to liczyć na CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Ocena na GPU nie powiodła się ({error}); ponowna próba na CPU też się nie powiodła: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "policzone z {cpu_frames} klatek na CPU, ale z {gpu_frames} na GPU, więc nie zachowano",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} wymaga GPU, którego Vship może użyć, i nie mogła użyć żadnego: {reason}",
   "{metric} could not be calculated: {reason}": "Nie można policzyć {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Akceleracja GPU Vship jest dołączona tylko dla Windows.",

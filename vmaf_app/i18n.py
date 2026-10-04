@@ -225,7 +225,6 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video "
     "over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.",
     "GPU scoring failed ({error}); the CPU retry failed too: {reason}",
-    "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept",
     "{metric} needs a GPU that Vship can use, and could not use one: {reason}",
     "{metric} could not be calculated: {reason}",
     "Vship GPU acceleration is only bundled for Windows.",

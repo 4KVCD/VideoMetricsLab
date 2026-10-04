@@ -2339,10 +2339,10 @@ def apply_vship_cpu_fallback(
             raise
         failures.update({spec.key: failed_on_cpu(spec.key, str(error)) for spec in cpu_specs})
         return replace(gpu_output, failures=failures)
-    if gpu_output.compared_frame_count != cpu_output.compared_frame_count:
-        mismatch = (f"calculated over {cpu_output.compared_frame_count} frames on the CPU but "
-                    f"{gpu_output.compared_frame_count} on the GPU, so it was not kept")
-        failures.update({spec.key: failed_on_cpu(spec.key, mismatch) for spec in cpu_specs})
+    # Each metric is kept on its own frames. Vship and the CPU tools can end
+    # a frame apart -- each stops where the shorter input's pictures do --
+    # and that used to throw the CPU's finished scores away, where the cache
+    # and the window have always taken each metric's own frames.
     combined = MetricResultSet()
     for spec in specs:
         if spec.key in failures:
@@ -2354,5 +2354,5 @@ def apply_vship_cpu_fallback(
         combined.add(value)
     return PerceptualTaskOutput(
         combined, gpu_output.source_crop, gpu_output.distorted_crop,
-        gpu_output.compared_frame_count, failures,
+        max(gpu_output.compared_frame_count, cpu_output.compared_frame_count), failures,
     )

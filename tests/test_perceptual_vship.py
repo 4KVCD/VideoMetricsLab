@@ -1345,8 +1345,9 @@ def test_a_metric_that_failed_on_the_gpu_is_retried_on_the_cpu_only_for_short_vi
 @pytest.mark.parametrize("cpu_problem", ["tool missing", "frame count"])
 def test_a_cpu_side_failure_keeps_the_finished_gpu_scores(monkeypatch, cpu_problem):
     """CVVDP on the GPU beside Butteraugli set to CPU: a missing libjxl tool
-    (or differing frame counts) after the GPU pass raised out of the
-    fallback and threw away the finished CVVDP score."""
+    after the GPU pass raised out of the fallback and threw away the
+    finished CVVDP score. Differing frame counts are no failure at all: each
+    metric keeps its own frames, as the cache does."""
     request = _cvvdp_request("butteraugli", "cvvdp", backends={"butteraugli": "cpu"})
     device = vship.VshipDevice("cuda","test GPU", 0, "5.1.1", None)
     cvvdp = vship.SequenceMetricResult("cvvdp", 9.1, MetricProvenance("t", "1", "gpu", "t"))
@@ -1363,8 +1364,12 @@ def test_a_cpu_side_failure_keeps_the_finished_gpu_scores(monkeypatch, cpu_probl
 
     monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", cpu)
     output = vship.apply_vship_cpu_fallback(_info("s.mkv"), _info("t.mkv"), request, request.metrics)
-    assert output.metrics.keys() == ("cvvdp",)
-    assert ("not installed" if cpu_problem == "tool missing" else "frames on the CPU") in output.failures["butteraugli"]
+    if cpu_problem == "tool missing":
+        assert output.metrics.keys() == ("cvvdp",)
+        assert "not installed" in output.failures["butteraugli"]
+    else:
+        assert set(output.metrics.keys()) == {"cvvdp", "butteraugli"} and output.failures == {}
+        assert output.compared_frame_count == 2
 
 
 def test_cvvdp_failure_messages_name_the_real_cause(monkeypatch):

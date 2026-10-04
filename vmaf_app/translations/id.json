@@ -539,7 +539,6 @@
   "Cancelled by user": "Dibatalkan oleh pengguna",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Penilaian GPU gagal ({error}). Tidak dicoba ulang di CPU, yang akan memakan waktu berjam-jam hingga berhari-hari untuk video lebih dari 10 menit. Pilih CPU untuk {metrics} agar tetap dihitung di CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Penilaian GPU gagal ({error}); percobaan ulang di CPU juga gagal: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Dihitung pada {cpu_frames} bingkai di CPU tetapi {gpu_frames} di GPU, jadi tidak dipakai",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} memerlukan GPU yang dapat dipakai Vship, dan tidak dapat memakai satu pun: {reason}",
   "{metric} could not be calculated: {reason}": "{metric} tidak dapat dihitung: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Akselerasi GPU Vship hanya disertakan untuk Windows.",

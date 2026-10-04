@@ -539,7 +539,6 @@
   "Cancelled by user": "Zrušeno uživatelem",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Hodnocení na GPU selhalo ({error}). Na CPU se znovu nezkoušelo, protože by to u videa delšího než 10 minut trvalo hodiny až dny. Zvolte pro {metrics} CPU, chcete-li přesto počítat na CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Hodnocení na GPU selhalo ({error}); selhal i nový pokus na CPU: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Spočítáno na {cpu_frames} snímcích na CPU, ale na {gpu_frames} na GPU, proto nepoužito",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} vyžaduje GPU, kterou Vship dokáže použít, a žádnou použít nemohla: {reason}",
   "{metric} could not be calculated: {reason}": "{metric} nelze spočítat: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Akcelerace Vship na GPU je přibalena jen pro Windows.",

@@ -539,7 +539,6 @@
   "Cancelled by user": "사용자가 취소함",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU 채점 실패({error}). 10분이 넘는 영상은 몇 시간에서 며칠이 걸리므로 CPU로 다시 시도하지 않았습니다. 그래도 CPU로 계산하려면 {metrics}에 CPU를 선택하세요.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "GPU 채점 실패({error}). CPU 재시도도 실패: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "CPU에서는 {cpu_frames}개 프레임, GPU에서는 {gpu_frames}개 프레임으로 계산되어 사용하지 않았습니다",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric}에는 Vship이 사용할 수 있는 GPU가 필요하지만 사용할 수 있는 GPU가 없었습니다: {reason}",
   "{metric} could not be calculated: {reason}": "{metric}을(를) 계산할 수 없음: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Vship GPU 가속은 Windows용에만 포함되어 있습니다.",

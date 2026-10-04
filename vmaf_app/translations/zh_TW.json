@@ -539,7 +539,6 @@
   "Cancelled by user": "已由使用者取消",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU 評分失敗（{error}）。未在 CPU 上重試，因為對超過 10 分鐘的影片這需要數小時到數天。若仍要在 CPU 上計算，請為 {metrics} 選擇 CPU。",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "GPU 評分失敗（{error}）；CPU 重試也失敗：{reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "在 CPU 上計算了 {cpu_frames} 格，GPU 上則是 {gpu_frames} 格，因此未採用",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} 需要 Vship 能使用的 GPU，但無法使用任何一個：{reason}",
   "{metric} could not be calculated: {reason}": "無法計算 {metric}：{reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Vship GPU 加速只隨附於 Windows 版。",

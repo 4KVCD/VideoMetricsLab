@@ -539,7 +539,6 @@
   "Cancelled by user": "Người dùng đã hủy",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Chấm điểm trên GPU lỗi ({error}). Không thử lại trên CPU, vì sẽ mất hàng giờ đến hàng ngày với video dài hơn 10 phút. Chọn CPU cho {metrics} để vẫn tính trên CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Chấm điểm trên GPU lỗi ({error}); thử lại trên CPU cũng lỗi: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Tính trên {cpu_frames} khung hình ở CPU nhưng {gpu_frames} ở GPU, nên không dùng",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} cần một GPU Vship dùng được, và không dùng được GPU nào: {reason}",
   "{metric} could not be calculated: {reason}": "Không tính được {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Tăng tốc GPU Vship chỉ đi kèm cho Windows.",

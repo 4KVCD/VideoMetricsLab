@@ -539,7 +539,6 @@
   "Cancelled by user": "ผู้ใช้ยกเลิก",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "การให้คะแนนบน GPU ล้มเหลว ({error}) ไม่ได้ลองใหม่บน CPU เพราะจะใช้เวลาหลายชั่วโมงถึงหลายวันสำหรับวิดีโอที่ยาวเกิน 10 นาที เลือก CPU สำหรับ {metrics} เพื่อคำนวณบน CPU อยู่ดี",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "การให้คะแนนบน GPU ล้มเหลว ({error}) และการลองใหม่บน CPU ก็ล้มเหลว: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "คำนวณได้ {cpu_frames} เฟรมบน CPU แต่ {gpu_frames} เฟรมบน GPU จึงไม่นำมาใช้",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} ต้องใช้ GPU ที่ Vship ใช้ได้ และใช้ไม่ได้เลย: {reason}",
   "{metric} could not be calculated: {reason}": "คำนวณ {metric} ไม่ได้: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "การเร่งด้วย GPU ของ Vship มีให้เฉพาะบน Windows",

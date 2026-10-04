@@ -539,7 +539,6 @@
   "Cancelled by user": "Скасовано користувачем",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Оцінювання на GPU не вдалося ({error}). Повтор на CPU не виконувався: для відео, довшого за 10 хвилин, це зайняло б від годин до днів. Виберіть CPU для {metrics}, щоб усе одно обчислити на CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Оцінювання на GPU не вдалося ({error}); повтор на CPU теж не вдався: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Обчислено на {cpu_frames} кадрах на CPU, але на {gpu_frames} на GPU, тож не використано",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} потребує GPU, який може використати Vship, і не змогла використати жодного: {reason}",
   "{metric} could not be calculated: {reason}": "{metric} не вдалося обчислити: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Прискорення Vship на GPU постачається лише для Windows.",
