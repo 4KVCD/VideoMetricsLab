@@ -9,6 +9,8 @@ from typing import Literal
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
+from vmaf_app.core.geometry import content_size, display_aspect_ratio
+from vmaf_app.core.gpu import analysis_pix_fmt
 from vmaf_app.core.models import (
     ComparisonResult,
     CropBox,
@@ -17,7 +19,6 @@ from vmaf_app.core.models import (
     VideoInfo,
 )
 from vmaf_app.core.process_control import ProcessHandle
-from vmaf_app.core.vmaf_runner import analysis_pix_fmt, display_aspect_ratio
 
 FrameSide = Literal["source", "distorted"]
 
@@ -111,16 +112,12 @@ class FrameComparison:
         )
 
 
-def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-    return (crop.w, crop.h) if crop is not None else (info.width, info.height)
-
-
 def comparison_dimensions(comparison: FrameComparison) -> tuple[int, int]:
     """Dimensions of the pictures the metric filter would see."""
-    source_size = _content_size(comparison.source_info, comparison.source_crop)
+    source_size = content_size(comparison.source_info, comparison.source_crop)
     if comparison.resample_target is not None:
         return source_size
-    distorted_size = _content_size(comparison.distorted_info, comparison.distorted_crop)
+    distorted_size = content_size(comparison.distorted_info, comparison.distorted_crop)
     if source_size == distorted_size:
         return source_size
     if comparison.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
@@ -249,7 +246,7 @@ def frame_filter(
         ops.append(crop_filter)
     ops.append(f"format={analysis_format}")
 
-    content_w, content_h = _content_size(info, crop)
+    content_w, content_h = content_size(info, crop)
     if comparison.resample_target is not None and side == "distorted":
         target_w = comparison.resample_target.width
         target_h = max(2, round(target_w * content_h / content_w / 2) * 2)

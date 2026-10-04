@@ -80,6 +80,7 @@ from vmaf_app.core.ffmpeg_request import (
     displayable_metric_specs,
 )
 from vmaf_app.core.frame_extract import FrameComparison
+from vmaf_app.core.geometry import analysis_dimensions, content_size, resample_analysis_dimensions
 from vmaf_app.core.gpu import detected_gpu_vendors
 from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
@@ -105,9 +106,7 @@ from vmaf_app.core.stats import aggregate_scores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
-    analysis_dimensions,
     estimate_total_frames,
-    resample_analysis_dimensions,
     validate_video_pair,
 )
 from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
@@ -2425,13 +2424,6 @@ class MainWindow(QMainWindow):
         else:
             show(tr("Yes") if has_bars else tr("No"), tooltip)
 
-    @staticmethod
-    def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-        """The picture that actually reaches the comparison, bars removed.
-        Mirrors vmaf_runner's own _content_size, which decides the same thing
-        for the filtergraph."""
-        return (crop.w, crop.h) if crop else (info.width, info.height)
-
     def _resize_mismatch(self, row: int) -> tuple[str, str]:
         """(short tag, full explanation) for which of the two videos gets
         resized to match the other, when they differ -- important now that a
@@ -2463,8 +2455,8 @@ class MainWindow(QMainWindow):
         run = row_data.completed_run
         if run is not None:
             source_info, distorted_info = run.result.source_info, run.result.distorted_info
-            ref = self._content_size(source_info, run.result.source_crop)
-            dist = self._content_size(distorted_info, run.result.distorted_crop)
+            ref = content_size(source_info, run.result.source_crop)
+            dist = content_size(distorted_info, run.result.distorted_crop)
         else:
             source_info, distorted_info = self._source_info, row_data.video_info
             if source_info is None or distorted_info is None:

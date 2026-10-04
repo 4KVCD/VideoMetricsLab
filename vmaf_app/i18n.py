@@ -250,7 +250,6 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "Vship does not support the {primaries} color primaries.",
     "Vship does not support the {range} range tag.",
     "Vship does not support {siting} chroma siting.",
-    "Variable-frame-rate video is not supported safely yet.",
     "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate "
     "before comparing them.",
     "Frame rates do not match ({source} vs {test} fps).",

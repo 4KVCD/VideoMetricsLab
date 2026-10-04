@@ -55,6 +55,7 @@ from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_js
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.frame_sync import frame_pairs
+from vmaf_app.core.geometry import content_size
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
@@ -81,7 +82,6 @@ from vmaf_app.core.perceptual_cpu import (
     PerceptualCancelled,
     PerceptualRunError,
     PerceptualTaskOutput,
-    _content_size,
     _validate_pair,
     compared_seconds,
 )
@@ -765,8 +765,8 @@ def _scaled_sizes(
     source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
 ) -> tuple[tuple[int, int], tuple[int, int]]:
-    source_size = _content_size(source, source_crop)
-    distorted_size = _content_size(distorted, distorted_crop)
+    source_size = content_size(source, source_crop)
+    distorted_size = content_size(distorted, distorted_crop)
     if source_size == distorted_size:
         return source_size, distorted_size
     if recipe.scale_direction is ScaleDirection.DISTORTED_TO_SOURCE:
@@ -792,7 +792,7 @@ def _filter_chain(
         operations.append(f"hwdownload,format={hw_native_format(info.pix_fmt)}")
     if crop is not None and not crop.is_noop(info.width, info.height):
         operations.append(crop.as_filter())
-    current_size = _content_size(info, crop)
+    current_size = content_size(info, crop)
     if current_size != target_size:
         operations.append(f"scale={target_size[0]}:{target_size[1]}:flags={algorithm}")
     operations.extend(("setpts=PTS-STARTPTS", f"format={pixel_format}"))

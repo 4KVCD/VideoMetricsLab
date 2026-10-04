@@ -236,6 +236,31 @@ def plan_hwaccel(
 # Here rather than in vmaf_runner because crop detection needs them too, and
 # vmaf_runner imports crop_detect.
 
+#: Analysis bit depth -> the planar 4:2:0 format both branches are converted
+#: to before they meet. libvmaf compares two streams that must agree on
+#: format, so one has to be picked for the pair.
+_ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
+
+
+def analysis_pix_fmt(*pix_fmts: str) -> str:
+    """The common format the inputs are converted to before comparison.
+
+    Takes the *deepest* of the inputs, so a 10-bit master compared against
+    an 8-bit encode promotes the encode rather than truncating the master.
+    Everything used to be forced to 8-bit yuv420p, which quietly discarded
+    two bits of both sides on any HDR/10-bit comparison and put a floor
+    under PSNR/XPSNR that had nothing to do with the encode being measured.
+    """
+    depth = max((bit_depth(f) for f in pix_fmts), default=8)
+    if depth <= 8:
+        return _ANALYSIS_FORMAT_BY_DEPTH[8]
+    if depth <= 10:
+        return _ANALYSIS_FORMAT_BY_DEPTH[10]
+    # libvmaf accepts up to 12-bit; deeper sources (16-bit intermediates)
+    # are analysed at 12 rather than being dropped back to 8.
+    return _ANALYSIS_FORMAT_BY_DEPTH[12]
+
+
 def hw_native_format(pix_fmt: str) -> str:
     """The system-memory pixel format a cuda/qsv/d3d11va hw surface downloads
     to, based on that input's bit depth. 10/12-bit 4:2:0 video decodes to a

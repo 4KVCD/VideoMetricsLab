@@ -32,6 +32,7 @@ from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detec
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
+from vmaf_app.core.geometry import content_size, pair_problem
 from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
@@ -173,18 +174,11 @@ def compared_seconds(source: VideoInfo, distorted: VideoInfo, duration_limit: fl
     return seconds
 
 
-def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-    return (crop.w, crop.h) if crop else (info.width, info.height)
-
-
 def _validate_pair(source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe) -> None:
-    if source.is_variable_frame_rate or distorted.is_variable_frame_rate:
-        raise PerceptualRunError("Variable-frame-rate video is not supported safely yet.")
-    fps_tolerance = max(0.01, max(source.fps, distorted.fps) * 0.001)
-    if abs(source.fps - distorted.fps) > fps_tolerance:
-        raise PerceptualRunError(f"Frame rates do not match ({source.fps:.3f} vs {distorted.fps:.3f} fps).")
-    if recipe.duration_limit > 0 and min(source.duration, distorted.duration) + 0.1 < recipe.duration_limit:
-        raise PerceptualRunError("The duration limit extends beyond the end of one of the videos.")
+    """The window's rules (geometry.pair_problem): these had none for
+    durations that do not match."""
+    if problem := pair_problem(source, distorted, recipe.duration_limit):
+        raise PerceptualRunError(problem)
 
 
 def _crop_filter(crop: CropBox | None, info: VideoInfo) -> list[str]:
@@ -247,8 +241,8 @@ def _image_filtergraph(
     blend does not take as it is (packed RGB, NV12, full-range "yuvj") is
     still paired by position.
     """
-    source_size = _content_size(source, source_crop)
-    distorted_size = _content_size(distorted, distorted_crop)
+    source_size = content_size(source, source_crop)
+    distorted_size = content_size(distorted, distorted_crop)
     if source_size != distorted_size:
         if recipe.scale_direction is ScaleDirection.DISTORTED_TO_SOURCE:
             distorted_target, source_target = source_size, None

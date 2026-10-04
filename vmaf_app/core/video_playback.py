@@ -15,9 +15,8 @@ from vmaf_app.core.frame_extract import (
     frame_video_info,
     hdr_kind,
 )
-from vmaf_app.core.gpu import HwAccelPlan
+from vmaf_app.core.gpu import HwAccelPlan, hw_native_format
 from vmaf_app.core.models import ScaleDirection
-from vmaf_app.core.vmaf_runner import _hw_native_format
 
 
 def source_playback_comparison(comparison, native=True):
@@ -164,7 +163,7 @@ def build_video_series_command(
                 if params:
                     ops.append("setparams=" + ":".join(params))
             if accel and accel != "vulkan":
-                ops += ["hwdownload", f"format={_hw_native_format(info.pix_fmt)}"]
+                ops += ["hwdownload", f"format={hw_native_format(info.pix_fmt)}"]
             if accel != "vulkan":
                 ops.append("hwupload")
             options = [f"w={size[0]}", f"h={size[1]}", "format=rgba", "colorspace=gbr", "range=pc"]
@@ -254,7 +253,7 @@ def _side_chain(
             comparison.source_info if side == "source"
             else comparison.distorted_info
         )
-        prefix = f"hwdownload,format={_hw_native_format(info.pix_fmt)},"
+        prefix = f"hwdownload,format={hw_native_format(info.pix_fmt)},"
     filters = frame_filter(
         comparison, side, color_settings, output_size=output_size
     )

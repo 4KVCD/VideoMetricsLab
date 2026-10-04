@@ -562,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship nie obsługuje barw podstawowych {primaries}.",
   "Vship does not support the {range} range tag.": "Vship nie obsługuje znacznika zakresu {range}.",
   "Vship does not support {siting} chroma siting.": "Vship nie obsługuje położenia chrominancji {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Wideo o zmiennej liczbie klatek na sekundę nie jest jeszcze bezpiecznie obsługiwane.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Wideo o zmiennej liczbie klatek na sekundę nie jest jeszcze bezpiecznie obsługiwane. Przed porównaniem przekonwertuj oba wideo do tej samej stałej liczby klatek.",
   "Frame rates do not match ({source} vs {test} fps).": "Liczby klatek na sekundę się różnią ({source} wobec {test} kl./s).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Czasy trwania się różnią ({source} wobec {test} s). Ustaw limit czasu mieszczący się w obu plikach, jeśli porównujesz tylko ich wspólny początek.",

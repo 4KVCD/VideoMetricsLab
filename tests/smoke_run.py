@@ -24,9 +24,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.frame_extract import FrameComparison, extract_frame_png
+from vmaf_app.core.gpu import analysis_pix_fmt
 from vmaf_app.core.models import CropMode, GpuVendor, VmafOptions
 from vmaf_app.core.stats import compute_stats
-from vmaf_app.core.vmaf_runner import VmafRunError, analysis_pix_fmt, run_vmaf
+from vmaf_app.core.vmaf_runner import VmafRunError, run_vmaf
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
 

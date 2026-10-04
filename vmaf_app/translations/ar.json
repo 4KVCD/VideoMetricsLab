@@ -562,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "لا يدعم Vship الألوان الأساسية {primaries}.",
   "Vship does not support the {range} range tag.": "لا يدعم Vship وسم النطاق {range}.",
   "Vship does not support {siting} chroma siting.": "لا يدعم Vship موضع الكروما {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "لا يُدعم الفيديو ذو معدل الإطارات المتغير بأمان بعد.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "لا يُدعم الفيديو ذو معدل الإطارات المتغير بأمان بعد. حوّل كلا الفيديوين إلى معدل الإطارات الثابت نفسه قبل مقارنتهما.",
   "Frame rates do not match ({source} vs {test} fps).": "معدلا الإطارات غير متطابقين ({source} مقابل {test} إطار/ث).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "المدتان غير متطابقتين ({source} مقابل {test} ثانية). اضبط حدًّا للمدة ضمن الملفين إذا كنت تقارن بدايتهما المشتركة فقط.",

@@ -426,7 +426,7 @@ def _compared_size(directory: Path) -> tuple[int, int] | None:
     """The size this comparison's frames are compared at, from the sizes and
     black bars its saved context records, as the run decides it -- what
     Auto picks a VMAF model from."""
-    from vmaf_app.core.vmaf_runner import compared_dimensions, resample_analysis_dimensions
+    from vmaf_app.core.geometry import compared_dimensions, resample_analysis_dimensions
 
     try:
         context = json.loads((directory / "context.json").read_text(encoding="utf-8"))

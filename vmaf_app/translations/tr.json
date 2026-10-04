@@ -562,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship renk birincillerini desteklemiyor: {primaries}.",
   "Vship does not support the {range} range tag.": "Vship aralık etiketini desteklemiyor: {range}.",
   "Vship does not support {siting} chroma siting.": "Vship renk konumlandırmasını desteklemiyor: {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Değişken kare hızlı video henüz güvenli biçimde desteklenmiyor.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Değişken kare hızlı video henüz güvenli biçimde desteklenmiyor. Karşılaştırmadan önce iki videoyu da aynı sabit kare hızına dönüştürün.",
   "Frame rates do not match ({source} vs {test} fps).": "Kare hızları eşleşmiyor ({source} / {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Süreler eşleşmiyor ({source} / {test} saniye). Yalnızca ortak başlangıç kısmını karşılaştırıyorsanız iki dosyanın içinde kalan bir süre sınırı belirleyin.",

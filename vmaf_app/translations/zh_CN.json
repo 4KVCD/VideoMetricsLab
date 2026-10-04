@@ -562,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship 不支持 {primaries} 色彩原色。",
   "Vship does not support the {range} range tag.": "Vship 不支持 {range} 范围标记。",
   "Vship does not support {siting} chroma siting.": "Vship 不支持 {siting} 色度位置。",
-  "Variable-frame-rate video is not supported safely yet.": "尚不能安全地支持可变帧率视频。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚不能安全地支持可变帧率视频。比较前请将两个视频转换为相同的恒定帧率。",
   "Frame rates do not match ({source} vs {test} fps).": "帧率不一致（{source} 与 {test} fps）。",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "时长不一致（{source} 与 {test} 秒）。如果只比较两者共同的开头部分，请在两个文件的范围内设置时长限制。",

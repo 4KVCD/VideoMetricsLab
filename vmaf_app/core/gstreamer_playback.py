@@ -22,8 +22,8 @@ from vmaf_app.core.frame_extract import (
     frame_video_info,
     hdr_kind,
 )
+from vmaf_app.core.gpu import analysis_pix_fmt
 from vmaf_app.core.models import CropBox, VideoInfo
-from vmaf_app.core.vmaf_runner import analysis_pix_fmt
 
 
 class GStreamerPlaybackError(RuntimeError):

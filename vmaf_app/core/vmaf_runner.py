@@ -24,10 +24,18 @@ from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detec
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
+from vmaf_app.core.geometry import (
+    analysis_dimensions,
+    content_size,
+    display_aspect_ratio,
+    pair_problem,
+    resample_analysis_dimensions,
+)
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
     HwAccelPlan,
+    analysis_pix_fmt,
     plan_hwaccel,
 )
 from vmaf_app.core.gpu import (
@@ -105,32 +113,9 @@ class Cancelled(RuntimeError):  # noqa: N818 - a cancellation, not an error cond
 def validate_video_pair(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions
 ) -> None:
-    """Rejects comparisons whose timelines/display geometry are ambiguous."""
-    if source_info.is_variable_frame_rate or distorted_info.is_variable_frame_rate:
-        raise VmafRunError(
-            "Variable-frame-rate video is not supported safely yet. Convert both videos "
-            "to the same constant frame rate before comparing them."
-        )
-    fps_tolerance = max(0.01, max(source_info.fps, distorted_info.fps) * 0.001)
-    if abs(source_info.fps - distorted_info.fps) > fps_tolerance:
-        raise VmafRunError(
-            f"Frame rates do not match ({source_info.fps:.3f} vs "
-            f"{distorted_info.fps:.3f} fps)."
-        )
-    if source_info.duration > 0 and distorted_info.duration > 0:
-        compared_limit = options.duration_limit
-        if compared_limit <= 0:
-            frame_duration = 1.0 / max(source_info.fps, distorted_info.fps, 1.0)
-            if abs(source_info.duration - distorted_info.duration) > max(0.1, 2 * frame_duration):
-                raise VmafRunError(
-                    f"Durations do not match ({source_info.duration:.3f} vs "
-                    f"{distorted_info.duration:.3f} seconds). Set a duration limit within "
-                    "both files if comparing only their common opening segment."
-                )
-        elif min(source_info.duration, distorted_info.duration) + 0.1 < compared_limit:
-            raise VmafRunError(
-                "The duration limit extends beyond the end of one of the videos."
-            )
+    """Rejects comparisons whose timelines are ambiguous (geometry.pair_problem)."""
+    if problem := pair_problem(source_info, distorted_info, options.duration_limit):
+        raise VmafRunError(problem)
 
 
 #: Two shapes count as the same if they agree to within this fraction. Wide
@@ -138,35 +123,6 @@ def validate_video_pair(
 #: 1920x1080 differs by 0.1%), far tighter than any real mismatch: 4:3
 #: against 16:9 is 33% apart, and the letterbox case below is 32%.
 _ASPECT_TOLERANCE = 0.01
-
-
-def _sar_fraction(sar: str) -> tuple[int, int]:
-    """A sample aspect ratio as a fraction. Unknown/unset means square."""
-    if sar in {"", "N/A", "0:1"}:
-        return 1, 1
-    try:
-        num, den = (int(part) for part in sar.split(":", 1))
-    except ValueError:
-        return 1, 1
-    if num <= 0 or den <= 0:
-        return 1, 1
-    return num, den
-
-
-def display_aspect_ratio(info: VideoInfo, crop: CropBox | None = None) -> float:
-    """The shape of the picture as displayed, after cropping.
-
-    Storage dimensions alone are not the shape: non-square pixels stretch
-    them, and a crop changes them. This is what has to match between two
-    videos, not the raw SAR string -- 1920x1080 SAR 1:1 and 1440x1080 SAR
-    4:3 are the same 16:9 picture stored two ways.
-    """
-    width = crop.w if crop else info.width
-    height = crop.h if crop else info.height
-    if height <= 0:
-        return 0.0
-    num, den = _sar_fraction(info.sar)
-    return (width * num) / (height * den)
 
 
 def validate_display_geometry(
@@ -237,31 +193,6 @@ def _resolve_crops(
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
     return common_picture(source_info, distorted_info, *boxes)
-
-
-#: Analysis bit depth -> the planar 4:2:0 format both branches are converted
-#: to before they meet. libvmaf compares two streams that must agree on
-#: format, so one has to be picked for the pair.
-_ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
-
-
-def analysis_pix_fmt(*pix_fmts: str) -> str:
-    """The common format the inputs are converted to before comparison.
-
-    Takes the *deepest* of the inputs, so a 10-bit master compared against
-    an 8-bit encode promotes the encode rather than truncating the master.
-    Everything used to be forced to 8-bit yuv420p, which quietly discarded
-    two bits of both sides on any HDR/10-bit comparison and put a floor
-    under PSNR/XPSNR that had nothing to do with the encode being measured.
-    """
-    depth = max((_bit_depth(f) for f in pix_fmts), default=8)
-    if depth <= 8:
-        return _ANALYSIS_FORMAT_BY_DEPTH[8]
-    if depth <= 10:
-        return _ANALYSIS_FORMAT_BY_DEPTH[10]
-    # libvmaf accepts up to 12-bit; deeper sources (16-bit intermediates)
-    # are analysed at 12 rather than being dropped back to 8.
-    return _ANALYSIS_FORMAT_BY_DEPTH[12]
 
 
 def auto_threads(concurrent_jobs: int = 1) -> int:
@@ -398,49 +329,6 @@ def _build_libvmaf_stage(
     return ";".join(chains)
 
 
-def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-    return (crop.w, crop.h) if crop else (info.width, info.height)
-
-
-def analysis_dimensions(
-    source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
-    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
-) -> tuple[int, int]:
-    """The size frames are actually compared at.
-
-    One side is scaled to the other before they reach libvmaf, so neither
-    input's own resolution need be the analysis resolution: a 1080p encode
-    measured with "upscale distorted to source" against a 4K master is
-    compared at 4K. Cropping moves it too. Shared with _build_filtergraph so
-    the two cannot disagree about what the run does.
-    """
-    return compared_dimensions(source_info, distorted_info, options.scale_direction, source_crop, distorted_crop)
-
-
-def compared_dimensions(
-    source_info: VideoInfo, distorted_info: VideoInfo, scale_direction: ScaleDirection,
-    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
-) -> tuple[int, int]:
-    """analysis_dimensions for code that has the scale direction but no
-    options -- the saved-score cache, which works out from a comparison's
-    recorded sizes which model Auto picks for it."""
-    dist_content = _content_size(distorted_info, distorted_crop)
-    ref_content = _content_size(source_info, source_crop)
-    if ref_content == dist_content:
-        return dist_content
-    if scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
-        return ref_content
-    return dist_content
-
-
-def resample_analysis_dimensions(
-    source_info: VideoInfo, source_crop: CropBox | None = None
-) -> tuple[int, int]:
-    """A round-trip test compares two branches of one input at the source's
-    own (cropped) size -- the downscale is undone before comparison."""
-    return _content_size(source_info, source_crop)
-
-
 def _build_filtergraph(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
@@ -450,8 +338,8 @@ def _build_filtergraph(
     """`gpu_vmaf`: VMAF and NEG are scored on the GPU (vmaf_cuda), from the
     compared frames as two raw outputs, [vmaf_dist] and [vmaf_ref], and are
     all the run scores: FFmpeg's own filters score nothing."""
-    dist_content_w, dist_content_h = _content_size(distorted_info, distorted_crop)
-    ref_content_w, ref_content_h = _content_size(source_info, source_crop)
+    dist_content_w, dist_content_h = content_size(distorted_info, distorted_crop)
+    ref_content_w, ref_content_h = content_size(source_info, source_crop)
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
     upscale_distorted = resolutions_differ and options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE
 

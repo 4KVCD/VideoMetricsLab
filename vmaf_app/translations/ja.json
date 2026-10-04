@@ -562,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship は {primaries} 原色に対応していません。",
   "Vship does not support the {range} range tag.": "Vship は {range} レンジタグに対応していません。",
   "Vship does not support {siting} chroma siting.": "Vship は {siting} クロマ位置に対応していません。",
-  "Variable-frame-rate video is not supported safely yet.": "可変フレームレートの動画にはまだ安全に対応していません。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "可変フレームレートの動画にはまだ安全に対応していません。比較する前に、両方の動画を同じ固定フレームレートに変換してください。",
   "Frame rates do not match ({source} vs {test} fps).": "フレームレートが一致しません（{source} と {test} fps）。",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "長さが一致しません（{source} と {test} 秒）。共通する冒頭部分だけを比較する場合は、両方のファイルに収まる時間の上限を設定してください。",
