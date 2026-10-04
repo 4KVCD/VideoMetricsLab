@@ -154,6 +154,16 @@ try {
         }
     }
 
+    # VMAF's features with Vulkan (scripts/build_vmaf_vulkan.ps1): without it,
+    # VMAF on Intel and AMD GPUs is quietly calculated on the CPU.
+    $vmafVulkan = Join-Path $output '_internal/vmaf_app/tools/vmaf_vulkan'
+    if (-not (Test-Path (Join-Path $vmafVulkan 'vmaf_vulkan.dll'))) {
+        throw 'Bundled vmaf_vulkan is missing: run scripts/build_vmaf_vulkan.ps1'
+    }
+    if (-not (Test-Path (Join-Path $vmafVulkan 'licenses/LICENSE.libvmaf.txt'))) {
+        throw 'Bundled vmaf_vulkan license notice is missing: LICENSE.libvmaf.txt'
+    }
+
     # Distributions must carry the project's MIT terms and the notices for
     # the third-party components bundled alongside the executable.
     Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt') -Force

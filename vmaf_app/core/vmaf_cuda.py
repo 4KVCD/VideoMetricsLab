@@ -1,7 +1,10 @@
-"""VMAF and VMAF NEG on an NVIDIA GPU: libvmaf's CUDA feature extractors
-(VIF, ADM and motion) from the bundled tools/libvmaf/libvmaf.dll, built by
-scripts/build_libvmaf_cuda.ps1 (libvmaf master with the pull requests that
-fix its CUDA code, listed there).
+"""VMAF and VMAF NEG on the GPU. On an NVIDIA GPU: libvmaf's CUDA feature
+extractors (VIF, ADM and motion) from the bundled tools/libvmaf/libvmaf.dll,
+built by scripts/build_libvmaf_cuda.ps1 (libvmaf master with the pull requests
+that fix its CUDA code, listed there). On any other GPU, or when Settings >
+GPU metrics > GPU backend is Vulkan: the port of those extractors to Vulkan
+(vmaf_vulkan), which gives the same scores. What is said below of libvmaf's
+scores holds for both.
 
 Only those two scores: VMAF v1, PSNR, SSIM and XPSNR have no GPU code, and
 stay in FFmpeg's libvmaf and xpsnr filters, so they are scored exactly as
@@ -376,10 +379,18 @@ def _read_frame(stream, buffer: bytearray) -> bool:
 
 class GpuAttempt:
     """One FFmpeg run's GPU half: the two pipes FFmpeg writes the compared
-    frames to, and the threads that read them and feed libvmaf."""
+    frames to, and the threads that read them and feed libvmaf (`backend`
+    "cuda") or the Vulkan port of its features ("vulkan", on Vulkan's GPU
+    number `device`)."""
 
-    def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int):
-        self._scorer = GpuScorer(width, height, bit_depth, models, n_subsample)
+    def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
+                 backend: str = "cuda", device: int | None = None):
+        if backend == "vulkan":
+            from vmaf_app.core import vmaf_vulkan
+
+            self._scorer = vmaf_vulkan.VulkanScorer(width, height, bit_depth, models, n_subsample, device=device)
+        else:
+            self._scorer = GpuScorer(width, height, bit_depth, models, n_subsample)
         self.distorted = _PipeReader("distorted", self._scorer.frame_bytes)
         self.reference = _PipeReader("reference", self._scorer.frame_bytes)
         self.error: BaseException | None = None
@@ -605,40 +616,95 @@ _probed_at = 0.0
 #: A failed probe older than this is made again before the next run
 #: (forget_failed_probe), as Vship's is.
 FAILED_PROBE_RETRY_SECONDS = 60.0
+#: What the probe chose: "cuda" or "vulkan", and Vulkan's GPU number.
+_backend: tuple[str, int | None] = ("cuda", None)
+#: Settings > GPU metrics > GPU backend, which VMAF follows as Vship does:
+#: "cuda" and "auto" take libvmaf's CUDA code where it runs (an NVIDIA GPU)
+#: and Vulkan elsewhere; "vulkan" takes Vulkan on every GPU. "hip" is Vship's
+#: build for AMD: VMAF has none, and takes Vulkan there as with "auto".
+_preference = "auto"
+
+
+def set_gpu_backend(preference: str) -> None:
+    """Follows the GPU backend setting; the GPU is probed again when the
+    choice changes what is tried first."""
+    global _preference, _probed
+    with _PROBE_LOCK:
+        changed = _backend_order(preference) != _backend_order(_preference)
+        _preference = preference
+        if changed and _probed is not None:
+            _probed = None
+            _log.info("VMAF on the GPU: GPU backend set to %s", preference)
+
+
+def _backend_order(preference: str) -> tuple[str, ...]:
+    return ("vulkan", "cuda") if preference == "vulkan" else ("cuda", "vulkan")
 
 
 def gpu_vmaf_available() -> tuple[bool, str]:
-    """Whether libvmaf scores on this PC's GPU, and with what (or why not).
-    Probed once, in a process of its own, and only with an NVIDIA GPU."""
-    global _probed, _probed_at
+    """Whether VMAF is scored on this PC's GPU, and with what (or why not).
+    Probed once per backend choice, in a process of its own (and again
+    after a failure, see forget_failed_probe)."""
+    global _probed, _probed_at, _backend
     with _PROBE_LOCK:
         if _probed is None:
-            _probed, _probed_at = _probe_once(), time.monotonic()
-            available, text = _probed
+            name, device, text = _probe_once(_preference)
+            _probed, _probed_at = (name is not None, text), time.monotonic()
+            available = name is not None
             if available:
+                _backend = (name, device)
                 _log.info("VMAF on the GPU: %s", text)
             else:
                 _log.info("VMAF on the GPU unavailable: %s", text)
         return _probed
 
 
-def _probe_once() -> tuple[bool, str]:
+def gpu_vmaf_backend() -> tuple[str, int | None]:
+    """("cuda", None) or ("vulkan", Vulkan's GPU number): what a run that
+    scores VMAF on the GPU uses. Meaningful when gpu_vmaf_available()."""
+    gpu_vmaf_available()
+    return _backend
+
+
+def _probe_once(preference: str = "auto") -> tuple[str | None, int | None, str]:
+    """(backend, Vulkan's GPU number, what it is) for the first backend, in
+    the order the setting gives, that scores here; (None, None, why not)
+    when neither does."""
     from vmaf_app.core.gpu import detected_gpu_vendors
     from vmaf_app.core.isolated import IsolatedCrashError, run_isolated
     from vmaf_app.core.models import GpuVendor
 
-    if GpuVendor.NVIDIA not in detected_gpu_vendors():
-        return False, "no NVIDIA GPU"
-    try:
-        return run_isolated(probe, what="libvmaf's GPU probe")
-    except IsolatedCrashError as error:
-        return False, str(error)
-    except Exception as error:
-        # Any failure is "not on this GPU": one that escaped here left the
-        # probe unanswered and failed every video's setup with it, instead
-        # of calculating VMAF on the CPU.
-        _log.warning("libvmaf's GPU probe failed", exc_info=error)
-        return False, f"the GPU probe failed: {error}"
+    reasons = []
+    for backend in _backend_order(preference):
+        try:
+            if backend == "cuda":
+                if GpuVendor.NVIDIA not in detected_gpu_vendors():
+                    reasons.append("no NVIDIA GPU")
+                    continue
+                try:
+                    available, text = run_isolated(probe, what="libvmaf's GPU probe")
+                except IsolatedCrashError as error:
+                    available, text = False, str(error)
+                if available:
+                    return "cuda", None, f"{text} with CUDA"
+                reasons.append(f"CUDA: {text}")
+            else:
+                from vmaf_app.core import vmaf_vulkan
+
+                try:
+                    available, device, text = run_isolated(vmaf_vulkan.probe, what="the Vulkan VMAF probe")
+                except IsolatedCrashError as error:
+                    available, device, text = False, None, str(error)
+                if available:
+                    return "vulkan", device, text
+                reasons.append(f"Vulkan: {text}")
+        except Exception as error:
+            # Any failure is "not on this GPU": one that escaped here left the
+            # probe unanswered and failed every video's setup with it, instead
+            # of calculating VMAF on the CPU.
+            _log.warning("The %s VMAF probe failed", backend, exc_info=error)
+            reasons.append(f"{backend}: the GPU probe failed: {error}")
+    return None, None, "; ".join(reasons)
 
 
 def forget_failed_probe() -> None:
@@ -675,7 +741,7 @@ def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
       size and blacks out an odd picture's last column and row. The
       attempt used to be made, fail in FFmpeg, and VMAF be calculated
       again on the CPU after a "VMAF on the GPU failed";
-    - no GPU libvmaf can use."""
+    - no GPU that scores it (CUDA or Vulkan)."""
     if not enabled or bit_depth > 10 or (size is not None and (size[0] & 1 or size[1] & 1)):
         return None
     models = gpu_models(compute_vmaf, compute_vmaf_neg, model)

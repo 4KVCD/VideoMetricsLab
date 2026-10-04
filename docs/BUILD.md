@@ -109,6 +109,16 @@ case anyone overrides that.
   1 MB compressed. libvmaf and Vship each run in a process of their own
   (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,
   falls back to the CPU instead of closing the app.
+- **VMAF's features with Vulkan** (`vmaf_app/tools/vmaf_vulkan/vmaf_vulkan.dll`),
+  for VMAF and VMAF NEG on GPUs other than NVIDIA's, or on any GPU when the
+  GPU backend setting is Vulkan: `native/vmaf_vulkan`, a port of libvmaf's
+  CUDA feature extractors (VIF, ADM and motion) to Vulkan compute shaders,
+  built by `scripts/build_vmaf_vulkan.ps1` (MSVC with the C runtime linked in,
+  as libvmaf's; the shaders are compiled with Slang, which the script
+  downloads, and embedded). It needs only Windows and a Vulkan driver, and
+  gives the same feature values as the CUDA code bit for bit; the score is
+  predicted from them by the libvmaf above, on the CPU. It adds about 0.5 MB.
+  It runs in the same process of its own as libvmaf does.
 
 ## What is not, and why
 

@@ -103,6 +103,16 @@ if LIBVMAF_TOOLS.is_dir():
 else:
     print("WARNING: bundled libvmaf (CUDA) is missing; VMAF will be calculated on the CPU")
 
+# VMAF's features with Vulkan, for VMAF and VMAF NEG on any other GPU
+# (scripts/build_vmaf_vulkan.ps1): needs only Windows and a Vulkan driver, and
+# the libvmaf above to predict the score. Without it VMAF is calculated on the
+# GPU with an NVIDIA GPU only.
+VMAF_VULKAN_TOOLS = PROJECT / "vmaf_app" / "tools" / "vmaf_vulkan"
+if VMAF_VULKAN_TOOLS.is_dir():
+    datas.append((str(VMAF_VULKAN_TOOLS), "vmaf_app/tools/vmaf_vulkan"))
+else:
+    print("WARNING: bundled vmaf_vulkan is missing; VMAF will be calculated on the GPU with NVIDIA GPUs only")
+
 a = Analysis(
     [str(PROJECT / "vmaf_app" / "main.py")],
     pathex=[str(PROJECT)],

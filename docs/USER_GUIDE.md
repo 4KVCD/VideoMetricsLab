@@ -27,9 +27,14 @@ back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU a
 because their implementations can produce different scores. These two metrics
 are opt-in and do not add processing to runs where they are unchecked.
 
-With an NVIDIA GPU (GeForce GTX 16 and RTX 20 series or newer), VMAF v0.6.1
-and VMAF NEG are calculated on it too, with a bundled libvmaf built with CUDA: each video's Performance > VMAF v0.6.1 and NEG
-compute, NVIDIA GPU by default and greyed out at CPU without one. Like
+VMAF v0.6.1 and VMAF NEG are calculated on the GPU too: with a bundled libvmaf
+built with CUDA on an NVIDIA GPU (GeForce GTX 16 and RTX 20 series or newer),
+and with a Vulkan version of the same calculation on any other GPU, such as
+Intel's and AMD's, or on every GPU when Settings > GPU metrics > GPU backend is
+Vulkan. The two give the same scores to the last decimal. The choice is each
+video's Performance > VMAF v0.6.1 and NEG compute, GPU by default and greyed out
+at CPU without a GPU. A small integrated GPU can be slower at it than a fast
+CPU: choose CPU there. Like
 SSIMULACRA2's and Butteraugli's, the last choice is what newly added videos
 start with. The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a
 thousandth of a point on every frame, so unlike those two, a saved VMAF score is
@@ -37,8 +42,9 @@ reused whichever is chosen. VMAF v1, PSNR, SSIM and XPSNR have no GPU code and
 are still calculated by FFmpeg on the CPU, in a run of their own beside the
 GPU's, so they do not slow VMAF down. A video's VMAF on the GPU waits for the
 GPU like its other GPU metrics, one video at a time, and goes before them. If the GPU calculation fails, or crashes, that
-video's VMAF is calculated on the CPU instead. Without an NVIDIA GPU nothing
-changes: FFmpeg's libvmaf calculates everything.
+video's VMAF is calculated on the CPU instead, as it is when the GPU's driver
+fails the self-test the app runs on it when it starts. Without a GPU, FFmpeg's
+libvmaf calculates everything.
 
 The files must describe corresponding frames. The app rejects several timing
 and geometry mismatches; this is not automatic content alignment. A source with

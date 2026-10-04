@@ -4,6 +4,7 @@ parsing the resulting per-frame JSON log.
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import logging
 import os
@@ -18,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import gpu_frames, vmaf_cuda
+from vmaf_app.core import gpu_frames, vmaf_cuda, vmaf_vulkan
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
@@ -78,11 +79,12 @@ ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_fr
 
 
 def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: str = "",
-                                    gpu_keys: set[str] | None = None):
+                                    gpu_keys: set[str] | None = None, gpu_backend: str = "cuda"):
     """Adapt one FFmpeg parse into generic results without re-parsing it.
     `gpu_keys`: VMAF and NEG scored on the GPU (vmaf_cuda) -- the same
     request identity as FFmpeg's libvmaf (their scores agree to within
-    4e-5), recorded as GPU scores of the bundled build."""
+    4e-5), recorded as GPU scores of the bundled build, libvmaf's CUDA code
+    or its Vulkan port (`gpu_backend`)."""
     status = check_tools()
     version = format_version(status.ffmpeg.version) if status.ffmpeg.runnable else "unknown"
 
@@ -92,11 +94,16 @@ def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: s
                       else {"model": model_v1} if key == "vmaf_v1" else None)
         made = current_ffmpeg_provenance(key, version, parameters)
         if key in (gpu_keys or ()):
-            made = replace(made, implementation="libvmaf/cuda", implementation_version=vmaf_cuda.LIBRARY_BUILD,
-                           compute_backend="gpu")
+            made = replace(made, implementation=f"libvmaf/{gpu_backend}",
+                           implementation_version=_gpu_build(gpu_backend), compute_backend="gpu")
         return made
 
     return results_from_frame_scores(frames, {key: provenance(key) for key in frames.metric_keys})
+
+
+def _gpu_build(backend: str) -> str:
+    """What scores VMAF on the GPU with `backend`."""
+    return vmaf_vulkan.LIBRARY_BUILD if backend == "vulkan" else vmaf_cuda.LIBRARY_BUILD
 
 
 class VmafRunError(RuntimeError):
@@ -740,6 +747,9 @@ class _GpuPlan:
     width: int
     height: int
     bit_depth: int
+    #: "cuda" (libvmaf) or "vulkan" (vmaf_vulkan, on Vulkan's GPU `device`).
+    backend: str = "cuda"
+    device: int | None = None
 
 
 def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
@@ -843,7 +853,8 @@ def _execute_run(
                 )
             # A libvmaf context and pipes of its own for each attempt: a
             # failed attempt's are spent.
-            attempt = vmaf_cuda.GpuAttempt(gpu.width, gpu.height, gpu.bit_depth, gpu.models, options.n_subsample)
+            attempt = vmaf_cuda.GpuAttempt(gpu.width, gpu.height, gpu.bit_depth, gpu.models, options.n_subsample,
+                                           gpu.backend, gpu.device)
             try:
                 # One frame more than the limit: FFmpeg's libvmaf filter scores
                 # the first frame at or past it (stamped 30.03 s for a 30 s
@@ -973,12 +984,15 @@ def run_vmaf(
     # result refused for a frame count FFmpeg's filters disagreed with, and
     # the whole run made again on the CPU.
     gpu_models = None
+    gpu_backend = "cuda"
     if not set(options.requested_metrics()) - {"vmaf", "vmaf_neg"}:
         gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
                                              options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info),
                                              size=dimensions)
     if gpu_models is not None:
-        plan = _GpuPlan(gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info))
+        plan = _GpuPlan(gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info),
+                        *vmaf_cuda.gpu_vmaf_backend())
+        gpu_backend = plan.backend
         frames = _run_on_gpu(
             plan, source_info, distorted_info, options, source_crop, distorted_crop, effective_model, hwaccel,
             total_frames, on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
@@ -1022,6 +1036,7 @@ def run_vmaf(
         model_choice_v1=options.model_choice_v1 if options.compute_vmaf_v1 else None,
         metric_results=_metric_results_for_current_run(
             frames, effective_model, options.model_v1, gpu_keys=set(gpu_models or ()) & set(frames.metric_keys),
+            gpu_backend=gpu_backend,
         ),
     )
 
@@ -1044,7 +1059,7 @@ def _run_on_gpu(
 
     One GPU pass at a time with Vship's (gpu.GPU_PASS): VMAF on the GPU does
     not run beside another video's GPU metrics."""
-    _log.info("VMAF on the GPU (%s): %s", ", ".join(plan.models.values()), vmaf_cuda.LIBRARY_BUILD)
+    _log.info("VMAF on the GPU (%s): %s", ", ".join(plan.models.values()), _gpu_build(plan.backend))
     if not GPU_PASS.acquire(blocking=False):
         if on_status:
             on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
@@ -1076,12 +1091,16 @@ def _score_on_gpu(
     """Run by _run_on_gpu in its own process: FFmpeg decodes and pairs the
     frames as on the CPU, and they are fed to libvmaf.
 
-    When NVIDIA's decoder decodes both videos, they are decoded in this
-    process instead (vmaf_cuda.score_decoded): the same frames, without
-    FFmpeg's decode and the CPU copies and pipes behind it. If that
-    decoding fails after it has started, the run is made again with
-    FFmpeg's, as before."""
-    if hwaccel.source == "cuda" and hwaccel.distorted == "cuda":
+    When the GPU's own decoder decodes both videos, they are decoded in this
+    process instead (vmaf_cuda.score_decoded, vmaf_vulkan.score_decoded):
+    the same frames, without FFmpeg's decode and the CPU copies and pipes
+    behind it. libvmaf's CUDA code takes NVIDIA's decoder's pictures on the
+    GPU; the Vulkan scorer takes the decoder FFmpeg would have used for both
+    videos -- NVIDIA's, Intel's or AMD's (_DECODED_HERE) -- whose pictures
+    it uploads. If that decoding fails after it has started, the run is
+    made again with FFmpeg's, as before."""
+    decoder = _DECODED_HERE.get(hwaccel.source or "") if hwaccel.source == hwaccel.distorted else None
+    if decoder is not None and (plan.backend == "vulkan" or decoder == "nvidia"):
         try:
             return _score_decoded_on_gpu(
                 plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
@@ -1109,13 +1128,19 @@ def _score_on_gpu(
     )
 
 
+#: The decoder in the scoring process for what FFmpeg would decode with each
+#: -hwaccel (as perceptual_vship's _GPU_DECODERS).
+_DECODED_HERE = {"cuda": "nvidia", "qsv": "intel", "d3d11va": "amd"}
+
+
 def _score_decoded_on_gpu(
     plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
     on_progress=None, on_status=None, cancel_event=None, process_handle=None,
 ) -> FrameScores:
-    """VMAF and NEG from videos decoded in this process (vmaf_cuda.score_decoded),
-    over the frames _execute_run's FFmpeg would give libvmaf on the GPU."""
+    """VMAF and NEG from videos decoded in this process (vmaf_cuda.score_decoded,
+    or vmaf_vulkan.score_decoded for the Vulkan backend), over the frames
+    _execute_run's FFmpeg would give libvmaf on the GPU."""
     fps = distorted_info.fps
     # As _execute_run: one frame more than the limit, which FFmpeg's libvmaf
     # filter scores before its output stops.
@@ -1127,7 +1152,12 @@ def _score_decoded_on_gpu(
         if cancel_event is not None and cancel_event.is_set():
             raise Cancelled("Cancelled by user")
 
-    scores = vmaf_cuda.score_decoded(
+    if plan.backend == "vulkan":
+        score_decoded = functools.partial(vmaf_vulkan.score_decoded, device=plan.device,
+                                          decoder=_DECODED_HERE[hwaccel.source])
+    else:
+        score_decoded = vmaf_cuda.score_decoded
+    scores = score_decoded(
         source_info, distorted_info, source_crop, distorted_crop, width=plan.width, height=plan.height,
         bit_depth=plan.bit_depth, models=plan.models, n_subsample=options.n_subsample,
         duration_limit=f"{limit:.3f}" if limit > 0 else None, total_frames=total_frames,

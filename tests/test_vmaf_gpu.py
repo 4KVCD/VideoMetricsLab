@@ -162,7 +162,7 @@ def test_a_duration_limit_gives_the_raw_outputs_one_frame_more(monkeypatch):
         total_frames=10, hwaccel=HwAccelPlan(), tmp_prefix="vmaf_test_", on_progress=None, on_status=None,
         cancel_event=None, process_handle=None, gpu=plan)
     assert seen["limit"] == pytest.approx(30 + 1 / 24)
-    assert seen["args"] == (64, 48, 8, {"vmaf": "vmaf_v0.6.1"}, 1)
+    assert seen["args"] == (64, 48, 8, {"vmaf": "vmaf_v0.6.1"}, 1, "cuda", None)
     assert commands[0][-1] == ["RAW"]
     assert frames.values("vmaf").tolist() == [90.0, 91.0]
 
@@ -525,8 +525,9 @@ def test_any_probe_failure_means_vmaf_is_calculated_on_the_cpu(monkeypatch):
 def test_a_failed_probe_is_made_again_a_while_later(monkeypatch):
     clock = [1000.0]
     monkeypatch.setattr(vmaf_cuda.time, "monotonic", lambda: clock[0])
-    answers = iter([(False, "driver restarting"), (True, "libvmaf 3.0")])
-    monkeypatch.setattr(vmaf_cuda, "_probe_once", lambda: next(answers))
+    # (backend, Vulkan's GPU, text), as _probe_once answers for the GPU backend setting
+    answers = iter([(None, None, "driver restarting"), ("cuda", None, "libvmaf 3.0")])
+    monkeypatch.setattr(vmaf_cuda, "_probe_once", lambda preference: next(answers))
     monkeypatch.setattr(vmaf_cuda, "_probed", None)
     assert vmaf_cuda.gpu_vmaf_available() == (False, "driver restarting")
     clock[0] += vmaf_cuda.FAILED_PROBE_RETRY_SECONDS - 1
