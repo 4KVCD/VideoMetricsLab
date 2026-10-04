@@ -255,7 +255,7 @@ def test_metrics_have_consistent_visual_order(qapp):
     labels = [win.distorted_table.horizontalHeaderItem(header.logicalIndex(i)).text().strip()
               for i in range(header.count()) if header.logicalIndex(i) in columns]
     assert labels == [
-        "VMAF v0.6.1", "VMAF v1", "VMAF NEG", "PSNR (dB)", "SSIM", "XPSNR (dB)",
+        "VMAF v0.6.1", "VMAF NEG", "VMAF v1", "PSNR (dB)", "SSIM", "XPSNR (dB)",
         "SSIMULACRA2", "Butteraugli", "CVVDP",
     ]
     win.settings_default_vmaf_neg.setChecked(True)

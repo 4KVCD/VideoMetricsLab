@@ -19,7 +19,7 @@ from vmaf_app.core.models import FrameScores, VmafOptions
 
 def test_registry_has_the_established_logical_order_and_metadata():
     assert tuple(metric.key for metric in METRICS) == (
-        "vmaf", "vmaf_v1", "vmaf_neg", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp",
+        "vmaf", "vmaf_neg", "vmaf_v1", "psnr", "ssim", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp",
     )
     # "vmaf" keeps its key (saved scores and settings) and is labelled with
     # its version now that VMAF v1 has a column of its own.

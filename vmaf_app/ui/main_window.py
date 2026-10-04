@@ -163,7 +163,7 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_SSIMULACRA2,
     COL_BUTTERAUGLI,
     COL_CVVDP,
-    COL_VMAF_V1,  # added last so every older column keeps its index; shown after VMAF v0.6.1
+    COL_VMAF_V1,  # added last so every older column keeps its index; shown after VMAF NEG
 ) = range(15)
 
 #: Row states worth colouring the file name for. Everything else the old
@@ -204,7 +204,8 @@ class MetricColumn:
 
 # Keep these physical indices and visual order exactly as the established UI.
 _METRIC_COLUMNS = (
-    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_V1, "vmaf_v1"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"),
+    # VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 after them.
+    MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"), MetricColumn(COL_VMAF_V1, "vmaf_v1"),
     MetricColumn(COL_PSNR, "psnr"), MetricColumn(COL_SSIM, "ssim"),
     MetricColumn(COL_XPSNR, "xpsnr"),
     MetricColumn(COL_SSIMULACRA2, "ssimulacra2"), MetricColumn(COL_BUTTERAUGLI, "butteraugli"),

@@ -95,14 +95,14 @@ METRICS = (
     MetricDefinition("vmaf", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "VMAF v0.6.1", "{:.2f}", "",
                      MetricKind.FRAME, MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
                      _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf")),
+    MetricDefinition("vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", "{:.2f}", "", MetricKind.FRAME,
+                     MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
+                     _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf_neg")),
     # Netflix's VMAF v1 models (bundled), calculated in the same libvmaf
     # pass. No fixed axis: the 4K/3H model scores up to 110.
     MetricDefinition("vmaf_v1", "VMAF v1", "VMAF v1", "VMAF v1", "VMAF v1", "{:.2f}", "", MetricKind.FRAME,
                      MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, None,
                      _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf_v1")),
-    MetricDefinition("vmaf_neg", "VMAF NEG", "VMAF NEG", "VMAF NEG", "VMAF NEG", "{:.2f}", "", MetricKind.FRAME,
-                     MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, 100.0,
-                     _VMAF_THRESHOLDS, FfmpegMetricBinding(bool_option="compute_vmaf_neg")),
     MetricDefinition("psnr", "PSNR", "PSNR", "PSNR (dB)", "PSNR (dB)", "{:.2f}", " dB", MetricKind.FRAME,
                      MetricDirection.HIGHER_IS_BETTER, MetricAggregation.ARITHMETIC, None,
                      _PSNR_THRESHOLDS, FfmpegMetricBinding(libvmaf_feature="name=psnr")),
