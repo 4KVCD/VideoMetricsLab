@@ -1962,8 +1962,9 @@ def test_a_format_ffmpegs_hardware_decode_cannot_give_is_decoded_in_software_fro
     """A 4:4:4 source through FFmpeg: its hardware decode failed every pass
     and the pass started again in software. The test video keeps the GPU."""
     source = VideoInfo(Path("source.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt="yuv444p10le")
+    statuses = []
     _output, spawned = _run(
-        monkeypatch, gpu_decode=True, metrics=("ssimulacra2",), source=source,
+        monkeypatch, gpu_decode=True, metrics=("ssimulacra2",), source=source, on_status=statuses.append,
         hwaccel=lambda _vendor, _codec: "cuda",
         children={"source": [_frames_command(2, vship._image_format(source).frame_layout(64, 48)[0])],
                   "test": [_frames_command(2, _FRAME_BYTES)]},
@@ -1971,3 +1972,4 @@ def test_a_format_ffmpegs_hardware_decode_cannot_give_is_decoded_in_software_fro
     (source_cmd,), (test_cmd,) = spawned["source"], spawned["test"]
     assert "-hwaccel" not in source_cmd
     assert test_cmd[test_cmd.index("-hwaccel") + 1] == "cuda"
+    assert any("(GPU decode: source cpu, distorted cuda)" in status for status in statuses)

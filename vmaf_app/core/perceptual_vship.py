@@ -1966,11 +1966,6 @@ def _score_vship_pass_with(
                               f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
         return report
 
-    if on_status:
-        labels = ", ".join(metric_definition(spec.key).label for spec in specs)
-        on_status(f"Vship GPU ({device.name}): calculating {labels} "
-                  f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
-
     streams: list[_FrameStream | _NativeFrameStream] = []
     lanes: list[_MetricLane | _CvvdpLane] = []
     cvvdp_lane: _CvvdpLane | None = None
@@ -2058,6 +2053,13 @@ def _score_vship_pass_with(
                               src_frame_bytes, src_plane_sizes, "reference", "source"))
         streams.append(stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format,
                               dist_passthrough, dist_frame_bytes, dist_plane_sizes, "test video", "distorted"))
+        # Once the streams are made: until then, where each video is decoded
+        # is not known (a format FFmpeg's hardware decode cannot give is
+        # decoded in software; see stream()).
+        if on_status:
+            labels = ", ".join(metric_definition(spec.key).label for spec in specs)
+            on_status(f"Vship GPU ({device.name}): calculating {labels} "
+                      f"(GPU decode: {HwAccelPlan(**decode).describe()})…")
         for stream in streams:
             stream.start()
         source_stream, distorted_stream = streams
