@@ -3596,9 +3596,11 @@ class MainWindow(QMainWindow):
 
         A metric counts when it has at least one score, produced the way
         the row asks for. SSIMULACRA2/Butteraugli on the GPU (Vship) and on
-        the CPU (libjxl) differ by a few points on the same frames (44.47 vs
-        46.89 in one 640x360 test), so a comparison mixing them ranks
-        encodes on different scales:
+        the CPU (libjxl) differ on the same frames -- by little on SDR (55.13
+        against 55.24 SSIMULACRA2, 1.810 against 1.851 Butteraugli, on a
+        1080p film), by far more on HDR (35.1 against 47.3 SSIMULACRA2 on a
+        PQ film: libjxl's tool scores PQ its own way) -- so a comparison
+        mixing them ranks encodes on different scales:
         - set to CPU, only a CPU score counts;
         - set to GPU, a CPU score -- left by a fallback, or by the CPU
           choice earlier -- counts only when no supported GPU is present,
