@@ -404,3 +404,32 @@ def test_decoded_in_libvmafs_process_the_limit_is_that_of_ffmpegs_raw_outputs(mo
     frames = _real_score_decoded_on_gpu(_gpu_plan(), _info("s.mkv"), _info("d.mkv"), VmafOptions(), None, None,
                                         HwAccelPlan("cuda", "cuda"), 721)
     assert seen["duration_limit"] is None
+
+
+def test_any_probe_failure_means_vmaf_is_calculated_on_the_cpu(monkeypatch):
+    """Only a crash was caught: anything else escaped the probe, left it
+    unanswered, and failed every video's setup."""
+    from vmaf_app.core import gpu, isolated
+
+    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [gpu.GpuVendor.NVIDIA])
+    monkeypatch.setattr(isolated, "run_isolated", lambda *a, **k: (_ for _ in ()).throw(OSError("pipe broke")))
+    monkeypatch.setattr(vmaf_cuda, "_probed", None)
+    available, text = vmaf_cuda.gpu_vmaf_available()
+    assert not available and "pipe broke" in text
+
+
+def test_a_failed_probe_is_made_again_a_while_later(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(vmaf_cuda.time, "monotonic", lambda: clock[0])
+    answers = iter([(False, "driver restarting"), (True, "libvmaf 3.0")])
+    monkeypatch.setattr(vmaf_cuda, "_probe_once", lambda: next(answers))
+    monkeypatch.setattr(vmaf_cuda, "_probed", None)
+    assert vmaf_cuda.gpu_vmaf_available() == (False, "driver restarting")
+    clock[0] += vmaf_cuda.FAILED_PROBE_RETRY_SECONDS - 1
+    vmaf_cuda.forget_failed_probe()
+    assert vmaf_cuda.gpu_vmaf_available() == (False, "driver restarting")
+    clock[0] += 1
+    vmaf_cuda.forget_failed_probe()
+    assert vmaf_cuda.gpu_vmaf_available() == (True, "libvmaf 3.0")
+    vmaf_cuda.forget_failed_probe()  # a working probe is kept
+    assert vmaf_cuda.gpu_vmaf_available() == (True, "libvmaf 3.0")

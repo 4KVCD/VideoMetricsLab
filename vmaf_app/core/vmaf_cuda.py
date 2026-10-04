@@ -578,15 +578,19 @@ def probe() -> tuple[bool, str]:
 
 _PROBE_LOCK = threading.Lock()
 _probed: tuple[bool, str] | None = None
+_probed_at = 0.0
+#: A failed probe older than this is made again before the next run
+#: (forget_failed_probe), as Vship's is.
+FAILED_PROBE_RETRY_SECONDS = 60.0
 
 
 def gpu_vmaf_available() -> tuple[bool, str]:
     """Whether libvmaf scores on this PC's GPU, and with what (or why not).
     Probed once, in a process of its own, and only with an NVIDIA GPU."""
-    global _probed
+    global _probed, _probed_at
     with _PROBE_LOCK:
         if _probed is None:
-            _probed = _probe_once()
+            _probed, _probed_at = _probe_once(), time.monotonic()
             available, text = _probed
             if available:
                 _log.info("VMAF on the GPU: %s", text)
@@ -606,6 +610,24 @@ def _probe_once() -> tuple[bool, str]:
         return run_isolated(probe, what="libvmaf's GPU probe")
     except IsolatedCrashError as error:
         return False, str(error)
+    except Exception as error:
+        # Any failure is "not on this GPU": one that escaped here left the
+        # probe unanswered and failed every video's setup with it, instead
+        # of calculating VMAF on the CPU.
+        _log.warning("libvmaf's GPU probe failed", exc_info=error)
+        return False, f"the GPU probe failed: {error}"
+
+
+def forget_failed_probe() -> None:
+    """Before a run, off the UI thread: makes again a probe that failed a
+    while ago. The failure may have been passing -- a driver being updated
+    or restarted -- and was kept for the session, calculating VMAF on the
+    CPU until the app restarted."""
+    global _probed
+    with _PROBE_LOCK:
+        if (_probed is not None and not _probed[0]
+                and time.monotonic() - _probed_at >= FAILED_PROBE_RETRY_SECONDS):
+            _probed = None
 
 
 def start_gpu_vmaf_probe() -> None:

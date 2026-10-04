@@ -286,6 +286,9 @@ class VmafWorker(QThread):
 
     # ------------------------------------------------------------------ run
     def run(self) -> None:
+        # A GPU probe that failed a while ago is made again (on this thread,
+        # as each video is planned): the failure may have passed.
+        vmaf_cuda.forget_failed_probe()
         runs: list[_JobRun] = []
         for index, job in enumerate(self._jobs):
             try:

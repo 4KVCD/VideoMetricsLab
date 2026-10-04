@@ -118,6 +118,7 @@ def isolate_user_state(tmp_path, monkeypatch):
     from vmaf_app.core import vmaf_cuda
 
     monkeypatch.setattr(vmaf_cuda, "_probed", (False, "off in tests"))
+    monkeypatch.setattr(vmaf_cuda, "_probed_at", float("inf"))  # never retried (forget_failed_probe)
     # Likewise decoding in the scoring process with NVIDIA's decoder
     # (nvdec_frames): FFmpeg decodes unless a test asks for it, so a test
     # faking NVIDIA decode does not reach a real GPU where there is one.
