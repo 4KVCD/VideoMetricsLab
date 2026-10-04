@@ -15,12 +15,13 @@ from vmaf_app.ui.video_compare_view import _PairedFrameWidget
 
 class LockedNativePool:
     def __init__(self, view, series, selected, position_ms, settings, playing, source_native=True):
+        # GStreamer first: it repairs the environment gi reads.
+        self.gst, _ = _load_gstreamer()
         import gi
 
         gi.require_version("GstD3D11", "1.0")
         from gi.repository import GstD3D11
 
-        self.gst, _ = _load_gstreamer()
         self.device = GstD3D11.D3D11Device.new(0, 0)
         if self.device is None:
             raise RuntimeError("D3D11 device unavailable")

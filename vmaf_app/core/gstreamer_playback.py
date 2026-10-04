@@ -6,7 +6,9 @@ a hardware decoder through crop/scale and into the swapchain.
 """
 from __future__ import annotations
 
+import logging
 import os
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Any
@@ -72,6 +74,53 @@ REQUIRED_ELEMENTS = (
 GPU_DECODERS = ("d3d11h264dec", "d3d11h265dec", "d3d11av1dec", "d3d11vp9dec", "d3d11mpeg2dec")
 
 
+#: Variables the GStreamer wheels' setup (gstreamer_libs.setup_python_
+#: environment, run by gstreamer_bundle.pth and the packaged app's runtime
+#: hook) sets by putting its value in front of what is there already: each
+#: names one file, and the others are path lists.
+_SINGLE_PATH_VARIABLES = ("GST_REGISTRY_1_0", "GST_PLUGIN_SCANNER_1_0")
+_PATH_LIST_VARIABLES = ("PATH", "PYGI_DLL_DIRS", "GST_PLUGIN_PATH_1_0", "GST_PLUGIN_SYSTEM_PATH_1_0",
+                        "GST_PYTHONPATH_1_0", "GI_TYPELIB_PATH", "GIO_EXTRA_MODULES", "XDG_DATA_DIRS",
+                        "XDG_CONFIG_DIRS")
+
+
+def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None) -> list[str]:
+    """Undoes GStreamer's setup having run twice. A process started by a
+    Python process that ran it inherits its variables and runs it again:
+    every path is then there twice, and the two variables that name a file
+    -- the plugin registry and the plugin scanner -- name none ("a;a").
+    GStreamer then found no registry and no scanner, loaded every plugin
+    into the process to scan it, and crashed doing so in about one start in
+    five (heap corruption, 0xc0000374): measured in fresh processes, 0 of 25
+    once repaired. That is any process started from Python -- the test
+    suite's workers, the app run from an editor's launcher.
+
+    Keeps a file variable's first path and a list's first occurrence of
+    each path. Returns the names of the variables it changed."""
+    environ = os.environ if environ is None else environ
+    changed = []
+    for name in (*_SINGLE_PATH_VARIABLES, *_PATH_LIST_VARIABLES):
+        value = environ.get(name)
+        if not value:
+            continue
+        parts = value.split(os.pathsep)
+        if name in _SINGLE_PATH_VARIABLES:
+            kept = parts[:1]
+        else:
+            seen: set[str] = set()
+            kept = []
+            for part in parts:
+                key = os.path.normcase(os.path.normpath(part)) if part else part
+                if key not in seen:
+                    seen.add(key)
+                    kept.append(part)
+        repaired = os.pathsep.join(kept)
+        if repaired != value:
+            environ[name] = repaired
+            changed.append(name)
+    return changed
+
+
 def _load_gstreamer() -> tuple[Any, Any]:
     """Import lazily so metric-only use does not pay GStreamer's start cost."""
     global _GST, _GST_ERROR
@@ -79,6 +128,8 @@ def _load_gstreamer() -> tuple[Any, Any]:
         return _GST
     if _GST_ERROR is not None:
         raise GStreamerPlaybackError(_GST_ERROR)
+    if changed := repair_gstreamer_environment():
+        logging.getLogger(__name__).info("GStreamer's environment was set up twice; repaired %s", ", ".join(changed))
     try:
         import gi
 
