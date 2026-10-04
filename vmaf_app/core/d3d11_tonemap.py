@@ -18,6 +18,24 @@ def available() -> bool:
     return sys.platform == "win32" and library_path().is_file()
 
 
+def boxed_pointer(boxed) -> int:
+    """The native pointer a PyGObject boxed wrapper (a Gst.Memory) holds.
+
+    PyGObject has no public way to give it. Its hash is that pointer, and
+    the wrapper stores it right after the Python object header; neither is
+    promised, so both are read, and a pointer they do not agree on is
+    refused rather than handed to native code, where a wrong one crashes
+    the app. Checked against gst_buffer_peek_memory on PyGObject 3.52."""
+    try:
+        stored = ctypes.c_void_p.from_address(id(boxed) + object.__basicsize__).value
+    except (ValueError, OSError) as error:
+        raise RuntimeError("Could not read the GPU frame's native pointer") from error
+    hashed = hash(boxed) & 0xFFFFFFFFFFFFFFFF
+    if not stored or stored != hashed:
+        raise RuntimeError("Could not find the GPU frame's native pointer (PyGObject changed)")
+    return stored
+
+
 class D3D11ToneMapper:
     def __init__(self, device, kind: str):
         self.device = device
@@ -41,9 +59,8 @@ class D3D11ToneMapper:
         if buffer.n_memory() != 1:
             raise RuntimeError("Tone mapper requires one private RGBA16 GPU texture")
         memory = buffer.peek_memory(0)
-        # PyGObject miniobject hashes expose the wrapped native pointer. Keep
-        # the wrapper alive until the native call returns.
-        pointer = hash(memory)
+        # Kept alive (``memory``) until the native calls return.
+        pointer = boxed_pointer(memory)
         if not self.gst.gst_is_d3d11_memory(pointer):
             raise RuntimeError("Tone mapper received CPU memory instead of a D3D11 texture")
         self.device.lock()
