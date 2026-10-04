@@ -1,5 +1,9 @@
 PySide6>=6.11
 numpy>=2.0
 psutil>=6.0
+# gstreamer-bundle installs gstreamer_bundle.pth, which puts GStreamer on the
+# search paths at startup: without it "import gi" fails and playback falls
+# back to FFmpeg.
+gstreamer-bundle~=1.28.6; sys_platform == "win32"
 gstreamer-plugins~=1.28.6; sys_platform == "win32"
 gstreamer-python~=1.28.6; sys_platform == "win32"
