@@ -198,19 +198,37 @@ class HwAccelPlan:
         return f"source {self.source or 'cpu'}, distorted {self.distorted or 'cpu'}"
 
 
+def downloads_from_gpu(pix_fmt: str) -> bool:
+    """Whether FFmpeg's hardware decode as the app runs it (-hwaccel X
+    -hwaccel_output_format X, then hwdownload,format=hw_native_format) can
+    give a video of this pixel format: 4:2:0 at 8 or 10 bits, the NV12 and
+    P010 surfaces. A 4:2:2, 4:4:4 or 12-bit video decodes to another surface,
+    the download fails, and the run started again in software -- every run
+    (checked on an RTX 5090 with HEVC, H.264 and AV1). An unknown format is
+    left to try."""
+    name = (pix_fmt or "").casefold()
+    if not name:
+        return True
+    return name in {"nv12", "p010le", "p010be"} or (
+        name.startswith(("yuv420p", "yuvj420p")) and bit_depth(name) <= 10)
+
+
 def plan_hwaccel(
-    vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None
+    vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None, *,
+    source_pix_fmt: str = "", distorted_pix_fmt: str = "",
 ) -> HwAccelPlan:
-    """Chooses hardware decode for each input separately.
+    """Chooses FFmpeg's hardware decode for each input separately: by codec,
+    and only for a pixel format it can give (downloads_from_gpu).
 
     `distorted_codec` of None is the round-trip-test case: there is only one
     input file, so there is nothing to decide for the distorted side.
     """
+    def pick(codec: str, pix_fmt: str) -> str | None:
+        return pick_hwaccel(vendor, codec) if downloads_from_gpu(pix_fmt) else None
+
     return HwAccelPlan(
-        source=pick_hwaccel(vendor, source_codec),
-        distorted=(
-            pick_hwaccel(vendor, distorted_codec) if distorted_codec is not None else None
-        ),
+        source=pick(source_codec, source_pix_fmt),
+        distorted=pick(distorted_codec, distorted_pix_fmt) if distorted_codec is not None else None,
     )
 
 

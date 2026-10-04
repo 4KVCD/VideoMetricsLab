@@ -1070,7 +1070,8 @@ def run_vmaf(
     hwaccel = HwAccelPlan()
     if options.gpu_decode:
         hwaccel = plan_hwaccel(
-            options.gpu_vendor, source_info.codec_name, distorted_info.codec_name
+            options.gpu_vendor, source_info.codec_name, distorted_info.codec_name,
+            source_pix_fmt=source_info.pix_fmt, distorted_pix_fmt=distorted_info.pix_fmt,
         )
 
     source_crop, distorted_crop = _resolve_crops(
@@ -1286,7 +1287,7 @@ def run_resample_test(
     hwaccel = HwAccelPlan()
     if options.gpu_decode:
         # One input file, so there is no distorted side to decide.
-        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name)
+        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name, source_pix_fmt=source_info.pix_fmt)
 
     source_crop: CropBox | None = None
     if options.crop_mode == CropMode.AUTO:

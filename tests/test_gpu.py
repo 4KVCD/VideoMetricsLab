@@ -127,3 +127,23 @@ def test_no_directx_means_no_gpu_maker(monkeypatch):
 def test_directx_lists_this_machines_adapters():
     vendor_ids = gpu._dxgi_vendor_ids()
     assert all(isinstance(vendor_id, int) and 0 < vendor_id < 0x10000 for vendor_id in vendor_ids)
+
+
+@pytest.mark.parametrize(("pix_fmt", "downloads"), [
+    ("yuv420p", True), ("yuvj420p", True), ("yuv420p10le", True), ("nv12", True), ("p010le", True), ("", True),
+    ("yuv420p12le", False), ("yuv422p", False), ("yuv422p10le", False), ("yuv444p", False),
+    ("yuv444p10le", False), ("gbrp", False),
+])
+def test_only_4_2_0_at_8_or_10_bits_comes_back_from_ffmpegs_hardware_decode(pix_fmt, downloads):
+    """Checked with real FFmpeg on an RTX 5090: every other format failed in
+    hwdownload, and the run started again in software, every run."""
+    assert gpu.downloads_from_gpu(pix_fmt) is downloads
+
+
+def test_a_format_ffmpegs_hardware_decode_cannot_give_is_planned_in_software(monkeypatch):
+    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
+    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
+
+    plan = plan_hwaccel(GpuVendor.AUTO, "hevc", "hevc", source_pix_fmt="yuv444p10le", distorted_pix_fmt="yuv420p10le")
+
+    assert plan == HwAccelPlan(source=None, distorted="cuda")

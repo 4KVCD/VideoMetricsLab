@@ -260,7 +260,9 @@ class RollingVideoCompareView(VideoCompareView):
         for key, (comparison, side) in self._desired.items():
             if key in self._pool or occupied >= self.decoder_limit:
                 continue
-            plan = plan_hwaccel(GpuVendor.AUTO, comparison.source_info.codec_name, comparison.distorted_info.codec_name)
+            plan = plan_hwaccel(GpuVendor.AUTO, comparison.source_info.codec_name, comparison.distorted_info.codec_name,
+                                source_pix_fmt=comparison.source_info.pix_fmt,
+                                distorted_pix_fmt=comparison.distorted_info.pix_fmt)
             worker = StreamDecodeWorker(comparison, side, self._target_frame(), self._color_settings,
                                         plan, self._pool_maximum, self)
             worker.ready.connect(lambda detail, k=key, w=worker: self._stream_ready(k, w, detail))

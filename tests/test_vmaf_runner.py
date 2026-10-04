@@ -1160,7 +1160,8 @@ def test_crop_detection_decodes_each_input_the_way_the_run_will(monkeypatch, tmp
     monkeypatch.setattr(vr, "detect_crop", fake_detect)
     monkeypatch.setattr(
         vr, "plan_hwaccel",
-        lambda vendor, src_codec, dist_codec=None: HwAccelPlan(source="whatever-the-planner-chose", distorted=None),
+        lambda vendor, src_codec, dist_codec=None, **_formats: HwAccelPlan(source="whatever-the-planner-chose",
+                                                                        distorted=None),
     )
     # Stop short of running ffmpeg: the plan and the crops are decided first.
     monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))

@@ -60,6 +60,7 @@ from vmaf_app.core.gpu import (
     GPU_WAIT_MESSAGE,
     PCI_VENDORS,
     HwAccelPlan,
+    downloads_from_gpu,
     hw_native_format,
     hwaccel_args,
     pick_hwaccel,
@@ -2035,6 +2036,13 @@ def _score_vship_pass_with(
                     except BaseException:
                         decoder.close()
                         raise
+            if hwaccel and not downloads_from_gpu(info.pix_fmt):
+                # Through FFmpeg, its hardware decode cannot give this
+                # format (gpu.downloads_from_gpu): decoded in software from
+                # the start, rather than after a failed start every pass.
+                hwaccel = None
+                with decode_lock:
+                    decode[side] = None
             split = None
             if passthrough is not None:
                 dtype = np.uint16 if image_format.sample != _VSHIP_ENUMS[8] else np.uint8

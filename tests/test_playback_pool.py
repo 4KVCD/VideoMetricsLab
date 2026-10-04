@@ -114,7 +114,7 @@ class FakeWorker(QThread):
 
 def make_view(monkeypatch, tmp_path, count=5):
     monkeypatch.setattr(rolling_video_view, "StreamDecodeWorker", FakeWorker)
-    monkeypatch.setattr(rolling_video_view, "plan_hwaccel", lambda *args: HwAccelPlan())
+    monkeypatch.setattr(rolling_video_view, "plan_hwaccel", lambda *args, **kwargs: HwAccelPlan())
     view = rolling_video_view.RollingVideoCompareView()
     view.set_audio_enabled(False)
     items = series(tmp_path, count)

@@ -492,6 +492,8 @@ class VideoCompareView(QWidget):
             GpuVendor.AUTO,
             comparison.source_info.codec_name,
             comparison.distorted_info.codec_name,
+            source_pix_fmt=comparison.source_info.pix_fmt,
+            distorted_pix_fmt=comparison.distorted_info.pix_fmt,
         )
         worker = _PairDecodeWorker(
             generation,
