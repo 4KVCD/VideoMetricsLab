@@ -652,9 +652,15 @@ def load_result(
     results = load_metrics(directory, specs, compute_backends)
     # Extra current metrics are direct lookups too. They preserve the UI
     # behavior of showing every compatible score already cached for a row
-    # without an exponential search through metric combinations.
+    # without an exponential search through metric combinations. Only for
+    # metrics the request does not ask for: one it asks for is its own score
+    # or none. XPSNR alone covers every frame and beside a subsampled libvmaf
+    # run every n-th, and the other's score stood in for the requested one --
+    # shown as the row's, and kept by its next run, which then never
+    # calculated the XPSNR it asked for.
+    requested = {spec.key for spec in specs}
     for spec in supplemental_specs:
-        if not results.has(spec.key):
+        if spec.key not in requested and not results.has(spec.key):
             extra = load_metric(directory, spec, (compute_backends or {}).get(spec.key, "gpu"))
             if extra is not None:
                 results.add(extra)

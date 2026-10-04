@@ -14,7 +14,7 @@ from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
-    supplemental_metric_specs,
+    displayable_metric_specs,
 )
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VmafOptions
@@ -48,7 +48,7 @@ def _cache_key(source, distorted, options):
 def _load_cached(source, distorted, options, directory=None):
     return result_cache.load_cached(
         source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
+        displayable_metric_specs(options),
     )
 
 
@@ -59,10 +59,8 @@ def _store_cached(source, distorted, result, label, options, directory=None):
 
 
 def _clear_cached(source, distorted, options, directory=None):
-    return result_cache.clear(
-        source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
-    )
+    # The ticked metrics only, as the window clears them for a recalculation.
+    return result_cache.clear(source, distorted, _cache_request(options), directory)
 
 @pytest.fixture(scope="module")
 def qapp():
@@ -105,7 +103,10 @@ def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):
     assert len(sampled.frames) == 4
     assert len(full.frames) == 12
     _store_cached(source.path, distorted.path, sampled, "sampled", mixed)
-    assert _load_cached(source.path, distorted.path, alone) is None
+    # The XPSNR-only row may show the sampled run's VMAF (a row shows any
+    # saved score of its recipe), but not its every-third-frame XPSNR.
+    found = _load_cached(source.path, distorted.path, alone)
+    assert found is None or found[0].metric_results.get("xpsnr") is None
     _clear_cached(source.path, distorted.path, alone)
     _store_cached(source.path, distorted.path, full, "full", alone)
     # The subsampled run stored first is still a valid answer for the
@@ -114,6 +115,12 @@ def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):
     reloaded, _label = _load_cached(source.path, distorted.path, mixed)
     assert len(reloaded.metric("xpsnr").frame) == 4
     assert len(reloaded.metric("vmaf").frame) == 4
+    # Nor, with only the full-frame XPSNR saved, does it answer the
+    # subsampled request's.
+    _clear_cached(source.path, distorted.path, mixed)
+    _store_cached(source.path, distorted.path, full, "full", alone)
+    found = _load_cached(source.path, distorted.path, mixed)
+    assert found is None or found[0].metric_results.get("xpsnr") is None
 
 
 @pytest.mark.parametrize("names", COMBINATIONS)
