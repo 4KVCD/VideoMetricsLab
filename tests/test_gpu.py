@@ -123,6 +123,27 @@ def test_no_directx_means_no_gpu_maker(monkeypatch):
         gpu.detected_gpu_vendors.cache_clear()
 
 
+def test_every_hardware_decoders_output_format_is_a_pixel_format_ffmpeg_has():
+    """AMD's was "d3d11va", the hwaccel's name, where FFmpeg's pixel format
+    is "d3d11": FFmpeg did not recognise it, and every run on an AMD GPU
+    decoded in software after a failed start. The commands were only ever
+    compared as text."""
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+
+    listed = subprocess.run([ffmpeg_path(), "-hide_banner", "-pix_fmts"], capture_output=True, text=True,
+                            check=True).stdout
+    hardware = {fields[1] for line in listed.splitlines()
+                if len(fields := line.split()) >= 2 and len(fields[0]) == 5 and "H" in fields[0]}
+    assert {"cuda", "qsv", "d3d11"} <= hardware  # the listing is read right
+    for hwaccel in gpu._VENDOR_PREFERRED_HWACCEL.values():
+        assert gpu.hwaccel_output_format(hwaccel) in hardware, hwaccel
+        assert gpu.hwaccel_args(hwaccel) == ["-hwaccel", hwaccel, "-hwaccel_output_format",
+                                             gpu.hwaccel_output_format(hwaccel)]
+    assert gpu.hwaccel_args(None) == []
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="DirectX")
 def test_directx_lists_this_machines_adapters():
     vendor_ids = gpu._dxgi_vendor_ids()

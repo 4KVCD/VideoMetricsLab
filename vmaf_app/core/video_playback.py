@@ -14,7 +14,7 @@ from vmaf_app.core.frame_extract import (
     frame_video_info,
     hdr_kind,
 )
-from vmaf_app.core.gpu import hw_native_format
+from vmaf_app.core.gpu import hw_native_format, hwaccel_args
 from vmaf_app.core.models import ScaleDirection
 
 
@@ -217,12 +217,6 @@ def playback_dimensions(
     return out_w, out_h
 
 
-def _hwaccel_args(hwaccel: str | None) -> list[str]:
-    if not hwaccel:
-        return []
-    return ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel]
-
-
 def _input_args(
     path: Path,
     timestamp: float,
@@ -233,7 +227,7 @@ def _input_args(
     if realtime:
         args += ["-readrate", "1"]
     args += ["-ss", f"{timestamp:.9f}"]
-    args += _hwaccel_args(hwaccel)
+    args += hwaccel_args(hwaccel)
     args += ["-i", str(path.resolve())]
     return args
 

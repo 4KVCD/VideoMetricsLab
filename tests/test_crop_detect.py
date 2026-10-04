@@ -236,7 +236,7 @@ def test_a_window_decodes_on_whatever_gpu_the_run_will_use(monkeypatch, hwaccel)
     assert box == crop_detect.CropBox(1920, 800, 0, 140)
     (cmd,) = seen
     assert cmd[cmd.index("-hwaccel") + 1] == hwaccel
-    assert cmd[cmd.index("-hwaccel_output_format") + 1] == hwaccel
+    assert cmd[cmd.index("-hwaccel_output_format") + 1] == {"d3d11va": "d3d11"}.get(hwaccel, hwaccel)
     assert cmd.index("-hwaccel") < cmd.index("-i")  # a per-input option
     assert "hwdownload,format=p010le,cropdetect=" in cmd[cmd.index("-vf") + 1]
 

@@ -320,10 +320,27 @@ def bit_depth(pix_fmt: str) -> int:
     return 8
 
 
+#: FFmpeg's pixel format for each -hwaccel's frames, where it is not the
+#: hwaccel's own name (cuda and qsv are both).
+_HWACCEL_OUTPUT_FORMATS = {"d3d11va": "d3d11"}
+
+
+def hwaccel_output_format(hwaccel: str) -> str:
+    """The -hwaccel_output_format that keeps `hwaccel`'s frames on the GPU
+    for hwdownload: the name of its pixel format.
+
+    It was the hwaccel's name, which for d3d11va -- AMD's -- is no pixel
+    format: FFmpeg said "Unrecognised hwaccel output format: d3d11va", gave
+    the frames in system memory, the graph's hwdownload refused them, and
+    the run started again in software. Every run on an AMD GPU: right
+    scores, never a hardware decode. Found on a Radeon 780M."""
+    return _HWACCEL_OUTPUT_FORMATS.get(hwaccel, hwaccel)
+
+
 def hwaccel_args(hwaccel: str | None) -> list[str]:
     """The -hwaccel options for ONE input. ffmpeg reads these as per-input
     options, applying to the next -i on the command line, which is what
     allows the two inputs to be decoded differently."""
     if not hwaccel:
         return []
-    return ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel]
+    return ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel_output_format(hwaccel)]

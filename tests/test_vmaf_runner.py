@@ -817,9 +817,9 @@ def test_each_input_gets_its_own_hwaccel_options():
     distorted_at = cmd.index(str(Path("distorted.mp4").resolve()))
     source_at = cmd.index(str(Path("source.mp4").resolve()))
 
-    # Each input reads as: -hwaccel X -hwaccel_output_format X -i <path>
+    # Each input reads as: -hwaccel X -hwaccel_output_format <X's pixel format> -i <path>
     assert cmd[distorted_at - 5:distorted_at] == [
-        "-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11va", "-i",
+        "-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11", "-i",
     ]
     assert cmd[source_at - 5:source_at] == [
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i",
