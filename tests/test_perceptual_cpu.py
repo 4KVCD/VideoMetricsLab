@@ -346,3 +346,27 @@ def test_a_saved_perceptual_metric_is_not_recalculated_beside_a_new_one():
     ]
     assert [spec.key for spec in plan.tasks[0].requested_specs] == ["butteraugli", "cvvdp"]
 
+
+
+def test_a_failed_frame_extraction_says_what_ffmpeg_said(tmp_path, monkeypatch):
+    """FFmpeg's errors went nowhere, so a failed extraction had no reason."""
+    from vmaf_app.core.perceptual_cpu import PerceptualRunError, _png_pairs
+
+    class FailedProcess:
+        pid = 123
+        returncode = 1
+
+        @staticmethod
+        def poll():
+            return 1
+
+    def fake_popen(args, stderr=None, **_kwargs):
+        stderr.write(b"[matroska] Invalid EBML number, skipping\nError opening input file\n")
+        return FailedProcess()
+
+    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
+    with pytest.raises(PerceptualRunError) as raised:
+        list(_png_pairs(_info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1,
+                        tmp_path, None, None))
+    assert "could not prepare" in str(raised.value)
+    assert "Error opening input file" in raised.value.stderr_tail

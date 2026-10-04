@@ -265,7 +265,7 @@ def _png_pairs(
     does.
     """
     graph = _image_filtergraph(source, distorted, recipe, source_crop, distorted_crop, step)
-    cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y", "-i", str(distorted.path.resolve()),
+    cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(distorted.path.resolve()),
            "-i", str(source.path.resolve()), "-filter_complex", graph]
     output_args = ["-fps_mode", "passthrough", "-pix_fmt", "rgb48le", "-atomic_writing", "1"]
     if recipe.duration_limit > 0:
@@ -274,10 +274,25 @@ def _png_pairs(
     cmd += ["-map", "[reference]", *output_args, str(directory / "reference-%08d.png")]
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
-    # A long FFmpeg extraction can write enough diagnostics to fill a pipe.
-    # We do not need its progress stream here, so inherit neither pipe and
-    # avoid deadlocking a feature-length task before it creates a frame.
-    process = proc_util.popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    # FFmpeg's errors go to a file beside the images: a pipe nobody reads
+    # while the images are scored can fill, stopping FFmpeg mid-video, and
+    # sent nowhere they left a failed extraction without a reason.
+    errors_path = directory / "ffmpeg-errors.log"
+    errors = open(errors_path, "wb")  # noqa: SIM115 -- closed in the finally below
+    try:
+        process = proc_util.popen(cmd, stdout=subprocess.DEVNULL, stderr=errors)
+    except BaseException:
+        errors.close()
+        raise
+
+    def failure(message: str) -> PerceptualRunError:
+        errors.flush()
+        try:
+            tail = errors_path.read_text(encoding="utf-8", errors="replace").strip()[-2000:]
+        except OSError:
+            tail = ""
+        return PerceptualRunError(message, stderr_tail=tail)
+
     if process_handle is not None:
         process_handle.attach(process.pid)
     throttled = False
@@ -379,9 +394,9 @@ def _png_pairs(
                     if reference.exists() and test.exists():
                         break  # written just before FFmpeg exited
                     if code != 0:
-                        raise PerceptualRunError("FFmpeg could not prepare lossless perceptual-metric frames.")
+                        raise failure("FFmpeg could not prepare lossless perceptual-metric frames.")
                     if index == 1:
-                        raise PerceptualRunError("FFmpeg produced no frame pairs for perceptual metrics.")
+                        raise failure("FFmpeg produced no frame pairs for perceptual metrics.")
                     return  # the shorter input has ended
                 throttle(False)  # the caller is waiting: FFmpeg must run
                 time.sleep(0.02)
@@ -397,6 +412,7 @@ def _png_pairs(
                 process.wait(timeout=5)
         if process_handle is not None:
             process_handle.detach(process.pid)
+        errors.close()
 
 
 def parse_score(metric: str, output: str) -> float:
