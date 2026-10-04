@@ -775,7 +775,11 @@ class FrameComparePanel(QWidget):
         message = self._video_status.replace("distorted", "test")
         # Errors stay visible; successful playback hides renderer diagnostics
         # in Advanced info, retaining only state and actual decoder choices.
-        if any(word in message.lower() for word in ("failed", "could not", "error", "unavailable")):
+        # A reference without a soundtrack ("audio unavailable") is not an
+        # error: it put the whole diagnostic line, wider than the window and
+        # cut off at both ends, under every such comparison.
+        problem = message.lower().replace("audio unavailable", "")
+        if any(word in problem for word in ("failed", "could not", "error", "unavailable")):
             return " · ".join(tr_message(part) for part in message.split(" · "))
         parts = [tr_message(message.split(" · ", 1)[0])]
         for side, shown in (("source", N_("Source")), ("test", N_("Test"))):

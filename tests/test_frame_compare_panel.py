@@ -63,6 +63,17 @@ def test_playback_status_hides_diagnostics_but_keeps_decode_modes(qapp):
     assert "missing codec" in panel._concise_playback_status()
 
 
+def test_a_reference_without_a_soundtrack_is_not_shown_as_an_error(qapp):
+    """It put the whole diagnostic line -- wider than the window, cut off at
+    both ends -- under every comparison whose reference has no audio."""
+    panel = FrameComparePanel()
+    panel._on_video_status_changed(
+        "Paused · GStreamer D3D11 · 3/4 streams · Frame-locked GPU pair · audio unavailable · "
+        "3840x2160 P010_10LE · memory:D3D11Memory · source software: avdec_ffv1 · distorted GPU: d3d11h264dec")
+    assert panel._concise_playback_status() == "Paused · Source: CPU decode · Test: GPU decode"
+    assert "audio unavailable" in panel.advanced_info_btn.toolTip()
+
+
 def test_advanced_info_opens_on_tooltip_event_and_click(qapp, monkeypatch):
     from PySide6.QtCore import QEvent, QPoint
     from PySide6.QtGui import QHelpEvent
