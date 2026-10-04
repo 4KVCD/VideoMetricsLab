@@ -83,7 +83,14 @@ def pair_problem(source_info: VideoInfo, distorted_info: VideoInfo, duration_lim
     if source_info.is_variable_frame_rate or distorted_info.is_variable_frame_rate:
         return ("Variable-frame-rate video is not supported safely yet. Convert both videos "
                 "to the same constant frame rate before comparing them.")
-    fps_tolerance = max(0.01, max(source_info.fps, distorted_info.fps) * 0.001)
+    # Half the gap between a whole rate and its NTSC one (24 and 23.976: a
+    # thousandth apart). The tolerance was that gap itself, to the digit, so
+    # 24 against 23.976 passed by 0.00002 fps -- and the frames, paired by
+    # their times, were a frame apart every 42 seconds: on the same pictures
+    # flagged 24 and 23.976 fps, VMAF went from 98.8 to about 30 within 20
+    # seconds. Rates read off two containers of one video differ by far
+    # less (24000/1001 against 2997/125: 0.00002 fps).
+    fps_tolerance = max(0.005, max(source_info.fps, distorted_info.fps) * 0.0005)
     if abs(source_info.fps - distorted_info.fps) > fps_tolerance:
         return f"Frame rates do not match ({source_info.fps:.3f} vs {distorted_info.fps:.3f} fps)."
     if source_info.duration > 0 and distorted_info.duration > 0:
