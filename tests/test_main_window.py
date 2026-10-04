@@ -82,6 +82,23 @@ def _clear_cached(source, distorted, options, directory=None):
         supplemental_metric_specs(options),
     )
 
+@pytest.fixture
+def clock(monkeypatch):
+    """The window's clock, standing at 1000 s until a test moves it."""
+    class Clock:
+        now = 1000.0
+
+        def monotonic(self):
+            return self.now
+
+        def __getattr__(self, name):  # the rest of the time module
+            return getattr(time, name)
+
+    fake = Clock()
+    monkeypatch.setattr(main_window_module, "time", fake)
+    return fake
+
+
 @pytest.fixture(scope="module")
 def qapp():
     return QApplication.instance() or QApplication([])
@@ -1561,13 +1578,11 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     assert win.status_label.text().startswith("1 video: 1 in progress")
 
 
-def test_run_status_includes_elapsed_time(qapp):
-    import time
-
+def test_run_status_includes_elapsed_time(qapp, clock):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._run_started_at = time.monotonic() - 61
+    win._run_started_at = clock.now - 61
     win._on_job_started(0, "a")
 
     assert "Elapsed: 0:01:01" in win.status_label.text()
@@ -2091,10 +2106,13 @@ def test_finished_probe_is_not_reused_after_qt_deletes_it(qapp, monkeypatch):
 def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
     started = threading.Event()
     release = threading.Event()
+    on_ui_thread = []
 
     def slow_probe(path, process_handle=None):
+        on_ui_thread.append(threading.current_thread() is threading.main_thread())
         started.set()
-        release.wait(10.0)
+        if not on_ui_thread[-1]:
+            release.wait(10.0)  # a slow probe, where it does not hold up the window
         return _fake_video_info(str(path))
 
     monkeypatch.setattr(probe_worker_module, "probe_video", slow_probe)
@@ -2104,12 +2122,10 @@ def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
     )
     win = MainWindow()
 
-    before = time.monotonic()
     win._on_browse_source()
-    elapsed = time.monotonic() - before
 
-    assert elapsed < 1.0
     assert started.wait(5.0)
+    assert on_ui_thread == [False], "the source was probed on the UI thread"
     assert win._source_info is None
 
     release.set()
@@ -3142,16 +3158,14 @@ def test_closing_does_not_accept_while_a_probe_is_still_running(qapp):
 
 
 def test_closing_does_not_block_the_ui_thread_for_seconds(qapp):
-    import time
-
+    """closeEvent used to wait a flat five seconds per running worker."""
     win = MainWindow()
-    win._probe_workers.append(_LiveWorker())
+    worker = _LiveWorker()
+    win._probe_workers.append(worker)
 
-    began = time.monotonic()
     win.closeEvent(QCloseEvent())
-    elapsed = time.monotonic() - began
 
-    assert elapsed < 1.0, f"closing blocked the UI thread for {elapsed:.1f}s"
+    assert worker.waited_ms == [], "closing waited on a running worker"
 
 
 def test_a_second_close_does_not_cancel_twice_but_still_refuses(qapp):
@@ -4323,7 +4337,7 @@ def test_a_score_calculated_the_chosen_way_has_no_implementation_note(qapp, monk
     win.close()
 
 
-def test_paused_and_cancelling_stay_on_the_status_line(qapp):
+def test_paused_and_cancelling_stay_on_the_status_line(qapp, clock):
     """The status line is rebuilt every second for the elapsed time, and it
     replaced "Paused." and "Cancelling..." within a second."""
     from types import SimpleNamespace
@@ -4331,7 +4345,7 @@ def test_paused_and_cancelling_stay_on_the_status_line(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._run_started_at = time.monotonic() - 65
+    win._run_started_at = clock.now - 65
     win._on_job_started(0, "a")
     calls = []
     win._worker = SimpleNamespace(pause=lambda: calls.append("pause"), resume=lambda: calls.append("resume"),
@@ -4534,34 +4548,34 @@ def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
     win.close()
 
 
-def test_elapsed_leaves_out_paused_time(qapp):
+def test_elapsed_leaves_out_paused_time(qapp, clock):
     """"Elapsed" kept counting while a run was paused."""
     from types import SimpleNamespace
 
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._run_started_at = time.monotonic() - 100
+    win._run_started_at = clock.now - 100
     win._on_job_started(0, "a")
     win._worker = SimpleNamespace(pause=lambda: None, resume=lambda: None)
     win.pause_btn.setChecked(True)
     win._on_pause_clicked()
     win._paused_since -= 40  # paused 40 s ago
-    assert 59 <= win._run_elapsed() <= 61
+    assert win._run_elapsed() == 60
     win.pause_btn.setChecked(False)
     win._on_pause_clicked()
-    assert 59 <= win._run_elapsed() <= 61
+    assert win._run_elapsed() == 60
     win._update_run_status()
     assert "Elapsed: 0:01:0" in win.status_label.text()
     win._worker = None
     win.close()
 
 
-def test_the_end_of_a_run_says_how_long_it_took_and_what_failed(qapp):
+def test_the_end_of_a_run_says_how_long_it_took_and_what_failed(qapp, clock):
     """It said "Done." with the time gone, or counted a video with one
     failed metric among scored ones as a failed video."""
     win = MainWindow()
-    win._run_started_at = time.monotonic() - 3725
+    win._run_started_at = clock.now - 3725
     win._run_failed_count, win._run_partial_count = 1, 2
     win._on_all_finished()
     assert win.status_label.text() == (

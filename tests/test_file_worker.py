@@ -126,10 +126,13 @@ def test_finishing_a_run_does_not_block_the_window(qapp, tmp_path, monkeypatch):
 
     started = threading.Event()
     release = threading.Event()
+    on_ui_thread = []
 
     def slow_store(*args, **kwargs):
+        on_ui_thread.append(threading.current_thread() is threading.main_thread())
         started.set()
-        release.wait(10.0)
+        if not on_ui_thread[-1]:
+            release.wait(10.0)  # a slow write, where it does not hold up the window
 
     monkeypatch.setattr(result_cache, "store", slow_store)
 
@@ -141,14 +144,10 @@ def test_finishing_a_run_does_not_block_the_window(qapp, tmp_path, monkeypatch):
     result.source = source
     result.distorted = distorted
 
-    began = time.monotonic()
     win._on_job_finished(0, result)
-    elapsed = time.monotonic() - began
 
     assert started.wait(5.0), "the cache write never started"
-    assert elapsed < 1.0, (
-        f"_on_job_finished blocked for {elapsed:.2f}s waiting on the cache write"
-    )
+    assert on_ui_thread == [False], "_on_job_finished wrote the cache on the UI thread"
     # And the row was still updated, rather than the result being deferred
     # along with the write.
     assert win._rows[row].completed_run is not None
