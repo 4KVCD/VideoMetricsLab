@@ -25,7 +25,7 @@ if str(REPO_ROOT) not in sys.path:
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.frame_extract import FrameComparison, extract_frame_png
 from vmaf_app.core.models import CropMode, GpuVendor, VmafOptions
-from vmaf_app.core.stats import stats_for_run
+from vmaf_app.core.stats import compute_stats
 from vmaf_app.core.vmaf_runner import VmafRunError, analysis_pix_fmt, run_vmaf
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     print("frame count:", len(result.frames))
     print("first 5 frames:", result.frames[:5])
 
-    stats = stats_for_run(result)
+    stats = compute_stats(result.frames.vmaf if result.frames.vmaf is not None else [])
     print("mean:", stats.mean, "min:", stats.minimum, "max:", stats.maximum)
     for t in stats.thresholds:
         print(f"  {t.label}: {t.percentage:.1f}% ({t.count} frames)")

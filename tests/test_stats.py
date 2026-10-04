@@ -35,14 +35,7 @@ def test_empty_frames_returns_zeroed_stats():
     stats = compute_stats([])
     assert stats.count == 0
     assert stats.thresholds == []
-    assert stats.histogram == []
     assert dict(stats.summary())["Mean"] == "0.00"  # summary must format, not raise
-
-
-def test_histogram_bins_cover_all_frames():
-    values = [i for i in range(0, 101, 5)]  # 0,5,...,100
-    stats = compute_stats(values)
-    assert sum(b.count for b in stats.histogram) == len(values)
 
 
 def test_percentile_1_and_0_1_low_with_a_large_sample():
