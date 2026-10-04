@@ -12,6 +12,7 @@ unsupported.
 """
 from __future__ import annotations
 
+import ctypes
 import platform
 import re
 import threading
@@ -73,29 +74,81 @@ def _hwaccels_of(executable: str) -> frozenset[str]:
     return frozenset(names)
 
 
+#: The GPU makers' PCI vendor IDs, as DXGI and Vulkan report them.
+PCI_VENDORS = {0x10DE: GpuVendor.NVIDIA, 0x1002: GpuVendor.AMD, 0x1022: GpuVendor.AMD, 0x8086: GpuVendor.INTEL}
+
+
 @lru_cache(maxsize=1)
 def detected_gpu_vendors() -> list[GpuVendor]:
-    """Best-effort detection of installed GPU vendors (Windows only)."""
+    """The makers of the GPUs DirectX lists (Windows only), NVIDIA first,
+    then Intel, then AMD -- the order "auto" tries their decoders in.
+
+    Asked of DXGI in-process, in milliseconds. It was a PowerShell query
+    (Get-CimInstance Win32_VideoController): 0.3 to 0.4 s warm, seconds
+    cold, on the UI thread while the window was being built."""
     if platform.system() != "Windows":
         return []
     try:
-        proc = proc_util.run(
-            [
-                "powershell", "-NoProfile", "-Command",
-                "(Get-CimInstance Win32_VideoController).Name",
-            ],
-            capture_output=True, text=True, timeout=20,
-        )
-    except Exception:
+        found = {PCI_VENDORS.get(vendor_id) for vendor_id in _dxgi_vendor_ids()}
+    except OSError:
         return []
-    names = proc.stdout.lower()
+    return [vendor for vendor in (GpuVendor.NVIDIA, GpuVendor.INTEL, GpuVendor.AMD) if vendor in found]
+
+
+class _Guid(ctypes.Structure):
+    _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16), ("Data3", ctypes.c_uint16),
+                ("Data4", ctypes.c_ubyte * 8)]
+
+
+class _AdapterDesc1(ctypes.Structure):  # DXGI_ADAPTER_DESC1
+    _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", ctypes.c_uint32),
+                ("DeviceId", ctypes.c_uint32), ("SubSysId", ctypes.c_uint32), ("Revision", ctypes.c_uint32),
+                ("DedicatedVideoMemory", ctypes.c_size_t), ("DedicatedSystemMemory", ctypes.c_size_t),
+                ("SharedSystemMemory", ctypes.c_size_t), ("AdapterLuidLow", ctypes.c_uint32),
+                ("AdapterLuidHigh", ctypes.c_int32), ("Flags", ctypes.c_uint32)]
+
+
+_IID_IDXGIFACTORY1 = _Guid(0x770AAE78, 0xF26F, 0x4DBA, (ctypes.c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1,
+                                                                            0xB3, 0x87))
+_DXGI_ERROR_NOT_FOUND = -0x7785FFFE  # 0x887A0002 as a signed HRESULT
+_DXGI_ADAPTER_FLAG_SOFTWARE = 2
+# Vtable slots: IUnknown's three, IDXGIObject's four, then the interface's.
+_RELEASE, _ENUM_ADAPTERS1, _GET_DESC1 = 2, 12, 10
+
+
+def _com_call(interface: ctypes.c_void_p, slot: int, *args, argtypes=()) -> int:
+    vtable = ctypes.cast(interface, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+    method = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *argtypes)(vtable[slot])
+    return method(interface, *args)
+
+
+def _dxgi_vendor_ids() -> list[int]:
+    """The PCI vendor ID of each hardware adapter DXGI lists. OSError when
+    DXGI cannot be asked."""
+    factory = ctypes.c_void_p()
+    result = ctypes.WinDLL("dxgi").CreateDXGIFactory1(ctypes.byref(_IID_IDXGIFACTORY1), ctypes.byref(factory))
+    if result < 0 or not factory:
+        raise OSError(f"CreateDXGIFactory1 failed: 0x{result & 0xFFFFFFFF:08x}")
     vendors = []
-    if "nvidia" in names:
-        vendors.append(GpuVendor.NVIDIA)
-    if "intel" in names:
-        vendors.append(GpuVendor.INTEL)
-    if "amd" in names or "radeon" in names:
-        vendors.append(GpuVendor.AMD)
+    try:
+        for index in range(64):
+            adapter = ctypes.c_void_p()
+            result = _com_call(factory, _ENUM_ADAPTERS1, index, ctypes.byref(adapter),
+                               argtypes=(ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p)))
+            if result == _DXGI_ERROR_NOT_FOUND:
+                break
+            if result < 0 or not adapter:
+                raise OSError(f"IDXGIFactory1::EnumAdapters1 failed: 0x{result & 0xFFFFFFFF:08x}")
+            try:
+                description = _AdapterDesc1()
+                if (_com_call(adapter, _GET_DESC1, ctypes.byref(description),
+                              argtypes=(ctypes.POINTER(_AdapterDesc1),)) >= 0
+                        and not description.Flags & _DXGI_ADAPTER_FLAG_SOFTWARE):
+                    vendors.append(description.VendorId)
+            finally:
+                _com_call(adapter, _RELEASE)
+    finally:
+        _com_call(factory, _RELEASE)
     return vendors
 
 

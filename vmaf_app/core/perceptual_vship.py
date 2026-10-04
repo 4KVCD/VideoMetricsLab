@@ -58,6 +58,7 @@ from vmaf_app.core.frame_sync import frame_pairs
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
+    PCI_VENDORS,
     HwAccelPlan,
     hw_native_format,
     hwaccel_args,
@@ -503,7 +504,6 @@ def _vulkan_unavailable() -> str | None:
 
 
 #: PCI vendor IDs, as Vulkan reports them.
-_PCI_VENDORS = {0x10DE: GpuVendor.NVIDIA, 0x1002: GpuVendor.AMD, 0x1022: GpuVendor.AMD, 0x8086: GpuVendor.INTEL}
 
 
 def _vulkan_vendor(name: str) -> GpuVendor | None:
@@ -535,7 +535,7 @@ def _vulkan_vendor(name: str) -> GpuVendor | None:
             vulkan.vkGetPhysicalDeviceProperties(ctypes.c_void_p(device), properties)
             raw = bytes(properties)
             if raw[20:276].split(b"\0", 1)[0].decode("utf-8", errors="replace") == name:
-                return _PCI_VENDORS.get(int.from_bytes(raw[8:12], "little"), GpuVendor.NONE)
+                return PCI_VENDORS.get(int.from_bytes(raw[8:12], "little"), GpuVendor.NONE)
         return None
     finally:
         vulkan.vkDestroyInstance(instance, None)

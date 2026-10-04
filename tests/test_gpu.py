@@ -1,6 +1,8 @@
 """Which hardware decoder gets chosen, for each input independently."""
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from vmaf_app.core import gpu
@@ -94,3 +96,34 @@ def test_the_hwaccel_list_follows_the_ffmpeg_in_use(monkeypatch):
     assert gpu.available_hwaccels() == {"qsv"}
     assert asked == ["a/ffmpeg", "b/ffmpeg"]
     gpu._hwaccels_of.cache_clear()
+
+
+def test_gpu_makers_come_from_directx_in_the_order_auto_tries_them(monkeypatch):
+    """Intel's integrated GPU first in DirectX's list, a software adapter
+    (Microsoft's, 0x1414) last: NVIDIA's decoder is still tried first."""
+    gpu.detected_gpu_vendors.cache_clear()
+    monkeypatch.setattr(gpu.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(gpu, "_dxgi_vendor_ids", lambda: [0x8086, 0x10DE, 0x1414])
+    try:
+        assert gpu.detected_gpu_vendors() == [GpuVendor.NVIDIA, GpuVendor.INTEL]
+    finally:
+        gpu.detected_gpu_vendors.cache_clear()
+
+
+def test_no_directx_means_no_gpu_maker(monkeypatch):
+    def unavailable():
+        raise OSError("CreateDXGIFactory1 failed")
+
+    gpu.detected_gpu_vendors.cache_clear()
+    monkeypatch.setattr(gpu.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(gpu, "_dxgi_vendor_ids", unavailable)
+    try:
+        assert gpu.detected_gpu_vendors() == []
+    finally:
+        gpu.detected_gpu_vendors.cache_clear()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DirectX")
+def test_directx_lists_this_machines_adapters():
+    vendor_ids = gpu._dxgi_vendor_ids()
+    assert all(isinstance(vendor_id, int) and 0 < vendor_id < 0x10000 for vendor_id in vendor_ids)
