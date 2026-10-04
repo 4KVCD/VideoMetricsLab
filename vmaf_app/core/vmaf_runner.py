@@ -20,7 +20,7 @@ import numpy as np
 
 from vmaf_app.core import nvdec_frames, vmaf_cuda
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
+from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.gpu import (
@@ -226,7 +226,7 @@ def _resolve_crops(
     if status_callback:
         status_callback("Detecting black bars in source and distorted...")
     try:
-        return detect_pair(
+        boxes = detect_pair(
             lambda: detect_crop(
                 source_info, cancel_event=cancel_event, process_handle=process_handle,
                 hwaccel=plan.source,
@@ -238,6 +238,7 @@ def _resolve_crops(
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
+    return common_picture(source_info, distorted_info, *boxes)
 
 
 #: Analysis bit depth -> the planar 4:2:0 format both branches are converted

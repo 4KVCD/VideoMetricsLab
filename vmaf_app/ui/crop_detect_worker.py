@@ -5,7 +5,7 @@ import threading
 
 from PySide6.QtCore import QThread, Signal
 
-from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
+from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.models import CropBox, VideoInfo
 
 _MISSING = object()
@@ -63,6 +63,9 @@ class CropDetectWorker(QThread):
                     distorted = self._detect(self._distorted)
                 else:
                     distorted = self._distorted_crop
+            if self._distorted.path != self._source.path:
+                # The boxes a run would compare (see common_picture).
+                source, distorted = common_picture(self._source, self._distorted, source, distorted)
             if not self._cancel.is_set():
                 self.ready.emit(source, distorted)
         except CropDetectCancelled:

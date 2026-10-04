@@ -303,7 +303,8 @@ def test_unscored_auto_crop_is_detected_once_in_the_background(qapp, tmp_path, m
 
     def fake_detect(info, **_kwargs):
         calls.append(info.path)
-        return CropBox(1920, 816, 0, 132)
+        # The same picture in each video's own pixels: 1920x1080, 1280x720.
+        return CropBox(1920, 816, 0, 132) if info.width == 1920 else CropBox(1280, 544, 0, 88)
 
     monkeypatch.setattr("vmaf_app.ui.crop_detect_worker.detect_crop", fake_detect)
     panel = FrameComparePanel()
@@ -317,7 +318,7 @@ def test_unscored_auto_crop_is_detected_once_in_the_background(qapp, tmp_path, m
 
     assert panel.current_entry.comparison.auto_crop_pending is False
     assert panel.current_entry.comparison.source_crop == CropBox(1920, 816, 0, 132)
-    assert panel.current_entry.comparison.distorted_crop == CropBox(1920, 816, 0, 132)
+    assert panel.current_entry.comparison.distorted_crop == CropBox(1280, 544, 0, 88)
     assert set(calls) == {tmp_path / "source.mkv", tmp_path / "encode.mkv"}
     panel.close()
 
