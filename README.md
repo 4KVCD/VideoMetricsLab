@@ -206,7 +206,8 @@ Third-party components retain their own licenses; see
 
 - VMAF v0.6.1 and VMAF NEG can now be calculated on NVIDIA GPUs.
 - GPU metrics now take frames straight from the GPU's video decoder (NVIDIA,
-  Intel and AMD) instead of through FFmpeg, using much less CPU.
+  Intel and AMD) instead of through FFmpeg, using much less CPU and running
+  noticeably faster.
 - Updated Vship's Vulkan build to 5.1.2, with SSIMULACRA2 on Intel GPUs.
 - A crash in Vship, libvmaf or the GPU driver while calculating metrics no
   longer closes the app.
