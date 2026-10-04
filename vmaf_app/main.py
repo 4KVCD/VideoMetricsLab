@@ -14,83 +14,114 @@ from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.ui.main_window import MainWindow
 
 
-def self_test() -> str:
+class SelfTestReport:
+    """The self-test's lines, and whether any check failed. Failure is
+    recorded as each check is made: it used to be read back from the text
+    ("FAIL" anywhere in it), so a path or a message containing the word
+    failed a good run."""
+
+    def __init__(self, title: str) -> None:
+        self.lines = [title]
+        self.failed = False
+
+    def ok(self, text: str) -> None:
+        self.lines.append(f"  OK    {text}")
+
+    def warn(self, text: str) -> None:
+        self.lines.append(f"  WARN  {text}")
+
+    def fail(self, text: str) -> None:
+        self.lines.append(f"  FAIL  {text}")
+        self.failed = True
+
+    def note(self, text: str) -> None:
+        self.lines.append(f"  {text}")
+
+    @property
+    def text(self) -> str:
+        return "\n".join(self.lines)
+
+
+def self_test() -> SelfTestReport:
     """A report on external tools and bundled runtime components.
 
     Exists for the packaged build: it has no console, so when it fails to
     start or silently falls back there is otherwise nothing to look at.
     Checks the pieces that are found at runtime rather than at build time.
     """
-    lines = [f"{APP_NAME} {__version__} self-test (Python {sys.version.split()[0]})"]
+    report = SelfTestReport(f"{APP_NAME} {__version__} self-test (Python {sys.version.split()[0]})")
     frozen = getattr(sys, "frozen", False)
-    lines.append(f"  packaged build: {'yes' if frozen else 'no, running from source'}")
+    report.note(f"packaged build: {'yes' if frozen else 'no, running from source'}")
 
     from vmaf_app.core.ffmpeg_locate import check_tools, format_version
 
     status = check_tools()
     if status.ok:
-        lines.append(f"  OK    ffmpeg {format_version(status.ffmpeg.version)} and ffprobe")
+        report.ok(f"ffmpeg {format_version(status.ffmpeg.version)} and ffprobe")
     else:
         for problem in status.problems:
-            lines.append(f"  FAIL  {problem}")
+            report.fail(problem)
 
     try:
         from vmaf_app.core.gstreamer_playback import GPU_DECODERS, REQUIRED_ELEMENTS, _load_gstreamer
 
         gst, _ = _load_gstreamer()
         version = ".".join(str(part) for part in gst.version()[:3])
-        lines.append(f"  OK    GStreamer {version}")
+        report.ok(f"GStreamer {version}")
         # Element by element rather than plugin by plugin: the packaged
         # build ships a pruned plugin set (scripts/gstreamer_bundle.py), and
         # a plugin can be present while the decoder someone needs is not.
         missing = [name for name in REQUIRED_ELEMENTS if gst.ElementFactory.find(name) is None]
         if missing:
-            lines.append(f"  FAIL  GStreamer elements missing: {', '.join(missing)}")
+            report.fail(f"GStreamer elements missing: {', '.join(missing)}")
         else:
-            lines.append(f"  OK    all {len(REQUIRED_ELEMENTS)} GStreamer elements the app uses")
+            report.ok(f"all {len(REQUIRED_ELEMENTS)} GStreamer elements the app uses")
         gpu = [name for name in GPU_DECODERS if gst.ElementFactory.find(name) is not None]
-        lines.append(
-            f"  OK    GPU decoders on this machine: {', '.join(gpu)}" if gpu else
-            "  WARN  no D3D11 GPU decoders registered; video decodes in software"
-        )
+        if gpu:
+            report.ok(f"GPU decoders on this machine: {', '.join(gpu)}")
+        else:
+            report.warn("no D3D11 GPU decoders registered; video decodes in software")
     except Exception as error:
-        lines.append(f"  WARN  GStreamer unavailable, playback falls back to FFmpeg: {error}")
+        report.warn(f"GStreamer unavailable, playback falls back to FFmpeg: {error}")
 
     # Which Qt platform plugin, style and image formats loaded. The packaged
     # build ships a pruned PySide6 (scripts/qt_bundle.py); Qt would silently
     # fall back to a plain style or refuse an image format if one were missing.
+    from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance()
     if app is not None:
         from PySide6.QtCore import qVersion
         from PySide6.QtGui import QImageReader
 
         formats = sorted(bytes(f).decode() for f in QImageReader.supportedImageFormats())
-        lines.append(
-            f"  OK    Qt {qVersion()} on '{app.platformName()}', style '{app.style().objectName()}', "
-            f"images: {', '.join(formats)}"
-        )
+        report.ok(f"Qt {qVersion()} on '{app.platformName()}', style '{app.style().objectName()}', "
+                  f"images: {', '.join(formats)}")
 
     from vmaf_app.core import d3d11_tonemap
 
     if d3d11_tonemap.available():
-        lines.append(f"  OK    GPU HDR tone-map shader ({d3d11_tonemap.library_path().name})")
+        report.ok(f"GPU HDR tone-map shader ({d3d11_tonemap.library_path().name})")
     else:
-        lines.append("  WARN  GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
+        report.warn("GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
 
     from vmaf_app.core import nvdec_frames
 
     for backend, maker in (("nvidia", "NVIDIA"), ("intel", "Intel"), ("amd", "AMD")):
         library = nvdec_frames.LIBRARIES[backend].name
         if nvdec_frames.available(backend):
-            lines.append(f"  OK    {maker} frame decoder for the GPU metrics ({library})")
+            report.ok(f"{maker} frame decoder for the GPU metrics ({library})")
         else:
-            lines.append(f"  WARN  {maker} frame decoder absent ({library}); FFmpeg decodes the GPU metrics' videos")
+            report.warn(f"{maker} frame decoder absent ({library}); FFmpeg decodes the GPU metrics' videos")
 
     from vmaf_app.core.perceptual_cpu import find_metric_executable
 
     for metric in ("ssimulacra2", "butteraugli"):
         tool = find_metric_executable(metric)
-        lines.append(f"  OK    {metric} ({tool})" if tool else f"  WARN  {metric} tool absent")
+        if tool:
+            report.ok(f"{metric} ({tool})")
+        else:
+            report.warn(f"{metric} tool absent")
 
     # Vship runs in processes of its own (vmaf_app.core.isolated): in the
     # packaged build that is the executable started again, which only works
@@ -101,9 +132,9 @@ def self_test() -> str:
 
     try:
         child = run_isolated(os.getpid, what="a child process")
-        lines.append(f"  OK    GPU libraries run in a process of their own (started process {child})")
+        report.ok(f"GPU libraries run in a process of their own (started process {child})")
     except Exception as error:
-        lines.append(f"  FAIL  no process for the GPU libraries could be started: {error}")
+        report.fail(f"no process for the GPU libraries could be started: {error}")
 
     from vmaf_app.core.perceptual_vship import backend_label, detect_vship_device, set_vship_backend
     from vmaf_app.core.settings import Settings
@@ -112,20 +143,20 @@ def self_test() -> str:
 
     vship_device, vship_reason = detect_vship_device()
     if vship_device is not None:
-        lines.append(
-            f"  OK    Vship {vship_device.version} GPU metrics "
-            f"({backend_label(vship_device.backend)}: {vship_device.name})"
-        )
+        report.ok(f"Vship {vship_device.version} GPU metrics "
+                  f"({backend_label(vship_device.backend)}: {vship_device.name})")
     else:
-        lines.append(f"  WARN  Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
+        report.warn(f"Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
 
     from vmaf_app.core import vmaf_cuda
 
     available, text = vmaf_cuda.gpu_vmaf_available()
-    lines.append(f"  OK    VMAF on the GPU ({text})" if available
-                 else f"  WARN  VMAF on the GPU unavailable; FFmpeg's libvmaf is used ({text})")
+    if available:
+        report.ok(f"VMAF on the GPU ({text})")
+    else:
+        report.warn(f"VMAF on the GPU unavailable; FFmpeg's libvmaf is used ({text})")
 
-    return "\n".join(lines)
+    return report
 
 
 _QT_LOG_LEVELS = {"QtDebugMsg": logging.DEBUG, "QtInfoMsg": logging.INFO, "QtWarningMsg": logging.WARNING,
@@ -195,11 +226,11 @@ def main() -> int:
         # has no console to print to, and an automated check has no one to
         # dismiss a dialog.
         with contextlib.suppress(OSError, ValueError):
-            print(report)  # a windowed build has no usable stdout
+            print(report.text)  # a windowed build has no usable stdout
         destination = user_data_dir() / "self-test.txt"
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(report, encoding="utf-8")
+            destination.write_text(report.text, encoding="utf-8")
         except OSError:
             destination = None
         if "--quiet" not in sys.argv:
@@ -207,9 +238,9 @@ def main() -> int:
 
             box = QMessageBox()
             box.setWindowTitle("Self-test")
-            box.setText(report + (f"\n\nSaved to {destination}" if destination else ""))
+            box.setText(report.text + (f"\n\nSaved to {destination}" if destination else ""))
             box.exec()
-        return 0 if "FAIL" not in report else 1
+        return 1 if report.failed else 0
 
     start_session_log()
     from vmaf_app.core.settings import Settings
