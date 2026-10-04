@@ -44,15 +44,23 @@ _VENDOR_PREFERRED_HWACCEL = {
 }
 
 
-@lru_cache(maxsize=1)
 def available_hwaccels() -> set[str]:
+    """The -hwaccel methods the FFmpeg in use was built with. Asked once
+    per FFmpeg: the answer was kept for the session whatever FFmpeg it came
+    from, so pointing the app at another one (Settings, or "Locate
+    ffmpeg.exe") kept the first one's list."""
+    return set(_hwaccels_of(ffmpeg_path()))
+
+
+@lru_cache(maxsize=4)
+def _hwaccels_of(executable: str) -> frozenset[str]:
     try:
         proc = proc_util.run(
-            [ffmpeg_path(), "-hide_banner", "-hwaccels"],
+            [executable, "-hide_banner", "-hwaccels"],
             capture_output=True, text=True, timeout=15,
         )
     except Exception:
-        return set()
+        return frozenset()
     lines = [l.strip() for l in proc.stdout.splitlines()]
     names = set()
     started = False
@@ -62,7 +70,7 @@ def available_hwaccels() -> set[str]:
             continue
         if started and line:
             names.add(line)
-    return names
+    return frozenset(names)
 
 
 @lru_cache(maxsize=1)

@@ -73,3 +73,24 @@ def test_the_description_names_which_input_got_hardware_decode():
     assert HwAccelPlan().describe() == "off"
     assert "distorted cpu" in HwAccelPlan(source="cuda").describe()
     assert "source cpu" in HwAccelPlan(distorted="qsv").describe()
+
+
+def test_the_hwaccel_list_follows_the_ffmpeg_in_use(monkeypatch):
+    """The list was kept for the session from whichever FFmpeg answered
+    first, through a change of FFmpeg folder."""
+    asked = []
+
+    def run(cmd, **_kwargs):
+        asked.append(cmd[0])
+        listing = {"a/ffmpeg": "cuda", "b/ffmpeg": "qsv"}[cmd[0]]
+        return type("Done", (), {"stdout": f"Hardware acceleration methods:\n{listing}\n"})()
+
+    gpu._hwaccels_of.cache_clear()
+    monkeypatch.setattr(gpu.proc_util, "run", run)
+    monkeypatch.setattr(gpu, "ffmpeg_path", lambda: "a/ffmpeg")
+    assert gpu.available_hwaccels() == {"cuda"}
+    assert gpu.available_hwaccels() == {"cuda"}
+    monkeypatch.setattr(gpu, "ffmpeg_path", lambda: "b/ffmpeg")
+    assert gpu.available_hwaccels() == {"qsv"}
+    assert asked == ["a/ffmpeg", "b/ffmpeg"]
+    gpu._hwaccels_of.cache_clear()
