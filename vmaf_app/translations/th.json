@@ -687,7 +687,8 @@
   "Cannot compare": "เปรียบเทียบไม่ได้",
   "Cannot be compared with the reference:": "เปรียบเทียบกับวิดีโออ้างอิงไม่ได้:",
   "Calculate the rest?": "คำนวณที่เหลือไหม?",
-  "It could not be read. Remove it or add the file again to retry.": "อ่านไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่"
+  "It could not be read. Remove it or add the file again to retry.": "อ่านไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "บิตเรตของทั้งไฟล์ รวมแทร็กเสียง: ไฟล์ไม่ได้บันทึกบิตเรตของวิดีโอไว้"
  },
  "plurals": {
   "about {count} day": [

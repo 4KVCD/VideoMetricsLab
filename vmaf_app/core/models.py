@@ -69,6 +69,9 @@ class VideoInfo:
     sar: str = "1:1"
     pix_fmt: str = ""
     bit_rate: int = 0  # bits per second, 0 if unknown
+    # The file's bitrate, soundtrack included, where the video's own is not
+    # recorded (a Matroska file without statistics tags).
+    bit_rate_whole_file: bool = False
     # ffprobe's r_frame_rate. A meaningful difference from average fps is a
     # practical warning that frame-number/fps timestamps are unsafe (VFR).
     nominal_fps: float = 0.0

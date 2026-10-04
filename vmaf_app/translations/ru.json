@@ -687,7 +687,8 @@
   "Cannot compare": "Сравнение невозможно",
   "Cannot be compared with the reference:": "Нельзя сравнить с эталоном:",
   "Calculate the rest?": "Вычислить остальные?",
-  "It could not be read. Remove it or add the file again to retry.": "Не удалось прочитать. Уберите его или добавьте файл снова, чтобы повторить."
+  "It could not be read. Remove it or add the file again to retry.": "Не удалось прочитать. Уберите его или добавьте файл снова, чтобы повторить.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Битрейт всего файла вместе со звуковой дорожкой: битрейт самого видео в файле не записан."
  },
  "plurals": {
   "about {count} day": [

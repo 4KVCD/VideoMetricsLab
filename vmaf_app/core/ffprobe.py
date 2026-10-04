@@ -62,6 +62,57 @@ def _clock_seconds(text: str | None) -> float | None:
         return None
 
 
+def _whole(value) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _stream_bit_rate(stream: dict, duration: float, file_size: int) -> int:
+    """One stream's own bitrate, from what the container records: its
+    bit_rate, or Matroska's statistics tags (BPS, or NUMBER_OF_BYTES over
+    its length). 0 when there is none.
+
+    The statistics are used only if they fit in the file: FFmpeg copies
+    them from its input into what it writes, even through a re-encode, so a
+    30 s cut of a film carried the film's 55 GB and 69.8 Mb/s."""
+    rate = _whole(stream.get("bit_rate"))
+    if rate > 0:
+        return rate
+    size = _whole(_tag(stream, "NUMBER_OF_BYTES"))
+    tagged = _whole(_tag(stream, "BPS")) or (round(size * 8 / duration) if size > 0 and duration > 0 else 0)
+    if tagged <= 0 or file_size <= 0 or size > file_size or tagged * duration / 8 > file_size * 1.02:
+        return 0
+    return tagged
+
+
+def _video_bit_rate(video: dict, streams: list[dict], fmt: dict, duration: float) -> tuple[int, bool]:
+    """(the video stream's bitrate, whether it is the whole file's instead).
+
+    A Matroska file records no bitrate per stream unless its writer added
+    statistics tags, and the file's own rate counts the soundtrack: a film
+    with a TrueHD track read 4-5 Mb/s high. Without the video's own, the
+    audio tracks' rates are taken from the file's when every one is known;
+    otherwise the file's rate is all there is, and says so."""
+    file_size = _whole(fmt.get("size"))
+    own = _stream_bit_rate(video, duration, file_size)
+    if own:
+        return own, False
+    total = _whole(fmt.get("bit_rate"))
+    if total <= 0:
+        return 0, False
+    try:
+        container = float(fmt.get("duration") or duration)
+    except ValueError:
+        container = duration
+    audio = [stream for stream in streams if stream.get("codec_type") == "audio"]
+    rates = [_stream_bit_rate(stream, _stream_duration(stream, container), file_size) for stream in audio]
+    if all(rates) and total > sum(rates):
+        return total - sum(rates), False
+    return total, True
+
+
 def _stream_duration(stream: dict, container: float) -> float:
     """The video's own length. A Matroska file gives no stream duration,
     and the container's is its longest stream's -- an audio track running
@@ -160,14 +211,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         except ValueError:
             nb_frames = 0
 
-    bit_rate = 0
-    for candidate in (v.get("bit_rate"), fmt.get("bit_rate")):
-        if candidate:
-            try:
-                bit_rate = int(candidate)
-                break
-            except ValueError:
-                continue
+    bit_rate, bit_rate_whole_file = _video_bit_rate(v, streams, fmt, duration)
 
     return VideoInfo(
         path=path,
@@ -180,6 +224,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         sar=v.get("sample_aspect_ratio", "1:1") or "1:1",
         pix_fmt=v.get("pix_fmt", ""),
         bit_rate=bit_rate,
+        bit_rate_whole_file=bit_rate_whole_file,
         nominal_fps=nominal_fps,
         color_range=v.get("color_range", "") or "",
         color_space=v.get("color_space", "") or "",

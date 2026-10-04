@@ -183,3 +183,41 @@ def test_an_unknown_frame_rate_is_zero_not_an_exception(monkeypatch):
     video = {**_VIDEO, "avg_frame_rate": "N/A", "r_frame_rate": "N/A", "duration": "1.0"}
     info = _probe_payload(monkeypatch, [video], {"duration": "1.0"})
     assert info.fps == 0.0
+
+
+_STATS = {"DURATION": "00:10:00.000000000"}
+
+
+def test_a_matroska_videos_bitrate_is_its_own_not_the_files(monkeypatch):
+    video = {**_VIDEO, "tags": {**_STATS, "BPS": "20000000", "NUMBER_OF_BYTES": "1500000000"}}
+    audio = {"codec_type": "audio", "tags": {"BPS": "4000000"}}
+    info = _probe_payload(monkeypatch, [video, audio],
+                          {"duration": "600.0", "bit_rate": "24100000", "size": "1807500000"})
+    assert (info.bit_rate, info.bit_rate_whole_file) == (20_000_000, False)
+
+
+def test_statistics_copied_from_a_longer_file_are_not_believed(monkeypatch):
+    """FFmpeg copies mkvmerge's statistics into what it writes, even through
+    a re-encode: a 30 s cut of a film carried the film's 55 GB."""
+    video = {**_VIDEO, "tags": {"DURATION": "00:00:30.072000000", "BPS": "69797727",
+                                "NUMBER_OF_BYTES": "55282321636"}}
+    info = _probe_payload(monkeypatch, [video], {"duration": "30.072", "bit_rate": "31910785", "size": "119952642"})
+    assert (info.bit_rate, info.bit_rate_whole_file) == (31_910_785, False)
+
+
+def test_without_the_videos_own_rate_known_audio_is_taken_off_the_files(monkeypatch):
+    video = {**_VIDEO, "tags": _STATS}
+    audio = {"codec_type": "audio", "bit_rate": "640000"}
+    info = _probe_payload(monkeypatch, [video, audio], {"duration": "600.0", "bit_rate": "10640000"})
+    assert (info.bit_rate, info.bit_rate_whole_file) == (10_000_000, False)
+
+
+def test_with_nothing_but_the_files_rate_it_says_so(monkeypatch):
+    from vmaf_app.ui.formatting import bitrate_note, bitrate_string
+
+    video = {**_VIDEO, "tags": _STATS}
+    audio = {"codec_type": "audio"}
+    info = _probe_payload(monkeypatch, [video, audio], {"duration": "600.0", "bit_rate": "10640000"})
+    assert (info.bit_rate, info.bit_rate_whole_file) == (10_640_000, True)
+    assert bitrate_string(info) == "≈10.6 Mb/s"
+    assert "whole file" in bitrate_note(info)

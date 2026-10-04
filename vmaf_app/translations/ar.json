@@ -687,7 +687,8 @@
   "Cannot compare": "تعذّرت المقارنة",
   "Cannot be compared with the reference:": "لا يمكن مقارنتها بالمرجع:",
   "Calculate the rest?": "هل تريد حساب البقية؟",
-  "It could not be read. Remove it or add the file again to retry.": "تعذّرت قراءته. أزِله أو أضف الملف من جديد لإعادة المحاولة."
+  "It could not be read. Remove it or add the file again to retry.": "تعذّرت قراءته. أزِله أو أضف الملف من جديد لإعادة المحاولة.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "معدل البت للملف كله بما فيه الصوت: لا يسجّل الملف معدل الفيديو وحده."
  },
  "plurals": {
   "about {count} day": [

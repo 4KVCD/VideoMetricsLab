@@ -687,7 +687,8 @@
   "Cannot compare": "无法比较",
   "Cannot be compared with the reference:": "无法与参考视频比较：",
   "Calculate the rest?": "计算其余的视频？",
-  "It could not be read. Remove it or add the file again to retry.": "无法读取。请将其移除，或重新添加该文件后重试。"
+  "It could not be read. Remove it or add the file again to retry.": "无法读取。请将其移除，或重新添加该文件后重试。",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整个文件的码率，包括音轨：文件中没有记录视频本身的码率。"
  },
  "plurals": {
   "about {count} day": [

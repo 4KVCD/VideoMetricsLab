@@ -687,7 +687,8 @@
   "Cannot compare": "Kan niet vergelijken",
   "Cannot be compared with the reference:": "Kan niet worden vergeleken met de referentie:",
   "Calculate the rest?": "De rest berekenen?",
-  "It could not be read. Remove it or add the file again to retry.": "Kon niet worden gelezen. Verwijder het, of voeg het bestand opnieuw toe om het nog eens te proberen."
+  "It could not be read. Remove it or add the file again to retry.": "Kon niet worden gelezen. Verwijder het, of voeg het bestand opnieuw toe om het nog eens te proberen.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "De bitrate van het hele bestand, inclusief geluid: het bestand vermeldt die van de video niet."
  },
  "plurals": {
   "about {count} day": [

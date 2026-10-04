@@ -687,7 +687,8 @@
   "Cannot compare": "比較できません",
   "Cannot be compared with the reference:": "参照動画と比較できません：",
   "Calculate the rest?": "残りを計算しますか？",
-  "It could not be read. Remove it or add the file again to retry.": "読み込めませんでした。削除するか、ファイルを追加し直してやり直してください。"
+  "It could not be read. Remove it or add the file again to retry.": "読み込めませんでした。削除するか、ファイルを追加し直してやり直してください。",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "音声トラックを含むファイル全体のビットレートです。ファイルに映像のみのビットレートが記録されていません。"
  },
  "plurals": {
   "about {count} day": [

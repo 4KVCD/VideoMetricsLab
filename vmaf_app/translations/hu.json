@@ -687,7 +687,8 @@
   "Cannot compare": "Nem hasonlítható össze",
   "Cannot be compared with the reference:": "Nem hasonlítható össze a referenciával:",
   "Calculate the rest?": "Kiszámítja a többit?",
-  "It could not be read. Remove it or add the file again to retry.": "Nem olvasható. Távolítsa el, vagy adja hozzá újra a fájlt az újrapróbáláshoz."
+  "It could not be read. Remove it or add the file again to retry.": "Nem olvasható. Távolítsa el, vagy adja hozzá újra a fájlt az újrapróbáláshoz.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "A teljes fájl bitrátája a hangsávval együtt: a fájl nem rögzíti a videó saját bitrátáját."
  },
  "plurals": {
   "about {count} day": [

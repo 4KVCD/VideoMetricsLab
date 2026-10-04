@@ -113,7 +113,7 @@ from vmaf_app.core.vmaf_runner import (
 from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.formatting import bitrate_string, media_info_string
+from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
@@ -2550,6 +2550,7 @@ class MainWindow(QMainWindow):
             item.setForeground(self.distorted_table.palette().text())
             item.setToolTip(format_hms(info.duration, decimals=1))
             self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
+            self.distorted_table.item(row, COL_BITRATE).setToolTip(bitrate_note(info))
             self._rows[row].video_info = info
             self._set_row_scaling(row)
             if self._rows[row].analysis_status == "Reading...":
