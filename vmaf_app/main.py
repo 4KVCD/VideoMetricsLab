@@ -5,13 +5,19 @@ import logging
 import multiprocessing
 import sys
 from pathlib import Path
-
-from PySide6.QtWidgets import QApplication
+from typing import TYPE_CHECKING
 
 from vmaf_app import APP_NAME, __version__, i18n
 from vmaf_app.core import app_log
 from vmaf_app.core.app_paths import user_data_dir
-from vmaf_app.ui.main_window import MainWindow
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QApplication
+
+# Qt and the window are imported in main(), not here: every process the app
+# starts for Vship and libvmaf (vmaf_app.core.isolated) runs this module
+# again before multiprocessing hands it its work, and importing them took
+# about 0.45 s of each such process's start.
 
 
 class SelfTestReport:
@@ -246,6 +252,10 @@ def apply_language(app: QApplication, chosen: str) -> str:
 
 
 def main() -> int:
+    from PySide6.QtWidgets import QApplication
+
+    from vmaf_app.ui.main_window import MainWindow
+
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     # Before anything looks for ffmpeg, the self-test included.
