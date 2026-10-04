@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -76,7 +78,7 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     for picture in (*references, *tests):
         picture.write_bytes(bytes([0x89]) + b"PNG")  # their colours are described before scoring
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu.find_metric_executable", lambda key: key)
-    def fake_pairs(*_args):
+    def fake_pairs(*_args, **_kwargs):
         yield from zip(references, tests, strict=True)
 
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu._png_pairs", fake_pairs)
@@ -90,6 +92,172 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     assert np.array_equal(output.metrics.frame("ssimulacra2").frame, np.array([0, 1, 2]))
     assert output.metrics.frame("butteraugli").aggregate == pytest.approx(0.25)
     assert output.metrics.frame("ssimulacra2").provenance.compute_backend == "cpu"
+
+
+# ------------------------------------------ several frame pairs at a time
+
+def test_pairs_scored_at_once_are_half_the_cores_shared_and_fit_in_memory():
+    from vmaf_app.core.perceptual_cpu import scoring_workers
+
+    four_k, plenty = 3840 * 2160, 1 << 40
+    assert scoring_workers(four_k, ("ssimulacra2",), cores=24, free_memory=plenty) == 12
+    assert scoring_workers(four_k, ("ssimulacra2",), 2, cores=24, free_memory=plenty) == 6  # two tasks share the CPU
+    assert scoring_workers(four_k, ("ssimulacra2",), cores=1, free_memory=plenty) == 1
+    # 8 GB free: 60% of it, at 250 bytes a pixel for Butteraugli (2.07 GB a 4K pair), 160 for SSIMULACRA2.
+    assert scoring_workers(four_k, ("butteraugli",), cores=24, free_memory=8 << 30) == 2
+    assert scoring_workers(four_k, ("ssimulacra2",), cores=24, free_memory=8 << 30) == 3
+    # A worker runs its tools in turn: it needs what the larger takes.
+    assert scoring_workers(four_k, ("ssimulacra2", "butteraugli"), cores=24, free_memory=8 << 30) == 2
+    assert scoring_workers(four_k, ("butteraugli",), 2, cores=24, free_memory=8 << 30) == 1  # and half the memory
+    assert scoring_workers(1920 * 1080, ("butteraugli",), cores=24, free_memory=8 << 30) == 9
+    assert scoring_workers(four_k, ("butteraugli",), cores=24, free_memory=0) == 1  # never none
+
+
+def _parallel_task(tmp_path, monkeypatch, count, workers, run_metric, keys=("ssimulacra2",), pairs=None, **kwargs):
+    """run_perceptual_task on `count` fake pairs with `workers` at a time."""
+    request = _request(*keys)
+    references = [tmp_path / f"r-{i}.png" for i in range(count)]
+    tests = [tmp_path / f"t-{i}.png" for i in range(count)]
+    for picture in (*references, *tests):
+        picture.write_bytes(bytes([0x89]) + b"PNG")
+
+    def fake_pairs(*_args, **_kwargs):
+        yield from zip(references, tests, strict=True)
+
+    monkeypatch.setattr(perceptual_cpu, "find_metric_executable", lambda key: key)
+    monkeypatch.setattr(perceptual_cpu, "_png_pairs", pairs or fake_pairs)
+    monkeypatch.setattr(perceptual_cpu, "_tool_version", lambda executable: "test-tool 1")
+    if workers is not None:
+        monkeypatch.setattr(perceptual_cpu, "scoring_workers", lambda *a, **k: workers)
+    monkeypatch.setattr(perceptual_cpu, "_run_metric", run_metric)
+    return run_perceptual_task(_info("source.mp4"), _info("test.mp4"), request, request.metrics, **kwargs)
+
+
+def _pair_number(picture: Path) -> int:
+    return int(picture.stem.split("-")[1])
+
+
+def test_scores_stay_in_the_pairs_order_when_later_pairs_finish_first(tmp_path, monkeypatch):
+    """Each pair waits for the one after it to finish: only pairs scored
+    at the same time can end at all, and they end last to first."""
+    done = [threading.Event() for _ in range(5)]
+    done[4].set()
+    progress = []
+
+    def run_metric(executable, key, reference, test, *_args):
+        number = _pair_number(reference)
+        assert done[number + 1].wait(30), "the next pair is not being scored at the same time"
+        if key == "butteraugli":  # the pair's last tool
+            done[number].set()
+        return float(number) if key == "ssimulacra2" else number / 10
+
+    output = _parallel_task(tmp_path, monkeypatch, 4, 4, run_metric, keys=("ssimulacra2", "butteraugli"),
+                            on_progress=lambda current, total, fps: progress.append(current))
+
+    assert output.metrics.frame("ssimulacra2").values.tolist() == [0.0, 1.0, 2.0, 3.0]
+    assert output.metrics.frame("butteraugli").values.tolist() == pytest.approx([0.0, 0.1, 0.2, 0.3])
+    assert output.metrics.frame("ssimulacra2").frame.tolist() == [0, 1, 2, 3]
+    assert progress == [1, 2, 3, 4, 4]  # by how many are scored, then the end
+    assert not list(tmp_path.glob("*.png"))  # each pair deleted once scored
+
+
+def test_a_pair_is_taken_from_ffmpeg_only_when_a_worker_is_free_for_it(tmp_path, monkeypatch):
+    """The pairs not yet started are FFmpeg's backlog, which holds it back:
+    taken early they would be out of its count, and FFmpeg would write the
+    whole video out ahead of the scoring."""
+    workers, lock = 2, threading.Lock()
+    both = threading.Barrier(workers)
+    state = {"scored": 0, "now": 0, "most": 0}
+    ahead = []
+
+    def pairs(*_args, **_kwargs):
+        for number in range(6):
+            with lock:
+                ahead.append(number - state["scored"])
+            yield tmp_path / f"r-{number}.png", tmp_path / f"t-{number}.png"
+
+    def run_metric(executable, key, reference, test, *_args):
+        with lock:
+            state["now"] += 1
+            state["most"] = max(state["most"], state["now"])
+        both.wait(30)  # two pairs are scored at the same time...
+        with lock:
+            state["now"] -= 1
+            state["scored"] += 1
+        return 1.0
+
+    output = _parallel_task(tmp_path, monkeypatch, 6, workers, run_metric, pairs=pairs)
+
+    assert len(output.metrics.frame("ssimulacra2").values) == 6
+    assert state["most"] == workers  # ...and never more
+    assert max(ahead) < workers  # each pair asked for with a worker free
+
+
+def test_a_failed_pair_ends_the_others_tools_and_is_the_error_raised(tmp_path, monkeypatch):
+    waiting = [threading.Event(), threading.Event()]
+    ended = []
+
+    def run_metric(executable, key, reference, test, process_handle, cancel_event, hdr):
+        number = _pair_number(reference)
+        if number == 0:
+            assert all(event.wait(30) for event in waiting)
+            raise PerceptualRunError("ssimulacra2 failed for a frame.")
+        waiting[number - 1].set()
+        while not cancel_event.is_set():  # a tool that runs until it is ended
+            time.sleep(0.001)
+        ended.append(number)
+        raise perceptual_cpu.PerceptualCancelled("Cancelled by user")
+
+    with pytest.raises(PerceptualRunError, match="failed for a frame"):
+        _parallel_task(tmp_path, monkeypatch, 3, 3, run_metric)
+
+    assert sorted(ended) == [1, 2]
+    assert not list(tmp_path.glob("*.png"))
+
+
+def test_cancel_ends_every_pair_being_scored(tmp_path, monkeypatch):
+    cancel = threading.Event()
+    both = threading.Barrier(2)
+    ended = []
+
+    def run_metric(executable, key, reference, test, process_handle, cancel_event, hdr):
+        both.wait(30)
+        cancel.set()  # the user's Cancel, with two pairs in progress
+        assert cancel_event.is_set()
+        ended.append(_pair_number(reference))
+        raise perceptual_cpu.PerceptualCancelled("Cancelled by user")
+
+    with pytest.raises(perceptual_cpu.PerceptualCancelled):
+        _parallel_task(tmp_path, monkeypatch, 4, 2, run_metric, cancel_event=cancel)
+
+    assert sorted(ended) == [0, 1]  # the pairs after them were never started
+
+
+@pytest.mark.parametrize(("workers", "backlog"), [(1, 24), (12, 24), (20, 40)])
+def test_ffmpegs_backlog_has_room_for_every_workers_next_pair(tmp_path, monkeypatch, workers, backlog):
+    seen = {}
+
+    def pairs(*_args, backlog=None):
+        seen["backlog"] = backlog
+        yield tmp_path / "r-0.png", tmp_path / "t-0.png"
+
+    _parallel_task(tmp_path, monkeypatch, 1, workers, lambda *args: 1.0, pairs=pairs)
+
+    assert seen == {"backlog": backlog}
+
+
+def test_the_task_takes_its_share_of_the_cpu(tmp_path, monkeypatch):
+    seen = {}
+
+    def workers(pixels, metrics, concurrent_tasks):
+        seen.update(pixels=pixels, metrics=metrics, concurrent_tasks=concurrent_tasks)
+        return 1
+
+    monkeypatch.setattr(perceptual_cpu, "scoring_workers", workers)
+    _parallel_task(tmp_path, monkeypatch, 1, None, lambda *args: 1.0, keys=("ssimulacra2", "butteraugli"),
+                   concurrent_tasks=2)
+
+    assert seen == {"pixels": 64 * 48, "metrics": ("ssimulacra2", "butteraugli"), "concurrent_tasks": 2}
 
 
 def test_cpu_frame_extraction_applies_duration_limit_to_both_outputs(tmp_path, monkeypatch):

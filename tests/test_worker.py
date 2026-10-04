@@ -303,6 +303,27 @@ def test_an_explicit_thread_count_is_the_users_and_is_not_shared(qapp, monkeypat
     assert seen == {"d0.mp4": 20, "d1.mp4": 20}
 
 
+@pytest.mark.parametrize(("videos", "parallel_jobs", "share"), [(3, 2, 2), (1, 2, 1), (3, 1, 1)])
+def test_the_cpu_perceptual_metrics_are_told_how_many_tasks_share_the_cpu(
+        qapp, monkeypatch, videos, parallel_jobs, share):
+    """They score several frame pairs at a time, as many as their share of
+    the cores and memory allows (perceptual_cpu.scoring_workers)."""
+    seen = []
+
+    def perceptual(*args, concurrent_cpu_tasks, **kwargs):
+        seen.append(concurrent_cpu_tasks)
+        return _perceptual_output()
+
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", perceptual)
+    jobs = [VmafJob(_info("s.mp4"), _info(f"d{n}.mp4"), VmafOptions(), f"d{n}", metric_keys=("ssimulacra2",),
+                    metric_backends={"ssimulacra2": "cpu"})
+            for n in range(videos)]
+
+    VmafWorker(jobs, parallel_jobs=parallel_jobs).run()
+
+    assert seen == [share] * videos
+
+
 def test_a_resample_test_shares_the_cores_like_any_other_job(qapp, monkeypatch):
     monkeypatch.setattr(os, "cpu_count", lambda: 24)
     seen = []

@@ -2,9 +2,10 @@
 
 SSIMULACRA2 and Butteraugli are reference command-line tools for *images*,
 not video filters.  This adapter gives them lossless PNG pairs from one
-FFmpeg pass per comparison, scoring each pair as soon as it is written and
-holding FFmpeg to a small backlog (see _png_pairs). The temporary directory
-exists only for the lifetime of the task.
+FFmpeg pass per comparison, scoring each pair as soon as it is written --
+several pairs at a time (scoring_workers) -- and holding FFmpeg to a small
+backlog (see _png_pairs). The temporary directory exists only for the
+lifetime of the task.
 """
 from __future__ import annotations
 
@@ -19,10 +20,12 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+import psutil
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
@@ -32,7 +35,7 @@ from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detec
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
-from vmaf_app.core.geometry import content_size, pair_problem
+from vmaf_app.core.geometry import compared_dimensions, content_size, pair_problem
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
@@ -334,7 +337,7 @@ def _png_pairs(
     source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe,
     source_crop: CropBox | None, distorted_crop: CropBox | None, step: int,
     directory: Path, cancel_event: threading.Event | None,
-    process_handle: ProcessHandle | None,
+    process_handle: ProcessHandle | None, backlog: int | None = None,
 ) -> Iterator[tuple[Path, Path]]:
     """Yield (reference, test) image pairs while FFmpeg is still writing them.
 
@@ -343,7 +346,8 @@ def _png_pairs(
     (-atomic_writing), so an image that exists is whole. The caller scores
     and deletes each pair as it arrives.
 
-    FFmpeg is suspended while it has _BACKLOG_PAIRS complete pairs ready
+    FFmpeg is suspended while it has `backlog` (_BACKLOG_PAIRS unless the
+    caller scores more pairs at a time than half of that) complete pairs ready
     ahead of the caller and resumed at half that, checked every 10 ms on a
     thread of its own (a check made only as each pair was handed out let
     FFmpeg run far ahead while one slow pair was being scored). Only
@@ -359,6 +363,7 @@ def _png_pairs(
     both have (libvmaf's shortest=1), so the pairs end when either sequence
     does.
     """
+    backlog = max(2, backlog or _BACKLOG_PAIRS)
     graph = _image_filtergraph(source, distorted, recipe, source_crop, distorted_crop, step)
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(distorted.path.resolve()),
            "-i", str(source.path.resolve()), "-filter_complex", graph]
@@ -468,9 +473,9 @@ def _png_pairs(
         proc_util.raise_current_thread_priority()
         while not stop.wait(0.01):
             index = consumed[0]
-            if complete(index + _BACKLOG_PAIRS):
+            if complete(index + backlog):
                 throttle(True)
-            elif not complete(index + _BACKLOG_PAIRS // 2):
+            elif not complete(index + backlog // 2):
                 throttle(False)
 
     regulator = threading.Thread(target=regulate, name="png-backlog", daemon=True)
@@ -548,10 +553,59 @@ def _butteraugli_norm3(distortion_map: Path) -> float:
     return float(np.mean(np.abs(values.astype(np.float64)) ** 3) ** (1.0 / 3.0))
 
 
+#: Memory one tool takes at its peak for each pixel of the pair it scores,
+#: in bytes. Measured on a 3840x2160 pair: SSIMULACRA2 1.19 GB (143 a
+#: pixel), Butteraugli 1.85 GB (223 a pixel); with a margin.
+_TOOL_BYTES_PER_PIXEL = {"ssimulacra2": 160, "butteraugli": 250}
+#: The share of the free memory the tools may fill between them.
+_MEMORY_SHARE = 0.6
+
+
+def scoring_workers(
+    pixels: int, metrics: tuple[str, ...], concurrent_tasks: int = 1, *,
+    cores: int | None = None, free_memory: int | None = None,
+) -> int:
+    """How many frame pairs are scored at a time.
+
+    The tools score one still image on one core: 1.6 s (SSIMULACRA2) and
+    2.7 s (Butteraugli) for a 4K pair, so in turn a 10-second 4K clip took
+    13 minutes with 1 core of 24 busy. Each pair's score is its own, so
+    scoring several at once changes how soon the scores arrive, never what
+    they are.
+
+    Half the logical cores, shared with whatever else the CPU's queue runs
+    at the same time (`concurrent_tasks`, as auto_threads shares libvmaf's):
+    on 24 cores (8 fast, 16 slow), 12 at once scored 6.5 times as many pairs
+    a second as 1, and 24 only 7.4 times as many, for twice the memory --
+    the cores share the memory's speed, and FFmpeg needs some to write the
+    pairs. And no more than fit in memory: a worker runs its tools in turn,
+    so it needs what the larger takes.
+    """
+    cores = cores or os.cpu_count() or 1
+    concurrent_tasks = max(1, concurrent_tasks)
+    by_cores = cores // 2 // concurrent_tasks
+    if free_memory is None:
+        free_memory = psutil.virtual_memory().available
+    per_worker = max(1, pixels) * max(_TOOL_BYTES_PER_PIXEL.get(metric, 250) for metric in metrics)
+    by_memory = int(free_memory * _MEMORY_SHARE / concurrent_tasks) // per_worker
+    return max(1, min(by_cores, by_memory))
+
+
+class _EitherEvent:
+    """Set when the user's Cancel or the task's own stop is: what the tools
+    of the other pairs are ended by when one pair fails."""
+
+    def __init__(self, cancel_event: threading.Event | None, stop: threading.Event) -> None:
+        self._cancel_event, self._stop = cancel_event, stop
+
+    def is_set(self) -> bool:
+        return self._stop.is_set() or (self._cancel_event is not None and self._cancel_event.is_set())
+
+
 def _run_metric(
     executable: str, metric: str, reference: Path, test: Path,
     process_handle: ProcessHandle | None = None,
-    cancel_event: threading.Event | None = None,
+    cancel_event: threading.Event | _EitherEvent | None = None,
     hdr: bool = False,
 ) -> float:
     """Score one frame pair with a still-image tool.
@@ -623,8 +677,12 @@ def run_perceptual_task(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
     resolved_crops: tuple[CropBox | None, CropBox | None] | None = None,
+    concurrent_tasks: int = 1,
 ) -> PerceptualTaskOutput:
-    """Execute the CPU reference implementation and return independent frame results."""
+    """Execute the CPU reference implementation and return independent frame results.
+
+    `concurrent_tasks` is how many tasks the CPU's queue runs at once, this
+    one included: its share of the cores and memory (scoring_workers)."""
     if not specs or any(spec.backend_id != BACKEND_ID for spec in specs):
         raise ValueError("perceptual task requires perceptual metric specs")
     if request.recipe.resample_test is not None:
@@ -654,8 +712,6 @@ def run_perceptual_task(
         on_status(Status.decoding("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
                                   HwAccelPlan()))
     started = time.perf_counter()
-    values: dict[str, list[float]] = {spec.key: [] for spec in specs}
-    total = 0
     # How the tools are to read each picture's values: as Vship reads the
     # video's (colour.describe_png). FFmpeg tags a BT.709 picture with
     # H.273's BT.709 curve -- the camera's -- where Vship and a display use
@@ -663,38 +719,86 @@ def run_perceptual_task(
     # film scored 40.4 SSIMULACRA2 here against 55.1 on the GPU.
     source_colour, distorted_colour = colour_of(source), colour_of(distorted)
     hdr = any(colour is not None and colour.hdr for colour in (source_colour, distorted_colour))
+    width, height = compared_dimensions(source, distorted, request.recipe.scale_direction, source_crop, distorted_crop)
+    workers = scoring_workers(width * height, tuple(spec.key for spec in specs), concurrent_tasks)
+    _log.info("%s on the CPU: %d frame pair%s at a time", " and ".join(spec.key for spec in specs),
+              workers, "" if workers == 1 else "s")
+    # Ends the tools of every pair in progress once one pair has failed.
+    stop = threading.Event()
+    stopped = _EitherEvent(cancel_event, stop)
+
+    def score(reference: Path, test: Path) -> list[float]:
+        """One pair's scores, a tool at a time, in the specs' order."""
+        try:
+            for picture, colour in ((reference, source_colour), (test, distorted_colour)):
+                if colour is not None:
+                    describe_png(picture, colour)
+            return [_run_metric(executables[spec.key], spec.key, reference, test, process_handle, stopped, hdr)
+                    for spec in specs]
+        finally:
+            # Each pair is deleted once every selected tool has scored it;
+            # with the extraction held to a small backlog the folder never
+            # holds more than the backlog and the pairs being scored.
+            reference.unlink(missing_ok=True)
+            test.unlink(missing_ok=True)
+
+    scored: list[Future] = []  # every pair's, in the pairs' order
+    in_progress: set[Future] = set()
+    finished = 0
+
+    def collect(wait_for_one: bool) -> None:
+        """Takes the pairs that have finished: the first failure is raised,
+        and the progress goes by how many are scored, in whatever order."""
+        nonlocal finished
+        if not in_progress:
+            return
+        done, _ = wait(in_progress, timeout=None if wait_for_one else 0, return_when=FIRST_COMPLETED)
+        for future in done:
+            in_progress.discard(future)
+            future.result()
+            finished += 1
+            if on_progress:
+                units = finished * step
+                rate = units / max(time.perf_counter() - started, 1e-6)
+                # The estimate can run short of the real length; the
+                # total grows with the work rather than passing 100%.
+                on_progress(units, max(total_units, units + step), rate)
+
     with tempfile.TemporaryDirectory(prefix="videometricslab-perceptual-") as temp:
         pairs = _png_pairs(
             source, distorted, request.recipe, source_crop, distorted_crop, step,
             Path(temp), cancel_event, process_handle,
+            # Room for every worker's next pair while FFmpeg wakes up.
+            backlog=max(_BACKLOG_PAIRS, 2 * workers),
         )
+        pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="cpu-pairs")
         try:
             for reference, test in pairs:
                 if cancel_event is not None and cancel_event.is_set():
                     raise PerceptualCancelled("Cancelled by user")
-                try:
-                    for picture, colour in ((reference, source_colour), (test, distorted_colour)):
-                        if colour is not None:
-                            describe_png(picture, colour)
-                    for spec in specs:
-                        values[spec.key].append(_run_metric(
-                            executables[spec.key], spec.key, reference, test, process_handle, cancel_event, hdr,
-                        ))
-                finally:
-                    # Each pair is deleted once every selected tool has
-                    # scored it; with the extraction held to a small backlog
-                    # the folder never holds more than a few dozen images.
-                    reference.unlink(missing_ok=True)
-                    test.unlink(missing_ok=True)
-                total += 1
-                if on_progress:
-                    done = total * step
-                    rate = done / max(time.perf_counter() - started, 1e-6)
-                    # The estimate can run short of the real length; the
-                    # total grows with the work rather than passing 100%.
-                    on_progress(done, max(total_units, done + step), rate)
+                future = pool.submit(score, reference, test)
+                scored.append(future)
+                in_progress.add(future)
+                collect(wait_for_one=False)
+                # A pair is taken from FFmpeg only when a worker is free
+                # for it: the pairs not yet started stay FFmpeg's backlog,
+                # which holds it back (_png_pairs).
+                while len(in_progress) >= workers:
+                    collect(wait_for_one=True)
+            while in_progress:
+                collect(wait_for_one=True)
+        except BaseException:
+            stop.set()  # the other pairs' tools end at once
+            raise
         finally:
-            pairs.close()  # stops FFmpeg if the scoring ended early
+            try:
+                pairs.close()  # stops FFmpeg if the scoring ended early
+            finally:
+                # Before the folder goes: a tool still reading its pair
+                # held the folder open.
+                pool.shutdown(wait=True)
+    total = len(scored)
+    values = {spec.key: [future.result()[position] for future in scored] for position, spec in enumerate(specs)}
     if (short := short_comparison(expected, total * step, source.fps, step)) is not None:
         raise ComparisonCutShortError(short)
     if on_progress:

@@ -297,6 +297,13 @@ class JobScheduler:
             return options  # the runner resolves Auto to every core itself
         return replace(options, n_threads=auto_threads(concurrent))
 
+    def concurrent_cpu_tasks(self) -> int:
+        """How many tasks the CPU's queue may run at once now: what the CPU
+        metrics that score several frame pairs at a time share the cores
+        and memory by (perceptual_cpu.scoring_workers), as _share_cores
+        shares libvmaf's threads."""
+        return max(1, min(self.parallel_jobs, self._lane_count))
+
     def _report_cancelled_once(self) -> None:
         """`cancelled` means the run stopped, not that a job did -- with
         several jobs in flight they all raise Cancelled together."""
@@ -799,6 +806,7 @@ class JobRun:
                 on_pass_done=self.report_pass, together=self.scheduler.gpu_metrics_together,
                 on_pass=lambda number, count, keys: self.report_pass_start(task.backend_id, number, count, keys),
                 on_cpu=lambda keys: self.report_cpu(task.backend_id, keys),
+                concurrent_cpu_tasks=self.scheduler.concurrent_cpu_tasks(),
             )
         raise VmafRunError(f"Unknown metric backend: {task.backend_id}")
 

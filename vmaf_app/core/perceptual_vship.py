@@ -2305,10 +2305,13 @@ def apply_vship_cpu_fallback(
     together: bool = False,
     on_pass: Callable[[int, int, tuple[str, ...]], None] | None = None,
     on_cpu: Callable[[tuple[str, ...]], None] | None = None,
+    concurrent_cpu_tasks: int = 1,
 ) -> PerceptualTaskOutput:
     """Run selected backends, with a per-metric GPU-to-CPU fallback.
     `together` scores the GPU metrics in one pass (see run_vship_task), and
-    `on_pass` hears of each GPU pass as it starts.
+    `on_pass` hears of each GPU pass as it starts. `concurrent_cpu_tasks` is
+    how many tasks share the CPU while this one runs: the CPU metrics take
+    their share of it (perceptual_cpu.scoring_workers).
 
     `on_cpu` gets the keys of the metrics the CPU is about to calculate,
     just before it starts on them: ones chosen for the CPU, and ones meant
@@ -2321,7 +2324,11 @@ def apply_vship_cpu_fallback(
     reported in the output's `failures` -- and the other metrics are scored
     as they would have been without it.
     """
-    from vmaf_app.core.perceptual_cpu import _resolve_crops, run_perceptual_task
+    from vmaf_app.core import perceptual_cpu
+    from vmaf_app.core.perceptual_cpu import _resolve_crops
+
+    def run_perceptual_task(*args, **kwargs) -> PerceptualTaskOutput:
+        return perceptual_cpu.run_perceptual_task(*args, concurrent_tasks=concurrent_cpu_tasks, **kwargs)
 
     def backend(spec: MetricRequestSpec) -> str:
         return "gpu" if spec.key in GPU_ONLY_METRICS else request.execution.perceptual_backend(spec.key)
