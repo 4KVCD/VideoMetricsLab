@@ -578,6 +578,7 @@ def _context_from_result(result: ComparisonResult, label: str, recipe: Compariso
         },
         "compared_frame_count": result.compared_frame_count,
         "model": result.model, "model_choice": result.model_choice,
+        "model_v1": result.model_v1, "model_choice_v1": result.model_choice_v1,
         "recipe": recipe.identity_dict(),
     }
 
@@ -635,15 +636,21 @@ def load_result(
     frame_view = frame_scores_from_results(results)
 
     try:
+        # What a context saved before these were recorded lacks is the
+        # recipe's: the comparison found under it is the same one. The
+        # scaling algorithm a result was made with is its own, though -- it
+        # is no part of the comparison's identity -- and is kept as saved.
+        target = context.get("resample_target")
         result = ComparisonResult(
             source=Path(context["source"]), distorted=Path(context["distorted"]),
             frames=frame_view, fps=context["fps"], model=context.get("model", ""),
             source_crop=_crop_from_dict(context.get("source_crop")), distorted_crop=_crop_from_dict(context.get("distorted_crop")),
             source_info=_info_from_dict(context["source_info"]), distorted_info=_info_from_dict(context["distorted_info"]),
-            scale_direction=ScaleDirection(context.get("scale_direction", ScaleDirection.SOURCE_TO_DISTORTED.value)),
-            scale_algorithm=context.get("scale_algorithm", "bicubic"),
-            resample_target=ResampleTarget(**context["resample_target"]) if context.get("resample_target") else None,
+            scale_direction=ScaleDirection(context.get("scale_direction", recipe.scale_direction.value)),
+            scale_algorithm=context.get("scale_algorithm") or recipe.scale_algorithm,
+            resample_target=ResampleTarget(**target) if target else recipe.resample_test,
             compared_frame_count=context.get("compared_frame_count", 0), model_choice=context.get("model_choice"),
+            model_v1=context.get("model_v1") or "", model_choice_v1=context.get("model_choice_v1"),
             metric_results=results,
         )
         return result, context.get("label") or Path(context["distorted"]).stem

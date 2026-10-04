@@ -619,3 +619,32 @@ def test_a_metric_saved_for_every_frame_under_a_sampled_request_loads_on_its_fra
     store_metric(directory, FrameMetricResult("xpsnr", frames, frames / 24.0, frames * 1.0, PROVENANCE), sampled)
     loaded = load_metric(directory, sampled)
     assert loaded.frame.tolist() == [0, 3, 6] and loaded.values.tolist() == [0.0, 3.0, 6.0]
+
+
+def test_a_cached_result_keeps_the_scaling_algorithm_and_vmaf_v1_model_it_was_made_with(tmp_path):
+    """The window overwrote a cache hit's scaling algorithm with the row's
+    -- the algorithm is no part of the identity, so a lanczos result was
+    found from a bicubic row and relabelled -- and the VMAF v1 model was not
+    saved, so a cached result saved to a file lost it."""
+    from dataclasses import replace
+
+    source, test = _paths(tmp_path)
+    made = replace(_run(source, test), scale_algorithm="lanczos", model_v1="path=v1.json",
+                   model_choice_v1="__builtin:vmaf_v1_3d0h")
+    _store_cached(source, test, made, "test", VmafOptions(scale_algorithm="lanczos"), tmp_path)
+    found, _label = _load_cached(source, test, VmafOptions(scale_algorithm="bicubic"), tmp_path)
+    assert found.scale_algorithm == "lanczos"
+    assert (found.model_v1, found.model_choice_v1) == ("path=v1.json", "__builtin:vmaf_v1_3d0h")
+
+
+def test_a_context_saved_without_the_algorithm_takes_the_recipes(tmp_path):
+    source, test = _paths(tmp_path)
+    options = VmafOptions(scale_algorithm="spline")
+    directory = _store_cached(source, test, _run(source, test), "test", options, tmp_path) or recipe_directory(
+        tmp_path, source, test, comparison_recipe_from_vmaf_options(options))
+    context_path = directory / "context.json"
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    del context["scale_algorithm"]
+    context_path.write_text(json.dumps(context), encoding="utf-8")
+    found, _label = _load_cached(source, test, options, tmp_path)
+    assert found.scale_algorithm == "spline"

@@ -2857,11 +2857,6 @@ class MainWindow(QMainWindow):
         row_data.completed_run = run
         row_data.analysis_status = ""
         row_data.analysis_status = N_("Complete (cached)") if self._has_requested_results(row_data) else ""
-        # Old cache files predate the persisted frame-preview recipe. The
-        # cache key still identifies these exact row options, so restore the
-        # missing pieces from the row that found the cache entry.
-        result.scale_algorithm = row_data.options.scale_algorithm
-        result.resample_target = row_data.options.resample_test
         # Scores/crops come from the cache, current media descriptors do not.
         # Older runs omitted HDR tags; replacing a fresh probe with that
         # snapshot silently disabled tone mapping in Frame Compare.
@@ -2950,8 +2945,6 @@ class MainWindow(QMainWindow):
         if cached is None:
             return False
         result, label = cached
-        result.scale_algorithm = row_data.options.scale_algorithm
-        result.resample_target = row_data.options.resample_test
         run = CompletedRun(result, label)
         row_data.completed_run = run
         row_data.analysis_status = ""
