@@ -607,3 +607,15 @@ def test_metrics_on_the_same_frames_share_the_frame_view_despite_rounded_times()
     assert frame_view.psnr.tolist() == [40, 41, 42, 43]
     assert frame_view.values("ssimulacra2").tolist() == [70, 71, 72, 73]
     np.testing.assert_array_equal(frame_view.time, vmaf.time)
+
+
+def test_a_metric_saved_for_every_frame_under_a_sampled_request_loads_on_its_frames(tmp_path):
+    """XPSNR scored beside VMAF on the GPU was saved for every frame under
+    its subsampled request; it loads on the frames the request covers."""
+    source, test = _paths(tmp_path)
+    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
+    sampled = _spec("xpsnr", step=3)
+    frames = np.arange(7)
+    store_metric(directory, FrameMetricResult("xpsnr", frames, frames / 24.0, frames * 1.0, PROVENANCE), sampled)
+    loaded = load_metric(directory, sampled)
+    assert loaded.frame.tolist() == [0, 3, 6] and loaded.values.tolist() == [0.0, 3.0, 6.0]

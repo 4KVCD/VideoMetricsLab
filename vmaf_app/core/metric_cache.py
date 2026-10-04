@@ -23,6 +23,7 @@ from vmaf_app.core.metric_results import (
     SequenceMetricResult,
     provenance_from_dict,
     provenance_to_dict,
+    sampled_every,
 )
 from vmaf_app.core.model_select import (
     AUTO_MODEL_CHOICE,
@@ -279,7 +280,12 @@ def _load_metric_file(path: Path, spec: MetricRequestSpec):
                 return None
             provenance = provenance_from_dict(metadata["provenance"])
             if metadata["kind"] == "frame":
-                return FrameMetricResult(spec.key, data["frame"], data["time"], data["values"], provenance)
+                # On the frames its request covers: XPSNR scored beside VMAF
+                # on the GPU was stored for every frame under a subsampled
+                # request (metric_results.as_requested).
+                return sampled_every(
+                    FrameMetricResult(spec.key, data["frame"], data["time"], data["values"], provenance),
+                    spec.coverage.step if spec.coverage is not None else 1)
             if metadata["kind"] == "sequence":
                 timeline = (data["frame"], data["time"], data["values"]) if "values" in data else (None, None, None)
                 return SequenceMetricResult(spec.key, float(data["score"].item()), provenance, *timeline)

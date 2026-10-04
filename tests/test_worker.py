@@ -1272,3 +1272,44 @@ def test_cancelling_keeps_the_gpu_metrics_whose_passes_had_finished(qapp, monkey
     _drain(qapp)
     assert len(finished) == 1 and finished[0].has_metric("ssimulacra2")
 
+
+
+def test_xpsnr_scored_beside_vmaf_on_the_gpu_covers_the_same_sampled_frames(qapp, monkeypatch):
+    """With frame subsampling, XPSNR beside libvmaf metrics covers their
+    frames. With VMAF on the GPU, XPSNR was a run of its own that scored
+    every frame: stored as the sampled metric, then off the shared frame
+    axis, out of the table's frames and the CSV."""
+    import numpy as np
+
+    from vmaf_app.core import vmaf_cuda
+
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    seen = {}
+
+    def ffmpeg(s, d, options, *a, **k):
+        keys = options.requested_metrics()
+        result = _fake_result(d.path.name)
+        if keys == ("xpsnr",):  # the CPU half: every frame, as an XPSNR-only run scores
+            frames = np.arange(10, dtype=np.int32)
+            values = {"xpsnr": np.full(10, 40.0)}
+        else:  # the GPU half: every 3rd frame, as libvmaf's n_subsample
+            frames = np.arange(0, 10, 3, dtype=np.int32)
+            values = {key: np.full(len(frames), 90.0) for key in keys}
+        provenance = MetricProvenance("ffmpeg", "", "cpu", "ffmpeg-libvmaf-v1")
+        result.metric_results = MetricResultSet(
+            FrameMetricResult(key, frames, frames / 30.0, value, provenance) for key, value in values.items())
+        seen.setdefault("keys", []).append(keys)
+        return result
+
+    monkeypatch.setattr(worker_module, "run_vmaf", ffmpeg)
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(n_subsample=3, compute_xpsnr=True),
+                  label="d", metric_keys=("vmaf", "xpsnr"))
+    worker = VmafWorker([job])
+    finished = []
+    worker.job_finished.connect(lambda _index, result: finished.append(result))
+    worker.run()
+    _drain(qapp)
+    assert sorted(seen["keys"]) == [("vmaf",), ("xpsnr",)]
+    [result] = finished
+    assert result.frame_metric("xpsnr").frame.tolist() == [0, 3, 6, 9]
+    assert result.frames.has("xpsnr") and result.frames.has("vmaf")

@@ -16,7 +16,7 @@ from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import ExecutionPlan, MetricTask, build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-from vmaf_app.core.metric_results import MetricResultSet
+from vmaf_app.core.metric_results import MetricResultSet, as_requested, frame_scores_from_results
 from vmaf_app.core.metrics import metric_definition
 from vmaf_app.core.models import ComparisonResult, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
@@ -735,19 +735,25 @@ class _JobRun:
             for key in options.requested_metrics():
                 task_options.set_metric_enabled(key, key in task.metric_keys)
             if options.resample_test is not None:
-                return run_resample_test(
+                result = run_resample_test(
                     job.source_info, task_options,
                     on_progress=progress,
                     on_status=lambda msg: self.report_status(task.backend_id, msg),
                     cancel_event=self.token, process_handle=self.handle,
                 )
-            return run_vmaf(
-                job.source_info, job.distorted_info, task_options,
-                on_progress=progress,
-                on_status=lambda msg: self.report_status(task.backend_id, msg),
-                cancel_event=self.token, process_handle=self.handle,
-                result_distorted_path=job.result_distorted_path,
-            )
+            else:
+                result = run_vmaf(
+                    job.source_info, job.distorted_info, task_options,
+                    on_progress=progress,
+                    on_status=lambda msg: self.report_status(task.backend_id, msg),
+                    cancel_event=self.token, process_handle=self.handle,
+                    result_distorted_path=job.result_distorted_path,
+                )
+            conformed = as_requested(result.metric_results, task.requested_specs)
+            if conformed is not result.metric_results:
+                result.metric_results = conformed
+                result.frames = frame_scores_from_results(conformed)
+            return result
         if task.backend_id in ("perceptual", PERCEPTUAL_CPU):
             return apply_vship_cpu_fallback(
                 job.source_info, job.distorted_info, self.request, task.requested_specs,
