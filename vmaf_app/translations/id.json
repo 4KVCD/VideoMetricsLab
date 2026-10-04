@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Bilah hitam tidak dapat diperiksa karena video tidak terbaca.",
   "Off": "Nonaktif",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Deteksi bilah hitam dinonaktifkan untuk baris ini; bingkai dibandingkan utuh.",
-  "Manual": "Manual",
-  "A manual crop is configured; the detected sides appear after the run.": "Pemotongan manual diatur; sisi yang terdeteksi tampil setelah proses.",
   "Pending": "Tertunda",
   "Black bars will be detected when this row is run.": "Bilah hitam dideteksi saat baris ini diproses.",
   "Test video": "Video uji",
@@ -539,7 +537,6 @@
   "Cancelled by user": "Dibatalkan oleh pengguna",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Penilaian GPU gagal ({error}). Tidak dicoba ulang di CPU, yang akan memakan waktu berjam-jam hingga berhari-hari untuk video lebih dari 10 menit. Pilih CPU untuk {metrics} agar tetap dihitung di CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Penilaian GPU gagal ({error}); percobaan ulang di CPU juga gagal: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Dihitung pada {cpu_frames} bingkai di CPU tetapi {gpu_frames} di GPU, jadi tidak dipakai",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} memerlukan GPU yang dapat dipakai Vship, dan tidak dapat memakai satu pun: {reason}",
   "{metric} could not be calculated: {reason}": "{metric} tidak dapat dihitung: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Akselerasi GPU Vship hanya disertakan untuk Windows.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship tidak mendukung warna primer {primaries}.",
   "Vship does not support the {range} range tag.": "Vship tidak mendukung tag rentang {range}.",
   "Vship does not support {siting} chroma siting.": "Vship tidak mendukung posisi kroma {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Video dengan frame rate variabel belum didukung dengan aman.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video dengan frame rate variabel belum didukung dengan aman. Konversikan kedua video ke frame rate konstan yang sama sebelum membandingkan.",
   "Frame rates do not match ({source} vs {test} fps).": "Frame rate tidak cocok ({source} vs {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Durasi tidak cocok ({source} vs {test} dtk). Atur batas durasi di dalam kedua file jika Anda hanya membandingkan bagian awal yang sama.",
@@ -687,7 +683,11 @@
   "Cannot compare": "Tidak dapat dibandingkan",
   "Cannot be compared with the reference:": "Tidak dapat dibandingkan dengan referensi:",
   "Calculate the rest?": "Hitung sisanya?",
-  "It could not be read. Remove it or add the file again to retry.": "Tidak dapat dibaca. Hapus, atau tambahkan file lagi untuk mencoba ulang."
+  "It could not be read. Remove it or add the file again to retry.": "Tidak dapat dibaca. Hapus, atau tambahkan file lagi untuk mencoba ulang.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate seluruh file, termasuk audio: file tidak mencatat bitrate videonya sendiri.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} sudah ada di daftar. Tampilkan skor dari proses tersimpan sebagai gantinya?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg tidak memberikan stempel waktu sebuah bingkai {side}.",
+  "The source has no frame at the test video's first.": "Sumber tidak memiliki bingkai pada waktu bingkai pertama video uji."
  },
  "plurals": {
   "about {count} day": [

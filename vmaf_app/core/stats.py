@@ -2,18 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from itertools import pairwise
 
 import numpy as np
 
 from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation, MetricDirection
-from vmaf_app.core.models import ComparisonResult
 
 # Default threshold breakdown requested: >95, >90, >85, <85, <80, <70
 DEFAULT_THRESHOLDS = METRIC_BY_KEY["vmaf"].thresholds
-
-HISTOGRAM_BIN_EDGES: list[float] = [0, 70, 80, 85, 90, 95, 100]
-
 
 @dataclass
 class ThresholdStat:
@@ -25,14 +20,6 @@ class ThresholdStat:
     @property
     def label(self) -> str:
         return f"{self.comparison} {self.threshold:g}"
-
-
-@dataclass
-class HistogramBin:
-    low: float
-    high: float
-    count: int
-    percentage: float
 
 
 @dataclass
@@ -57,7 +44,6 @@ class VmafStats:
     #: counts, where "better than X" is exactly what they are.
     identical: int = 0
     thresholds: list[ThresholdStat] = field(default_factory=list)
-    histogram: list[HistogramBin] = field(default_factory=list)
     #: True for a lower-is-better metric: the percentile_* tail fields are
     #: taken from the top, and are labelled "High" rather than "Low".
     worst_is_high: bool = False
@@ -194,7 +180,7 @@ def compute_stats(
         return VmafStats(
             count=0, mean=0, median=0, stdev=0, minimum=0, maximum=0,
             percentile_10=0, percentile_5=0, percentile_1=0, percentile_0_1=0,
-            thresholds=[], histogram=[], worst_is_high=worst_is_high,
+            thresholds=[], worst_is_high=worst_is_high,
         )
 
     # A frame identical to the reference scores +inf, which XPSNR reports
@@ -237,13 +223,6 @@ def compute_stats(
         count = int(np.count_nonzero(data > thresh if cmp_op == ">" else data < thresh))
         threshold_stats.append(ThresholdStat(cmp_op, thresh, count, 100.0 * count / n))
 
-    histogram = []
-    edges = HISTOGRAM_BIN_EDGES
-    for lo, hi in pairwise(edges):
-        in_bin = (data >= lo) & (data <= hi if hi == edges[-1] else data < hi)
-        count = int(np.count_nonzero(in_bin))
-        histogram.append(HistogramBin(lo, hi, count, 100.0 * count / n))
-
     mean = aggregate_scores(data, aggregate)
     # Standard deviation over the finite frames only: it is undefined for a
     # set containing infinity (numpy returns nan), and a spread of "nan"
@@ -265,10 +244,5 @@ def compute_stats(
         percentile_1=p1,
         percentile_0_1=p01,
         thresholds=threshold_stats,
-        histogram=histogram,
         worst_is_high=worst_is_high,
     )
-
-
-def stats_for_run(result: ComparisonResult, thresholds: list[tuple[str, float]] | None = None) -> VmafStats:
-    return compute_stats(result.frames.vmaf if result.frames.vmaf is not None else [], thresholds)

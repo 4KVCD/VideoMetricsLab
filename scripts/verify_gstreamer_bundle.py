@@ -124,7 +124,8 @@ def _probe(Gst, path: str, kind: str) -> dict:  # noqa: N803 - gi namespace
             "d3d11convert ! video/x-raw(memory:D3D11Memory)"
         )
     else:
-        # gstreamer_playback._build_audio_branch, with the sink replaced.
+        # The soundtrack's chain (locked_presentation.SingleSoundtrack's
+        # playbin3 makes the same one), with the sink replaced.
         chain = "queue ! audioconvert ! audioresample ! volume"
     # Built by hand in the app's order: the location goes on before the link,
     # because linking into decodebin3 activates the source, and a filesrc

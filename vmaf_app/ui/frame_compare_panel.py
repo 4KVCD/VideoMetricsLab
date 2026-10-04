@@ -42,7 +42,7 @@ from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
 from vmaf_app.i18n import N_, tr, tr_message
 from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
-from vmaf_app.ui.rolling_video_view import RollingVideoCompareView as VideoCompareView
+from vmaf_app.ui.video_compare_view import VideoCompareView
 
 
 @dataclass(frozen=True)

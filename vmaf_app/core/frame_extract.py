@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Literal
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
+from vmaf_app.core.geometry import content_size, display_aspect_ratio
+from vmaf_app.core.gpu import analysis_pix_fmt
 from vmaf_app.core.models import (
     ComparisonResult,
     CropBox,
@@ -17,7 +19,6 @@ from vmaf_app.core.models import (
     VideoInfo,
 )
 from vmaf_app.core.process_control import ProcessHandle
-from vmaf_app.core.vmaf_runner import analysis_pix_fmt, display_aspect_ratio
 
 FrameSide = Literal["source", "distorted"]
 
@@ -111,16 +112,12 @@ class FrameComparison:
         )
 
 
-def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-    return (crop.w, crop.h) if crop is not None else (info.width, info.height)
-
-
 def comparison_dimensions(comparison: FrameComparison) -> tuple[int, int]:
     """Dimensions of the pictures the metric filter would see."""
-    source_size = _content_size(comparison.source_info, comparison.source_crop)
+    source_size = content_size(comparison.source_info, comparison.source_crop)
     if comparison.resample_target is not None:
         return source_size
-    distorted_size = _content_size(comparison.distorted_info, comparison.distorted_crop)
+    distorted_size = content_size(comparison.distorted_info, comparison.distorted_crop)
     if source_size == distorted_size:
         return source_size
     if comparison.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
@@ -243,19 +240,13 @@ def frame_filter(
     if comparison.resample_target is None:
         pixel_formats.append(comparison.distorted_info.pix_fmt)
     analysis_format = analysis_pix_fmt(*pixel_formats)
-    # Match the scorer's ordering: normal distorted frames crop before the
-    # common format conversion; source and resolution-test branches convert
-    # first. This matters slightly when the inputs have different bit depths.
-    if side == "distorted" and comparison.resample_target is None:
-        if crop_filter:
-            ops.append(crop_filter)
-        ops.append(f"format={analysis_format}")
-    else:
-        ops.append(f"format={analysis_format}")
-        if crop_filter:
-            ops.append(crop_filter)
+    # The scorer's order: every branch is cropped before the common format
+    # conversion.
+    if crop_filter:
+        ops.append(crop_filter)
+    ops.append(f"format={analysis_format}")
 
-    content_w, content_h = _content_size(info, crop)
+    content_w, content_h = content_size(info, crop)
     if comparison.resample_target is not None and side == "distorted":
         target_w = comparison.resample_target.width
         target_h = max(2, round(target_w * content_h / content_w / 2) * 2)
@@ -316,7 +307,7 @@ def build_frame_command(
         "-loglevel", "error",
         "-ss", f"{timestamp:.9f}",
         "-i", str(frame_input_path(comparison, side).resolve()),
-        "-map", "0:v:0",
+        "-map", f"0:{VIDEO_STREAM}",
         "-an", "-sn", "-dn",
         "-vf", frame_filter(comparison, side, color_settings),
         "-frames:v", "1",

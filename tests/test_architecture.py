@@ -9,12 +9,6 @@ import pytest
 
 CORE = Path(__file__).resolve().parent.parent / "vmaf_app" / "core"
 
-# This uses Qt purely as a platform abstraction for the remembered ffmpeg
-# location. That is not a UI dependency. Anything else in core importing Qt
-# is a layering break.
-_QT_FOR_PLATFORM_PATHS = {"ffmpeg_locate.py"}
-
-
 def _imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names: set[str] = set()
@@ -26,14 +20,11 @@ def _imported_modules(path: Path) -> set[str]:
     return names
 
 
-def test_core_does_not_import_qt_widgets():
+def test_core_does_not_import_qt():
     offenders = {}
     for path in CORE.glob("*.py"):
         qt = {m for m in _imported_modules(path) if m.startswith("PySide6")}
-        widgets = {m for m in qt if "QtWidgets" in m or "QtGui" in m}
-        if widgets:
-            offenders[path.name] = sorted(widgets)
-        elif qt and path.name not in _QT_FOR_PLATFORM_PATHS:
+        if qt:
             offenders[path.name] = sorted(qt)
     assert not offenders, (
         f"core must stay headless-runnable; Qt imported by: {offenders}"

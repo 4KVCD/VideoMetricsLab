@@ -1,7 +1,7 @@
 """Finds the ffmpeg/ffprobe executables, since a freshly-installed winget
 package is not on PATH for processes that were already running when it
-was installed. Falls back to common install locations and lets the user
-override via QSettings.
+was installed. The folder chosen in Settings (Settings.ffmpeg_dir) comes
+first, then PATH, then common install locations.
 """
 from __future__ import annotations
 
@@ -14,13 +14,17 @@ from pathlib import Path
 
 from vmaf_app.core import proc as proc_util
 
-_SETTINGS_ORG = "VmafApp"
-_SETTINGS_APP = "VmafCalculator"
-
 # libvmaf's XPSNR filter and the current libvmaf option syntax this app
 # builds its filtergraphs around need a recent ffmpeg; 9 is what the app is
 # developed and tested against.
 MINIMUM_FFMPEG_VERSION = (9,)
+
+#: The stream every command reads from an input: the first video stream
+#: that is not a picture. FFmpeg lists cover art and thumbnails as video
+#: streams too, and an MP4's cover (covr) can come before its video track:
+#: "v:0" then compared, scanned or played the picture. "V" leaves them out.
+#: ffprobe.probe_video describes the same stream.
+VIDEO_STREAM = "V:0"
 
 _WINGET_PACKAGE_GLOBS = [
     r"AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg-*-full_build\bin",
@@ -38,32 +42,23 @@ def _candidate_dirs() -> list[Path]:
     return candidates
 
 
-def _get_setting(key: str) -> str | None:
+def _configured_dir() -> str | None:
+    """The folder chosen in Settings, read from settings.json -- where every
+    process finds it, the isolated ones included. It used to be kept in the
+    registry as well, written from two places that could disagree: "Locate
+    ffmpeg.exe" wrote only the registry, so the Settings tab showed no
+    folder while one was in use."""
     try:
-        from PySide6.QtCore import QSettings
-        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
-        val = settings.value(key)
-        return str(val) if val else None
+        from vmaf_app.core.settings import Settings
+
+        return Settings.load().ffmpeg_dir.strip() or None
     except Exception:
         return None
 
 
-def set_ffmpeg_dir_override(dir_path: str | Path | None) -> None:
-    """Pins lookups to `dir_path`, or clears the override when it's empty so
-    lookup falls back to PATH and the known install locations.
-
-    This persists to QSettings, so it is a real side effect -- callers should
-    only invoke it when the user actually changed the setting.
-    """
-    from PySide6.QtCore import QSettings
-    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
-    value = str(dir_path).strip() if dir_path else ""
-    if value:
-        settings.setValue("ffmpeg_dir", value)
-    else:
-        # Storing None/"" leaves a key that later reads back as the useless
-        # string "None" on some platforms; removing it is unambiguous.
-        settings.remove("ffmpeg_dir")
+def ffmpeg_dir_changed() -> None:
+    """After the folder in Settings changed (and was saved): finds the tools
+    again, and checks them again."""
     find_binary.cache_clear()
     check_tools.cache_clear()
 
@@ -77,7 +72,7 @@ def find_binary(name: str) -> str:
     """Returns a path (or bare name) to invoke for `name` (ffmpeg/ffprobe)."""
     exe = f"{name}.exe" if os.name == "nt" else name
 
-    override = _get_setting("ffmpeg_dir")
+    override = _configured_dir()
     if override:
         candidate = Path(override) / exe
         if candidate.exists():
@@ -179,5 +174,5 @@ class ToolsStatus:
 @lru_cache(maxsize=1)
 def check_tools() -> ToolsStatus:
     """Cached: each call shells out twice, and this is consulted on every
-    window construction. set_ffmpeg_dir_override() clears it."""
+    window construction. ffmpeg_dir_changed() clears it."""
     return ToolsStatus(ffmpeg=check_tool("ffmpeg"), ffprobe=check_tool("ffprobe"))

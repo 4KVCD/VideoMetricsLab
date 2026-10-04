@@ -20,11 +20,115 @@ class ProbeCancelled(RuntimeError):  # noqa: N818 - expected control flow
 
 
 def _parse_frame_rate(rate_str: str) -> float:
-    if "/" in rate_str:
-        num, den = rate_str.split("/", 1)
-        num, den = float(num), float(den)
-        return num / den if den else 0.0
-    return float(rate_str)
+    """A rate as ffprobe prints it ("24000/1001", "25"); 0 for one it
+    could not tell ("N/A", "0/0"), as for a missing one."""
+    try:
+        if "/" in rate_str:
+            num, den = rate_str.split("/", 1)
+            num, den = float(num), float(den)
+            return num / den if den else 0.0
+        return float(rate_str)
+    except ValueError:
+        return 0.0
+
+
+def _video_stream(streams: list[dict]) -> dict | None:
+    """The first video stream that is a video: not cover art or a
+    thumbnail, which FFmpeg lists as video streams too -- an MP4's cover
+    (covr) can come before its video track. The same stream FFmpeg's
+    commands read (ffmpeg_locate.VIDEO_STREAM)."""
+    for stream in streams:
+        disposition = stream.get("disposition") or {}
+        if (stream.get("codec_type") == "video" and not disposition.get("attached_pic")
+                and not disposition.get("timed_thumbnails")):
+            return stream
+    return None
+
+
+def _tag(stream: dict, name: str) -> str | None:
+    """A stream tag, by its name in any case (Matroska writers differ)."""
+    for key, value in (stream.get("tags") or {}).items():
+        if key.upper() == name:
+            return value
+    return None
+
+
+def _clock_seconds(text: str | None) -> float | None:
+    """ "01:45:36.289000000" in seconds, or None."""
+    try:
+        hours, minutes, seconds = (text or "").split(":")
+        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except ValueError:
+        return None
+
+
+def _whole(value) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _stream_bit_rate(stream: dict, duration: float, file_size: int) -> int:
+    """One stream's own bitrate, from what the container records: its
+    bit_rate, or Matroska's statistics tags (BPS, or NUMBER_OF_BYTES over
+    its length). 0 when there is none.
+
+    The statistics are used only if they fit in the file: FFmpeg copies
+    them from its input into what it writes, even through a re-encode, so a
+    30 s cut of a film carried the film's 55 GB and 69.8 Mb/s."""
+    rate = _whole(stream.get("bit_rate"))
+    if rate > 0:
+        return rate
+    size = _whole(_tag(stream, "NUMBER_OF_BYTES"))
+    tagged = _whole(_tag(stream, "BPS")) or (round(size * 8 / duration) if size > 0 and duration > 0 else 0)
+    if tagged <= 0 or file_size <= 0 or size > file_size or tagged * duration / 8 > file_size * 1.02:
+        return 0
+    return tagged
+
+
+def _video_bit_rate(video: dict, streams: list[dict], fmt: dict, duration: float) -> tuple[int, bool]:
+    """(the video stream's bitrate, whether it is the whole file's instead).
+
+    A Matroska file records no bitrate per stream unless its writer added
+    statistics tags, and the file's own rate counts the soundtrack: a film
+    with a TrueHD track read 4-5 Mb/s high. Without the video's own, the
+    audio tracks' rates are taken from the file's when every one is known;
+    otherwise the file's rate is all there is, and says so."""
+    file_size = _whole(fmt.get("size"))
+    own = _stream_bit_rate(video, duration, file_size)
+    if own:
+        return own, False
+    total = _whole(fmt.get("bit_rate"))
+    if total <= 0:
+        return 0, False
+    try:
+        container = float(fmt.get("duration") or duration)
+    except ValueError:
+        container = duration
+    audio = [stream for stream in streams if stream.get("codec_type") == "audio"]
+    rates = [_stream_bit_rate(stream, _stream_duration(stream, container), file_size) for stream in audio]
+    if all(rates) and total > sum(rates):
+        return total - sum(rates), False
+    return total, True
+
+
+def _stream_duration(stream: dict, container: float) -> float:
+    """The video's own length. A Matroska file gives no stream duration,
+    and the container's is its longest stream's -- an audio track running
+    on after the picture, which then failed "Durations do not match", or
+    made a whole video read as cut short. Its writers record each track's
+    length as a DURATION tag; one longer than the container is stale (left
+    by a remux that cut the file) and is not used."""
+    if stream.get("duration"):
+        try:
+            return float(stream["duration"])
+        except ValueError:
+            pass
+    tagged = _clock_seconds(_tag(stream, "DURATION"))
+    if tagged is not None and tagged > 0 and (container <= 0 or tagged <= container + 0.5):
+        return tagged
+    return container
 
 
 def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> VideoInfo:
@@ -84,10 +188,9 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         raise ProbeError(f"Could not parse ffprobe output for {path}") from e
 
     streams = data.get("streams", [])
-    video_streams = [s for s in streams if s.get("codec_type") == "video"]
-    if not video_streams:
+    v = _video_stream(streams)
+    if v is None:
         raise ProbeError(f"No video stream found in {path}")
-    v = video_streams[0]
     fmt = data.get("format", {})
 
     fps = _parse_frame_rate(v.get("avg_frame_rate") or v.get("r_frame_rate") or "0/1")
@@ -95,7 +198,11 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
     nominal_fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
 
-    duration = float(v.get("duration") or fmt.get("duration") or 0.0)
+    try:
+        container = float(fmt.get("duration") or 0.0)
+    except ValueError:
+        container = 0.0
+    duration = _stream_duration(v, container)
 
     nb_frames = 0
     if v.get("nb_frames"):
@@ -104,14 +211,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         except ValueError:
             nb_frames = 0
 
-    bit_rate = 0
-    for candidate in (v.get("bit_rate"), fmt.get("bit_rate")):
-        if candidate:
-            try:
-                bit_rate = int(candidate)
-                break
-            except ValueError:
-                continue
+    bit_rate, bit_rate_whole_file = _video_bit_rate(v, streams, fmt, duration)
 
     return VideoInfo(
         path=path,
@@ -124,6 +224,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         sar=v.get("sample_aspect_ratio", "1:1") or "1:1",
         pix_fmt=v.get("pix_fmt", ""),
         bit_rate=bit_rate,
+        bit_rate_whole_file=bit_rate_whole_file,
         nominal_fps=nominal_fps,
         color_range=v.get("color_range", "") or "",
         color_space=v.get("color_space", "") or "",

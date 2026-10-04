@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Le bande nere non sono state controllate perché il video non è leggibile.",
   "Off": "Disattivato",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Il rilevamento delle bande nere è disattivato per questa riga; verranno confrontati i fotogrammi interi.",
-  "Manual": "Manuale",
-  "A manual crop is configured; the detected sides appear after the run.": "È impostato un ritaglio manuale; i lati rilevati compaiono dopo l'esecuzione.",
   "Pending": "In attesa",
   "Black bars will be detected when this row is run.": "Le bande nere verranno rilevate quando questa riga sarà eseguita.",
   "Test video": "Video di prova",
@@ -539,7 +537,6 @@
   "Cancelled by user": "Annullato dall'utente",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Valutazione su GPU non riuscita ({error}). Non è stata ripetuta sulla CPU, che per un video di oltre 10 minuti richiederebbe da ore a giorni. Scegli CPU per {metrics} per calcolarla comunque sulla CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Valutazione su GPU non riuscita ({error}); anche il nuovo tentativo su CPU non è riuscito: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "calcolata su {cpu_frames} fotogrammi sulla CPU ma {gpu_frames} sulla GPU, quindi non conservata",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} richiede una GPU che Vship possa usare, e non ha potuto usarne nessuna: {reason}",
   "{metric} could not be calculated: {reason}": "Impossibile calcolare {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "L'accelerazione GPU di Vship è inclusa solo per Windows.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship non supporta i primari di colore {primaries}.",
   "Vship does not support the {range} range tag.": "Vship non supporta il tag di intervallo {range}.",
   "Vship does not support {siting} chroma siting.": "Vship non supporta la posizione della crominanza {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "I video a frequenza di fotogrammi variabile non sono ancora supportati in modo sicuro.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "I video a frequenza di fotogrammi variabile non sono ancora supportati in modo sicuro. Converti entrambi i video alla stessa frequenza costante prima di confrontarli.",
   "Frame rates do not match ({source} vs {test} fps).": "Le frequenze dei fotogrammi non corrispondono ({source} contro {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Le durate non corrispondono ({source} contro {test} secondi). Imposta un limite di durata compreso in entrambi i file se confronti solo il loro inizio comune.",
@@ -687,7 +683,11 @@
   "Cannot compare": "Impossibile confrontare",
   "Cannot be compared with the reference:": "Impossibile confrontare con il riferimento:",
   "Calculate the rest?": "Calcolare gli altri?",
-  "It could not be read. Remove it or add the file again to retry.": "Impossibile leggerlo. Rimuovilo o aggiungi di nuovo il file per riprovare."
+  "It could not be read. Remove it or add the file again to retry.": "Impossibile leggerlo. Rimuovilo o aggiungi di nuovo il file per riprovare.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Il bitrate dell'intero file, audio compreso: il file non registra quello del video.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} è già nell'elenco. Mostrare al suo posto i punteggi dell'esecuzione salvata?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg non ha fornito la marca temporale di un fotogramma di {side}.",
+  "The source has no frame at the test video's first.": "L'originale non ha alcun fotogramma all'istante del primo fotogramma del video di prova."
  },
  "plurals": {
   "about {count} day": [

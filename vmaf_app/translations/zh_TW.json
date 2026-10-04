@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "無法檢查黑邊，因為無法讀取影片。",
   "Off": "關閉",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "此列已停用黑邊偵測；將比較完整畫面。",
-  "Manual": "手動",
-  "A manual crop is configured; the detected sides appear after the run.": "已設定手動裁切；偵測到的邊會在執行後顯示。",
   "Pending": "待定",
   "Black bars will be detected when this row is run.": "執行此列時會偵測黑邊。",
   "Test video": "測試影片",
@@ -539,7 +537,6 @@
   "Cancelled by user": "已由使用者取消",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU 評分失敗（{error}）。未在 CPU 上重試，因為對超過 10 分鐘的影片這需要數小時到數天。若仍要在 CPU 上計算，請為 {metrics} 選擇 CPU。",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "GPU 評分失敗（{error}）；CPU 重試也失敗：{reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "在 CPU 上計算了 {cpu_frames} 格，GPU 上則是 {gpu_frames} 格，因此未採用",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} 需要 Vship 能使用的 GPU，但無法使用任何一個：{reason}",
   "{metric} could not be calculated: {reason}": "無法計算 {metric}：{reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Vship GPU 加速只隨附於 Windows 版。",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship 不支援 {primaries} 原色。",
   "Vship does not support the {range} range tag.": "Vship 不支援 {range} 範圍標記。",
   "Vship does not support {siting} chroma siting.": "Vship 不支援 {siting} 色度位置。",
-  "Variable-frame-rate video is not supported safely yet.": "尚無法安全地支援可變影格速率的影片。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚無法安全地支援可變影格速率的影片。比較前請將兩部影片轉換成相同的固定影格速率。",
   "Frame rates do not match ({source} vs {test} fps).": "影格速率不一致（{source} 與 {test} fps）。",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "長度不一致（{source} 與 {test} 秒）。如果只比較兩者共同的開頭部分，請在兩個檔案的範圍內設定長度限制。",
@@ -687,7 +683,11 @@
   "Cannot compare": "無法比較",
   "Cannot be compared with the reference:": "無法與參考影片比較：",
   "Calculate the rest?": "計算其餘的影片？",
-  "It could not be read. Remove it or add the file again to retry.": "無法讀取。請將其移除，或重新新增該檔案後再試一次。"
+  "It could not be read. Remove it or add the file again to retry.": "無法讀取。請將其移除，或重新新增該檔案後再試一次。",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整個檔案的位元率，包含音軌：檔案中沒有記錄影片本身的位元率。",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} 已在清單中。改為顯示已儲存執行的分數嗎？",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg 沒有提供 {side} 一個影格的時間戳記。",
+  "The source has no frame at the test video's first.": "來源影片在測試影片第一個影格的時間點沒有影格。"
  },
  "plurals": {
   "about {count} day": [

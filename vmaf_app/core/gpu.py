@@ -12,6 +12,7 @@ unsupported.
 """
 from __future__ import annotations
 
+import ctypes
 import platform
 import re
 import threading
@@ -44,15 +45,23 @@ _VENDOR_PREFERRED_HWACCEL = {
 }
 
 
-@lru_cache(maxsize=1)
 def available_hwaccels() -> set[str]:
+    """The -hwaccel methods the FFmpeg in use was built with. Asked once
+    per FFmpeg: the answer was kept for the session whatever FFmpeg it came
+    from, so pointing the app at another one (Settings, or "Locate
+    ffmpeg.exe") kept the first one's list."""
+    return set(_hwaccels_of(ffmpeg_path()))
+
+
+@lru_cache(maxsize=4)
+def _hwaccels_of(executable: str) -> frozenset[str]:
     try:
         proc = proc_util.run(
-            [ffmpeg_path(), "-hide_banner", "-hwaccels"],
+            [executable, "-hide_banner", "-hwaccels"],
             capture_output=True, text=True, timeout=15,
         )
     except Exception:
-        return set()
+        return frozenset()
     lines = [l.strip() for l in proc.stdout.splitlines()]
     names = set()
     started = False
@@ -62,32 +71,84 @@ def available_hwaccels() -> set[str]:
             continue
         if started and line:
             names.add(line)
-    return names
+    return frozenset(names)
+
+
+#: The GPU makers' PCI vendor IDs, as DXGI and Vulkan report them.
+PCI_VENDORS = {0x10DE: GpuVendor.NVIDIA, 0x1002: GpuVendor.AMD, 0x1022: GpuVendor.AMD, 0x8086: GpuVendor.INTEL}
 
 
 @lru_cache(maxsize=1)
 def detected_gpu_vendors() -> list[GpuVendor]:
-    """Best-effort detection of installed GPU vendors (Windows only)."""
+    """The makers of the GPUs DirectX lists (Windows only), NVIDIA first,
+    then Intel, then AMD -- the order "auto" tries their decoders in.
+
+    Asked of DXGI in-process, in milliseconds. It was a PowerShell query
+    (Get-CimInstance Win32_VideoController): 0.3 to 0.4 s warm, seconds
+    cold, on the UI thread while the window was being built."""
     if platform.system() != "Windows":
         return []
     try:
-        proc = proc_util.run(
-            [
-                "powershell", "-NoProfile", "-Command",
-                "(Get-CimInstance Win32_VideoController).Name",
-            ],
-            capture_output=True, text=True, timeout=20,
-        )
-    except Exception:
+        found = {PCI_VENDORS.get(vendor_id) for vendor_id in _dxgi_vendor_ids()}
+    except OSError:
         return []
-    names = proc.stdout.lower()
+    return [vendor for vendor in (GpuVendor.NVIDIA, GpuVendor.INTEL, GpuVendor.AMD) if vendor in found]
+
+
+class _Guid(ctypes.Structure):
+    _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16), ("Data3", ctypes.c_uint16),
+                ("Data4", ctypes.c_ubyte * 8)]
+
+
+class _AdapterDesc1(ctypes.Structure):  # DXGI_ADAPTER_DESC1
+    _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", ctypes.c_uint32),
+                ("DeviceId", ctypes.c_uint32), ("SubSysId", ctypes.c_uint32), ("Revision", ctypes.c_uint32),
+                ("DedicatedVideoMemory", ctypes.c_size_t), ("DedicatedSystemMemory", ctypes.c_size_t),
+                ("SharedSystemMemory", ctypes.c_size_t), ("AdapterLuidLow", ctypes.c_uint32),
+                ("AdapterLuidHigh", ctypes.c_int32), ("Flags", ctypes.c_uint32)]
+
+
+_IID_IDXGIFACTORY1 = _Guid(0x770AAE78, 0xF26F, 0x4DBA, (ctypes.c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1,
+                                                                            0xB3, 0x87))
+_DXGI_ERROR_NOT_FOUND = -0x7785FFFE  # 0x887A0002 as a signed HRESULT
+_DXGI_ADAPTER_FLAG_SOFTWARE = 2
+# Vtable slots: IUnknown's three, IDXGIObject's four, then the interface's.
+_RELEASE, _ENUM_ADAPTERS1, _GET_DESC1 = 2, 12, 10
+
+
+def _com_call(interface: ctypes.c_void_p, slot: int, *args, argtypes=()) -> int:
+    vtable = ctypes.cast(interface, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+    method = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *argtypes)(vtable[slot])
+    return method(interface, *args)
+
+
+def _dxgi_vendor_ids() -> list[int]:
+    """The PCI vendor ID of each hardware adapter DXGI lists. OSError when
+    DXGI cannot be asked."""
+    factory = ctypes.c_void_p()
+    result = ctypes.WinDLL("dxgi").CreateDXGIFactory1(ctypes.byref(_IID_IDXGIFACTORY1), ctypes.byref(factory))
+    if result < 0 or not factory:
+        raise OSError(f"CreateDXGIFactory1 failed: 0x{result & 0xFFFFFFFF:08x}")
     vendors = []
-    if "nvidia" in names:
-        vendors.append(GpuVendor.NVIDIA)
-    if "intel" in names:
-        vendors.append(GpuVendor.INTEL)
-    if "amd" in names or "radeon" in names:
-        vendors.append(GpuVendor.AMD)
+    try:
+        for index in range(64):
+            adapter = ctypes.c_void_p()
+            result = _com_call(factory, _ENUM_ADAPTERS1, index, ctypes.byref(adapter),
+                               argtypes=(ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p)))
+            if result == _DXGI_ERROR_NOT_FOUND:
+                break
+            if result < 0 or not adapter:
+                raise OSError(f"IDXGIFactory1::EnumAdapters1 failed: 0x{result & 0xFFFFFFFF:08x}")
+            try:
+                description = _AdapterDesc1()
+                if (_com_call(adapter, _GET_DESC1, ctypes.byref(description),
+                              argtypes=(ctypes.POINTER(_AdapterDesc1),)) >= 0
+                        and not description.Flags & _DXGI_ADAPTER_FLAG_SOFTWARE):
+                    vendors.append(description.VendorId)
+            finally:
+                _com_call(adapter, _RELEASE)
+    finally:
+        _com_call(factory, _RELEASE)
     return vendors
 
 
@@ -137,25 +198,85 @@ class HwAccelPlan:
         return f"source {self.source or 'cpu'}, distorted {self.distorted or 'cpu'}"
 
 
+def downloads_from_gpu(pix_fmt: str, width: int = 0, height: int = 0) -> bool:
+    """Whether FFmpeg's hardware decode as the app runs it (-hwaccel X
+    -hwaccel_output_format X, then hwdownload,format=hw_native_format) gives
+    a video of this pixel format and size as its software decode does.
+
+    The format: 4:2:0 at 8 or 10 bits, the NV12 and P010 surfaces. A 4:2:2,
+    4:4:4 or 12-bit video decodes to another surface, the download fails,
+    and the run started again in software -- every run (checked on an RTX
+    5090 with HEVC, H.264 and AV1). An unknown format is left to try.
+
+    The size: an even width and height. Of an odd-sized video (AV1 and VP9
+    can be) FFmpeg's NVIDIA decode gives the decoder's own picture, a sample
+    wider or a row taller -- 854x480 for 853x479 -- with whatever the decoder
+    left in the added column and row, and for an odd height its chroma a row
+    out (FFmpeg 9.0.1, RTX 5090: luma identical to the software decode,
+    chroma 26 dB PSNR from it). With default settings an 854x479 AV1 pair
+    scored SSIMULACRA2 20.4 where its pictures score 45.1, and 853x480, its
+    black bars measured on the padded picture, 16.1 for 44.0. Intel's decode
+    gave the video's own picture; AMD's is unchecked, and a size this rare
+    is not worth a rule per maker. An unknown size (0) is left to try."""
+    if width & 1 or height & 1:
+        return False
+    name = (pix_fmt or "").casefold()
+    if not name:
+        return True
+    return name in {"nv12", "p010le", "p010be"} or (
+        name.startswith(("yuv420p", "yuvj420p")) and bit_depth(name) <= 10)
+
+
 def plan_hwaccel(
-    vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None
+    vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None, *,
+    source_pix_fmt: str = "", distorted_pix_fmt: str = "",
+    source_size: tuple[int, int] = (0, 0), distorted_size: tuple[int, int] = (0, 0),
 ) -> HwAccelPlan:
-    """Chooses hardware decode for each input separately.
+    """Chooses FFmpeg's hardware decode for each input separately: by codec,
+    and only for a pixel format and a size (width, height) it gives as the
+    software decode does (downloads_from_gpu).
 
     `distorted_codec` of None is the round-trip-test case: there is only one
     input file, so there is nothing to decide for the distorted side.
     """
+    def pick(codec: str, pix_fmt: str, size: tuple[int, int]) -> str | None:
+        return pick_hwaccel(vendor, codec) if downloads_from_gpu(pix_fmt, *size) else None
+
     return HwAccelPlan(
-        source=pick_hwaccel(vendor, source_codec),
-        distorted=(
-            pick_hwaccel(vendor, distorted_codec) if distorted_codec is not None else None
-        ),
+        source=pick(source_codec, source_pix_fmt, source_size),
+        distorted=(pick(distorted_codec, distorted_pix_fmt, distorted_size)
+                   if distorted_codec is not None else None),
     )
 
 
 # ---------------------------------------------------------------- pixel formats
 # Here rather than in vmaf_runner because crop detection needs them too, and
 # vmaf_runner imports crop_detect.
+
+#: Analysis bit depth -> the planar 4:2:0 format both branches are converted
+#: to before they meet. libvmaf compares two streams that must agree on
+#: format, so one has to be picked for the pair.
+_ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
+
+
+def analysis_pix_fmt(*pix_fmts: str) -> str:
+    """The common format the inputs are converted to before comparison.
+
+    Takes the *deepest* of the inputs, so a 10-bit master compared against
+    an 8-bit encode promotes the encode rather than truncating the master.
+    Everything used to be forced to 8-bit yuv420p, which quietly discarded
+    two bits of both sides on any HDR/10-bit comparison and put a floor
+    under PSNR/XPSNR that had nothing to do with the encode being measured.
+    """
+    depth = max((bit_depth(f) for f in pix_fmts), default=8)
+    if depth <= 8:
+        return _ANALYSIS_FORMAT_BY_DEPTH[8]
+    if depth <= 10:
+        return _ANALYSIS_FORMAT_BY_DEPTH[10]
+    # libvmaf accepts up to 12-bit; deeper sources (16-bit intermediates)
+    # are analysed at 12 rather than being dropped back to 8.
+    return _ANALYSIS_FORMAT_BY_DEPTH[12]
+
 
 def hw_native_format(pix_fmt: str) -> str:
     """The system-memory pixel format a cuda/qsv/d3d11va hw surface downloads

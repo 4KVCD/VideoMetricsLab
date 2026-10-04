@@ -111,7 +111,7 @@ def _sized(name, w, h):
 def test_auto_follows_the_resolution_frames_are_compared_at(
     source_wh, distorted_wh, direction, expected_size, expected_model
 ):
-    from vmaf_app.core.vmaf_runner import analysis_dimensions
+    from vmaf_app.core.geometry import analysis_dimensions
 
     options = VmafOptions(model_choice=AUTO_MODEL_CHOICE, scale_direction=direction)
     source = _sized("source.mkv", *source_wh)
@@ -124,8 +124,8 @@ def test_auto_follows_the_resolution_frames_are_compared_at(
 
 
 def test_cropping_is_part_of_the_analysis_size():
+    from vmaf_app.core.geometry import analysis_dimensions
     from vmaf_app.core.models import CropBox
-    from vmaf_app.core.vmaf_runner import analysis_dimensions
 
     options = VmafOptions(
         model_choice=AUTO_MODEL_CHOICE,
@@ -144,8 +144,8 @@ def test_cropping_is_part_of_the_analysis_size():
 
 
 def test_a_round_trip_test_is_analysed_at_the_sources_own_size():
+    from vmaf_app.core.geometry import resample_analysis_dimensions
     from vmaf_app.core.models import CropBox
-    from vmaf_app.core.vmaf_runner import resample_analysis_dimensions
 
     source = _sized("master.mkv", 3840, 2160)
     options = VmafOptions(model_choice=AUTO_MODEL_CHOICE)

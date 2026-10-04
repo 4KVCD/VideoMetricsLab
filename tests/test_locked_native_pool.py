@@ -55,10 +55,10 @@ def test_seek_reuses_cached_pairs_and_existing_decoders():
 def test_native_frame_step_does_not_restart_playback():
     from unittest.mock import Mock
 
-    from vmaf_app.ui.rolling_video_view import RollingVideoCompareView
+    from vmaf_app.ui.video_compare_view import VideoCompareView
     native = Mock(frame=42)
     view = SimpleNamespace(_native_pool=native, _restart_decoder=Mock())
-    RollingVideoCompareView.set_position(view, 1750)
+    VideoCompareView.set_position(view, 1750)
     native.seek.assert_called_once_with(1750)
     view._restart_decoder.assert_not_called()
     assert view._frame == 42
@@ -91,11 +91,11 @@ def test_switch_uses_same_frame_from_new_encode():
     assert output == ["d10", "new10", "s10"]
 
 
-def test_decoding_branches_never_select_audio_in_sample_mode():
+def test_decoding_branches_never_select_audio():
+    """The soundtrack plays on its own (SingleSoundtrack)."""
     from vmaf_app.core.gstreamer_playback import GstComparePipeline
 
     player = object.__new__(GstComparePipeline)
-    player._sample_output = True
     player._stream_caps_name = lambda stream: "audio/x-raw"
     assert player._select_stream(None, None, None, "source") == 0
     assert player._select_stream(None, None, None, "distorted") == 0

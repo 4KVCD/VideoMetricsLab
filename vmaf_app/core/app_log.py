@@ -31,7 +31,7 @@ CRASH_FILE_NAME = "native-crashes.log"
 _MAX_BYTES = 5 * 1024 * 1024
 _BACKUPS = 4
 #: The line that opens each session (vmaf_app.main.start_session_log), and
-#: the one that opens each run (vmaf_app.ui.worker).
+#: the one that opens each run (vmaf_app.core.job_runner).
 SESSION_START = " starting ===="
 RUN_START = "Run started:"
 #: The most text "Copy log" puts on the clipboard: a post or chat takes this

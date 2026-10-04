@@ -47,6 +47,24 @@ case anyone overrides that.
   style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
+- **`nvdec_frames.dll`, `vpl_frames.dll` and `amf_frames.dll`**, the
+  NVIDIA, Intel and AMD decoders the GPU metrics read their frames from
+  (`vmaf_app/core/gpu_frames.py`), built from `native/nvdec_frames.cpp`,
+  `native/vpl_frames.cpp` and `native/amf_frames.cpp` by
+  `scripts/build_gpu_frames.ps1` (MinGW-w64 g++, as for the tone mapper) as
+  part of the build, about 0.3 MB each. They link nothing of the GPU makers':
+  each loads its maker's decoder library from the graphics driver at run time
+  -- NVIDIA's `nvcuda.dll` and `nvcuvid.dll`, Intel's oneVPL `libvpl.dll`,
+  AMD's AMF `amfrt64.dll` -- and NVIDIA's conversion kernels are PTX in the
+  source, so no CUDA toolkit or SDK is needed to build them. They contain
+  nv-codec-headers', oneVPL's and AMF's API definitions (all MIT), whose
+  notices are packaged beside them. Without one, FFmpeg decodes those
+  videos as before. `scripts/check_gpu_decoder.py` checks one of them on the
+  PC it runs on: pictures against FFmpeg's decode, speed, and GPU scores.
+  The build makes these four from the commit's own source every time -- they
+  are not in git, so ones left from another commit would be stale -- and so
+  needs MinGW-w64 g++ on PATH; it stops without it, and checks all four and
+  their notices are in the package.
 - **SSIMULACRA2 and Butteraugli**, the official libjxl 0.12.0 static Windows
   command-line tools. Only these two executables and their notices are copied
   into the bundle; users do not need to install libjxl or a runtime separately.
@@ -68,16 +86,23 @@ case anyone overrides that.
   re-measure every build when updating Vship. Where no build can use the GPU,
   the input format is unsupported, or GPU processing fails, SSIMULACRA2 and
   Butteraugli fall back to the bundled CPU tools. The Vship CLI and FFMS2
-  decoder are not included; video frames continue to come from the user's FFmpeg
-  installation. Vship and metric notices are packaged beside the libraries.
+  decoder are not included; the user's FFmpeg reads every video. A video the
+  GPU's own decoder decodes -- NVIDIA's with Vship's CUDA build, Intel's or
+  AMD's with any build -- is decoded by the frame decoders above in Vship's
+  process, FFmpeg only copying its compressed stream out of the container;
+  other videos FFmpeg decodes. Vship and metric notices are packaged beside
+  the libraries.
 - **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`), for VMAF and
   VMAF NEG on NVIDIA GPUs only: libvmaf master with the open pull requests
   that let it build with MSVC and fix its CUDA code, built by
   `scripts/build_libvmaf_cuda.ps1` (MSVC, CUDA 13.4, meson and ninja; the
   script lists each pull request and the commit of it merged). The C runtime
   is linked in, so it needs only Windows and the NVIDIA driver; no CUDA
-  runtime ships. VMAF on any other GPU or the CPU, VMAF v1, PSNR, SSIM and
-  XPSNR still come from the user's FFmpeg. It adds about 3.3 MB installed,
+  runtime ships. Where NVIDIA's decoder decodes both videos, they are
+  decoded, scaled and widened on the GPU by `nvdec_frames.dll` in libvmaf's
+  process, the user's FFmpeg only copying their compressed streams out of
+  the containers; otherwise FFmpeg decodes them. VMAF on any other GPU or the CPU, VMAF v1,
+  PSNR, SSIM and XPSNR still come from the user's FFmpeg. It adds about 3.3 MB installed,
   1 MB compressed. libvmaf and Vship each run in a process of their own
   (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,
   falls back to the CPU instead of closing the app.
@@ -86,8 +111,9 @@ case anyone overrides that.
 
 **FFmpeg and libvmaf.** The app finds them at runtime and prompts for their
 location if they are missing. They are left out deliberately (the bundled
-libvmaf above scores only VMAF and VMAF NEG on NVIDIA GPUs, from frames the
-user's FFmpeg decodes):
+libvmaf above scores only VMAF and VMAF NEG on NVIDIA GPUs, and the NVIDIA
+decoder above decodes from the compressed streams the user's FFmpeg copies out
+of the containers):
 
 - A libvmaf-enabled FFmpeg is another ~80 MB on an already large download.
 - FFmpeg licensing depends on its build configuration and linked libraries.

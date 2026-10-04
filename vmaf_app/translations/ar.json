@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "تعذّر فحص الأشرطة السوداء لأن الفيديو غير مقروء.",
   "Off": "إيقاف",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "اكتشاف الأشرطة السوداء معطَّل لهذا الصف؛ ستُقارن الإطارات كاملة.",
-  "Manual": "يدوي",
-  "A manual crop is configured; the detected sides appear after the run.": "ضُبط اقتصاص يدوي؛ تظهر الجوانب المكتشفة بعد التشغيل.",
   "Pending": "قيد الانتظار",
   "Black bars will be detected when this row is run.": "ستُكتشف الأشرطة السوداء عند تشغيل هذا الصف.",
   "Test video": "فيديو الاختبار",
@@ -539,7 +537,6 @@
   "Cancelled by user": "ألغاه المستخدم",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "فشل التقييم على GPU ({error}). لم تُعَد المحاولة على المعالج، إذ ستستغرق من ساعات إلى أيام لفيديو أطول من 10 دقائق. اختر CPU لـ {metrics} لحسابه على المعالج على أي حال.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "فشل التقييم على GPU ({error})؛ وفشلت إعادة المحاولة على المعالج أيضًا: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "حُسب على {cpu_frames} إطارًا على المعالج لكن على {gpu_frames} على GPU، لذا لم يُعتمد",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "يتطلب {metric} وحدة GPU يستطيع Vship استخدامها، وتعذّر استخدام أي منها: {reason}",
   "{metric} could not be calculated: {reason}": "تعذّر حساب {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "تسريع Vship عبر GPU مرفق لنظام Windows فقط.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "لا يدعم Vship الألوان الأساسية {primaries}.",
   "Vship does not support the {range} range tag.": "لا يدعم Vship وسم النطاق {range}.",
   "Vship does not support {siting} chroma siting.": "لا يدعم Vship موضع الكروما {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "لا يُدعم الفيديو ذو معدل الإطارات المتغير بأمان بعد.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "لا يُدعم الفيديو ذو معدل الإطارات المتغير بأمان بعد. حوّل كلا الفيديوين إلى معدل الإطارات الثابت نفسه قبل مقارنتهما.",
   "Frame rates do not match ({source} vs {test} fps).": "معدلا الإطارات غير متطابقين ({source} مقابل {test} إطار/ث).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "المدتان غير متطابقتين ({source} مقابل {test} ثانية). اضبط حدًّا للمدة ضمن الملفين إذا كنت تقارن بدايتهما المشتركة فقط.",
@@ -687,7 +683,11 @@
   "Cannot compare": "تعذّرت المقارنة",
   "Cannot be compared with the reference:": "لا يمكن مقارنتها بالمرجع:",
   "Calculate the rest?": "هل تريد حساب البقية؟",
-  "It could not be read. Remove it or add the file again to retry.": "تعذّرت قراءته. أزِله أو أضف الملف من جديد لإعادة المحاولة."
+  "It could not be read. Remove it or add the file again to retry.": "تعذّرت قراءته. أزِله أو أضف الملف من جديد لإعادة المحاولة.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "معدل البت للملف كله بما فيه الصوت: لا يسجّل الملف معدل الفيديو وحده.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} موجود في القائمة بالفعل. هل تُعرض درجات التشغيل المحفوظ مكانه؟",
+  "FFmpeg did not give the timestamp of a {side} frame.": "لم يُعطِ FFmpeg الطابع الزمني لإطار من {side}.",
+  "The source has no frame at the test video's first.": "لا يحتوي المصدر على إطار عند وقت الإطار الأول من فيديو الاختبار."
  },
  "plurals": {
   "about {count} day": [

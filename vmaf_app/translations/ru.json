@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Чёрные полосы не удалось проверить: видео не читается.",
   "Off": "Выкл.",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Определение чёрных полос для этой строки отключено; будут сравниваться полные кадры.",
-  "Manual": "Вручную",
-  "A manual crop is configured; the detected sides appear after the run.": "Задана ручная обрезка; найденные стороны появятся после расчёта.",
   "Pending": "Ожидается",
   "Black bars will be detected when this row is run.": "Чёрные полосы будут определены при расчёте этой строки.",
   "Test video": "Тестовое видео",
@@ -539,7 +537,6 @@
   "Cancelled by user": "Отменено пользователем",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Оценка на GPU не удалась ({error}). Повтор на CPU не выполнялся: для видео длиннее 10 минут он занял бы от часов до дней. Выберите CPU для {metrics}, чтобы всё же вычислить на CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Оценка на GPU не удалась ({error}); повтор на CPU тоже не удался: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "вычислено по {cpu_frames} кадрам на CPU, но по {gpu_frames} на GPU, поэтому не сохранено",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} требуется GPU, который может использовать Vship, но ни один не удалось использовать: {reason}",
   "{metric} could not be calculated: {reason}": "Не удалось вычислить {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Ускорение Vship на GPU входит только в сборку для Windows.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship не поддерживает основные цвета {primaries}.",
   "Vship does not support the {range} range tag.": "Vship не поддерживает метку диапазона {range}.",
   "Vship does not support {siting} chroma siting.": "Vship не поддерживает расположение цветности {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Видео с переменной частотой кадров пока не поддерживается надёжно.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Видео с переменной частотой кадров пока не поддерживается надёжно. Перед сравнением преобразуйте оба видео к одинаковой постоянной частоте кадров.",
   "Frame rates do not match ({source} vs {test} fps).": "Частоты кадров не совпадают ({source} и {test} к/с).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Длительности не совпадают ({source} и {test} с). Задайте ограничение длительности в пределах обоих файлов, если сравниваете только их общее начало.",
@@ -687,7 +683,11 @@
   "Cannot compare": "Сравнение невозможно",
   "Cannot be compared with the reference:": "Нельзя сравнить с эталоном:",
   "Calculate the rest?": "Вычислить остальные?",
-  "It could not be read. Remove it or add the file again to retry.": "Не удалось прочитать. Уберите его или добавьте файл снова, чтобы повторить."
+  "It could not be read. Remove it or add the file again to retry.": "Не удалось прочитать. Уберите его или добавьте файл снова, чтобы повторить.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Битрейт всего файла вместе со звуковой дорожкой: битрейт самого видео в файле не записан.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} уже есть в списке. Показать вместо этого оценки сохранённого запуска?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg не выдал метку времени кадра {side}.",
+  "The source has no frame at the test video's first.": "У исходника нет кадра в момент первого кадра тестового видео."
  },
  "plurals": {
   "about {count} day": [

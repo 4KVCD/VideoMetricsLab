@@ -23,6 +23,7 @@ from vmaf_app.core.metric_results import (
     SequenceMetricResult,
     provenance_from_dict,
     provenance_to_dict,
+    sampled_every,
 )
 from vmaf_app.core.model_select import (
     AUTO_MODEL_CHOICE,
@@ -60,10 +61,11 @@ def _json_default(value: object):
 
 
 def recipe_hash(source: Path, distorted: Path, recipe: ComparisonRecipe) -> str:
-    raw = _canonical({
-        "source": file_identity(source), "distorted": file_identity(distorted),
-        "recipe": recipe.identity_dict(),
-    })
+    return _hash(file_identity(source), file_identity(distorted), recipe.identity_dict())
+
+
+def _hash(source_identity: str, distorted_identity: str, recipe_identity: dict) -> str:
+    raw = _canonical({"source": source_identity, "distorted": distorted_identity, "recipe": recipe_identity})
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -71,8 +73,57 @@ def metric_identity_hash(spec: MetricRequestSpec) -> str:
     return hashlib.sha256(_canonical(spec.identity_dict()).encode("utf-8")).hexdigest()
 
 
+#: The scaling algorithms a comparison's identity once held (the app's
+#: choices). Its directory was named by a hash that included the one it was
+#: scaled with; the identity no longer does (ComparisonRecipe.identity_dict).
+_LEGACY_SCALE_ALGORITHMS = ("bicubic", "lanczos", "bilinear", "spline")
+
+
 def recipe_directory(base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe) -> Path:
-    return Path(base) / _V2_DIR / recipe_hash(source, distorted, recipe)
+    """The comparison's directory. Those saved before the scaling algorithm
+    left its identity -- under hashes that held it, one per algorithm the
+    comparison was scaled with -- become it the first time it is asked for:
+    the recipe's own algorithm's is moved to the new name, and every other's
+    scores are moved into it (_merge_legacy). Only the first used to be, and
+    the scores of the others were never found again. If the first cannot be
+    moved (open elsewhere), it is used where it is."""
+    root = Path(base) / _V2_DIR
+    identities = file_identity(source), file_identity(distorted)
+    identity = recipe.identity_dict()
+    directory = root / _hash(*identities, identity)
+    if directory.exists() or not root.is_dir():
+        return directory
+    algorithms = [recipe.scale_algorithm, *(a for a in _LEGACY_SCALE_ALGORITHMS if a != recipe.scale_algorithm)]
+    legacy = [path for path in (root / _hash(*identities, {**identity, "scale_algorithm": algorithm})
+                                for algorithm in algorithms) if path.is_dir()]
+    if not legacy:
+        return directory
+    first, *others = legacy
+    try:
+        first.rename(directory)
+    except OSError:
+        return first
+    for other in others:
+        _merge_legacy(other, directory)
+    return directory
+
+
+def _merge_legacy(legacy: Path, directory: Path) -> None:
+    """Moves the files of `legacy`, a directory of the same comparison saved
+    under another scaling algorithm, into `directory`. A score `directory`
+    has already -- the same metric, calculated the same way, scaled with the
+    algorithm adopted first -- is kept, and the copy removed: a comparison
+    scaled any way is the same one. What cannot be moved stays where it is."""
+    for item in legacy.iterdir():
+        target = directory / item.name
+        with contextlib.suppress(OSError):
+            if target.exists():
+                if item.is_file():
+                    item.unlink()
+            else:
+                item.rename(target)
+    with contextlib.suppress(OSError):
+        legacy.rmdir()
 
 
 def metric_path(directory: Path, spec: MetricRequestSpec) -> Path:
@@ -92,7 +143,8 @@ def _info_to_dict(info: VideoInfo) -> dict:
         "path": str(info.path), "width": info.width, "height": info.height,
         "fps": info.fps, "duration": info.duration, "nb_frames": info.nb_frames,
         "codec_name": info.codec_name, "sar": info.sar, "pix_fmt": info.pix_fmt,
-        "bit_rate": info.bit_rate, "nominal_fps": info.nominal_fps,
+        "bit_rate": info.bit_rate, "bit_rate_whole_file": info.bit_rate_whole_file,
+        "nominal_fps": info.nominal_fps,
         "color_range": info.color_range, "color_space": info.color_space,
         "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
         "chroma_location": info.chroma_location,
@@ -104,6 +156,7 @@ def _info_from_dict(data: dict) -> VideoInfo:
                      fps=data["fps"], duration=data["duration"], nb_frames=data["nb_frames"],
                      codec_name=data["codec_name"], sar=data.get("sar", "1:1"),
                      pix_fmt=data.get("pix_fmt", ""), bit_rate=data.get("bit_rate", 0),
+                     bit_rate_whole_file=bool(data.get("bit_rate_whole_file", False)),
                      nominal_fps=data.get("nominal_fps", 0.0), color_range=data.get("color_range", ""),
                      color_space=data.get("color_space", ""), color_transfer=data.get("color_transfer", ""),
                      color_primaries=data.get("color_primaries", ""),
@@ -124,10 +177,29 @@ _OLD_VSHIP_RGB = re.compile(
 _UNTAGGED = {"", "unknown", "unspecified", "reserved"}
 
 
+#: Every CPU SSIMULACRA2 and Butteraugli score records how its pictures'
+#: colours were read, as provenance parameter "color_tags": since the CPU
+#: tools are given them as Vship reads them (colour.describe_png) and
+#: Butteraugli's 3-norm is Vship's. One without it was made with FFmpeg's
+#: own conversion and the tool's norm -- a tagged BT.709 film scored 15
+#: SSIMULACRA2 points below the GPU -- and is calculated again. "/2": a
+#: scaled video is converted to RGB after its tags are set; before, FFmpeg
+#: converted it while scaling, an untagged HD source with BT.601's matrix.
+CPU_COLOR_TAGS = "vship-5.1.1/2"
+
+
+def _stale_cpu_score(provenance) -> bool:
+    return (provenance.compute_backend == "cpu" and provenance.implementation in {"ssimulacra2", "butteraugli"}
+            and provenance.parameters.get("color_tags") != CPU_COLOR_TAGS)
+
+
 def _stale_vship_score(provenance, infos: tuple[object, ...]) -> bool:
     """Whether a saved score is a GPU score of v1.2 / v1.2.1 for a pair with
-    an RGB video without a transfer tag (VSHIP_COLOR_TAGS). `infos` are the
-    two videos' context.json entries."""
+    an RGB video without a transfer tag (VSHIP_COLOR_TAGS), or a CPU score
+    from before the CPU tools read colours as Vship does (CPU_COLOR_TAGS).
+    `infos` are the two videos' context.json entries."""
+    if _stale_cpu_score(provenance):
+        return True
     if (provenance.compute_backend != "gpu" or not provenance.implementation.startswith("Vship/")
             or provenance.parameters.get("color_tags") == VSHIP_COLOR_TAGS):
         return False
@@ -246,7 +318,12 @@ def _load_metric_file(path: Path, spec: MetricRequestSpec):
                 return None
             provenance = provenance_from_dict(metadata["provenance"])
             if metadata["kind"] == "frame":
-                return FrameMetricResult(spec.key, data["frame"], data["time"], data["values"], provenance)
+                # On the frames its request covers: XPSNR scored beside VMAF
+                # on the GPU was stored for every frame under a subsampled
+                # request (metric_results.as_requested).
+                return sampled_every(
+                    FrameMetricResult(spec.key, data["frame"], data["time"], data["values"], provenance),
+                    spec.coverage.step if spec.coverage is not None else 1)
             if metadata["kind"] == "sequence":
                 timeline = (data["frame"], data["time"], data["values"]) if "values" in data else (None, None, None)
                 return SequenceMetricResult(spec.key, float(data["score"].item()), provenance, *timeline)
@@ -349,7 +426,7 @@ def _compared_size(directory: Path) -> tuple[int, int] | None:
     """The size this comparison's frames are compared at, from the sizes and
     black bars its saved context records, as the run decides it -- what
     Auto picks a VMAF model from."""
-    from vmaf_app.core.vmaf_runner import compared_dimensions, resample_analysis_dimensions
+    from vmaf_app.core.geometry import compared_dimensions, resample_analysis_dimensions
 
     try:
         context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
@@ -485,7 +562,7 @@ def load_metric(directory: Path, spec: MetricRequestSpec, compute_backend: str =
     def stale(result) -> bool:
         nonlocal infos
         if result.provenance.compute_backend != "gpu":
-            return False
+            return _stale_cpu_score(result.provenance)
         if infos is None:
             infos = _context_infos(directory)
         return _stale_vship_score(result.provenance, infos)
@@ -539,6 +616,7 @@ def _context_from_result(result: ComparisonResult, label: str, recipe: Compariso
         },
         "compared_frame_count": result.compared_frame_count,
         "model": result.model, "model_choice": result.model_choice,
+        "model_v1": result.model_v1, "model_choice_v1": result.model_choice_v1,
         "recipe": recipe.identity_dict(),
     }
 
@@ -574,9 +652,15 @@ def load_result(
     results = load_metrics(directory, specs, compute_backends)
     # Extra current metrics are direct lookups too. They preserve the UI
     # behavior of showing every compatible score already cached for a row
-    # without an exponential search through metric combinations.
+    # without an exponential search through metric combinations. Only for
+    # metrics the request does not ask for: one it asks for is its own score
+    # or none. XPSNR alone covers every frame and beside a subsampled libvmaf
+    # run every n-th, and the other's score stood in for the requested one --
+    # shown as the row's, and kept by its next run, which then never
+    # calculated the XPSNR it asked for.
+    requested = {spec.key for spec in specs}
     for spec in supplemental_specs:
-        if not results.has(spec.key):
+        if spec.key not in requested and not results.has(spec.key):
             extra = load_metric(directory, spec, (compute_backends or {}).get(spec.key, "gpu"))
             if extra is not None:
                 results.add(extra)
@@ -596,15 +680,21 @@ def load_result(
     frame_view = frame_scores_from_results(results)
 
     try:
+        # What a context saved before these were recorded lacks is the
+        # recipe's: the comparison found under it is the same one. The
+        # scaling algorithm a result was made with is its own, though -- it
+        # is no part of the comparison's identity -- and is kept as saved.
+        target = context.get("resample_target")
         result = ComparisonResult(
             source=Path(context["source"]), distorted=Path(context["distorted"]),
             frames=frame_view, fps=context["fps"], model=context.get("model", ""),
             source_crop=_crop_from_dict(context.get("source_crop")), distorted_crop=_crop_from_dict(context.get("distorted_crop")),
             source_info=_info_from_dict(context["source_info"]), distorted_info=_info_from_dict(context["distorted_info"]),
-            scale_direction=ScaleDirection(context.get("scale_direction", ScaleDirection.SOURCE_TO_DISTORTED.value)),
-            scale_algorithm=context.get("scale_algorithm", "bicubic"),
-            resample_target=ResampleTarget(**context["resample_target"]) if context.get("resample_target") else None,
+            scale_direction=ScaleDirection(context.get("scale_direction", recipe.scale_direction.value)),
+            scale_algorithm=context.get("scale_algorithm") or recipe.scale_algorithm,
+            resample_target=ResampleTarget(**target) if target else recipe.resample_test,
             compared_frame_count=context.get("compared_frame_count", 0), model_choice=context.get("model_choice"),
+            model_v1=context.get("model_v1") or "", model_choice_v1=context.get("model_choice_v1"),
             metric_results=results,
         )
         return result, context.get("label") or Path(context["distorted"]).stem
@@ -669,18 +759,6 @@ def clear_metrics(
         with contextlib.suppress(OSError):
             shutil.rmtree(directory)
     return removed
-
-
-def clear_recipe(base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe) -> int:
-    directory = recipe_directory(base, source, distorted, recipe)
-    if not directory.exists():
-        return 0
-    count = sum(1 for path in directory.rglob("*") if path.is_file())
-    try:
-        shutil.rmtree(directory)
-    except OSError:
-        return 0
-    return count
 
 
 def clear_all(base: Path) -> int:

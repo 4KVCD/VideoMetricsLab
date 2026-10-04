@@ -38,6 +38,7 @@ from vmaf_app.ui.main_window import (
     TAB_VIDEOS,
     MainWindow,
 )
+from vmaf_app.ui.row_state import RowState
 
 
 @pytest.fixture(scope="module")
@@ -409,7 +410,7 @@ def test_a_probed_row_does_not_stay_greyed_out(qapp):
 
     win = MainWindow()
     row = win._add_table_row(Path("C:/vid/a.mkv"))
-    win._set_row_status(row, "Reading...")
+    win._set_row_status(row, RowState.READING)
     assert win._row_state(win._rows[row]) == "Reading..."
 
     win._set_row_info(row, _info("C:/vid/a.mkv", 1920, 1080))

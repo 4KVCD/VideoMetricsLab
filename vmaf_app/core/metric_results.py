@@ -233,6 +233,38 @@ def frame_scores_from_results(results: MetricResultSet):
     })
 
 
+def sampled_every(result: FrameMetricResult, step: int) -> FrameMetricResult:
+    """`result` with only every `step`-th frame (0, step, 2*step...): the
+    frames a subsampled request covers, as libvmaf's n_subsample scores
+    them. The result itself when it holds no others."""
+    if step <= 1 or not len(result.frame) or not np.any(result.frame % step):
+        return result
+    keep = result.frame % step == 0
+    return FrameMetricResult(result.key, result.frame[keep], result.time[keep], result.values[keep],
+                             result.provenance)
+
+
+def as_requested(results: MetricResultSet, specs) -> MetricResultSet:
+    """`results` with each frame metric on the frames its request covers
+    (MetricRequestSpec.coverage). XPSNR requested beside subsampled libvmaf
+    metrics covers their frames -- in one FFmpeg run, libvmaf's log decides
+    which frames are reported -- but scored in a run of its own, beside VMAF
+    on the GPU, it came back for every frame: stored as the sampled metric,
+    then off the shared frame axis, out of the table's frames and the CSV.
+    The set itself when nothing changes."""
+    steps = {spec.key: spec.coverage.step for spec in specs if spec.coverage is not None}
+    changed = False
+    conformed = MetricResultSet()
+    for key in results:
+        result = results.get(key)
+        if isinstance(result, FrameMetricResult) and steps.get(key, 1) > 1:
+            sampled = sampled_every(result, steps[key])
+            changed |= sampled is not result
+            result = sampled
+        conformed.add(result)
+    return conformed if changed else results
+
+
 def merge_metric_results(existing: MetricResultSet, incoming: MetricResultSet) -> MetricResultSet:
     """Return a replacement-by-key merge; unrelated metric results survive."""
     merged = existing.copy()

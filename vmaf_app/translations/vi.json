@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Không kiểm tra được viền đen vì không đọc được video.",
   "Off": "Tắt",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Phát hiện viền đen đã tắt cho hàng này; khung hình được so sánh nguyên vẹn.",
-  "Manual": "Thủ công",
-  "A manual crop is configured; the detected sides appear after the run.": "Đã đặt cắt thủ công; các cạnh phát hiện được hiển thị sau khi chạy.",
   "Pending": "Chờ",
   "Black bars will be detected when this row is run.": "Viền đen được phát hiện khi hàng này chạy.",
   "Test video": "Video thử",
@@ -539,7 +537,6 @@
   "Cancelled by user": "Người dùng đã hủy",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Chấm điểm trên GPU lỗi ({error}). Không thử lại trên CPU, vì sẽ mất hàng giờ đến hàng ngày với video dài hơn 10 phút. Chọn CPU cho {metrics} để vẫn tính trên CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Chấm điểm trên GPU lỗi ({error}); thử lại trên CPU cũng lỗi: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Tính trên {cpu_frames} khung hình ở CPU nhưng {gpu_frames} ở GPU, nên không dùng",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} cần một GPU Vship dùng được, và không dùng được GPU nào: {reason}",
   "{metric} could not be calculated: {reason}": "Không tính được {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Tăng tốc GPU Vship chỉ đi kèm cho Windows.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship không hỗ trợ màu cơ bản {primaries}.",
   "Vship does not support the {range} range tag.": "Vship không hỗ trợ thẻ dải {range}.",
   "Vship does not support {siting} chroma siting.": "Vship không hỗ trợ vị trí chroma {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Video có tốc độ khung hình thay đổi chưa được hỗ trợ an toàn.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video có tốc độ khung hình thay đổi chưa được hỗ trợ an toàn. Hãy chuyển cả hai video sang cùng một tốc độ khung hình cố định trước khi so sánh.",
   "Frame rates do not match ({source} vs {test} fps).": "Tốc độ khung hình không khớp ({source} so với {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Thời lượng không khớp ({source} so với {test} giây). Đặt giới hạn thời lượng nằm trong cả hai tệp nếu bạn chỉ so sánh phần đầu chung.",
@@ -687,7 +683,11 @@
   "Cannot compare": "Không thể so sánh",
   "Cannot be compared with the reference:": "Không thể so sánh với video tham chiếu:",
   "Calculate the rest?": "Tính các video còn lại?",
-  "It could not be read. Remove it or add the file again to retry.": "Không đọc được. Hãy xóa nó, hoặc thêm lại tệp để thử lại."
+  "It could not be read. Remove it or add the file again to retry.": "Không đọc được. Hãy xóa nó, hoặc thêm lại tệp để thử lại.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate của cả tệp, gồm cả âm thanh: tệp không ghi bitrate riêng của video.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} đã có trong danh sách. Hiển thị điểm của lần chạy đã lưu thay thế?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg không cho biết dấu thời gian của một khung {side}.",
+  "The source has no frame at the test video's first.": "Nguồn không có khung nào tại thời điểm khung đầu tiên của video thử."
  },
  "plurals": {
   "about {count} day": [

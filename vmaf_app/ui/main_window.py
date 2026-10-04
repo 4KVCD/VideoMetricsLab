@@ -19,7 +19,6 @@ import contextlib
 import copy
 import logging
 import os
-import re
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -74,13 +73,15 @@ from vmaf_app.core.cvvdp import (
     without_user_preset,
 )
 from vmaf_app.core.cvvdp import presets as cvvdp_presets
-from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, format_version, set_ffmpeg_dir_override
+from vmaf_app.core.ffmpeg_locate import check_tools, exe_name, ffmpeg_dir_changed, format_version
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
     displayable_metric_specs,
 )
 from vmaf_app.core.frame_extract import FrameComparison
-from vmaf_app.core.gpu import detected_gpu_vendors
+from vmaf_app.core.geometry import analysis_dimensions, content_size, resample_analysis_dimensions
+from vmaf_app.core.gpu import HwAccelPlan, detected_gpu_vendors
+from vmaf_app.core.job_runner import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob
 from vmaf_app.core.metric_results import MetricResultSet, frame_scores_from_results
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricKind, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE, is_v1_choice, resolve_model
@@ -102,23 +103,24 @@ from vmaf_app.core.power import keep_system_awake
 from vmaf_app.core.run_io import RESULT_FILE_FILTER, RESULT_SUFFIX, load_run, save_run, unique_output_path
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.stats import aggregate_scores
+from vmaf_app.core.status import plan_of
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.vmaf_runner import (
     VmafRunError,
-    analysis_dimensions,
     estimate_total_frames,
-    resample_analysis_dimensions,
     validate_video_pair,
 )
 from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.formatting import bitrate_string, media_info_string
+from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
+from vmaf_app.ui.row_state import RowState
+from vmaf_app.ui.run_line import decoder_text, metric_line
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
-from vmaf_app.ui.worker import MAX_PARALLEL_JOBS, MAX_VIDEOS_IN_FLIGHT, VmafJob, VmafWorker
+from vmaf_app.ui.worker import VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
 # own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
@@ -416,10 +418,6 @@ _PERCEPTUAL_METRIC_KEYS = ("ssimulacra2", "butteraugli")
 #: CVVDP runs in the same GPU pass but has no CPU choice.
 _EXTRA_METRIC_KEYS = (*_PERCEPTUAL_METRIC_KEYS, "cvvdp")
 
-#: A row whose job finished some metrics and failed others (see
-#: MainWindow._on_job_partially_failed).
-_PARTLY_FAILED = N_("Partly failed")
-
 #: Longer than this, CPU SSIMULACRA2/Butteraugli asks for confirmation first.
 _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
 #: CPU tool seconds per megapixel of a compared frame pair, measured with the
@@ -444,29 +442,6 @@ def _rough_duration(seconds: float) -> str:
         return ntr("about {count} hour", "about {count} hours", hours)
     minutes = max(1, round(seconds / 60))
     return ntr("about {count} minute", "about {count} minutes", minutes)
-
-
-#: Each place's name on the run line.
-_PLACE_NAMES = {"CPU": N_("CPU metrics"), "GPU": N_("GPU metrics")}
-
-
-@dataclass(frozen=True)
-class _MetricUnit:
-    """Metrics of a video calculated together -- in one pass, in one place --
-    and how far they are: one entry on its run line (_metric_units).
-
-    The line used to be built from the programs' halves -- FFmpeg's, Vship's
-    -- and counted their passes: with Vship's metrics in one pass, VMAF and
-    four GPU metrics read "GPU metrics 1 of 2"."""
-
-    place: str  # "CPU" or "GPU": where they are calculated as the run stands
-    keys: tuple[str, ...]
-    state: str  # "running", "starting", "waiting", "queued", "done" or "failed"
-    task: dict  # the half's snapshot (VmafWorker.task_progress)
-    done: int = 0  # how far: done / whole, rounded down on the line
-    whole: int = 0
-    scale: int = 1  # whole / scale is the pass's frames: (whole - done) / scale / fps seconds left
-    fps: float = 0.0
 
 
 class CompletedRun:
@@ -519,7 +494,7 @@ class RowData:
     # [(CvvdpSettings, JOD)]: named in the tooltip of an empty CVVDP cell,
     # never shown as the row's score.
     cvvdp_elsewhere: list = field(default_factory=list)
-    analysis_status: str = ""
+    analysis_status: RowState | None = None
     # What the old Status column's tooltip carried: an ffmpeg error, or how
     # many frames a loaded result holds. Now shown on the file name, which
     # is the only cell that is always present and always about the row as a
@@ -578,11 +553,8 @@ class MainWindow(QMainWindow):
         self._file_writes = FileWriteQueue(self)
         self._file_writes.write_failed.connect(self._on_file_write_failed)
         self._file_writes.became_idle.connect(self._on_file_writes_idle)
-        # Only when one is actually configured. Calling this unconditionally
-        # wrote to persistent QSettings on every launch, and each call clears
-        # the tool-lookup cache -- which re-probes ffmpeg by spawning it.
-        if self._settings.ffmpeg_dir_path() is not None:
-            self._apply_ffmpeg_setting()
+        # The ffmpeg folder needs nothing applied: the lookup reads it from
+        # the settings file (ffmpeg_locate._configured_dir).
         result_cache.set_cache_dir_override(self._settings.cache_dir_path())
         if self._settings.remember_window_size:
             self.resize(self._settings.window_width, self._settings.window_height)
@@ -843,15 +815,6 @@ class MainWindow(QMainWindow):
         format."""
         return default_settings(self._settings.cvvdp_presets, self._settings.cvvdp_default_preset)
 
-    def _apply_ffmpeg_setting(self) -> None:
-        """Points the finder at the configured folder, or clears the override
-        so it goes back to searching PATH and the known install locations.
-
-        set_ffmpeg_dir_override writes to persistent QSettings, so this is
-        only called when the setting actually changes -- not on every launch.
-        """
-        configured = self._settings.ffmpeg_dir_path()
-        set_ffmpeg_dir_override(str(configured) if configured else "")
 
     def _build_settings_panel(self) -> QWidget:
         page = QWidget()
@@ -1172,9 +1135,6 @@ class MainWindow(QMainWindow):
             perceptual_vship.set_vship_backend(backend)
             perceptual_vship.start_vship_probe()
 
-        if self._settings.ffmpeg_dir != before_ffmpeg:
-            self._apply_ffmpeg_setting()
-            self._check_ffmpeg(prompt=False)
         if self._settings.cache_dir != before_cache:
             result_cache.set_cache_dir_override(self._settings.cache_dir_path())
 
@@ -1184,6 +1144,10 @@ class MainWindow(QMainWindow):
         self._default_extra_metric_keys = self._extra_metrics_from_settings()
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
+        if self._settings.ffmpeg_dir != before_ffmpeg:
+            # After the save: the lookup reads the folder from the file.
+            ffmpeg_dir_changed()
+            self._check_ffmpeg(prompt=False)
         self.settings_status.setText(
             tr_message(error) if error else
             tr("Settings saved. The new language shows when the app is next started.")
@@ -1951,7 +1915,13 @@ class MainWindow(QMainWindow):
                 )
                 return False
 
-        set_ffmpeg_dir_override(str(directory))
+        # Kept as the Settings tab's folder: the one place it is kept.
+        self._settings.ffmpeg_dir = str(directory)
+        self.settings_ffmpeg_edit.setText(str(directory))
+        if error := self._settings.save():
+            self.status_label.setText(tr_message(error))
+            return False
+        ffmpeg_dir_changed()
         status = check_tools()
         if not status.ok:
             QMessageBox.warning(self, tr("Still not usable"), "\n".join(status.problems))
@@ -2196,7 +2166,7 @@ class MainWindow(QMainWindow):
                         Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
                     )
                     item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
-                    failed = enabled and row_data.analysis_status in {"Failed", _PARTLY_FAILED}
+                    failed = enabled and row_data.analysis_status in (RowState.FAILED, RowState.PARTLY_FAILED)
                     item.setText(tr("Failed") if failed else "")
                     item.setToolTip((
                         self._failed_metric_tooltip(row_data, metric_column.key)
@@ -2243,7 +2213,7 @@ class MainWindow(QMainWindow):
         self._set_row_black_bars(row)
         self._set_row_scaling(row)
 
-    def _row_state(self, row_data: RowData) -> str:
+    def _row_state(self, row_data: RowData) -> RowState:
         """How this row's analysis stands, in one phrase.
 
         No longer a column of its own: the metric cells already answer it.
@@ -2255,10 +2225,10 @@ class MainWindow(QMainWindow):
         is at, and why a finished job is not being shown.
         """
         return row_data.analysis_status or (
-            N_("No metrics selected") if not self._requested_metrics(row_data) else
-            N_("Complete") if self._has_requested_results(row_data) else
-            N_("Partially calculated") if row_data.completed_run is not None
-            else N_("Not calculated")
+            RowState.NO_METRICS if not self._requested_metrics(row_data) else
+            RowState.COMPLETE if self._has_requested_results(row_data) else
+            RowState.PARTIAL if row_data.completed_run is not None
+            else RowState.NOT_CALCULATED
         )
 
     def _refresh_row_state(self, row: int) -> None:
@@ -2270,16 +2240,16 @@ class MainWindow(QMainWindow):
             return
         row_data = self._rows[row]
         state = self._row_state(row_data)
-        # The state is kept in English -- it is compared below -- and shown
-        # in the window's language; a detail from the core modules (a
-        # failure's reason) is translated where its shape is known.
+        # The state is shown in the window's language; a detail from the
+        # core modules (a failure's reason) is translated where its shape is
+        # known.
         lines = [str(row_data.path), tr(state)]
         if row_data.status_detail:
             lines.append(tr_message(row_data.status_detail))
         item.setToolTip("\n\n".join(lines))
-        if state == "Failed":
+        if state is RowState.FAILED:
             colour = _STATE_COLOURS["failed"]
-        elif state.startswith("Finished"):
+        elif state.finished_not_shown:
             # Done, cached, and deliberately not displayed -- see
             # _on_job_finished. Without a mark the row would look untouched.
             colour = _STATE_COLOURS["stale"]
@@ -2409,8 +2379,6 @@ class MainWindow(QMainWindow):
         if completed is None:
             if row_data.options.crop_mode == CropMode.NONE:
                 show(tr("Off"), tr("Black-bar detection is disabled for this row; the full frames will be compared."), muted=True)
-            elif row_data.options.crop_mode == CropMode.MANUAL:
-                show(tr("Manual"), tr("A manual crop is configured; the detected sides appear after the run."), muted=True)
             else:
                 show(tr("Pending"), tr("Black bars will be detected when this row is run."), muted=True)
             return
@@ -2431,13 +2399,6 @@ class MainWindow(QMainWindow):
             show(tr("Off"), tr("Black-bar detection was disabled for this run; no crop was applied."), muted=True)
         else:
             show(tr("Yes") if has_bars else tr("No"), tooltip)
-
-    @staticmethod
-    def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-        """The picture that actually reaches the comparison, bars removed.
-        Mirrors vmaf_runner's own _content_size, which decides the same thing
-        for the filtergraph."""
-        return (crop.w, crop.h) if crop else (info.width, info.height)
 
     def _resize_mismatch(self, row: int) -> tuple[str, str]:
         """(short tag, full explanation) for which of the two videos gets
@@ -2470,8 +2431,8 @@ class MainWindow(QMainWindow):
         run = row_data.completed_run
         if run is not None:
             source_info, distorted_info = run.result.source_info, run.result.distorted_info
-            ref = self._content_size(source_info, run.result.source_crop)
-            dist = self._content_size(distorted_info, run.result.distorted_crop)
+            ref = content_size(source_info, run.result.source_crop)
+            dist = content_size(distorted_info, run.result.distorted_crop)
         else:
             source_info, distorted_info = self._source_info, row_data.video_info
             if source_info is None or distorted_info is None:
@@ -2534,7 +2495,7 @@ class MainWindow(QMainWindow):
         item = self.distorted_table.item(row, COL_INFO)
         scaling_item = self.distorted_table.item(row, COL_SCALING)
         if error:
-            self._set_row_status(row, N_("Failed"), error)
+            self._set_row_status(row, RowState.FAILED, error)
             item.setText(tr("Probe failed"))
             item.setToolTip(error)
             item.setForeground(Qt.red)
@@ -2550,10 +2511,11 @@ class MainWindow(QMainWindow):
             item.setForeground(self.distorted_table.palette().text())
             item.setToolTip(format_hms(info.duration, decimals=1))
             self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
+            self.distorted_table.item(row, COL_BITRATE).setToolTip(bitrate_note(info))
             self._rows[row].video_info = info
             self._set_row_scaling(row)
-            if self._rows[row].analysis_status == "Reading...":
-                self._rows[row].analysis_status = ""
+            if self._rows[row].analysis_status is RowState.READING:
+                self._rows[row].analysis_status = None
                 self._set_row_metrics(row)
             self._set_row_black_bars(row)
         # Keeps these snug to whatever's actually in them (never wider than
@@ -2652,7 +2614,7 @@ class MainWindow(QMainWindow):
         # the window for the whole time.
         for path in new_paths:
             row = self._add_table_row(path)
-            self._set_row_status(row, N_("Reading..."))
+            self._set_row_status(row, RowState.READING)
         self._start_media_probe(new_paths)
         self._start_cache_lookup(new_paths)
 
@@ -2681,8 +2643,8 @@ class MainWindow(QMainWindow):
         if paths:
             self._start_cache_lookup(paths)
 
-    def _set_row_status(self, row: int, text: str, detail: str = "") -> None:
-        self._rows[row].analysis_status = text
+    def _set_row_status(self, row: int, state: RowState, detail: str = "") -> None:
+        self._rows[row].analysis_status = state
         self._rows[row].status_detail = detail
         self._refresh_row_state(row)
 
@@ -2854,13 +2816,7 @@ class MainWindow(QMainWindow):
             # saved CVVDP score.
             run.graph_identity = previous.graph_identity
         row_data.completed_run = run
-        row_data.analysis_status = ""
-        row_data.analysis_status = N_("Complete (cached)") if self._has_requested_results(row_data) else ""
-        # Old cache files predate the persisted frame-preview recipe. The
-        # cache key still identifies these exact row options, so restore the
-        # missing pieces from the row that found the cache entry.
-        result.scale_algorithm = row_data.options.scale_algorithm
-        result.resample_target = row_data.options.resample_test
+        row_data.analysis_status = RowState.CACHED if self._has_requested_results(row_data) else None
         # Scores/crops come from the cache, current media descriptors do not.
         # Older runs omitted HDR tags; replacing a fresh probe with that
         # snapshot silently disabled tone mapping in Frame Compare.
@@ -2949,11 +2905,9 @@ class MainWindow(QMainWindow):
         if cached is None:
             return False
         result, label = cached
-        result.scale_algorithm = row_data.options.scale_algorithm
-        result.resample_target = row_data.options.resample_test
         run = CompletedRun(result, label)
         row_data.completed_run = run
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         row_data.video_info = result.distorted_info
         if row_data.options.resample_test is not None:
             self._set_resample_row_info(row, row_data.options.resample_test)
@@ -2998,7 +2952,7 @@ class MainWindow(QMainWindow):
             # Only the metrics being recalculated leave the row: saved scores
             # of unticked metrics are neither recalculated nor deleted, and
             # clearing the whole row hid them until the video was re-added.
-            row_data.analysis_status = ""
+            row_data.analysis_status = None
             self._drop_metric_results(row, set(self._requested_metrics(row_data)))
             row_data.status_detail = ""
             if self._source_info is not None:
@@ -3538,7 +3492,7 @@ class MainWindow(QMainWindow):
                     rd.extra_metric_keys.discard(key)
             else:
                 self._set_metric_option(rd.options, column, checked)
-            rd.analysis_status = ""
+            rd.analysis_status = None
             # The existing scores remain valid: selecting another metric
             # changes the requested output, not the measured pictures.
             self._set_row_metrics(row)
@@ -3609,9 +3563,11 @@ class MainWindow(QMainWindow):
 
         A metric counts when it has at least one score, produced the way
         the row asks for. SSIMULACRA2/Butteraugli on the GPU (Vship) and on
-        the CPU (libjxl) differ by a few points on the same frames (44.47 vs
-        46.89 in one 640x360 test), so a comparison mixing them ranks
-        encodes on different scales:
+        the CPU (libjxl) differ on the same frames -- by little on SDR (55.13
+        against 55.24 SSIMULACRA2, 1.810 against 1.851 Butteraugli, on a
+        1080p film), by far more on HDR (35.1 against 47.3 SSIMULACRA2 on a
+        PQ film: libjxl's tool scores PQ its own way) -- so a comparison
+        mixing them ranks encodes on different scales:
         - set to CPU, only a CPU score counts;
         - set to GPU, a CPU score -- left by a fallback, or by the CPU
           choice earlier -- counts only when no supported GPU is present,
@@ -3673,7 +3629,7 @@ class MainWindow(QMainWindow):
         tooltip said "Not calculated" over the old result's "240 scored
         frames; metrics: ...", or over a failure's reason."""
         row_data = self._rows[row]
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         row_data.status_detail = ""
         if row_data.completed_run is None:
             self._set_row_metrics(row)
@@ -3717,7 +3673,10 @@ class MainWindow(QMainWindow):
             error = self._settings.save()
             if error:
                 self.status_label.setText(tr_message(error))
-        execution_only = field_name in {"gpu", "n_threads", "vmaf_on_gpu"}
+        # Which GPU, how many threads, and how frames are scaled change how a
+        # comparison is made, not what it is (ComparisonRecipe.identity_dict):
+        # its scores stay.
+        execution_only = field_name in {"gpu", "n_threads", "vmaf_on_gpu", "scale_algorithm"}
         changed_rows = []
         for row in self._panel_target_rows:
             if apply(self._rows[row].options):
@@ -3791,7 +3750,7 @@ class MainWindow(QMainWindow):
             value for key in run.result.metric_results
             if key not in keys and (value := run.result.metric_results.get(key)) is not None
         )
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         if kept:
             result = copy.copy(run.result)
             result.metric_results = kept
@@ -4043,15 +4002,9 @@ class MainWindow(QMainWindow):
                 # the other before libvmaf sees it. The runner re-resolves
                 # this after auto-crop, which it cannot know here.
                 if row_data.options.resample_test is not None:
-                    analysis_size = resample_analysis_dimensions(
-                        self._source_info, row_data.options.manual_source_crop
-                    )
+                    analysis_size = resample_analysis_dimensions(self._source_info, None)
                 else:
-                    analysis_size = analysis_dimensions(
-                        self._source_info, dist_info, row_data.options,
-                        row_data.options.manual_source_crop,
-                        row_data.options.manual_distorted_crop,
-                    )
+                    analysis_size = analysis_dimensions(self._source_info, dist_info, row_data.options, None, None)
                 model = resolve_model(row_data.options, *analysis_size) if row_data.options.compute_vmaf else ""
             except (ValueError, VmafRunError) as e:
                 skipped.append((row_data, str(e)))
@@ -4079,7 +4032,7 @@ class MainWindow(QMainWindow):
 
         self._job_rows = job_rows
         for rd in job_rows:
-            self._set_row_status(self._row_index_of(rd), N_("Queued"))
+            self._set_row_status(self._row_index_of(rd), RowState.QUEUED)
         self._job_cache_options = [clone_options(rd.options) for rd in job_rows]
         self._job_cvvdp = [rd.cvvdp for rd in job_rows]
         # Held as RowData, not indices, so removing a row mid-run can't
@@ -4139,7 +4092,7 @@ class MainWindow(QMainWindow):
         for row_data, why in skipped:
             row = self._row_index_of(row_data)
             if row is not None:
-                self._set_row_status(row, N_("Failed"), why)
+                self._set_row_status(row, RowState.FAILED, why)
         listed = "\n".join(f"\u2022 {row_data.path.name}: {tr_message(why)}" for row_data, why in skipped)
         text = tr("Cannot be compared with the reference:") + "\n\n" + listed
         if not others:
@@ -4224,7 +4177,7 @@ class MainWindow(QMainWindow):
     def _on_job_started(self, index: int, label: str) -> None:
         row = self._row_index_of(self._job_rows[index])
         if row is not None:
-            self._set_row_status(row, N_("Calculating"))
+            self._set_row_status(row, RowState.CALCULATING)
         if index not in self._running_jobs:
             self._running_jobs.append(index)
         self._job_frames_done.setdefault(index, 0)
@@ -4237,20 +4190,6 @@ class MainWindow(QMainWindow):
             return
         self._job_line_text[index] = (tr("{label} — starting…", label=label), "")
         self._arrange_job_lines()
-
-    @staticmethod
-    def _step_text(message: str) -> str:
-        """A half's status message as its step before figures arrive, e.g.
-        "Detecting black bars in source" -- "" for the message that only
-        says FFmpeg is starting. A decode plan, "(GPU decode: ...)", is left
-        out: it is shown on its own, as "Decoder: ...". Before, a video with
-        CPU and GPU halves said only "CPU starting" for as long as black
-        bars on a 4K source were being looked for."""
-        text = re.sub(r"\s*\(GPU decode: [^)]*\)", "", message)
-        text = text.strip().rstrip(".\u2026").strip().replace("distorted", "test video")
-        if not text or text.startswith("Running ffmpeg") or text.startswith("GPU metric "):
-            return ""
-        return tr_message(text)
 
     def _redraw_job_lines(self) -> None:
         """Every video line with figures, now: on Pause and Resume."""
@@ -4439,11 +4378,6 @@ class MainWindow(QMainWindow):
         self._job_lines_due.clear()
         self._update_run_status()
 
-    @staticmethod
-    def _metric_labels(task: dict[str, object]) -> str:
-        """A half's metrics, "VMAF v0.6.1, VMAF NEG"."""
-        return ", ".join(metric_definition(key).label for key in task.get("metric_keys", ()))
-
     def _render_job_progress(self, index: int) -> None:
         if index not in self._job_line_text:
             return
@@ -4452,7 +4386,7 @@ class MainWindow(QMainWindow):
         tooltip = ""
         paused = self._run_hold == _PAUSED
         if snapshots:
-            parts, tooltip, plans = self._metric_line(snapshots, paused)
+            parts, tooltip, plans = metric_line(snapshots, paused)
             decode_status = self._decoder_text(index, plans) if plans else ""
         else:
             decode_status = self._job_decode_status.get(index, "")
@@ -4469,216 +4403,6 @@ class MainWindow(QMainWindow):
             parts.append(decode_status)
         self._set_job_line(index, f"{self._job_label(index)} — " + "   ·   ".join(parts), tooltip)
 
-    @staticmethod
-    def _half_place(task: dict[str, object]) -> str:
-        """Where a half's metrics are calculated now: "CPU" for the CPU's
-        queue, and for a half in the GPU's whose metrics the CPU has taken
-        (cpu_keys); "GPU" otherwise."""
-        return "CPU" if task.get("lane") == "cpu" or task.get("cpu_keys") else "GPU"
-
-    @staticmethod
-    def _metric_units(snapshots) -> list[_MetricUnit]:
-        """A video's metrics in the units they are calculated in -- a pass
-        of one or more metrics, in one place -- in the order they run, each
-        metric in one unit only: the last it is in (a retry, say).
-
-        From the worker's halves (VmafWorker.task_progress): FFmpeg's
-        metrics on the CPU, VMAF and NEG on the GPU, Vship's metrics on the
-        GPU in one or more passes, SSIMULACRA2/Butteraugli on the CPU; a
-        half in the GPU's queue whose metrics the CPU takes over -- a GPU
-        failure -- has them as CPU metrics, with the CPU's figures."""
-        units: list[_MetricUnit] = []
-        for task in snapshots:
-            state = str(task.get("state"))
-            done_keys = set(task.get("done_keys", ()))
-            cpu_keys = tuple(task.get("cpu_keys", ()))
-            current, total = int(task.get("current") or 0), int(task.get("total") or 0)
-            fps = float(task.get("fps") or 0.0)
-
-            def finished(keys, place, task=task, done_keys=done_keys):
-                for kept, outcome in ((tuple(key for key in keys if key in done_keys), "done"),
-                                      (tuple(key for key in keys if key not in done_keys), "failed")):
-                    if kept:
-                        units.append(_MetricUnit(place, kept, outcome, task))
-
-            def under_way(keys, place, task=task, state=state, current=current, total=total, fps=fps):
-                units.append(_MetricUnit(place, keys, state, task, current, total, 1, fps))
-
-            if task.get("lane") == "cpu" or cpu_keys:
-                # A pass of its metrics on the CPU, after any on the GPU.
-                for group in task.get("passes", ()) if cpu_keys else ():
-                    finished(tuple(key for key in group if key not in cpu_keys), "GPU")
-                keys = cpu_keys or tuple(task.get("metric_keys", ()))
-                if state in ("done", "failed"):
-                    finished(keys, "CPU")
-                else:
-                    under_way(keys, "CPU")
-                continue
-            passes = ([tuple(group) for group in task.get("passes", ()) if group]
-                      or [tuple(task.get("metric_keys", ()))])
-            if state in ("done", "failed"):
-                for group in passes:
-                    finished(group, "GPU")
-                continue
-            phase = task.get("phase")
-            if state != "running" or not phase:
-                under_way(passes[0], "GPU")
-                units.extend(_MetricUnit("GPU", group, "queued", task) for group in passes[1:])
-                continue
-            number, count, start = phase
-            for position, group in enumerate(passes, 1):
-                if position < number:
-                    finished(group, "GPU")
-                elif position == number:
-                    # Its passes are one count (run_vship_task): this one
-                    # from `start`, out of `left` passes of its length.
-                    left = max(1, count - number + 1)
-                    units.append(_MetricUnit("GPU", group, "running", task, (current - start) * left,
-                                             total - start, left, fps))
-                else:
-                    units.append(_MetricUnit("GPU", group, "queued", task))
-        kept: list[_MetricUnit] = []
-        seen: set[str] = set()
-        for unit in reversed(units):
-            keys = tuple(key for key in unit.keys if key not in seen)
-            seen.update(keys)
-            if keys:
-                kept.append(replace(unit, keys=keys))
-        return kept[::-1]
-
-    @staticmethod
-    def _numbers_text(numbers: list[int]) -> str:
-        """Metric numbers as the line shows them: "3", "1\u20132", "1, 3"."""
-        numbers = sorted(numbers)
-        if len(numbers) > 1 and numbers[-1] - numbers[0] == len(numbers) - 1:
-            return f"{numbers[0]}\u2013{numbers[-1]}"
-        return ", ".join(map(str, numbers))
-
-    def _metric_line(self, snapshots, paused: bool) -> tuple[list[str], str, dict[str, str]]:
-        """A video's run line, by metric: for the CPU and then the GPU, the
-        metrics under way, each numbered among that place's metrics, with
-        their figures -- "CPU metrics 1-4 of 4: VMAF v1, PSNR, SSIM, XPSNR
-        23.3% (9.8 fps, 0:00:22 remaining)", "GPU metrics 1-2 of 5: VMAF
-        v0.6.1, VMAF NEG 50.0% (55.0 fps, ...)". Metrics in one pass share
-        its figures. Then the tooltip: every metric on a line of its own.
-
-        Built from FFmpeg's and Vship's halves it counted passes -- "GPU
-        metrics 1 of 2" for VMAF and Vship's metrics in one pass -- named
-        metrics by the program instead of the place, a CPU SSIMULACRA2 in
-        Vship's half among the GPU metrics, and took two halves on the CPU
-        for two "CPU metrics".
-
-        Last, each half's decode plan by the place it is in (_decoder_text),
-        two halves in one place that decode differently by their metrics'
-        numbers: "Source: GPU (CPU metrics 1-4) / CPU (CPU metrics 5)"."""
-        units = self._metric_units(snapshots)
-        order: dict[str, list[str]] = {"CPU": [], "GPU": []}
-        for unit in units:
-            for key in unit.keys:
-                if key not in order[unit.place]:
-                    order[unit.place].append(key)
-
-        def head(unit: _MetricUnit) -> str:
-            numbers = sorted(order[unit.place].index(key) + 1 for key in unit.keys)
-            labels = ", ".join(metric_definition(order[unit.place][number - 1]).label for number in numbers)
-            return tr("{kind} {numbers} of {count}: {labels}", kind=tr(_PLACE_NAMES[unit.place]),
-                      numbers=self._numbers_text(numbers), count=len(order[unit.place]), labels=labels)
-
-        def holder(unit: _MetricUnit) -> str:
-            """The metrics of this video holding the GPU's turn while `unit`
-            waits for it: on the CPU after a GPU failure, in the same turn."""
-            for other in units:
-                if (other.task is not unit.task and other.state in ("running", "starting")
-                        and other.task.get("lane") == "gpu"):
-                    return ", ".join(metric_definition(key).label for key in other.keys)
-            return ""
-
-        parts = []
-        for place in ("CPU", "GPU"):
-            if not order[place]:
-                continue
-            mine = [unit for unit in units if unit.place == place]
-            shown = ([unit for unit in mine if unit.state in ("running", "starting")]
-                     or [unit for unit in mine if unit.state == "waiting"][:1]
-                     or [unit for unit in mine if unit.state == "queued"][:1]
-                     or [unit for unit in mine if unit.state == "failed"])
-            if not shown:
-                parts.append(tr("{kind} done", kind=tr(_PLACE_NAMES[place])))
-            for unit in shown:
-                parts.append(self._unit_text(head(unit), unit, paused, holder(unit)))
-        lines = []
-        for place in ("CPU", "GPU"):
-            for key in order[place]:
-                unit = next(unit for unit in units if unit.place == place and key in unit.keys)
-                line = tr("{kind} {numbers} of {count}: {labels}", kind=tr(_PLACE_NAMES[place]),
-                          numbers=order[place].index(key) + 1, count=len(order[place]),
-                          labels=metric_definition(key).label)
-                lines.append(self._unit_tooltip(line, unit, paused))
-        # Each half decodes on its own; one that is done no longer does,
-        # unless none is left.
-        decoding = ([task for task in snapshots if task.get("decode") and task.get("state") not in ("done", "failed")]
-                    or [task for task in snapshots if task.get("decode")])
-        places = [self._half_place(task) for task in decoding]
-        plans: dict[str, str] = {}
-        for task, place in zip(decoding, places, strict=True):
-            name = tr(_PLACE_NAMES[place])
-            if any(other is not task and where == place and other["decode"] != task["decode"]
-                   for other, where in zip(decoding, places, strict=True)):
-                keys = task.get("cpu_keys") or task.get("metric_keys", ())
-                name += " " + self._numbers_text([order[place].index(key) + 1 for key in keys if key in order[place]])
-            plans[name] = str(task["decode"])
-        return parts, "\n".join(lines), plans
-
-    def _unit_text(self, head: str, unit: _MetricUnit, paused: bool, holder: str) -> str:
-        """A unit on the run line: `head` ("GPU metrics 1-2 of 5: VMAF
-        v0.6.1, VMAF NEG"), then how far it is or what it waits for."""
-        if unit.state == "waiting":
-            if unit.task.get("waiting_for") == "CPU":
-                return tr("{kind} queued (waiting for a free CPU slot)", kind=head)
-            if holder:
-                return tr("{kind} queued (waiting for this video's {other} to finish)", kind=head, other=holder)
-            return tr("{kind} queued (another video is using the GPU)", kind=head)
-        if unit.state in ("starting", "queued"):
-            step = self._step_text(str(unit.task.get("step") or "")) if unit.state == "starting" else ""
-            return tr("{kind} ({step})", kind=head, step=step) if step else tr("{kind} starting", kind=head)
-        if unit.state == "done":
-            return tr("{kind} done", kind=head)
-        if unit.state == "failed":  # why: in the video's tooltip when it is over
-            return tr("{kind} failed", kind=head)
-        details = []
-        if paused:
-            # Its last rate and time left would read as if it were running.
-            details.append(tr("paused"))
-        elif unit.fps > 0 and unit.whole > 0:
-            details.append(tr("{fps:.1f} fps", fps=unit.fps))
-            details.append(tr("{time} remaining",
-                              time=format_hms(max(0, unit.whole - unit.done) / unit.scale / unit.fps)))
-        return f"{head} {self._unit_percent(unit)}" + (f" ({tr(', ').join(details)})" if details else "")
-
-    def _unit_tooltip(self, line: str, unit: _MetricUnit, paused: bool) -> str:
-        """A metric's line in its video's tooltip: "GPU metrics 3 of 5:
-        SSIMULACRA2 40.0% (0:00:15 remaining)", "... (done)"."""
-        if unit.state == "done":
-            return tr("{label} (done)", label=line)
-        if unit.state == "failed":
-            return tr("{label} (failed)", label=line)
-        if unit.state == "running":
-            text = f"{line} {self._unit_percent(unit)}"
-            if paused:
-                return f"{text} ({tr('paused')})"
-            if unit.fps > 0 and unit.whole > 0:
-                seconds = max(0, unit.whole - unit.done) / unit.scale / unit.fps
-                return f"{text} ({tr('{time} remaining', time=format_hms(seconds))})"
-            return text
-        if unit.state == "starting":
-            return tr("{kind} starting", kind=line)
-        return tr("{label} (queued)", label=line)
-
-    @staticmethod
-    def _unit_percent(unit: _MetricUnit) -> str:
-        """Rounded down: 99.96% must not read "100.0%" while work remains."""
-        return f"{min(1000, 1000 * max(0, unit.done) // unit.whole) / 10 if unit.whole > 0 else 0.0:.1f}%"
-
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
         # Live progress (queued/starting/frame N of M/paused) belongs on the
         # video's line above -- its rate and time remaining -- not the VMAF
@@ -4693,7 +4417,7 @@ class MainWindow(QMainWindow):
         else:
             self._job_lines_due.add(index)  # see _on_run_tick
 
-    def _on_job_status(self, index: int, message: str) -> None:
+    def _on_job_status(self, index: int, message: str) -> None:  # message: often a core.status.Status
         """Phase messages belong to the video they came from.
 
         Putting them all in the one status line meant that with two videos
@@ -4706,9 +4430,7 @@ class MainWindow(QMainWindow):
             # The runner sends the active plan on each attempt, including
             # software fallbacks. Keep it when progress replaces this phase
             # message; each parallel job owns its own decode plan.
-            marker = "(GPU decode: "
-            if marker in message:
-                plan = message.split(marker, 1)[1].split(")", 1)[0]
+            if (plan := plan_of(message)) is not None:
                 self._job_decode_status[index] = self._decoder_text(index, {"": plan})
             if index in self._job_task_progress:
                 # Keep backend-specific rates and pass progress visible. A
@@ -4722,34 +4444,10 @@ class MainWindow(QMainWindow):
                 self._job_line_shape.pop(index, None)
         self._update_run_status()
 
-    def _decoder_text(self, index: int, plans: dict[str, str]) -> str:
-        """Where each video is decoded, as the run line shows it: "Decoder:
-        Source: GPU, test video: CPU".
-
-        `plans` holds each half's decode plan by the half's name on the line
-        ("CPU metrics"), as the half reports it: "source cuda, distorted
-        cpu" or "off". The line showed it nearly as it came, "Decode:
-        source cuda, test cuda": the decoder API's name where the question
-        is only whether the GPU or the CPU decodes each video. Where the
-        halves differ -- one fell back to software -- each is named: "test
-        video: CPU (CPU metrics) / GPU (GPU metrics)".
-        """
-        def where(plan: str) -> dict[str, str]:
-            sides = dict(part.split(" ", 1) for part in plan.split(", ") if " " in part)
-            return {side: "CPU" if sides.get(side, "cpu") == "cpu" else "GPU" for side in ("source", "distorted")}
-
-        by_half = {half: where(plan) for half, plan in plans.items()}
-
-        def side(name: str) -> str:
-            found = {half: sides[name] for half, sides in by_half.items()}
-            if len(set(found.values())) == 1:
-                return next(iter(found.values()))
-            return " / ".join(f"{decoder} ({half})" for half, decoder in found.items())
-
+    def _decoder_text(self, index: int, plans: dict[str, HwAccelPlan]) -> str:
+        """run_line.decoder_text for a video: a resolution test decodes only its source."""
         row = self._job_rows[index] if 0 <= index < len(self._job_rows) else None
-        if row is not None and row.options.resample_test is not None:
-            return tr("Decoder: Source: {source}", source=side("source"))  # a resolution test decodes only the source
-        return tr("Decoder: Source: {source}, test video: {test}", source=side("source"), test=side("distorted"))
+        return decoder_text(plans, source_only=row is not None and row.options.resample_test is not None)
 
     def _row_index_of(self, row_data: RowData) -> int | None:
         """The table row this RowData currently sits at, or None if it was
@@ -4767,7 +4465,7 @@ class MainWindow(QMainWindow):
         cell said only "This metric failed on the last run" -- the reason
         was on the file name's tooltip, one text for all the row's metrics."""
         reason = row_data.metric_failures.get(key)
-        if reason is None and row_data.analysis_status == "Failed":
+        if reason is None and row_data.analysis_status is RowState.FAILED:
             reason = row_data.status_detail.split("\n\n", 1)[0]  # the whole video failed: its reason
         text = (tr("Failed on the last run: {reason}", reason=tr_message(reason)) if reason
                 else tr("This metric failed on the last run."))
@@ -4832,7 +4530,7 @@ class MainWindow(QMainWindow):
             self.bitrate_panel.add_and_analyze(bitrate_infos)
         if self._source_info is None or self._source_info.path != result.source:
             if final:
-                self._set_row_status(row, N_("Finished for the previous source; select it again to load the result."))
+                self._set_row_status(row, RowState.FOR_PREVIOUS_SOURCE)
             return None
         if cache_options != row_data.options or not cache_cvvdp.same_as(row_data.cvvdp):
             # The row's settings changed after this job was launched, so the
@@ -4843,7 +4541,7 @@ class MainWindow(QMainWindow):
             if final:
                 self._set_row_status(
                     row,
-                    N_("Finished with the previous settings; change them back to see the result."),
+                    RowState.FOR_PREVIOUS_SETTINGS,
                 )
             return None
         previous = row_data.completed_run
@@ -4873,7 +4571,7 @@ class MainWindow(QMainWindow):
         run.partial = not final
         row_data.completed_run = run
         if final:  # a result so far leaves the video in progress
-            row_data.analysis_status = ""
+            row_data.analysis_status = None
         if row_data.options.resample_test is None:
             self._set_row_info(row, result.distorted_info)  # refresh the resize-mismatch note against the actual run
         if final:
@@ -4901,7 +4599,7 @@ class MainWindow(QMainWindow):
             return
         self._rows[row].metric_failures = dict(reasons or {})
         self._set_row_status(
-            row, _PARTLY_FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
+            row, RowState.PARTLY_FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )
         self._set_row_metrics(row)
 
@@ -4913,7 +4611,7 @@ class MainWindow(QMainWindow):
             return  # the row was removed mid-run
         self._rows[row].metric_failures = {}  # the video's reason is every metric's
         self._set_row_status(
-            row, N_("Failed"), f"{message}\n\n{stderr_tail}" if stderr_tail else message
+            row, RowState.FAILED, f"{message}\n\n{stderr_tail}" if stderr_tail else message
         )
         self._set_row_metrics(row)
 
@@ -4923,10 +4621,10 @@ class MainWindow(QMainWindow):
     def _on_all_finished(self) -> None:
         for rd in self._job_rows:
             row = self._row_index_of(rd)
-            if row is not None and rd.analysis_status in {"Calculating", "Queued"}:
+            if row is not None and rd.analysis_status in (RowState.CALCULATING, RowState.QUEUED):
                 # A video the run never reached is as it was, not cancelled.
-                rd.analysis_status = (N_("Cancelled") if self._run_was_cancelled and rd.analysis_status == "Calculating"
-                                      else "")
+                rd.analysis_status = (RowState.CANCELLED if self._run_was_cancelled
+                                      and rd.analysis_status is RowState.CALCULATING else None)
                 self._set_row_metrics(row)
         self._run_elapsed_timer.stop()
         self._run_hold = ""
@@ -4985,19 +4683,35 @@ class MainWindow(QMainWindow):
         # the table under whatever source happens to be selected presents a
         # comparison that was never made -- the row showed one video's score
         # underneath a different reference.
+        # One row per video: two rows with one path, and every lookup by path
+        # (cached scores, probes, a run's result) found only the first.
+        existing = self._row_index_of_path(result.distorted)
+        if existing is not None and QMessageBox.question(
+                self, tr("Already added"),
+                tr("{name} is already in the list. Show the saved run's scores in its place?",
+                   name=result.distorted.name)) != QMessageBox.Yes:
+            return
         if self._source_info is None:
             # Nothing to contradict: adopt the run's own reference, so the
             # window and the result agree about what was compared.
             self._adopt_source_from_run(result)
-        elif not self._same_source(self._source_info.path, result.source)                 and not self._offer_to_switch_source(result):
+        elif (not self._same_source(self._source_info.path, result.source)
+                and not self._offer_to_switch_source(result)):
             return
+        existing = self._row_index_of_path(result.distorted)
+        if existing is not None:
+            previous = self._rows[existing].completed_run
+            if previous is not None and not self.graph_panel.remove_by_identity(previous.graph_identity):
+                self.graph_panel.remove_by_path(self._rows[existing].path)
+            self.distorted_table.removeRow(existing)
+            del self._rows[existing]
 
         run = CompletedRun(result, label)
         row = self._add_table_row(result.distorted)
         row_data = self._rows[row]
         row_data.video_info = result.distorted_info
         row_data.completed_run = run
-        row_data.analysis_status = ""
+        row_data.analysis_status = None
         # The optional-metric columns are driven by row options. Seed those
         # flags from the data that is actually present in the saved result,
         # otherwise valid PSNR/SSIM/XPSNR arrays render as "N/A".
@@ -5204,13 +4918,10 @@ class MainWindow(QMainWindow):
             return None  # the test file has not been read yet
 
         # Crops that a run would apply are only known once it has run:
-        # auto-detection measures the video. Manual and "none" are known
-        # now, so those are exact; auto is previewed uncropped and says so.
+        # auto-detection measures the video. "None" is known now, so it is
+        # exact; auto is previewed uncropped and says so.
         auto_crop_pending = options.crop_mode == CropMode.AUTO
         source_crop = distorted_crop = None
-        if options.crop_mode == CropMode.MANUAL:
-            source_crop = options.manual_source_crop
-            distorted_crop = options.manual_distorted_crop
 
         distorted_info = self._source_info if resample is not None else row.video_info
         reference = self._source_info if resample is not None else distorted_info

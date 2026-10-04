@@ -14,11 +14,7 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE
-from vmaf_app.core.models import CropBox, ResampleTarget, VmafOptions, clone_options
-
-
-def _copy_crop(crop: CropBox | None) -> CropBox | None:
-    return None if crop is None else CropBox(crop.w, crop.h, crop.x, crop.y)
+from vmaf_app.core.models import ResampleTarget, VmafOptions, clone_options
 
 
 def _copy_resample(target: ResampleTarget | None) -> ResampleTarget | None:
@@ -29,8 +25,6 @@ def comparison_recipe_from_vmaf_options(options: VmafOptions) -> ComparisonRecip
     """Snapshot the common scientific preprocessing represented by the UI row."""
     return ComparisonRecipe(
         crop_mode=options.crop_mode,
-        manual_source_crop=_copy_crop(options.manual_source_crop),
-        manual_distorted_crop=_copy_crop(options.manual_distorted_crop),
         scale_algorithm=options.scale_algorithm,
         scale_direction=options.scale_direction,
         duration_limit=options.duration_limit,
@@ -145,22 +139,6 @@ def analysis_request_from_vmaf_options(
             perceptual_backends=tuple(sorted(backend_choices.items())),
         ),
     )
-
-
-def supplemental_metric_specs(options: VmafOptions) -> tuple[MetricRequestSpec, ...]:
-    """Compatible current FFmpeg metrics worth probing in addition to a row's request.
-
-    The UI shows already-cached companion scores when their scientific recipe
-    matches. XPSNR-only requests stay isolated because their full-frame coverage
-    differs from mixed libvmaf runs when subsampling is enabled.
-    """
-    if not any(key != "xpsnr" for key in options.requested_metrics()):
-        return ()
-    fuller = clone_options(options)
-    for metric in FRAME_METRICS:
-        if metric.ffmpeg_binding is not None:
-            fuller.set_metric_enabled(metric.key, True)
-    return metric_request_specs(fuller)
 
 
 def displayable_metric_specs(

@@ -20,18 +20,25 @@ and the exception, with its attributes. While the child runs:
   are attached to this one, so Pause and Cancel reach them as before;
 - `cancel_event`: when it is set the child and everything it started are
   ended, and `cancelled` is raised;
-- the child's log records are logged here, under their own logger names.
+- the child's log records are logged here, under their own logger names;
+- if it crashes, where each of its threads was (faulthandler) is logged here
+  with the crash.
 """
 from __future__ import annotations
 
 import contextlib
+import faulthandler
 import logging
 import multiprocessing
+import os
+import tempfile
 import threading
 import traceback
+import uuid
 from collections.abc import Callable, Iterable
 from multiprocessing.connection import wait
 from multiprocessing.reduction import ForkingPickler
+from pathlib import Path
 
 import psutil
 
@@ -80,6 +87,9 @@ def run_isolated(
         kwargs.pop(name, None)
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
+    # Where the child's threads are written if it crashes: a native crash
+    # ends it before it can send anything, and it used to leave no trace.
+    crash_path = Path(tempfile.gettempdir()) / f"vml-isolated-{os.getpid()}-{uuid.uuid4().hex[:12]}.txt"
     # The lowest level any of the app's loggers takes: the app's own log is
     # at INFO on its package logger while the root logger stays at WARNING,
     # and the root's level alone dropped every INFO line the child wrote
@@ -90,17 +100,17 @@ def run_isolated(
     child = context.Process(
         target=_child_main,
         args=(sender, level, target, args, kwargs,
-              tuple(calls), process_handle is not None, cancel_event is not None),
+              tuple(calls), process_handle is not None, cancel_event is not None, str(crash_path)),
         name=f"isolated-{what}", daemon=True,
     )
     child.start()
     sender.close()
     attached: set[int] = set()
     outcome: tuple[str, object] | None = None
+    crash_threads = ""
     try:
         while outcome is None:
             if cancel_event is not None and cancel_event.is_set():
-                _end_tree(child.pid)
                 raise (cancelled or RuntimeError)("Cancelled by user")
             ready = wait([receiver, child.sentinel], _POLL_SECONDS)
             if not ready:
@@ -127,6 +137,12 @@ def run_isolated(
                     process_handle.detach(message[1])
             else:  # "result" or "error"
                 outcome = message
+    except BaseException:
+        # A Cancel, or a callback that failed: the child's work is not
+        # wanted any more, and it and what it started are ended now. (A
+        # failed callback used to leave it running for five more seconds.)
+        _end_tree(child.pid)
+        raise
     finally:
         receiver.close()
         if outcome is None or child.is_alive():
@@ -137,15 +153,33 @@ def run_isolated(
         if process_handle is not None:
             for pid in attached:
                 process_handle.detach(pid)
+        # Here, whichever way the loop was left: a Cancel raises out of it,
+        # and so does a callback that fails, and the child's file -- empty,
+        # without a crash -- stayed in the temp folder after each.
+        crash_threads = _take_text(crash_path)
     if cancel_event is not None and cancel_event.is_set():
         # Cancel ends the child's FFmpeg too: what the child made of that
         # (a failed read, a dead pipe) is not the outcome.
         raise (cancelled or RuntimeError)("Cancelled by user")
     if outcome is None:
-        raise IsolatedCrashError(what, child.exitcode)
+        error = IsolatedCrashError(what, child.exitcode)
+        if crash_threads:
+            _log.error("%s; its threads at the crash:\n%s", error, crash_threads)
+        raise error
     if outcome[0] == "error":
         raise _rebuild_exception(*outcome[1:])
     return outcome[1]
+
+
+def _take_text(path: Path) -> str:
+    """The text of `path`, which is then removed; "" if there is none."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+    with contextlib.suppress(OSError):
+        path.unlink()
+    return text
 
 
 def _end_tree(pid: int | None) -> None:
@@ -212,7 +246,12 @@ class _LogForwarder(logging.Handler):
 
 
 def _child_main(connection, log_level: int, target: Callable, args: tuple, kwargs: dict,
-                callback_names: tuple[str, ...], has_handle: bool, has_cancel: bool) -> None:
+                callback_names: tuple[str, ...], has_handle: bool, has_cancel: bool, crash_path: str) -> None:
+    try:
+        crash_file = open(crash_path, "w", encoding="utf-8")  # noqa: SIM115 -- open while the process lives
+        faulthandler.enable(crash_file, all_threads=True)
+    except (OSError, RuntimeError):
+        pass  # the work runs the same without it
     sender = _Sender(connection)
     root = logging.getLogger()
     for handler in list(root.handlers):

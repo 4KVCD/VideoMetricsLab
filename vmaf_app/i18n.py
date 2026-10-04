@@ -225,7 +225,6 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video "
     "over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.",
     "GPU scoring failed ({error}); the CPU retry failed too: {reason}",
-    "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept",
     "{metric} needs a GPU that Vship can use, and could not use one: {reason}",
     "{metric} could not be calculated: {reason}",
     "Vship GPU acceleration is only bundled for Windows.",
@@ -237,6 +236,8 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "FFmpeg failed while decoding the {side} for Vship.",
     "Could not start FFmpeg for Vship: {error}",
     "FFmpeg ended partway through a {side} frame.",
+    "FFmpeg did not give the timestamp of a {side} frame.",
+    "The source has no frame at the test video's first.",
     "Could not allocate Vship pinned frame memory: {error}",
     "Could not initialize Vship {metric}: {error}",
     "Vship {metric} failed: {error}",
@@ -251,7 +252,6 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "Vship does not support the {primaries} color primaries.",
     "Vship does not support the {range} range tag.",
     "Vship does not support {siting} chroma siting.",
-    "Variable-frame-rate video is not supported safely yet.",
     "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate "
     "before comparing them.",
     "Frame rates do not match ({source} vs {test} fps).",

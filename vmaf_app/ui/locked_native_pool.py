@@ -3,24 +3,40 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 
 from vmaf_app.core.frame_extract import comparison_dimensions
 from vmaf_app.core.gstreamer_playback import GstComparePipeline, _load_gstreamer
 from vmaf_app.core.locked_presentation import LockedPresentation, SingleSoundtrack
 from vmaf_app.core.video_playback import neighbour_indices, source_playback_comparison
-from vmaf_app.ui.native_playback_pool import _StopNative
 from vmaf_app.ui.video_compare_view import _PairedFrameWidget
+
+
+class _StopNative(QThread):
+    def __init__(self, pipeline, parent):
+        super().__init__(parent)
+        self.pipeline = pipeline
+
+    def run(self):
+        self.pipeline.stop()
+
+    def cancel(self):
+        """Already stopping: allow teardown to finish, never terminate it.
+
+        The main window cancels all live workers during shutdown, including
+        this one. Interrupting D3D11 teardown could destroy live resources.
+        """
 
 
 class LockedNativePool:
     def __init__(self, view, series, selected, position_ms, settings, playing, source_native=True):
+        # GStreamer first: it repairs the environment gi reads.
+        self.gst, _ = _load_gstreamer()
         import gi
 
         gi.require_version("GstD3D11", "1.0")
         from gi.repository import GstD3D11
 
-        self.gst, _ = _load_gstreamer()
         self.device = GstD3D11.D3D11Device.new(0, 0)
         if self.device is None:
             raise RuntimeError("D3D11 device unavailable")
@@ -95,9 +111,7 @@ class LockedNativePool:
         for key, (comparison, side) in self.desired.items():
             if key in self.entries or occupied >= self.view.decoder_limit or self.closed:
                 continue
-            player = GstComparePipeline(comparison, 0, 0, self.settings,
-                                        single_side=side, audio_enabled=False,
-                                        sample_output=True, device=self.device)
+            player = GstComparePipeline(comparison, self.settings, side, device=self.device)
             self.entries[key] = [player, None, self.position, False]
             self.frames[key] = {}
             player.start(max(0, self.position - round(1000 / self.fps)), True)

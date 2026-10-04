@@ -4,18 +4,18 @@
 
 `vmaf_app.main` creates the Qt application. `ui/main_window.py` owns video rows,
 options and orchestration. The UI imports `core`; core does not import UI.
-`tests/test_architecture.py` checks this boundary. Core is not completely
-Qt-free: tool discovery uses QSettings and native playback loads GI bindings.
+`tests/test_architecture.py` checks this boundary, and that core imports no
+Qt at all. Native playback in core does load GI bindings.
 
 | Concern | Main modules |
 | --- | --- |
-| Media metadata and geometry | `core/ffprobe.py`, `crop_detect.py`, `model_select.py` |
-| Metric requests and execution | `core/analysis_request.py`, `ffmpeg_request.py`, `execution.py`, `vmaf_runner.py`, `ui/worker.py` |
+| Media metadata and geometry | `core/ffprobe.py`, `geometry.py`, `crop_detect.py`, `model_select.py` |
+| Metric requests and execution | `core/analysis_request.py`, `ffmpeg_request.py`, `execution.py`, `vmaf_runner.py`, `job_runner.py` |
 | Metric registry and packed scores | `core/metrics.py`, `core/models.py` |
 | Results and persistence | `core/run_io.py`, `core/result_cache.py` |
 | Statistics and plotting | `core/stats.py`, `ui/graph_panel.py`, `chart.py` |
 | Still comparison | `core/frame_extract.py`, `ui/frame_extract_worker.py` |
-| Playback orchestration | `ui/rolling_video_view.py`, `video_compare_view.py` |
+| Playback orchestration | `ui/video_compare_view.py`, `playback_worker.py` |
 | Native playback and synchronization | `core/gstreamer_playback.py`, `locked_presentation.py`, `ui/locked_native_pool.py` |
 | FFmpeg playback fallback | `core/video_playback.py`, `ui/playback_worker.py` |
 | Bitrate analysis | `core/bitrate.py`, `ui/bitrate_worker.py`, `bitrate_panel.py` |
@@ -83,9 +83,11 @@ the current five displayed metrics.
 ## Comparison recipe, requests and execution
 
 `ComparisonRecipe` describes the scientifically compared pictures: crop
-policy, manual crops, scaling algorithm and direction, duration limit, and a
-possible resolution round-trip recipe. It intentionally excludes decode GPU,
-GPU vendor, libvmaf thread count, and the application's parallel-job count.
+policy, manual crops, scaling direction, duration limit, and a possible
+resolution round-trip recipe. It intentionally excludes decode GPU, GPU vendor,
+libvmaf thread count, and the application's parallel-job count -- and the
+scaling algorithm, which it carries for the run but not in its identity:
+pictures scaled with another algorithm, or on the GPU, are the same comparison.
 
 `AnalysisRequest` is the backend-neutral contract used by cache and planning.
 It contains the common recipe, immutable `MetricRequestSpec` objects, and

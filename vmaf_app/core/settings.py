@@ -6,12 +6,18 @@ belong to the user.
 """
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 import os
-from dataclasses import asdict, dataclass, field, fields
+import tempfile
+import typing
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from vmaf_app.core.app_paths import settings_file
+
+_log = logging.getLogger(__name__)
 
 #: Above this many logical cores, a fresh install scores two videos at once.
 #: One libvmaf job leaves a big CPU largely idle (see MAX_PARALLEL_JOBS for
@@ -150,7 +156,10 @@ class Settings:
         """Read saved settings, using defaults for missing or unreadable data.
 
         Unknown keys are ignored so a stray or future field cannot stop the
-        application from starting.
+        application from starting. So is a value of the wrong type -- a
+        hand-edited file, say "parallel_jobs": "2" or "hidden_metrics": "psnr"
+        -- which used to be kept as it was and fail later, wherever the
+        setting was used: that setting keeps its default, the others load.
         """
         try:
             data = json.loads(cls.path().read_text(encoding="utf-8"))
@@ -158,14 +167,36 @@ class Settings:
             return cls()
         if not isinstance(data, dict):
             return cls()
-        known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        kinds = typing.get_type_hints(cls)
+        kept = {}
+        for name, value in data.items():
+            if name not in kinds:
+                continue
+            if _fits(value, kinds[name]):
+                kept[name] = value
+            else:
+                _log.warning("Settings: %s is %r, not a %s; using its default", name, value, kinds[name])
+        return cls(**kept)
 
     def save(self) -> str | None:
-        """Returns None on success, or a message to show the user."""
+        """Returns None on success, or a message to show the user.
+
+        Written whole beside the file, then put in its place: written in
+        place, a crash or a full disk part-way left a truncated file, which
+        the next start read as no settings at all."""
+        path = self.path()
         try:
-            self.path().write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
+            descriptor, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
         except OSError as e:
+            return f"Could not save settings: {e}"
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(asdict(self), indent=2))
+            os.replace(temporary, path)
+        except OSError as e:
+            with contextlib.suppress(OSError):
+                temporary.unlink()
             return f"Could not save settings: {e}"
         return None
 
@@ -192,3 +223,18 @@ class Settings:
         if self.default_compute_ssim:
             features.append("name=float_ssim")
         return features
+
+
+def _fits(value, kind) -> bool:
+    """Whether a value read from the settings file is of a field's type:
+    bool, int, str, or a list of one of them (or of dicts)."""
+    if kind is bool:
+        return isinstance(value, bool)
+    if kind is int:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind in (str, float, dict):
+        return isinstance(value, kind)
+    if typing.get_origin(kind) is list:
+        (item,) = typing.get_args(kind) or (object,)
+        return isinstance(value, list) and all(_fits(element, item) for element in value)
+    return kind is object

@@ -26,20 +26,20 @@ try {
     $distPath = Join-Path $OutputRoot 'dist'
     New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
 
-    # 1. The GPU HDR->SDR shader. Optional -- the app falls back to FFmpeg
-    #    tone mapping without it -- so a missing compiler is a warning, not a
-    #    failure. But a release should have it, so say so loudly.
-    $tonemap = Join-Path $projectDirectory 'vmaf_app/native/d3d11_tonemap.dll'
-    if (Get-Command g++ -ErrorAction SilentlyContinue) {
-        Write-Host '==> Building d3d11_tonemap.dll' -ForegroundColor Cyan
-        & (Join-Path $PSScriptRoot 'build_d3d11_tonemap.ps1')
-    } elseif (Test-Path $tonemap) {
-        Write-Warning 'g++ not found; reusing the existing d3d11_tonemap.dll.'
-    } else {
-        Write-Warning ('g++ not found and no d3d11_tonemap.dll present. The build ' +
-                       'will fall back to FFmpeg tone mapping. Install MinGW-w64 ' +
-                       'to include the GPU shader.')
+    # 1. The native libraries, built from this commit's source every time:
+    #    the GPU HDR->SDR shader and the GPU frame decoders the GPU metrics
+    #    read their frames from (NVIDIA's, Intel's and AMD's). The app runs
+    #    without them -- FFmpeg tone maps and decodes instead -- which is
+    #    exactly why a release missing one would look fine. They are not in
+    #    git, so ones left from another commit would be stale; a release
+    #    needs g++ (MinGW-w64) and builds them, or does not build at all.
+    if (-not (Get-Command g++ -ErrorAction SilentlyContinue)) {
+        throw 'g++ (MinGW-w64) is needed to build the native libraries; see docs/BUILD.md'
     }
+    Write-Host '==> Building d3d11_tonemap.dll' -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'build_d3d11_tonemap.ps1')
+    Write-Host '==> Building the GPU frame decoders' -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'build_gpu_frames.ps1')
 
     # 2. Freeze. --noconfirm so a rebuild does not stop to ask about dist/.
     Write-Host '==> Running PyInstaller' -ForegroundColor Cyan
@@ -107,6 +107,19 @@ try {
     }
     if ($selfTest -ne 0) {
         throw 'The self-test reported a failure (see above)'
+    }
+
+    # The native libraries and the notices of the headers built into them.
+    $native = Join-Path $output '_internal/vmaf_app/native'
+    foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll')) {
+        if (-not (Test-Path (Join-Path $native $library))) {
+            throw "Bundled native library is missing: $library"
+        }
+    }
+    foreach ($notice in @('LICENSE.nv-codec-headers.txt', 'LICENSE.onevpl.txt', 'LICENSE.amf.txt')) {
+        if (-not (Test-Path (Join-Path $native "licenses/$notice"))) {
+            throw "Bundled native library license notice is missing: $notice"
+        }
     }
 
     $perceptualTools = @('ssimulacra2.exe', 'butteraugli_main.exe')

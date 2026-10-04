@@ -10,6 +10,14 @@ FFmpeg's graph ends in its CPU filters as before and, beside them, in two raw
 outputs, one per video, written to named pipes that this module reads and
 feeds to libvmaf frame pair by frame pair (see vmaf_runner._run_on_gpu).
 
+Where NVIDIA's decoder decodes both videos, VMAF is scored without FFmpeg's
+decode (score_decoded): the videos are decoded in libvmaf's process
+(gpu_frames), scaled and widened on the GPU to the size and depth they
+are compared at, the frames paired as libvmaf's filter pairs them
+(frame_sync), and each frame's luma -- all VMAF reads -- copied on the GPU
+into a picture of libvmaf's on the GPU. No frame crosses to system memory;
+FFmpeg only copies the compressed streams out of their containers.
+
 Scores against the CPU (vmaf.exe of the same build, frame by frame): VIF and
 ADM identical; motion within about 3e-5, from the order the CUDA kernel
 rounds its blur in (libvmaf issue 1562, which nobody has fixed). VMAF and
@@ -28,12 +36,22 @@ import msvcrt
 import os
 import queue
 import threading
+import time
 import uuid
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core import gpu_frames
+from vmaf_app.core.frame_sync import frame_pairs
+from vmaf_app.core.models import CropBox, VideoInfo
+
 _log = logging.getLogger(__name__)
+#: ConnectNamedPipe's answers when the writer has already connected (535),
+#: or has connected, written and closed (232).
+_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA = 535, 232
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "libvmaf" / "libvmaf.dll"
 #: What a GPU score records it was calculated with (its provenance).
@@ -50,6 +68,14 @@ _VMAF_LOG_LEVEL_ERROR = 1
 #: the GPU without holding more host memory than it needs (25 MB each at
 #: 4K 10-bit).
 _PICTURES = 8
+#: The CUDA device GPU VMAF runs on, its decoders included: CUDA's first,
+#: which by its default order (CUDA_DEVICE_ORDER=FASTEST_FIRST) is the
+#: fastest NVIDIA GPU. It is the one FFmpeg's -hwaccel cuda takes, and the
+#: one Vship's CUDA build picks (the first discrete GPU it lists;
+#: perceptual_vship._probe_vship_device), so on a PC with two NVIDIA GPUs
+#: every GPU metric and decode still lands on the same card. The app offers
+#: no choice of GPU.
+_GPU = 0
 #: Frames each reader may hold ready before the feeder takes them.
 _READ_AHEAD = 3
 _PIPE_BYTES = 64 * 1024 * 1024
@@ -88,6 +114,15 @@ class _CudaConfiguration(ctypes.Structure):
     _fields_ = [("cu_ctx", ctypes.c_void_p)]
 
 
+class _CudaPictureConfiguration(ctypes.Structure):
+    _fields_ = [("pic_params", _PictureParameters), ("pic_prealloc_method", ctypes.c_int)]
+
+
+#: VMAF_CUDA_PICTURE_PREALLOCATION_METHOD_DEVICE: libvmaf's own pictures in
+#: GPU memory, which the decoded frames are copied into on the GPU.
+_PREALLOCATE_ON_DEVICE = 1
+
+
 _library: ctypes.CDLL | None = None
 
 
@@ -105,6 +140,8 @@ def _load() -> ctypes.CDLL:
             ("vmaf_use_features_from_model", ctypes.c_int, [handle, handle]),
             ("vmaf_preallocate_pictures", ctypes.c_int, [handle, _PictureConfiguration]),
             ("vmaf_fetch_preallocated_picture", ctypes.c_int, [handle, ctypes.POINTER(_Picture)]),
+            ("vmaf_cuda_preallocate_pictures", ctypes.c_int, [handle, _CudaPictureConfiguration]),
+            ("vmaf_cuda_fetch_preallocated_picture", ctypes.c_int, [handle, ctypes.POINTER(_Picture)]),
             ("vmaf_read_pictures", ctypes.c_int,
              [handle, ctypes.POINTER(_Picture), ctypes.POINTER(_Picture), ctypes.c_uint]),
             ("vmaf_score_at_index", ctypes.c_int, [handle, handle, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]),
@@ -126,10 +163,14 @@ def _check(error: int, what: str) -> None:
 class GpuScorer:
     """One libvmaf context on the GPU, given frame pairs in order: the luma
     and chroma planes of 4:2:0 frames, packed as FFmpeg's rawvideo writes
-    them, at `bit_depth` bits (16-bit little-endian samples above 8)."""
+    them, at `bit_depth` bits (16-bit little-endian samples above 8) --
+    or, with `on_device`, pictures in GPU memory that add_on_device has
+    filled (their luma: VMAF reads nothing else)."""
 
-    def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1):
+    def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
+                 on_device: bool = False):
         self._lib = lib = _load()
+        self._on_device = on_device
         self._step = max(1, n_subsample)
         self._context = ctypes.c_void_p()
         self._models: dict[str, ctypes.c_void_p] = {}
@@ -147,9 +188,13 @@ class GpuScorer:
                        f"Loading the {version} model")
                 self._models[name] = model
                 _check(lib.vmaf_use_features_from_model(self._context, model), f"Setting up {version}")
-            pictures = _PictureConfiguration(
-                _PictureParameters(width, height, bit_depth, _VMAF_PIX_FMT_YUV420P), _PICTURES)
-            _check(lib.vmaf_preallocate_pictures(self._context, pictures), "Allocating pictures")
+            parameters = _PictureParameters(width, height, bit_depth, _VMAF_PIX_FMT_YUV420P)
+            if on_device:
+                pictures = _CudaPictureConfiguration(parameters, _PREALLOCATE_ON_DEVICE)
+                _check(lib.vmaf_cuda_preallocate_pictures(self._context, pictures), "Allocating pictures")
+            else:
+                _check(lib.vmaf_preallocate_pictures(self._context, _PictureConfiguration(parameters, _PICTURES)),
+                       "Allocating pictures")
         except BaseException:
             self.close()
             raise
@@ -165,16 +210,28 @@ class GpuScorer:
 
     def add(self, reference: bytearray, distorted: bytearray) -> None:
         """Scores one more pair (frame index = how many came before)."""
+        self._add(lambda picture: self._fill(picture, reference), lambda picture: self._fill(picture, distorted))
+
+    def add_on_device(self, reference: Callable[[int, int], None], distorted: Callable[[int, int], None]) -> None:
+        """Scores one more pair of pictures in GPU memory: `reference` and
+        `distorted` are each given a picture's luma plane (address, pitch)
+        to fill, and return once it is filled."""
+        self._add(lambda picture: reference(picture.data[0], picture.stride[0]),
+                  lambda picture: distorted(picture.data[0], picture.stride[0]))
+
+    def _add(self, fill_reference, fill_distorted) -> None:
+        fetch = (self._lib.vmaf_cuda_fetch_preallocated_picture if self._on_device
+                 else self._lib.vmaf_fetch_preallocated_picture)
         ref, dist = _Picture(), _Picture()
-        _check(self._lib.vmaf_fetch_preallocated_picture(self._context, ctypes.byref(ref)), "Taking a picture")
+        _check(fetch(self._context, ctypes.byref(ref)), "Taking a picture")
         try:
-            _check(self._lib.vmaf_fetch_preallocated_picture(self._context, ctypes.byref(dist)), "Taking a picture")
+            _check(fetch(self._context, ctypes.byref(dist)), "Taking a picture")
         except BaseException:
             self._lib.vmaf_picture_unref(ctypes.byref(ref))
             raise
         try:
-            self._fill(ref, reference)
-            self._fill(dist, distorted)
+            fill_reference(ref)
+            fill_distorted(dist)
         except BaseException:
             # Pictures taken from the pool and never handed over keep
             # vmaf_close waiting for them.
@@ -252,7 +309,11 @@ class _PipeReader(threading.Thread):
             try:
                 _winapi.ConnectNamedPipe(self._handle, _winapi.NULL)
             except OSError as error:
-                if error.winerror != 535:  # ERROR_PIPE_CONNECTED: FFmpeg was first
+                # ERROR_PIPE_CONNECTED: FFmpeg was first. ERROR_NO_DATA: it
+                # came, wrote and went before this connected -- what it
+                # wrote is still there to read. Taken for an error, a short
+                # run on a busy machine lost all of it.
+                if error.winerror not in (_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA):
                     raise
             if self._stopped.is_set():
                 return
@@ -382,6 +443,113 @@ class GpuAttempt:
         return args
 
 
+# ------------------------------------------------- videos decoded here
+
+def score_decoded(
+    source: VideoInfo, distorted: VideoInfo, source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+    width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
+    duration_limit: str | None, total_frames: int, scale_algorithm: str = "bicubic",
+    on_progress: Callable[[int, int, float], None] | None = None,
+    check_cancel: Callable[[], None] = lambda: None,
+    process_handle=None,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """VMAF and NEG with both videos decoded by NVIDIA's decoder in this
+    process: what GpuAttempt scores from FFmpeg's raw outputs, the same
+    frames compared.
+
+    FFmpeg's graph for those outputs -- the decoded frames cropped, scaled to
+    the size compared at, converted to its depth, paired by overlay with
+    libvmaf's frame sync, cut by each output's -t -- is done here:
+    gpu_frames crops as FFmpeg's crop filter does, shifts 10-bit samples and
+    widens 8-bit ones as FFmpeg converts them, and scales on the GPU with the
+    same filter (not to the sample: the user decided a comparison scaled any
+    way is the same one); frame_sync.frame_pairs pairs as the overlay does,
+    and a pair is scored while the test frame's time from the first is below
+    `duration_limit` (the outputs' -t, as text) in the test video's time
+    base, as FFmpeg's trim filter cuts.
+
+    GpuDecodeUnavailableError when the videos are not decoded here (FFmpeg then
+    decodes them, as before): another decoder, a codec or size it does not
+    take. GpuDecodeFailedError when decoding failed after the start -- the run
+    is then made again through FFmpeg."""
+    plans = []
+    for info, crop in ((distorted, distorted_crop), (source, source_crop)):
+        plan = gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
+                                        algorithm=scale_algorithm)
+        if plan.bit_depth < bit_depth:
+            full = (info.color_range or "").casefold() in {"pc", "jpeg", "full"} or (
+                not info.color_range and (info.pix_fmt or "").casefold().startswith("yuvj"))
+            plan = replace(plan, widen=gpu_frames.WIDEN_REPEAT if full else gpu_frames.WIDEN_SHIFT)
+        if plan.bit_depth > bit_depth:
+            raise gpu_frames.GpuDecodeUnavailableError(
+                f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
+        supported, refusal = gpu_frames.decoder_supports(_GPU, plan)
+        if not supported:
+            raise gpu_frames.GpuDecodeUnavailableError(refusal)
+        plans.append(plan)
+    # The decoders first: the first to start CUDA sets its waits to sleep
+    # rather than spin (gpu_frames), and libvmaf's then do too.
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], _GPU, pool=4, process_handle=process_handle)
+    try:
+        ref = gpu_frames.GpuFrameStream(source, plans[1], _GPU, pool=4, process_handle=process_handle)
+    except BaseException:
+        test.close()
+        raise
+    scorer = None
+    try:
+        scorer = GpuScorer(width, height, bit_depth, models, n_subsample, on_device=True)
+        test.start()
+        ref.start()
+        test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
+        stop = gpu_frames.duration_in(duration_limit, test_base) if duration_limit else None
+
+        def puller(stream):
+            def pull():
+                while True:
+                    check_cancel()
+                    try:
+                        return stream.next(100)
+                    except TimeoutError:
+                        continue
+            return pull
+
+        pairs = frame_pairs(puller(test), puller(ref), test_base, ref_base, test.release, ref.release)
+        count = 0
+        started = reported = time.perf_counter()
+        try:
+            for test_slot, ref_slot, when in pairs:
+                if stop is not None and when >= stop:
+                    break
+                if ref_slot is None:
+                    raise gpu_frames.GpuDecodeFailedError("the source has no frame for the test video's first")
+                scorer.add_on_device(lambda address, pitch, slot=ref_slot: ref.copy_luma(slot, address, pitch),
+                                     lambda address, pitch, slot=test_slot: test.copy_luma(slot, address, pitch))
+                count += 1
+                # Four times a second, about as often as FFmpeg's -progress:
+                # each report crosses to the app's process.
+                now = time.perf_counter()
+                if on_progress is not None and now - reported >= 0.25:
+                    reported = now
+                    on_progress(count, total_frames, count / (now - started))
+        finally:
+            pairs.close()  # gives the frames it holds back
+        # The pictures decoded so far are the packets', one each (the end of
+        # a video was checked when it came).
+        test.verify()
+        ref.verify()
+        result = scorer.finish()
+        if on_progress is not None and count:
+            elapsed = time.perf_counter() - started
+            on_progress(count, total_frames, count / elapsed if elapsed > 0 else 0.0)
+        return result
+    finally:
+        # The decoders before libvmaf: their threads stop first.
+        test.close()
+        ref.close()
+        if scorer is not None:
+            scorer.close()
+
+
 # ------------------------------------------------------------ availability
 
 def gpu_models(compute_vmaf: bool, compute_vmaf_neg: bool, model: str) -> dict[str, str] | None:
@@ -431,15 +599,19 @@ def probe() -> tuple[bool, str]:
 
 _PROBE_LOCK = threading.Lock()
 _probed: tuple[bool, str] | None = None
+_probed_at = 0.0
+#: A failed probe older than this is made again before the next run
+#: (forget_failed_probe), as Vship's is.
+FAILED_PROBE_RETRY_SECONDS = 60.0
 
 
 def gpu_vmaf_available() -> tuple[bool, str]:
     """Whether libvmaf scores on this PC's GPU, and with what (or why not).
     Probed once, in a process of its own, and only with an NVIDIA GPU."""
-    global _probed
+    global _probed, _probed_at
     with _PROBE_LOCK:
         if _probed is None:
-            _probed = _probe_once()
+            _probed, _probed_at = _probe_once(), time.monotonic()
             available, text = _probed
             if available:
                 _log.info("VMAF on the GPU: %s", text)
@@ -459,6 +631,24 @@ def _probe_once() -> tuple[bool, str]:
         return run_isolated(probe, what="libvmaf's GPU probe")
     except IsolatedCrashError as error:
         return False, str(error)
+    except Exception as error:
+        # Any failure is "not on this GPU": one that escaped here left the
+        # probe unanswered and failed every video's setup with it, instead
+        # of calculating VMAF on the CPU.
+        _log.warning("libvmaf's GPU probe failed", exc_info=error)
+        return False, f"the GPU probe failed: {error}"
+
+
+def forget_failed_probe() -> None:
+    """Before a run, off the UI thread: makes again a probe that failed a
+    while ago. The failure may have been passing -- a driver being updated
+    or restarted -- and was kept for the session, calculating VMAF on the
+    CPU until the app restarted."""
+    global _probed
+    with _PROBE_LOCK:
+        if (_probed is not None and not _probed[0]
+                and time.monotonic() - _probed_at >= FAILED_PROBE_RETRY_SECONDS):
+            _probed = None
 
 
 def start_gpu_vmaf_probe() -> None:
@@ -467,13 +657,24 @@ def start_gpu_vmaf_probe() -> None:
 
 
 def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
-                  enabled: bool = True, bit_depth: int = 8) -> dict[str, str] | None:
+                  enabled: bool = True, bit_depth: int = 8,
+                  size: tuple[int, int] | None = None) -> dict[str, str] | None:
     """The models a run scores on the GPU (gpu_models), or None when its
-    VMAF is calculated on the CPU: the video set to CPU (`enabled`, its
-    VmafOptions.vmaf_on_gpu), a custom model, a comparison deeper than 10
-    bits (`bit_depth`: the frames libvmaf pairs reach the GPU through
-    FFmpeg's overlay, which holds 8 and 10 bits), or no GPU libvmaf can use."""
-    if not enabled or bit_depth > 10:
+    VMAF is calculated on the CPU:
+    - the video set to CPU (`enabled`, its VmafOptions.vmaf_on_gpu);
+    - a custom model;
+    - a comparison deeper than 10 bits (`bit_depth`: the frames libvmaf
+      pairs reach the GPU through FFmpeg's overlay, which holds 8 and 10
+      bits);
+    - a comparison at an odd width or height (`size`, where it is known):
+      the pairs cross that overlay side by side on one 4:2:0 canvas
+      (vmaf_runner._gpu_pairs_stage), and FFmpeg's pad, which makes it,
+      keeps a 4:2:0 picture on whole chroma samples -- it gives an even
+      size and blacks out an odd picture's last column and row. The
+      attempt used to be made, fail in FFmpeg, and VMAF be calculated
+      again on the CPU after a "VMAF on the GPU failed";
+    - no GPU libvmaf can use."""
+    if not enabled or bit_depth > 10 or (size is not None and (size[0] & 1 or size[1] & 1)):
         return None
     models = gpu_models(compute_vmaf, compute_vmaf_neg, model)
     if models is None or not gpu_vmaf_available()[0]:

@@ -32,7 +32,7 @@ def _info(path: str) -> VideoInfo:
 
 def _request(*keys: str) -> AnalysisRequest:
     return AnalysisRequest(
-        recipe=ComparisonRecipe(CropMode.NONE, None, None, "bicubic", ScaleDirection.SOURCE_TO_DISTORTED, 0.0, None),
+        recipe=ComparisonRecipe(CropMode.NONE, "bicubic", ScaleDirection.SOURCE_TO_DISTORTED, 0.0, None),
         metrics=tuple(MetricRequestSpec(key, "perceptual", (), FrameCoverage("full"), f"{key}-reference-cli-v1") for key in keys),
         execution=ExecutionPreferences(False, GpuVendor.NONE, 1),
     )
@@ -73,6 +73,8 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
     request = _request("ssimulacra2", "butteraugli")
     references = [tmp_path / f"r-{i}.png" for i in range(3)]
     tests = [tmp_path / f"t-{i}.png" for i in range(3)]
+    for picture in (*references, *tests):
+        picture.write_bytes(bytes([0x89]) + b"PNG")  # their colours are described before scoring
     monkeypatch.setattr("vmaf_app.core.perceptual_cpu.find_metric_executable", lambda key: key)
     def fake_pairs(*_args):
         yield from zip(references, tests, strict=True)
@@ -224,8 +226,9 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
     ]
 
 
-def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
-    """A stand-in for ssimulacra2: sleeps, then prints a score. Returned as
+def _waiting_tool(tmp_path) -> tuple[str, Path, Path]:
+    """A stand-in for ssimulacra2 that prints its score once the file
+    "finish" exists beside it, and never otherwise. Returned as
     (executable, "reference", "test") for _run_metric's argument order.
 
     Run by the real interpreter, not a virtual environment's python.exe:
@@ -236,8 +239,25 @@ def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
     single processes."""
 
     script = tmp_path / "tool.py"
-    script.write_text(f"import time\ntime.sleep({seconds})\nprint('score: 42.5')\n", encoding="utf-8")
+    script.write_text("import os, time\n"
+                      f"while not os.path.exists({str(tmp_path / 'finish')!r}):\n"
+                      "    time.sleep(0.01)\n"
+                      "print('score: 42.5')\n", encoding="utf-8")
     return STDLIB_PYTHON, script, tmp_path / "unused.png"
+
+
+def _attached(handle, worker) -> int:
+    """The tool's process, once `handle` holds it: attach suspends a new
+    process of a paused job under the same lock."""
+    import time
+
+    for _ in range(3000):  # a bound against a hang, not a timing assertion
+        with handle._lock:
+            if handle._pids:
+                return next(iter(handle._pids))
+        assert worker.is_alive(), "the tool ended before it was attached"
+        time.sleep(0.01)
+    raise AssertionError("the tool was never attached to the job's handle")
 
 
 def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
@@ -245,46 +265,64 @@ def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
     scoring while the app said Paused."""
     import threading
 
+    import psutil
+
     from vmaf_app.core.perceptual_cpu import _run_metric
     from vmaf_app.core.process_control import ProcessHandle
 
-    executable, script, other = _slow_tool(tmp_path, 0.2)
+    executable, script, other = _waiting_tool(tmp_path)
     handle = ProcessHandle()
     handle.pause()
     out = []
     worker = threading.Thread(target=lambda: out.append(_run_metric(executable, "ssimulacra2", script, other, handle)))
     worker.start()
-    worker.join(0.8)  # four times what the tool needs, Python's start included
-    assert worker.is_alive(), "the tool ran on while the job was paused"
+    pid = _attached(handle, worker)
+    (tmp_path / "finish").touch()  # would end it, were it running
+    assert psutil.Process(pid).status() == psutil.STATUS_STOPPED, "the tool ran on while the job was paused"
     handle.resume()
-    worker.join(10.0)
+    worker.join(30.0)
     assert out == [42.5]
 
 
 def test_cancel_ends_a_cpu_tool_at_once(tmp_path):
     import threading
-    import time
+
+    import psutil
 
     from vmaf_app.core.perceptual_cpu import PerceptualCancelled, _run_metric
     from vmaf_app.core.process_control import ProcessHandle
 
-    executable, script, other = _slow_tool(tmp_path, 30)
-    cancel = threading.Event()
-    threading.Timer(0.3, cancel.set).start()
-    started = time.monotonic()
-    with pytest.raises(PerceptualCancelled):
-        _run_metric(executable, "ssimulacra2", script, other, ProcessHandle(), cancel)
-    assert time.monotonic() - started < 5
+    executable, script, other = _waiting_tool(tmp_path)  # never finishes: the test ends only if Cancel ends it
+    cancel, handle, raised = threading.Event(), ProcessHandle(), []
+
+    def run():
+        try:
+            _run_metric(executable, "ssimulacra2", script, other, handle, cancel)
+        except PerceptualCancelled as error:
+            raised.append(error)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    pid = _attached(handle, worker)
+    cancel.set()
+    worker.join()
+    assert raised
+    assert not psutil.pid_exists(pid) or psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
 
 
 def test_a_tool_that_never_finishes_a_frame_times_out(tmp_path, monkeypatch):
+    import itertools
+    import time
+    from types import SimpleNamespace
+
     from vmaf_app.core import perceptual_cpu
     from vmaf_app.core.process_control import ProcessHandle
 
-    monkeypatch.setattr(perceptual_cpu, "_TOOL_TIMEOUT_SECONDS", 0.3)
-    slow, script, other = _slow_tool(tmp_path, 5)
-    with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame"):
-        perceptual_cpu._run_metric(slow, "ssimulacra2", script, other, ProcessHandle())
+    clock = itertools.count(0.0, 100.0)  # each look at the clock, 100 s later
+    monkeypatch.setattr(perceptual_cpu, "time", SimpleNamespace(monotonic=lambda: next(clock), sleep=time.sleep))
+    never, script, other = _waiting_tool(tmp_path)
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame within 120 s"):
+        perceptual_cpu._run_metric(never, "ssimulacra2", script, other, ProcessHandle())
 
 def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, monkeypatch):
     """The two image sequences come from two decoders; a fast one can run
@@ -346,3 +384,211 @@ def test_a_saved_perceptual_metric_is_not_recalculated_beside_a_new_one():
     ]
     assert [spec.key for spec in plan.tasks[0].requested_specs] == ["butteraugli", "cvvdp"]
 
+
+
+def test_a_failed_frame_extraction_says_what_ffmpeg_said(tmp_path, monkeypatch):
+    """FFmpeg's errors went nowhere, so a failed extraction had no reason."""
+    from vmaf_app.core.perceptual_cpu import PerceptualRunError, _png_pairs
+
+    class FailedProcess:
+        pid = 123
+        returncode = 1
+
+        @staticmethod
+        def poll():
+            return 1
+
+    def fake_popen(args, stderr=None, **_kwargs):
+        stderr.write(b"[matroska] Invalid EBML number, skipping\nError opening input file\n")
+        return FailedProcess()
+
+    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
+    with pytest.raises(PerceptualRunError) as raised:
+        list(_png_pairs(_info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1,
+                        tmp_path, None, None))
+    assert "could not prepare" in str(raised.value)
+    assert "Error opening input file" in raised.value.stderr_tail
+
+
+def test_pictures_are_converted_with_the_matrix_vship_reads_the_video_with():
+    """FFmpeg converts an untagged video with BT.601's matrix; Vship takes an
+    HD one as BT.709. The CPU tools' pictures are converted as Vship reads
+    the video, before they become RGB."""
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    hd = VideoInfo(Path("hd.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
+    full = VideoInfo(Path("j.mkv"), 640, 480, 24.0, 1.0, 24, "mjpeg", pix_fmt="yuvj420p")
+    graph = _image_filtergraph(full, hd, _request().recipe, None, None, 1)
+    distorted, reference = graph.split(";")
+    assert "setparams=colorspace=bt709:range=tv,scale,format=rgb48le" in distorted
+    assert "setparams=colorspace=bt470bg:range=pc,scale,format=rgb48le" in reference
+
+
+def test_butteraugli_is_vships_3_norm_on_vships_display(tmp_path, monkeypatch):
+    """The tool's own "3-norm" (the mean of the 3-, 6- and 12-norms, at 80
+    nits) read about 1.8 times Vship's 3-norm (at 203) on the same frames."""
+    import numpy as np
+
+    from vmaf_app.core import perceptual_cpu
+
+    seen = []
+
+    class Done:
+        pid, returncode = 7, 0
+
+        def communicate(self, timeout=None):
+            return "3-norm: 9.99\n", ""
+
+    def popen(command, **_kwargs):
+        seen.append(command)
+        path = Path(command[command.index("--rawdistmap") + 1])
+        values = np.array([1.0, 2.0, 3.0, 4.0], dtype="<f4")
+        path.write_bytes(b"Pf\n2 2\n-1.0\n" + values.tobytes())
+        return Done()
+
+    monkeypatch.setattr(perceptual_cpu.proc_util, "popen", popen)
+    reference, test = tmp_path / "r.png", tmp_path / "t.png"
+    score = perceptual_cpu._run_metric("butteraugli_main", "butteraugli", reference, test)
+    assert score == pytest.approx((np.mean([1, 8, 27, 64])) ** (1 / 3))
+    assert seen[0][seen[0].index("--intensity_target") + 1] == "203"
+    assert not (tmp_path / "t-distortion.pfm").exists()
+    perceptual_cpu._run_metric("butteraugli_main", "butteraugli", reference, test, hdr=True)
+    assert "--intensity_target" not in seen[1]  # an HDR picture's brightness is its own
+
+
+def _rgb_frames(command_inputs: list[str], graph: str, label: str) -> bytes:
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+
+    command = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", *command_inputs, "-filter_complex", graph,
+               "-map", f"[{label}]", "-f", "rawvideo", "-"]
+    for other in {"distorted", "reference"} - {label}:
+        if f"[{other}]" in graph:
+            command += ["-map", f"[{other}]", "-f", "null", "-"]
+    return subprocess.run(command, capture_output=True, check=True).stdout
+
+
+def test_a_scaled_untagged_hd_source_is_converted_with_bt709(tmp_path):
+    """Converted while FFmpeg scaled it -- before the tags were set -- an
+    untagged HD source scaled to its encode's size was made RGB with
+    BT.601's matrix. Scaled in its own format, it is converted after."""
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    clips = {"source.mkv": "96x656", "test.mkv": "48x328"}
+    for name, size in clips.items():
+        subprocess.run([ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                        f"testsrc2=size={size}:rate=24:duration=0.125", "-vf", "format=yuv420p",
+                        "-c:v", "ffv1", str(tmp_path / name)], check=True)
+    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
+    inputs = ["-i", str(test.path), "-i", str(source.path)]
+    graph = _image_filtergraph(source, test, _request().recipe, None, None, 1)
+    made = _rgb_frames(inputs, graph, "reference")
+
+    def converted(matrix: str) -> bytes:
+        return _rgb_frames(inputs, "[0:V:0]nullsink;[1:V:0]scale=48:328:flags=bicubic,format=yuv420p,"
+                                   f"scale=in_color_matrix={matrix}:in_range=tv,format=rgb48le[reference]",
+                           "reference")
+
+    assert made == converted("bt709")
+    assert made != converted("bt601")
+
+
+def _frame_hashes(inputs: list[str], graph: str) -> dict[str, list[str]]:
+    import subprocess
+    import tempfile
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+
+    with tempfile.TemporaryDirectory() as directory:
+        files = {label: Path(directory) / f"{label}.txt" for label in ("distorted", "reference")}
+        command = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", *inputs, "-filter_complex", graph]
+        for label, path in files.items():
+            command += ["-map", f"[{label}]", "-fps_mode", "passthrough", "-f", "framemd5", str(path)]
+        subprocess.run(command, capture_output=True, check=True)
+        return {label: [line.rsplit(",", 1)[-1].strip() for line in path.read_text().splitlines()
+                        if line and not line.startswith("#")] for label, path in files.items()}
+
+
+@pytest.mark.parametrize("step, pairs", [(1, 23), (3, 8)])
+def test_a_frame_dropped_from_the_test_video_pairs_the_rest_by_time(tmp_path, step, pairs):
+    """The test video is the source with its sixth frame dropped, the others'
+    times kept. Paired by position, every frame after the gap was compared
+    with the source's next one; by time, as libvmaf pairs them, each frame
+    is compared with itself."""
+    import subprocess
+
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    run = [ffmpeg_path(), "-hide_banner", "-loglevel", "error"]
+    subprocess.run([*run, "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=24:duration=1", "-vf", "format=yuv420p10le",
+                    "-c:v", "ffv1", str(tmp_path / "source.mkv")], check=True)
+    subprocess.run([*run, "-i", str(tmp_path / "source.mkv"), "-vf", "select='not(eq(n,5))'", "-fps_mode",
+                    "passthrough", "-c:v", "ffv1", str(tmp_path / "test.mkv")], check=True)
+    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
+    graph = _image_filtergraph(source, test, _request().recipe, None, None, step)
+    assert "blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest" in graph
+
+    hashes = _frame_hashes(["-i", str(test.path), "-i", str(source.path)], graph)
+
+    assert len(hashes["distorted"]) == len(hashes["reference"]) == pairs
+    assert hashes["distorted"] == hashes["reference"]
+
+
+@pytest.mark.parametrize("size, pix_fmt", [("63x48", "yuv420p"), ("64x47", "yuv420p10le"), ("63x47", "yuv422p"),
+                                           ("63x47", "yuv444p"), ("64x48", "yuv420p")])
+def test_videos_of_an_odd_size_are_paired_with_their_pictures_unchanged(tmp_path, size, pix_fmt):
+    """The pairing's clock was padded to the pictures' size, and FFmpeg's pad
+    gives a subsampled picture an even one: at an odd width or height blend
+    refused its two inputs ("size 852x480 do not match ... 853x480") and the
+    CPU tools failed. The pictures are the ones pairing by position gives."""
+    import re
+    import subprocess
+
+    from vmaf_app.core import perceptual_cpu
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+    from vmaf_app.core.ffprobe import probe_video
+
+    run = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+           "testsrc2=size=128x96:rate=24:duration=0.25"]
+    width, height = size.split("x")
+    for name, noise in (("source.mkv", ""), ("test.mkv", "noise=alls=3:allf=t,")):
+        subprocess.run([*run, "-vf", f"{noise}scale={width}:{height},format={pix_fmt}", "-c:v", "ffv1",
+                        str(tmp_path / name)], check=True)
+    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
+    assert (source.width, source.height) == (int(width), int(height))
+    inputs = ["-i", str(test.path), "-i", str(source.path)]
+    graph = perceptual_cpu._image_filtergraph(source, test, _request().recipe, None, None, 1)
+    assert "blend=" in graph
+
+    paired = _frame_hashes(inputs, graph)
+
+    by_position = pytest.MonkeyPatch()
+    by_position.setattr(perceptual_cpu, "_BLEND_FORMAT", re.compile("never"))
+    try:
+        unpaired = _frame_hashes(inputs, perceptual_cpu._image_filtergraph(source, test, _request().recipe, None,
+                                                                           None, 1))
+    finally:
+        by_position.undo()
+    assert len(paired["reference"]) == 6
+    assert paired == unpaired
+
+
+@pytest.mark.parametrize("change", [{"pix_fmt": "nv12"}, {"pix_fmt": "yuvj420p"}, {"color_space": "reserved"}])
+def test_a_source_blend_cannot_carry_unchanged_is_paired_by_position(change):
+    from dataclasses import replace
+
+    from vmaf_app.core.perceptual_cpu import _image_filtergraph
+
+    source = replace(VideoInfo(Path("source.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p"), **change)
+    test = VideoInfo(Path("test.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
+    graph = _image_filtergraph(source, test, _request().recipe, None, None, 1)
+
+    assert "blend" not in graph
+    assert graph.count(";") == 1  # a chain each

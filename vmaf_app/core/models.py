@@ -19,7 +19,6 @@ from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 
 class CropMode(str, Enum):
     AUTO = "auto"
-    MANUAL = "manual"
     NONE = "none"
 
 
@@ -69,6 +68,9 @@ class VideoInfo:
     sar: str = "1:1"
     pix_fmt: str = ""
     bit_rate: int = 0  # bits per second, 0 if unknown
+    # The file's bitrate, soundtrack included, where the video's own is not
+    # recorded (a Matroska file without statistics tags).
+    bit_rate_whole_file: bool = False
     # ffprobe's r_frame_rate. A meaningful difference from average fps is a
     # practical warning that frame-number/fps timestamps are unsafe (VFR).
     nominal_fps: float = 0.0
@@ -176,8 +178,6 @@ class VmafOptions:
     vmaf_on_gpu: bool = True
 
     crop_mode: CropMode = CropMode.AUTO
-    manual_source_crop: CropBox | None = None
-    manual_distorted_crop: CropBox | None = None
 
     # When set, this row is a resolution round-trip test (see ResampleTarget)
     # instead of a normal comparison against a second, already-encoded file.

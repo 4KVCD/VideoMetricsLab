@@ -68,8 +68,8 @@ def test_source_is_downscaled_not_distorted_upscaled_when_distorted_is_lower_res
     )
 
     main_chain, ref_chain, _ = graph.split(";")
-    assert main_chain.startswith("[0:v]")
-    assert ref_chain.startswith("[1:v]")
+    assert main_chain.startswith("[0:V:0]")
+    assert ref_chain.startswith("[1:V:0]")
     assert "scale=1280:720" not in main_chain  # distorted is NOT upscaled
     assert "scale=1280:720" in ref_chain  # source IS downscaled to match distorted
 
@@ -159,7 +159,7 @@ def test_hwdownload_inserted_when_gpu_decode_used():
         hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
     )
 
-    assert "[1:v]hwdownload,format=nv12,format=yuv420p" in graph
+    assert "[1:V:0]hwdownload,format=nv12,format=yuv420p" in graph
 
 
 def test_hwdownload_uses_p010_for_10bit_source():
@@ -175,7 +175,7 @@ def test_hwdownload_uses_p010_for_10bit_source():
         hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
     )
 
-    assert "[1:v]hwdownload,format=p010le,format=yuv420p" in graph
+    assert "[1:V:0]hwdownload,format=p010le,format=yuv420p" in graph
 
 
 def test_default_n_threads_resolves_to_cpu_count_not_omitted():
@@ -280,8 +280,8 @@ def test_resample_filtergraph_is_single_input_split_into_two_branches():
         source_info, options, source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
     )
 
-    assert "[1:v]" not in graph  # only one input -- everything derives from [0:v]
-    assert "[0:v]" in graph
+    assert "[1:V:0]" not in graph  # only one input -- everything derives from [0:V:0]
+    assert "[0:V:0]" in graph
     assert "split=2" in graph
     assert "[main][ref]libvmaf=" in graph
 
@@ -852,7 +852,7 @@ def test_a_gpu_decoded_distorted_input_is_downloaded_before_filtering():
     )
     main_chain = graph.split(";")[0]
 
-    assert main_chain.startswith("[0:v]hwdownload,format=nv12,crop=")
+    assert main_chain.startswith("[0:V:0]hwdownload,format=nv12,crop=")
     assert "hwdownload" not in graph.split(";")[1], "the source was not GPU-decoded"
 
 
@@ -1160,7 +1160,8 @@ def test_crop_detection_decodes_each_input_the_way_the_run_will(monkeypatch, tmp
     monkeypatch.setattr(vr, "detect_crop", fake_detect)
     monkeypatch.setattr(
         vr, "plan_hwaccel",
-        lambda vendor, src_codec, dist_codec=None: HwAccelPlan(source="whatever-the-planner-chose", distorted=None),
+        lambda vendor, src_codec, dist_codec=None, **_formats: HwAccelPlan(source="whatever-the-planner-chose",
+                                                                        distorted=None),
     )
     # Stop short of running ffmpeg: the plan and the crops are decided first.
     monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
@@ -1255,3 +1256,19 @@ def test_each_ffmpeg_attempt_and_its_failure_are_logged(monkeypatch, caplog):
     assert ("FFmpeg exited with code 1 (GPU decode: source cuda, distorted cuda); retrying. Last output:\n"
             "[hevc @ 0x1] hardware decoder refused the stream") in text
     assert "FFmpeg exited with code 1 (GPU decode: off). Last output:" in text
+
+
+def test_both_inputs_are_cropped_before_the_format_conversion():
+    """The source was converted to the analysis format first and cropped
+    after, the test video the other way round: a 4:2:2 or 4:4:4 source's
+    chroma at the crop's edges was filtered with samples of the bars."""
+    from vmaf_app.core.models import CropBox, VideoInfo, VmafOptions
+    from vmaf_app.core.vmaf_runner import HwAccelPlan, _build_filtergraph
+
+    source = VideoInfo(Path("s.mov"), 1920, 1080, 24.0, 1.0, 24, "prores", pix_fmt="yuv422p10le")
+    test = VideoInfo(Path("t.mkv"), 1920, 1080, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p10le")
+    box = CropBox(1920, 800, 0, 140)
+    graph = _build_filtergraph(source, test, VmafOptions(), box, box, HwAccelPlan(), Path("log.json"))
+    main, ref = graph.split(";")[:2]
+    assert "crop=1920:800:0:140,format=yuv420p10le" in main
+    assert "crop=1920:800:0:140,format=yuv420p10le" in ref

@@ -4,20 +4,18 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_extract import (
     FrameComparison,
     PreviewColorMode,
-    PreviewColorSettings,
     comparison_dimensions,
     frame_filter,
     frame_input_path,
     frame_video_info,
     hdr_kind,
 )
-from vmaf_app.core.gpu import HwAccelPlan
+from vmaf_app.core.gpu import hw_native_format
 from vmaf_app.core.models import ScaleDirection
-from vmaf_app.core.vmaf_runner import _hw_native_format
 
 
 def source_playback_comparison(comparison, native=True):
@@ -139,7 +137,7 @@ def build_video_series_command(
     graph = []
     for index in range(len(inputs)):
         outputs = [f"[in{n}]" for n, i in enumerate(recipe_inputs) if i == index]
-        graph.append(f"[{index}:v:0]split={len(outputs)}" + "".join(outputs))
+        graph.append(f"[{index}:{VIDEO_STREAM}]split={len(outputs)}" + "".join(outputs))
     for n, (comparison, side, size) in enumerate(recipes):
         info = frame_video_info(comparison, side)
         crop = comparison.source_crop if side == "source" else comparison.distorted_crop
@@ -164,7 +162,7 @@ def build_video_series_command(
                 if params:
                     ops.append("setparams=" + ":".join(params))
             if accel and accel != "vulkan":
-                ops += ["hwdownload", f"format={_hw_native_format(info.pix_fmt)}"]
+                ops += ["hwdownload", f"format={hw_native_format(info.pix_fmt)}"]
             if accel != "vulkan":
                 ops.append("hwupload")
             options = [f"w={size[0]}", f"h={size[1]}", "format=rgba", "colorspace=gbr", "range=pc"]
@@ -238,80 +236,6 @@ def _input_args(
     args += _hwaccel_args(hwaccel)
     args += ["-i", str(path.resolve())]
     return args
-
-
-def _side_chain(
-    comparison: FrameComparison,
-    side: str,
-    input_index: int,
-    hwaccel: str | None,
-    color_settings: PreviewColorSettings,
-    output_size: tuple[int, int],
-) -> str:
-    prefix = ""
-    if hwaccel:
-        info = (
-            comparison.source_info if side == "source"
-            else comparison.distorted_info
-        )
-        prefix = f"hwdownload,format={_hw_native_format(info.pix_fmt)},"
-    filters = frame_filter(
-        comparison, side, color_settings, output_size=output_size
-    )
-    # Both streams are converted to the comparison's declared frame rate and
-    # rebased to frame zero. hstack then emits one indivisible pair per tick:
-    # the UI can flip halves without consulting two independent media clocks.
-    fps = f"{comparison.fps:.12g}"
-    return (
-        f"[{input_index}:v]{prefix}{filters},fps={fps},"
-        f"setpts=N/({fps}*TB)[{side}]"
-    )
-
-
-def build_video_pair_command(
-    comparison: FrameComparison,
-    start_frame: int,
-    color_settings: PreviewColorSettings,
-    hwaccel: HwAccelPlan,
-    output_size: tuple[int, int],
-    *,
-    realtime: bool,
-) -> list[str]:
-    """Decode a stream of horizontally packed, frame-exact comparison pairs."""
-    if comparison.fps <= 0:
-        raise ValueError("comparison has no usable frame rate")
-    if start_frame < 0:
-        raise ValueError("start frame must be non-negative")
-    timestamp = max(0.0, (start_frame - 0.125) / comparison.fps)
-    source = frame_input_path(comparison, "source")
-    distorted = frame_input_path(comparison, "distorted")
-    source_chain = _side_chain(
-        comparison, "source", 0, hwaccel.source,
-        color_settings, output_size,
-    )
-    distorted_chain = _side_chain(
-        comparison, "distorted", 1, hwaccel.distorted,
-        color_settings, output_size,
-    )
-    graph = ";".join([
-        source_chain,
-        distorted_chain,
-        "[source][distorted]hstack=inputs=2:shortest=1[out]",
-    ])
-    cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error"]
-    cmd += _input_args(source, timestamp, hwaccel.source, realtime)
-    cmd += _input_args(distorted, timestamp, hwaccel.distorted, realtime)
-    cmd += [
-        "-filter_complex", graph,
-        "-map", "[out]",
-        "-an", "-sn", "-dn",
-        "-pix_fmt", "rgb24",
-        "-fps_mode", "passthrough",
-    ]
-    if not realtime:
-        cmd += ["-frames:v", "1"]
-    cmd += ["-f", "rawvideo", "pipe:1"]
-    return cmd
 
 
 def ffplay_path() -> Path | None:

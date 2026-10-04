@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "ตรวจแถบดำไม่ได้ เพราะอ่านวิดีโอไม่ได้",
   "Off": "ปิด",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "ปิดการตรวจหาแถบดำสำหรับแถวนี้ เฟรมจะถูกเปรียบเทียบทั้งภาพ",
-  "Manual": "กำหนดเอง",
-  "A manual crop is configured; the detected sides appear after the run.": "ตั้งค่าครอปด้วยตนเองแล้ว ด้านที่ตรวจพบจะแสดงหลังการรัน",
   "Pending": "รอดำเนินการ",
   "Black bars will be detected when this row is run.": "จะตรวจหาแถบดำเมื่อแถวนี้ทำงาน",
   "Test video": "วิดีโอทดสอบ",
@@ -539,7 +537,6 @@
   "Cancelled by user": "ผู้ใช้ยกเลิก",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "การให้คะแนนบน GPU ล้มเหลว ({error}) ไม่ได้ลองใหม่บน CPU เพราะจะใช้เวลาหลายชั่วโมงถึงหลายวันสำหรับวิดีโอที่ยาวเกิน 10 นาที เลือก CPU สำหรับ {metrics} เพื่อคำนวณบน CPU อยู่ดี",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "การให้คะแนนบน GPU ล้มเหลว ({error}) และการลองใหม่บน CPU ก็ล้มเหลว: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "คำนวณได้ {cpu_frames} เฟรมบน CPU แต่ {gpu_frames} เฟรมบน GPU จึงไม่นำมาใช้",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} ต้องใช้ GPU ที่ Vship ใช้ได้ และใช้ไม่ได้เลย: {reason}",
   "{metric} could not be calculated: {reason}": "คำนวณ {metric} ไม่ได้: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "การเร่งด้วย GPU ของ Vship มีให้เฉพาะบน Windows",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship ไม่รองรับแม่สี {primaries}",
   "Vship does not support the {range} range tag.": "Vship ไม่รองรับแท็กช่วง {range}",
   "Vship does not support {siting} chroma siting.": "Vship ไม่รองรับตำแหน่งโครมา {siting}",
-  "Variable-frame-rate video is not supported safely yet.": "ยังไม่รองรับวิดีโออัตราเฟรมแปรผันอย่างปลอดภัย",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "ยังไม่รองรับวิดีโออัตราเฟรมแปรผันอย่างปลอดภัย แปลงวิดีโอทั้งสองเป็นอัตราเฟรมคงที่เดียวกันก่อนเปรียบเทียบ",
   "Frame rates do not match ({source} vs {test} fps).": "อัตราเฟรมไม่ตรงกัน ({source} กับ {test} fps)",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "ความยาวไม่ตรงกัน ({source} กับ {test} วินาที) ตั้งค่าจำกัดความยาวให้อยู่ในทั้งสองไฟล์ หากเปรียบเทียบเฉพาะช่วงต้นที่ตรงกัน",
@@ -687,7 +683,11 @@
   "Cannot compare": "เปรียบเทียบไม่ได้",
   "Cannot be compared with the reference:": "เปรียบเทียบกับวิดีโออ้างอิงไม่ได้:",
   "Calculate the rest?": "คำนวณที่เหลือไหม?",
-  "It could not be read. Remove it or add the file again to retry.": "อ่านไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่"
+  "It could not be read. Remove it or add the file again to retry.": "อ่านไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "บิตเรตของทั้งไฟล์ รวมแทร็กเสียง: ไฟล์ไม่ได้บันทึกบิตเรตของวิดีโอไว้",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} อยู่ในรายการแล้ว แสดงคะแนนของการรันที่บันทึกไว้แทนหรือไม่",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg ไม่ได้ให้เวลาประทับของเฟรม{side}",
+  "The source has no frame at the test video's first.": "ต้นฉบับไม่มีเฟรม ณ เวลาของเฟรมแรกของวิดีโอทดสอบ"
  },
  "plurals": {
   "about {count} day": [

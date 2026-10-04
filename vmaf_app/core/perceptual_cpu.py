@@ -9,6 +9,7 @@ exists only for the lifetime of the task.
 from __future__ import annotations
 
 import contextlib
+import logging
 import math
 import os
 import re
@@ -25,15 +26,22 @@ import numpy as np
 
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
+from vmaf_app.core.colour import FFMPEG_MATRICES, colour_of, describe_png
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
-from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
+from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
+from vmaf_app.core.geometry import content_size, pair_problem
+from vmaf_app.core.gpu import HwAccelPlan
+from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.status import Status
 
 BACKEND_ID = "perceptual"
+_log = logging.getLogger(__name__)
 _NUMBER = re.compile(r"(?<![\w.])([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)")
 
 
@@ -132,8 +140,6 @@ def _resolve_crops(
 ) -> tuple[CropBox | None, CropBox | None]:
     if recipe.crop_mode is CropMode.NONE:
         return None, None
-    if recipe.crop_mode is CropMode.MANUAL:
-        return recipe.manual_source_crop, recipe.manual_distorted_crop
     try:
         if on_status:
             # Worded as the FFmpeg metrics' detection is: the two halves of a
@@ -143,12 +149,13 @@ def _resolve_crops(
         # Crop detection samples representative windows across the whole
         # file. A short score-duration limit may land entirely in a dark
         # intro and must not define the crop used for the comparison.
-        return detect_pair(
+        boxes = detect_pair(
             lambda: detect_crop(source, cancel_event=cancel_event, process_handle=process_handle),
             lambda: detect_crop(distorted, cancel_event=cancel_event, process_handle=process_handle),
         )
     except CropDetectCancelled as exc:
         raise PerceptualCancelled("Cancelled by user") from exc
+    return common_picture(source, distorted, *boxes)
 
 
 #: Longer than this, SSIMULACRA2/Butteraugli run on the CPU only when the
@@ -169,24 +176,48 @@ def compared_seconds(source: VideoInfo, distorted: VideoInfo, duration_limit: fl
     return seconds
 
 
-def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-    return (crop.w, crop.h) if crop else (info.width, info.height)
-
-
 def _validate_pair(source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe) -> None:
-    if source.is_variable_frame_rate or distorted.is_variable_frame_rate:
-        raise PerceptualRunError("Variable-frame-rate video is not supported safely yet.")
-    fps_tolerance = max(0.01, max(source.fps, distorted.fps) * 0.001)
-    if abs(source.fps - distorted.fps) > fps_tolerance:
-        raise PerceptualRunError(f"Frame rates do not match ({source.fps:.3f} vs {distorted.fps:.3f} fps).")
-    if recipe.duration_limit > 0 and min(source.duration, distorted.duration) + 0.1 < recipe.duration_limit:
-        raise PerceptualRunError("The duration limit extends beyond the end of one of the videos.")
+    """The window's rules (geometry.pair_problem): these had none for
+    durations that do not match."""
+    if problem := pair_problem(source, distorted, recipe.duration_limit):
+        raise PerceptualRunError(problem)
 
 
 def _crop_filter(crop: CropBox | None, info: VideoInfo) -> list[str]:
     if crop is None or crop.is_noop(info.width, info.height):
         return []
     return [crop.as_filter()]
+
+
+#: Pixel formats FFmpeg's blend filter takes as they are, so it can carry a
+#: source frame through unchanged (_image_filtergraph): the planar YUV, GBR
+#: and gray ones, each checked frame by frame against the source's own.
+_BLEND_FORMAT = re.compile(r"(yuv(420|422|444)p|gbrp|gray)(9|10|12|14|16)?(le)?")
+#: The names setparams knows for each colour tag, as ffprobe prints them.
+_SETPARAMS_NAMES = {
+    "range": {"unknown", "tv", "pc"},
+    "color_primaries": {"bt709", "unknown", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020",
+                        "smpte428", "smpte431", "smpte432", "jedec-p22", "ebu3213", "vgamut"},
+    "color_trc": {"bt709", "unknown", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316",
+                  "iec61966-2-4", "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12", "smpte2084", "smpte428",
+                  "arib-std-b67", "vlog"},
+    "colorspace": {"gbr", "bt709", "unknown", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco", "ycgco-re",
+                   "ycgco-ro", "bt2020nc", "bt2020c", "smpte2085", "chroma-derived-nc", "chroma-derived-c",
+                   "ictcp", "ipt-c2"},
+    "chroma_location": {"unspecified", "left", "center", "topleft", "top", "bottomleft", "bottom"},
+}
+
+
+def _frame_tags(info: VideoInfo) -> str | None:
+    """A setparams giving frames `info`'s colour tags again, or None for a
+    tag setparams has no name for."""
+    tags = {"range": info.color_range or "unknown", "color_primaries": info.color_primaries or "unknown",
+            "color_trc": info.color_transfer or "unknown", "colorspace": info.color_space or "unknown",
+            "chroma_location": info.chroma_location or "unspecified"}
+    tags = {option: value.casefold() for option, value in tags.items()}
+    if any(value not in _SETPARAMS_NAMES[option] for option, value in tags.items()):
+        return None
+    return "setparams=" + ":".join(f"{option}={value}" for option, value in tags.items())
 
 
 def _image_filtergraph(
@@ -199,9 +230,21 @@ def _image_filtergraph(
     single decoder pass for each input, then both requested image metrics use
     each resulting pair, so adding Butteraugli to SSIMULACRA2 does not decode
     the videos again.
+
+    The n-th pictures of the two streams are a pair: the test video's n-th
+    frame and the source frame libvmaf pairs it with, by timestamp
+    (frame_sync.FRAMESYNC_OPTS). blend makes the pairs, with the same frame
+    sync: one frame for each test frame, from a "clock" of all-zero frames at
+    the test frames' times OR'd with the source's frames -- the source's
+    pixels unchanged, then its own colour tags (blend's frame takes the
+    clock's, the test video's). Every step-th pair is kept. The two streams
+    used to be paired by position, which a frame dropped from the test video
+    put one frame apart for the rest of the video. A source in a format
+    blend does not take as it is (packed RGB, NV12, full-range "yuvj") is
+    still paired by position.
     """
-    source_size = _content_size(source, source_crop)
-    distorted_size = _content_size(distorted, distorted_crop)
+    source_size = content_size(source, source_crop)
+    distorted_size = content_size(distorted, distorted_crop)
     if source_size != distorted_size:
         if recipe.scale_direction is ScaleDirection.DISTORTED_TO_SOURCE:
             distorted_target, source_target = source_size, None
@@ -210,19 +253,72 @@ def _image_filtergraph(
     else:
         distorted_target = source_target = None
 
-    def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo, target: tuple[int, int] | None) -> str:
+    def prepare(crop: CropBox | None, info: VideoInfo, target: tuple[int, int] | None) -> list[str]:
         ops = _crop_filter(crop, info)
         if target is not None:
-            ops.append(f"scale={target[0]}:{target[1]}:flags={recipe.scale_algorithm}")
-        # select keeps a generic sampling axis distinct from FFmpeg/libvmaf.
-        if step > 1:
-            ops.append(f"select=not(mod(n\\,{step}))")
-        ops += ["setpts=PTS-STARTPTS", "format=rgb48le"]
-        return f"[{input_label}]{','.join(ops)}[{output_label}]"
+            # Scaled in the video's own format, as Vship's pictures are, and
+            # converted to RGB only after its tags are set (to_rgb). Left to
+            # FFmpeg, the scale filter made the RGB itself, before the tags:
+            # an untagged HD source scaled to its encode's size was converted
+            # with BT.601's matrix, not BT.709's.
+            ops += [f"scale={target[0]}:{target[1]}:flags={recipe.scale_algorithm}", f"format={info.pix_fmt}"]
+        return ops
 
+    def to_rgb(info: VideoInfo) -> list[str]:
+        # Converted to RGB with the matrix and range Vship reads the video
+        # with (colour.video_colour): FFmpeg's own choice for an untagged
+        # video is BT.601's, where Vship takes an HD one as BT.709. The
+        # conversion is the scale filter here, after the tags, not one FFmpeg
+        # puts wherever its format negotiation lands.
+        colour = colour_of(info)
+        ops = []
+        if colour is not None and colour.matrix in FFMPEG_MATRICES:
+            ops.append(f"setparams=colorspace={FFMPEG_MATRICES[colour.matrix]}:"
+                       f"range={'pc' if colour.full_range else 'tv'}")
+        return [*ops, "scale", "format=rgb48le"]
+
+    sample = [f"select=not(mod(n\\,{step}))"] if step > 1 else []
+    source_format = (source.pix_fmt or "").casefold()
+    restore = _frame_tags(source)
+    if _BLEND_FORMAT.fullmatch(source_format) is None or restore is None:
+        _log.info("The CPU tools' frames are paired by position: %s",
+                  f"blend cannot carry the source's {source_format} frames unchanged" if restore else
+                  "setparams has no name for one of the source's colour tags")
+
+        def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo,
+                  target: tuple[int, int] | None) -> str:
+            # select first: the frames it drops are not cropped or scaled.
+            ops = [*sample, *prepare(crop, info, target), "setpts=PTS-STARTPTS", *to_rgb(info)]
+            return f"[{input_label}]{','.join(ops)}[{output_label}]"
+
+        return ";".join((
+            chain(f"0:{VIDEO_STREAM}", "distorted", distorted_crop, distorted, distorted_target),
+            chain(f"1:{VIDEO_STREAM}", "reference", source_crop, source, source_target),
+        ))
+
+    width, height = source_target or source_size
+    # pad keeps a subsampled picture on whole chroma samples: asked for an
+    # odd size it gives the even one below, and blend then refused the two
+    # inputs ("size 852x480 do not match ... 853x480"). An odd-sized clock
+    # is padded to the even size above and cut to the picture's exactly.
+    clock_size = f"pad={width + (width & 1)}:{height + (height & 1)}"
+    if width & 1 or height & 1:
+        clock_size += f",crop={width}:{height}:0:0:exact=1"
+    test_chain = [*prepare(distorted_crop, distorted, distorted_target), "setpts=PTS-STARTPTS",
+                  "split=2[test_frames][test_times]"]
+    source_chain = [*prepare(source_crop, source, source_target),
+                    *([] if source_target else [f"format={source_format}"]), "setpts=PTS-STARTPTS"]
     return ";".join((
-        chain("0:v", "distorted", distorted_crop, distorted, distorted_target),
-        chain("1:v", "reference", source_crop, source, source_target),
+        f"[0:{VIDEO_STREAM}]{','.join(test_chain)}",
+        # Its own scale: the format the clock is made in is not the test
+        # frames', which reach the split -- and the test's pictures -- as
+        # they are decoded.
+        f"[test_times]crop=2:2:0:0,scale,format={source_format},{clock_size},"
+        "lut=c0=0:c1=0:c2=0:c3=0[clock]",
+        f"[1:{VIDEO_STREAM}]{','.join(source_chain)}[source_frames]",
+        f"[clock][source_frames]blend=all_mode=or:{':'.join(FRAMESYNC_OPTS)},{restore},"
+        f"{','.join([*sample, *to_rgb(source)])}[reference]",
+        f"[test_frames]{','.join([*sample, *to_rgb(distorted)])}[distorted]",
     ))
 
 
@@ -264,7 +360,7 @@ def _png_pairs(
     does.
     """
     graph = _image_filtergraph(source, distorted, recipe, source_crop, distorted_crop, step)
-    cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y", "-i", str(distorted.path.resolve()),
+    cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(distorted.path.resolve()),
            "-i", str(source.path.resolve()), "-filter_complex", graph]
     output_args = ["-fps_mode", "passthrough", "-pix_fmt", "rgb48le", "-atomic_writing", "1"]
     if recipe.duration_limit > 0:
@@ -273,10 +369,25 @@ def _png_pairs(
     cmd += ["-map", "[reference]", *output_args, str(directory / "reference-%08d.png")]
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
-    # A long FFmpeg extraction can write enough diagnostics to fill a pipe.
-    # We do not need its progress stream here, so inherit neither pipe and
-    # avoid deadlocking a feature-length task before it creates a frame.
-    process = proc_util.popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    # FFmpeg's errors go to a file beside the images: a pipe nobody reads
+    # while the images are scored can fill, stopping FFmpeg mid-video, and
+    # sent nowhere they left a failed extraction without a reason.
+    errors_path = directory / "ffmpeg-errors.log"
+    errors = open(errors_path, "wb")  # noqa: SIM115 -- closed in the finally below
+    try:
+        process = proc_util.popen(cmd, stdout=subprocess.DEVNULL, stderr=errors)
+    except BaseException:
+        errors.close()
+        raise
+
+    def failure(message: str) -> PerceptualRunError:
+        errors.flush()
+        try:
+            tail = errors_path.read_text(encoding="utf-8", errors="replace").strip()[-2000:]
+        except OSError:
+            tail = ""
+        return PerceptualRunError(message, stderr_tail=tail)
+
     if process_handle is not None:
         process_handle.attach(process.pid)
     throttled = False
@@ -378,9 +489,9 @@ def _png_pairs(
                     if reference.exists() and test.exists():
                         break  # written just before FFmpeg exited
                     if code != 0:
-                        raise PerceptualRunError("FFmpeg could not prepare lossless perceptual-metric frames.")
+                        raise failure("FFmpeg could not prepare lossless perceptual-metric frames.")
                     if index == 1:
-                        raise PerceptualRunError("FFmpeg produced no frame pairs for perceptual metrics.")
+                        raise failure("FFmpeg produced no frame pairs for perceptual metrics.")
                     return  # the shorter input has ended
                 throttle(False)  # the caller is waiting: FFmpeg must run
                 time.sleep(0.02)
@@ -396,6 +507,7 @@ def _png_pairs(
                 process.wait(timeout=5)
         if process_handle is not None:
             process_handle.detach(process.pid)
+        errors.close()
 
 
 def parse_score(metric: str, output: str) -> float:
@@ -413,11 +525,34 @@ def parse_score(metric: str, output: str) -> float:
 #: not paused. The bundled tools take 1-2 s for a 4K pair.
 _TOOL_TIMEOUT_SECONDS = 120.0
 
+#: The display Butteraugli models for SDR pictures, in nits: Vship's
+#: default, which the GPU is given (perceptual_vship._init_handler). The
+#: tool's own is 80. An HDR picture's brightness is its own (PQ and HLG are
+#: absolute): the tool takes it from the picture, as Vship does -- its
+#: scores then agree with Vship's (2.892 against 2.881 on a PQ film),
+#: where 203 gave 0.815.
+BUTTERAUGLI_INTENSITY_NITS = 203.0
+
+
+def _butteraugli_norm3(distortion_map: Path) -> float:
+    """The 3-norm of a Butteraugli distortion map (the tool's --rawdistmap,
+    a PFM): (mean of d^3)^(1/3), as Vship reports it. The tool prints its
+    own "3-norm", the mean of the 3-, 6- and 12-norms, which read about 1.8
+    times Vship's on the same frames."""
+    data = distortion_map.read_bytes()
+    header, size, scale, rest = data.split(b"\n", 3)
+    if header.strip() != b"Pf":
+        raise PerceptualRunError("butteraugli wrote a distortion map that is not a greyscale PFM.")
+    width, height = (int(part) for part in size.split())
+    values = np.frombuffer(rest, dtype="<f4" if float(scale) < 0 else ">f4", count=width * height)
+    return float(np.mean(np.abs(values.astype(np.float64)) ** 3) ** (1.0 / 3.0))
+
 
 def _run_metric(
     executable: str, metric: str, reference: Path, test: Path,
     process_handle: ProcessHandle | None = None,
     cancel_event: threading.Event | None = None,
+    hdr: bool = False,
 ) -> float:
     """Score one frame pair with a still-image tool.
 
@@ -426,10 +561,16 @@ def _run_metric(
     handle: pausing a CPU run left the tools scoring while the app said
     "Paused", and Cancel waited for the frame in progress.
     """
+    command = [executable, str(reference), str(test)]
+    distortion_map = None
+    if metric == "butteraugli":
+        distortion_map = test.with_name(test.stem + "-distortion.pfm")
+        if not hdr:
+            command += ["--intensity_target", f"{BUTTERAUGLI_INTENSITY_NITS:g}"]
+        command += ["--rawdistmap", str(distortion_map)]
     try:
         process = proc_util.popen(
-            [executable, str(reference), str(test)],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
     except OSError as exc:
         raise PerceptualRunError(f"Could not run {metric}: {exc}") from exc
@@ -459,10 +600,19 @@ def _run_metric(
     finally:
         if process_handle is not None:
             process_handle.detach(process.pid)
-    combined = (stdout or "") + "\n" + (stderr or "")
-    if process.returncode != 0:
-        raise PerceptualRunError(f"{metric} failed for a frame.", combined[-2000:])
-    return parse_score(metric, combined)
+    try:
+        combined = (stdout or "") + "\n" + (stderr or "")
+        if process.returncode != 0:
+            raise PerceptualRunError(f"{metric} failed for a frame.", combined[-2000:])
+        if distortion_map is not None:
+            try:
+                return _butteraugli_norm3(distortion_map)
+            except (OSError, ValueError) as exc:
+                raise PerceptualRunError("butteraugli wrote no readable distortion map.", combined[-2000:]) from exc
+        return parse_score(metric, combined)
+    finally:
+        if distortion_map is not None:
+            distortion_map.unlink(missing_ok=True)
 
 
 def run_perceptual_task(
@@ -501,10 +651,18 @@ def run_perceptual_task(
         expected = min(expected, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
     total_units = max(1, math.ceil(expected / step)) * step
     if on_status:
-        on_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted (GPU decode: off)…")
+        on_status(Status.decoding("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
+                                  HwAccelPlan()))
     started = time.perf_counter()
     values: dict[str, list[float]] = {spec.key: [] for spec in specs}
     total = 0
+    # How the tools are to read each picture's values: as Vship reads the
+    # video's (colour.describe_png). FFmpeg tags a BT.709 picture with
+    # H.273's BT.709 curve -- the camera's -- where Vship and a display use
+    # a 2.4 gamma, and an untagged one not at all (sRGB): a tagged BT.709
+    # film scored 40.4 SSIMULACRA2 here against 55.1 on the GPU.
+    source_colour, distorted_colour = colour_of(source), colour_of(distorted)
+    hdr = any(colour is not None and colour.hdr for colour in (source_colour, distorted_colour))
     with tempfile.TemporaryDirectory(prefix="videometricslab-perceptual-") as temp:
         pairs = _png_pairs(
             source, distorted, request.recipe, source_crop, distorted_crop, step,
@@ -515,9 +673,12 @@ def run_perceptual_task(
                 if cancel_event is not None and cancel_event.is_set():
                     raise PerceptualCancelled("Cancelled by user")
                 try:
+                    for picture, colour in ((reference, source_colour), (test, distorted_colour)):
+                        if colour is not None:
+                            describe_png(picture, colour)
                     for spec in specs:
                         values[spec.key].append(_run_metric(
-                            executables[spec.key], spec.key, reference, test, process_handle, cancel_event,
+                            executables[spec.key], spec.key, reference, test, process_handle, cancel_event, hdr,
                         ))
                 finally:
                     # Each pair is deleted once every selected tool has
@@ -551,7 +712,13 @@ def run_perceptual_task(
                 implementation_version=version,
                 compute_backend="cpu",
                 implementation_compatibility_id=compatibility,
-                parameters={"intermediate": "png/rgb48le", "coverage_step": step},
+                parameters={"intermediate": "png/rgb48le", "coverage_step": step,
+                            # Read as Vship reads the colours, with its
+                            # Butteraugli 3-norm and display (metric_cache).
+                            "color_tags": CPU_COLOR_TAGS,
+                            **({"butteraugli_norm": "3-norm",
+                                "intensity_target": "picture's own" if hdr else BUTTERAUGLI_INTENSITY_NITS}
+                               if spec.key == "butteraugli" else {})},
             ),
         ))
     return PerceptualTaskOutput(results, source_crop, distorted_crop, total * step)

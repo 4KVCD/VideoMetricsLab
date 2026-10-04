@@ -18,6 +18,7 @@ one film used to detect the source's bars six times over.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import subprocess
 import threading
@@ -28,7 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.gpu import hw_native_format, hwaccel_args
 from vmaf_app.core.models import CropBox, VideoInfo
 
@@ -110,6 +111,7 @@ def _window_command(
         *hwaccel_args(hwaccel),
         "-ss", f"{start:.3f}",
         "-i", path,
+        "-map", f"0:{VIDEO_STREAM}",
         "-t", f"{window:.3f}",
         "-vf", filters,
         "-f", "null", "-",
@@ -275,6 +277,65 @@ def clear_cache() -> None:
         _cache.clear()
 
 
+#: Two pictures are the same shape when their sizes differ by one factor,
+#: across and down, to within this.
+_SAME_SHAPE = 0.005
+
+
+def common_picture(
+    source: VideoInfo, distorted: VideoInfo,
+    source_crop: CropBox | None, distorted_crop: CropBox | None,
+) -> tuple[CropBox | None, CropBox | None]:
+    """The two videos' black-bar boxes, made to cover the same picture.
+
+    Each video's bars are found on their own, and an encode's soft bar edge
+    can put its box a row or two from the source's: 1920x800 against
+    1920x802. The two were then compared at different sizes, so one was
+    scaled to the other -- a comparison of two same-size videos, scaled.
+    Where the two videos are the same picture at one size or two (their
+    sizes one factor apart, across and down), each box becomes the picture
+    both show: the boxes' overlap, in each video's own pixels, its edges on
+    even samples (4:2:0). Boxes that already agree are unchanged; so is any
+    pair that is not the same picture, or where a box is missing."""
+    if source_crop is None or distorted_crop is None:
+        return source_crop, distorted_crop
+    if min(source.width, source.height, distorted.width, distorted.height) <= 0:
+        return source_crop, distorted_crop
+    across, down = source.width / distorted.width, source.height / distorted.height
+    if abs(across - down) > _SAME_SHAPE * max(across, down):
+        return source_crop, distorted_crop
+
+    def edges(box: CropBox, info: VideoInfo) -> tuple[float, float, float, float]:
+        return (box.x / info.width, box.y / info.height,
+                (box.x + box.w) / info.width, (box.y + box.h) / info.height)
+
+    (sl, st, sr, sb), (dl, dt, dr, db) = edges(source_crop, source), edges(distorted_crop, distorted)
+    left, top, right, bottom = max(sl, dl), max(st, dt), min(sr, dr), min(sb, db)
+    if right <= left or bottom <= top:
+        return source_crop, distorted_crop
+
+    def box(info: VideoInfo) -> CropBox:
+        # Inward, so the box never takes in a row of the other's bars.
+        x = math.ceil(left * info.width - 1e-6)
+        y = math.ceil(top * info.height - 1e-6)
+        x, y = x + (x & 1), y + (y & 1)
+        w = math.floor(right * info.width + 1e-6) - x
+        h = math.floor(bottom * info.height + 1e-6) - y
+        return CropBox(w=w - (w & 1), h=h - (h & 1), x=x, y=y)
+
+    shared_source, shared_distorted = box(source), box(distorted)
+    if shared_source.w <= 0 or shared_source.h <= 0 or shared_distorted.w <= 0 or shared_distorted.h <= 0:
+        return source_crop, distorted_crop
+    if (shared_source, shared_distorted) != (source_crop, distorted_crop):
+        _log.info("Black bars: the picture both videos show is %dx%d at %d,%d of the source and %dx%d at %d,%d "
+                  "of the test video (detected: %dx%d at %d,%d and %dx%d at %d,%d)",
+                  shared_source.w, shared_source.h, shared_source.x, shared_source.y,
+                  shared_distorted.w, shared_distorted.h, shared_distorted.x, shared_distorted.y,
+                  source_crop.w, source_crop.h, source_crop.x, source_crop.y,
+                  distorted_crop.w, distorted_crop.h, distorted_crop.x, distorted_crop.y)
+    return shared_source, shared_distorted
+
+
 def detect_pair(
     detect_source: Callable[[], CropBox | None],
     detect_distorted: Callable[[], CropBox | None],
@@ -408,6 +469,9 @@ def _detect_uncached(
     for b in boxes:
         key = (b.w, b.h, b.x, b.y)
         counts[key] = counts.get(key, 0) + 1
-    best_key = max(counts, key=lambda k: counts[k])
+    # The most common box; between equally common ones the largest. A box
+    # from a dark stretch is too tight -- dark picture reads as bar -- and a
+    # tie went to whichever window came first, which could crop picture off.
+    best_key = max(counts, key=lambda k: (counts[k], k[0] * k[1]))
     w, h, x, y = best_key
     return CropBox(w=w, h=h, x=x, y=y)

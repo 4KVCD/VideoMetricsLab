@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Černé pruhy nebylo možné zkontrolovat, protože video je nečitelné.",
   "Off": "Vypnuto",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Detekce černých pruhů je pro tento řádek vypnutá; snímky se porovnávají celé.",
-  "Manual": "Ručně",
-  "A manual crop is configured; the detected sides appear after the run.": "Nastaven ruční ořez; zjištěné strany se zobrazí po běhu.",
   "Pending": "Čeká",
   "Black bars will be detected when this row is run.": "Černé pruhy se zjistí při zpracování tohoto řádku.",
   "Test video": "Testovací video",
@@ -539,7 +537,6 @@
   "Cancelled by user": "Zrušeno uživatelem",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Hodnocení na GPU selhalo ({error}). Na CPU se znovu nezkoušelo, protože by to u videa delšího než 10 minut trvalo hodiny až dny. Zvolte pro {metrics} CPU, chcete-li přesto počítat na CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Hodnocení na GPU selhalo ({error}); selhal i nový pokus na CPU: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "Spočítáno na {cpu_frames} snímcích na CPU, ale na {gpu_frames} na GPU, proto nepoužito",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} vyžaduje GPU, kterou Vship dokáže použít, a žádnou použít nemohla: {reason}",
   "{metric} could not be calculated: {reason}": "{metric} nelze spočítat: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Akcelerace Vship na GPU je přibalena jen pro Windows.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship nepodporuje primární barvy {primaries}.",
   "Vship does not support the {range} range tag.": "Vship nepodporuje značku rozsahu {range}.",
   "Vship does not support {siting} chroma siting.": "Vship nepodporuje umístění chroma {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Video s proměnnou snímkovou frekvencí zatím není bezpečně podporováno.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video s proměnnou snímkovou frekvencí zatím není bezpečně podporováno. Před porovnáním převeďte obě videa na stejnou konstantní snímkovou frekvenci.",
   "Frame rates do not match ({source} vs {test} fps).": "Snímkové frekvence se neshodují ({source} vs {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Délky se neshodují ({source} vs {test} s). Pokud porovnáváte jen jejich společný začátek, nastavte omezení délky v rámci obou souborů.",
@@ -687,7 +683,11 @@
   "Cannot compare": "Nelze porovnat",
   "Cannot be compared with the reference:": "Nelze porovnat s referencí:",
   "Calculate the rest?": "Spočítat ostatní?",
-  "It could not be read. Remove it or add the file again to retry.": "Nelze jej přečíst. Odeberte jej nebo přidejte soubor znovu a zkuste to znovu."
+  "It could not be read. Remove it or add the file again to retry.": "Nelze jej přečíst. Odeberte jej nebo přidejte soubor znovu a zkuste to znovu.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Datový tok celého souboru včetně zvuku: soubor neuvádí datový tok samotného videa.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} už je v seznamu. Zobrazit místo toho skóre uloženého běhu?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg neudal časovou značku snímku {side}.",
+  "The source has no frame at the test video's first.": "Zdroj nemá žádný snímek v čase prvního snímku testovacího videa."
  },
  "plurals": {
   "about {count} day": [

@@ -276,7 +276,7 @@ def test_a_run_carries_each_rows_display_and_skips_a_row_already_scored(qapp, mo
     monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
     monkeypatch.setattr(main_window_module, "validate_video_pair", lambda *a: None)
     win._on_run_clicked()
-    (job,) = win._worker._jobs
+    (job,) = win._worker.scheduler.jobs
     assert "cvvdp" in job.metric_keys and job.cvvdp == BUILTIN_PRESETS[1].settings
     win._worker = None
     win.close()

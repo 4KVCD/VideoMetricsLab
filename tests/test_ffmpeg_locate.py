@@ -95,3 +95,25 @@ def test_check_tool_parses_a_real_version_from_the_binary(monkeypatch):
     status = ffmpeg_locate.check_tool("ffmpeg")
     assert status.runnable is True
     assert status.version == (9, 0, 1)
+
+
+@pytest.fixture
+def forget_lookups():
+    ffmpeg_locate.ffmpeg_dir_changed()
+    yield
+    ffmpeg_locate.ffmpeg_dir_changed()
+
+
+def test_the_folder_chosen_in_settings_comes_first(tmp_path, forget_lookups):
+    # Read from settings.json, where every process finds it. It used to be
+    # kept in the registry too, and "Locate ffmpeg.exe" wrote only there.
+    from vmaf_app.core.settings import Settings
+
+    chosen = tmp_path / ffmpeg_locate.exe_name("ffmpeg")
+    chosen.write_bytes(b"")
+    settings = Settings.load()
+    settings.ffmpeg_dir = str(tmp_path)
+    assert settings.save() is None
+    ffmpeg_locate.ffmpeg_dir_changed()
+
+    assert ffmpeg_locate.find_binary("ffmpeg") == str(chosen)

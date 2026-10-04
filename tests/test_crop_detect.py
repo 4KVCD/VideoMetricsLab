@@ -7,7 +7,7 @@ import pytest
 from tests.factories import STDLIB_PYTHON
 from vmaf_app.core import crop_detect
 from vmaf_app.core.crop_detect import _SAMPLE_WINDOW_SECONDS, CropDetectError, _sample_offsets
-from vmaf_app.core.models import VideoInfo
+from vmaf_app.core.models import CropBox, VideoInfo
 
 
 def test_crop_samples_never_start_beyond_the_last_full_window():
@@ -504,3 +504,63 @@ def test_the_picture_found_is_logged(monkeypatch, caplog):
     info = VideoInfo(Path("film.mkv"), 3840, 2160, 24.0, 600.0, 14400, "hevc", pix_fmt="yuv420p10le")
     crop_detect.detect_crop(info)
     assert "Black bars in film.mkv: picture 3840x1608 at 0,276 of 3840x2160" in caplog.text
+
+
+def _sized(width, height):
+    from vmaf_app.core.models import VideoInfo
+
+    return VideoInfo(Path(f"{width}x{height}.mkv"), width, height, 24.0, 10.0, 240, "hevc", pix_fmt="yuv420p")
+
+
+def test_two_boxes_a_row_apart_become_the_picture_both_show():
+    """An encode's soft bar edge put its box two rows from the source's:
+    1920x800 against 1920x802, compared by scaling one onto the other."""
+    from vmaf_app.core.crop_detect import common_picture
+
+    source, test = common_picture(_sized(1920, 1080), _sized(1920, 1080),
+                                  CropBox(1920, 800, 0, 140), CropBox(1920, 802, 0, 138))
+    assert source == test == CropBox(1920, 800, 0, 140)
+
+
+def test_the_same_picture_at_two_sizes_is_matched_in_each_ones_pixels():
+    from vmaf_app.core.crop_detect import common_picture
+
+    source, test = common_picture(_sized(3840, 2160), _sized(1920, 1080),
+                                  CropBox(3840, 1600, 0, 280), CropBox(1920, 804, 0, 138))
+    assert source == CropBox(3840, 1600, 0, 280)
+    assert test == CropBox(1920, 800, 0, 140)
+
+
+def test_agreeing_boxes_are_left_as_they_are():
+    from vmaf_app.core.crop_detect import common_picture
+
+    boxes = CropBox(3840, 1600, 0, 280), CropBox(1920, 800, 0, 140)
+    assert common_picture(_sized(3840, 2160), _sized(1920, 1080), *boxes) == boxes
+
+
+def test_videos_of_different_shapes_keep_their_own_boxes():
+    """An encode already cropped to the picture is a different shape from
+    its letterboxed source: the boxes are each video's own business."""
+    from vmaf_app.core.crop_detect import common_picture
+
+    boxes = CropBox(1920, 800, 0, 140), CropBox(1920, 800, 0, 0)
+    assert common_picture(_sized(1920, 1080), _sized(1920, 800), *boxes) == boxes
+
+
+def test_a_missing_box_is_left_alone():
+    from vmaf_app.core.crop_detect import common_picture
+
+    assert common_picture(_sized(1920, 1080), _sized(1920, 1080), None, CropBox(1920, 800, 0, 140)) == (
+        None, CropBox(1920, 800, 0, 140))
+
+
+def test_equally_common_boxes_go_to_the_larger(monkeypatch):
+    """A dark stretch reads its dark picture as bar: its box is too tight.
+    A tie went to whichever window answered first."""
+    crop_detect.clear_cache()
+    boxes = iter([CropBox(1920, 696, 0, 192), CropBox(1920, 800, 0, 140), CropBox(1920, 696, 0, 192),
+                  CropBox(1920, 800, 0, 140), None])
+    monkeypatch.setattr(crop_detect, "_run_single_window", lambda *a, **k: next(boxes))
+    info = VideoInfo(path=Path("tie.mkv"), width=1920, height=1080, fps=24.0, duration=600.0, nb_frames=14400,
+                     codec_name="hevc")
+    assert crop_detect.detect_crop(info) == CropBox(1920, 800, 0, 140)

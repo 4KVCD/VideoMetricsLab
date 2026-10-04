@@ -5,7 +5,7 @@ import pytest
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
-    supplemental_metric_specs,
+    displayable_metric_specs,
 )
 from vmaf_app.core.models import (
     ComparisonResult,
@@ -29,7 +29,7 @@ def _cache_key(source, distorted, options):
 def _load_cached(source, distorted, options, directory=None):
     return result_cache.load_cached(
         source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
+        displayable_metric_specs(options),
     )
 
 
@@ -40,10 +40,8 @@ def _store_cached(source, distorted, result, label, options, directory=None):
 
 
 def _clear_cached(source, distorted, options, directory=None):
-    return result_cache.clear(
-        source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
-    )
+    # The ticked metrics only, as the window clears them for a recalculation.
+    return result_cache.clear(source, distorted, _cache_request(options), directory)
 
 OPTIONS = VmafOptions()
 
@@ -199,6 +197,10 @@ def test_cache_miss_when_calculation_options_change(tmp_path):
         VmafOptions(gpu_vendor=GpuVendor.NVIDIA),
         VmafOptions(n_threads=12),
         VmafOptions(gpu_decode=False, gpu_vendor=GpuVendor.AMD, n_threads=4),
+        # Scaled with another algorithm (or on the GPU), a comparison is the
+        # same comparison (ComparisonRecipe.identity_dict).
+        VmafOptions(scale_algorithm="lanczos"),
+        VmafOptions(scale_algorithm="bilinear"),
     ],
 )
 def test_cache_hit_survives_execution_only_option_changes(tmp_path, changed):
@@ -220,7 +222,6 @@ def test_cache_hit_survives_execution_only_option_changes(tmp_path, changed):
             model_choice="version=vmaf_4k_v0.6.1",
         ),
         VmafOptions(crop_mode=CropMode.NONE),
-        VmafOptions(scale_algorithm="lanczos"),
         VmafOptions(scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
         VmafOptions(duration_limit=2.0),
         VmafOptions(n_subsample=5),

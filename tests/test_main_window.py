@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication, QHeaderView, QTableWidgetSelectionRange
 
+from tests.factories import decode_plan, status
 from tests.factories import (
     fake_completed_run as _fake_completed_run,
 )
@@ -18,7 +19,7 @@ from tests.factories import (
 from vmaf_app.core import result_cache
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
-    supplemental_metric_specs,
+    displayable_metric_specs,
 )
 from vmaf_app.core.models import (
     ComparisonResult,
@@ -34,6 +35,7 @@ from vmaf_app.core.models import (
 from vmaf_app.core.settings import Settings, default_parallel_jobs
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
+from vmaf_app.ui import run_line
 from vmaf_app.ui.main_window import (
     COL_BITRATE,
     COL_BLACK_BARS,
@@ -53,6 +55,7 @@ from vmaf_app.ui.main_window import (
     CompletedRun,
     MainWindow,
 )
+from vmaf_app.ui.row_state import RowState
 
 
 def _cache_request(options):
@@ -66,7 +69,7 @@ def _cache_key(source, distorted, options):
 def _load_cached(source, distorted, options, directory=None):
     return result_cache.load_cached(
         source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
+        displayable_metric_specs(options),
     )
 
 
@@ -77,10 +80,25 @@ def _store_cached(source, distorted, result, label, options, directory=None):
 
 
 def _clear_cached(source, distorted, options, directory=None):
-    return result_cache.clear(
-        source, distorted, _cache_request(options), directory,
-        supplemental_metric_specs(options),
-    )
+    # The ticked metrics only, as the window clears them for a recalculation.
+    return result_cache.clear(source, distorted, _cache_request(options), directory)
+
+@pytest.fixture
+def clock(monkeypatch):
+    """The window's clock, standing at 1000 s until a test moves it."""
+    class Clock:
+        now = 1000.0
+
+        def monotonic(self):
+            return self.now
+
+        def __getattr__(self, name):  # the rest of the time module
+            return getattr(time, name)
+
+    fake = Clock()
+    monkeypatch.setattr(main_window_module, "time", fake)
+    return fake
+
 
 @pytest.fixture(scope="module")
 def qapp():
@@ -266,9 +284,7 @@ def test_a_result_finished_for_other_settings_is_marked_rather_than_silent(qapp)
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
 
-    win._set_row_status(
-        row, "Finished with the previous settings; change them back to see the result."
-    )
+    win._set_row_status(row, RowState.FOR_PREVIOUS_SETTINGS)
 
     name = win.distorted_table.item(row, COL_PATH)
     assert "Finished with the previous settings" in name.toolTip()
@@ -278,10 +294,10 @@ def test_a_result_finished_for_other_settings_is_marked_rather_than_silent(qapp)
 def test_a_row_returning_to_normal_loses_its_mark(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
-    win._set_row_status(row, "Failed", "some error")
+    win._set_row_status(row, RowState.FAILED, "some error")
     assert win.distorted_table.item(row, COL_PATH).foreground().color().name() == "#a03030"
 
-    win._set_row_status(row, "")
+    win._set_row_status(row, None)
 
     name = win.distorted_table.item(row, COL_PATH)
     assert name.foreground().color() == win.distorted_table.palette().text().color()
@@ -978,6 +994,34 @@ def test_loaded_saved_run_shows_every_metric_present_in_the_file(qapp, monkeypat
     assert win.distorted_table.item(0, COL_BLACK_BARS).text() == "No"
 
 
+@pytest.mark.parametrize("answer", ["yes", "no"])
+def test_loading_a_saved_run_of_a_video_already_listed_keeps_one_row(qapp, monkeypatch, answer):
+    """A second row with the same path was added, and every lookup by path
+    found only the first."""
+    win = MainWindow()
+    info = _fake_video_info("saved.mp4")
+
+    def result(vmaf):
+        return ComparisonResult(
+            source=Path("source.mp4"), distorted=Path("saved.mp4"),
+            frames=[FrameScore(0, 0.0, vmaf)], fps=30.0, model="version=vmaf_v0.6.1",
+            source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+        )
+
+    monkeypatch.setattr(main_window_module.QFileDialog, "getOpenFileName",
+                        lambda *a, **kw: ("saved.metrics.json", ""))
+    monkeypatch.setattr(main_window_module, "load_run", lambda _path: (result(90.0), "saved"))
+    win._on_load_saved_run()
+    monkeypatch.setattr(main_window_module, "load_run", lambda _path: (result(70.0), "saved"))
+    monkeypatch.setattr(main_window_module.QMessageBox, "question", lambda *a, **k: (
+        main_window_module.QMessageBox.Yes if answer == "yes" else main_window_module.QMessageBox.No))
+    win._on_load_saved_run()
+
+    assert len(win._rows) == win.distorted_table.rowCount() == 1
+    assert win.distorted_table.item(0, COL_VMAF).text() == ("70.00" if answer == "yes" else "90.00")
+    win.close()
+
+
 def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypatch):
     from vmaf_app.core import result_cache
 
@@ -1244,8 +1288,8 @@ def test_run_clicked_builds_a_job_for_a_resample_row_without_probing(qapp, monke
     win._on_run_clicked()
 
     assert win._worker is not None
-    assert len(win._worker._jobs) == 1
-    assert win._worker._jobs[0].options.resample_test == ResampleTarget(width=854, label="480p")
+    assert len(win._worker.scheduler.jobs) == 1
+    assert win._worker.scheduler.jobs[0].options.resample_test == ResampleTarget(width=854, label="480p")
 
     win._worker.cancel()
     win._worker.wait(5000)
@@ -1392,7 +1436,7 @@ def test_run_clicked_gives_the_opposite_direction_row_a_distinct_result_identity
     win._on_run_clicked()
 
     assert win._worker is not None
-    jobs_by_direction = {j.options.scale_direction: j for j in win._worker._jobs}
+    jobs_by_direction = {j.options.scale_direction: j for j in win._worker.scheduler.jobs}
     assert jobs_by_direction[ScaleDirection.SOURCE_TO_DISTORTED].result_distorted_path == Path("a.mp4")
     assert jobs_by_direction[ScaleDirection.DISTORTED_TO_SOURCE].result_distorted_path == synthetic_scale_direction_variant_path(
         Path("a.mp4"), ScaleDirection.DISTORTED_TO_SOURCE
@@ -1533,13 +1577,11 @@ def test_mixed_cpu_and_gpu_status_keeps_backend_rates_separate(qapp, monkeypatch
     assert win.status_label.text().startswith("1 video: 1 in progress")
 
 
-def test_run_status_includes_elapsed_time(qapp):
-    import time
-
+def test_run_status_includes_elapsed_time(qapp, clock):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._run_started_at = time.monotonic() - 61
+    win._run_started_at = clock.now - 61
     win._on_job_started(0, "a")
 
     assert "Elapsed: 0:01:01" in win.status_label.text()
@@ -1649,8 +1691,8 @@ def test_a_cancelled_run_leaves_the_videos_it_never_reached_as_they_were(qapp):
     win = MainWindow()
     running, queued = (win._add_table_row(Path(name)) for name in ("a.mkv", "b.mkv"))
     win._job_rows = [win._rows[running], win._rows[queued]]
-    win._set_row_status(running, "Calculating")
-    win._set_row_status(queued, "Queued")
+    win._set_row_status(running, RowState.CALCULATING)
+    win._set_row_status(queued, RowState.QUEUED)
     win._on_run_cancelled()
     win._on_all_finished()
     assert "Cancelled" in win.distorted_table.item(running, COL_PATH).toolTip()
@@ -1659,8 +1701,10 @@ def test_a_cancelled_run_leaves_the_videos_it_never_reached_as_they_were(qapp):
     win.close()
 
 
-@pytest.mark.parametrize("state, detail", [("Complete", "240 scored frames; metrics: VMAF v0.6.1"),
-                                            ("Failed", "Frame rates do not match (23.976 vs 25.000 fps).")])
+@pytest.mark.parametrize("state, detail", [
+    (RowState.COMPLETE, "240 scored frames; metrics: VMAF v0.6.1"),
+    (RowState.FAILED, "Frame rates do not match (23.976 vs 25.000 fps)."),
+])
 def test_a_changed_setting_clears_the_old_state_and_its_detail_together(qapp, state, detail):
     """The tooltip said "Not calculated" over the old result's detail."""
     win = MainWindow()
@@ -1950,8 +1994,10 @@ def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
     assert win._rows[row].completed_run is None
 
 
-@pytest.mark.parametrize("control", ["gpu", "threads"])
+@pytest.mark.parametrize("control", ["gpu", "threads", "scaling algorithm"])
 def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
+    """Which GPU, how many threads, and how frames are scaled change how a
+    comparison is made, not what it is: its scores stay."""
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     completed = _fake_completed_run("a.mp4")
@@ -1961,8 +2007,11 @@ def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
 
     if control == "gpu":
         win.gpu_checkbox.setChecked(not win.gpu_checkbox.isChecked())
-    else:
+    elif control == "threads":
         win.threads_spin.setValue(7)
+    else:
+        win.scale_algo_combo.setCurrentText("lanczos")
+        assert win._rows[row].options.scale_algorithm == "lanczos"
 
     assert win._rows[row].completed_run is completed
 
@@ -2058,10 +2107,13 @@ def test_finished_probe_is_not_reused_after_qt_deletes_it(qapp, monkeypatch):
 def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
     started = threading.Event()
     release = threading.Event()
+    on_ui_thread = []
 
     def slow_probe(path, process_handle=None):
+        on_ui_thread.append(threading.current_thread() is threading.main_thread())
         started.set()
-        release.wait(10.0)
+        if not on_ui_thread[-1]:
+            release.wait(10.0)  # a slow probe, where it does not hold up the window
         return _fake_video_info(str(path))
 
     monkeypatch.setattr(probe_worker_module, "probe_video", slow_probe)
@@ -2071,12 +2123,10 @@ def test_selecting_a_slow_source_does_not_block_the_ui(qapp, monkeypatch):
     )
     win = MainWindow()
 
-    before = time.monotonic()
     win._on_browse_source()
-    elapsed = time.monotonic() - before
 
-    assert elapsed < 1.0
     assert started.wait(5.0)
+    assert on_ui_thread == [False], "the source was probed on the UI thread"
     assert win._source_info is None
 
     release.set()
@@ -3109,16 +3159,14 @@ def test_closing_does_not_accept_while_a_probe_is_still_running(qapp):
 
 
 def test_closing_does_not_block_the_ui_thread_for_seconds(qapp):
-    import time
-
+    """closeEvent used to wait a flat five seconds per running worker."""
     win = MainWindow()
-    win._probe_workers.append(_LiveWorker())
+    worker = _LiveWorker()
+    win._probe_workers.append(worker)
 
-    began = time.monotonic()
     win.closeEvent(QCloseEvent())
-    elapsed = time.monotonic() - began
 
-    assert elapsed < 1.0, f"closing blocked the UI thread for {elapsed:.1f}s"
+    assert worker.waited_ms == [], "closing waited on a running worker"
 
 
 def test_a_second_close_does_not_cancel_twice_but_still_refuses(qapp):
@@ -3535,7 +3583,7 @@ def test_an_unscored_rows_timeline_stops_at_the_shorter_input(qapp):
 
 @pytest.mark.parametrize(
     ("crop_mode", "pending"),
-    [(CropMode.AUTO, True), (CropMode.NONE, False), (CropMode.MANUAL, False)],
+    [(CropMode.AUTO, True), (CropMode.NONE, False)],
 )
 def test_only_auto_crop_is_reported_as_pending(qapp, crop_mode, pending):
     win = MainWindow()
@@ -3547,25 +3595,6 @@ def test_only_auto_crop_is_reported_as_pending(qapp, crop_mode, pending):
     win._sync_frame_compare()
 
     assert win.frame_compare_panel._entries[0].comparison.auto_crop_pending is pending
-
-
-def test_a_manual_crop_is_applied_to_an_unscored_preview(qapp):
-    from vmaf_app.core.models import CropBox
-
-    win = MainWindow()
-    win._source_info = _fake_video_info_res("source.mkv", 1920, 1080)
-    row = win._add_table_row(Path("encode.mkv"))
-    win._rows[row].video_info = _fake_video_info_res("encode.mkv", 1920, 1080)
-    win._rows[row].options.crop_mode = CropMode.MANUAL
-    win._rows[row].options.manual_source_crop = CropBox(w=1920, h=816, x=0, y=132)
-    win._rows[row].options.manual_distorted_crop = CropBox(w=1920, h=816, x=0, y=132)
-
-    win._sync_frame_compare()
-    comparison = win.frame_compare_panel._entries[0].comparison
-
-    # Manual crops are known without running anything, so they are exact.
-    assert comparison.source_crop.h == 816
-    assert comparison.distorted_crop.h == 816
 
 
 def test_a_resolution_test_row_can_be_previewed_before_it_runs(qapp, tmp_path, monkeypatch):
@@ -3692,7 +3721,7 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
     win._job_rows = list(win._rows)
     for i in range(job_count):
         win._on_job_started(i, f"encode-{i}")
-        win._on_job_status(i, "Running ffmpeg (GPU decode: source cuda, distorted cuda)...")
+        win._on_job_status(i, status("Running ffmpeg (GPU decode: source cuda, distorted cuda)..."))
         win._on_job_progress(i, current=20, total=100, fps=10.0)
         text = win.job_progress_labels[win._job_line_slot[i]].text()
         assert "Decoder: Source: GPU, test video: GPU" in text
@@ -3703,7 +3732,7 @@ def test_decode_status_survives_progress_and_tracks_fallback(qapp, job_count):
         ("source cpu, distorted d3d11va", "Decoder: Source: CPU, test video: GPU"),
         ("off", "Decoder: Source: CPU, test video: CPU"),
     ):
-        win._on_job_status(0, f"GPU decode failed, retrying (GPU decode: {plan})...")
+        win._on_job_status(0, status(f"GPU decode failed, retrying (GPU decode: {plan})..."))
         win._on_job_progress(0, current=30, total=100, fps=5.0)
         assert expected in win.job_progress_labels[win._job_line_slot[0]].text()
         if job_count == 2:
@@ -3730,7 +3759,7 @@ def test_a_single_jobs_phase_also_stays_on_its_own_line(qapp):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
 
-    win._on_job_status(0, "Running ffmpeg (GPU decode: off)...")
+    win._on_job_status(0, status("Running ffmpeg (GPU decode: off)..."))
 
     assert "GPU decode" in win.job_progress_labels[0].text()
     assert win.status_label.text().startswith("1 video: 1 in progress")
@@ -4058,7 +4087,7 @@ def test_perceptual_metrics_are_unavailable_on_a_resolution_round_trip_row(qapp,
     monkeypatch.setattr(main_window_module.VmafWorker, "start", lambda self: None)
     win._on_run_clicked()
     assert win._worker is not None
-    (job,) = win._worker._jobs
+    (job,) = win._worker.scheduler.jobs
     assert "ssimulacra2" not in job.metric_keys and "vmaf" in job.metric_keys
     win._worker = None
     win.close()
@@ -4126,7 +4155,7 @@ def test_a_run_hands_the_worker_what_the_row_already_has(qapp, monkeypatch):
 
     win._on_run_clicked()
 
-    job, = win._worker._jobs
+    job, = win._worker.scheduler.jobs
     assert job.metric_keys == ("vmaf", "ssimulacra2")
     assert job.cached_metrics.keys() == ("vmaf",)
     assert job.cached_result is win._rows[row].completed_run.result
@@ -4290,7 +4319,7 @@ def test_a_score_calculated_the_chosen_way_has_no_implementation_note(qapp, monk
     win.close()
 
 
-def test_paused_and_cancelling_stay_on_the_status_line(qapp):
+def test_paused_and_cancelling_stay_on_the_status_line(qapp, clock):
     """The status line is rebuilt every second for the elapsed time, and it
     replaced "Paused." and "Cancelling..." within a second."""
     from types import SimpleNamespace
@@ -4298,7 +4327,7 @@ def test_paused_and_cancelling_stay_on_the_status_line(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._run_started_at = time.monotonic() - 65
+    win._run_started_at = clock.now - 65
     win._on_job_started(0, "a")
     calls = []
     win._worker = SimpleNamespace(pause=lambda: calls.append("pause"), resume=lambda: calls.append("resume"),
@@ -4501,34 +4530,34 @@ def test_the_status_line_counts_the_queue_the_same_way_whatever_runs(qapp):
     win.close()
 
 
-def test_elapsed_leaves_out_paused_time(qapp):
+def test_elapsed_leaves_out_paused_time(qapp, clock):
     """"Elapsed" kept counting while a run was paused."""
     from types import SimpleNamespace
 
     win = MainWindow()
     row = win._add_table_row(Path("a.mp4"))
     win._job_rows = [win._rows[row]]
-    win._run_started_at = time.monotonic() - 100
+    win._run_started_at = clock.now - 100
     win._on_job_started(0, "a")
     win._worker = SimpleNamespace(pause=lambda: None, resume=lambda: None)
     win.pause_btn.setChecked(True)
     win._on_pause_clicked()
     win._paused_since -= 40  # paused 40 s ago
-    assert 59 <= win._run_elapsed() <= 61
+    assert win._run_elapsed() == 60
     win.pause_btn.setChecked(False)
     win._on_pause_clicked()
-    assert 59 <= win._run_elapsed() <= 61
+    assert win._run_elapsed() == 60
     win._update_run_status()
     assert "Elapsed: 0:01:0" in win.status_label.text()
     win._worker = None
     win.close()
 
 
-def test_the_end_of_a_run_says_how_long_it_took_and_what_failed(qapp):
+def test_the_end_of_a_run_says_how_long_it_took_and_what_failed(qapp, clock):
     """It said "Done." with the time gone, or counted a video with one
     failed metric among scored ones as a failed video."""
     win = MainWindow()
-    win._run_started_at = time.monotonic() - 3725
+    win._run_started_at = clock.now - 3725
     win._run_failed_count, win._run_partial_count = 1, 2
     win._on_all_finished()
     assert win.status_label.text() == (
@@ -4616,7 +4645,7 @@ def test_a_starting_half_names_its_step(qapp, step, shown):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [
-        {**_half("ffmpeg", ("vmaf",), state="starting", current=0, total=0, fps=0.0), "step": step},
+        {**_half("ffmpeg", ("vmaf",), state="starting", current=0, total=0, fps=0.0), "step": status(step)},
         _half("perceptual", ("ssimulacra2",), state="starting", current=0, total=0, fps=0.0),
     ])
     text = win.job_progress_labels[0].text()
@@ -4679,7 +4708,8 @@ def _half(backend, keys, *, state="running", decode="", current=20, total=100, f
           passes=None, cpu_keys=(), done_keys=(), lane=None):
     """A half's snapshot as the worker sends it (VmafWorker.task_progress)."""
     return {"backend": backend, "metric_keys": keys, "current": current, "total": total, "fps": fps,
-            "state": state, "phase": phase, "waiting_for": None, "step": "", "decode": decode,
+            "state": state, "phase": phase, "waiting_for": None, "step": "",
+            "decode": decode_plan(decode) if decode else None,
             "lane": lane or ("cpu" if backend in ("ffmpeg", "perceptual_cpu") else "gpu"),
             "passes": passes or (keys,), "cpu_keys": cpu_keys, "done_keys": done_keys}
 
@@ -4692,7 +4722,7 @@ def test_a_video_with_only_gpu_metrics_names_its_decoders(qapp):
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [_half("perceptual", ("ssimulacra2",), decode="source cuda, distorted cpu")])
-    win._on_job_status(0, "Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…")
+    win._on_job_status(0, status("Vship GPU (fake GPU): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)…"))
     assert win.job_progress_labels[0].text().endswith("   ·   Decoder: Source: GPU, test video: CPU")
     win.close()
 
@@ -4742,7 +4772,7 @@ def test_a_starting_gpu_half_shows_its_step_without_the_decode_plan(qapp, step, 
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
     win._on_task_progress(0, [{**_half("perceptual", ("ssimulacra2",), state="starting",
-                                       decode="source cuda, distorted cuda"), "step": step}])
+                                       decode="source cuda, distorted cuda"), "step": status(step)}])
     assert win.job_progress_labels[0].text().startswith(f"a — {shown}   ·   Decoder: ")
     win.close()
 
@@ -4757,7 +4787,7 @@ def test_a_resolution_tests_decoder_names_only_the_source(qapp):
     win._rows[0].options.resample_test = ResampleTarget(width=1920, label="1080p")
     win._job_rows = list(win._rows)
     win._on_job_started(0, "a")
-    win._on_job_status(0, "Running ffmpeg (GPU decode: source cuda, distorted cpu)...")
+    win._on_job_status(0, status("Running ffmpeg (GPU decode: source cuda, distorted cpu)..."))
     win._on_job_progress(0, current=20, total=100, fps=10.0)
     text = win.job_progress_labels[0].text()
     assert text.endswith("   ·   Decoder: Source: GPU")
@@ -4780,7 +4810,7 @@ def test_both_halves_name_their_black_bar_detection_alike(qapp, monkeypatch):
     cpu, gpu = [], []
     vmaf_runner._resolve_crops(info, info, VmafOptions(crop_mode=CropMode.AUTO), cpu.append)
     perceptual_cpu._resolve_crops(info, info, SimpleNamespace(crop_mode=CropMode.AUTO), None, None, gpu.append)
-    assert MainWindow._step_text(cpu[0]) == MainWindow._step_text(gpu[0]) == \
+    assert run_line.step_text(cpu[0]) == run_line.step_text(gpu[0]) == \
         "Detecting black bars in source and test video"
 
 
@@ -5049,7 +5079,7 @@ def test_a_videos_result_so_far_is_shown_saved_and_graphed_during_its_run(qapp, 
     rd = win._rows[row]
     win._job_rows = [rd]
     win._on_job_started(0, "distorted")
-    rd.analysis_status = "Calculating"
+    rd.analysis_status = RowState.CALCULATING
     so_far = _fake_completed_run(str(distorted)).result
     so_far.source, so_far.distorted = source, distorted
 
@@ -5166,12 +5196,14 @@ def test_the_update_check_can_be_turned_off(qapp, monkeypatch):
     win = MainWindow()
     started = []
     monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self.name))
+    # Only the update check's own thread counts: anything else the test
+    # process starts meanwhile (a background probe) is recorded too.
     win.settings_check_updates.setChecked(False)
     win.check_for_updates()
-    assert started == [] and win._settings.check_for_updates is False
+    assert "update-check" not in started and win._settings.check_for_updates is False
     win.settings_check_updates.setChecked(True)
     win.check_for_updates()
-    assert started == ["update-check"]
+    assert started.count("update-check") == 1
     win.close()
 
 
@@ -5262,7 +5294,7 @@ def test_gpu_metrics_together_is_off_by_default_and_reaches_the_run(qapp, monkey
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device", lambda: (_CUDA_GPU, ""))
     _long_row(win, "clip.mkv", minutes=1, backend="gpu")
     win._on_run_clicked()
-    assert win._worker is not None and win._worker.gpu_metrics_together
+    assert win._worker is not None and win._worker.scheduler.gpu_metrics_together
     win._worker = None
     win._set_run_ui_active(False)
     win.close()
@@ -5323,7 +5355,7 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         win._update_run_status()
         assert win.status_label.text().startswith("[[")
         assert win._run_end_message().startswith("[[")
-        win._set_row_status(0, "Failed", "Frame rates do not match (23.976 vs 24.000 fps).")
+        win._set_row_status(0, RowState.FAILED, "Frame rates do not match (23.976 vs 24.000 fps).")
         win._refresh_row_state(0)
         assert "[[Failed]]" in win.distorted_table.item(0, COL_PATH).toolTip()
         assert "[[Frame rates do not match ({source} vs {test} fps).]]" not in \
@@ -5333,3 +5365,30 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
     finally:
         i18n.set_language("en")
 
+
+
+def test_locating_ffmpeg_keeps_the_folder_in_settings(qapp, monkeypatch, tmp_path):
+    # "Locate ffmpeg.exe" kept the folder only in the registry, so the
+    # Settings tab showed no folder while one was in use.
+    from vmaf_app.core import ffmpeg_locate
+    from vmaf_app.core.ffmpeg_locate import ToolsStatus, ToolStatus
+    from vmaf_app.core.settings import Settings
+
+    for name in ("ffmpeg", "ffprobe"):
+        (tmp_path / ffmpeg_locate.exe_name(name)).write_bytes(b"")
+    good = ToolsStatus(
+        ffmpeg=ToolStatus("ffmpeg", "ffmpeg.exe", True, (9, 0, 1)),
+        ffprobe=ToolStatus("ffprobe", "ffprobe.exe", True, (9, 0, 1)),
+    )
+    monkeypatch.setattr(main_window_module, "check_tools", lambda: good)
+    monkeypatch.setattr(
+        main_window_module.QFileDialog, "getOpenFileName",
+        lambda *a, **k: (str(tmp_path / ffmpeg_locate.exe_name("ffmpeg")), ""),
+    )
+    win = MainWindow()
+    try:
+        assert win._on_locate_ffmpeg() is True
+        assert Settings.load().ffmpeg_dir == str(tmp_path)
+        assert win.settings_ffmpeg_edit.text() == str(tmp_path)
+    finally:
+        ffmpeg_locate.ffmpeg_dir_changed()

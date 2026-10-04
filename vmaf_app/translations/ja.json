@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "動画を読み込めなかったため、黒帯を確認できませんでした。",
   "Off": "オフ",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "この行では黒帯の検出が無効です。フレーム全体を比較します。",
-  "Manual": "手動",
-  "A manual crop is configured; the detected sides appear after the run.": "手動クロップが設定されています。検出された辺は実行後に表示されます。",
   "Pending": "保留中",
   "Black bars will be detected when this row is run.": "この行を実行するときに黒帯を検出します。",
   "Test video": "テスト動画",
@@ -539,7 +537,6 @@
   "Cancelled by user": "ユーザーがキャンセルしました",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "GPU での採点に失敗しました（{error}）。10 分を超える動画では数時間から数日かかるため、CPU での再試行は行っていません。それでも CPU で計算するには、{metrics} に CPU を選んでください。",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "GPU での採点に失敗しました（{error}）。CPU での再試行も失敗しました：{reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "CPU では {cpu_frames} フレーム、GPU では {gpu_frames} フレームで計算されたため、採用しませんでした",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} には Vship が使える GPU が必要ですが、どれも使えませんでした：{reason}",
   "{metric} could not be calculated: {reason}": "{metric} を計算できませんでした：{reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Vship の GPU アクセラレーションは Windows 版にのみ同梱されています。",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship は {primaries} 原色に対応していません。",
   "Vship does not support the {range} range tag.": "Vship は {range} レンジタグに対応していません。",
   "Vship does not support {siting} chroma siting.": "Vship は {siting} クロマ位置に対応していません。",
-  "Variable-frame-rate video is not supported safely yet.": "可変フレームレートの動画にはまだ安全に対応していません。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "可変フレームレートの動画にはまだ安全に対応していません。比較する前に、両方の動画を同じ固定フレームレートに変換してください。",
   "Frame rates do not match ({source} vs {test} fps).": "フレームレートが一致しません（{source} と {test} fps）。",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "長さが一致しません（{source} と {test} 秒）。共通する冒頭部分だけを比較する場合は、両方のファイルに収まる時間の上限を設定してください。",
@@ -687,7 +683,11 @@
   "Cannot compare": "比較できません",
   "Cannot be compared with the reference:": "参照動画と比較できません：",
   "Calculate the rest?": "残りを計算しますか？",
-  "It could not be read. Remove it or add the file again to retry.": "読み込めませんでした。削除するか、ファイルを追加し直してやり直してください。"
+  "It could not be read. Remove it or add the file again to retry.": "読み込めませんでした。削除するか、ファイルを追加し直してやり直してください。",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "音声トラックを含むファイル全体のビットレートです。ファイルに映像のみのビットレートが記録されていません。",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} は既に一覧にあります。代わりに保存した実行のスコアを表示しますか？",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg が {side} のフレームのタイムスタンプを出力しませんでした。",
+  "The source has no frame at the test video's first.": "テスト動画の最初のフレームの時刻に、ソースのフレームがありません。"
  },
  "plurals": {
   "about {count} day": [

@@ -18,15 +18,24 @@ from pathlib import Path
 
 import numpy as np
 
+from vmaf_app.core import gpu_frames, vmaf_cuda
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core import vmaf_cuda
-from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
-from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
+from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
+from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
+from vmaf_app.core.geometry import (
+    analysis_dimensions,
+    content_size,
+    display_aspect_ratio,
+    pair_problem,
+    resample_analysis_dimensions,
+)
 from vmaf_app.core.gpu import (
     GPU_PASS,
     GPU_WAIT_MESSAGE,
     HwAccelPlan,
+    analysis_pix_fmt,
     plan_hwaccel,
 )
 from vmaf_app.core.gpu import (
@@ -52,6 +61,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.process_control import ProcessHandle
+from vmaf_app.core.status import GPU_VMAF_FAILED, GPU_WAIT, STARTING, Status
 
 _log = logging.getLogger(__name__)
 
@@ -104,32 +114,9 @@ class Cancelled(RuntimeError):  # noqa: N818 - a cancellation, not an error cond
 def validate_video_pair(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions
 ) -> None:
-    """Rejects comparisons whose timelines/display geometry are ambiguous."""
-    if source_info.is_variable_frame_rate or distorted_info.is_variable_frame_rate:
-        raise VmafRunError(
-            "Variable-frame-rate video is not supported safely yet. Convert both videos "
-            "to the same constant frame rate before comparing them."
-        )
-    fps_tolerance = max(0.01, max(source_info.fps, distorted_info.fps) * 0.001)
-    if abs(source_info.fps - distorted_info.fps) > fps_tolerance:
-        raise VmafRunError(
-            f"Frame rates do not match ({source_info.fps:.3f} vs "
-            f"{distorted_info.fps:.3f} fps)."
-        )
-    if source_info.duration > 0 and distorted_info.duration > 0:
-        compared_limit = options.duration_limit
-        if compared_limit <= 0:
-            frame_duration = 1.0 / max(source_info.fps, distorted_info.fps, 1.0)
-            if abs(source_info.duration - distorted_info.duration) > max(0.1, 2 * frame_duration):
-                raise VmafRunError(
-                    f"Durations do not match ({source_info.duration:.3f} vs "
-                    f"{distorted_info.duration:.3f} seconds). Set a duration limit within "
-                    "both files if comparing only their common opening segment."
-                )
-        elif min(source_info.duration, distorted_info.duration) + 0.1 < compared_limit:
-            raise VmafRunError(
-                "The duration limit extends beyond the end of one of the videos."
-            )
+    """Rejects comparisons whose timelines are ambiguous (geometry.pair_problem)."""
+    if problem := pair_problem(source_info, distorted_info, options.duration_limit):
+        raise VmafRunError(problem)
 
 
 #: Two shapes count as the same if they agree to within this fraction. Wide
@@ -137,35 +124,6 @@ def validate_video_pair(
 #: 1920x1080 differs by 0.1%), far tighter than any real mismatch: 4:3
 #: against 16:9 is 33% apart, and the letterbox case below is 32%.
 _ASPECT_TOLERANCE = 0.01
-
-
-def _sar_fraction(sar: str) -> tuple[int, int]:
-    """A sample aspect ratio as a fraction. Unknown/unset means square."""
-    if sar in {"", "N/A", "0:1"}:
-        return 1, 1
-    try:
-        num, den = (int(part) for part in sar.split(":", 1))
-    except ValueError:
-        return 1, 1
-    if num <= 0 or den <= 0:
-        return 1, 1
-    return num, den
-
-
-def display_aspect_ratio(info: VideoInfo, crop: CropBox | None = None) -> float:
-    """The shape of the picture as displayed, after cropping.
-
-    Storage dimensions alone are not the shape: non-square pixels stretch
-    them, and a crop changes them. This is what has to match between two
-    videos, not the raw SAR string -- 1920x1080 SAR 1:1 and 1440x1080 SAR
-    4:3 are the same 16:9 picture stored two ways.
-    """
-    width = crop.w if crop else info.width
-    height = crop.h if crop else info.height
-    if height <= 0:
-        return 0.0
-    num, den = _sar_fraction(info.sar)
-    return (width * num) / (height * den)
 
 
 def validate_display_geometry(
@@ -219,14 +177,11 @@ def _resolve_crops(
     if options.crop_mode == CropMode.NONE:
         return None, None
 
-    if options.crop_mode == CropMode.MANUAL:
-        return options.manual_source_crop, options.manual_distorted_crop
-
     plan = hwaccel or HwAccelPlan()
     if status_callback:
         status_callback("Detecting black bars in source and distorted...")
     try:
-        return detect_pair(
+        boxes = detect_pair(
             lambda: detect_crop(
                 source_info, cancel_event=cancel_event, process_handle=process_handle,
                 hwaccel=plan.source,
@@ -238,31 +193,7 @@ def _resolve_crops(
         )
     except CropDetectCancelled as e:
         raise Cancelled("Cancelled by user") from e
-
-
-#: Analysis bit depth -> the planar 4:2:0 format both branches are converted
-#: to before they meet. libvmaf compares two streams that must agree on
-#: format, so one has to be picked for the pair.
-_ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
-
-
-def analysis_pix_fmt(*pix_fmts: str) -> str:
-    """The common format the inputs are converted to before comparison.
-
-    Takes the *deepest* of the inputs, so a 10-bit master compared against
-    an 8-bit encode promotes the encode rather than truncating the master.
-    Everything used to be forced to 8-bit yuv420p, which quietly discarded
-    two bits of both sides on any HDR/10-bit comparison and put a floor
-    under PSNR/XPSNR that had nothing to do with the encode being measured.
-    """
-    depth = max((_bit_depth(f) for f in pix_fmts), default=8)
-    if depth <= 8:
-        return _ANALYSIS_FORMAT_BY_DEPTH[8]
-    if depth <= 10:
-        return _ANALYSIS_FORMAT_BY_DEPTH[10]
-    # libvmaf accepts up to 12-bit; deeper sources (16-bit intermediates)
-    # are analysed at 12 rather than being dropped back to 8.
-    return _ANALYSIS_FORMAT_BY_DEPTH[12]
+    return common_picture(source_info, distorted_info, *boxes)
 
 
 def auto_threads(concurrent_jobs: int = 1) -> int:
@@ -310,7 +241,7 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
         opts.append(f"n_subsample={options.n_subsample}")
     if options.extra_features:
         opts.append("feature=" + "|".join(options.extra_features))
-    opts += _FRAMESYNC_OPTS
+    opts += FRAMESYNC_OPTS
     return opts
 
 
@@ -325,27 +256,6 @@ def _v1_model_file(options: VmafOptions) -> Path | None:
     return None
 
 
-#: Both libvmaf and xpsnr are framesync filters, and framesync's defaults are
-#: wrong for measurement: repeatlast=true extends the last frame of the
-#: secondary input past its EOF, and eof_action=repeat keeps the comparison
-#: going. A distorted file two frames longer than the source -- routine
-#: encoder padding, and well inside the duration tolerance -- therefore got
-#: two extra "scores" comparing real distorted frames against a frozen copy
-#: of the source's final frame. Those frames score terribly (48 and 31 on a
-#: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
-#: the run silently reports a worse encode than was delivered.
-#:
-#: The default ts_sync_mode pairs each distorted frame with the last source
-#: frame at or before its timestamp. Two files with the same frames can have
-#: timestamps a millisecond apart -- MKV stores whole milliseconds, and each
-#: program rounds frame times from its own clock -- and a distorted frame
-#: stamped 1 ms early was compared with the source's previous frame: VMAF 0
-#: and XPSNR ~16 dB at scene cuts and in motion, on an anime episode whose
-#: SSIMULACRA2 (paired frame by frame) was 93 on the same frame. "nearest"
-#: takes the source frame nearest in time, the same frame whichever way the
-#: two timestamps are off by less than half a frame.
-_FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
-
 #: overlay's name for each analysis format it holds unchanged. It has none
 #: for 12-bit, which is therefore scored on the CPU (vmaf_cuda.scores_on_gpu).
 _OVERLAY_FORMAT = {"yuv420p": "yuv420", "yuv420p10le": "yuv420p10"}
@@ -355,7 +265,7 @@ def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: 
     """The frame pairs FFmpeg's libvmaf filter compares, as the raw outputs
     [vmaf_dist] and [vmaf_ref] that VMAF on the GPU reads: the two streams
     are synchronized by overlay with libvmaf's own frame sync options
-    (_FRAMESYNC_OPTS), side by side in one frame, and cut apart again,
+    (FRAMESYNC_OPTS), side by side in one frame, and cut apart again,
     every pixel unchanged.
 
     The two outputs used to come straight from the two streams, paired by
@@ -365,15 +275,19 @@ def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: 
     PSNR, SSIM or XPSNR beside it, VMAF on the GPU was refused and the
     video calculated again on the CPU.
 
-    The source goes at an even offset, so that an odd width still puts it
-    on a chroma sample."""
-    offset = width + (width & 1)
-    sync = ":".join(_FRAMESYNC_OPTS)
-    return (f"[{main_label}]pad={offset + width}:{height}[vmaf_canvas];"
-            f"[vmaf_canvas][{ref_label}]overlay=x={offset}:y=0:eval=init:"
+    For an even width and height only (vmaf_cuda.scores_on_gpu sends an odd
+    comparison to the CPU): pad gives a 4:2:0 picture an even size and
+    blacks out an odd one's last column and row, and crop cuts on whole
+    chroma samples. An odd width was once given an even offset here, and
+    the run still failed in FFmpeg, every time."""
+    if width & 1 or height & 1:
+        raise ValueError(f"the GPU's frame pairs need an even size, not {width}x{height}")
+    sync = ":".join(FRAMESYNC_OPTS)
+    return (f"[{main_label}]pad={2 * width}:{height}[vmaf_canvas];"
+            f"[vmaf_canvas][{ref_label}]overlay=x={width}:y=0:eval=init:"
             f"format={_OVERLAY_FORMAT[analysis_format]}:{sync},split=2[vmaf_left][vmaf_right];"
             f"[vmaf_left]crop={width}:{height}:0:0[vmaf_dist];"
-            f"[vmaf_right]crop={width}:{height}:{offset}:0[vmaf_ref]")
+            f"[vmaf_right]crop={width}:{height}:{width}:0[vmaf_ref]")
 
 
 def analysis_bit_depth(source_info: VideoInfo, distorted_info: VideoInfo) -> int:
@@ -398,7 +312,7 @@ def _build_libvmaf_stage(
     if not _uses_vmaf_model(options) and not options.extra_features:
         assert xpsnr_log_path is not None
         return (f"[{main_label}][{ref_label}]xpsnr=stats_file={xpsnr_log_path.name}:"
-                + ":".join(_FRAMESYNC_OPTS) + output)
+                + ":".join(FRAMESYNC_OPTS) + output)
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
     chains = []
     if options.compute_xpsnr and xpsnr_log_path is not None:
@@ -412,55 +326,12 @@ def _build_libvmaf_stage(
         chains.append(f"[{ref_label}]split=2[ref_xpsnr][ref_vmaf]")
         chains.append(
             f"[{main_label}][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}:"
-            + ":".join(_FRAMESYNC_OPTS) + "[xmain]"
+            + ":".join(FRAMESYNC_OPTS) + "[xmain]"
         )
         main_label = "xmain"
         ref_label = "ref_vmaf"
     chains.append(f"[{main_label}][{ref_label}]libvmaf=" + ":".join(libvmaf_opts) + output)
     return ";".join(chains)
-
-
-def _content_size(info: VideoInfo, crop: CropBox | None) -> tuple[int, int]:
-    return (crop.w, crop.h) if crop else (info.width, info.height)
-
-
-def analysis_dimensions(
-    source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
-    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
-) -> tuple[int, int]:
-    """The size frames are actually compared at.
-
-    One side is scaled to the other before they reach libvmaf, so neither
-    input's own resolution need be the analysis resolution: a 1080p encode
-    measured with "upscale distorted to source" against a 4K master is
-    compared at 4K. Cropping moves it too. Shared with _build_filtergraph so
-    the two cannot disagree about what the run does.
-    """
-    return compared_dimensions(source_info, distorted_info, options.scale_direction, source_crop, distorted_crop)
-
-
-def compared_dimensions(
-    source_info: VideoInfo, distorted_info: VideoInfo, scale_direction: ScaleDirection,
-    source_crop: CropBox | None = None, distorted_crop: CropBox | None = None,
-) -> tuple[int, int]:
-    """analysis_dimensions for code that has the scale direction but no
-    options -- the saved-score cache, which works out from a comparison's
-    recorded sizes which model Auto picks for it."""
-    dist_content = _content_size(distorted_info, distorted_crop)
-    ref_content = _content_size(source_info, source_crop)
-    if ref_content == dist_content:
-        return dist_content
-    if scale_direction == ScaleDirection.DISTORTED_TO_SOURCE:
-        return ref_content
-    return dist_content
-
-
-def resample_analysis_dimensions(
-    source_info: VideoInfo, source_crop: CropBox | None = None
-) -> tuple[int, int]:
-    """A round-trip test compares two branches of one input at the source's
-    own (cropped) size -- the downscale is undone before comparison."""
-    return _content_size(source_info, source_crop)
 
 
 def _build_filtergraph(
@@ -470,11 +341,10 @@ def _build_filtergraph(
     xpsnr_log_path: Path | None = None, gpu_vmaf: bool = False,
 ) -> str:
     """`gpu_vmaf`: VMAF and NEG are scored on the GPU (vmaf_cuda), from the
-    compared frames as two raw outputs, [vmaf_dist] and [vmaf_ref]; `options`
-    then holds what FFmpeg's own filters still score (XPSNR, VMAF v1, PSNR,
-    SSIM), and they get the same frames through a split."""
-    dist_content_w, dist_content_h = _content_size(distorted_info, distorted_crop)
-    ref_content_w, ref_content_h = _content_size(source_info, source_crop)
+    compared frames as two raw outputs, [vmaf_dist] and [vmaf_ref], and are
+    all the run scores: FFmpeg's own filters score nothing."""
+    dist_content_w, dist_content_h = content_size(distorted_info, distorted_crop)
+    ref_content_w, ref_content_h = content_size(source_info, source_crop)
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
     upscale_distorted = resolutions_differ and options.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE
 
@@ -500,7 +370,7 @@ def _build_filtergraph(
         # resolution) -- see ScaleDirection.
         main_ops.append(f"scale={ref_content_w}:{ref_content_h}:flags={options.scale_algorithm}")
     main_ops.append("setpts=PTS-STARTPTS")
-    main_chain = f"[0:v]{','.join(main_ops)}[main]"
+    main_chain = f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[main]"
 
     # --- source / reference (input 1) chain ---
     ref_ops = []
@@ -511,25 +381,24 @@ def _build_filtergraph(
         # needs its own separate format filter afterwards.
         ref_ops.append("hwdownload")
         ref_ops.append(f"format={_hw_native_format(source_info.pix_fmt)}")
-    ref_ops.append(f"format={analysis_format}")
+    # Cropped before the format conversion, as the distorted chain is (and
+    # Vship's, the CPU tools' and the GPU decoders'): converted first, a
+    # 4:2:2 or 4:4:4 source's chroma at the crop's edges was filtered with
+    # samples of the bars cut off.
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
         ref_ops.append(source_crop.as_filter())
+    ref_ops.append(f"format={analysis_format}")
 
     if resolutions_differ and not upscale_distorted:
         ref_ops.append(f"scale={dist_content_w}:{dist_content_h}:flags={options.scale_algorithm}")
 
     ref_ops.append("setpts=PTS-STARTPTS")
-    ref_chain = f"[1:v]{','.join(ref_ops)}[ref]"
+    ref_chain = f"[1:{VIDEO_STREAM}]{','.join(ref_ops)}[ref]"
 
     compared_w, compared_h = (
         (ref_content_w, ref_content_h) if upscale_distorted else (dist_content_w, dist_content_h))
     if not gpu_vmaf:
         tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
-    elif options.requested_metrics():
-        tail = ("[main]split=2[main_cpu][main_gpu];[ref]split=2[ref_cpu][ref_gpu];"
-                + _gpu_pairs_stage(analysis_format, compared_w, compared_h, "main_gpu", "ref_gpu") + ";"
-                + _build_libvmaf_stage(options, log_path, model, xpsnr_log_path,
-                                       main_label="main_cpu", ref_label="ref_cpu", output_label="cpu_out"))
     else:
         tail = _gpu_pairs_stage(analysis_format, compared_w, compared_h, "main", "ref")
     return ";".join([main_chain, ref_chain, tail])
@@ -544,7 +413,7 @@ def _build_resample_test_filtergraph(
     source is decoded once and split into an untouched reference branch and
     a "distorted" branch that's scaled down to the target width (preserving
     the source's own aspect ratio) and back up to the source's original
-    resolution -- there's no second file, both branches come from [0:v].
+    resolution -- there's no second file, both branches come from the one input.
     """
     target = options.resample_test
     assert target is not None
@@ -566,10 +435,10 @@ def _build_resample_test_filtergraph(
         # emit the hw surface's native format, not the analysis format.
         base_ops.append("hwdownload")
         base_ops.append(f"format={_hw_native_format(source_info.pix_fmt)}")
-    base_ops.append(f"format={analysis_format}")
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
-        base_ops.append(source_crop.as_filter())
-    base_chain = f"[0:v]{','.join(base_ops)}[base]"
+        base_ops.append(source_crop.as_filter())  # before the conversion, as _build_filtergraph
+    base_ops.append(f"format={analysis_format}")
+    base_chain = f"[0:{VIDEO_STREAM}]{','.join(base_ops)}[base]"
 
     split_chain = "[base]split=2[ref_src][dist_src]"
     ref_chain = "[ref_src]setpts=PTS-STARTPTS[ref]"
@@ -589,7 +458,7 @@ _PROGRESS_FPS_RE = re.compile(r"fps=\s*([\d.]+)")
 def _build_ffmpeg_cmd(
     distorted_path: Path, source_path: Path, filtergraph: str,
     hwaccel: HwAccelPlan, duration_limit: float = 0.0,
-    gpu_outputs: list[str] | None = None, cpu_output: bool = True,
+    gpu_outputs: list[str] | None = None,
 ) -> list[str]:
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-y"]
     # -i paths are plain argv (not filtergraph syntax) so absolute Windows
@@ -600,7 +469,7 @@ def _build_ffmpeg_cmd(
     cmd += ["-i", str(Path(distorted_path).resolve())]
     cmd += _hwaccel_args(hwaccel.source)
     cmd += ["-i", str(Path(source_path).resolve())]
-    cmd += _build_ffmpeg_output_args(filtergraph, duration_limit, gpu_outputs, cpu_output)
+    cmd += _build_ffmpeg_output_args(filtergraph, duration_limit, gpu_outputs)
     return cmd
 
 
@@ -615,24 +484,20 @@ def _build_resample_cmd(
 
 
 def _build_ffmpeg_output_args(
-    filtergraph: str, duration_limit: float, gpu_outputs: list[str] | None = None, cpu_output: bool = True,
+    filtergraph: str, duration_limit: float, gpu_outputs: list[str] | None = None,
 ) -> list[str]:
     """`gpu_outputs`: GPU VMAF's raw outputs (vmaf_cuda.GpuAttempt), each
-    with its own -t; the CPU filters' output is then mapped by its label,
-    and left out when they have nothing to score (`cpu_output`)."""
+    with its own -t, and the run's only outputs."""
     args = ["-lavfi", filtergraph, "-progress", "pipe:1", "-nostats"]
     if gpu_outputs is not None:
-        if not cpu_output:
-            return args + gpu_outputs
-        args += ["-map", "[cpu_out]"]
+        return args + gpu_outputs
     if duration_limit > 0:
         # An output-side -t caps how much of the filtered output is produced
         # (and so how many frames reach libvmaf), regardless of any length
         # mismatch between the two inputs -- simpler than trying to bound
         # each input separately.
         args += ["-t", f"{duration_limit:.3f}"]
-    args += ["-f", "null", "-"]
-    return args + (gpu_outputs or [])
+    return [*args, "-f", "null", "-"]
 
 
 def _run_ffmpeg(
@@ -749,7 +614,7 @@ def estimate_total_frames(
     both ETAs. Used to size progress and estimate the queued work.
 
     `other_info` is the second input of a two-input comparison. The graph now
-    stops at whichever input ends first (see _FRAMESYNC_OPTS), so a distorted
+    stops at whichever input ends first (see FRAMESYNC_OPTS), so a distorted
     file longer than its source produces fewer frames than its own length
     suggests -- without this the progress bar would stop short of 100% and
     the ETA would never be reached.
@@ -869,35 +734,22 @@ CommandBuilder = Callable[..., list[str]]
 
 @dataclass(frozen=True)
 class _GpuPlan:
-    """VMAF and NEG scored on the GPU (vmaf_cuda): libvmaf's models for
-    them, the size and depth frames are compared at, and `cpu_options`,
-    what FFmpeg's own filters still score (XPSNR, VMAF v1, PSNR, SSIM)."""
+    """VMAF and NEG scored on the GPU (vmaf_cuda), the run's only metrics:
+    libvmaf's models for them, and the size and depth frames are compared at."""
     models: dict[str, str]
     width: int
     height: int
     bit_depth: int
-    cpu_options: VmafOptions
 
 
-def _with_gpu_scores(frames: FrameScores | None, gpu_scores, fps: float) -> FrameScores:
-    """The GPU's VMAF and NEG added to what FFmpeg's logs gave, frame by
-    frame. FFmpeg pairs frames by time and the GPU by position; for every
-    pair the app accepts they are the same frames. When they are not -- or
-    the GPU scored none -- the GPU result is refused (VmafGpuError) and the
-    run is made again on the CPU: the frames one side lacked used to be
-    kept as NaN, a VMAF with holes in it."""
+def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
+    """The GPU's VMAF and NEG as the run's frame scores; VmafGpuError when it
+    scored no frame."""
     numbers, scores = gpu_scores
     if not len(numbers):
         raise vmaf_cuda.VmafGpuError("GPU VMAF scored no frames")
-    if frames is None or not len(frames):
-        time = numbers / fps if fps > 0 else np.zeros(len(numbers), dtype=np.float64)
-        return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"))
-    if not np.array_equal(numbers, frames.frame):
-        raise vmaf_cuda.VmafGpuError(
-            f"GPU VMAF scored {len(numbers)} frames and FFmpeg's filters {len(frames)}, not the same ones")
-    for key, values in scores.items():
-        frames = frames.with_values(key, np.asarray(values, dtype=np.float32))
-    return frames
+    time = numbers / fps if fps > 0 else np.zeros(len(numbers), dtype=np.float64)
+    return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"))
 
 
 def _fallback_ladder(plan: HwAccelPlan) -> list[HwAccelPlan]:
@@ -958,9 +810,9 @@ def _execute_run(
 ) -> FrameScores:
     """Runs one ffmpeg invocation to completion and parses its logs.
 
-    With `gpu`, VMAF and NEG are scored on the GPU from FFmpeg's raw outputs
-    (vmaf_cuda.GpuAttempt, one per attempt) and FFmpeg's filters score the
-    rest; build_command then also takes those outputs' arguments.
+    With `gpu`, VMAF and NEG -- the run's only metrics -- are scored on the
+    GPU from FFmpeg's raw outputs (vmaf_cuda.GpuAttempt, one per attempt);
+    build_command then also takes those outputs' arguments.
 
     Shared by run_vmaf and run_resample_test, which previously carried
     byte-identical copies of the temp-dir setup, the GPU-decode fallback, the
@@ -973,9 +825,8 @@ def _execute_run(
         tmpdir = Path(tmpdir_str)
         log_path = tmpdir / "vmaf_log.json"
         xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None
-        cpu = gpu.cpu_options if gpu is not None else options  # what FFmpeg's filters score
         resolved_model = _resolve_model_for_cwd(
-            (model if model is not None else options.model) if cpu.compute_vmaf else "", tmpdir
+            (model if model is not None else options.model) if options.compute_vmaf and gpu is None else "", tmpdir
         )
         gpu_scores = None
         if (v1_file := _v1_model_file(options)) is not None:
@@ -1019,12 +870,10 @@ def _execute_run(
         for attempt, plan in enumerate(ladder):
             if on_status:
                 if attempt == 0:
-                    on_status(f"Running ffmpeg{', VMAF on the GPU' if gpu is not None else ''} "
-                              f"(GPU decode: {plan.describe()})...")
+                    on_status(Status.decoding(f"Running ffmpeg{', VMAF on the GPU' if gpu is not None else ''}",
+                                              plan, ending="...", kind=STARTING))
                 else:
-                    on_status(
-                        f"GPU decode failed, retrying (GPU decode: {plan.describe()})..."
-                    )
+                    on_status(Status.decoding("GPU decode failed, retrying", plan, ending="..."))
             result = run_with(plan)
             if result.returncode == 0:
                 break
@@ -1043,9 +892,9 @@ def _execute_run(
             tail = "\n".join(result.stderr.splitlines()[-25:])
             raise VmafRunError(f"ffmpeg exited with code {result.returncode}", stderr_tail=tail)
 
-        if not cpu.requested_metrics():
-            frames = None  # VMAF and NEG only, both from the GPU
-        elif not _uses_vmaf_model(cpu) and not cpu.extra_features:
+        if gpu is not None:
+            frames = _gpu_frame_scores(gpu_scores, fps)
+        elif not _uses_vmaf_model(options) and not options.extra_features:
             values = _parse_xpsnr_log(xpsnr_log_path)
             numbers = np.array(sorted(values), dtype=np.int32)
             frames = FrameScores(numbers, numbers / fps, None,
@@ -1054,8 +903,6 @@ def _execute_run(
             if not log_path.exists():
                 raise VmafRunError("ffmpeg finished but no metric log was produced.", stderr_tail=result.stderr[-2000:])
             frames = _parse_log(log_path, fps, xpsnr_log_path)
-        if gpu is not None:
-            frames = _with_gpu_scores(frames, gpu_scores, fps)
         missing = [m for m in options.requested_metrics() if not frames.has(m)]
         if not frames or missing:
             raise VmafRunError("No results for requested metrics: " + ", ".join(missing or options.requested_metrics()))
@@ -1088,7 +935,10 @@ def run_vmaf(
     hwaccel = HwAccelPlan()
     if options.gpu_decode:
         hwaccel = plan_hwaccel(
-            options.gpu_vendor, source_info.codec_name, distorted_info.codec_name
+            options.gpu_vendor, source_info.codec_name, distorted_info.codec_name,
+            source_pix_fmt=source_info.pix_fmt, distorted_pix_fmt=distorted_info.pix_fmt,
+            source_size=(source_info.width, source_info.height),
+            distorted_size=(distorted_info.width, distorted_info.height),
         )
 
     source_crop, distorted_crop = _resolve_crops(
@@ -1117,13 +967,18 @@ def run_vmaf(
 
     total_frames = estimate_total_frames(distorted_info, options, source_info)
     frames = None
-    gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
-                                         options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info))
+    # On the GPU only when VMAF and NEG are all the run scores: the window's
+    # runs split them from FFmpeg's other metrics (worker, GPU_VMAF). One
+    # FFmpeg feeding both, which nothing used any more, could see its GPU
+    # result refused for a frame count FFmpeg's filters disagreed with, and
+    # the whole run made again on the CPU.
+    gpu_models = None
+    if not set(options.requested_metrics()) - {"vmaf", "vmaf_neg"}:
+        gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
+                                             options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info),
+                                             size=dimensions)
     if gpu_models is not None:
-        plan = _GpuPlan(
-            gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info),
-            replace(options, compute_vmaf=False, compute_vmaf_neg=False),
-        )
+        plan = _GpuPlan(gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info))
         frames = _run_on_gpu(
             plan, source_info, distorted_info, options, source_crop, distorted_crop, effective_model, hwaccel,
             total_frames, on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
@@ -1192,7 +1047,7 @@ def _run_on_gpu(
     _log.info("VMAF on the GPU (%s): %s", ", ".join(plan.models.values()), vmaf_cuda.LIBRARY_BUILD)
     if not GPU_PASS.acquire(blocking=False):
         if on_status:
-            on_status(GPU_WAIT_MESSAGE)
+            on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
         while not GPU_PASS.acquire(timeout=0.1):
             if cancel_event is not None and cancel_event.is_set():
                 raise Cancelled("Cancelled by user")
@@ -1207,7 +1062,7 @@ def _run_on_gpu(
     except Exception as error:
         _log.error("VMAF on the GPU failed; calculating it on the CPU: %s", error, exc_info=error)
         if on_status:
-            on_status(f"{VMAF_GPU_FAILED} ({error}); calculating it on the CPU…")
+            on_status(Status(f"{VMAF_GPU_FAILED} ({error}); calculating it on the CPU…", kind=GPU_VMAF_FAILED))
         return None
     finally:
         GPU_PASS.release()
@@ -1218,23 +1073,71 @@ def _score_on_gpu(
     source_crop: CropBox | None, distorted_crop: CropBox | None, model: str, hwaccel: HwAccelPlan,
     total_frames: int, *, on_progress=None, on_status=None, cancel_event=None, process_handle=None,
 ) -> FrameScores:
-    """Run by _run_on_gpu in its own process: FFmpeg as on the CPU, its
-    filters scoring the rest, and the compared frames fed to libvmaf."""
-    cpu_output = bool(plan.cpu_options.requested_metrics())
+    """Run by _run_on_gpu in its own process: FFmpeg decodes and pairs the
+    frames as on the CPU, and they are fed to libvmaf.
+
+    When NVIDIA's decoder decodes both videos, they are decoded in this
+    process instead (vmaf_cuda.score_decoded): the same frames, without
+    FFmpeg's decode and the CPU copies and pipes behind it. If that
+    decoding fails after it has started, the run is made again with
+    FFmpeg's, as before."""
+    if hwaccel.source == "cuda" and hwaccel.distorted == "cuda":
+        try:
+            return _score_decoded_on_gpu(
+                plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
+                on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+                process_handle=process_handle)
+        except gpu_frames.GpuDecodeUnavailableError as error:
+            _log.info("VMAF on the GPU: the videos are decoded by FFmpeg (%s)", error)
+        except gpu_frames.GpuDecodeFailedError as error:
+            _log.warning("GPU decoding for VMAF on the GPU failed; decoding through FFmpeg instead: %s", error)
+            if on_status:
+                on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
 
     def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
         filtergraph = _build_filtergraph(
-            source_info, distorted_info, plan.cpu_options, source_crop, distorted_crop, hw, log_path,
+            source_info, distorted_info, options, source_crop, distorted_crop, hw, log_path,
             model=resolved_model, xpsnr_log_path=xpsnr_log_path, gpu_vmaf=True,
         )
         return _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, hw,
-                                 options.duration_limit, gpu_outputs, cpu_output)
+                                 options.duration_limit, gpu_outputs)
 
     return _execute_run(
         build_command, options=options, model=model, fps=distorted_info.fps, total_frames=total_frames,
         hwaccel=hwaccel, tmp_prefix="vmaf_gpu_run_", on_progress=on_progress, on_status=on_status,
         cancel_event=cancel_event, process_handle=process_handle, gpu=plan,
     )
+
+
+def _score_decoded_on_gpu(
+    plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
+    on_progress=None, on_status=None, cancel_event=None, process_handle=None,
+) -> FrameScores:
+    """VMAF and NEG from videos decoded in this process (vmaf_cuda.score_decoded),
+    over the frames _execute_run's FFmpeg would give libvmaf on the GPU."""
+    fps = distorted_info.fps
+    # As _execute_run: one frame more than the limit, which FFmpeg's libvmaf
+    # filter scores before its output stops.
+    limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
+    if on_status:
+        on_status(Status.decoding("Running VMAF on the GPU", hwaccel, ending="..."))
+
+    def check_cancel() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise Cancelled("Cancelled by user")
+
+    scores = vmaf_cuda.score_decoded(
+        source_info, distorted_info, source_crop, distorted_crop, width=plan.width, height=plan.height,
+        bit_depth=plan.bit_depth, models=plan.models, n_subsample=options.n_subsample,
+        duration_limit=f"{limit:.3f}" if limit > 0 else None, total_frames=total_frames,
+        scale_algorithm=options.scale_algorithm,
+        on_progress=on_progress, check_cancel=check_cancel, process_handle=process_handle)
+    frames = _gpu_frame_scores(scores, fps)
+    missing = [m for m in options.requested_metrics() if not frames.has(m)]
+    if not frames or missing:
+        raise VmafRunError("No results for requested metrics: " + ", ".join(missing or options.requested_metrics()))
+    return frames
 
 
 def run_resample_test(
@@ -1255,7 +1158,8 @@ def run_resample_test(
     hwaccel = HwAccelPlan()
     if options.gpu_decode:
         # One input file, so there is no distorted side to decide.
-        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name)
+        hwaccel = plan_hwaccel(options.gpu_vendor, source_info.codec_name, source_pix_fmt=source_info.pix_fmt,
+                               source_size=(source_info.width, source_info.height))
 
     source_crop: CropBox | None = None
     if options.crop_mode == CropMode.AUTO:
@@ -1268,8 +1172,6 @@ def run_resample_test(
             )
         except CropDetectCancelled as e:
             raise Cancelled("Cancelled by user") from e
-    elif options.crop_mode == CropMode.MANUAL:
-        source_crop = options.manual_source_crop
 
     dimensions = resample_analysis_dimensions(source_info, source_crop)
     effective_model = _auto_model_or(options, dimensions)

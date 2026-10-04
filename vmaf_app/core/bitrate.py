@@ -7,6 +7,8 @@ video stream spends its bits, not how large the whole file is.
 from __future__ import annotations
 
 import subprocess
+import threading
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffprobe_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffprobe_path
 from vmaf_app.core.models import VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
 
@@ -150,7 +152,7 @@ def analyze_video_bitrate(
         raise BitrateError(f"Video file is missing: {info.path}")
     fallback_duration = 1.0 / info.fps if info.fps > 0 else 0.0
     command = [
-        ffprobe_path(), "-v", "error", "-select_streams", "v:0",
+        ffprobe_path(), "-v", "error", "-select_streams", VIDEO_STREAM,
         "-show_packets",
         "-show_entries", "packet=pts_time,dts_time,duration_time,size,pos,flags",
         "-of", "compact=p=0:nk=0", str(info.path),
@@ -165,6 +167,13 @@ def analyze_video_bitrate(
         raise BitrateError(f"Could not start ffprobe: {exc}") from exc
 
     handle.attach(process.pid)
+    # ffprobe's complaints, read as they come: a damaged file can report an
+    # error for every packet, and read only after the packets, they filled
+    # the pipe and ffprobe stopped -- waiting on it -- with the scan.
+    complaints: deque[str] = deque(maxlen=200)
+    assert process.stderr is not None
+    drain = threading.Thread(target=complaints.extend, args=(process.stderr,), name="bitrate-stderr", daemon=True)
+    drain.start()
     packets: list[tuple[float | None, float | None, float, int, int, bool]] = []
     total = max(1, info.estimated_frame_count)
     try:
@@ -187,9 +196,10 @@ def analyze_video_bitrate(
             if on_progress is not None and len(packets) % 500 == 0:
                 on_progress(len(packets), total)
         return_code = process.wait()
-        stderr = process.stderr.read() if process.stderr is not None else ""
     finally:
         handle.detach()
+        drain.join(timeout=5)
+    stderr = "".join(complaints)
 
     if return_code != 0:
         if handle.was_terminated:

@@ -168,15 +168,15 @@ def test_the_session_and_run_lines_are_the_ones_the_copy_looks_for(tmp_path, mon
     import logging
 
     from vmaf_app import main as entry
-    from vmaf_app.ui import worker as worker_module
+    from vmaf_app.core import job_runner
 
     monkeypatch.setattr(app_log, "log_dir", lambda: tmp_path)
     monkeypatch.setattr(threading, "excepthook", lambda args: None)
     monkeypatch.setattr(sys, "excepthook", lambda *args: None)
     entry.start_session_log()
     try:
-        worker_module.VmafWorker([], parallel_jobs=1).run()
-        logging.getLogger("vmaf_app.ui.worker").error("a failure in the run")
+        job_runner.JobScheduler([], parallel_jobs=1).run()
+        logging.getLogger("vmaf_app.core.job_runner").error("a failure in the run")
         text, _ = app_log.log_text_to_share(tmp_path)
     finally:
         from PySide6.QtCore import qInstallMessageHandler

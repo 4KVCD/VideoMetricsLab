@@ -163,7 +163,28 @@ def test_packet_scan_selects_only_video_and_sorts_decode_order_by_pts(
 
     data = analyze_video_bitrate(info)
 
-    assert captured[0][captured[0].index("-select_streams") + 1] == "v:0"
+    assert captured[0][captured[0].index("-select_streams") + 1] == "V:0"
     np.testing.assert_allclose(data.times, [0.0, 0.033, 0.066])
     np.testing.assert_array_equal(data.sizes, [1000, 200, 300])
     np.testing.assert_array_equal(data.keyframes, [True, False, False])
+
+
+def test_a_flood_of_ffprobe_errors_does_not_stall_the_scan(tmp_path, monkeypatch):
+    """A damaged file can make ffprobe report an error per packet. Read only
+    after the packets, the errors filled the pipe and ffprobe stopped,
+    waiting on it -- and the scan with it. A real child process writes 1 MB
+    of errors before its packet list here."""
+    from tests.factories import STDLIB_PYTHON
+
+    path = tmp_path / "damaged.mkv"
+    path.write_bytes(b"x")
+    info = VideoInfo(path=path, width=1920, height=1080, fps=30.0, duration=0.1, nb_frames=3, codec_name="h264")
+    script = ("import sys\n"
+              "for _ in range(20000): sys.stderr.write('[hevc] error while decoding MB 1 2' + chr(10))\n"
+              "sys.stderr.flush()\n"
+              "print('pts_time=0.000|duration_time=0.033|size=1000|pos=0|flags=K_')\n")
+    real_popen = bitrate_module.proc_util.popen
+    monkeypatch.setattr(bitrate_module.proc_util, "popen",
+                        lambda command, **kwargs: real_popen([STDLIB_PYTHON, "-S", "-c", script], **kwargs))
+    data = analyze_video_bitrate(info)
+    np.testing.assert_array_equal(data.sizes, [1000])

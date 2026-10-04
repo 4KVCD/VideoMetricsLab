@@ -235,8 +235,6 @@
   "Black bars could not be checked because the video could not be read.": "Nie można było sprawdzić czarnych pasów, bo wideo jest nieczytelne.",
   "Off": "Wyłączone",
   "Black-bar detection is disabled for this row; the full frames will be compared.": "Wykrywanie czarnych pasów jest wyłączone dla tego wiersza; porównywane będą całe klatki.",
-  "Manual": "Ręcznie",
-  "A manual crop is configured; the detected sides appear after the run.": "Ustawiono ręczne kadrowanie; wykryte krawędzie pojawią się po obliczeniach.",
   "Pending": "Oczekuje",
   "Black bars will be detected when this row is run.": "Czarne pasy zostaną wykryte przy obliczaniu tego wiersza.",
   "Test video": "Wideo testowe",
@@ -539,7 +537,6 @@
   "Cancelled by user": "Anulowane przez użytkownika",
   "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Choose CPU for {metrics} to calculate it on the CPU anyway.": "Ocena na GPU nie powiodła się ({error}). Nie powtórzono jej na CPU, co dla wideo dłuższego niż 10 minut trwałoby od godzin do dni. Wybierz CPU dla {metrics}, aby mimo to liczyć na CPU.",
   "GPU scoring failed ({error}); the CPU retry failed too: {reason}": "Ocena na GPU nie powiodła się ({error}); ponowna próba na CPU też się nie powiodła: {reason}",
-  "calculated over {cpu_frames} frames on the CPU but {gpu_frames} on the GPU, so it was not kept": "policzone z {cpu_frames} klatek na CPU, ale z {gpu_frames} na GPU, więc nie zachowano",
   "{metric} needs a GPU that Vship can use, and could not use one: {reason}": "{metric} wymaga GPU, którego Vship może użyć, i nie mogła użyć żadnego: {reason}",
   "{metric} could not be calculated: {reason}": "Nie można policzyć {metric}: {reason}",
   "Vship GPU acceleration is only bundled for Windows.": "Akceleracja GPU Vship jest dołączona tylko dla Windows.",
@@ -565,7 +562,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship nie obsługuje barw podstawowych {primaries}.",
   "Vship does not support the {range} range tag.": "Vship nie obsługuje znacznika zakresu {range}.",
   "Vship does not support {siting} chroma siting.": "Vship nie obsługuje położenia chrominancji {siting}.",
-  "Variable-frame-rate video is not supported safely yet.": "Wideo o zmiennej liczbie klatek na sekundę nie jest jeszcze bezpiecznie obsługiwane.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Wideo o zmiennej liczbie klatek na sekundę nie jest jeszcze bezpiecznie obsługiwane. Przed porównaniem przekonwertuj oba wideo do tej samej stałej liczby klatek.",
   "Frame rates do not match ({source} vs {test} fps).": "Liczby klatek na sekundę się różnią ({source} wobec {test} kl./s).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Czasy trwania się różnią ({source} wobec {test} s). Ustaw limit czasu mieszczący się w obu plikach, jeśli porównujesz tylko ich wspólny początek.",
@@ -687,7 +683,11 @@
   "Cannot compare": "Nie można porównać",
   "Cannot be compared with the reference:": "Nie można porównać z odniesieniem:",
   "Calculate the rest?": "Obliczyć pozostałe?",
-  "It could not be read. Remove it or add the file again to retry.": "Nie można go odczytać. Usuń je lub dodaj plik ponownie, aby spróbować jeszcze raz."
+  "It could not be read. Remove it or add the file again to retry.": "Nie można go odczytać. Usuń je lub dodaj plik ponownie, aby spróbować jeszcze raz.",
+  "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate całego pliku, łącznie ze ścieżką dźwiękową: plik nie zapisuje bitrate samego wideo.",
+  "{name} is already in the list. Show the saved run's scores in its place?": "{name} jest już na liście. Pokazać zamiast tego wyniki zapisanego przebiegu?",
+  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg nie podał znacznika czasu klatki {side}.",
+  "The source has no frame at the test video's first.": "Źródło nie ma klatki w chwili pierwszej klatki wideo testowego."
  },
  "plurals": {
   "about {count} day": [

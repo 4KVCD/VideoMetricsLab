@@ -85,7 +85,7 @@ def test_each_side_gets_its_own_crop_before_scaling():
         distorted_crop=CropBox(1920, 804, 0, 138),
     )
 
-    assert "crop=3840:1608:0:276,scale=1920:804" in frame_filter(result, "source")
+    assert "crop=3840:1608:0:276,format=yuv420p,scale=1920:804" in frame_filter(result, "source")
     assert frame_filter(result, "distorted").startswith("crop=1920:804:0:138")
     assert comparison_dimensions(result) == (1920, 804)
 

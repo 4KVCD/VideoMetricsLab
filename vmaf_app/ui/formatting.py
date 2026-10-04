@@ -9,6 +9,7 @@ from __future__ import annotations
 from PySide6.QtGui import QColor
 
 from vmaf_app.core.models import VideoInfo
+from vmaf_app.i18n import tr
 
 # Shown wherever a value genuinely doesn't exist, as opposed to being 0.
 NOT_COMPUTED = "N/A"
@@ -29,12 +30,23 @@ def media_info_string(info: VideoInfo) -> str:
 
 
 def bitrate_string(info: VideoInfo) -> str:
-    """Bitrate at a human scale: Mb/s once it's over a megabit, else kb/s."""
+    """Bitrate at a human scale: Mb/s once it's over a megabit, else kb/s.
+    "≈" when it is the whole file's, the soundtrack included
+    (bitrate_note says so)."""
     if not info.bit_rate:
         return NOT_COMPUTED
+    approximate = "≈" if info.bit_rate_whole_file else ""
     if info.bit_rate >= 1_000_000:
-        return f"{info.bit_rate / 1_000_000:.1f} Mb/s"
-    return f"{info.bit_rate // 1000} kb/s"
+        return f"{approximate}{info.bit_rate / 1_000_000:.1f} Mb/s"
+    return f"{approximate}{info.bit_rate // 1000} kb/s"
+
+
+def bitrate_note(info: VideoInfo) -> str:
+    """The Bitrate cell's tooltip: what the figure is when it is not the
+    video's own."""
+    if info.bit_rate and info.bit_rate_whole_file:
+        return tr("The whole file's bitrate, soundtrack included: the file does not record the video's own.")
+    return ""
 
 
 def vmaf_band_colour(mean: float) -> QColor:

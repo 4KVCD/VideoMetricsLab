@@ -22,3 +22,13 @@ def test_hours_always_shown_even_when_zero():
 
 def test_large_duration_hours_not_truncated():
     assert format_hms(3600 * 25 + 61) == "25:01:01"
+
+
+def test_rounding_carries_into_the_minutes_and_hours():
+    assert format_hms(59.96, decimals=1) == "0:01:00.0"
+    assert format_hms(3599.999, decimals=2) == "1:00:00.00"
+    assert format_hms(59.94, decimals=1) == "0:00:59.9"
+
+
+def test_without_decimals_the_seconds_are_cut():
+    assert format_hms(59.9) == "0:00:59"

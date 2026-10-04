@@ -5,16 +5,21 @@ from __future__ import annotations
 
 def format_hms(seconds: float, *, decimals: int = 0) -> str:
     """Formats a duration in seconds as H:MM:SS, or H:MM:SS.sss when
-    decimals > 0. Always shows hours (even 0) for a consistent width."""
+    decimals > 0. Always shows hours (even 0) for a consistent width.
+
+    With decimals the whole value is rounded first, in whole units of the
+    last decimal, and only then split into hours, minutes and seconds: the
+    seconds rounded on their own came out as "0:00:60.0" for 59.96 s and
+    "0:59:60.00" for 3599.999 s. Without decimals the seconds are cut, as
+    they always were."""
     seconds = max(0.0, seconds)
-    total_whole_seconds = int(seconds)
-    hours, remainder = divmod(total_whole_seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-
     if decimals > 0:
-        frac_secs = secs + (seconds - total_whole_seconds)
-        secs_str = f"{frac_secs:0{3 + decimals}.{decimals}f}"
+        scale = 10 ** decimals
+        whole, fraction = divmod(round(seconds * scale), scale)
     else:
-        secs_str = f"{secs:02d}"
-
-    return f"{hours}:{minutes:02d}:{secs_str}"
+        whole, fraction = int(seconds), 0
+    hours, remainder = divmod(whole, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if decimals > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}.{fraction:0{decimals}d}"
+    return f"{hours}:{minutes:02d}:{secs:02d}"
