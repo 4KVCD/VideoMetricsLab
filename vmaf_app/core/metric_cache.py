@@ -79,16 +79,14 @@ def metric_identity_hash(spec: MetricRequestSpec) -> str:
 _LEGACY_SCALE_ALGORITHMS = ("bicubic", "lanczos", "bilinear", "spline")
 
 
-def _legacy_hash(source: Path, distorted: Path, recipe: ComparisonRecipe, algorithm: str) -> str:
-    return _hash(file_identity(source), file_identity(distorted), {**recipe.identity_dict(), "scale_algorithm": algorithm})
-
-
 def recipe_directory(base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe) -> Path:
-    """The comparison's directory. One saved before the scaling algorithm left
-    its identity -- under a hash that held it -- is moved to the new name the
-    first time it is asked for: the recipe's own algorithm first, then the
-    others, so no saved score is lost. If it cannot be moved (open
-    elsewhere), it is used where it is."""
+    """The comparison's directory. Those saved before the scaling algorithm
+    left its identity -- under hashes that held it, one per algorithm the
+    comparison was scaled with -- become it the first time it is asked for:
+    the recipe's own algorithm's is moved to the new name, and every other's
+    scores are moved into it (_merge_legacy). Only the first used to be, and
+    the scores of the others were never found again. If the first cannot be
+    moved (open elsewhere), it is used where it is."""
     root = Path(base) / _V2_DIR
     identities = file_identity(source), file_identity(distorted)
     identity = recipe.identity_dict()
@@ -96,15 +94,36 @@ def recipe_directory(base: Path, source: Path, distorted: Path, recipe: Comparis
     if directory.exists() or not root.is_dir():
         return directory
     algorithms = [recipe.scale_algorithm, *(a for a in _LEGACY_SCALE_ALGORITHMS if a != recipe.scale_algorithm)]
-    for algorithm in algorithms:
-        legacy = root / _hash(*identities, {**identity, "scale_algorithm": algorithm})
-        if legacy.is_dir():
-            try:
-                legacy.rename(directory)
-            except OSError:
-                return legacy
-            return directory
+    legacy = [path for path in (root / _hash(*identities, {**identity, "scale_algorithm": algorithm})
+                                for algorithm in algorithms) if path.is_dir()]
+    if not legacy:
+        return directory
+    first, *others = legacy
+    try:
+        first.rename(directory)
+    except OSError:
+        return first
+    for other in others:
+        _merge_legacy(other, directory)
     return directory
+
+
+def _merge_legacy(legacy: Path, directory: Path) -> None:
+    """Moves the files of `legacy`, a directory of the same comparison saved
+    under another scaling algorithm, into `directory`. A score `directory`
+    has already -- the same metric, calculated the same way, scaled with the
+    algorithm adopted first -- is kept, and the copy removed: a comparison
+    scaled any way is the same one. What cannot be moved stays where it is."""
+    for item in legacy.iterdir():
+        target = directory / item.name
+        with contextlib.suppress(OSError):
+            if target.exists():
+                if item.is_file():
+                    item.unlink()
+            else:
+                item.rename(target)
+    with contextlib.suppress(OSError):
+        legacy.rmdir()
 
 
 def metric_path(directory: Path, spec: MetricRequestSpec) -> Path:

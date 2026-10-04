@@ -165,6 +165,16 @@ def test_recipe_and_metric_identity_keep_scientific_choices_separate(tmp_path):
     assert recipe_directory(tmp_path, source, test, recipe) != baseline
 
 
+def _legacy_directory(tmp_path, source, test, recipe, algorithm):
+    """Where a comparison was saved while its identity held the scaling
+    algorithm it was scaled with."""
+    from vmaf_app.core import metric_cache
+
+    return tmp_path / "v2" / metric_cache._hash(
+        metric_cache.file_identity(source), metric_cache.file_identity(test),
+        {**recipe.identity_dict(), "scale_algorithm": algorithm})
+
+
 @pytest.mark.parametrize("saved_with", ["bicubic", "lanczos", "spline"])
 def test_scores_saved_when_the_algorithm_was_part_of_the_identity_are_found(tmp_path, saved_with):
     """A comparison saved before the scaling algorithm left its identity sits
@@ -174,7 +184,7 @@ def test_scores_saved_when_the_algorithm_was_part_of_the_identity_are_found(tmp_
 
     source, test = _paths(tmp_path)
     recipe = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm=saved_with))
-    old = tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, saved_with)
+    old = _legacy_directory(tmp_path, source, test, recipe, saved_with)
     old.mkdir(parents=True)
     store_metric(old, _frame(), _spec())
     wanted = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="bilinear"))
@@ -184,16 +194,28 @@ def test_scores_saved_when_the_algorithm_was_part_of_the_identity_are_found(tmp_
     assert load_metric(directory, _spec()) is not None
 
 
-def test_the_recipes_own_algorithm_is_adopted_first(tmp_path):
-    from vmaf_app.core import metric_cache
-
+def test_every_algorithms_saved_scores_are_kept_the_recipes_own_first(tmp_path):
+    """Scored once scaled with bicubic and once with lanczos, a comparison was
+    saved twice. Only the first directory found was adopted: the other's
+    scores were never found again. Both are now, and where both hold a
+    metric's scores, the recipe's own algorithm's are kept."""
     source, test = _paths(tmp_path)
     recipe = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="lanczos"))
-    for algorithm in ("bicubic", "lanczos"):
-        (tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, algorithm)).mkdir(parents=True)
-    recipe_directory(tmp_path, source, test, recipe)
-    assert (tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, "bicubic")).exists()
-    assert not (tmp_path / "v2" / metric_cache._legacy_hash(source, test, recipe, "lanczos")).exists()
+    bicubic, lanczos = (_legacy_directory(tmp_path, source, test, recipe, a) for a in ("bicubic", "lanczos"))
+    for directory in (bicubic, lanczos):
+        directory.mkdir(parents=True)
+    def scores(key, values):
+        return FrameMetricResult(key, [0, 4, 8], [0.0, 1 / 6, 1 / 3], values, PROVENANCE)
+
+    store_metric(bicubic, scores("only_bicubic", [1.0, 2.0, 3.0]), _spec("only_bicubic"))
+    store_metric(bicubic, scores("both", [1.0, 2.0, 3.0]), _spec("both"))
+    store_metric(lanczos, scores("both", [4.0, 5.0, 6.0]), _spec("both"))
+
+    directory = recipe_directory(tmp_path, source, test, recipe)
+
+    assert not bicubic.exists() and not lanczos.exists()
+    assert list(load_metric(directory, _spec("only_bicubic")).values) == [1.0, 2.0, 3.0]
+    assert list(load_metric(directory, _spec("both")).values) == [4.0, 5.0, 6.0]
 
 
 def test_coverage_and_compatibility_id_produce_independent_direct_entries(tmp_path):
