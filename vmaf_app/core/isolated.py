@@ -107,10 +107,10 @@ def run_isolated(
     sender.close()
     attached: set[int] = set()
     outcome: tuple[str, object] | None = None
+    crash_threads = ""
     try:
         while outcome is None:
             if cancel_event is not None and cancel_event.is_set():
-                _end_tree(child.pid)
                 raise (cancelled or RuntimeError)("Cancelled by user")
             ready = wait([receiver, child.sentinel], _POLL_SECONDS)
             if not ready:
@@ -137,6 +137,12 @@ def run_isolated(
                     process_handle.detach(message[1])
             else:  # "result" or "error"
                 outcome = message
+    except BaseException:
+        # A Cancel, or a callback that failed: the child's work is not
+        # wanted any more, and it and what it started are ended now. (A
+        # failed callback used to leave it running for five more seconds.)
+        _end_tree(child.pid)
+        raise
     finally:
         receiver.close()
         if outcome is None or child.is_alive():
@@ -147,7 +153,10 @@ def run_isolated(
         if process_handle is not None:
             for pid in attached:
                 process_handle.detach(pid)
-    crash_threads = _take_text(crash_path)
+        # Here, whichever way the loop was left: a Cancel raises out of it,
+        # and so does a callback that fails, and the child's file -- empty,
+        # without a crash -- stayed in the temp folder after each.
+        crash_threads = _take_text(crash_path)
     if cancel_event is not None and cancel_event.is_set():
         # Cancel ends the child's FFmpeg too: what the child made of that
         # (a failed read, a dead pipe) is not the outcome.

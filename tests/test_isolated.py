@@ -91,9 +91,12 @@ def test_the_result_callbacks_logs_and_errors_come_back(caplog):
     assert raised.value.stderr_tail == "the last lines FFmpeg wrote"
 
 
-def test_cancel_ends_the_child_and_what_it_started():
+def test_cancel_ends_the_child_and_what_it_started(tmp_path, monkeypatch):
     """The child's FFmpeg is attached to the caller's handle, so Pause and
-    Cancel reach it; Cancel also ends the child."""
+    Cancel reach it; Cancel also ends the child, and takes away the file
+    its threads would be written to in a crash -- one was left in the temp
+    folder by every cancelled GPU pass."""
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
     attached = []
 
     class Handle:
@@ -109,6 +112,23 @@ def test_cancel_ends_the_child_and_what_it_started():
         run_isolated(_start_and_wait, what="test", process_handle=Handle(), cancel_event=cancel,
                      cancelled=PerceptualCancelled)
     assert _wait_for(lambda: not psutil.pid_exists(attached[0])), "the child's process kept running"
+    assert list(tmp_path.glob("vml-isolated-*")) == []
+
+
+def _report_twice(on_status=None):
+    on_status("first")
+    time.sleep(60)
+
+
+def test_a_callback_that_fails_leaves_no_crash_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+
+    def failing(_text):
+        raise RuntimeError("the window's handler failed")
+
+    with pytest.raises(RuntimeError, match="handler failed"):
+        run_isolated(_report_twice, what="test", callbacks=("on_status",), on_status=failing)
+    assert list(tmp_path.glob("vml-isolated-*")) == []
 
 
 def _wait_for(condition, seconds=10.0):
