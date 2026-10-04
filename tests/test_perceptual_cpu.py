@@ -226,8 +226,9 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
     ]
 
 
-def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
-    """A stand-in for ssimulacra2: sleeps, then prints a score. Returned as
+def _waiting_tool(tmp_path) -> tuple[str, Path, Path]:
+    """A stand-in for ssimulacra2 that prints its score once the file
+    "finish" exists beside it, and never otherwise. Returned as
     (executable, "reference", "test") for _run_metric's argument order.
 
     Run by the real interpreter, not a virtual environment's python.exe:
@@ -238,8 +239,25 @@ def _slow_tool(tmp_path, seconds: float) -> tuple[str, Path, Path]:
     single processes."""
 
     script = tmp_path / "tool.py"
-    script.write_text(f"import time\ntime.sleep({seconds})\nprint('score: 42.5')\n", encoding="utf-8")
+    script.write_text("import os, time\n"
+                      f"while not os.path.exists({str(tmp_path / 'finish')!r}):\n"
+                      "    time.sleep(0.01)\n"
+                      "print('score: 42.5')\n", encoding="utf-8")
     return STDLIB_PYTHON, script, tmp_path / "unused.png"
+
+
+def _attached(handle, worker) -> int:
+    """The tool's process, once `handle` holds it: attach suspends a new
+    process of a paused job under the same lock."""
+    import time
+
+    for _ in range(3000):  # a bound against a hang, not a timing assertion
+        with handle._lock:
+            if handle._pids:
+                return next(iter(handle._pids))
+        assert worker.is_alive(), "the tool ended before it was attached"
+        time.sleep(0.01)
+    raise AssertionError("the tool was never attached to the job's handle")
 
 
 def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
@@ -247,46 +265,64 @@ def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
     scoring while the app said Paused."""
     import threading
 
+    import psutil
+
     from vmaf_app.core.perceptual_cpu import _run_metric
     from vmaf_app.core.process_control import ProcessHandle
 
-    executable, script, other = _slow_tool(tmp_path, 0.2)
+    executable, script, other = _waiting_tool(tmp_path)
     handle = ProcessHandle()
     handle.pause()
     out = []
     worker = threading.Thread(target=lambda: out.append(_run_metric(executable, "ssimulacra2", script, other, handle)))
     worker.start()
-    worker.join(0.8)  # four times what the tool needs, Python's start included
-    assert worker.is_alive(), "the tool ran on while the job was paused"
+    pid = _attached(handle, worker)
+    (tmp_path / "finish").touch()  # would end it, were it running
+    assert psutil.Process(pid).status() == psutil.STATUS_STOPPED, "the tool ran on while the job was paused"
     handle.resume()
-    worker.join(10.0)
+    worker.join(30.0)
     assert out == [42.5]
 
 
 def test_cancel_ends_a_cpu_tool_at_once(tmp_path):
     import threading
-    import time
+
+    import psutil
 
     from vmaf_app.core.perceptual_cpu import PerceptualCancelled, _run_metric
     from vmaf_app.core.process_control import ProcessHandle
 
-    executable, script, other = _slow_tool(tmp_path, 30)
-    cancel = threading.Event()
-    threading.Timer(0.3, cancel.set).start()
-    started = time.monotonic()
-    with pytest.raises(PerceptualCancelled):
-        _run_metric(executable, "ssimulacra2", script, other, ProcessHandle(), cancel)
-    assert time.monotonic() - started < 5
+    executable, script, other = _waiting_tool(tmp_path)  # never finishes: the test ends only if Cancel ends it
+    cancel, handle, raised = threading.Event(), ProcessHandle(), []
+
+    def run():
+        try:
+            _run_metric(executable, "ssimulacra2", script, other, handle, cancel)
+        except PerceptualCancelled as error:
+            raised.append(error)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    pid = _attached(handle, worker)
+    cancel.set()
+    worker.join()
+    assert raised
+    assert not psutil.pid_exists(pid) or psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
 
 
 def test_a_tool_that_never_finishes_a_frame_times_out(tmp_path, monkeypatch):
+    import itertools
+    import time
+    from types import SimpleNamespace
+
     from vmaf_app.core import perceptual_cpu
     from vmaf_app.core.process_control import ProcessHandle
 
-    monkeypatch.setattr(perceptual_cpu, "_TOOL_TIMEOUT_SECONDS", 0.3)
-    slow, script, other = _slow_tool(tmp_path, 5)
-    with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame"):
-        perceptual_cpu._run_metric(slow, "ssimulacra2", script, other, ProcessHandle())
+    clock = itertools.count(0.0, 100.0)  # each look at the clock, 100 s later
+    monkeypatch.setattr(perceptual_cpu, "time", SimpleNamespace(monotonic=lambda: next(clock), sleep=time.sleep))
+    never, script, other = _waiting_tool(tmp_path)
+    with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame within 120 s"):
+        perceptual_cpu._run_metric(never, "ssimulacra2", script, other, ProcessHandle())
 
 def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, monkeypatch):
     """The two image sequences come from two decoders; a fast one can run

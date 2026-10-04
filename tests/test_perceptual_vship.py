@@ -1449,13 +1449,12 @@ def test_cvvdp_alone_failing_to_start_stops_the_pass_at_once(monkeypatch):
 
     _FakeCvvdp().install(monkeypatch)
     monkeypatch.setattr(vship, "_init_cvvdp", cannot_start)
-    slow = [STDLIB_PYTHON, "-S", "-c",
-            f"import sys, time\nfor i in range(600):\n    sys.stdout.buffer.write(bytes({_FRAME_BYTES})); "
-            "sys.stdout.buffer.flush(); time.sleep(0.01)\n"]
-    started = time.monotonic()
+    # A video that never ends: the pass ends only if it stops at once.
+    endless = [STDLIB_PYTHON, "-S", "-c",
+               f"import sys, time\nwhile True:\n    sys.stdout.buffer.write(bytes({_FRAME_BYTES})); "
+               "sys.stdout.buffer.flush(); time.sleep(0.01)\n"]
     with pytest.raises(vship.VshipUnavailableError, match="out of memory"):
-        _run(monkeypatch, metrics=("cvvdp",), children=_both(slow))
-    assert time.monotonic() - started < 4, "the pass decoded the rest of the video first"
+        _run(monkeypatch, metrics=("cvvdp",), children=_both(endless))
 
 
 def test_a_ssimulacra2_failure_keeps_butteraugli_and_cvvdp(monkeypatch):
