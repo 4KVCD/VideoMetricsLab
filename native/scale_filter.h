@@ -1,6 +1,7 @@
 // The filters the GPU frame decoders scale pictures with -- the same for every
-// GPU maker: NVIDIA's applies them on the GPU (nvdec_frames.cpp), Intel's and
-// AMD's on the CPU (scale_plane below).
+// GPU maker: NVIDIA's applies them on the GPU (nvdec_frames.cpp), and so do
+// Intel's and AMD's (d3d11_scale.h, a shader that gives scale_plane's picture
+// below, which they check it against and fall back to).
 //
 // A picture scaled here is not FFmpeg's scale filter's to the sample (the
 // user decided, 2026-10-03, that the algorithm and where it runs make the same

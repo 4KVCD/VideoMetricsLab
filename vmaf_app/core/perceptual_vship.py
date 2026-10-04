@@ -1336,8 +1336,9 @@ def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int]
     """The decoder for one input of a pass, when GPU decoder `backend` can
     give it in the layout Vship is told (8-bit planes, P016's 16-bit samples
     as they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
-    scaled to `size` with `algorithm` where it is (by the GPU on NVIDIA, the
-    CPU on Intel and AMD). None, with the reason logged, when FFmpeg decodes it."""
+    scaled to `size` with `algorithm` where it is (by the GPU; by the CPU on
+    Intel and AMD if their GPU scaling fails its check, gpu_frames.scale_note).
+    None, with the reason logged, when FFmpeg decodes it."""
     shifts = {"yuv420p": 0, "yuv420p16le": 0, "yuv420p10le": 6}
     reason = None
     if image_format.pixel_format not in shifts:

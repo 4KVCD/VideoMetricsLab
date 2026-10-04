@@ -892,6 +892,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->chroma_bytes = p.luma_only ? 0 : static_cast<size_t>((d->out_w + 1) / 2) * ((d->out_h + 1) / 2) * out_sample;
     d->frame_bytes = d->luma_bytes + 2 * d->chroma_bytes;
     d->info.frame_bytes = static_cast<long long>(d->frame_bytes);
+    d->info.scaled_on_gpu = is_scaled(d->params);
 
     auto give_up = [&](const std::string &text) {
         copy_text(error, error_size, text);

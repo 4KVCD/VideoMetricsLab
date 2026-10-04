@@ -18,6 +18,13 @@ and the decoders built (scripts/build_gpu_frames.ps1):
    it): identical. The FFmpeg pass's status lines say where FFmpeg decoded:
    "GPU decode failed ... decoding it in software" means its hardware decode
    did not work on this PC.
+4. Scaling (Intel, AMD): a comparison at two sizes is scaled by the decoder,
+   on the GPU (native/d3d11_scale.h's shader). The shader's picture must be
+   the CPU scaler's, sample for sample, on this GPU; then the first VIDEO
+   (or the 10-bit clip) is decoded and scaled down and up, on the GPU and
+   on the CPU: identical pictures, with each one's speed and CPU. "scaled
+   on the CPU" with a reason means the decoder could not scale on the GPU
+   here: the pictures are still right, only slower.
 
 It prints a report to send back. Nothing is written outside a temporary
 folder.
@@ -44,6 +51,8 @@ from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import CropBox, GpuVendor
 
 VENDORS = {"nvidia": GpuVendor.NVIDIA, "intel": GpuVendor.INTEL, "amd": GpuVendor.AMD}
+#: PCI vendor ids, for the scaling shader's own check.
+PCI_VENDORS = {"intel": 0x8086, "amd": 0x1002}
 
 
 def clip(path: Path, encoder: list[str], pix_fmt: str, seconds: float = 2.0, size: str = "1280x720",
@@ -225,6 +234,105 @@ def check_scores(source: Path, backend: str, work: Path) -> str:
     return "\n".join(lines)
 
 
+def test_picture(width: int, height: int, depth: int, seed: int = 7) -> bytes:
+    """An NV12/P010 picture of noise with hard edges, where a filter rings
+    and a wrong weight, order or rounding shows."""
+    rng = np.random.default_rng(seed)
+    top = (1 << depth) - 1
+    luma = rng.integers(0, top + 1, (height, width))
+    luma[: height // 3, : width // 2] = top
+    luma[height // 3: height // 2, width // 3:] = 0
+    chroma = rng.integers(0, top + 1, (height // 2, width))
+    chroma[: height // 5] = top
+    planes = np.concatenate([luma, chroma])
+    return (planes << 6).astype("<u2").tobytes() if depth > 8 else planes.astype(np.uint8).tobytes()
+
+
+def check_shader(backend: str) -> str:
+    """The scaling shader on this maker's GPU against the CPU scaler."""
+    same = total = 0
+    for depth in (8, 10):
+        for (w, h), size in (((1920, 1080), (1280, 720)), ((1280, 720), (1920, 1080)), ((1920, 800), (854, 356))):
+            for algorithm in ("bicubic", "bilinear", "lanczos", "spline"):
+                plan = nv.DecodePlan("hevc" if depth > 8 else "h264", depth, w, h, 0, 0, w, h,
+                                     6 if depth > 8 else 0, False, size[0], size[1], algorithm)
+                picture = test_picture(w, h, depth)
+                try:
+                    on_gpu = nv.scale_picture(plan, picture, PCI_VENDORS[backend], backend)
+                except nv.GpuDecodeFailedError as error:
+                    return f"shader: FAILED on this GPU: {error}"
+                if on_gpu is None:
+                    return "shader: no Direct3D 11 GPU of this maker here"
+                total += 1
+                same += on_gpu == nv.scale_picture(plan, picture, None, backend)
+    return f"shader: {'IDENTICAL' if same == total else 'DIFFERENT'} to the CPU scaler in {same} of {total} cases"
+
+
+#: Pictures compared by MD5 at the start of a scaled decode; the rest are
+#: only timed (hashing a 4K picture costs more CPU than handing it over).
+_COMPARED = 48
+
+
+def scaled(info, plan, backend, frames):
+    """(the first pictures' MD5s, fps and ms of CPU a picture after them,
+    scaled on the GPU, note)."""
+    stream = nv.GpuFrameStream(info, plan, backend=backend)
+    out = np.empty(plan.frame_bytes, dtype=np.uint8)
+    me = psutil.Process()
+    sums, count = [], 0
+    try:
+        stream.start()
+        started, cpu = time.perf_counter(), sum(me.cpu_times()[:2])
+        while count < frames:
+            try:
+                item = stream.next(1000)
+            except TimeoutError:
+                continue
+            if item is None:
+                break
+            stream.download(item[0], out.ctypes.data)
+            stream.release(item[0])
+            count += 1
+            if count <= _COMPARED:
+                sums.append(hashlib.md5(out).hexdigest())
+                if count == _COMPARED:
+                    started, cpu = time.perf_counter(), sum(me.cpu_times()[:2])
+        elapsed, used = time.perf_counter() - started, sum(me.cpu_times()[:2]) - cpu
+        on_gpu, note = bool(stream.stats().scaled_on_gpu), stream.scale_note()
+    finally:
+        stream.close()
+    timed = count - _COMPARED
+    if timed <= 0:  # a short clip: nothing left to time
+        return sums, 0.0, 0.0, on_gpu, note
+    return sums, timed / max(elapsed, 1e-6), used / timed * 1000, on_gpu, note
+
+
+def check_scaling(path: Path, backend: str, frames: int = 240) -> list[str]:
+    from dataclasses import replace
+
+    info = probe_video(path)
+    lines = []
+    half = (max(2, info.width // 4 * 2), max(2, info.height // 4 * 2))
+    # Up to twice the size, or for a video already 4K wide, down to a third.
+    other = (("up", (info.width * 2, info.height * 2)) if info.width <= 1920
+             else ("down", (max(2, info.width // 6 * 2), max(2, info.height // 6 * 2))))
+    for name, size in (("down", half), other):
+        try:
+            plan = nv.plan_decode(info, None, shift=6, size=size)
+            gpu = scaled(info, plan, backend, frames)
+            cpu = scaled(info, replace(plan, cpu_scaling=True), backend, frames)
+        except (nv.GpuDecodeUnavailableError, nv.GpuDecodeFailedError) as error:
+            lines.append(f"{name} to {size[0]}x{size[1]}: FAILED: {error}")
+            continue
+        verdict = "IDENTICAL" if gpu[0] == cpu[0] else "DIFFERENT"
+        where = "scaled on the GPU" if gpu[3] else f"scaled on the CPU ({gpu[4] or 'no reason given'})"
+        speed = (f"{gpu[1]:.0f} fps, {gpu[2]:.1f} ms of CPU a picture; with CPU scaling: {cpu[1]:.0f} fps, "
+                 f"{cpu[2]:.1f} ms" if gpu[1] and cpu[1] else "too short to time: give a longer VIDEO")
+        lines.append(f"{name} to {size[0]}x{size[1]}: {verdict} to CPU scaling ({len(gpu[0])} pictures); {where}: "
+                     f"{speed}")
+    return lines
+
+
 def main() -> None:
     backend = sys.argv[1] if len(sys.argv) > 1 else "amd"
     videos = [Path(arg) for arg in sys.argv[2:]]
@@ -253,6 +361,11 @@ def main() -> None:
                   flush=True)
         print("2. " + check_speed(videos[0] if videos else work / "hevc10.mkv", backend), flush=True)
         print("3. " + check_scores(videos[0] if videos else work / "hevc10.mkv", backend, work), flush=True)
+        if backend in PCI_VENDORS:
+            print("4. scaling")
+            print(f"   {check_shader(backend)}", flush=True)
+            for line in check_scaling(videos[0] if videos else work / "hevc10.mkv", backend):
+                print(f"   {line} [{(videos[0] if videos else work / 'hevc10.mkv').name}]", flush=True)
 
 
 if __name__ == "__main__":

@@ -42,6 +42,9 @@ struct Params {
     int scaler;          // Scaler (scale_filter.h)
     int widen;           // 8-bit pictures handed back as 10-bit: 1 shifted, 2 with
                          // the luma's top bits repeated (full range), as FFmpeg widens
+    int cpu_scaling;     // Intel, AMD: 1 scaled on the CPU even where the GPU can (to
+                         // check one against the other); 2 for the tests: the GPU's
+                         // first picture is spoiled, as a driver's wrong one would be
 };
 
 inline int out_width(const Params &p) { return p.out_w > 0 ? p.out_w : p.crop_w; }
@@ -56,6 +59,7 @@ struct Info {
     int bit_depth, chroma_format, progressive;
     int decode_surfaces;
     long long decoded, displayed, frame_bytes;
+    int scaled_on_gpu;   // the pictures are being scaled on the GPU
 };
 
 inline bool params_valid(const Params &p) {
@@ -122,8 +126,9 @@ inline void convert_frame(const Params &p, const uint8_t *y, const uint8_t *uv, 
     }
 }
 
-// Scaling on the CPU, for the decoders that hand pictures over in system
-// memory (Intel's, AMD's): the filters of scale_filter.h, made once.
+// Scaling on the CPU, for Intel's and AMD's decoders: what their GPU scaling
+// (d3d11_scale.h) is checked against, and what scales where the GPU cannot.
+// The filters of scale_filter.h, made once.
 struct PlaneScaler {
     Filter luma_h, luma_v, chroma_h, chroma_v;
     ScaleScratch scratch;

@@ -56,7 +56,10 @@ case anyone overrides that.
   each loads its maker's decoder library from the graphics driver at run time
   -- NVIDIA's `nvcuda.dll` and `nvcuvid.dll`, Intel's oneVPL `libvpl.dll`,
   AMD's AMF `amfrt64.dll` -- and NVIDIA's conversion kernels are PTX in the
-  source, so no CUDA toolkit or SDK is needed to build them. They contain
+  source, so no CUDA toolkit or SDK is needed to build them. Intel's and
+  AMD's scale pictures with a Direct3D 11 compute shader
+  (`native/d3d11_scale.h`), compiled at run time by Windows' own
+  `d3dcompiler_47.dll`. They contain
   nv-codec-headers', oneVPL's and AMF's API definitions (all MIT), whose
   notices are packaged beside them. Without one, FFmpeg decodes those
   videos as before. `scripts/check_gpu_decoder.py` checks one of them on the

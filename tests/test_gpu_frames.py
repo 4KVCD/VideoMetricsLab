@@ -4,6 +4,7 @@ pictures against FFmpeg's decode with each GPU maker's decoder the PC has
 (NVIDIA's, Intel's, AMD's)."""
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import subprocess
 from fractions import Fraction
@@ -313,6 +314,107 @@ def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path, backend):
         pytest.skip("only NVIDIA's decoder widens (for VMAF on the GPU)")
     ours = _frames(info, plan, backend)
     assert np.array_equal(ours, _ffmpeg_frames(path, "format=yuv420p10le", 10))
+
+
+# ------------------------------------------------- scaling on the GPU (Intel, AMD)
+
+#: PCI vendor ids of the GPUs the scaling shader is checked on; the last is
+#: Windows' software device, which every PC has.
+_SCALE_GPUS = {"nvidia": 0x10DE, "intel": 0x8086, "amd": 0x1002, "software": 0x1414}
+
+
+def _test_picture(width: int, height: int, depth: int) -> bytes:
+    """NV12/P010 noise with hard edges, where a filter rings: a wrong weight,
+    order of summing, cap or rounding shows."""
+    rng = np.random.default_rng(7)
+    top = (1 << depth) - 1
+    luma = rng.integers(0, top + 1, (height, width))
+    luma[: height // 3, : width // 2] = top
+    luma[height // 3: height // 2, width // 3:] = 0
+    chroma = rng.integers(0, top + 1, (height // 2, width))
+    chroma[: height // 5] = top
+    planes = np.concatenate([luma, chroma])
+    return (planes << 6).astype("<u2").tobytes() if depth > 8 else planes.astype(np.uint8).tobytes()
+
+
+@pytest.mark.parametrize("gpu", list(_SCALE_GPUS))
+@pytest.mark.parametrize(("depth", "size", "to", "algorithm", "shift", "luma_only", "crop"), [
+    (10, (1280, 720), (640, 360), "bicubic", 6, False, None),
+    (10, (1280, 720), (640, 360), "lanczos", 0, False, None),  # the samples kept in the top bits
+    (8, (640, 360), (1280, 720), "bicubic", 0, False, None),  # up: along the rows first
+    (8, (1280, 720), (427, 241), "spline", 0, False, None),  # odd output: its chroma is rounded up
+    (10, (1280, 720), (854, 480), "bilinear", 6, True, None),
+    (10, (1280, 720), (640, 300), "bicubic", 6, False, (0, 60, 1280, 600)),  # cropped: black bars cut
+    (8, (640, 360), (320, 640), "lanczos", 0, False, None),  # narrower and taller at once
+])
+def test_the_scaling_shader_gives_the_cpu_scalers_picture(gpu, depth, size, to, algorithm, shift, luma_only, crop):
+    """Sample for sample: the same weights, summed in the same order."""
+    if not nv.available("intel"):
+        pytest.skip("the decoders are not built")
+    x, y, w, h = crop or (0, 0, *size)
+    plan = nv.DecodePlan("hevc" if depth > 8 else "h264", depth, size[0], size[1], x, y, w, h, shift, luma_only,
+                         to[0], to[1], algorithm)
+    picture = _test_picture(size[0], size[1], depth)
+    on_gpu = nv.scale_picture(plan, picture, _SCALE_GPUS[gpu])
+    if on_gpu is None:
+        pytest.skip(f"no {gpu} GPU with Direct3D 11 here")
+    assert on_gpu == nv.scale_picture(plan, picture, None)
+
+
+@pytest.mark.parametrize("backend", ["intel", "amd"])
+@pytest.mark.parametrize(("pix_fmt", "size", "algorithm"), [
+    ("yuv420p10le", (320, 180), "bicubic"),
+    ("yuv420p", (1920, 1080), "lanczos"),
+])
+def test_decoded_pictures_are_scaled_on_the_gpu_and_are_the_cpus(tmp_path, backend, pix_fmt, size, algorithm):
+    from dataclasses import replace
+
+    codec = "hevc" if pix_fmt == "yuv420p10le" else "h264"
+    info = probe_video(_clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=0.5))
+    plan = nv.plan_decode(info, None, shift=6, size=size, algorithm=algorithm)
+    _need(plan, backend)
+    stream = nv.GpuFrameStream(info, plan, backend=backend)
+    try:
+        stream.start()
+        while stream.stats().displayed == 0:  # where the first picture was scaled
+            with contextlib.suppress(TimeoutError):
+                if (item := stream.next(1000)) is None:
+                    break
+                stream.release(item[0])
+        assert stream.scale_note() == ""
+        assert stream.stats().scaled_on_gpu == 1
+    finally:
+        stream.close()
+    assert np.array_equal(_frames(info, plan, backend), _frames(info, replace(plan, cpu_scaling=True), backend))
+
+
+@pytest.mark.parametrize("backend", ["intel", "amd"])
+def test_a_gpu_picture_that_is_not_the_cpus_hands_the_scaling_to_the_cpu(tmp_path, backend):
+    """A driver whose shader arithmetic differed would change the scores:
+    the decoders scale their first pictures on the CPU as well, and at the
+    first that differs the CPU's is the one handed out, from then on."""
+    from dataclasses import replace
+
+    info = probe_video(_clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=0.5))
+    plan = nv.plan_decode(info, None, size=(320, 180))
+    _need(plan, backend)
+    spoiled = replace(plan, cpu_scaling=2)  # the GPU's first picture is made wrong
+    stream = nv.GpuFrameStream(info, spoiled, backend=backend)
+    try:
+        stream.start()
+        while (item := _next(stream)) is not None:
+            stream.release(item[0])
+        assert stream.scale_note() == "the GPU's scaled picture is not the CPU's"
+        assert stream.stats().scaled_on_gpu == 0
+    finally:
+        stream.close()
+    assert np.array_equal(_frames(info, spoiled, backend), _frames(info, replace(plan, cpu_scaling=1), backend))
+
+
+def _next(stream):
+    while True:
+        with contextlib.suppress(TimeoutError):
+            return stream.next(1000)
 
 
 def _stream_fed(*timestamps):

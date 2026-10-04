@@ -11,6 +11,13 @@
 // U and V split out of their interleaved plane, 10-bit samples aligned as
 // asked (convert_frame). The samples are moved, never computed.
 //
+// Pictures that are scaled are scaled on the GPU instead, from the decoder's
+// Direct3D 11 texture, as soon as they are decoded (d3d11_scale.h's shader);
+// only the scaled picture comes to system memory, into the slot's own
+// buffer. The first pictures are scaled on the CPU as well and compared; if
+// the GPU cannot scale them, or its picture is ever not the CPU's, the CPU
+// scales the rest (deliver_scaled).
+//
 // amfrt64.dll comes with AMD's graphics driver (System32) and is loaded at run
 // time; this library links nothing of AMD's. The decoder runs on a Direct3D
 // 11 device made on the AMD GPU. The headers in native/amf are the AMF SDK's
@@ -35,6 +42,7 @@
 #include <string>
 #include <vector>
 
+#include "d3d11_scale.h"
 #include "gpu_frames.h"
 // AMF's interfaces overload virtual methods in ways g++ warns about.
 #pragma GCC diagnostic push
@@ -143,7 +151,7 @@ struct Session {
 
 // AMF's decoder for `codec` at this format and size on the AMD GPU, or the reason there is none.
 bool open_session(int codec, int bit_depth, int width, int height, const std::vector<unsigned char> &extradata,
-                  Session &s, std::string &error) {
+                  bool read_on_cpu, Session &s, std::string &error) {
     s.device = amd_device(error);
     if (!s.device) return false;
     AMF_RESULT result = g_factory->CreateContext(&s.context);
@@ -162,7 +170,7 @@ bool open_session(int codec, int bit_depth, int width, int height, const std::ve
     // Pictures in display order, with the timestamps given; read on the CPU.
     s.decoder->SetProperty(AMF_VIDEO_DECODER_REORDER_MODE, static_cast<amf_int64>(AMF_VIDEO_DECODER_MODE_REGULAR));
     s.decoder->SetProperty(AMF_TIMESTAMP_MODE, static_cast<amf_int64>(AMF_TS_PRESENTATION));
-    s.decoder->SetProperty(AMF_VIDEO_DECODER_SURFACE_CPU, true);
+    s.decoder->SetProperty(AMF_VIDEO_DECODER_SURFACE_CPU, read_on_cpu);
     if (!extradata.empty()) {
         amf::AMFBuffer *buffer = nullptr;
         if (s.context->AllocBuffer(amf::AMF_MEMORY_HOST, extradata.size(), &buffer) == AMF_OK) {
@@ -192,6 +200,14 @@ struct Decoder {
     Info info{};
     std::vector<unsigned char> extradata;
     PlaneScaler scaler;  // when the pictures are scaled (on the CPU)
+    // Scaled pictures: each scaled as it is decoded, into its slot's buffer
+    // (feeding thread only, but for the buffers).
+    bool buffered = false, gpu_scaling = false;
+    int checked = 0;  // pictures the GPU's scaling has been checked on
+    gpu_scale::Scaler gpu;
+    std::vector<std::vector<uint8_t>> buffers;  // slot -> scaled picture
+    std::vector<uint8_t> check;
+    std::string scale_note;  // why the CPU scales, when the GPU was meant to
     Session session;
 
     std::mutex mutex;
@@ -223,13 +239,125 @@ void recycle(Decoder *d) {
         while (!d->returned.empty()) {
             int slot = d->returned.front();
             d->returned.pop_front();
-            back.push_back(d->slots[slot]);
+            if (d->slots[slot]) back.push_back(d->slots[slot]);  // a scaled picture is its buffer's
             d->slots[slot] = nullptr;
             d->free_slots.push_back(slot);
+            d->changed.notify_all();
         }
-        if (!back.empty()) d->changed.notify_all();
     }
     for (amf::AMFSurface *surface : back) surface->Release();
+}
+
+// A free slot, once there is one; -1 when decoding has stopped.
+int take_slot(Decoder *d) {
+    while (true) {
+        recycle(d);
+        std::unique_lock<std::mutex> guard(d->mutex);
+        if (d->aborted || d->failed) return -1;
+        if (!d->free_slots.empty()) {
+            int slot = d->free_slots.front();
+            d->free_slots.pop_front();
+            return slot;
+        }
+        d->changed.wait(guard, [d] { return !d->free_slots.empty() || !d->returned.empty() || d->aborted || d->failed; });
+    }
+}
+
+// A picture in host memory, cropped (and scaled) and planes packed, into `out`.
+bool host_picture(Decoder *d, amf::AMFSurface *surface, uint8_t *out) {
+    amf::AMFPlane *luma = surface->GetPlaneAt(0), *chroma = surface->GetPlaneAt(1);
+    if (!luma || !chroma || luma->GetHPitch() != chroma->GetHPitch()) return false;
+    size_t pitch = static_cast<size_t>(luma->GetHPitch());
+    size_t sample = d->params.bit_depth > 8 ? 2 : 1;
+    // A plane's picture can start inside its allocation.
+    const uint8_t *y = static_cast<const uint8_t *>(luma->GetNative()) + luma->GetOffsetY() * pitch
+                       + luma->GetOffsetX() * sample;
+    const uint8_t *uv = static_cast<const uint8_t *>(chroma->GetNative()) + chroma->GetOffsetY() * pitch
+                        + chroma->GetOffsetX() * 2 * sample;
+    if (is_scaled(d->params)) {  // P010: the top bits
+        scale_frame(d->params, d->scaler, y, uv, pitch, true, out);
+    } else {
+        convert_frame(d->params, y, uv, pitch, true, out);
+    }
+    return true;
+}
+
+void scale_on_cpu_from_now(Decoder *d, const std::string &why) {
+    d->gpu_scaling = false;
+    std::lock_guard<std::mutex> guard(d->mutex);
+    d->scale_note = why;
+    d->info.scaled_on_gpu = 0;
+}
+
+// AMF's name for which picture of a texture array a surface is, kept on the
+// texture (AMFTextureArrayIndexGUID in AMF's samples and FFmpeg).
+const GUID kTextureArrayIndex = {0x28115527, 0xe7c3, 0x4b66, {0x99, 0xd3, 0x4f, 0x2a, 0xe6, 0xb4, 0x7f, 0xaf}};
+
+// The decoder's picture scaled on the GPU into `out`, or why not.
+bool scale_on_gpu(Decoder *d, amf::AMFSurface *surface, uint8_t *out, std::string &why) {
+    amf::AMFPlane *luma = surface->GetPlaneAt(0);
+    if (surface->GetMemoryType() != amf::AMF_MEMORY_DX11 || !luma || !luma->GetNative()) {
+        why = "AMD's decoder gave no Direct3D 11 texture";
+        return false;
+    }
+    ID3D11Texture2D *texture = static_cast<ID3D11Texture2D *>(luma->GetNative());
+    D3D11_TEXTURE2D_DESC desc;
+    texture->GetDesc(&desc);
+    UINT slice = 0, size = sizeof(slice);
+    bool named = SUCCEEDED(texture->GetPrivateData(kTextureArrayIndex, &size, &slice)) && size == sizeof(slice);
+    if (!named) slice = 0;
+    if (desc.ArraySize != 1 && !named) {
+        why = "AMD's decoder keeps its pictures in one texture";  // which slice is not said
+        return false;
+    }
+    d->session.context->LockDX11();
+    bool scaled = (d->gpu.started() || d->gpu.start(texture, d->params, why))
+                  && d->gpu.scale(texture, slice, luma->GetOffsetX(), luma->GetOffsetY(), out, why);
+    d->session.context->UnlockDX11();
+    return scaled;
+}
+
+// A decoded picture scaled into a slot's buffer and queued for nvf_pop: on
+// the GPU, and for the session's first pictures on the CPU too, which must
+// give the same picture. False when decoding has stopped.
+bool deliver_scaled(Decoder *d, amf::AMFSurface *surface, long long pts) {
+    int slot = take_slot(d);
+    if (slot < 0) {
+        surface->Release();
+        return false;
+    }
+    uint8_t *out = d->buffers[slot].data();
+    bool on_gpu = false;
+    if (d->gpu_scaling) {
+        std::string why;
+        on_gpu = scale_on_gpu(d, surface, out, why);
+        if (!on_gpu) scale_on_cpu_from_now(d, why);
+        // The tests' way to a GPU picture that is not the CPU's.
+        if (on_gpu && d->params.cpu_scaling == 2) out[0] ^= 1;
+    }
+    if (!on_gpu || d->checked < gpu_scale::GPU_SCALE_CHECKED) {
+        AMF_RESULT result = surface->Convert(amf::AMF_MEMORY_HOST);
+        uint8_t *cpu = on_gpu ? d->check.data() : out;
+        if (result != AMF_OK || !host_picture(d, surface, cpu)) {
+            surface->Release();
+            d->fail("Reading a decoded picture failed (" + result_text(result) + ")");
+            return false;
+        }
+        if (on_gpu) {
+            if (memcmp(cpu, out, d->check.size()) == 0) {
+                d->checked++;
+            } else {
+                memcpy(out, cpu, d->check.size());
+                scale_on_cpu_from_now(d, "the GPU's scaled picture is not the CPU's");
+            }
+        }
+    }
+    surface->Release();
+    std::lock_guard<std::mutex> guard(d->mutex);
+    d->ready.push_back({slot, pts});
+    d->info.displayed++;
+    d->changed.notify_all();
+    return true;
 }
 
 // One picture from the decoder: checked, brought to host memory and queued
@@ -259,27 +387,17 @@ bool deliver(Decoder *d, amf::AMFData *data) {
         d->fail("the video is interlaced");
         return false;
     }
+    if (d->buffered) return deliver_scaled(d, surface, pts);
     AMF_RESULT result = surface->Convert(amf::AMF_MEMORY_HOST);
     if (result != AMF_OK) {
         surface->Release();
         d->fail("Reading a decoded picture failed (" + result_text(result) + ")");
         return false;
     }
-    int slot;
-    while (true) {
-        recycle(d);
-        std::unique_lock<std::mutex> guard(d->mutex);
-        if (d->aborted || d->failed) {
-            guard.unlock();
-            surface->Release();
-            return false;
-        }
-        if (!d->free_slots.empty()) {
-            slot = d->free_slots.front();
-            d->free_slots.pop_front();
-            break;
-        }
-        d->changed.wait(guard, [d] { return !d->free_slots.empty() || !d->returned.empty() || d->aborted || d->failed; });
+    int slot = take_slot(d);
+    if (slot < 0) {
+        surface->Release();
+        return false;
     }
     std::lock_guard<std::mutex> guard(d->mutex);
     d->slots[slot] = surface;
@@ -354,8 +472,16 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->info.chroma_format = 1;
     d->info.display_right = params->width;
     d->info.display_bottom = params->height;
+    // Scaled pictures stay on the GPU, to be scaled there.
+    d->buffered = d->gpu_scaling = is_scaled(d->params) && d->params.cpu_scaling != 1;
+    if (d->buffered) {
+        d->buffers.assign(params->pool, std::vector<uint8_t>(frame_bytes(d->params)));
+        d->check.resize(frame_bytes(d->params));
+        d->info.scaled_on_gpu = 1;
+    }
     std::string text;
-    if (!open_session(params->codec, params->bit_depth, params->width, params->height, d->extradata, d->session, text)) {
+    if (!open_session(params->codec, params->bit_depth, params->width, params->height, d->extradata, !d->buffered,
+                      d->session, text)) {
         copy_text(error, error_size, text);
         destroy(d);
         return nullptr;
@@ -438,27 +564,17 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
 // Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
     Decoder *d = static_cast<Decoder *>(handle);
+    if (d->buffered) {  // scaled when it was decoded
+        memcpy(host, d->buffers[slot].data(), d->buffers[slot].size());
+        return 0;
+    }
     amf::AMFSurface *surface;
     {
         std::lock_guard<std::mutex> guard(d->mutex);
         surface = d->slots[slot];
     }
     if (!surface) return NVF_ERROR;
-    amf::AMFPlane *luma = surface->GetPlaneAt(0), *chroma = surface->GetPlaneAt(1);
-    if (!luma || !chroma || luma->GetHPitch() != chroma->GetHPitch()) return NVF_ERROR;
-    size_t pitch = static_cast<size_t>(luma->GetHPitch());
-    size_t sample = d->params.bit_depth > 8 ? 2 : 1;
-    // A plane's picture can start inside its allocation.
-    const uint8_t *y = static_cast<const uint8_t *>(luma->GetNative()) + luma->GetOffsetY() * pitch
-                       + luma->GetOffsetX() * sample;
-    const uint8_t *uv = static_cast<const uint8_t *>(chroma->GetNative()) + chroma->GetOffsetY() * pitch
-                        + chroma->GetOffsetX() * 2 * sample;
-    if (is_scaled(d->params)) {  // P010: the top bits
-        scale_frame(d->params, d->scaler, y, uv, pitch, true, static_cast<uint8_t *>(host));
-    } else {
-        convert_frame(d->params, y, uv, pitch, true, static_cast<uint8_t *>(host));
-    }
-    return 0;
+    return host_picture(d, surface, static_cast<uint8_t *>(host)) ? 0 : NVF_ERROR;
 }
 
 NVF_API int nvf_copy_luma(void *, int, unsigned long long, long long) {
@@ -500,6 +616,23 @@ NVF_API void nvf_info(void *handle, Info *out) {
     *out = d->info;
 }
 
+// Why the pictures are scaled on the CPU, when the GPU was to scale them.
+NVF_API int nvf_scale_note(void *handle, char *out, int size) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    std::lock_guard<std::mutex> guard(d->mutex);
+    copy_text(out, size, d->scale_note);
+    return static_cast<int>(d->scale_note.size());
+}
+
+// For the tests: one picture scaled on the CPU or on a GPU (gpu_scale::scale_test).
+NVF_API int nvf_scale_test(int vendor, const Params *params, const unsigned char *picture, int on_gpu,
+                           unsigned char *out, char *error, int error_size) {
+    std::string text;
+    int result = gpu_scale::scale_test(vendor, *params, picture, on_gpu, out, text);
+    copy_text(error, error_size, text);
+    return result;
+}
+
 // Whether AMD's GPU decoder decodes `codec` 4:2:0 at `bit_depth` and this size.
 NVF_API int nvf_supports(int, int codec, int bit_depth, int width, int height, char *error, int error_size) {
     if (!load_amf()) {
@@ -512,7 +645,7 @@ NVF_API int nvf_supports(int, int codec, int bit_depth, int width, int height, c
     }
     Session session;
     std::string text;
-    bool ok = open_session(codec, bit_depth, width, height, {}, session, text);
+    bool ok = open_session(codec, bit_depth, width, height, {}, true, session, text);
     session.close();
     if (!ok) copy_text(error, error_size, text);
     return ok ? 1 : 0;

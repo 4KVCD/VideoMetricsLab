@@ -25,7 +25,8 @@ either kept in the top bits (Vship reads them as 16-bit) or shifted down,
 which is FFmpeg's conversion to yuv420p10le exactly -- and 8-bit samples
 widened to 10 bits as FFmpeg widens them. A picture the comparison scales is
 scaled here with FFmpeg's filter for the algorithm chosen (native/
-scale_filter.h; by the GPU on NVIDIA's, the CPU on Intel's and AMD's): not
+scale_filter.h; by the GPU on every maker's, with a compute shader on
+Intel's and AMD's, native/d3d11_scale.h, that gives the CPU scaler's picture): not
 FFmpeg's to the sample -- within 1 of it on film -- which the user decided is
 the same comparison (ComparisonRecipe.identity_dict). Which pictures come out,
 and with which timestamps, is checked against the packets that went in
@@ -112,7 +113,8 @@ class _Params(ctypes.Structure):
                 ("crop_x", ctypes.c_int), ("crop_y", ctypes.c_int), ("crop_w", ctypes.c_int), ("crop_h", ctypes.c_int),
                 ("shift", ctypes.c_int), ("luma_only", ctypes.c_int), ("pool", ctypes.c_int),
                 ("extradata", ctypes.c_void_p), ("extradata_size", ctypes.c_int),
-                ("out_w", ctypes.c_int), ("out_h", ctypes.c_int), ("scaler", ctypes.c_int), ("widen", ctypes.c_int)]
+                ("out_w", ctypes.c_int), ("out_h", ctypes.c_int), ("scaler", ctypes.c_int), ("widen", ctypes.c_int),
+                ("cpu_scaling", ctypes.c_int)]
 
 
 class _Info(ctypes.Structure):
@@ -121,7 +123,8 @@ class _Info(ctypes.Structure):
                 ("display_right", ctypes.c_int), ("display_bottom", ctypes.c_int),
                 ("bit_depth", ctypes.c_int), ("chroma_format", ctypes.c_int), ("progressive", ctypes.c_int),
                 ("decode_surfaces", ctypes.c_int),
-                ("decoded", ctypes.c_longlong), ("displayed", ctypes.c_longlong), ("frame_bytes", ctypes.c_longlong)]
+                ("decoded", ctypes.c_longlong), ("displayed", ctypes.c_longlong), ("frame_bytes", ctypes.c_longlong),
+                ("scaled_on_gpu", ctypes.c_int)]
 
 
 _libraries: dict[str, ctypes.CDLL] = {}
@@ -157,6 +160,11 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
             ):
                 function = getattr(lib, name)
                 function.restype, function.argtypes = restype, argtypes
+            if backend != "nvidia":  # the decoders that scale with native/d3d11_scale.h
+                lib.nvf_scale_note.restype, lib.nvf_scale_note.argtypes = ctypes.c_int, [handle, text, ctypes.c_int]
+                lib.nvf_scale_test.restype = ctypes.c_int
+                lib.nvf_scale_test.argtypes = [ctypes.c_int, ctypes.POINTER(_Params), ctypes.c_void_p, ctypes.c_int,
+                                               ctypes.c_void_p, text, ctypes.c_int]
             _libraries[backend] = lib
         return _libraries[backend]
 
@@ -197,6 +205,11 @@ class DecodePlan:
     scaler: str = "bicubic"
     #: 8-bit pictures handed back as 10-bit (WIDEN_SHIFT, WIDEN_REPEAT; 0: not).
     widen: int = 0
+    #: Intel, AMD: scaled on the CPU even where the GPU can scale -- the same
+    #: picture, slower; for checking one against the other. 2, for the
+    #: tests: the GPU's first picture is spoiled, as a driver's wrong one
+    #: would be, so the decoder finds it differs from the CPU's.
+    cpu_scaling: int = 0
 
     @property
     def bytes_per_sample(self) -> int:
@@ -256,6 +269,32 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
     return DecodePlan(codec, depth, info.width, info.height, x, y, w, h,
                       shift if depth > 8 else 0, luma_only, out_w, out_h,
                       algorithm if algorithm in _SCALERS else "bicubic", widen)
+
+
+def _params(plan: DecodePlan, device: int = 0, pool: int = 1, extradata=None, extradata_size: int = 0) -> _Params:
+    return _Params(device, _CODECS[plan.codec][0], plan.bit_depth, plan.width, plan.height,
+                   plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.shift, int(plan.luma_only),
+                   pool, extradata, extradata_size, plan.output_size[0], plan.output_size[1], _SCALERS[plan.scaler],
+                   plan.widen, int(plan.cpu_scaling))
+
+
+def scale_picture(plan: DecodePlan, picture: bytes, vendor: int | None, backend: str = "intel") -> bytes | None:
+    """For the tests: one NV12/P010 picture (luma rows, then interleaved
+    chroma rows, 10-bit samples at the top of 16) scaled as `plan` says by
+    the decoders' scaler -- on the CPU (`vendor` None), or by its shader on
+    the first GPU of PCI vendor `vendor` (0x1414: Windows' software device).
+    None when this PC has no such GPU."""
+    lib = _load(backend)
+    params = _params(plan)
+    out = ctypes.create_string_buffer(plan.frame_bytes)
+    error = ctypes.create_string_buffer(2048)
+    result = lib.nvf_scale_test(vendor or 0, ctypes.byref(params), picture, int(vendor is not None), out, error,
+                                len(error))
+    if result == 1:
+        return None
+    if result != 0:
+        raise GpuDecodeFailedError(error.value.decode(errors="replace") or "scaling failed")
+    return out.raw
 
 
 def available(backend: str = "nvidia") -> bool:
@@ -544,11 +583,10 @@ class GpuFrameStream:
         self._reader = _PacketReader(info.path, plan.codec, process_handle)
         self._extradata = _av1_sequence_header(info.path) if plan.codec == "av1" else b""
         self._extradata_buffer = ctypes.create_string_buffer(self._extradata) if self._extradata else None
-        params = _Params(device, _CODECS[plan.codec][0], plan.bit_depth, plan.width, plan.height,
-                         plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.shift, int(plan.luma_only),
-                         pool, ctypes.cast(self._extradata_buffer, ctypes.c_void_p) if self._extradata_buffer else None,
-                         len(self._extradata), plan.output_size[0], plan.output_size[1], _SCALERS[plan.scaler],
-                         plan.widen)
+        params = _params(
+            plan, device, pool,
+            ctypes.cast(self._extradata_buffer, ctypes.c_void_p) if self._extradata_buffer else None,
+            len(self._extradata))
         error = ctypes.create_string_buffer(1024)
         handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
         if not handle:
@@ -703,11 +741,22 @@ class GpuFrameStream:
         self._lib.nvf_info(self._handle, ctypes.byref(info))
         return info
 
+    def scale_note(self) -> str:
+        """Why the pictures are scaled on the CPU when the GPU was to scale
+        them (Intel, AMD); empty when it does, or nothing is scaled."""
+        if self.backend == "nvidia" or self._handle is None:
+            return ""
+        text = ctypes.create_string_buffer(1024)
+        self._lib.nvf_scale_note(self._handle, text, len(text))
+        return text.value.decode(errors="replace")
+
     def close(self) -> None:
         """Stops decoding and frees everything; safe to call twice."""
         if self._handle is None:
             return
         self._closing = True
+        if note := self.scale_note():
+            _log.warning("%s: scaled on the CPU, not the GPU: %s", self.info.path.name, note)
         self._lib.nvf_abort(self._handle)
         self._reader.close()
         if self._feeder.ident is not None:

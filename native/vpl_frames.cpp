@@ -14,6 +14,13 @@
 // Intel's decoder through oneVPL gives FFmpeg's CPU decode, sample for sample
 // (checked against it frame by frame).
 //
+// Pictures that are scaled stay on the GPU instead (video memory): each is
+// scaled there by d3d11_scale.h's shader as soon as it is decoded, and only
+// the scaled picture comes to system memory, into the slot's own buffer.
+// The first pictures are scaled on the CPU as well and compared; if the GPU
+// cannot scale them, or its picture is ever not the CPU's, the CPU scales
+// the rest (deliver_scaled).
+//
 // libvpl.dll, the oneVPL dispatcher, comes with Intel's graphics driver
 // (System32), and finds the driver's runtime; it is loaded at run time, and
 // this library links nothing. The headers in native/onevpl are oneVPL's
@@ -35,6 +42,7 @@
 #include <string>
 #include <vector>
 
+#include "d3d11_scale.h"
 #include "gpu_frames.h"
 #include "onevpl/vpl/mfxdispatcher.h"
 #include "onevpl/vpl/mfxvideo.h"
@@ -163,6 +171,14 @@ struct Decoder {
     Info info{};
     std::vector<unsigned char> extradata;
     PlaneScaler scaler;  // when the pictures are scaled (on the CPU)
+    // Scaled pictures decoded to video memory: each scaled as it is decoded,
+    // into its slot's buffer (feeding thread only, but for the buffers).
+    bool buffered = false, gpu_scaling = false;
+    int checked = 0;  // pictures the GPU's scaling has been checked on
+    gpu_scale::Scaler gpu;
+    std::vector<std::vector<uint8_t>> buffers;  // slot -> scaled picture
+    std::vector<uint8_t> check;
+    std::string scale_note;  // why the CPU scales, when the GPU was meant to
     mfxLoader loader = nullptr;
     mfxSession session = nullptr;
     mfxVideoParam video{};
@@ -207,13 +223,99 @@ void recycle(Decoder *d) {
         while (!d->returned.empty()) {
             int slot = d->returned.front();
             d->returned.pop_front();
-            back.push_back(d->slots[slot]);
+            if (d->slots[slot]) back.push_back(d->slots[slot]);  // a scaled picture is its buffer's
             d->slots[slot] = nullptr;
             d->free_slots.push_back(slot);
+            d->changed.notify_all();
         }
-        if (!back.empty()) d->changed.notify_all();
     }
     for (mfxFrameSurface1 *surface : back) give_back(surface);
+}
+
+// A free slot, once there is one; -1 when decoding has stopped.
+int take_slot(Decoder *d) {
+    while (true) {
+        recycle(d);
+        std::unique_lock<std::mutex> guard(d->mutex);
+        if (d->aborted || d->failed) return -1;
+        if (!d->free_slots.empty()) {
+            int slot = d->free_slots.front();
+            d->free_slots.pop_front();
+            return slot;
+        }
+        d->changed.wait(guard, [d] { return !d->free_slots.empty() || !d->returned.empty() || d->aborted || d->failed; });
+    }
+}
+
+void scale_on_cpu_from_now(Decoder *d, const std::string &why) {
+    d->gpu_scaling = false;
+    std::lock_guard<std::mutex> guard(d->mutex);
+    d->scale_note = why;
+    d->info.scaled_on_gpu = 0;
+}
+
+// A picture in video memory, scaled into a slot's buffer and queued for
+// nvf_pop: on the GPU, and for the session's first pictures on the CPU too,
+// which must give the same picture. False when decoding has stopped.
+bool deliver_scaled(Decoder *d, mfxFrameSurface1 *surface) {
+    const long long pts = static_cast<long long>(surface->Data.TimeStamp) - kPtsOffset;
+    int slot = take_slot(d);
+    if (slot < 0) {
+        surface->FrameInterface->Release(surface);
+        return false;
+    }
+    uint8_t *out = d->buffers[slot].data();
+    bool on_gpu = false;
+    if (d->gpu_scaling) {
+        std::string why;
+        mfxHDL resource = nullptr;
+        mfxResourceType type{};
+        if (surface->FrameInterface->GetNativeHandle(surface, &resource, &type) != MFX_ERR_NONE || !resource
+            || type != MFX_RESOURCE_DX11_TEXTURE) {
+            why = "Intel's decoder gave no Direct3D 11 texture";
+        } else {
+            ID3D11Texture2D *texture = static_cast<ID3D11Texture2D *>(resource);
+            D3D11_TEXTURE2D_DESC desc;
+            texture->GetDesc(&desc);
+            if (desc.ArraySize != 1) {
+                why = "Intel's decoder keeps its pictures in one texture";  // which slice is not said
+            } else {
+                on_gpu = (d->gpu.started() || d->gpu.start(texture, d->params, why))
+                         && d->gpu.scale(texture, 0, 0, 0, out, why);
+            }
+        }
+        if (!on_gpu) scale_on_cpu_from_now(d, why);
+        // The tests' way to a GPU picture that is not the CPU's.
+        if (on_gpu && d->params.cpu_scaling == 2) out[0] ^= 1;
+    }
+    if (!on_gpu || d->checked < gpu_scale::GPU_SCALE_CHECKED) {
+        mfxStatus status = surface->FrameInterface->Map(surface, MFX_MAP_READ);
+        if (status != MFX_ERR_NONE) {
+            surface->FrameInterface->Release(surface);
+            d->fail("Reading a decoded picture failed (" + status_text(status) + ")");
+            return false;
+        }
+        const mfxFrameData &data = surface->Data;
+        size_t pitch = (static_cast<size_t>(data.PitchHigh) << 16) | data.PitchLow;
+        bool msb = d->params.bit_depth > 8 && surface->Info.Shift;
+        uint8_t *cpu = on_gpu ? d->check.data() : out;
+        scale_frame(d->params, d->scaler, data.Y, data.UV, pitch, msb, cpu);
+        surface->FrameInterface->Unmap(surface);
+        if (on_gpu) {
+            if (memcmp(cpu, out, d->check.size()) == 0) {
+                d->checked++;
+            } else {
+                memcpy(out, cpu, d->check.size());
+                scale_on_cpu_from_now(d, "the GPU's scaled picture is not the CPU's");
+            }
+        }
+    }
+    surface->FrameInterface->Release(surface);
+    std::lock_guard<std::mutex> guard(d->mutex);
+    d->ready.push_back({slot, pts});
+    d->info.displayed++;
+    d->changed.notify_all();
+    return true;
 }
 
 // Waits for the oldest picture in flight, maps it and queues it for nvf_pop,
@@ -250,27 +352,17 @@ bool deliver_oldest(Decoder *d) {
         d->fail("Intel's GPU decoder lost a picture's timestamp");
         return false;
     }
+    if (d->buffered) return deliver_scaled(d, surface);
     status = surface->FrameInterface->Map(surface, MFX_MAP_READ);
     if (status != MFX_ERR_NONE) {
         surface->FrameInterface->Release(surface);
         d->fail("Reading a decoded picture failed (" + status_text(status) + ")");
         return false;
     }
-    int slot;
-    while (true) {
-        recycle(d);
-        std::unique_lock<std::mutex> guard(d->mutex);
-        if (d->aborted || d->failed) {
-            guard.unlock();
-            give_back(surface);
-            return false;
-        }
-        if (!d->free_slots.empty()) {
-            slot = d->free_slots.front();
-            d->free_slots.pop_front();
-            break;
-        }
-        d->changed.wait(guard, [d] { return !d->free_slots.empty() || !d->returned.empty() || d->aborted || d->failed; });
+    int slot = take_slot(d);
+    if (slot < 0) {
+        give_back(surface);
+        return false;
     }
     std::lock_guard<std::mutex> guard(d->mutex);
     d->slots[slot] = surface;
@@ -329,9 +421,23 @@ bool start_decoder(Decoder *d) {
         d->fail("the crop is outside the picture");
         return false;
     }
-    v.IOPattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
+    // Scaled pictures stay on the GPU, to be scaled there.
+    d->buffered = is_scaled(d->params) && d->params.cpu_scaling != 1;
+    v.IOPattern = d->buffered ? MFX_IOPATTERN_OUT_VIDEO_MEMORY : MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
     v.AsyncDepth = 4;
     status = g_vpl.Init(d->session, &v);
+    if (status < MFX_ERR_NONE && d->buffered) {  // no video memory: as unscaled pictures are decoded
+        g_vpl.DecodeClose(d->session);
+        d->buffered = false;
+        d->scale_note = "Intel's decoder would not keep its pictures on the GPU (" + status_text(status) + ")";
+        v.IOPattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
+        status = g_vpl.Init(d->session, &v);
+    }
+    if (d->buffered) {
+        d->gpu_scaling = true;
+        d->buffers.assign(d->params.pool, std::vector<uint8_t>(frame_bytes(d->params)));
+        d->check.resize(frame_bytes(d->params));
+    }
     if (status < MFX_ERR_NONE) {
         d->fail("Starting Intel's GPU decoder failed (" + status_text(status) + ")");
         return false;
@@ -339,6 +445,7 @@ bool start_decoder(Decoder *d) {
     d->header = d->initialized = true;
     std::lock_guard<std::mutex> guard(d->mutex);
     d->info.decode_surfaces = v.AsyncDepth;
+    d->info.scaled_on_gpu = d->gpu_scaling;
     return true;
 }
 
@@ -503,6 +610,10 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
 // Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
     Decoder *d = static_cast<Decoder *>(handle);
+    if (d->buffered) {  // scaled when it was decoded
+        memcpy(host, d->buffers[slot].data(), d->buffers[slot].size());
+        return 0;
+    }
     mfxFrameSurface1 *surface;
     {
         std::lock_guard<std::mutex> guard(d->mutex);
@@ -557,6 +668,23 @@ NVF_API void nvf_info(void *handle, Info *out) {
     Decoder *d = static_cast<Decoder *>(handle);
     std::lock_guard<std::mutex> guard(d->mutex);
     *out = d->info;
+}
+
+// Why the pictures are scaled on the CPU, when the GPU was to scale them.
+NVF_API int nvf_scale_note(void *handle, char *out, int size) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    std::lock_guard<std::mutex> guard(d->mutex);
+    copy_text(out, size, d->scale_note);
+    return static_cast<int>(d->scale_note.size());
+}
+
+// For the tests: one picture scaled on the CPU or on a GPU (gpu_scale::scale_test).
+NVF_API int nvf_scale_test(int vendor, const Params *params, const unsigned char *picture, int on_gpu,
+                           unsigned char *out, char *error, int error_size) {
+    std::string text;
+    int result = gpu_scale::scale_test(vendor, *params, picture, on_gpu, out, text);
+    copy_text(error, error_size, text);
+    return result;
 }
 
 // Whether Intel's GPU decoder decodes `codec` 4:2:0 at `bit_depth` and this

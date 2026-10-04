@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $native = Join-Path $projectDirectory 'native'
 foreach ($build in @(
         @{ Name = 'nvdec_frames'; Libraries = @() },
-        @{ Name = 'vpl_frames'; Libraries = @() },
+        @{ Name = 'vpl_frames'; Libraries = @('-ld3d11', '-ldxgi', '-luuid') },
         @{ Name = 'amf_frames'; Libraries = @('-ld3d11', '-ldxgi', '-luuid') })) {
     & g++ -std=c++17 -O3 -Wall -Wextra -shared -static -s -I $native `
         (Join-Path $native "$($build.Name).cpp") `
