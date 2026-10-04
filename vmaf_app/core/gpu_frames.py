@@ -96,6 +96,20 @@ _ES_PIPE_BYTES = 8 * 1024 * 1024
 _NOPTS = -(1 << 63)
 
 
+#: How long a decoder library may take to close a decoder. It takes
+#: milliseconds; AMD's has been seen never to return (a Radeon 780M, closing
+#: a decoder stopped part-way with Vulkan in use in the same process).
+_CLOSE_SECONDS = 10.0
+_stuck_closes = 0
+
+
+def stuck_decoders() -> int:
+    """How many decoders this process gave up closing: their library never
+    returned. The process cannot be trusted to shut down by itself (the
+    stuck call holds the driver's locks); isolated's child ends itself."""
+    return _stuck_closes
+
+
 class GpuDecodeUnavailableError(RuntimeError):
     """This video is not decoded here; FFmpeg decodes it, as before."""
 
@@ -762,7 +776,17 @@ class GpuFrameStream:
         if self._feeder.ident is not None:
             self._feeder.join(timeout=30)
         if not self._feeder.is_alive():
-            self._lib.nvf_close(self._handle)
+            # On a thread of its own, waited for only so long: a close that
+            # never returned hung the whole run at its end, scores and all.
+            closer = threading.Thread(target=self._lib.nvf_close, args=(self._handle,), name="gpu-frames-close",
+                                      daemon=True)
+            closer.start()
+            closer.join(_CLOSE_SECONDS)
+            if closer.is_alive():
+                global _stuck_closes
+                _stuck_closes += 1
+                _log.error("%s: the %s GPU decoder did not close in %.0f s; it is left open", self.info.path.name,
+                           self.backend, _CLOSE_SECONDS)
         else:  # never seen; leaking the decoder is safer than freeing it under the thread
             _log.error("The GPU decoder's feeding thread did not stop; its decoder is left open")
         self._handle = None

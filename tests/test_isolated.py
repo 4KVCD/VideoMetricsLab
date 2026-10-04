@@ -138,3 +138,18 @@ def _wait_for(condition, seconds=10.0):
             return True
         time.sleep(0.02)
     return False
+
+
+def test_a_child_with_a_decoder_that_never_closed_ends_itself_outright(monkeypatch):
+    """The stuck close holds the driver's locks: a normal exit, every library
+    unloading in turn, can wait on them for ever (gpu_frames.stuck_decoders)."""
+    from vmaf_app.core import gpu_frames, isolated
+
+    ended = []
+    monkeypatch.setattr(isolated, "_end_now", lambda: ended.append(True))
+    monkeypatch.setattr(gpu_frames, "_stuck_closes", 0)
+    isolated._end_if_a_decoder_is_stuck()
+    assert ended == []  # an ordinary child exits normally
+    monkeypatch.setattr(gpu_frames, "_stuck_closes", 1)
+    isolated._end_if_a_decoder_is_stuck()
+    assert ended == [True]

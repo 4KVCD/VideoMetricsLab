@@ -27,10 +27,12 @@ and the exception, with its attributes. While the child runs:
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import faulthandler
 import logging
 import multiprocessing
 import os
+import sys
 import tempfile
 import threading
 import traceback
@@ -272,6 +274,26 @@ def _child_main(connection, log_level: int, target: Callable, args: tuple, kwarg
         sender.send(("result", result))
     finally:
         connection.close()
+    _end_if_a_decoder_is_stuck()
+
+
+def _end_if_a_decoder_is_stuck() -> None:
+    """Ends this process outright if a GPU decoder never finished closing
+    (gpu_frames.stuck_decoders): its thread still holds the driver's locks,
+    which a normal exit -- every library unloading in turn -- can wait on
+    for ever. The result has been sent; nothing else is left to do here."""
+    gpu_frames = sys.modules.get("vmaf_app.core.gpu_frames")
+    if gpu_frames is not None and gpu_frames.stuck_decoders():
+        _end_now()
+
+
+def _end_now() -> None:
+    """This process, ended without unloading anything."""
+    if os.name == "nt":
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+        kernel32.TerminateProcess(ctypes.c_void_p(kernel32.GetCurrentProcess()), 0)
+    os._exit(0)
 
 
 def _forwarder(sender: _Sender, name: str) -> Callable:

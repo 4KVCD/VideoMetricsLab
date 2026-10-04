@@ -126,6 +126,28 @@ ID3D11Device *amd_device(std::string &error) {
     return device;
 }
 
+// Each step of a decoder's shutdown, appended to the file VML_AMF_TRACE
+// names, with the thread: a shutdown that never returns (seen on a Radeon
+// 780M, inside AMF's own library) then shows which call it is in.
+void trace(const char *step) {
+    char path[MAX_PATH];
+    DWORD length = GetEnvironmentVariableA("VML_AMF_TRACE", path, sizeof path);
+    if (length == 0 || length >= sizeof path) return;
+    if (FILE *file = fopen(path, "a")) {
+        fprintf(file, "%llu thread %lu: %s\n", static_cast<unsigned long long>(GetTickCount64()),
+                GetCurrentThreadId(), step);
+        fclose(file);
+    }
+}
+
+// VML_AMF_CLOSE=flush: the decoder's pictures in progress are dropped
+// (Flush) before it is ended; for trying against the shutdown that hangs.
+bool close_with_flush() {
+    char value[16];
+    DWORD length = GetEnvironmentVariableA("VML_AMF_CLOSE", value, sizeof value);
+    return length > 0 && length < sizeof value && strcmp(value, "flush") == 0;
+}
+
 struct Session {
     ID3D11Device *device = nullptr;
     amf::AMFContext *context = nullptr;
@@ -133,16 +155,25 @@ struct Session {
 
     void close() {
         if (decoder) {
+            if (close_with_flush()) {
+                trace("decoder Flush");
+                decoder->Flush();
+            }
+            trace("decoder Terminate");
             decoder->Terminate();
+            trace("decoder Release");
             decoder->Release();
             decoder = nullptr;
         }
         if (context) {
+            trace("context Terminate");
             context->Terminate();
+            trace("context Release");
             context->Release();
             context = nullptr;
         }
         if (device) {
+            trace("device Release");
             device->Release();
             device = nullptr;
         }
@@ -433,11 +464,14 @@ bool collect(Decoder *d, bool draining) {
 }
 
 void destroy(Decoder *d) {
+    trace("close: releasing the pictures held");
     for (amf::AMFSurface *surface : d->slots) {
         if (surface) surface->Release();
     }
     d->session.close();
+    trace("close: freeing the decoder");
     delete d;
+    trace("close: done");
 }
 
 void copy_text(char *out, int size, const std::string &text) {

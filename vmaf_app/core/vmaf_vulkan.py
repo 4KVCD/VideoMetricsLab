@@ -417,7 +417,13 @@ def score_decoded(
         ref.verify()
         return scorer.finish()
     finally:
+        # VML_VULKAN_CLOSE=scorer-first: Vulkan is closed before the decoders;
+        # for trying against AMD's decoder shutdown, which never returned
+        # with Vulkan still open (gpu_frames._CLOSE_SECONDS).
+        scorer_first = os.environ.get("VML_VULKAN_CLOSE", "") == "scorer-first"
+        if scorer_first and scorer is not None:
+            scorer.close()
         test.close()
         ref.close()
-        if scorer is not None:
+        if not scorer_first and scorer is not None:
             scorer.close()

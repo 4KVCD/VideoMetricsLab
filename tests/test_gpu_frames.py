@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import subprocess
+import threading
 from fractions import Fraction
 from pathlib import Path
 
@@ -415,6 +416,59 @@ def _next(stream):
     while True:
         with contextlib.suppress(TimeoutError):
             return stream.next(1000)
+
+
+class _Library:
+    """A decoder library whose nvf_close returns when `closes` says so."""
+
+    def __init__(self, closes: threading.Event) -> None:
+        self.closes, self.closed = closes, []
+
+    def nvf_abort(self, handle) -> None:
+        pass
+
+    def nvf_close(self, handle) -> None:
+        self.closes.wait()
+        self.closed.append(handle)
+
+
+def _open_stream(library) -> nv.GpuFrameStream:
+    """A stream as close() finds it: open, its feeding thread ended."""
+    stream = object.__new__(nv.GpuFrameStream)
+    stream.info, stream.backend, stream._lib, stream._handle = _info(), "nvidia", library, 7
+    stream._closing = False
+    stream._reader = type("Reader", (), {"close": lambda self: None})()
+    stream._feeder = threading.Thread(target=lambda: None)
+    return stream
+
+
+def test_a_decoder_that_never_closes_is_left_open_and_the_run_goes_on(monkeypatch, caplog):
+    """AMD's library has been seen never to return from closing a decoder:
+    the run hung at its end, scores and all."""
+    never = threading.Event()
+    library = _Library(never)
+    monkeypatch.setattr(nv, "_CLOSE_SECONDS", 0.01)
+    monkeypatch.setattr(nv, "_stuck_closes", 0)
+    stream = _open_stream(library)
+    try:
+        stream.close()  # returns, though the library's close has not
+        assert nv.stuck_decoders() == 1
+        assert library.closed == [] and stream._handle is None
+        assert "GPU decoder did not close" in caplog.text
+        stream.close()  # safe to call twice
+        assert nv.stuck_decoders() == 1
+    finally:
+        never.set()
+
+
+def test_a_decoder_that_closes_is_not_counted_as_stuck(monkeypatch):
+    done = threading.Event()
+    done.set()
+    library = _Library(done)
+    monkeypatch.setattr(nv, "_stuck_closes", 0)
+    stream = _open_stream(library)
+    stream.close()
+    assert library.closed == [7] and nv.stuck_decoders() == 0
 
 
 def _stream_fed(*timestamps):
