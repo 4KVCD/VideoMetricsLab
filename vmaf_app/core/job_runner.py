@@ -20,10 +20,11 @@ from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import ExecutionPlan, MetricTask, build_execution_plan
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+from vmaf_app.core.geometry import analysis_dimensions
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.metric_results import MetricResultSet, as_requested, frame_scores_from_results
 from vmaf_app.core.metrics import metric_definition
-from vmaf_app.core.models import ComparisonResult, FrameScores, VideoInfo, VmafOptions
+from vmaf_app.core.models import ComparisonResult, CropMode, FrameScores, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualRunError, PerceptualTaskOutput
 from vmaf_app.core.perceptual_vship import (
     GPU_ONLY_METRICS,
@@ -524,6 +525,10 @@ class JobRun:
         calculated after its GPU passes, holding the GPU's turn meanwhile,
         and were shown as GPU metrics."""
         options = self.job.options
+        # The size compared at, where it is known before the run: with black
+        # bars off. Cut, the pictures are even-sized (crop_detect).
+        size = (analysis_dimensions(self.job.source_info, self.job.distorted_info, options)
+                if options.crop_mode is CropMode.NONE and options.resample_test is None else None)
         tasks = []
         for task in plan.tasks:
             if task.backend_id == "perceptual":
@@ -539,7 +544,8 @@ class JobRun:
             if (task.backend_id != "ffmpeg" or not vmaf or options.resample_test is not None
                     or vmaf_cuda.scores_on_gpu("vmaf" in keys, "vmaf_neg" in keys, options.model,
                                                options.vmaf_on_gpu, analysis_bit_depth(
-                                                   self.job.source_info, self.job.distorted_info)) is None):
+                                                   self.job.source_info, self.job.distorted_info),
+                                               size=size) is None):
                 tasks.append(task)
                 continue
             # The planner keeps FFmpeg's metrics together, so a saved one is

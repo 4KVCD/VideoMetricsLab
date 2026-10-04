@@ -651,13 +651,24 @@ def start_gpu_vmaf_probe() -> None:
 
 
 def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
-                  enabled: bool = True, bit_depth: int = 8) -> dict[str, str] | None:
+                  enabled: bool = True, bit_depth: int = 8,
+                  size: tuple[int, int] | None = None) -> dict[str, str] | None:
     """The models a run scores on the GPU (gpu_models), or None when its
-    VMAF is calculated on the CPU: the video set to CPU (`enabled`, its
-    VmafOptions.vmaf_on_gpu), a custom model, a comparison deeper than 10
-    bits (`bit_depth`: the frames libvmaf pairs reach the GPU through
-    FFmpeg's overlay, which holds 8 and 10 bits), or no GPU libvmaf can use."""
-    if not enabled or bit_depth > 10:
+    VMAF is calculated on the CPU:
+    - the video set to CPU (`enabled`, its VmafOptions.vmaf_on_gpu);
+    - a custom model;
+    - a comparison deeper than 10 bits (`bit_depth`: the frames libvmaf
+      pairs reach the GPU through FFmpeg's overlay, which holds 8 and 10
+      bits);
+    - a comparison at an odd width or height (`size`, where it is known):
+      the pairs cross that overlay side by side on one 4:2:0 canvas
+      (vmaf_runner._gpu_pairs_stage), and FFmpeg's pad, which makes it,
+      keeps a 4:2:0 picture on whole chroma samples -- it gives an even
+      size and blacks out an odd picture's last column and row. The
+      attempt used to be made, fail in FFmpeg, and VMAF be calculated
+      again on the CPU after a "VMAF on the GPU failed";
+    - no GPU libvmaf can use."""
+    if not enabled or bit_depth > 10 or (size is not None and (size[0] & 1 or size[1] & 1)):
         return None
     models = gpu_models(compute_vmaf, compute_vmaf_neg, model)
     if models is None or not gpu_vmaf_available()[0]:

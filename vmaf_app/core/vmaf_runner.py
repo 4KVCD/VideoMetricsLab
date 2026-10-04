@@ -275,15 +275,19 @@ def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: 
     PSNR, SSIM or XPSNR beside it, VMAF on the GPU was refused and the
     video calculated again on the CPU.
 
-    The source goes at an even offset, so that an odd width still puts it
-    on a chroma sample."""
-    offset = width + (width & 1)
+    For an even width and height only (vmaf_cuda.scores_on_gpu sends an odd
+    comparison to the CPU): pad gives a 4:2:0 picture an even size and
+    blacks out an odd one's last column and row, and crop cuts on whole
+    chroma samples. An odd width was once given an even offset here, and
+    the run still failed in FFmpeg, every time."""
+    if width & 1 or height & 1:
+        raise ValueError(f"the GPU's frame pairs need an even size, not {width}x{height}")
     sync = ":".join(FRAMESYNC_OPTS)
-    return (f"[{main_label}]pad={offset + width}:{height}[vmaf_canvas];"
-            f"[vmaf_canvas][{ref_label}]overlay=x={offset}:y=0:eval=init:"
+    return (f"[{main_label}]pad={2 * width}:{height}[vmaf_canvas];"
+            f"[vmaf_canvas][{ref_label}]overlay=x={width}:y=0:eval=init:"
             f"format={_OVERLAY_FORMAT[analysis_format]}:{sync},split=2[vmaf_left][vmaf_right];"
             f"[vmaf_left]crop={width}:{height}:0:0[vmaf_dist];"
-            f"[vmaf_right]crop={width}:{height}:{offset}:0[vmaf_ref]")
+            f"[vmaf_right]crop={width}:{height}:{width}:0[vmaf_ref]")
 
 
 def analysis_bit_depth(source_info: VideoInfo, distorted_info: VideoInfo) -> int:
@@ -971,7 +975,8 @@ def run_vmaf(
     gpu_models = None
     if not set(options.requested_metrics()) - {"vmaf", "vmaf_neg"}:
         gpu_models = vmaf_cuda.scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, effective_model,
-                                             options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info))
+                                             options.vmaf_on_gpu, analysis_bit_depth(source_info, distorted_info),
+                                             size=dimensions)
     if gpu_models is not None:
         plan = _GpuPlan(gpu_models, *dimensions, analysis_bit_depth(source_info, distorted_info))
         frames = _run_on_gpu(

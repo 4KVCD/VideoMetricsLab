@@ -61,10 +61,37 @@ def test_the_graph_gives_the_gpu_libvmafs_frame_pairs_and_nothing_else():
     assert "libvmaf" not in graph and "xpsnr" not in graph
 
 
-def test_an_odd_width_puts_the_source_on_a_chroma_sample():
-    stage = vr._gpu_pairs_stage("yuv420p10le", 1365, 768, "main", "ref")
-    assert "pad=2731:768" in stage and "overlay=x=1366:" in stage and "format=yuv420p10:" in stage
-    assert stage.endswith("[vmaf_right]crop=1365:768:1366:0[vmaf_ref]")
+def test_a_comparison_at_an_odd_size_is_scored_on_the_cpu(monkeypatch):
+    """The GPU's pairs cross FFmpeg's overlay on one 4:2:0 canvas, which pad
+    cannot make odd-sized: the attempt failed in FFmpeg ("VMAF on the GPU
+    failed") and VMAF was calculated again on the CPU, every time."""
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    model = "version=vmaf_v0.6.1"
+    assert vmaf_cuda.scores_on_gpu(True, False, model, size=(1366, 768)) == {"vmaf": "vmaf_v0.6.1"}
+    assert vmaf_cuda.scores_on_gpu(True, False, model, size=None) == {"vmaf": "vmaf_v0.6.1"}
+    for size in ((1365, 768), (1366, 767), (853, 479)):
+        assert vmaf_cuda.scores_on_gpu(True, False, model, size=size) is None
+    with pytest.raises(ValueError, match="even size"):
+        vr._gpu_pairs_stage("yuv420p10le", 1365, 768, "main", "ref")
+    stage = vr._gpu_pairs_stage("yuv420p10le", 1366, 768, "main", "ref")
+    assert "pad=2732:768" in stage and "overlay=x=1366:" in stage and "format=yuv420p10:" in stage
+
+
+def test_an_odd_sized_video_with_black_bars_off_has_its_vmaf_in_ffmpegs_half(monkeypatch):
+    """Known before the run only with black bars off; cut, the pictures are
+    even-sized. No GPU attempt is made, and the run line shows VMAF as a
+    CPU metric from the start."""
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+
+    def halves(width, height, crop_mode):
+        job = job_runner.VmafJob(_info("s.mp4", width, height), _info("d.mp4", width, height),
+                                 VmafOptions(crop_mode=crop_mode), label="d", metric_keys=("vmaf", "psnr"))
+        run = job_runner.JobRun(job_runner.JobScheduler([job]), 0, job)
+        return [(task.backend_id, task.metric_keys) for task in run.plan.tasks]
+
+    assert halves(853, 479, CropMode.NONE) == [("ffmpeg", ("vmaf", "psnr"))]
+    assert halves(854, 480, CropMode.NONE) == [("ffmpeg", ("psnr",)), (job_runner.GPU_VMAF, ("vmaf",))]
+    assert halves(853, 479, CropMode.AUTO) == [("ffmpeg", ("psnr",)), (job_runner.GPU_VMAF, ("vmaf",))]
 
 
 def test_a_12_bit_comparison_is_scored_on_the_cpu(monkeypatch):
