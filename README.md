@@ -7,6 +7,7 @@ A Windows desktop app for measuring and comparing video encode quality.
 - Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli, and ColorVideo VDP for multiple test videos.
 - Vship integration for GPU acceleration for ColorVideo VDP, SSIMULACRA2, and Butteraugli, on NVIDIA (CUDA), AMD (HIP) and any other GPU with a Vulkan driver
 - GPU acceleration for VMAF v0.6.1 and VMAF NEG on NVIDIA GPUs (GeForce GTX 16 and RTX 20 series or newer), with a bundled libvmaf built with CUDA
+- GPU metrics decode each video with the GPU's own decoder (NVIDIA, Intel and AMD) inside the scoring process, for the same scores at a fraction of the CPU use
 - libjxl integration for CPU fallback for SSIMULACRA2, and Butteraugli (no CPU support for ColorVideo VDP)
 - VMAF v0.6.1 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
 - Compare metric curves, statistics, and per-frame scores (per second for ColorVideo VDP).
@@ -212,6 +213,14 @@ Third-party components retain their own licenses; see
   apart from VMAF v1, PSNR, SSIM and XPSNR, which stay on the CPU, so they do
   not slow it down. If the GPU fails, that video's VMAF is calculated on the
   CPU.
+- The GPU metrics now decode each video with the GPU's own decoder, inside the
+  process that scores it, on NVIDIA, Intel and AMD GPUs (H.264, HEVC and AV1,
+  8- and 10-bit 4:2:0). FFmpeg used to decode on the GPU, copy every picture
+  back to memory and pipe it across, which took most of a GPU metric's CPU
+  time. The scores are the same; CPU use is about 15 times lower on NVIDIA and
+  about 3 times lower on Intel. On NVIDIA the pictures for VMAF never leave
+  the GPU. Anything else (other codecs, 4:2:2, 4:4:4, 12-bit, interlaced or
+  damaged streams) is decoded through FFmpeg as before.
 - Updated Vship's Vulkan build (Intel GPUs, or Settings > GPU metrics > GPU
   backend set to Vulkan) to 5.1.2. SSIMULACRA2 is now calculated on the GPU
   with it: Vship 5.1.1's Vulkan build scored it up to 17 points too high on
@@ -249,6 +258,45 @@ Third-party components retain their own licenses; see
   with "the JSON object must be str, bytes or bytearray, not NoneType".
 - Cancelling a run now leaves the videos it never reached as they were, instead
   of marking them Cancelled.
+- SSIMULACRA2, Butteraugli and CVVDP now compare each test frame with the
+  source frame nearest in time, as VMAF, PSNR, SSIM and XPSNR have since v1.3.
+  They were paired by position, so a frame dropped from the test video put
+  every later pair one frame apart.
+- SSIMULACRA2 and Butteraugli on the CPU now read a video's colors as the GPU
+  does, and Butteraugli uses the same norm and display brightness. A tagged
+  BT.709 film scored 40.4 SSIMULACRA2 on the CPU against 55.1 on the GPU; the
+  two now agree closely on SDR video. Saved CPU scores are calculated again
+  once.
+- A comparison resized with any scaling algorithm is now treated as the same
+  comparison, so its saved scores are found again after the algorithm is
+  changed.
+- Fixed wrong SSIMULACRA2, Butteraugli and CVVDP scores for AV1 and VP9 videos
+  with an odd width or height when GPU decoding was on (NVIDIA): FFmpeg's
+  hardware decode returned a padded picture, with wrong chroma for odd
+  heights. Such videos are now decoded on the CPU.
+- A video at 24 fps is no longer accepted against one at 23.976 fps (or 30
+  against 29.97, 60 against 59.94). Their frames drift a frame apart every 42
+  seconds, which gave scores for frames that were not each other's.
+- Fixed FFmpeg's GPU decoding never being used on AMD GPUs: every run started
+  with a failed attempt and decoded on the CPU.
+- The Video bitrate column now shows the video stream's own bitrate. For MKV
+  files it showed the whole file's, soundtrack included; where only that is
+  known, it is marked with "≈".
+- Fixed MP4 files with cover art: the cover could be compared, scanned or
+  played instead of the video.
+- Fixed a video whose soundtrack runs longer than its picture failing with
+  "Durations do not match".
+- Fixed a crash at startup or when opening Video Compare that affected about
+  one start in five when the app was launched from another Python program.
+- Fixed XPSNR being calculated for every frame, and then dropped from the
+  table, when libvmaf frame subsampling was on and VMAF ran on the GPU.
+- Loading a saved run of a video already in the list now replaces its row
+  instead of adding a second one.
+- A settings file with a wrong value no longer stops a setting from working
+  later; that setting keeps its default. Settings are saved in one step, so a
+  crash cannot leave half a file.
+- The window fits its default width in every language with wider system
+  fonts.
 - Included various small bug fixes and reliability improvements.
 
 ### How VMAF on the GPU works
@@ -290,11 +338,18 @@ not fixed yet). Every frame's VMAF is within 0.00006 of the CPU's, and VMAF
 NEG within 0.0008, so a saved score is reused whichever calculated it.
 
 `scripts/build_libvmaf_cuda.ps1` builds it from exactly these commits, and two
-builds give the same file. FFmpeg still decodes the videos; libvmaf scores
-them on the GPU in a process of its own, so a crash in it or in the NVIDIA
-driver calculates that video's VMAF on the CPU instead of closing the app.
-VMAF v1 (which has no CUDA version), custom models, resolution tests and
-12-bit videos stay on the CPU.
+builds give the same file. libvmaf scores on the GPU in a process of its own,
+so a crash in it or in the NVIDIA driver calculates that video's VMAF on the
+CPU instead of closing the app.
+
+Where NVIDIA's decoder can decode both videos, that process decodes them too:
+the pictures are cropped, scaled and paired on the GPU and handed to libvmaf
+there, without ever being copied to system memory. Otherwise FFmpeg decodes
+and pairs the frames and pipes them to it. Either way the frames are paired
+by timestamp exactly as FFmpeg's own libvmaf filter pairs them.
+
+VMAF v1 (which has no CUDA version), custom models, resolution tests, 12-bit
+videos and comparisons at an odd width or height stay on the CPU.
 
 Thanks to the authors of these pull requests. We hope they are merged, so that
 everyone gets accurate VMAF on the GPU.
@@ -304,3 +359,6 @@ everyone gets accurate VMAF on the GPU.
 - On the integrated Intel GPU of a Core Ultra 9 285K, CVVDP fails on 4K videos
   ("A GPU Call failed inside Vship"). SSIMULACRA2 and Butteraugli are not
   affected.
+- On HDR (PQ) video, SSIMULACRA2 on the CPU and on the GPU still differ
+  widely (35 against 47 on one film): libjxl's tool handles HDR in its own
+  way. Butteraugli agrees (2.89 against 2.88). Use the GPU score for HDR.
