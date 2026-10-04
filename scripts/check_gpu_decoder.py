@@ -73,7 +73,7 @@ def gpu_sums(info, plan, backend):
 
 def cpu_sums(path, plan, frames=None):
     fmt = "yuv420p10le" if plan.bit_depth > 8 else "yuv420p"
-    out = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf",
+    out = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:V:0", "-vf",
                           f"crop={plan.crop_w}:{plan.crop_h}:{plan.crop_x}:{plan.crop_y},format={fmt}",
                           "-fps_mode", "passthrough", *(["-frames:v", str(frames)] if frames else []),
                           "-f", "framemd5", "-"], capture_output=True, text=True, check=True).stdout
@@ -144,7 +144,7 @@ def check_scores(source: Path, backend: str, work: Path) -> str:
     from vmaf_app.core.models import CropMode, VmafOptions
 
     test = work / "test.mkv"
-    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-i", str(source), "-map", "0:v:0", "-t", "10",
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-i", str(source), "-map", "0:V:0", "-t", "10",
                     "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "30", "-preset", "veryfast", str(test)],
                    check=True)
     options = VmafOptions(crop_mode=CropMode.NONE, gpu_decode=True, gpu_vendor=VENDORS[backend], duration_limit=10.0)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_extract import (
     FrameComparison,
     PreviewColorMode,
@@ -139,7 +139,7 @@ def build_video_series_command(
     graph = []
     for index in range(len(inputs)):
         outputs = [f"[in{n}]" for n, i in enumerate(recipe_inputs) if i == index]
-        graph.append(f"[{index}:v:0]split={len(outputs)}" + "".join(outputs))
+        graph.append(f"[{index}:{VIDEO_STREAM}]split={len(outputs)}" + "".join(outputs))
     for n, (comparison, side, size) in enumerate(recipes):
         info = frame_video_info(comparison, side)
         crop = comparison.source_crop if side == "source" else comparison.distorted_crop
@@ -263,7 +263,7 @@ def _side_chain(
     # the UI can flip halves without consulting two independent media clocks.
     fps = f"{comparison.fps:.12g}"
     return (
-        f"[{input_index}:v]{prefix}{filters},fps={fps},"
+        f"[{input_index}:{VIDEO_STREAM}]{prefix}{filters},fps={fps},"
         f"setpts=N/({fps}*TB)[{side}]"
     )
 

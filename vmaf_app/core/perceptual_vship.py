@@ -50,7 +50,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.gpu import (
     GPU_PASS,
@@ -1917,7 +1917,7 @@ def _score_vship_pass_with(
             command = [
                 ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-nostdin",
                 *hwaccel_args(accel),
-                "-i", str(info.path.resolve()), "-map", "0:v:0", "-an", "-sn", "-dn",
+                "-i", str(info.path.resolve()), "-map", f"0:{VIDEO_STREAM}", "-an", "-sn", "-dn",
                 "-vf", filter_chain,
             ]
             if request.recipe.duration_limit > 0:

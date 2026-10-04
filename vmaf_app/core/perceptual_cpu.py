@@ -27,7 +27,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
@@ -221,8 +221,8 @@ def _image_filtergraph(
         return f"[{input_label}]{','.join(ops)}[{output_label}]"
 
     return ";".join((
-        chain("0:v", "distorted", distorted_crop, distorted, distorted_target),
-        chain("1:v", "reference", source_crop, source, source_target),
+        chain(f"0:{VIDEO_STREAM}", "distorted", distorted_crop, distorted, distorted_target),
+        chain(f"1:{VIDEO_STREAM}", "reference", source_crop, source, source_target),
     ))
 
 

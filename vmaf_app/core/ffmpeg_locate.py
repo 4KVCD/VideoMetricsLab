@@ -22,6 +22,13 @@ _SETTINGS_APP = "VmafCalculator"
 # developed and tested against.
 MINIMUM_FFMPEG_VERSION = (9,)
 
+#: The stream every command reads from an input: the first video stream
+#: that is not a picture. FFmpeg lists cover art and thumbnails as video
+#: streams too, and an MP4's cover (covr) can come before its video track:
+#: "v:0" then compared, scanned or played the picture. "V" leaves them out.
+#: ffprobe.probe_video describes the same stream.
+VIDEO_STREAM = "V:0"
+
 _WINGET_PACKAGE_GLOBS = [
     r"AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg-*-full_build\bin",
     r"AppData\Local\Microsoft\WinGet\Packages\BtbN.FFmpeg*\bin",

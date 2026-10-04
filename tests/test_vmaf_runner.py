@@ -68,8 +68,8 @@ def test_source_is_downscaled_not_distorted_upscaled_when_distorted_is_lower_res
     )
 
     main_chain, ref_chain, _ = graph.split(";")
-    assert main_chain.startswith("[0:v]")
-    assert ref_chain.startswith("[1:v]")
+    assert main_chain.startswith("[0:V:0]")
+    assert ref_chain.startswith("[1:V:0]")
     assert "scale=1280:720" not in main_chain  # distorted is NOT upscaled
     assert "scale=1280:720" in ref_chain  # source IS downscaled to match distorted
 
@@ -159,7 +159,7 @@ def test_hwdownload_inserted_when_gpu_decode_used():
         hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
     )
 
-    assert "[1:v]hwdownload,format=nv12,format=yuv420p" in graph
+    assert "[1:V:0]hwdownload,format=nv12,format=yuv420p" in graph
 
 
 def test_hwdownload_uses_p010_for_10bit_source():
@@ -175,7 +175,7 @@ def test_hwdownload_uses_p010_for_10bit_source():
         hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
     )
 
-    assert "[1:v]hwdownload,format=p010le,format=yuv420p" in graph
+    assert "[1:V:0]hwdownload,format=p010le,format=yuv420p" in graph
 
 
 def test_default_n_threads_resolves_to_cpu_count_not_omitted():
@@ -280,8 +280,8 @@ def test_resample_filtergraph_is_single_input_split_into_two_branches():
         source_info, options, source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
     )
 
-    assert "[1:v]" not in graph  # only one input -- everything derives from [0:v]
-    assert "[0:v]" in graph
+    assert "[1:V:0]" not in graph  # only one input -- everything derives from [0:V:0]
+    assert "[0:V:0]" in graph
     assert "split=2" in graph
     assert "[main][ref]libvmaf=" in graph
 
@@ -852,7 +852,7 @@ def test_a_gpu_decoded_distorted_input_is_downloaded_before_filtering():
     )
     main_chain = graph.split(";")[0]
 
-    assert main_chain.startswith("[0:v]hwdownload,format=nv12,crop=")
+    assert main_chain.startswith("[0:V:0]hwdownload,format=nv12,crop=")
     assert "hwdownload" not in graph.split(";")[1], "the source was not GPU-decoded"
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.models import (
     ComparisonResult,
     CropBox,
@@ -316,7 +316,7 @@ def build_frame_command(
         "-loglevel", "error",
         "-ss", f"{timestamp:.9f}",
         "-i", str(frame_input_path(comparison, side).resolve()),
-        "-map", "0:v:0",
+        "-map", f"0:{VIDEO_STREAM}",
         "-an", "-sn", "-dn",
         "-vf", frame_filter(comparison, side, color_settings),
         "-frames:v", "1",

@@ -20,11 +20,64 @@ class ProbeCancelled(RuntimeError):  # noqa: N818 - expected control flow
 
 
 def _parse_frame_rate(rate_str: str) -> float:
-    if "/" in rate_str:
-        num, den = rate_str.split("/", 1)
-        num, den = float(num), float(den)
-        return num / den if den else 0.0
-    return float(rate_str)
+    """A rate as ffprobe prints it ("24000/1001", "25"); 0 for one it
+    could not tell ("N/A", "0/0"), as for a missing one."""
+    try:
+        if "/" in rate_str:
+            num, den = rate_str.split("/", 1)
+            num, den = float(num), float(den)
+            return num / den if den else 0.0
+        return float(rate_str)
+    except ValueError:
+        return 0.0
+
+
+def _video_stream(streams: list[dict]) -> dict | None:
+    """The first video stream that is a video: not cover art or a
+    thumbnail, which FFmpeg lists as video streams too -- an MP4's cover
+    (covr) can come before its video track. The same stream FFmpeg's
+    commands read (ffmpeg_locate.VIDEO_STREAM)."""
+    for stream in streams:
+        disposition = stream.get("disposition") or {}
+        if (stream.get("codec_type") == "video" and not disposition.get("attached_pic")
+                and not disposition.get("timed_thumbnails")):
+            return stream
+    return None
+
+
+def _tag(stream: dict, name: str) -> str | None:
+    """A stream tag, by its name in any case (Matroska writers differ)."""
+    for key, value in (stream.get("tags") or {}).items():
+        if key.upper() == name:
+            return value
+    return None
+
+
+def _clock_seconds(text: str | None) -> float | None:
+    """ "01:45:36.289000000" in seconds, or None."""
+    try:
+        hours, minutes, seconds = (text or "").split(":")
+        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except ValueError:
+        return None
+
+
+def _stream_duration(stream: dict, container: float) -> float:
+    """The video's own length. A Matroska file gives no stream duration,
+    and the container's is its longest stream's -- an audio track running
+    on after the picture, which then failed "Durations do not match", or
+    made a whole video read as cut short. Its writers record each track's
+    length as a DURATION tag; one longer than the container is stale (left
+    by a remux that cut the file) and is not used."""
+    if stream.get("duration"):
+        try:
+            return float(stream["duration"])
+        except ValueError:
+            pass
+    tagged = _clock_seconds(_tag(stream, "DURATION"))
+    if tagged is not None and tagged > 0 and (container <= 0 or tagged <= container + 0.5):
+        return tagged
+    return container
 
 
 def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> VideoInfo:
@@ -84,10 +137,9 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         raise ProbeError(f"Could not parse ffprobe output for {path}") from e
 
     streams = data.get("streams", [])
-    video_streams = [s for s in streams if s.get("codec_type") == "video"]
-    if not video_streams:
+    v = _video_stream(streams)
+    if v is None:
         raise ProbeError(f"No video stream found in {path}")
-    v = video_streams[0]
     fmt = data.get("format", {})
 
     fps = _parse_frame_rate(v.get("avg_frame_rate") or v.get("r_frame_rate") or "0/1")
@@ -95,7 +147,11 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
     nominal_fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
 
-    duration = float(v.get("duration") or fmt.get("duration") or 0.0)
+    try:
+        container = float(fmt.get("duration") or 0.0)
+    except ValueError:
+        container = 0.0
+    duration = _stream_duration(v, container)
 
     nb_frames = 0
     if v.get("nb_frames"):

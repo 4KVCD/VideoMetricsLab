@@ -163,7 +163,7 @@ def test_packet_scan_selects_only_video_and_sorts_decode_order_by_pts(
 
     data = analyze_video_bitrate(info)
 
-    assert captured[0][captured[0].index("-select_streams") + 1] == "v:0"
+    assert captured[0][captured[0].index("-select_streams") + 1] == "V:0"
     np.testing.assert_allclose(data.times, [0.0, 0.033, 0.066])
     np.testing.assert_array_equal(data.sizes, [1000, 200, 300])
     np.testing.assert_array_equal(data.keyframes, [True, False, False])

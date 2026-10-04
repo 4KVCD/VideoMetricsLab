@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.gpu import hw_native_format, hwaccel_args
 from vmaf_app.core.models import CropBox, VideoInfo
 
@@ -110,6 +110,7 @@ def _window_command(
         *hwaccel_args(hwaccel),
         "-ss", f"{start:.3f}",
         "-i", path,
+        "-map", f"0:{VIDEO_STREAM}",
         "-t", f"{window:.3f}",
         "-vf", filters,
         "-f", "null", "-",

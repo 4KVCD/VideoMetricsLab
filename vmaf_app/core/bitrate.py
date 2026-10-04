@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffprobe_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffprobe_path
 from vmaf_app.core.models import VideoInfo
 from vmaf_app.core.process_control import ProcessHandle
 
@@ -150,7 +150,7 @@ def analyze_video_bitrate(
         raise BitrateError(f"Video file is missing: {info.path}")
     fallback_duration = 1.0 / info.fps if info.fps > 0 else 0.0
     command = [
-        ffprobe_path(), "-v", "error", "-select_streams", "v:0",
+        ffprobe_path(), "-v", "error", "-select_streams", VIDEO_STREAM,
         "-show_packets",
         "-show_entries", "packet=pts_time,dts_time,duration_time,size,pos,flags",
         "-of", "compact=p=0:nk=0", str(info.path),

@@ -67,7 +67,7 @@ def test_pair_command_crops_tone_maps_and_packs_one_frame_clock():
     )
     graph = command[command.index("-filter_complex") + 1]
 
-    assert "[0:v]hwdownload,format=p010le" in graph
+    assert "[0:V:0]hwdownload,format=p010le" in graph
     assert "crop=3840:1608:0:276" in graph
     assert "scale=1280:536" in graph
     assert graph.count("tonemap=mobius") == 2

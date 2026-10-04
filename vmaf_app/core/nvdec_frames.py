@@ -56,7 +56,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path, ffprobe_path
 from vmaf_app.core.models import CropBox, VideoInfo
 
 _log = logging.getLogger(__name__)
@@ -319,8 +319,8 @@ class _PacketReader:
             # -y: the listing's pipe exists already (this process serves it).
             ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
             "-i", str(Path(path).resolve()),
-            "-map", "0:v:0", "-c:v", "copy", "-copyinkf", *filters, "-f", "data", "pipe:1",
-            "-map", "0:v:0", "-c:v", "copy", "-copyinkf", *filters, "-flush_packets", "1", "-f", "framecrc",
+            "-map", f"0:{VIDEO_STREAM}", "-c:v", "copy", "-copyinkf", *filters, "-f", "data", "pipe:1",
+            "-map", f"0:{VIDEO_STREAM}", "-c:v", "copy", "-copyinkf", *filters, "-flush_packets", "1", "-f", "framecrc",
             self.pipe_path,
         ]
         self._process_handle = process_handle
@@ -499,7 +499,7 @@ def _av1_sequence_header(path: Path) -> bytes:
     """The AV1 sequence header OBUs of `path`'s stream configuration (its
     av1C box minus the box's own 4-byte header), as FFmpeg's NVDEC decoder
     gives them to NVIDIA's parser. Empty when there is none."""
-    command = [ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=extradata",
+    command = [ffprobe_path(), "-v", "error", "-select_streams", VIDEO_STREAM, "-show_entries", "stream=extradata",
                "-show_data", "-of", "default=noprint_wrappers=1", str(Path(path).resolve())]
     try:
         output = proc_util.run(command, capture_output=True, text=True, timeout=60).stdout

@@ -136,3 +136,50 @@ def test_probe_preserves_hdr_colour_tags(monkeypatch):
     assert info.color_space == "bt2020nc"
     assert info.color_transfer == "smpte2084"
     assert info.color_primaries == "bt2020"
+
+
+def _probe_payload(monkeypatch, streams, fmt):
+    _fake_popen(monkeypatch, FakeFfprobe(stdout=json.dumps({"streams": streams, "format": fmt})))
+    return ffprobe.probe_video(Path("v.mkv"))
+
+
+_VIDEO = {"codec_type": "video", "codec_name": "hevc", "width": 3840, "height": 2160, "pix_fmt": "yuv420p10le",
+          "avg_frame_rate": "24000/1001", "r_frame_rate": "24000/1001"}
+
+
+def test_cover_art_listed_before_the_video_is_not_taken_for_it(monkeypatch):
+    """An MP4's cover (covr) can be the first video stream FFmpeg lists:
+    the app then described, and compared, a still picture."""
+    cover = {"codec_type": "video", "codec_name": "mjpeg", "width": 600, "height": 600,
+             "disposition": {"attached_pic": 1}}
+    info = _probe_payload(monkeypatch, [cover, {**_VIDEO, "duration": "10.0"}], {"duration": "10.0"})
+    assert (info.codec_name, info.width) == ("hevc", 3840)
+
+
+def test_only_cover_art_is_no_video(monkeypatch):
+    cover = {"codec_type": "video", "codec_name": "png", "width": 600, "height": 600,
+             "disposition": {"attached_pic": 1}}
+    with pytest.raises(ProbeError, match="No video stream"):
+        _probe_payload(monkeypatch, [cover], {"duration": "10.0"})
+
+
+def test_a_matroska_videos_length_is_its_own_not_the_soundtracks(monkeypatch):
+    """Matroska gives no stream duration; the container's is the longest
+    track's. An audio track running on after the picture made "Durations do
+    not match" -- or a whole video read as cut short."""
+    video = {**_VIDEO, "tags": {"DURATION": "01:45:36.289000000"}}
+    info = _probe_payload(monkeypatch, [video], {"duration": "6340.0"})
+    assert info.duration == pytest.approx(6336.289)
+
+
+def test_a_stale_duration_tag_longer_than_the_file_is_not_used(monkeypatch):
+    """A remux that cut the file can keep the original's DURATION tag."""
+    video = {**_VIDEO, "tags": {"DURATION": "01:45:36.289000000"}}
+    info = _probe_payload(monkeypatch, [video], {"duration": "600.0"})
+    assert info.duration == 600.0
+
+
+def test_an_unknown_frame_rate_is_zero_not_an_exception(monkeypatch):
+    video = {**_VIDEO, "avg_frame_rate": "N/A", "r_frame_rate": "N/A", "duration": "1.0"}
+    info = _probe_payload(monkeypatch, [video], {"duration": "1.0"})
+    assert info.fps == 0.0

@@ -21,7 +21,7 @@ import numpy as np
 from vmaf_app.core import nvdec_frames, vmaf_cuda
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, detect_crop, detect_pair
-from vmaf_app.core.ffmpeg_locate import check_tools, ffmpeg_path, format_version
+from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
 from vmaf_app.core.gpu import (
     GPU_PASS,
@@ -500,7 +500,7 @@ def _build_filtergraph(
         # resolution) -- see ScaleDirection.
         main_ops.append(f"scale={ref_content_w}:{ref_content_h}:flags={options.scale_algorithm}")
     main_ops.append("setpts=PTS-STARTPTS")
-    main_chain = f"[0:v]{','.join(main_ops)}[main]"
+    main_chain = f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[main]"
 
     # --- source / reference (input 1) chain ---
     ref_ops = []
@@ -519,7 +519,7 @@ def _build_filtergraph(
         ref_ops.append(f"scale={dist_content_w}:{dist_content_h}:flags={options.scale_algorithm}")
 
     ref_ops.append("setpts=PTS-STARTPTS")
-    ref_chain = f"[1:v]{','.join(ref_ops)}[ref]"
+    ref_chain = f"[1:{VIDEO_STREAM}]{','.join(ref_ops)}[ref]"
 
     compared_w, compared_h = (
         (ref_content_w, ref_content_h) if upscale_distorted else (dist_content_w, dist_content_h))
@@ -544,7 +544,7 @@ def _build_resample_test_filtergraph(
     source is decoded once and split into an untouched reference branch and
     a "distorted" branch that's scaled down to the target width (preserving
     the source's own aspect ratio) and back up to the source's original
-    resolution -- there's no second file, both branches come from [0:v].
+    resolution -- there's no second file, both branches come from the one input.
     """
     target = options.resample_test
     assert target is not None
@@ -569,7 +569,7 @@ def _build_resample_test_filtergraph(
     base_ops.append(f"format={analysis_format}")
     if source_crop and not source_crop.is_noop(source_info.width, source_info.height):
         base_ops.append(source_crop.as_filter())
-    base_chain = f"[0:v]{','.join(base_ops)}[base]"
+    base_chain = f"[0:{VIDEO_STREAM}]{','.join(base_ops)}[base]"
 
     split_chain = "[base]split=2[ref_src][dist_src]"
     ref_chain = "[ref_src]setpts=PTS-STARTPTS[ref]"
