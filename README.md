@@ -109,6 +109,14 @@ Licensed under the [MIT License](LICENSE). Copyright (c) 2026 **4KVCD**.
 Third-party components retain their own licenses; see
 [Third-Party Notices](docs/THIRD_PARTY.md).
 
+### ❤️ Enjoying VideoMetricsLab?
+
+If VideoMetricsLab has been useful to you, I'd love to hear from you!
+
+[💬 Leave a comment / say thanks](LINK_TO_DISCUSSION)
+
+You can also ⭐ star the repository — it helps me know people are finding the project useful.
+
 ## v1.1 changelog
 
 - Added bundled Netflix VMAF v1.0 model files for standard, phone, 4K, and HFR analysis.
