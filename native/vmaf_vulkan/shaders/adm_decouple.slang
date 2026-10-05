@@ -113,6 +113,26 @@ int saturate32(int64_t v)
     return int(clamp(v, int64_t(-2147483647 - 1), int64_t(2147483647)));
 }
 
+// divTable's entry for o, 2^30 / o as the CUDA kernel reads it at
+// o + 32768, read at |o| + 32768 and negated for a negative o. The entry is
+// a float division truncated towards zero, so the entry of -o is minus the
+// entry of o exactly; -32768 has no positive twin, and its entry is -32768.
+//
+// A Radeon 780M's driver (32.0.21028.21 and 32.0.31041.1004 alike) reads
+// divTable[o + 32768] as 0 for every o below -1, though the table in its
+// memory is right (read back) and so is the SPIR-V: rest came out 0 wherever
+// o was negative, and the GPU's sums failed the probe. The upper half of the
+// table it reads correctly.
+int reciprocal(int o)
+{
+    if (o == 0)
+        return 0;
+    if (o == -32768)
+        return -32768;
+    int entry = int(divTable[abs(o) + 32768]);
+    return o < 0 ? -entry : entry;
+}
+
 [shader("compute")]
 [numthreads(16, 8, 1)]
 void main(uint3 id : SV_DispatchThreadID)
@@ -145,25 +165,25 @@ void main(uint3 id : SV_DispatchThreadID)
         int product = k * o[b];
         int rest = saturate32(int64_t((product + 16384) >> 15) * limit);
 #else
-        int quotient = 0;  // divTable's entry: 2^30 / o
-        if (o[b] != 0)
-            quotient = int(divTable[o[b] + 32768]);
 #if VARIANT == 0
+        int quotient = reciprocal(o[b]);
         // k = clamp((quotient * t + 16384) >> 15, 0, 32768) and
-        // rest = ((k * o + 16384) >> 15) * limit, in 32-bit steps. The CUDA
-        // kernel's 64-bit expressions (VARIANT 1) gave rest = 0 on a Radeon
-        // 780M whenever o and t were both negative: its driver's fault, and
-        // its sums failed the probe. With quotient = high * 2^15 + low, low
-        // in 0..32767:
+        // rest = ((k * o + 16384) >> 15) * limit, in 32-bit steps, which give
+        // what the CUDA kernel's 64-bit expressions (VARIANT 1) give. With
+        // quotient = high * 2^15 + low, low in 0..32767:
         //   (quotient * t + 16384) >> 15 = high * t + ((low * t + 16384) >> 15)
         // exactly, and neither term passes 2^30: the bands are 16-bit here.
-        // rest is at most 32768 * 100, so nothing saturates. The same sums
-        // as the 64-bit ones on every GPU that gets those right.
+        // rest is at most 32768 * 100, so nothing saturates.
         if (o[b] != 0)
             k = clamp((quotient >> 15) * t[b] + (((quotient & 32767) * t[b] + 16384) >> 15), 0, 32768);
         int product = k * o[b];
         int rest = ((product + 16384) >> 15) * int(limit);
 #else
+        // The table read at o + 32768, as it was: what a Radeon 780M's
+        // driver reads as 0 for a negative o (see reciprocal).
+        int quotient = 0;
+        if (o[b] != 0)
+            quotient = int(divTable[o[b] + 32768]);
         if (o[b] != 0)
             k = clamp(int((int64_t(quotient) * t[b] + 16384) >> 15), 0, 32768);
         int product = k * o[b];

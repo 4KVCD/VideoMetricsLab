@@ -1676,11 +1676,13 @@ VV_EXPORT int vv_sums(vv_context *context, unsigned index, uint64_t *out, int co
 VV_EXPORT const char *vv_device_name(vv_context *context) { return context->deviceName.c_str(); }
 
 // A device buffer's first `bytes` bytes, after vv_flush; for tests. `which`:
-// 0 admR, 1 admA, 2 admF, 3 bandsRef[0], 4 bandsDis[0], 5 bandsRef[1], 6 bandsDis[1], 7 vifTmp.
+// 0 admR, 1 admA, 2 admF, 3 bandsRef[0], 4 bandsDis[0], 5 bandsRef[1], 6 bandsDis[1], 7 vifTmp,
+// 8 the division table, 9 the logarithm table.
 VV_EXPORT int vv_read_buffer(vv_context *context, int which, void *out, uint64_t bytes)
 {
     Buffer *all[] = { &context->admR, &context->admA, &context->admF, &context->bandsRef[0], &context->bandsDis[0],
-                      &context->bandsRef[1], &context->bandsDis[1], &context->vifTmp };
+                      &context->bandsRef[1], &context->bandsDis[1], &context->vifTmp, &context->divTable,
+                      &context->logTable };
     if (which < 0 || which >= (int)(sizeof all / sizeof all[0]))
         return fail(-3, "no such buffer");
     Buffer *source = all[which];

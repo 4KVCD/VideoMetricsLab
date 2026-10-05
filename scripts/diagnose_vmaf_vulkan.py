@@ -11,11 +11,15 @@ Scores the probe's frames (vmaf_vulkan.probe_frames) at 8 and 10 bits:
    reference's. The first pass after which something differs is the shader
    that goes wrong; its differing 256-word blocks are counted and the first
    of them printed, to look up against the reference where it was made.
-3. The scale-0 decouple shader (where a Radeon 780M first differed) built
-   other ways (VARIANT in shaders/adm_decouple.slang): in 64 bits, as the
-   CUDA kernel has it and as it was until 2026-10 -- the sums of that -- and
-   with one step of the 64-bit calculation written out in place of the
-   result, to see which step a driver gets wrong.
+3. The scale-0 decouple shader (where a Radeon 780M first differed) as it
+   was until 2026-10 (VARIANT in shaders/adm_decouple.slang): reading the
+   division table at o + 32768 and calculating in 64 bits as the CUDA kernel
+   does -- the sums of that -- and with one step of it written out in place
+   of the result, and the table as the GPU's memory holds it. On the Radeon
+   780M (driver 32.0.21028.21) these differ and the table is right: its
+   driver reads the table as 0 for a negative o. The shader the app uses
+   reads it at |o| + 32768, so they differing there is expected; sections 1
+   and 2 are what must match.
 
 The reference (scripts/vmaf_vulkan_reference.json) is written with
 --write-reference on a GPU that passes the probe. It prints a report to
@@ -97,6 +101,23 @@ def full_sums(device: int, bits: int, variant: int = 0) -> list[list[int]]:
         return [[int(value) for value in scorer.sums(frame)] for frame in range(len(reference))]
     finally:
         scorer.close()
+
+
+def table_check(device: int, bits: int) -> str:
+    """Whether the division table read back from the GPU is the host's."""
+    reference, distorted = vmaf_vulkan.probe_frames(bits, 1)
+    scorer = vmaf_vulkan.VulkanScorer(WIDTH, HEIGHT, bits, {}, device=device)
+    try:
+        scorer.add(reference[0], distorted[0])
+        scorer.features()
+        got = read_buffer(scorer, 8, 65536 * 4).view("<i4")
+    finally:
+        scorer.close()
+    divisor = np.arange(-32768, 32768)
+    want = np.zeros(65536, dtype=np.int32)
+    want[divisor != 0] = (np.float32(1073741824) / divisor[divisor != 0].astype(np.float32)).astype(np.int32)
+    wrong = int(np.count_nonzero(got != want))
+    return "right" if not wrong else f"{wrong} of 65536 entries differ"
 
 
 def after_passes(device: int, bits: int, count: int, variant: int = 0) -> tuple[list[int], dict[str, np.ndarray]]:
@@ -192,7 +213,9 @@ def diagnose(device: int, name: str) -> bool:
         other = full_sums(device, bits, 1)
         wrong = sum(other[frame][slot] != want["frames"][frame][slot]
                     for frame in range(len(other)) for slot in range(len(other[frame])))
-        print(f"   in 64 bits, as it was (variant 1): {'ALL SUMS MATCH' if not wrong else f'{wrong} sums differ'}")
+        print(f"   the table read at o + 32768, as it was (variant 1): "
+              f"{'ALL SUMS MATCH' if not wrong else f'{wrong} sums differ'}")
+        print(f"   the division table in the GPU's memory: {table_check(device, bits)}")
         for variant, what in VARIANTS.items():
             words = after_passes(device, bits, DECOUPLE_PASS, variant)[1]["admR"]
             entry = want["variants"][str(variant)]

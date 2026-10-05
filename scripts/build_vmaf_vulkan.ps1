@@ -50,14 +50,15 @@ $shaders = [ordered]@{
     'adm_cm_0'          = 'adm_cm', 'SCALE0=1', 'BPC16=0'
     'adm_cm'            = 'adm_cm', 'SCALE0=0', 'BPC16=0'
     # VMAF v1: libvmaf's CPU code, not its CUDA kernels. Its scale-0 decouple
-    # shader takes the same 32-bit steps (VARIANT 0) as VMAF v0.6.1's.
+    # shader reads the division table and takes the 32-bit steps (VARIANT 0)
+    # as VMAF v0.6.1's does.
     'motion_v1_8'       = 'motion_v1', 'BPC16=0'
     'motion_v1_16'      = 'motion_v1', 'BPC16=1'
     'adm_decouple_v1_0' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'V1=1', 'VARIANT=0'
     'adm_decouple_v1'   = 'adm_decouple', 'SCALE0=0', 'BPC16=0', 'V1=1', 'VARIANT=0'
     'adm_csf_den_v1_0'  = 'adm_csf_den', 'SCALE0=1', 'BPC16=0', 'ROWWISE=1'
     'adm_csf_den_v1'    = 'adm_csf_den', 'SCALE0=0', 'BPC16=0', 'ROWWISE=1'
-    # adm_decouple_0 as the CUDA kernel writes it, in 64 bits (1), and steps
+    # adm_decouple_0 as it was (the table read at o + 32768, 64 bits) (1), and steps
     # of that shown (2-7), for scripts/diagnose_vmaf_vulkan.py: see VARIANT
     # in the shader.
     'adm_decouple_0_v1' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'V1=0', 'VARIANT=1'

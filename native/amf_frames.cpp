@@ -47,6 +47,7 @@
 // AMF's interfaces overload virtual methods in ways g++ warns about.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+#include "amf/components/ComponentCaps.h"
 #include "amf/components/VideoDecoderUVD.h"
 #include "amf/core/Factory.h"
 #pragma GCC diagnostic pop
@@ -127,8 +128,10 @@ ID3D11Device *amd_device(std::string &error) {
 }
 
 // Each step of a decoder's shutdown, appended to the file VML_AMF_TRACE
-// names, with the thread: a shutdown that never returns (seen on a Radeon
-// 780M, inside AMF's own library) then shows which call it is in.
+// names, with the thread (scripts/diagnose_amf_close.py): a shutdown that
+// never returns then shows which call it is in. One did on a Radeon 780M,
+// in Terminate, after the decoder had failed on a video it does not decode
+// (see decodes).
 void trace(const char *step) {
     char path[MAX_PATH];
     DWORD length = GetEnvironmentVariableA("VML_AMF_TRACE", path, sizeof path);
@@ -140,61 +143,22 @@ void trace(const char *step) {
     }
 }
 
-// VML_AMF_CLOSE: other ways to end a decoder, for trying against the
-// shutdown that hangs (a decoder stopped part-way never returned from
-// Terminate on a Radeon 780M in a Vulkan VMAF run; Flush first, and closing
-// Vulkan first, changed nothing):
-//   drain    the decoder is told the stream has ended and its remaining
-//            pictures are taken and dropped, then it is ended as usual
-//   release  the decoder and context are released without Terminate
-bool close_as(const char *way) {
-    char value[16];
-    DWORD length = GetEnvironmentVariableA("VML_AMF_CLOSE", value, sizeof value);
-    return length > 0 && length < sizeof value && strcmp(value, way) == 0;
-}
-
 struct Session {
     ID3D11Device *device = nullptr;
     amf::AMFContext *context = nullptr;
     amf::AMFComponent *decoder = nullptr;
 
     void close() {
-        const bool terminate = !close_as("release");
         if (decoder) {
-            if (close_as("drain")) {
-                trace("decoder Drain");
-                decoder->Drain();
-                // Its last pictures, for at most two seconds.
-                int taken = 0;
-                const ULONGLONG until = GetTickCount64() + 2000;
-                while (GetTickCount64() < until) {
-                    amf::AMFData *data = nullptr;
-                    AMF_RESULT result = decoder->QueryOutput(&data);
-                    if (data) {
-                        data->Release();
-                        taken++;
-                        continue;
-                    }
-                    if (result == AMF_EOF) break;
-                    Sleep(1);
-                }
-                char text[64];
-                snprintf(text, sizeof text, "decoder drained: %d pictures dropped", taken);
-                trace(text);
-            }
-            if (terminate) {
-                trace("decoder Terminate");
-                decoder->Terminate();
-            }
+            trace("decoder Terminate");
+            decoder->Terminate();
             trace("decoder Release");
             decoder->Release();
             decoder = nullptr;
         }
         if (context) {
-            if (terminate) {
-                trace("context Terminate");
-                context->Terminate();
-            }
+            trace("context Terminate");
+            context->Terminate();
             trace("context Release");
             context->Release();
             context = nullptr;
@@ -206,6 +170,43 @@ struct Session {
         }
     }
 };
+
+// Whether the decoder says it gives pictures of this depth and size (its
+// capabilities' output formats and size range), or why not. Its Init does
+// not say: it takes 10-bit H.264, which no AMD GPU decodes, and the pictures
+// were then not the video's (a Radeon 780M, driver 32.0.31041.1004: every
+// picture wrong, VMAF 69.86 for 86.43), or decoding failed part-way with
+// AMF_DIRECTX_FAILED and the decoder's Terminate never returned (driver
+// 32.0.21028.21). A decoder that states no capabilities is believed, but for
+// H.264 above 8 bits.
+bool decodes(amf::AMFComponent *decoder, int codec, int bit_depth, int width, int height, std::string &error) {
+    const amf::AMF_SURFACE_FORMAT wanted = bit_depth > 8 ? amf::AMF_SURFACE_P010 : amf::AMF_SURFACE_NV12;
+    bool format = !(codec == CODEC_H264 && bit_depth > 8), size = true;
+    amf::AMFCaps *caps = nullptr;
+    amf::AMFIOCaps *output = nullptr;
+    if (decoder->GetCaps(&caps) == AMF_OK && caps && caps->GetOutputCaps(&output) == AMF_OK && output) {
+        format = false;
+        for (amf_int32 i = 0; i < output->GetNumOfFormats(); ++i) {
+            amf::AMF_SURFACE_FORMAT listed = amf::AMF_SURFACE_UNKNOWN;
+            amf_bool native = false;
+            if (output->GetFormatAt(i, &listed, &native) == AMF_OK && listed == wanted) format = true;
+        }
+        amf_int32 least = 0, most = 0;
+        output->GetWidthRange(&least, &most);
+        if (most > 0 && (width < least || width > most)) size = false;
+        output->GetHeightRange(&least, &most);
+        if (most > 0 && (height < least || height > most)) size = false;
+    }
+    if (output) output->Release();
+    if (caps) caps->Release();
+    if (!format) {
+        error = "AMD's GPU decoder does not decode this codec at " + std::to_string(bit_depth) + " bits";
+    } else if (!size) {
+        error = "AMD's GPU decoder does not decode this codec at " + std::to_string(width) + "x"
+                + std::to_string(height);
+    }
+    return format && size;
+}
 
 // AMF's decoder for `codec` at this format and size on the AMD GPU, or the reason there is none.
 bool open_session(int codec, int bit_depth, int width, int height, const std::vector<unsigned char> &extradata,
@@ -222,6 +223,10 @@ bool open_session(int codec, int bit_depth, int width, int height, const std::ve
     result = g_factory->CreateComponent(s.context, amf_codec(codec), &s.decoder);
     if (result != AMF_OK) {
         error = "no AMD GPU decoder for this codec (" + result_text(result) + ")";
+        s.close();
+        return false;
+    }
+    if (!decodes(s.decoder, codec, bit_depth, width, height, error)) {
         s.close();
         return false;
     }
