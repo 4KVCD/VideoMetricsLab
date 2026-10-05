@@ -9,9 +9,13 @@ scores holds for both.
 Only those two scores: VMAF v1, PSNR, SSIM and XPSNR have no GPU code, and
 stay in FFmpeg's libvmaf and xpsnr filters, so they are scored exactly as
 before. A run that scores VMAF on the GPU still decodes each video once:
-FFmpeg's graph ends in its CPU filters as before and, beside them, in two raw
-outputs, one per video, written to named pipes that this module reads and
-feeds to libvmaf frame pair by frame pair (see vmaf_runner._run_on_gpu).
+an FFmpeg for each video writes its frames, as they would reach libvmaf's
+filter, to a named pipe and their timestamps to another (_StreamReader), and
+this module pairs them as that filter would (frame_sync) and feeds libvmaf
+frame pair by frame pair (see vmaf_runner._run_on_gpu). With an FFmpeg older
+than 6.1, one FFmpeg pairs them itself and writes two raw outputs
+(_PipeReader), as every run did before: about twice the CPU for the same
+frames (pairs_in_app).
 
 Where NVIDIA's decoder decodes both videos, VMAF is scored without FFmpeg's
 decode (score_decoded): the videos are decoded in libvmaf's process
@@ -34,15 +38,19 @@ from __future__ import annotations
 
 import _winapi
 import ctypes
+import functools
 import logging
 import msvcrt
 import os
 import queue
+import re
 import threading
 import time
 import uuid
 from collections.abc import Callable
+from ctypes import wintypes
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -377,14 +385,246 @@ def _read_frame(stream, buffer: bytearray) -> bool:
     return True
 
 
+# ------------------------------------------- frames with their timestamps
+
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32.PeekNamedPipe.restype = wintypes.BOOL
+_kernel32.PeekNamedPipe.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p,
+                                    ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p]
+_kernel32.ReadFile.restype = wintypes.BOOL
+_kernel32.ReadFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+                               ctypes.c_void_p]
+#: The variable that takes the pairing back into FFmpeg ("canvas"), for
+#: comparing the two ways.
+PIPES_VARIABLE = "VML_VMAF_PIPES"
+_LISTING_TB = re.compile(r"#tb 0: (\d+)/(\d+)")
+
+
+@functools.cache
+def pairs_in_app() -> bool:
+    """Whether the frame pairs are worked out here (frame_sync) from each
+    video's own frames and timestamps -- _StreamReader -- and not by
+    FFmpeg's overlay on a canvas of both (vmaf_runner._gpu_pairs_stage),
+    which cost FFmpeg about four times the CPU. Each video then has an
+    FFmpeg of its own: in one, the video that decodes faster fills its pipe
+    while its frames wait here for the other's, and FFmpeg's one filter
+    thread, held by that pipe, passes no frame of the other's -- neither
+    side moves again. It takes an FFmpeg that keeps the filters' timestamps
+    in an output (-enc_time_base filter, FFmpeg 6.1), which is asked once."""
+    if os.environ.get(PIPES_VARIABLE, "").casefold() == "canvas":
+        return False
+    from vmaf_app.core import proc as proc_util
+    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
+
+    command = [ffmpeg_path(), "-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i",
+               "color=s=16x16:r=1:d=1", "-frames:v", "1", "-fps_mode", "passthrough", "-enc_time_base", "filter",
+               "-c:v", "wrapped_avframe", "-f", "framecrc", "-"]
+    try:
+        done = proc_util.run(command, capture_output=True, timeout=30)
+    except Exception:  # no FFmpeg, or one that does not answer: FFmpeg pairs them, as before
+        return False
+    return done.returncode == 0 and b"#tb 0:" in done.stdout
+
+
+class _StreamReader:
+    """One of the two videos as it leaves FFmpeg's filter chain: its frames,
+    a YUV4MPEG stream on one named pipe, and their timestamps, a framecrc
+    listing on another (-enc_time_base filter: the filters' own time base
+    and timestamps, which are what libvmaf's frame sync pairs by). pull()
+    gives the next (frame, timestamp) to frame_sync.frame_pairs.
+
+    YUV4MPEG, not rawvideo: FFmpeg writes its frames' rows straight to the
+    pipe, where the rawvideo encoder first copies each frame into a packet
+    it allocates. Each frame is left to gather in the pipe and then taken
+    in one read: read as it comes, it arrives in about 300 pieces, each a
+    wake-up of this thread (2 ms of CPU a 4K frame against 4)."""
+
+    def __init__(self, name: str, frame_bytes: int) -> None:
+        stem = rf"\\.\pipe\vml-vmaf-{os.getpid()}-{uuid.uuid4().hex[:12]}-{name}"
+        self.path, self.listing_path = stem, stem + "-times"
+        self.frame_bytes = frame_bytes
+        self._pipe = _winapi.CreateNamedPipe(self.path, _winapi.PIPE_ACCESS_INBOUND, _winapi.PIPE_WAIT, 1,
+                                             _PIPE_BYTES, _PIPE_BYTES, 0, _winapi.NULL)
+        self._listing = _winapi.CreateNamedPipe(self.listing_path, _winapi.PIPE_ACCESS_INBOUND, _winapi.PIPE_WAIT,
+                                                1, 65536, 65536, 0, _winapi.NULL)
+        self.free: queue.Queue[bytearray | None] = queue.Queue()
+        # A frame held and the one after it (frame_pairs), one read ahead and one being read.
+        for _ in range(_READ_AHEAD + 1):
+            self.free.put(bytearray(frame_bytes))
+        self._pixels: queue.Queue[bytearray | None] = queue.Queue()
+        self._stamps: queue.Queue[int | None] = queue.Queue()
+        self.time_base: Fraction | None = None
+        self._time_base_known = threading.Event()
+        self.error: BaseException | None = None
+        self._stopped = threading.Event()
+        self._writer_gone = threading.Event()
+        self._threads = [threading.Thread(target=self._read_frames, name=f"vmaf-gpu-{name}", daemon=True),
+                         threading.Thread(target=self._read_listing, name=f"vmaf-gpu-{name}-times", daemon=True)]
+
+    def start(self) -> None:
+        for thread in self._threads:
+            thread.start()
+
+    @staticmethod
+    def _connect(pipe: int) -> None:
+        try:
+            _winapi.ConnectNamedPipe(pipe, _winapi.NULL)
+        except OSError as error:
+            # As _PipeReader: FFmpeg was first, or came, wrote and went.
+            if error.winerror not in (_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA):
+                raise
+
+    def _gather(self, count: int) -> None:
+        """Waits until `count` bytes are in the pipe (or all it holds), or
+        FFmpeg has gone."""
+        count = min(count, _PIPE_BYTES // 2)
+        available = wintypes.DWORD()
+        while not self._stopped.is_set():
+            if not _kernel32.PeekNamedPipe(self._pipe, None, 0, None, ctypes.byref(available), None):
+                return  # closed and empty: the read says so
+            if available.value >= count or self._writer_gone.is_set():
+                return
+            time.sleep(0.001)
+
+    def _read(self, buffer: bytearray) -> bool:
+        """Fills `buffer`; False at the end of the stream."""
+        address = ctypes.addressof((ctypes.c_char * len(buffer)).from_buffer(buffer))
+        filled, got = 0, wintypes.DWORD()
+        while filled < len(buffer):
+            if not _kernel32.ReadFile(self._pipe, address + filled, len(buffer) - filled, ctypes.byref(got), None) \
+                    or not got.value:
+                if filled:
+                    raise VmafGpuError(f"FFmpeg's frames ended inside one ({filled} of {len(buffer)} bytes)")
+                return False
+            filled += got.value
+        return True
+
+    def _read_frames(self) -> None:
+        try:
+            self._connect(self._pipe)
+            if self._stopped.is_set():
+                return
+            # "YUV4MPEG2 W.. H.. ...\n", then "FRAME\n" and the planes, packed, for each frame.
+            header, byte = bytearray(), bytearray(1)
+            while byte != b"\n" and len(header) < 1024 and self._read(byte):
+                header += byte
+            if header and not header.startswith(b"YUV4MPEG2 "):
+                raise VmafGpuError("FFmpeg's frames are not a YUV4MPEG stream")
+            marker = bytearray(6)
+            while header and not self._stopped.is_set():
+                self._gather(len(marker) + self.frame_bytes)
+                if not self._read(marker):
+                    break
+                if marker != b"FRAME\n":
+                    raise VmafGpuError("FFmpeg's frames are not where they were expected")
+                buffer = self.free.get()
+                if buffer is None:
+                    break
+                if not self._read(buffer):
+                    raise VmafGpuError("FFmpeg's frames ended after a frame's start")
+                self._pixels.put(buffer)
+            # The comparison may end before this video does: the rest is read and dropped.
+            spare = bytearray(4 * 1024 * 1024)
+            while not self._stopped.is_set():
+                self._gather(len(spare))
+                try:
+                    if not self._read(spare):
+                        break
+                except VmafGpuError:
+                    break  # the tail, shorter than the buffer
+        except BaseException as error:  # raised by pull()
+            self.error = error
+        finally:
+            _winapi.CloseHandle(self._pipe)
+            self._pixels.put(None)
+
+    def _read_listing(self) -> None:
+        try:
+            self._connect(self._listing)
+            fd = msvcrt.open_osfhandle(self._listing, os.O_RDONLY)
+            self._listing = None
+            with open(fd, "rb") as listing:
+                for raw in listing:
+                    line = raw.decode("ascii", errors="replace").strip()
+                    if line.startswith("#"):
+                        match = _LISTING_TB.match(line)
+                        if match:
+                            self.time_base = Fraction(int(match.group(1)), int(match.group(2)))
+                            self._time_base_known.set()
+                        continue
+                    fields = [field.strip() for field in line.split(",")]
+                    if len(fields) >= 6 and fields[0].isdigit():
+                        self._stamps.put(int(fields[2]))
+        except BaseException as error:
+            self.error = self.error or error
+        finally:
+            if self._listing is not None:
+                _winapi.CloseHandle(self._listing)
+            self._time_base_known.set()
+            self._stamps.put(None)
+
+    def wait_time_base(self) -> Fraction:
+        """The time base of pull()'s timestamps; any, for a video without a frame."""
+        self._time_base_known.wait()
+        return self.time_base or Fraction(1, 1000)
+
+    def pull(self) -> tuple[bytearray, int] | None:
+        """The next frame and its timestamp; None at the video's end."""
+        buffer = self._pixels.get()
+        if buffer is None:
+            self._pixels.put(None)
+            if self.error is not None:
+                raise self.error
+            return None
+        stamp = self._stamps.get()
+        if stamp is None:
+            self._stamps.put(None)
+            raise VmafGpuError("FFmpeg gave a frame without its timestamp")
+        return buffer, stamp
+
+    def release(self, buffer: bytearray) -> None:
+        self.free.put(buffer)
+
+    def drop_rest(self) -> None:
+        """The comparison is over: what FFmpeg still writes is read and dropped."""
+        self.free.put(None)
+
+    def ffmpeg_ended(self) -> None:
+        """FFmpeg has gone: no wait for more, and a pipe it never opened --
+        an output that got no frame is never opened -- is connected to here,
+        which ends the wait for it (see _PipeReader.release_if_unconnected)."""
+        self._writer_gone.set()
+        for thread, path in zip(self._threads, (self.path, self.listing_path), strict=True):
+            if thread.is_alive():
+                try:
+                    with open(path, "wb"):
+                        pass
+                except OSError:
+                    pass  # FFmpeg's already, or the pipe is gone
+
+    def stop(self) -> None:
+        self._stopped.set()
+        self.free.put(None)
+        self.ffmpeg_ended()
+
+    def join(self) -> None:
+        for thread in self._threads:
+            thread.join()
+        if self.error is not None:
+            raise self.error
+
+
 class GpuAttempt:
-    """One FFmpeg run's GPU half: the two pipes FFmpeg writes the compared
+    """One FFmpeg run's GPU half: the pipes FFmpeg writes the two videos'
     frames to, and the threads that read them and feed libvmaf (`backend`
     "cuda") or the Vulkan port of its features ("vulkan", on Vulkan's GPU
-    number `device`)."""
+    number `device`). `paired`: the frames come paired by FFmpeg, on two
+    pipes of raw video (_PipeReader); by default (pairs_in_app) each video
+    comes as it is, with its timestamps, and is paired here (_StreamReader)."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
-                 backend: str = "cuda", device: int | None = None):
+                 backend: str = "cuda", device: int | None = None, paired: bool | None = None):
+        self.paired = not pairs_in_app() if paired is None else paired
         if "vmaf_v1" in models:
             from vmaf_app.core import vmaf_v1_gpu
 
@@ -395,14 +635,39 @@ class GpuAttempt:
             self._scorer = vmaf_vulkan.VulkanScorer(width, height, bit_depth, models, n_subsample, device=device)
         else:
             self._scorer = GpuScorer(width, height, bit_depth, models, n_subsample)
-        self.distorted = _PipeReader("distorted", self._scorer.frame_bytes)
-        self.reference = _PipeReader("reference", self._scorer.frame_bytes)
+        reader = _PipeReader if self.paired else _StreamReader
+        self.distorted = reader("distorted", self._scorer.frame_bytes)
+        self.reference = reader("reference", self._scorer.frame_bytes)
         self.error: BaseException | None = None
         self._result = None
-        self._feeder = threading.Thread(target=self._feed, name="vmaf-gpu-feed", daemon=True)
+        self._feeder = threading.Thread(target=self._feed if self.paired else self._feed_streams,
+                                        name="vmaf-gpu-feed", daemon=True)
         self.distorted.start()
         self.reference.start()
         self._feeder.start()
+
+    def _feed_streams(self) -> None:
+        """Pairs the two videos' frames as libvmaf's filter would (frame_sync)
+        and scores each pair."""
+        try:
+            test, ref = self.distorted, self.reference
+            pairs = frame_pairs(test.pull, ref.pull, test.wait_time_base(), ref.wait_time_base(),
+                                test.release, ref.release)
+            try:
+                for test_frame, ref_frame, _when in pairs:
+                    if ref_frame is None:
+                        raise VmafGpuError("the source has no frame for the test video's first")
+                    self._scorer.add(ref_frame, test_frame)
+            finally:
+                pairs.close()
+            for reader in (test, ref):
+                reader.drop_rest()
+            for reader in (test, ref):
+                reader.join()
+            self._result = self._scorer.finish()
+        except BaseException as error:  # finish() raises it in the run
+            self.error = error
+            self.stop()
 
     def _feed(self) -> None:
         try:
@@ -437,9 +702,12 @@ class GpuAttempt:
         caller retries or gives up); VmafGpuError when libvmaf failed."""
         if not ffmpeg_succeeded:
             self.stop()
-        else:
+        elif self.paired:
             self.distorted.release_if_unconnected()
             self.reference.release_if_unconnected()
+        else:
+            self.distorted.ffmpeg_ended()
+            self.reference.ffmpeg_ended()
         self._feeder.join()
         try:
             if self.error is not None:
@@ -449,9 +717,22 @@ class GpuAttempt:
             self._scorer.close()
 
     def output_args(self, duration_limit: float) -> list[str]:
-        """FFmpeg's two raw outputs, for the graph's [vmaf_dist] and
-        [vmaf_ref]: every frame as it comes (no frame rate conversion)."""
+        """FFmpeg's outputs for the graph's [vmaf_dist] and [vmaf_ref]: every
+        frame as it comes (no frame rate conversion). Paired by FFmpeg: two
+        of raw video. Paired here: (the test video's FFmpeg's, the
+        source's), each its frames as YUV4MPEG and, from their [.._ts] copy,
+        their timestamps as a listing; the source runs a second past the
+        limit, for the frame nearest the test video's last to be among them."""
         args = []
+        if not self.paired:
+            both = []
+            for label, reader, past in (("vmaf_dist", self.distorted, 0.0), ("vmaf_ref", self.reference, 1.0)):
+                cut = ["-t", f"{duration_limit + past:.3f}"] if duration_limit > 0 else []
+                both.append(["-map", f"[{label}]", "-fps_mode", "passthrough", *cut, "-flush_packets", "1",
+                             "-f", "yuv4mpegpipe", "-strict", "-1", reader.path,
+                             "-map", f"[{label}_ts]", "-fps_mode", "passthrough", "-enc_time_base", "filter", *cut,
+                             "-c:v", "wrapped_avframe", "-flush_packets", "1", "-f", "framecrc", reader.listing_path])
+            return tuple(both)
         for label, reader in (("vmaf_dist", self.distorted), ("vmaf_ref", self.reference)):
             args += ["-map", f"[{label}]", "-fps_mode", "passthrough"]
             if duration_limit > 0:

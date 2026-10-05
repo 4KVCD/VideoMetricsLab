@@ -108,6 +108,7 @@ def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through():
     assert vr._build_ffmpeg_output_args("G", 30.0) == [
         "-lavfi", "G", "-progress", "pipe:1", "-nostats", "-t", "30.000", "-f", "null", "-"]
     attempt = object.__new__(vmaf_cuda.GpuAttempt)
+    attempt.paired = True  # by FFmpeg; test_vmaf_gpu_streams.py for the pairing in the app
     attempt.distorted, attempt.reference = SimpleNamespace(path="D"), SimpleNamespace(path="R")
     assert attempt.output_args(30.5) == [
         "-map", "[vmaf_dist]", "-fps_mode", "passthrough", "-t", "30.500", "-f", "rawvideo", "D",

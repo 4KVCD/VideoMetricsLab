@@ -348,11 +348,17 @@ def _build_filtergraph(
     source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
     hwaccel: HwAccelPlan, log_path: Path, model: str | None = None,
-    xpsnr_log_path: Path | None = None, gpu_vmaf: bool = False,
+    xpsnr_log_path: Path | None = None, gpu_vmaf: bool = False, gpu_paired: bool = True,
 ) -> str:
     """`gpu_vmaf`: VMAF and NEG are scored on the GPU (vmaf_cuda), from the
     compared frames as two raw outputs, [vmaf_dist] and [vmaf_ref], and are
-    all the run scores: FFmpeg's own filters score nothing."""
+    all the run scores: FFmpeg's own filters score nothing. `gpu_paired`:
+    FFmpeg pairs the frames (_gpu_pairs_stage). Else the GPU's side does
+    (vmaf_cuda._StreamReader, frame_sync), from each video as it would reach
+    libvmaf's filter, and two graphs come back, a line each -- the test
+    video's and the source's, each for an FFmpeg of its own
+    (_build_stream_cmds): the video's frames ([vmaf_dist], [vmaf_ref]) and a
+    copy that costs nothing, which FFmpeg lists the timestamps of ([.._ts])."""
     dist_content_w, dist_content_h = content_size(distorted_info, distorted_crop)
     ref_content_w, ref_content_h = content_size(source_info, source_crop)
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
@@ -380,6 +386,8 @@ def _build_filtergraph(
         # resolution) -- see ScaleDirection.
         main_ops.append(f"scale={ref_content_w}:{ref_content_h}:flags={options.scale_algorithm}")
     main_ops.append("setpts=PTS-STARTPTS")
+    if gpu_vmaf and not gpu_paired:
+        main_ops.append("split=2[vmaf_dist][vmaf_dist_ts]")
     main_chain = f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[main]"
 
     # --- source / reference (input 1) chain ---
@@ -403,6 +411,9 @@ def _build_filtergraph(
         ref_ops.append(f"scale={dist_content_w}:{dist_content_h}:flags={options.scale_algorithm}")
 
     ref_ops.append("setpts=PTS-STARTPTS")
+    if gpu_vmaf and not gpu_paired:
+        return (f"[0:{VIDEO_STREAM}]{','.join(main_ops)}\n"
+                f"[0:{VIDEO_STREAM}]{','.join([*ref_ops, 'split=2[vmaf_ref][vmaf_ref_ts]'])}")
     ref_chain = f"[1:{VIDEO_STREAM}]{','.join(ref_ops)}[ref]"
 
     compared_w, compared_h = (
@@ -481,6 +492,64 @@ def _build_ffmpeg_cmd(
     cmd += ["-i", str(Path(source_path).resolve())]
     cmd += _build_ffmpeg_output_args(filtergraph, duration_limit, gpu_outputs)
     return cmd
+
+
+def _build_stream_cmds(
+    distorted_path: Path, source_path: Path, graphs: str, hwaccel: HwAccelPlan,
+    outputs: tuple[list[str], list[str]],
+) -> list[list[str]]:
+    """An FFmpeg for each video (the test video's first), for VMAF on the GPU
+    where it pairs the frames itself: `graphs` as _build_filtergraph gives
+    them for that, `outputs` as vmaf_cuda.GpuAttempt.output_args does."""
+    commands = []
+    for path, accel, graph, output in zip((distorted_path, source_path), (hwaccel.distorted, hwaccel.source),
+                                          graphs.split("\n"), outputs, strict=True):
+        commands.append([ffmpeg_path(), "-nostdin", "-hide_banner", "-y", *_hwaccel_args(accel),
+                         "-i", str(Path(path).resolve()), "-lavfi", graph, "-progress", "pipe:1", "-nostats",
+                         *output])
+    return commands
+
+
+def _run_ffmpeg_pair(
+    commands: list[list[str]], total_frames: int, on_progress: ProgressCallback | None,
+    cancel_event: threading.Event | None, cwd: Path, process_handle: ProcessHandle | None = None,
+) -> subprocess.CompletedProcess:
+    """_run_ffmpeg for the two FFmpegs of _build_stream_cmds, side by side:
+    the first reports the progress; one that fails ends the other. The
+    result is the failed one's, or the first's."""
+    stop = threading.Event()
+    results: list[subprocess.CompletedProcess | None] = [None] * len(commands)
+    errors: list[BaseException] = []
+
+    def run(index: int) -> None:
+        try:
+            results[index] = _run_ffmpeg(commands[index], total_frames, on_progress if index == 0 else None, stop,
+                                         cwd=cwd, process_handle=process_handle)
+            if results[index].returncode != 0:
+                stop.set()
+        except BaseException as error:  # raised below, in the caller's thread
+            errors.append(error)
+            stop.set()
+
+    threads = [threading.Thread(target=run, args=(index,), name=f"ffmpeg-{index}", daemon=True)
+               for index in range(len(commands))]
+    for thread in threads:
+        thread.start()
+    while any(thread.is_alive() for thread in threads):
+        if cancel_event is not None and cancel_event.is_set():
+            stop.set()
+        threads[0].join(timeout=0.1)
+    if cancel_event is not None and cancel_event.is_set():
+        raise Cancelled("Cancelled by user")
+    failed = next((result for result in results if result is not None and result.returncode != 0), None)
+    if failed is not None:
+        return failed
+    for error in errors:
+        if not isinstance(error, Cancelled):  # the one ended because the other failed
+            raise error
+    if errors:
+        raise errors[0]
+    return results[0]
 
 
 def _build_resample_cmd(
@@ -867,11 +936,17 @@ def _execute_run(
                 # the raw outputs are to carry the same frames.
                 limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
                 cmd = build_command(plan, resolved_model, log_path, xpsnr_log_path, attempt.output_args(limit))
-                _log.info("FFmpeg: %s", _command_text(cmd))
-                result = _run_ffmpeg(
-                    cmd, total_frames, on_progress, cancel_event,
-                    cwd=tmpdir, process_handle=process_handle,
-                )
+                if isinstance(cmd[0], list):  # an FFmpeg for each video
+                    for one in cmd:
+                        _log.info("FFmpeg: %s", _command_text(one))
+                    result = _run_ffmpeg_pair(cmd, total_frames, on_progress, cancel_event,
+                                              cwd=tmpdir, process_handle=process_handle)
+                else:
+                    _log.info("FFmpeg: %s", _command_text(cmd))
+                    result = _run_ffmpeg(
+                        cmd, total_frames, on_progress, cancel_event,
+                        cwd=tmpdir, process_handle=process_handle,
+                    )
             except BaseException:
                 with contextlib.suppress(Exception):
                     attempt.finish(False)
@@ -1126,7 +1201,10 @@ def _score_on_gpu(
         filtergraph = _build_filtergraph(
             source_info, distorted_info, options, source_crop, distorted_crop, hw, log_path,
             model=resolved_model, xpsnr_log_path=xpsnr_log_path, gpu_vmaf=True,
+            gpu_paired=not isinstance(gpu_outputs, tuple),
         )
+        if isinstance(gpu_outputs, tuple):  # an FFmpeg for each video: the GPU's side pairs the frames
+            return _build_stream_cmds(distorted_info.path, source_info.path, filtergraph, hw, gpu_outputs)
         return _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, hw,
                                  options.duration_limit, gpu_outputs)
 
