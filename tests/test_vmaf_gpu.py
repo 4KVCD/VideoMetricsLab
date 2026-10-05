@@ -721,3 +721,61 @@ def test_a_failed_probe_is_made_again_a_while_later(monkeypatch):
     assert vmaf_cuda.gpu_vmaf_available() == (True, "libvmaf 3.0")
     vmaf_cuda.forget_failed_probe()  # a working probe is kept
     assert vmaf_cuda.gpu_vmaf_available() == (True, "libvmaf 3.0")
+
+
+# ------------------------------------------------ paths given to libvmaf
+
+def test_a_path_goes_to_libvmaf_in_the_ansi_code_page_not_utf8(tmp_path):
+    """libvmaf opens files with fopen(): UTF-8 bytes of "modèle" named a
+    file that is not there, and VMAF v1 on the GPU failed for every user with
+    an accented letter in their profile's name."""
+    assert vmaf_cuda.path_bytes(Path("C:/models/vmaf.json")) == b"C:\\models\\vmaf.json"
+    accented = "C:\\Users\\J\u00f6rg\\mod\u00e8le.json"
+    try:
+        expected = accented.encode("mbcs", errors="strict")
+    except UnicodeEncodeError:
+        pytest.skip("this PC's code page has no accented letters")
+    assert vmaf_cuda.path_bytes(accented) == expected != accented.encode("utf-8")
+
+
+class _ShortPaths:
+    """kernel32's GetShortPathNameW, answering `short` (None: it fails)."""
+
+    def __init__(self, short: str | None):
+        self.short, self.asked = short, []
+
+    def GetShortPathNameW(self, path, buffer, size):
+        self.asked.append(path)
+        if self.short is None:
+            return 0
+        buffer.value = self.short
+        return len(self.short)
+
+
+def _unencodable() -> str:
+    for text in ("C:\\\u6a21\u578b\\vmaf.json", "C:\\mod\u00e8le\\vmaf.json",
+                 "C:\\\u043c\u043e\u0434\u0435\u043b\u044c\\vmaf.json"):
+        try:
+            text.encode("mbcs", errors="strict")
+        except UnicodeEncodeError:
+            return text
+    pytest.skip("this PC's code page has every letter tried")
+
+
+def test_a_name_outside_the_code_page_goes_by_its_short_path(monkeypatch):
+    path = _unencodable()
+    kernel = _ShortPaths("C:\\6A21~1\\vmaf.json")
+    monkeypatch.setattr(vmaf_cuda.ctypes, "windll", SimpleNamespace(kernel32=kernel))
+    assert vmaf_cuda.path_bytes(path) == b"C:\\6A21~1\\vmaf.json"
+    assert kernel.asked == [path]
+
+
+@pytest.mark.parametrize("short", [None, "same"])
+def test_a_name_with_no_short_path_is_a_gpu_failure_with_the_reason(monkeypatch, short):
+    """A drive without 8.3 names gives the long name back: the CPU then
+    calculates, as for any other failure of the GPU's."""
+    path = _unencodable()
+    monkeypatch.setattr(vmaf_cuda.ctypes, "windll",
+                        SimpleNamespace(kernel32=_ShortPaths(path if short == "same" else None)))
+    with pytest.raises(vmaf_cuda.VmafGpuError, match="code page"):
+        vmaf_cuda.path_bytes(path)

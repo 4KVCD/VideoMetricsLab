@@ -141,7 +141,8 @@ def _output_names(lib: ctypes.CDLL, context: ctypes.c_void_p) -> list[str]:
     handle, path = tempfile.mkstemp(prefix="vml-vmaf-v1-", suffix=".json")
     os.close(handle)
     try:
-        vmaf_cuda._check(lib.vmaf_write_output(context, path.encode(), _VMAF_OUTPUT_FORMAT_JSON), "Listing features")
+        vmaf_cuda._check(lib.vmaf_write_output(context, vmaf_cuda.path_bytes(path), _VMAF_OUTPUT_FORMAT_JSON),
+                         "Listing features")
         return list(json.loads(Path(path).read_text(encoding="utf-8"))["frames"][-1]["metrics"])
     finally:
         Path(path).unlink(missing_ok=True)
@@ -186,7 +187,7 @@ def feature_names(model_path: Path) -> tuple[dict[str, str], dict[str, str]]:
             if with_model:
                 config = vmaf_cuda._ModelConfig(b"vmaf", 0)
                 vmaf_cuda._check(lib.vmaf_model_load_from_path(ctypes.byref(model), ctypes.byref(config),
-                                                               str(model_path).encode()), "Loading the model")
+                                                               vmaf_cuda.path_bytes(model_path)), "Loading the model")
                 vmaf_cuda._check(lib.vmaf_use_features_from_model(context, model), "Setting up the model")
             else:
                 _use_cpu_features(lib, context, options)
@@ -436,7 +437,7 @@ def predict(model_path: Path, frames: np.ndarray, values: dict[str, np.ndarray],
     try:
         config = vmaf_cuda._ModelConfig(b"vmaf", 0)
         vmaf_cuda._check(lib.vmaf_model_load_from_path(ctypes.byref(model), ctypes.byref(config),
-                                                       str(model_path).encode()), "Loading the model")
+                                                       vmaf_cuda.path_bytes(model_path)), "Loading the model")
         for feature, name in names.items():
             encoded = name.encode()
             for frame, value in zip(frames, values[feature], strict=True):
@@ -468,7 +469,7 @@ def cpu_reference(model_path: Path, width: int, height: int, bit_depth: int, ref
     try:
         config = vmaf_cuda._ModelConfig(b"vmaf", 0)
         vmaf_cuda._check(lib.vmaf_model_load_from_path(ctypes.byref(model), ctypes.byref(config),
-                                                       str(model_path).encode()), "Loading the model")
+                                                       vmaf_cuda.path_bytes(model_path)), "Loading the model")
         vmaf_cuda._check(lib.vmaf_use_features_from_model(context, model), "Setting up the model")
         pictures = vmaf_cuda._PictureConfiguration(
             vmaf_cuda._PictureParameters(width, height, bit_depth, vmaf_cuda._VMAF_PIX_FMT_YUV420P),
@@ -478,9 +479,17 @@ def cpu_reference(model_path: Path, width: int, height: int, bit_depth: int, ref
         layout._set_layout(width, height, bit_depth)
         for index, frames in enumerate(zip(reference, distorted, strict=True)):
             ref, dist = vmaf_cuda._Picture(), vmaf_cuda._Picture()
-            for picture, frame in zip((ref, dist), frames, strict=True):
-                vmaf_cuda._check(lib.vmaf_fetch_preallocated_picture(context, ctypes.byref(picture)), "Taking a picture")
-                layout._fill(picture, frame, (0, 1, 2))
+            try:
+                for picture, frame in zip((ref, dist), frames, strict=True):
+                    vmaf_cuda._check(lib.vmaf_fetch_preallocated_picture(context, ctypes.byref(picture)),
+                                     "Taking a picture")
+                    layout._fill(picture, frame, (0, 1, 2))
+            except BaseException:
+                # A picture taken and never handed over keeps vmaf_close waiting for it.
+                for picture in (ref, dist):
+                    if picture.data[0]:
+                        lib.vmaf_picture_unref(ctypes.byref(picture))
+                raise
             vmaf_cuda._check(lib.vmaf_read_pictures(context, ctypes.byref(ref), ctypes.byref(dist), index),
                              f"Scoring frame {index}")
         vmaf_cuda._check(lib.vmaf_read_pictures(context, None, None, 0), "Finishing")

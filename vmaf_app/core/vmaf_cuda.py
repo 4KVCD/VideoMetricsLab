@@ -176,6 +176,27 @@ def _check(error: int, what: str) -> None:
         raise VmafGpuError(f"{what} failed (libvmaf error {error})")
 
 
+def path_bytes(path) -> bytes:
+    """An existing file's path as libvmaf opens it: with fopen(), which reads
+    the name in Windows' ANSI code page, not UTF-8. UTF-8 bytes of a folder
+    with an accented letter (a user's own name in their profile and its Temp
+    folder) named a file that is not there. A name the code page has no
+    letters for (Chinese on a western Windows) goes by its short 8.3 path
+    where the drive keeps those; VmafGpuError where it does not."""
+    text = str(path)
+    for attempt in range(2):
+        try:
+            return text.encode("mbcs" if os.name == "nt" else "utf-8", errors="strict")
+        except UnicodeEncodeError:
+            if attempt:
+                break
+            short = ctypes.create_unicode_buffer(32768)
+            if not ctypes.windll.kernel32.GetShortPathNameW(text, short, len(short)):
+                break
+            text = short.value
+    raise VmafGpuError(f"libvmaf cannot open {path}: its name has letters outside this PC's code page")
+
+
 # ------------------------------------------------- frames from system memory
 
 class _Copy2D(ctypes.Structure):
