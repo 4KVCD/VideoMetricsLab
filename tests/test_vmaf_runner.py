@@ -15,6 +15,7 @@ from vmaf_app.core.models import (
     synthetic_resample_distorted_path,
 )
 from vmaf_app.core.vmaf_runner import (
+    _GRAPH_SEPARATOR,
     VmafRunError,
     _bit_depth,
     _build_ffmpeg_cmd,
@@ -359,43 +360,82 @@ def test_xpsnr_not_requested_by_default():
     assert "[main][ref]libvmaf=" in graph
 
 
-def test_xpsnr_stage_sits_between_decode_and_libvmaf():
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1", compute_xpsnr=True)
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
+def _xpsnr_and_libvmaf_graphs(hwaccel=None, **options):
+    source_info = _info("source.mov", 3840, 2160, "yuv420p10le")
+    distorted_info = _info("distorted.mp4", 1920, 1080, "yuv420p10le")
+    options = VmafOptions(compute_vmaf=False, compute_xpsnr=True, extra_features=["name=psnr", "name=float_ssim"],
+                          **options)
+    graphs = _build_filtergraph(
+        source_info, distorted_info, options, CropBox(3840, 1608, 0, 276), None,
+        hwaccel=hwaccel or HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
     )
-
-    assert "[main][ref_xpsnr]xpsnr=stats_file=xpsnr_log.txt:" in graph
-    assert "[xmain]" in graph
-    assert "[xmain][ref_vmaf]libvmaf=" in graph  # libvmaf consumes xpsnr's passthrough output, not [main] directly
+    return graphs
 
 
-def test_xpsnr_splits_the_reference_so_libvmaf_still_gets_its_own_copy():
-    # Regression test for a silent, severe correctness bug: xpsnr consumes
-    # [ref], and a filtergraph label can only be consumed once. Reusing
-    # [ref] for libvmaf too made ffmpeg wire libvmaf up to the wrong stream
-    # -- it compared the distorted video against ITSELF and reported a
-    # perfect VMAF 100 / PSNR 60 / SSIM 1.0 for every frame, without any
-    # error, no matter how bad the encode really was.
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1", compute_xpsnr=True)
+def test_xpsnr_and_libvmaf_get_a_filter_graph_each():
+    """FFmpeg runs a filter graph on one thread. Chained in one, XPSNR's work
+    and the libvmaf filter's took turns: PSNR + SSIM + XPSNR on 4K ran at
+    31 fps where PSNR + SSIM alone ran at 46 and XPSNR alone at 62. A graph
+    each, they run side by side at PSNR + SSIM's speed."""
+    graphs = _xpsnr_and_libvmaf_graphs().split(_GRAPH_SEPARATOR)
+    assert len(graphs) == 2
+    libvmaf, xpsnr = graphs
+    assert "libvmaf=" in libvmaf and "xpsnr" not in libvmaf and libvmaf.endswith("[graph0]")
+    assert "xpsnr=stats_file=xpsnr_log.txt:" in xpsnr and "libvmaf" not in xpsnr and xpsnr.endswith("[graph1]")
+    assert "feature=name=psnr|name=float_ssim" in libvmaf
 
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
-    )
 
-    assert "[ref]split=2[ref_xpsnr][ref_vmaf]" in graph
-    # The bare [ref] label must be consumed exactly once (by the split), and
-    # never handed to two filters.
-    assert graph.count("[ref]") == 2  # once produced by the decode chain, once consumed by the split
-    assert "[main][ref]xpsnr" not in graph
-    assert "[xmain][ref]libvmaf" not in graph
+def test_each_graph_reads_both_videos_itself_and_pairs_its_own_copies():
+    """The regression the old layout's split guarded against -- one label
+    consumed twice, so libvmaf compared the distorted video with itself and
+    reported a perfect score -- cannot happen: each graph takes both decoded
+    videos from FFmpeg, prepares them the same way, and consumes each of its
+    own labels once."""
+    libvmaf, xpsnr = _xpsnr_and_libvmaf_graphs().split(_GRAPH_SEPARATOR)
+    for graph, suffix in ((libvmaf, "v"), (xpsnr, "x")):
+        assert graph.count("[0:V:0]") == 1 and graph.count("[1:V:0]") == 1
+        assert graph.count(f"[main_{suffix}]") == 2 and graph.count(f"[ref_{suffix}]") == 2  # made once, used once
+        assert f"[main_{suffix}][ref_{suffix}]" in graph
+    # The same preparation in both: crop, conversion, scaling of the source to the test video's size.
+    assert libvmaf.split(";")[:2] == [chain.replace("_x]", "_v]") for chain in xpsnr.split(";")[:2]]
+    assert "crop=3840:1608:0:276" in libvmaf and "scale=1920:1080" in libvmaf
+
+
+def test_a_run_with_a_graph_each_maps_each_to_an_output_of_its_own():
+    graphs = _xpsnr_and_libvmaf_graphs()
+    cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graphs, hwaccel=HwAccelPlan(), duration_limit=30.0)
+    assert "-lavfi" not in cmd and cmd.count("-filter_complex") == 2
+    tail = cmd[cmd.index("-nostats") + 1:]
+    assert tail == ["-map", "[graph0]", "-t", "30.000", "-f", "null", "-",
+                    "-map", "[graph1]", "-t", "30.000", "-f", "null", "-"]
+    cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graphs, hwaccel=HwAccelPlan())
+    assert "-t" not in cmd
+
+
+@pytest.mark.parametrize(("accel", "decoder_downloads"), [("cuda", True), ("d3d11va", True), ("qsv", False)])
+def test_with_a_graph_each_the_decoder_downloads_where_it_can(accel, decoder_downloads):
+    """Kept on the GPU, every graph would download each picture again. CUDA
+    and D3D11VA download it once when no output format is asked for; QSV
+    still hands over its own surfaces, so each graph downloads them."""
+    plan = HwAccelPlan(distorted=accel, source=accel)
+    graphs = _xpsnr_and_libvmaf_graphs(plan)
+    cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graphs, hwaccel=plan)
+    assert cmd.count("-hwaccel") == 2
+    assert ("-hwaccel_output_format" in cmd) is not decoder_downloads
+    assert ("hwdownload" in graphs) is not decoder_downloads
+
+
+def test_a_single_metric_family_keeps_one_graph_and_its_gpu_download():
+    plan = HwAccelPlan(distorted="cuda", source="cuda")
+    for options in (VmafOptions(compute_vmaf=False, extra_features=["name=psnr", "name=float_ssim"]),
+                    VmafOptions(compute_vmaf=False, compute_xpsnr=True)):
+        graph = _build_filtergraph(
+            _info("source.mov", 1920, 1080), _info("distorted.mp4", 1920, 1080), options, None, None,
+            hwaccel=plan, log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
+        )
+        assert _GRAPH_SEPARATOR not in graph and graph.count("hwdownload") == 2
+        cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graph, hwaccel=plan)
+        assert cmd.count("-lavfi") == 1 and cmd.count("-hwaccel_output_format") == 2
 
 
 def test_xpsnr_reference_split_also_applies_to_resample_tests():

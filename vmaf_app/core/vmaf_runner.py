@@ -305,6 +305,24 @@ def analysis_bit_depth(source_info: VideoInfo, distorted_info: VideoInfo) -> int
     return _bit_depth(analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt))
 
 
+#: Between the filter graphs of a run that has more than one
+#: (_build_filtergraph with _split_graphs): each becomes a -filter_complex of
+#: its own, ending in [graph0], [graph1].
+_GRAPH_SEPARATOR = "\n"
+
+
+def _split_graphs(options: VmafOptions, xpsnr_log_path: Path | None) -> bool:
+    """Whether XPSNR and libvmaf's metrics (VMAF, PSNR, SSIM...) get a filter
+    graph each. FFmpeg runs a filter graph on one thread: chained in one,
+    XPSNR's work and the libvmaf filter's -- which allocates, zeroes and
+    copies both pictures of every pair before its own threads see them --
+    took turns. PSNR + SSIM + XPSNR on 4K ran at 31 fps where PSNR + SSIM
+    alone ran at 46 and XPSNR alone at 62, with most cores idle. Each on a
+    thread of its own, the three run at 44, PSNR + SSIM's speed."""
+    return bool(options.compute_xpsnr and xpsnr_log_path is not None
+                and (_uses_vmaf_model(options) or options.extra_features))
+
+
 def _build_libvmaf_stage(
     options: VmafOptions, log_path: Path, model: str | None, xpsnr_log_path: Path | None,
     main_label: str = "main", ref_label: str = "ref", output_label: str = "",
@@ -369,9 +387,13 @@ def _build_filtergraph(
     # analysis_pix_fmt for why it is not simply yuv420p.
     analysis_format = analysis_pix_fmt(source_info.pix_fmt, distorted_info.pix_fmt)
 
+    # XPSNR beside libvmaf's metrics: each in a filter graph of its own,
+    # which FFmpeg runs on a thread of its own (_split_graphs).
+    split = not gpu_vmaf and _split_graphs(options, xpsnr_log_path)
+
     # --- distorted (main, input 0) chain ---
     main_ops = []
-    if hwaccel.distorted:
+    if hwaccel.distorted and not (split and _decoder_downloads(hwaccel.distorted)):
         # Same shape as the reference chain below: frames arrive as hardware
         # surfaces and have to come back to system memory before any filter
         # that isn't hardware-aware -- including the crop -- can touch them.
@@ -392,7 +414,7 @@ def _build_filtergraph(
 
     # --- source / reference (input 1) chain ---
     ref_ops = []
-    if hwaccel.source:
+    if hwaccel.source and not (split and _decoder_downloads(hwaccel.source)):
         # hwdownload can only emit the hw surface's native format -- nv12 for
         # 8-bit cuda decode, p010le for 10-bit (common for UHD/HDR masters) --
         # it can't itself target the analysis format, so that conversion
@@ -418,6 +440,22 @@ def _build_filtergraph(
 
     compared_w, compared_h = (
         (ref_content_w, ref_content_h) if upscale_distorted else (dist_content_w, dist_content_h))
+    if split:
+        # Each graph decodes nothing itself: FFmpeg hands every graph that
+        # reads an input the same decoded frames (with CUDA or D3D11VA, the
+        # decoder downloads them once: _split_hwaccel_args). Each converts
+        # and crops them on its own thread.
+        def chains(suffix: str) -> str:
+            return (f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[main_{suffix}];"
+                    f"[1:{VIDEO_STREAM}]{','.join(ref_ops)}[ref_{suffix}]")
+
+        sync = ":".join(FRAMESYNC_OPTS)
+        assert xpsnr_log_path is not None
+        return _GRAPH_SEPARATOR.join([
+            chains("v") + ";[main_v][ref_v]libvmaf=" + ":".join(_build_libvmaf_opts(options, log_path, model))
+            + "[graph0]",
+            chains("x") + f";[main_x][ref_x]xpsnr=stats_file={xpsnr_log_path.name}:{sync}[graph1]",
+        ])
     if not gpu_vmaf:
         tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
     else:
@@ -486,12 +524,33 @@ def _build_ffmpeg_cmd(
     # paths are fine here even though they aren't inside the filtergraph --
     # but they must be made absolute first, since ffmpeg's cwd is set to a
     # temp dir below (see _build_filtergraph's log_path/model comment).
-    cmd += _hwaccel_args(hwaccel.distorted)
+    decode = _split_hwaccel_args if _GRAPH_SEPARATOR in filtergraph else _hwaccel_args
+    cmd += decode(hwaccel.distorted)
     cmd += ["-i", str(Path(distorted_path).resolve())]
-    cmd += _hwaccel_args(hwaccel.source)
+    cmd += decode(hwaccel.source)
     cmd += ["-i", str(Path(source_path).resolve())]
     cmd += _build_ffmpeg_output_args(filtergraph, duration_limit, gpu_outputs)
     return cmd
+
+
+#: -hwaccel decoders that hand frames over in system memory when no
+#: -hwaccel_output_format is given. QSV's still hands over its own surfaces:
+#: "Impossible to convert between the formats ... src: qsv".
+_DECODERS_THAT_DOWNLOAD = frozenset({"cuda", "d3d11va"})
+
+
+def _decoder_downloads(hwaccel: str | None) -> bool:
+    return hwaccel in _DECODERS_THAT_DOWNLOAD
+
+
+def _split_hwaccel_args(hwaccel: str | None) -> list[str]:
+    """-hwaccel for one input of a run with several filter graphs. Where the
+    decoder can (_decoder_downloads), it downloads each picture to system
+    memory itself, once, and every graph is handed it; kept on the GPU,
+    each graph would hwdownload it again: PSNR + SSIM + XPSNR on 4K ran at
+    38 fps that way, 44 this way. QSV's frames stay on the GPU, and each
+    graph downloads them (_build_filtergraph)."""
+    return ["-hwaccel", hwaccel] if _decoder_downloads(hwaccel) else _hwaccel_args(hwaccel)
 
 
 def _build_stream_cmds(
@@ -566,7 +625,18 @@ def _build_ffmpeg_output_args(
     filtergraph: str, duration_limit: float, gpu_outputs: list[str] | None = None,
 ) -> list[str]:
     """`gpu_outputs`: GPU VMAF's raw outputs (vmaf_cuda.GpuAttempt), each
-    with its own -t, and the run's only outputs."""
+    with its own -t, and the run's only outputs. Several filter graphs
+    (_GRAPH_SEPARATOR): a -filter_complex each, and a null output each for
+    its [graphN], each with the -t."""
+    graphs = filtergraph.split(_GRAPH_SEPARATOR)
+    if len(graphs) > 1 and gpu_outputs is None:
+        args = [part for graph in graphs for part in ("-filter_complex", graph)] + ["-progress", "pipe:1", "-nostats"]
+        for index in range(len(graphs)):
+            args += ["-map", f"[graph{index}]"]
+            if duration_limit > 0:
+                args += ["-t", f"{duration_limit:.3f}"]
+            args += ["-f", "null", "-"]
+        return args
     args = ["-lavfi", filtergraph, "-progress", "pipe:1", "-nostats"]
     if gpu_outputs is not None:
         return args + gpu_outputs
