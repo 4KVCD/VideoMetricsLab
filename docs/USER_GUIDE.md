@@ -106,6 +106,79 @@ one-second bitrate and GOP-based bitrate. Only the first video stream is
 counted: audio, subtitles and container overhead are excluded. Overall video
 bitrate is video packet bytes × 8 divided by the measured video duration.
 
+## Command line
+
+`VideoMetricsLab-cli.exe`, beside the app, calculates metrics without the
+window (from source: `python -m vmaf_app.cli`):
+
+```powershell
+.\VideoMetricsLab-cli.exe compare reference.mkv encode1.mkv encode2.mkv
+```
+
+It runs what **Calculate metrics** runs and prints each video's scores, and
+for several videos a summary side by side. The app's saved settings are its
+defaults (FFmpeg's folder, the cache, the GPU backend, the metrics a new video
+starts with); options override them for one run and nothing is written to the
+settings. Scores go to the same cache, so a comparison made on the command
+line opens in the app already calculated, and scores the app has saved are
+not calculated again.
+
+More examples:
+
+```powershell
+# Two metrics for every .mkv in a folder (the reference is left out of what a pattern finds)
+.\VideoMetricsLab-cli.exe compare reference.mkv encodes\*.mkv -m vmaf,ssimulacra2
+
+# Every metric, with each video's per-frame scores as results\<video>.csv
+.\VideoMetricsLab-cli.exe compare reference.mkv a.mkv b.mkv -m all --csv results
+
+# The first 30 seconds only, everything calculated on the CPU
+.\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv --duration 30 --cpu
+
+# A 1080p encode against a 4K reference, compared at 4K
+.\VideoMetricsLab-cli.exe compare reference_4k.mkv encode_1080p.mkv --scale-to reference
+
+# In a script: read the score from JSON
+$run = .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv -m vmaf --json - -q | ConvertFrom-Json
+$run.videos[0].metrics.vmaf.score
+
+# What would calculate each metric on this PC
+.\VideoMetricsLab-cli.exe devices
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-m`, `--metrics LIST` | Comma-separated: `vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`, `butteraugli`, `cvvdp`, or `all`. Left out: the metrics a video added to the app starts with. |
+| `--model auto\|standard\|4k\|FILE` | VMAF v0.6.1's model. `auto` uses the 4K model for a 4K comparison. |
+| `--black-bars auto\|none` | Detect and cut black bars, or compare whole pictures. |
+| `--scale-to test\|reference` | Which video's size the other is scaled to when they differ. |
+| `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
+| `--duration SECONDS` | Compare only the start of each video. |
+| `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
+| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
+| `--vmaf-on`, `--ssimulacra2-on`, `--butteraugli-on` `gpu\|cpu` | Where that one metric is calculated (`--vmaf-on` is VMAF v0.6.1, VMAF NEG and VMAF v1). Left out: as the app's Options panel was last set. |
+| `--no-gpu-decode` | Decode the videos on the CPU. |
+| `--threads N` | libvmaf threads. Left out: automatic. |
+| `--parallel 1\|2` | Videos calculated at once on the CPU. |
+| `--recalculate` | Ignore saved scores. |
+| `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |
+| `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
+| `-q`, `--quiet` | No progress, only the results. |
+| `-v`, `--verbose` | The app's log as well. |
+
+`compare --help` lists the same with examples. The last column of each
+video's table says where a score was calculated: a metric asked for on the
+GPU is calculated on the CPU where no GPU can.
+
+Progress is written to the error stream and results to the output stream, so
+`--json -` can be piped. The exit code is 0 when every video got every metric
+asked for, 1 when a video failed or lost a metric, 2 for a wrong command or
+when FFmpeg cannot be used, and 130 after Ctrl+C. Ctrl+C stops the run as
+**Cancel** does; scores that had finished are saved.
+
+Unlike the app, the command line does not ask before a long SSIMULACRA2 or
+Butteraugli run on the CPU. Text is English whatever the app's language.
+
 ## Saved results and caches
 
 Save portable results as `.metrics.json` or export CSV. Cached results are reused

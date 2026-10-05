@@ -123,7 +123,7 @@ def best_device(found: list[VulkanDevice] | None = None) -> VulkanDevice | None:
 
 
 #: vv_create's flag for a context whose frames come from GPU memory (SharedLumas).
-SHARED_FLAG = 1 << 28
+SHARED_FLAG = 1 << 19
 
 
 class SharedLumas:
@@ -180,7 +180,7 @@ class VulkanScorer:
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
                  device: int | None = None, native_double: bool = False, in_flight: int = 3, skip: int = 0, pass_limit: int = 0,
-                 shared=None):
+                 decouple_variant: int = 0, shared=None):
         self._shared: SharedLumas | None = None
         self._lib = lib = _load()
         self._vmaf = vmaf_cuda._load()
@@ -193,7 +193,8 @@ class VulkanScorer:
             if chosen is None:
                 raise VmafVulkanError("no GPU that Vulkan can calculate VMAF on")
             device = chosen.index
-        flags = (1 if native_double else 0) | (max(1, min(16, in_flight)) << 8) | ((skip & 7) << 16) | ((pass_limit & 0xFF) << 20)
+        flags = ((1 if native_double else 0) | (max(1, min(16, in_flight)) << 8) | ((skip & 7) << 16)
+                 | ((pass_limit & 0xFF) << 20) | ((decouple_variant & 7) << 28))
         if shared is not None:
             flags |= SHARED_FLAG
         _check(lib, lib.vv_create(ctypes.byref(self._context), device, width, height, bit_depth, flags),

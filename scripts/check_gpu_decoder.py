@@ -3,7 +3,10 @@ PC, for a GPU whose decoder cannot be checked where the app is developed
 (AMD's, say). Run from the repository root, with FFmpeg 9 or newer installed
 and the decoders built (scripts/build_gpu_frames.ps1):
 
-    .venv\\Scripts\\python.exe scripts\\check_gpu_decoder.py amd [VIDEO ...]
+    .venv\\Scripts\\python.exe scripts\\check_gpu_decoder.py amd [VIDEO ...] [--seconds 60]
+
+Of each VIDEO given, the first --seconds are checked (60 unless said; 0 for
+all of it): a whole film decoded twice, frame by frame, takes hours.
 
 1. Pictures: small clips it makes itself (H.264 8-bit, HEVC 10-bit, AV1
    10-bit; cropped; an MP4 cut with an edit list), and each VIDEO given,
@@ -67,13 +70,13 @@ def clip(path: Path, encoder: list[str], pix_fmt: str, seconds: float = 2.0, siz
     return path
 
 
-def gpu_sums(info, plan, backend):
+def gpu_sums(info, plan, backend, frames=None):
     stream = nv.GpuFrameStream(info, plan, backend=backend)
     out = np.empty(plan.frame_bytes, dtype=np.uint8)
     sums, stamps = [], []
     try:
         stream.start()
-        while True:
+        while frames is None or len(sums) < frames:
             try:
                 item = stream.next(1000)
             except TimeoutError:
@@ -102,8 +105,10 @@ def cpu_sums(path, plan, frames=None):
     return [row[5].strip() for row in rows], [int(row[2]) for row in rows]
 
 
-def check_pictures(path: Path, backend: str, crop: CropBox | None = None) -> str:
+def check_pictures(path: Path, backend: str, crop: CropBox | None = None, seconds: float = 0.0) -> str:
     info = probe_video(path)
+    # The first `seconds` of it, as a count of pictures for both decodes.
+    frames = max(1, round(seconds * info.fps)) if seconds > 0 and info.fps > 0 else None
     try:
         plan = nv.plan_decode(info, crop, shift=6)
     except nv.GpuDecodeUnavailableError as error:
@@ -112,10 +117,10 @@ def check_pictures(path: Path, backend: str, crop: CropBox | None = None) -> str
     if not supported:
         return f"{path.name}: the GPU decoder refuses it ({reason})"
     try:
-        sums, stamps = gpu_sums(info, plan, backend)
+        sums, stamps = gpu_sums(info, plan, backend, frames)
     except nv.GpuDecodeFailedError as error:
         return f"{path.name}: FAILED on the GPU decoder: {error}"
-    want, want_stamps = cpu_sums(path, plan)
+    want, want_stamps = cpu_sums(path, plan, frames)
     differ = sum(a != b for a, b in zip(sums, want, strict=False))
     # From each one's first picture: FFmpeg's start at 0, the decoder's are
     # the file's own.
@@ -334,8 +339,14 @@ def check_scaling(path: Path, backend: str, frames: int = 240) -> list[str]:
 
 
 def main() -> None:
-    backend = sys.argv[1] if len(sys.argv) > 1 else "amd"
-    videos = [Path(arg) for arg in sys.argv[2:]]
+    arguments = sys.argv[1:]
+    seconds = 60.0
+    if "--seconds" in arguments:
+        at = arguments.index("--seconds")
+        seconds = float(arguments[at + 1])
+        del arguments[at:at + 2]
+    backend = arguments[0] if arguments else "amd"
+    videos = [Path(arg) for arg in arguments[1:]]
     print(f"GPU frame decoder check: {backend}")
     for name in nv.LIBRARIES:
         print(f"  {name}: {'library loads' if nv.available(name) else 'library missing'}")
@@ -355,10 +366,13 @@ def main() -> None:
         subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-ss", "1.3", "-i", str(whole), "-c", "copy",
                         str(work / "editlist.mp4")], check=True)
         cases.append((work / "editlist.mp4", None))
+        made = len(cases)  # the clips made here are short: checked whole
         cases += [(video, None) for video in videos]
-        for path, crop in cases:
-            print(f"   {check_pictures(path, backend, crop)}" + (f" (cropped {crop.as_filter()})" if crop else ""),
-                  flush=True)
+        for number, (path, crop) in enumerate(cases):
+            limit = seconds if number >= made else 0.0
+            print(f"   {check_pictures(path, backend, crop, limit)}"
+                  + (f" (cropped {crop.as_filter()})" if crop else "")
+                  + (f" (its first {limit:g} s)" if limit else ""), flush=True)
         print("2. " + check_speed(videos[0] if videos else work / "hevc10.mkv", backend), flush=True)
         print("3. " + check_scores(videos[0] if videos else work / "hevc10.mkv", backend, work), flush=True)
         if backend in PCI_VENDORS:

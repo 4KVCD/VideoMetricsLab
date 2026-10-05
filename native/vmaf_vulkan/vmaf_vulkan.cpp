@@ -448,6 +448,7 @@ struct vv_context {
     int build_passes_v1();
     int skip = 0;  // timing tests: 1 = no motion, 2 = no VIF, 4 = no ADM
     int passLimit = 0;  // timing tests: only the first N scored passes
+    int decoupleVariant = 0;  // adm_decouple_0's VARIANT (shaders/adm_decouple.slang)
     uint32_t strideBytes = 0, planeBytes = 0;
     // The frames' luma planes come from another API on this GPU (a decoder's
     // CUDA), which writes them into the slots' staging buffers: GPU memory it
@@ -815,7 +816,9 @@ int vv_context::build_passes()
                                                (uint32_t)bandStride, (uint32_t)outStride,
                                                limit == 0 ? 100u : 1u,
                                                i_rfactor[scale * 3], i_rfactor[scale * 3 + 1], i_rfactor[scale * 3 + 2] };
-                error = add_pass(scored, scale == 0 ? kShader_adm_decouple_0 : kShader_adm_decouple,
+                const int decouple0 = decoupleVariant ? kShader_adm_decouple_0_v1 + decoupleVariant - 1
+                                                      : kShader_adm_decouple_0;
+                error = add_pass(scored, scale == 0 ? decouple0 : kShader_adm_decouple,
                                  { &bandsRef[set], &bandsDis[set], &admR, &admA, &admF, &divTable }, constants,
                                  sizeof constants, groups(right - left, 16), groups(bottom - top, 8));
                 if (error)
@@ -1215,7 +1218,7 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     nativeDouble = (flags & 1) && features.shaderFloat64;
     skip = (flags >> 16) & 7;
     passLimit = (flags >> 20) & 0xFF;
-    shared = (flags >> 28) & 1;
+    shared = (flags >> 19) & 1;
     const char *extensions[] = { VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME };
     if (shared) {
         uint32_t count = 0;
@@ -1229,6 +1232,7 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
         if (!found)
             return fail(-4, deviceName + " cannot share its memory with a decoder");
     }
+    decoupleVariant = (flags >> 28) & 7;
     api->vkGetPhysicalDeviceMemoryProperties(physical, &memoryProperties);
 
     uint32_t familyCount = 0;
@@ -1542,7 +1546,9 @@ VV_EXPORT int vv_device(int index, char *name, int nameBytes, uint32_t *vendor, 
 // `flags`: 1 = use the GPU's double where it has one (the scores are the
 // same; see shaders/vif_hori.slang); bits 8-15 = frames in flight (0: 3).
 // Bits 16-18 leave out motion, VIF or ADM, and bits 20-27 all but the first
-// N passes of VIF and ADM, to time the others.
+// N passes of VIF and ADM, to time the others. Bit 19: the frames come from
+// GPU memory a decoder shares (vv_shared_next, vv_export). Bits 28-30: the
+// scale-0 decouple shader's VARIANT, for the diagnosis.
 VV_EXPORT int vv_create(vv_context **out, int device, int width, int height, int bitDepth, int flags)
 {
     vv_context *context = new vv_context();
@@ -1581,7 +1587,7 @@ VV_EXPORT int vv_staging(vv_context *context, uint8_t **reference, uint8_t **dis
 
 VV_EXPORT int vv_commit(vv_context *context, int score) { return context->commit(score != 0); }
 
-// For a context made with flag bit 28 (frames from GPU memory): the staging
+// For a context made with flag bit 19 (frames from GPU memory): the staging
 // buffer the next pair's luma planes are to be written into by the API that
 // imported it -- *slot says which (they take turns), the reference's rows
 // start at offset 0 and the distorted's at *planeBytes, *stride bytes apart.
