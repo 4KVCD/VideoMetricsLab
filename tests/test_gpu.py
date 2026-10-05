@@ -139,7 +139,8 @@ def test_every_hardware_decoders_output_format_is_a_pixel_format_ffmpeg_has():
     assert {"cuda", "qsv", "d3d11"} <= hardware  # the listing is read right
     for hwaccel in gpu._VENDOR_PREFERRED_HWACCEL.values():
         assert gpu.hwaccel_output_format(hwaccel) in hardware, hwaccel
-        assert gpu.hwaccel_args(hwaccel) == ["-hwaccel", hwaccel, "-hwaccel_output_format",
+        threads = ["-threads", "1"] if hwaccel == "cuda" else []
+        assert gpu.hwaccel_args(hwaccel) == [*threads, "-hwaccel", hwaccel, "-hwaccel_output_format",
                                              gpu.hwaccel_output_format(hwaccel)]
     assert gpu.hwaccel_args(None) == []
 

@@ -354,10 +354,25 @@ def hwaccel_output_format(hwaccel: str) -> str:
     return _HWACCEL_OUTPUT_FORMATS.get(hwaccel, hwaccel)
 
 
+#: -hwaccels whose decoding FFmpeg runs on one thread (hwaccel_args).
+_ONE_THREAD_HWACCELS = frozenset({"cuda"})
+
+
 def hwaccel_args(hwaccel: str | None) -> list[str]:
     """The -hwaccel options for ONE input. ffmpeg reads these as per-input
     options, applying to the next -i on the command line, which is what
-    allows the two inputs to be decoded differently."""
+    allows the two inputs to be decoded differently.
+
+    NVIDIA's with one decoder thread: FFmpeg's frame threads each hold
+    pictures of their own, and the GPU decoding the video gains nothing
+    from them -- a 4K HEVC 10-bit film decoded and downloaded as fast in
+    260 MB less memory, 1080p in 50 MB less; the XPSNR run beside PSNR and
+    SSIM in the app took 1.3 GB, 0.8 GB this way. Intel's took the same
+    memory either way. A video NVIDIA's decoder does not take, which FFmpeg
+    then decodes on the CPU -- slowly on one thread -- fails instead, the
+    frames being kept on the GPU here (hwaccel_output_format) for a graph
+    that downloads them, and the run is made again without -hwaccel."""
     if not hwaccel:
         return []
-    return ["-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel_output_format(hwaccel)]
+    threads = ["-threads", "1"] if hwaccel in _ONE_THREAD_HWACCELS else []
+    return [*threads, "-hwaccel", hwaccel, "-hwaccel_output_format", hwaccel_output_format(hwaccel)]

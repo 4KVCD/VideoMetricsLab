@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.factories import STDLIB_PYTHON
-from vmaf_app.core.gpu import HwAccelPlan
+from vmaf_app.core.gpu import HwAccelPlan, hwaccel_args
 from vmaf_app.core.models import (
     CropBox,
     ResampleTarget,
@@ -879,6 +879,27 @@ def test_only_the_accelerated_input_gets_hwaccel_options():
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i",
     ]
     assert cmd.count("-hwaccel") == 1
+
+
+def test_nvidias_decoding_runs_on_one_thread_only_where_its_frames_stay_on_the_gpu():
+    """FFmpeg's frame threads hold pictures of their own (260 MB at 4K) for
+    nothing when NVIDIA's decoder decodes. A video it does not take is then
+    decoded on the CPU: with the frames kept on the GPU that fails the run,
+    made again without -hwaccel; handed over in memory, it would go on, on
+    one thread."""
+    cmd = _build_ffmpeg_cmd(
+        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf",
+        hwaccel=HwAccelPlan(source="cuda", distorted=None),
+    )
+    source_at = cmd.index(str(Path("source.mp4").resolve()))
+    assert cmd[source_at - 7:source_at - 5] == ["-threads", "1"]
+    assert cmd.count("-threads") == 1  # not the software-decoded input's
+    assert "-threads" not in hwaccel_args("qsv")
+    split = _build_ffmpeg_cmd(
+        Path("distorted.mp4"), Path("source.mp4"), "[0:v]xpsnr[x]" + _GRAPH_SEPARATOR + "[1:v]null[y]",
+        hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
+    )
+    assert "-threads" not in split and "-hwaccel_output_format" not in split
 
 
 def test_a_gpu_decoded_distorted_input_is_downloaded_before_filtering():
