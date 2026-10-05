@@ -132,6 +132,10 @@ def isolate_user_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(perceptual_vship, "_native_decoder", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(vmaf_runner, "_score_decoded_on_gpu", ffmpeg_decodes)
+    # PSNR and SSIM are FFmpeg's libvmaf filter's unless a test asks for the
+    # app's own (vmaf_runner._run_cpu_metrics): it runs in a process of its
+    # own, which a test faking FFmpeg's run would start for real.
+    monkeypatch.setenv(vmaf_runner.CPU_METRICS_VARIABLE, "ffmpeg")
     # Detected black bars are remembered per file for the life of the
     # process; a test's answer must not leak into the next one's.
     crop_detect.clear_cache()

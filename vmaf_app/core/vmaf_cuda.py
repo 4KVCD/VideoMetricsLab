@@ -79,6 +79,7 @@ _GPU_MODELS = {"version=vmaf_v0.6.1": "vmaf_v0.6.1", "version=vmaf_4k_v0.6.1": "
 _NEG_MODEL = "vmaf_v0.6.1neg"
 
 _VMAF_PIX_FMT_YUV420P = 1
+_VMAF_PIX_FMT_YUV400P = 4
 _VMAF_LOG_LEVEL_ERROR = 1
 #: The CUDA device GPU VMAF runs on, its decoders included: CUDA's first,
 #: which by its default order (CUDA_DEVICE_ORDER=FASTEST_FIRST) is the
@@ -164,6 +165,9 @@ def _load() -> ctypes.CDLL:
             ("vmaf_picture_unref", ctypes.c_int, [ctypes.POINTER(_Picture)]),
             ("vmaf_model_destroy", None, [handle]),
             ("vmaf_close", ctypes.c_int, [handle]),
+            ("vmaf_use_feature", ctypes.c_int, [handle, ctypes.c_char_p, handle]),
+            ("vmaf_feature_score_at_index", ctypes.c_int,
+             [handle, ctypes.c_char_p, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]),
         ):
             function = getattr(lib, name)
             function.restype, function.argtypes = restype, argtypes
@@ -451,6 +455,280 @@ class GpuScorer:
         if self._context:
             self._lib.vmaf_close(self._context)
             self._context = ctypes.c_void_p()
+
+
+#: libvmaf's CPU feature extractors scored by CpuScorer: the app's metric key
+#: -> (the extractor, the feature whose score is the metric's), as FFmpeg's
+#: libvmaf filter is asked for them ("name=psnr", "name=float_ssim") and as
+#: its log names the scores the app reads (vmaf_runner._parse_log).
+CPU_FEATURES = {"psnr": ("psnr", "psnr_y"), "ssim": ("float_ssim", "float_ssim")}
+#: What a CPU score records it was calculated with.
+CPU_BUILD = f"libvmaf-fast {LIBVMAF_FAST_VERSION} (CPU)"
+#: The most memory CpuScorer's pictures take, unless two pairs of them take
+#: more (8K): page-locked, from NVIDIA's decoder. 4K 10-bit from NVIDIA's
+#: decoder, PSNR + SSIM: 2 pairs 49 fps, 3 93, 4 129, 5 159, 6 (this) and 8
+#: 172 fps, where the decoders' feed levels off.
+CPU_PICTURE_MEMORY = 200 << 20
+
+
+class CpuScorer:
+    """PSNR and SSIM of frame pairs given in order, by libvmaf-fast's own CPU
+    extractors -- the ones FFmpeg's libvmaf filter runs, which give the same
+    scores to the six decimals its log keeps -- in this process, on its
+    pictures (vmaf_preallocate_pictures). FFmpeg's filter allocates, zeroes
+    and copies two new pictures for every pair on its one filter thread
+    before libvmaf's threads see them: 4K PSNR + SSIM ran at 67 fps there,
+    with most cores idle. The pictures are luma only: the app keeps PSNR's
+    luma score (psnr_y) and SSIM, which read nothing else, and libvmaf's
+    PSNR leaves out the chroma planes of a picture without them -- the
+    same psnr_y, a third less to copy and to score. `metrics`: CPU_FEATURES
+    keys. Frames as GpuScorer takes them (4:2:0, packed as FFmpeg's rawvideo
+    writes them; their luma is read), or a decoder's (add_decoded)."""
+
+    def __init__(self, width: int, height: int, bit_depth: int, metrics: tuple[str, ...], n_subsample: int = 1,
+                 threads: int = 0):
+        self._lib = lib = _load()
+        self._step = max(1, n_subsample)
+        self._metrics = tuple(metrics)
+        self._context = ctypes.c_void_p()
+        self._count = 0
+        #: Pictures' memory page-locked for NVIDIA's decoder -> the stream
+        #: that did it (None: it could not).
+        self._pinned: dict[int, object] = {}
+        self._staging: list[bytearray] | None = None
+        sample = 1 if bit_depth <= 8 else 2
+        self._rows, self._row_bytes = height, width * sample
+        #: A frame's luma: the size of a decoder's luma-only frame.
+        self.luma_bytes = width * height * sample
+        self.frame_bytes = self.luma_bytes + 2 * ((width + 1) // 2) * ((height + 1) // 2) * sample
+        threads = max(0, int(threads))
+        configuration = _Configuration(_VMAF_LOG_LEVEL_ERROR, threads, self._step, 0, 0)
+        _check(lib.vmaf_init(ctypes.byref(self._context), configuration), "Starting libvmaf")
+        try:
+            for metric in self._metrics:
+                extractor = CPU_FEATURES[metric][0]
+                _check(lib.vmaf_use_feature(self._context, extractor.encode(), None), f"Starting {extractor}")
+            parameters = _PictureParameters(width, height, bit_depth, _VMAF_PIX_FMT_YUV400P)
+            _check(lib.vmaf_preallocate_pictures(
+                self._context, _PictureConfiguration(parameters, 2 * cpu_pairs(width, height, bit_depth, threads))),
+                "Allocating pictures")
+        except BaseException:
+            self.close()
+            raise
+
+    def add(self, reference, distorted) -> None:
+        """Scores one more pair (frame index = how many came before). The
+        frames are the caller's again when it returns."""
+        ref, dist = self._take()
+        try:
+            self._fill(ref, reference, self.frame_bytes)
+            self._fill(dist, distorted, self.frame_bytes)
+        except BaseException:
+            self._give_back(ref, dist)
+            raise
+        self._score(ref, dist)
+
+    def add_decoded(self, ref_stream, ref_slot: int, test_stream, test_slot: int) -> None:
+        """Scores one more pair held by gpu_frames' decoders, decoding luma
+        only (luma_bytes frames). NVIDIA's copies it into libvmaf's picture
+        itself, rows as far apart as the picture's (download_planes), into
+        memory it page-locks the first time each of the pool's pictures
+        comes round. Intel's and AMD's write it straight into the picture
+        where its rows are packed, as libvmaf aligns them at most widths
+        (multiples of 32 samples: 3840, 1920, 1280), else into memory it is
+        copied from as add() copies a frame."""
+        ref, dist = self._take()
+        try:
+            self._download(ref, ref_stream, ref_slot, 0)
+            self._download(dist, test_stream, test_slot, 1)
+        except BaseException:
+            self._give_back(ref, dist)
+            raise
+        self._score(ref, dist)
+
+    def _take(self) -> tuple[_Picture, _Picture]:
+        lib = self._lib
+        ref, dist = _Picture(), _Picture()
+        _check(lib.vmaf_fetch_preallocated_picture(self._context, ctypes.byref(ref)), "Taking a picture")
+        try:
+            _check(lib.vmaf_fetch_preallocated_picture(self._context, ctypes.byref(dist)), "Taking a picture")
+        except BaseException:
+            lib.vmaf_picture_unref(ctypes.byref(ref))
+            raise
+        return ref, dist
+
+    def _give_back(self, ref: _Picture, dist: _Picture) -> None:
+        # Pictures taken from the pool and never handed over keep vmaf_close
+        # waiting for them.
+        self._lib.vmaf_picture_unref(ctypes.byref(ref))
+        self._lib.vmaf_picture_unref(ctypes.byref(dist))
+
+    def _score(self, ref: _Picture, dist: _Picture) -> None:
+        # libvmaf takes both pictures, also when it fails (pull request 1652).
+        _check(self._lib.vmaf_read_pictures(self._context, ctypes.byref(ref), ctypes.byref(dist), self._count),
+               f"Scoring frame {self._count}")
+        self._count += 1
+
+    def _download(self, picture: _Picture, stream, slot: int, which: int) -> None:
+        address, pitch = picture.data[0], picture.stride[0]
+        if stream.backend == "nvidia":
+            if address not in self._pinned:
+                self._pinned[address] = stream if stream.pin(address, pitch * picture.h[0]) else None
+            stream.download_planes(slot, (address, None, None), (pitch, 0, 0))
+        elif pitch == self._row_bytes:
+            stream.download(slot, address)
+        else:
+            if self._staging is None:
+                self._staging = [bytearray(self.luma_bytes), bytearray(self.luma_bytes)]
+            buffer = self._staging[which]
+            stream.download(slot, ctypes.addressof((ctypes.c_char * len(buffer)).from_buffer(buffer)))
+            self._fill(picture, buffer, self.luma_bytes)
+
+    def _fill(self, picture: _Picture, frame, size: int) -> None:
+        """The luma of `frame`, `size` bytes or more."""
+        source = np.frombuffer(frame, dtype=np.uint8)
+        if len(source) < size:
+            raise VmafGpuError(f"frame {self._count} is shorter than a picture")
+        target = np.ctypeslib.as_array(ctypes.cast(picture.data[0], ctypes.POINTER(ctypes.c_uint8)),
+                                       shape=(self._rows, picture.stride[0]))
+        target[:, :self._row_bytes] = source[:self.luma_bytes].reshape(self._rows, self._row_bytes)
+
+    def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+        """The frame numbers scored (every n_subsample-th) and each metric's
+        scores for them, as libvmaf's JSON log rounds them: six decimals."""
+        if not self._count:
+            return np.zeros(0, dtype=np.int32), {metric: np.zeros(0) for metric in self._metrics}
+        _check(self._lib.vmaf_read_pictures(self._context, None, None, 0), "Finishing")
+        frames = np.arange(0, self._count, self._step, dtype=np.int32)
+        scores = {}
+        value = ctypes.c_double()
+        for metric in self._metrics:
+            feature = CPU_FEATURES[metric][1].encode()
+            column = np.empty(len(frames), dtype=np.float64)
+            for slot, frame in enumerate(frames):
+                _check(self._lib.vmaf_feature_score_at_index(self._context, feature, ctypes.byref(value), int(frame)),
+                       f"Reading {metric} for frame {frame}")
+                column[slot] = float(f"{value.value:.6f}")
+            scores[metric] = column
+        return frames, scores
+
+    def close(self) -> None:
+        """Before the decoders are closed, where the frames came from them."""
+        # Unpinned first: vmaf_close frees the pictures, and CUDA's memory is
+        # unregistered before it is freed. No copy into it is under way
+        # (download_planes returns once its copy is done); an extractor still
+        # reading it does not mind.
+        for address, stream in self._pinned.items():
+            if stream is not None:
+                stream.unpin(address)
+        self._pinned = {}
+        if self._context:
+            self._lib.vmaf_close(self._context)
+            self._context = ctypes.c_void_p()
+
+
+def cpu_pairs(width: int, height: int, bit_depth: int, threads: int) -> int:
+    """How many pairs of pictures CpuScorer's pool holds: one for each of
+    libvmaf's threads and one being filled, up to 8 threads' worth -- PSNR
+    and SSIM of 4K pairs from memory went little faster with more (139 fps
+    with 8 threads, 152 with 24) -- in at most CPU_PICTURE_MEMORY, but two.
+    A pair is scored on one thread: each more in the pool is one more
+    scored at a time."""
+    picture = ((width + 31) & ~31) * height * (1 if bit_depth <= 8 else 2)
+    return max(2, min(min(8, max(1, threads)) + 1, CPU_PICTURE_MEMORY // (2 * picture)))
+
+
+def score_decoded_cpu(
+    source: VideoInfo, distorted: VideoInfo, source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+    width: int, height: int, bit_depth: int, models: dict[str, str] | tuple[str, ...], n_subsample: int,
+    duration_limit: str | None, total_frames: int, decoder: str, threads: int = 0,
+    scale_algorithm: str = "bicubic",
+    on_progress: Callable[[int, int, float], None] | None = None,
+    check_cancel: Callable[[], None] = lambda: None,
+    process_handle=None,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """PSNR and SSIM (CpuScorer; `models`: CPU_FEATURES keys) with both videos
+    decoded in this process by the GPU's own decoder (gpu_frames: NVIDIA's,
+    Intel's or AMD's), luma only, as score_decoded does for VMAF: the frames
+    FFmpeg's outputs carry -- the decoders crop as FFmpeg's crop filter does
+    and widen 8-bit samples as FFmpeg converts them -- paired as libvmaf's
+    filter pairs them (frame_sync) and cut where FFmpeg's -t would cut them.
+    Not for a comparison scaled to a size: the decoders do not scale as
+    FFmpeg does to the sample, and PSNR and SSIM, unlike VMAF, are scored
+    here to be FFmpeg's (GpuDecodeUnavailableError, and FFmpeg decodes, as
+    for any video they do not take). GpuDecodeFailedError when decoding
+    failed after the start."""
+    plans = []
+    device = _GPU if decoder == "nvidia" else 0
+    for info, crop in ((distorted, distorted_crop), (source, source_crop)):
+        plan = gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
+                                      algorithm=scale_algorithm)
+        if plan.scaled:
+            raise gpu_frames.GpuDecodeUnavailableError("the comparison is scaled, by FFmpeg")
+        if plan.bit_depth < bit_depth:
+            full = (info.color_range or "").casefold() in {"pc", "jpeg", "full"} or (
+                not info.color_range and (info.pix_fmt or "").casefold().startswith("yuvj"))
+            plan = replace(plan, widen=gpu_frames.WIDEN_REPEAT if full else gpu_frames.WIDEN_SHIFT)
+        if plan.bit_depth > bit_depth:
+            raise gpu_frames.GpuDecodeUnavailableError(
+                f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
+        supported, refusal = gpu_frames.decoder_supports(device, plan, decoder)
+        if not supported:
+            raise gpu_frames.GpuDecodeUnavailableError(refusal)
+        plans.append(plan)
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], device, pool=4, process_handle=process_handle,
+                                     backend=decoder)
+    try:
+        ref = gpu_frames.GpuFrameStream(source, plans[1], device, pool=4, process_handle=process_handle,
+                                        backend=decoder)
+    except BaseException:
+        test.close()
+        raise
+    scorer = None
+    try:
+        scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads)
+        if test.frame_bytes != scorer.luma_bytes or ref.frame_bytes != scorer.luma_bytes:
+            raise gpu_frames.GpuDecodeUnavailableError("the decoders' frames are not the size compared at")
+        test.start()
+        ref.start()
+        test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
+        stop = gpu_frames.duration_in(duration_limit, test_base) if duration_limit else None
+
+        def puller(stream):
+            def pull():
+                while True:
+                    check_cancel()
+                    try:
+                        return stream.next(100)
+                    except TimeoutError:
+                        continue
+            return pull
+
+        pairs = frame_pairs(puller(test), puller(ref), test_base, ref_base, test.release, ref.release)
+        count = 0
+        started = reported = time.perf_counter()
+        try:
+            for test_slot, ref_slot, when in pairs:
+                if stop is not None and when >= stop:
+                    break
+                if ref_slot is None:
+                    raise gpu_frames.GpuDecodeFailedError("the source has no frame for the test video's first")
+                scorer.add_decoded(ref, ref_slot, test, test_slot)
+                count += 1
+                now = time.perf_counter()
+                if on_progress is not None and now - reported >= 0.25:
+                    reported = now
+                    on_progress(count, total_frames, count / (now - started))
+        finally:
+            pairs.close()
+        test.verify()
+        ref.verify()
+        return scorer.finish()
+    finally:
+        if scorer is not None:  # first: it gives back the memory the decoders page-locked
+            scorer.close()
+        test.close()
+        ref.close()
 
 
 # ------------------------------------------------------------- frame feed
@@ -780,9 +1058,14 @@ class GpuAttempt:
     comes as it is, with its timestamps, and is paired here (_StreamReader)."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
-                 backend: str = "cuda", device: int | None = None, paired: bool | None = None):
+                 backend: str = "cuda", device: int | None = None, paired: bool | None = None,
+                 threads: int = 0):
+        """`backend` "cpu": `models` are CPU_FEATURES keys, scored by
+        CpuScorer with `threads` of libvmaf's."""
         self.paired = not pairs_in_app() if paired is None else paired
-        if "vmaf_v1" in models:
+        if backend == "cpu":
+            self._scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads)
+        elif "vmaf_v1" in models:
             from vmaf_app.core import vmaf_v1_gpu
 
             self._scorer = vmaf_v1_gpu.MultiScorer(width, height, bit_depth, models, n_subsample, backend, device)

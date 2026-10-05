@@ -145,7 +145,7 @@ def test_a_duration_limit_gives_the_raw_outputs_one_frame_more(monkeypatch):
     seen = {}
 
     class Attempt:
-        def __init__(self, *args):
+        def __init__(self, *args, **_kwargs):
             seen["args"] = args
 
         def output_args(self, limit):

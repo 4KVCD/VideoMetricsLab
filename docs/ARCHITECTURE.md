@@ -30,7 +30,15 @@ Qt at all. Native playback in core does load GI bindings.
 3. Check cached results using only the request's scientific identity.
 4. Group missing metrics by backend. The current FFmpeg backend still builds
    one efficient filtergraph for its requested metrics; XPSNR alone does not
-   require a VMAF score. SSIMULACRA2 and Butteraugli use the perceptual backend,
+   require a VMAF score. Where PSNR and SSIM are libvmaf's only metrics (no
+   VMAF on the CPU), the bundled libvmaf-fast scores them in a process of its
+   own (`vmaf_runner._run_cpu_metrics`, `vmaf_cuda.CpuScorer`), on luma-only
+   pictures from a pool of bounded size: decoded there by the GPU's own
+   decoder when nothing is scaled (`vmaf_cuda.score_decoded_cpu`), else from
+   frames FFmpeg writes to pipes. XPSNR runs in an FFmpeg beside it, unless
+   the CPU decodes a video, which that would decode twice. FFmpeg's libvmaf
+   filter, which copies every frame pair on one thread, scores them
+   whenever that fails. SSIMULACRA2 and Butteraugli use the perceptual backend,
    which tries Vship GPU scoring and falls back to the bundled libjxl CPU tools.
 5. Parse per-frame logs into `FrameScores`, a collection of packed NumPy arrays.
 6. Deliver results to the UI, update graph identities, and queue cache writes.

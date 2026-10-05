@@ -79,12 +79,15 @@ ProgressCallback = Callable[[int, int, float], None]  # (current_frame, total_fr
 
 
 def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: str = "",
-                                    gpu_keys: set[str] | None = None, gpu_backend: str = "cuda"):
+                                    gpu_keys: set[str] | None = None, gpu_backend: str = "cuda",
+                                    cpu_keys: set[str] | None = None):
     """Adapt one FFmpeg parse into generic results without re-parsing it.
     `gpu_keys`: VMAF and NEG scored on the GPU (vmaf_cuda) -- the same
     request identity as FFmpeg's libvmaf (their scores agree to within
     4e-5), recorded as GPU scores of the bundled build, libvmaf's CUDA code
-    or its Vulkan port (`gpu_backend`)."""
+    or its Vulkan port (`gpu_backend`). `cpu_keys`: PSNR and SSIM scored by
+    the bundled libvmaf's CPU extractors in the app (vmaf_cuda.CpuScorer),
+    which give FFmpeg's libvmaf's scores: the same identity too."""
     status = check_tools()
     version = format_version(status.ffmpeg.version) if status.ffmpeg.runnable else "unknown"
 
@@ -93,6 +96,8 @@ def _metric_results_for_current_run(frames: FrameScores, model: str, model_v1: s
                       else {"model": model} if key == "vmaf"
                       else {"model": model_v1} if key == "vmaf_v1" else None)
         made = current_ffmpeg_provenance(key, version, parameters)
+        if key in (cpu_keys or ()):
+            made = replace(made, implementation="libvmaf", implementation_version=vmaf_cuda.CPU_BUILD)
         if key in (gpu_keys or ()):
             # VMAF v1's GPU half is Vulkan's on every GPU (vmaf_v1_gpu).
             backend = "vulkan" if key == "vmaf_v1" else gpu_backend
@@ -884,14 +889,19 @@ CommandBuilder = Callable[..., list[str]]
 @dataclass(frozen=True)
 class _GpuPlan:
     """VMAF and NEG scored on the GPU (vmaf_cuda), the run's only metrics:
-    libvmaf's models for them, and the size and depth frames are compared at."""
+    libvmaf's models for them, and the size and depth frames are compared at.
+    Or, with `backend` "cpu", PSNR and SSIM by the bundled libvmaf's CPU
+    extractors (vmaf_cuda.CpuScorer): `models` maps their keys to
+    themselves, `threads` is libvmaf's."""
     models: dict[str, str]
     width: int
     height: int
     bit_depth: int
-    #: "cuda" (libvmaf) or "vulkan" (vmaf_vulkan, on Vulkan's GPU `device`).
+    #: "cuda" (libvmaf), "vulkan" (vmaf_vulkan, on Vulkan's GPU `device`)
+    #: or "cpu".
     backend: str = "cuda"
     device: int | None = None
+    threads: int = 0
 
 
 def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
@@ -902,7 +912,12 @@ def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
         raise vmaf_cuda.VmafGpuError("GPU VMAF scored no frames")
     time = numbers / fps if fps > 0 else np.zeros(len(numbers), dtype=np.float64)
     v1 = scores.get("vmaf_v1")
+
+    def column(key: str):  # float32, as _parse_log keeps FFmpeg's
+        return None if scores.get(key) is None else np.asarray(scores[key], dtype=np.float32)
+
     return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"),
+                       psnr=column("psnr"), ssim=column("ssim"),
                        metrics=None if v1 is None else {"vmaf_v1": np.asarray(v1, dtype=np.float32)})
 
 
@@ -998,7 +1013,7 @@ def _execute_run(
             # A libvmaf context and pipes of its own for each attempt: a
             # failed attempt's are spent.
             attempt = vmaf_cuda.GpuAttempt(gpu.width, gpu.height, gpu.bit_depth, gpu.models, options.n_subsample,
-                                           gpu.backend, gpu.device)
+                                           gpu.backend, gpu.device, threads=gpu.threads)
             try:
                 # One frame more than the limit: FFmpeg's libvmaf filter scores
                 # the first frame at or past it (stamped 30.03 s for a 30 s
@@ -1031,8 +1046,9 @@ def _execute_run(
         for attempt, plan in enumerate(ladder):
             if on_status:
                 if attempt == 0:
-                    on_status(Status.decoding(f"Running ffmpeg{', VMAF on the GPU' if gpu is not None else ''}",
-                                              plan, ending="...", kind=STARTING))
+                    doing = ("" if gpu is None else ", PSNR and SSIM in the app" if gpu.backend == "cpu"
+                             else ", VMAF on the GPU")
+                    on_status(Status.decoding(f"Running ffmpeg{doing}", plan, ending="...", kind=STARTING))
                 else:
                     on_status(Status.decoding("GPU decode failed, retrying", plan, ending="..."))
             result = run_with(plan)
@@ -1154,6 +1170,16 @@ def run_vmaf(
         )
         if frames is None:
             gpu_models = None
+    cpu_keys: set[str] = set()
+    if frames is None and (cpu := _cpu_metrics_plan(options, dimensions, source_info, distorted_info,
+                                                     hwaccel)) is not None:
+        frames = _run_cpu_metrics(
+            cpu, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
+            model=effective_model, on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+            process_handle=process_handle,
+        )
+        if frames is not None:
+            cpu_keys = set(cpu.models)
     if frames is None:
         frames = _execute_run(
             build_command,
@@ -1190,7 +1216,7 @@ def run_vmaf(
         model_choice_v1=options.model_choice_v1 if options.compute_vmaf_v1 else None,
         metric_results=_metric_results_for_current_run(
             frames, effective_model, options.model_v1, gpu_keys=set(gpu_models or ()) & set(frames.metric_keys),
-            gpu_backend=gpu_backend,
+            gpu_backend=gpu_backend, cpu_keys=cpu_keys & set(frames.metric_keys),
         ),
     )
 
@@ -1285,6 +1311,203 @@ def _score_on_gpu(
     )
 
 
+#: Set to "ffmpeg", PSNR and SSIM are left to FFmpeg's libvmaf filter, as
+#: before _run_cpu_metrics (for comparing the two).
+CPU_METRICS_VARIABLE = "VML_CPU_METRICS"
+#: FFmpeg's libvmaf features -> the metrics vmaf_cuda.CpuScorer scores.
+_CPU_METRIC_OF_FEATURE = {"name=psnr": "psnr", "name=float_ssim": "ssim"}
+
+
+def _cpu_metrics_plan(options: VmafOptions, dimensions: tuple[int, int], source_info: VideoInfo,
+                      distorted_info: VideoInfo, hwaccel: HwAccelPlan) -> _GpuPlan | None:
+    """PSNR and SSIM scored by the bundled libvmaf in the app
+    (_run_cpu_metrics) instead of by FFmpeg's libvmaf filter: where they are
+    libvmaf's only metrics in the run (VMAF on the CPU keeps them in
+    FFmpeg's filter, which it runs anyway), and frames can come to the app
+    as for VMAF on the GPU. None: FFmpeg's filter, as before."""
+    if os.environ.get(CPU_METRICS_VARIABLE, "").casefold() == "ffmpeg":
+        return None
+    if not options.extra_features or _uses_vmaf_model(options) or options.resample_test is not None:
+        return None
+    if any(feature not in _CPU_METRIC_OF_FEATURE for feature in options.extra_features):
+        return None
+    if options.compute_xpsnr and not (hwaccel.source and hwaccel.distorted):
+        # XPSNR's FFmpeg beside them decodes the videos again, and a video
+        # the CPU decodes is then decoded twice on it -- 70% more CPU a
+        # frame for a 4K film against its encode, and a 4K film against a
+        # 1080p encode ran slower (97 fps, 112 in FFmpeg's one run) -- where
+        # FFmpeg's one run decodes each once for its libvmaf and XPSNR.
+        return None
+    if not vmaf_cuda.LIBRARY_PATH.is_file():
+        return None
+    width, height = dimensions
+    bit_depth = analysis_bit_depth(source_info, distorted_info)
+    # FFmpeg's pairing (an FFmpeg older than 6.1) takes an even size and the
+    # formats overlay holds unchanged (_gpu_pairs_stage).
+    if not vmaf_cuda.pairs_in_app() and (width & 1 or height & 1 or bit_depth > 10):
+        return None
+    metrics = tuple(dict.fromkeys(_CPU_METRIC_OF_FEATURE[feature] for feature in options.extra_features))
+    threads = options.n_threads if options.n_threads > 0 else auto_threads()
+    return _GpuPlan({metric: metric for metric in metrics}, width, height, bit_depth, backend="cpu",
+                    threads=threads)
+
+
+class _Progress:
+    """Two runs' progress as one: the frames of the one that is behind."""
+
+    def __init__(self, on_progress: ProgressCallback | None, parts: int):
+        self._on_progress = on_progress
+        self._latest: list[tuple[int, int, float] | None] = [None] * parts
+        self._lock = threading.Lock()
+
+    def part(self, index: int) -> ProgressCallback | None:
+        if self._on_progress is None:
+            return None
+
+        def report(done: int, total: int, fps: float) -> None:
+            with self._lock:
+                self._latest[index] = (done, total, fps)
+                if any(latest is None for latest in self._latest):
+                    return
+                behind = min(self._latest, key=lambda latest: latest[0])
+            self._on_progress(*behind)
+
+        return report
+
+
+def _run_cpu_metrics(
+    plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
+    model: str, on_progress, on_status, cancel_event, process_handle,
+) -> FrameScores | None:
+    """PSNR and SSIM by the bundled libvmaf's CPU extractors, in a process of
+    their own (a crash ends that, not the app), from the videos' frames as
+    they would reach FFmpeg's libvmaf filter -- decoded there by the GPU's
+    decoder, or written by each video's FFmpeg (_score_cpu_metrics) -- and
+    paired as that filter pairs them (frame_sync), as for VMAF on the GPU.
+    XPSNR, when asked for too, is FFmpeg's, in an
+    FFmpeg of its own beside them, its scores taken for the frames PSNR and
+    SSIM were scored for (as _parse_log takes them).
+
+    FFmpeg's libvmaf filter allocates, zeroes and copies two new pictures
+    for every pair on its one filter thread before libvmaf's threads see
+    them. None when the run fails for any reason but Cancel: FFmpeg's
+    filter then calculates them, as before."""
+    _log.info("PSNR and SSIM in the app (%s): %s, %d threads", ", ".join(plan.models), vmaf_cuda.CPU_BUILD,
+              plan.threads)
+    xpsnr_frames: list[FrameScores] = []
+    xpsnr_error: list[BaseException] = []
+    progress = _Progress(on_progress, 2 if options.compute_xpsnr else 1)
+    stop = threading.Event()
+    xpsnr_thread = None
+    if options.compute_xpsnr:
+        xpsnr_options = replace(options, extra_features=[])
+
+        def build_command(hw, resolved_model, log_path, xpsnr_log_path):
+            # XPSNR's alone: run_vmaf's command would score PSNR and SSIM
+            # there again, at FFmpeg's speed.
+            filtergraph = _build_filtergraph(
+                source_info, distorted_info, xpsnr_options, source_crop, distorted_crop, hw, log_path,
+                model=resolved_model, xpsnr_log_path=xpsnr_log_path,
+            )
+            return _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, hw,
+                                     xpsnr_options.duration_limit)
+
+        def xpsnr() -> None:
+            try:
+                xpsnr_frames.append(_execute_run(
+                    build_command, options=xpsnr_options, model=model, fps=distorted_info.fps,
+                    total_frames=total_frames, hwaccel=hwaccel, tmp_prefix="vmaf_xpsnr_run_",
+                    on_progress=progress.part(1), on_status=None, cancel_event=stop,
+                    process_handle=process_handle))
+            except BaseException as error:  # raised in the caller's thread
+                xpsnr_error.append(error)
+
+        xpsnr_thread = threading.Thread(target=xpsnr, name="vmaf-xpsnr", daemon=True)
+        xpsnr_thread.start()
+
+    def wait_for_xpsnr() -> None:
+        if xpsnr_thread is None:
+            return
+        while xpsnr_thread.is_alive():
+            if cancel_event is not None and cancel_event.is_set():
+                stop.set()
+            xpsnr_thread.join(timeout=0.1)
+
+    try:
+        frames = run_isolated(
+            _score_cpu_metrics, plan, source_info, distorted_info, replace(options, compute_xpsnr=False),
+            source_crop, distorted_crop, hwaccel, total_frames, what="libvmaf",
+            callbacks=("on_progress", "on_status"), on_progress=progress.part(0), on_status=on_status,
+            cancel_event=cancel_event, process_handle=process_handle, cancelled=Cancelled,
+        )
+    except Cancelled:
+        stop.set()
+        wait_for_xpsnr()
+        raise
+    except Exception as error:
+        stop.set()
+        wait_for_xpsnr()
+        _log.error("PSNR and SSIM in the app failed; FFmpeg's libvmaf calculates them: %s", error, exc_info=error)
+        if on_status:
+            on_status(f"PSNR and SSIM in the app failed ({error}); calculating them with FFmpeg…")
+        return None
+    wait_for_xpsnr()
+    if cancel_event is not None and cancel_event.is_set():
+        raise Cancelled("Cancelled by user")
+    if xpsnr_error:
+        raise xpsnr_error[0]
+    if xpsnr_frames:
+        found = xpsnr_frames[0]
+        by_frame = dict(zip(found.frame.tolist(), found.values("xpsnr").tolist(), strict=True))
+        xpsnr = np.array([by_frame.get(number, np.nan) for number in frames.frame.tolist()], dtype=np.float32)
+        frames = FrameScores(frames.frame, frames.time, None, psnr=frames.values("psnr") if frames.has("psnr")
+                             else None, ssim=frames.values("ssim") if frames.has("ssim") else None, xpsnr=xpsnr)
+    return frames
+
+
+def _score_cpu_metrics(
+    plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
+    source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
+    on_progress=None, on_status=None, cancel_event=None, process_handle=None,
+) -> FrameScores:
+    """Run by _run_cpu_metrics in its own process: FFmpeg decodes, crops,
+    scales and converts the videos as for its libvmaf filter, and the app
+    pairs and scores them (vmaf_cuda.GpuAttempt with a CpuScorer). Where the
+    GPU's own decoder decodes both videos, and nothing is scaled, they are
+    decoded in this process instead (vmaf_cuda.score_decoded_cpu): the same
+    frames, without FFmpeg, its conversions and the pipes."""
+    if hwaccel.source == hwaccel.distorted and hwaccel.source in _DECODED_HERE:
+        try:
+            return _score_decoded_on_gpu(
+                plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
+                on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+                process_handle=process_handle)
+        except gpu_frames.GpuDecodeUnavailableError as error:
+            _log.info("PSNR and SSIM in the app: the videos are decoded by FFmpeg (%s)", error)
+        except gpu_frames.GpuDecodeFailedError as error:
+            _log.warning("GPU decoding for PSNR and SSIM failed; decoding through FFmpeg instead: %s", error)
+            if on_status:
+                on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
+
+    def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
+        filtergraph = _build_filtergraph(
+            source_info, distorted_info, options, source_crop, distorted_crop, hw, log_path,
+            model=resolved_model, xpsnr_log_path=xpsnr_log_path, gpu_vmaf=True,
+            gpu_paired=not isinstance(gpu_outputs, tuple),
+        )
+        if isinstance(gpu_outputs, tuple):  # an FFmpeg for each video: the app pairs the frames
+            return _build_stream_cmds(distorted_info.path, source_info.path, filtergraph, hw, gpu_outputs)
+        return _build_ffmpeg_cmd(distorted_info.path, source_info.path, filtergraph, hw,
+                                 options.duration_limit, gpu_outputs)
+
+    return _execute_run(
+        build_command, options=options, model="", fps=distorted_info.fps, total_frames=total_frames,
+        hwaccel=hwaccel, tmp_prefix="vmaf_cpu_run_", on_progress=on_progress, on_status=on_status,
+        cancel_event=cancel_event, process_handle=process_handle, gpu=plan,
+    )
+
+
 #: The decoder in the scoring process for what FFmpeg would decode with each
 #: -hwaccel (as perceptual_vship's _GPU_DECODERS).
 _DECODED_HERE = {"cuda": "nvidia", "qsv": "intel", "d3d11va": "amd"}
@@ -1297,19 +1520,24 @@ def _score_decoded_on_gpu(
 ) -> FrameScores:
     """VMAF and NEG from videos decoded in this process (vmaf_cuda.score_decoded,
     or vmaf_vulkan.score_decoded for the Vulkan backend), over the frames
-    _execute_run's FFmpeg would give libvmaf on the GPU."""
+    _execute_run's FFmpeg would give libvmaf on the GPU; PSNR and SSIM for the
+    "cpu" backend (vmaf_cuda.score_decoded_cpu, for _score_cpu_metrics)."""
     fps = distorted_info.fps
     # As _execute_run: one frame more than the limit, which FFmpeg's libvmaf
     # filter scores before its output stops.
     limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
     if on_status:
-        on_status(Status.decoding("Running VMAF on the GPU", hwaccel, ending="..."))
+        on_status(Status.decoding("Running PSNR and SSIM in the app" if plan.backend == "cpu"
+                                  else "Running VMAF on the GPU", hwaccel, ending="..."))
 
     def check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
             raise Cancelled("Cancelled by user")
 
-    if "vmaf_v1" in plan.models:  # whole frames, for its scorers and any of VMAF v0.6.1's beside them
+    if plan.backend == "cpu":
+        score_decoded = functools.partial(vmaf_cuda.score_decoded_cpu, threads=plan.threads,
+                                          decoder=_DECODED_HERE[hwaccel.source])
+    elif "vmaf_v1" in plan.models:  # whole frames, for its scorers and any of VMAF v0.6.1's beside them
         score_decoded = functools.partial(vmaf_v1_gpu.score_decoded, backend=plan.backend, device=plan.device,
                                           decoder=_DECODED_HERE[hwaccel.source])
     elif plan.backend == "vulkan":

@@ -76,7 +76,7 @@ def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):
     seen = {}
 
     class Attempt:
-        def __init__(self, *args):
+        def __init__(self, *args, **_kwargs):
             seen["args"] = args
 
         def output_args(self, limit):
