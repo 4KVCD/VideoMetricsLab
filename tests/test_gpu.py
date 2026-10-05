@@ -172,6 +172,30 @@ def test_only_an_even_sized_video_comes_back_from_ffmpegs_hardware_decode_as_it_
     assert gpu.downloads_from_gpu("yuv420p", *size) is downloads
 
 
+@pytest.mark.parametrize(("vendor", "hwaccel"), [(GpuVendor.INTEL, "qsv"), (GpuVendor.AMD, "d3d11va")])
+def test_ten_bit_h264_is_planned_in_software_where_the_gpu_does_not_decode_it(monkeypatch, vendor, hwaccel):
+    """Intel's and AMD's do not: FFmpeg decoded in software, the download
+    failed and the run started again, every run."""
+    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda", "qsv", "d3d11va"})
+    assert gpu.pick_hwaccel(vendor, "h264") == hwaccel
+
+    for pix_fmt, decoder in (("yuv420p10le", None), ("yuv420p", hwaccel), ("yuvj420p", hwaccel), ("", hwaccel)):
+        assert gpu.pick_decode(vendor, "h264", pix_fmt) == decoder
+        assert gpu.pick_decode(vendor, "H264", pix_fmt) == decoder
+    assert gpu.pick_decode(vendor, "hevc", "yuv420p10le") == hwaccel
+    assert gpu.pick_decode(vendor, "hevc", "yuv420p10le", 853, 480) is None
+    plan = plan_hwaccel(vendor, "h264", "h264", source_pix_fmt="yuv420p10le", distorted_pix_fmt="yuv420p")
+    assert plan == HwAccelPlan(source=None, distorted=hwaccel)
+
+
+def test_ten_bit_h264_is_left_to_nvidias_decoder(monkeypatch):
+    """An RTX 50 decodes it, to the software decode's pictures."""
+    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
+
+    assert gpu.pick_decode(GpuVendor.NVIDIA, "h264", "yuv420p10le") == "cuda"
+    assert gpu.pick_decode(GpuVendor.NVIDIA, "h264", "yuv422p10le") is None
+
+
 def test_an_odd_sized_video_is_planned_in_software(monkeypatch):
     monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
     monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])

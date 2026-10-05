@@ -227,6 +227,26 @@ def downloads_from_gpu(pix_fmt: str, width: int = 0, height: int = 0) -> bool:
         name.startswith(("yuv420p", "yuvj420p")) and bit_depth(name) <= 10)
 
 
+def pick_decode(vendor: GpuVendor, codec_name: str, pix_fmt: str, width: int = 0, height: int = 0) -> str | None:
+    """The ffmpeg -hwaccel to start for this video, or None for software
+    decode: pick_hwaccel's, for a format and size downloads_from_gpu takes,
+    and for H.264 at more than 8 bits NVIDIA's only.
+
+    Intel's and AMD's GPUs do not decode 10-bit H.264. Asked to with
+    -hwaccel qsv or d3d11va, FFmpeg decodes it in software, the frames reach
+    hwdownload in system memory and the run fails after 0.3 s ("Error
+    reinitializing filters!" on a Radeon 780M, "Invalid argument" with
+    FFmpeg 9 here) to be started again in software -- every run. NVIDIA's
+    RTX 50 series does decode it (RTX 5090: the software decode's pictures,
+    by MD5); an older card fails and starts again as before."""
+    if not downloads_from_gpu(pix_fmt, width, height):
+        return None
+    hwaccel = pick_hwaccel(vendor, codec_name)
+    if hwaccel != "cuda" and (codec_name or "").casefold() == "h264" and pix_fmt and bit_depth(pix_fmt) > 8:
+        return None
+    return hwaccel
+
+
 def plan_hwaccel(
     vendor: GpuVendor, source_codec: str, distorted_codec: str | None = None, *,
     source_pix_fmt: str = "", distorted_pix_fmt: str = "",
@@ -234,17 +254,14 @@ def plan_hwaccel(
 ) -> HwAccelPlan:
     """Chooses FFmpeg's hardware decode for each input separately: by codec,
     and only for a pixel format and a size (width, height) it gives as the
-    software decode does (downloads_from_gpu).
+    software decode does (pick_decode).
 
     `distorted_codec` of None is the round-trip-test case: there is only one
     input file, so there is nothing to decide for the distorted side.
     """
-    def pick(codec: str, pix_fmt: str, size: tuple[int, int]) -> str | None:
-        return pick_hwaccel(vendor, codec) if downloads_from_gpu(pix_fmt, *size) else None
-
     return HwAccelPlan(
-        source=pick(source_codec, source_pix_fmt, source_size),
-        distorted=(pick(distorted_codec, distorted_pix_fmt, distorted_size)
+        source=pick_decode(vendor, source_codec, source_pix_fmt, *source_size),
+        distorted=(pick_decode(vendor, distorted_codec, distorted_pix_fmt, *distorted_size)
                    if distorted_codec is not None else None),
     )
 

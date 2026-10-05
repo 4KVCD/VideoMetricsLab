@@ -61,10 +61,9 @@ from vmaf_app.core.gpu import (
     GPU_WAIT_MESSAGE,
     PCI_VENDORS,
     HwAccelPlan,
-    downloads_from_gpu,
     hw_native_format,
     hwaccel_args,
-    pick_hwaccel,
+    pick_decode,
 )
 from vmaf_app.core.isolated import IsolatedCrashError, run_isolated
 from vmaf_app.core.metric_cache import VSHIP_COLOR_TAGS
@@ -2009,14 +2008,13 @@ def _score_vship_pass_with(
     # Decode follows the row's GPU-decode setting, per input and per codec:
     # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
     # decoder (VVC) or where FFmpeg's hardware decode does not give the
-    # video's own pictures (gpu.downloads_from_gpu: 4:2:2, 4:4:4, 12-bit, an
-    # odd size). Hardware decode is otherwise bit-exact: it changes speed only.
+    # video's own pictures (gpu.pick_decode: 4:2:2, 4:4:4, 12-bit, an
+    # odd size, 10-bit H.264 on Intel and AMD). Hardware decode is otherwise bit-exact: it
+    # changes speed only.
     vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
 
     def decoder_of(info: VideoInfo) -> str | None:
-        if not downloads_from_gpu(info.pix_fmt, info.width, info.height):
-            return None
-        return pick_hwaccel(vendor, info.codec_name)
+        return pick_decode(vendor, info.codec_name, info.pix_fmt, info.width, info.height)
 
     src_hwaccel, dist_hwaccel = decoder_of(source), decoder_of(distorted)
     src_passthrough = _passthrough_format(source, src_hwaccel)

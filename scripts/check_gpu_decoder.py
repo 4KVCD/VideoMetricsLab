@@ -13,7 +13,8 @@ all of it): a whole film decoded twice, frame by frame, takes hours.
    decoded by the GPU decoder and by FFmpeg on the CPU, frame by frame
    (MD5): they must be identical, and so must their timestamps, each from
    its first picture.
-2. Speed: the first VIDEO (or the 10-bit clip) decoded on its own, with the
+2. Speed: the first VIDEO the decoder takes (or the 10-bit clip; the same
+   one in steps 3 and 4) decoded on its own, with the
    copy into a host buffer the GPU metrics make: frames per second and CPU.
 3. Scores: SSIMULACRA2 on the GPU (Vship) for the first VIDEO against its
    first 10 s re-encoded (8-bit H.264, which every GPU decodes), with the GPU
@@ -128,6 +129,16 @@ def check_pictures(path: Path, backend: str, crop: CropBox | None = None, second
     verdict = "IDENTICAL" if len(sums) == len(want) and not differ and not late else "DIFFERENT"
     return (f"{path.name}: {verdict} ({len(sums)} GPU pictures, {len(want)} CPU, {differ} differ, "
             f"{late} timestamps differ)")
+
+
+def refused(path: Path, backend: str) -> str:
+    """Why the GPU decoder does not take `path`, or "" if it does."""
+    try:
+        plan = nv.plan_decode(probe_video(path), None)
+    except nv.GpuDecodeUnavailableError as error:
+        return str(error)
+    supported, reason = nv.decoder_supports(0, plan, backend)
+    return "" if supported else reason or "no reason given"
 
 
 def check_speed(path: Path, backend: str, frames: int = 600) -> str:
@@ -373,13 +384,25 @@ def main() -> None:
             print(f"   {check_pictures(path, backend, crop, limit)}"
                   + (f" (cropped {crop.as_filter()})" if crop else "")
                   + (f" (its first {limit:g} s)" if limit else ""), flush=True)
-        print("2. " + check_speed(videos[0] if videos else work / "hevc10.mkv", backend), flush=True)
-        print("3. " + check_scores(videos[0] if videos else work / "hevc10.mkv", backend, work), flush=True)
+        # Speed, scores and scaling on the first VIDEO the decoder takes: one
+        # it refuses (10-bit H.264 on AMD) ended the report in a traceback.
+        subject = work / "hevc10.mkv"
+        for video in videos:
+            reason = refused(video, backend)
+            if not reason:
+                subject = video
+                break
+            print(f"   {video.name} is left out of the steps below: the GPU decoder refuses it ({reason})")
+        else:
+            if videos:
+                print(f"   none of the videos given is one the GPU decoder takes: {subject.name}, made here, is used")
+        print("2. " + check_speed(subject, backend), flush=True)
+        print("3. " + check_scores(subject, backend, work), flush=True)
         if backend in PCI_VENDORS:
             print("4. scaling")
             print(f"   {check_shader(backend)}", flush=True)
-            for line in check_scaling(videos[0] if videos else work / "hevc10.mkv", backend):
-                print(f"   {line} [{(videos[0] if videos else work / 'hevc10.mkv').name}]", flush=True)
+            for line in check_scaling(subject, backend):
+                print(f"   {line} [{subject.name}]", flush=True)
 
 
 if __name__ == "__main__":

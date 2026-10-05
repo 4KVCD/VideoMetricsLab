@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from tests.factories import STDLIB_PYTHON
-from vmaf_app.core import gpu_frames, perceptual_cpu
+from vmaf_app.core import gpu, gpu_frames, perceptual_cpu
 from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
@@ -416,7 +416,7 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
         stamps[side] = given if isinstance(given, list) else [given]
     monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
     monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handle())
-    monkeypatch.setattr(vship, "pick_hwaccel", hwaccel)
+    monkeypatch.setattr(gpu, "pick_hwaccel", hwaccel)  # what gpu.pick_decode asks
     # The stand-ins write bare frames: every layout goes as raw video here.
     # The YUV4MPEG stream has tests of its own, below.
     monkeypatch.setattr(vship, "_piped_as", lambda pixel_format: ["-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"])
