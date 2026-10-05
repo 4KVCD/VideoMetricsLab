@@ -131,28 +131,85 @@ bool set_filter(mfxLoader loader, const char *name, mfxVariantType type, mfxU32 
     return g_vpl.SetConfigFilterProperty(config, reinterpret_cast<const mfxU8 *>(name), variant) == MFX_ERR_NONE;
 }
 
-// A session on Intel's GPU decoder for `codec`, or the reason there is none.
-bool open_session(mfxU32 codec, mfxLoader *loader, mfxSession *session, std::string &error) {
-    *loader = g_vpl.Load();
-    if (!*loader) {
-        error = "Intel's video library could not start";
+// Intel's GPU decoders, found once for the process. Loading the library and
+// asking what it has takes about 0.6 s, and a comparison used to do it four
+// times before its first picture: for each video, once to ask whether it is
+// decoded and once to open its decoder. The loader is kept (sessions for any
+// number of decoders are made from one) and so is what each implementation
+// decodes.
+struct Decodes {
+    mfxU32 codec, format, max_width, max_height;
+};
+
+struct Implementations {
+    mfxLoader loader{};
+    std::vector<std::vector<Decodes>> decoders;  // by implementation index
+    std::string error;
+};
+
+const Implementations &implementations() {
+    static Implementations found;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        found.loader = g_vpl.Load();
+        if (!found.loader) {
+            found.error = "Intel's video library could not start";
+            return;
+        }
+        bool filtered = set_filter(found.loader, "mfxImplDescription.Impl", MFX_VARIANT_TYPE_U32, MFX_IMPL_TYPE_HARDWARE)
+                        && set_filter(found.loader, "mfxImplDescription.VendorID", MFX_VARIANT_TYPE_U32, 0x8086);
+        // The decoded pictures are copied to system memory by the GPU, where it can.
+        set_filter(found.loader, "DeviceCopy", MFX_VARIANT_TYPE_U16, MFX_GPUCOPY_ON);
+        for (mfxU32 index = 0; filtered; index++) {
+            mfxImplDescription *description = nullptr;
+            if (g_vpl.EnumImplementations(found.loader, index, MFX_IMPLCAPS_IMPLDESCSTRUCTURE,
+                                          reinterpret_cast<mfxHDL *>(&description)) != MFX_ERR_NONE
+                || !description)
+                break;
+            std::vector<Decodes> list;
+            const mfxDecoderDescription &decoders = description->Dec;
+            for (int c = 0; c < decoders.NumCodecs; c++) {
+                const auto &decoder = decoders.Codecs[c];
+                for (int profile = 0; profile < decoder.NumProfiles; profile++) {
+                    for (int m = 0; m < decoder.Profiles[profile].NumMemTypes; m++) {
+                        const auto &memory = decoder.Profiles[profile].MemDesc[m];
+                        for (int f = 0; f < memory.NumColorFormats; f++)
+                            list.push_back({decoder.CodecID, memory.ColorFormats[f], memory.Width.Max, memory.Height.Max});
+                    }
+                }
+            }
+            g_vpl.ReleaseImplDescription(found.loader, description);
+            found.decoders.push_back(std::move(list));
+        }
+        if (found.decoders.empty()) found.error = "no Intel GPU decoder";
+    });
+    return found;
+}
+
+// A session on Intel's GPU decoder for `codec` (the first implementation
+// that decodes it), or the reason there is none.
+bool open_session(mfxU32 codec, mfxSession *session, std::string &error) {
+    *session = nullptr;
+    const Implementations &found = implementations();
+    if (!found.error.empty()) {
+        error = found.error;
         return false;
     }
-    bool filtered = set_filter(*loader, "mfxImplDescription.Impl", MFX_VARIANT_TYPE_U32, MFX_IMPL_TYPE_HARDWARE)
-                    && set_filter(*loader, "mfxImplDescription.VendorID", MFX_VARIANT_TYPE_U32, 0x8086)
-                    && set_filter(*loader, "mfxImplDescription.mfxDecoderDescription.decoder.CodecID",
-                                  MFX_VARIANT_TYPE_U32, codec);
-    // The decoded pictures are copied to system memory by the GPU, where it can.
-    set_filter(*loader, "DeviceCopy", MFX_VARIANT_TYPE_U16, MFX_GPUCOPY_ON);
-    mfxStatus status = filtered ? g_vpl.CreateSession(*loader, 0, session) : MFX_ERR_UNSUPPORTED;
-    if (status != MFX_ERR_NONE) {
-        error = "no Intel GPU decoder for this codec (" + status_text(status) + ")";
-        g_vpl.Unload(*loader);
-        *loader = nullptr;
-        *session = nullptr;
-        return false;
+    mfxStatus status = MFX_ERR_UNSUPPORTED;
+    for (size_t index = 0; index < found.decoders.size(); index++) {
+        bool decodes = false;
+        for (const Decodes &entry : found.decoders[index]) decodes = decodes || entry.codec == codec;
+        if (!decodes) continue;
+        // Sessions are made one at a time: the two videos' decoders are
+        // opened from different threads.
+        static std::mutex making;
+        std::lock_guard<std::mutex> lock(making);
+        status = g_vpl.CreateSession(found.loader, static_cast<mfxU32>(index), session);
+        if (status == MFX_ERR_NONE) return true;
     }
-    return true;
+    error = "no Intel GPU decoder for this codec (" + status_text(status) + ")";
+    *session = nullptr;
+    return false;
 }
 
 // ----------------------------------------------------------------- decoder
@@ -179,7 +236,6 @@ struct Decoder {
     std::vector<std::vector<uint8_t>> buffers;  // slot -> scaled picture
     std::vector<uint8_t> check;
     std::string scale_note;  // why the CPU scales, when the GPU was meant to
-    mfxLoader loader = nullptr;
     mfxSession session = nullptr;
     mfxVideoParam video{};
     bool header = false, initialized = false;
@@ -509,7 +565,6 @@ void destroy(Decoder *d) {
         if (d->initialized) g_vpl.DecodeClose(d->session);
         g_vpl.Close(d->session);
     }
-    if (d->loader) g_vpl.Unload(d->loader);
     delete d;
 }
 
@@ -526,7 +581,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         copy_text(error, error_size, g_vpl_error);
         return nullptr;
     }
-    if (!params_valid(*params) || params->widen || !vpl_codec(params->codec)) {
+    if (!params_valid(*params) || !vpl_codec(params->codec)) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }
@@ -538,7 +593,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->info.frame_bytes = static_cast<long long>(frame_bytes(d->params));
     if (is_scaled(d->params)) prepare_scaler(d->params, d->scaler);
     std::string text;
-    if (!open_session(vpl_codec(params->codec), &d->loader, &d->session, text)) {
+    if (!open_session(vpl_codec(params->codec), &d->session, text)) {
         copy_text(error, error_size, text);
         destroy(d);
         return nullptr;
@@ -701,38 +756,17 @@ NVF_API int nvf_supports(int, int codec, int bit_depth, int width, int height, c
         copy_text(error, error_size, "not a codec Intel's decoder is asked for");
         return 0;
     }
-    mfxLoader loader = g_vpl.Load();
-    if (!loader) {
-        copy_text(error, error_size, "Intel's video library could not start");
-        return 0;
-    }
-    bool filtered = set_filter(loader, "mfxImplDescription.Impl", MFX_VARIANT_TYPE_U32, MFX_IMPL_TYPE_HARDWARE)
-                    && set_filter(loader, "mfxImplDescription.VendorID", MFX_VARIANT_TYPE_U32, 0x8086);
-    mfxImplDescription *description = nullptr;
-    bool found = filtered && g_vpl.EnumImplementations(loader, 0, MFX_IMPLCAPS_IMPLDESCSTRUCTURE,
-                                                       reinterpret_cast<mfxHDL *>(&description)) == MFX_ERR_NONE
-                 && description;
+    const Implementations &implementations_found = implementations();
+    bool found = implementations_found.error.empty();
     mfxU32 format = bit_depth > 8 ? MFX_FOURCC_P010 : MFX_FOURCC_NV12;
     bool supported = false;
-    if (found) {
-        const mfxDecoderDescription &decoders = description->Dec;
-        for (int c = 0; c < decoders.NumCodecs && !supported; c++) {
-            const auto &decoder = decoders.Codecs[c];
-            if (decoder.CodecID != id) continue;
-            for (int p = 0; p < decoder.NumProfiles && !supported; p++) {
-                const auto &profile = decoder.Profiles[p];
-                for (int m = 0; m < profile.NumMemTypes && !supported; m++) {
-                    const auto &memory = profile.MemDesc[m];
-                    if (static_cast<mfxU32>(width) > memory.Width.Max || static_cast<mfxU32>(height) > memory.Height.Max)
-                        continue;
-                    for (int f = 0; f < memory.NumColorFormats && !supported; f++)
-                        supported = memory.ColorFormats[f] == format;
-                }
-            }
+    for (const auto &list : implementations_found.decoders) {
+        for (const Decodes &entry : list) {
+            supported = supported || (entry.codec == id && entry.format == format
+                                      && static_cast<mfxU32>(width) <= entry.max_width
+                                      && static_cast<mfxU32>(height) <= entry.max_height);
         }
-        g_vpl.ReleaseImplDescription(loader, description);
     }
-    g_vpl.Unload(loader);
     if (!supported) {
         char text[160];
         snprintf(text, sizeof text, "Intel's GPU decoder does not decode this codec at %d bits and %dx%d", bit_depth,

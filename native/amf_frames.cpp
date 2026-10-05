@@ -703,8 +703,10 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         copy_text(error, error_size, g_amf_error);
         return nullptr;
     }
-    if (!params_valid(*params) || params->widen || !amf_codec(params->codec)
-        || (params->handover && (is_scaled(*params) || (params->crop_w & 1) || (params->crop_h & 1)))) {
+    // Widened pictures are decoded as without the hand-over, whose shader
+    // does not widen (amf_handover.slang).
+    if (!params_valid(*params) || !amf_codec(params->codec)
+        || (params->handover && (is_scaled(*params) || params->widen || (params->crop_w & 1) || (params->crop_h & 1)))) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }

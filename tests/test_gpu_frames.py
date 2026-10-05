@@ -8,6 +8,7 @@ import contextlib
 import hashlib
 import subprocess
 import threading
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
@@ -331,10 +332,49 @@ def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path, backend):
     info = probe_video(path)
     plan = nv.plan_decode(info, None, widen=nv.WIDEN_SHIFT)
     _need(plan, backend)
-    if backend != "nvidia":
-        pytest.skip("only NVIDIA's decoder widens (for VMAF on the GPU)")
     ours = _frames(info, plan, backend)
     assert np.array_equal(ours, _ffmpeg_frames(path, "format=yuv420p10le", 10))
+
+
+@BACKENDS
+def test_widened_full_range_luma_has_its_top_bits_repeated(tmp_path, backend):
+    """255 becomes 1023, as FFmpeg widens full-range video; the chroma is
+    shifted as ever."""
+    path = _clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=0.5)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, widen=nv.WIDEN_REPEAT)
+    _need(plan, backend)
+    ours = _frames(info, plan, backend).reshape(-1, 640 * 360 * 3 // 2)
+    narrow = _ffmpeg_frames(path, "format=yuv420p", 8).astype(np.uint16).reshape(ours.shape)
+    luma = 640 * 360
+    assert np.array_equal(ours[:, :luma], (narrow[:, :luma] << 2) | (narrow[:, :luma] >> 6))
+    assert np.array_equal(ours[:, luma:], narrow[:, luma:] << 2)
+
+
+@pytest.mark.parametrize("backend", ["intel", "amd"])
+@pytest.mark.parametrize("widen", [nv.WIDEN_SHIFT, nv.WIDEN_REPEAT])
+@pytest.mark.parametrize("to", [(640, 360), (1920, 1080)])
+def test_a_scaled_eight_bit_picture_is_widened_as_it_is_scaled(backend, widen, to):
+    """Intel's and AMD's decoders scale a widened picture on the CPU: the
+    filtered value times 4 (full-range luma: 1023 for 255), 16-bit samples
+    of 10 bits -- the scaled 8-bit picture's, to the rounding. No GPU is
+    asked."""
+    if not nv.LIBRARIES[backend].is_file():
+        pytest.skip(f"{nv.LIBRARIES[backend].name} is not built")
+    plain = nv.DecodePlan("h264", 8, 1280, 720, 0, 0, 1280, 720, 0, False, to[0], to[1], "bicubic")
+    picture = _test_picture(1280, 720, 8)
+    narrow = np.frombuffer(nv.scale_picture(plain, picture, None, backend), dtype=np.uint8).astype(np.int32)
+    wide_plan = replace(plain, widen=widen, shift=6)
+    assert wide_plan.frame_bytes == 2 * plain.frame_bytes
+    wide = np.frombuffer(nv.scale_picture(wide_plan, picture, None, backend), dtype=np.uint16).astype(np.int32)
+    assert wide.shape == narrow.shape and wide.max() <= 1023
+    luma = to[0] * to[1]
+    inside = (narrow > 0) & (narrow < 255)  # at the ends the 8-bit picture was clamped first
+    gain = np.full(narrow.shape, 4.0)
+    if widen == nv.WIDEN_REPEAT:
+        gain[:luma] = 1023 / 255
+    assert np.abs(wide - narrow * gain)[inside].max() <= 3
+    assert wide[:luma][narrow[:luma] == 255].min() >= 1018 and wide[narrow == 0].max() <= 2  # 254.5 and 0.5, times 4
 
 
 # ------------------------------------------------- scaling on the GPU (Intel, AMD)

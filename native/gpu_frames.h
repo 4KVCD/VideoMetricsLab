@@ -86,10 +86,37 @@ inline size_t frame_bytes(const Params &p) {
 // packed. 10-bit samples sit in the top bits of 16 when `msb`, else in the
 // low ones; they are handed back in the top bits (shift 0, P016's layout,
 // which Vship reads as 16-bit) or the low ones (shift 6, yuv420p10le). The
-// samples are moved, never computed.
+// samples are moved, never computed -- but for 8-bit pictures widened to 10
+// (Params::widen), which are made as FFmpeg makes them and NVIDIA's decoder
+// here does (its widen8 kernel): v << 2, in the low bits of 16, the luma's
+// top two bits repeated below when the video is full range.
 inline void convert_frame(const Params &p, const uint8_t *y, const uint8_t *uv, size_t pitch, bool msb,
                           uint8_t *dst) {
     const size_t w = p.crop_w, h = p.crop_h, cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
+    if (p.bit_depth == 8 && p.widen) {
+        uint16_t *wide = reinterpret_cast<uint16_t *>(dst);
+        const bool repeat = p.widen == 2;
+        for (size_t row = 0; row < h; row++) {
+            const uint8_t *src = y + (p.crop_y + row) * pitch + p.crop_x;
+            uint16_t *o = wide + row * w;
+            if (repeat) {
+                for (size_t i = 0; i < w; i++) o[i] = static_cast<uint16_t>((src[i] << 2) | (src[i] >> 6));
+            } else {
+                for (size_t i = 0; i < w; i++) o[i] = static_cast<uint16_t>(src[i] << 2);
+            }
+        }
+        if (p.luma_only) return;
+        uint16_t *u = wide + w * h, *v = u + cw * ch;
+        for (size_t row = 0; row < ch; row++) {
+            const uint8_t *src = uv + (p.crop_y / 2 + row) * pitch + p.crop_x;
+            uint16_t *ur = u + row * cw, *vr = v + row * cw;
+            for (size_t i = 0; i < cw; i++) {
+                ur[i] = static_cast<uint16_t>(src[2 * i] << 2);
+                vr[i] = static_cast<uint16_t>(src[2 * i + 1] << 2);
+            }
+        }
+        return;
+    }
     if (p.bit_depth == 8) {
         for (size_t row = 0; row < h; row++)
             memcpy(dst + row * w, y + (p.crop_y + row) * pitch + p.crop_x, w);
@@ -145,22 +172,26 @@ inline void prepare_scaler(const Params &p, PlaneScaler &s) {
     s.chroma_v = plane_filter((p.crop_h + 1) / 2, (oh + 1) / 2, p.scaler);
 }
 
-// convert_frame, scaled to the output size on the way.
+// convert_frame, scaled to the output size on the way. A widened 8-bit
+// picture is the filtered value times 4 (full-range luma: to 1023 for 255),
+// as NVIDIA's decoder here scales and widens.
 inline void scale_frame(const Params &p, PlaneScaler &s, const uint8_t *y, const uint8_t *uv, size_t pitch, bool msb,
                         uint8_t *dst) {
-    const bool wide = p.bit_depth > 8;
-    const size_t bps = wide ? 2 : 1;
+    const bool wide = p.bit_depth > 8, out_wide = wide_out(p);
+    const size_t bps = wide ? 2 : 1, out_bps = out_wide ? 2 : 1;
     const int in_shift = wide && msb ? 6 : 0, out_shift = wide && p.shift == 0 ? 6 : 0;
-    const float max = wide ? 1023.0f : 255.0f;
+    const float max = out_wide ? 1023.0f : 255.0f;
+    const float luma_gain = p.widen == 2 ? 1023.0f / 255.0f : p.widen ? 4.0f : 1.0f;
+    const float chroma_gain = p.widen ? 4.0f : 1.0f;
     const int ow = out_width(p), oh = out_height(p), ocw = (ow + 1) / 2, och = (oh + 1) / 2;
     const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
     scale_plane(y + p.crop_y * pitch + p.crop_x * bps, pitch, bps, wide, in_shift, p.crop_w, p.crop_h, s.luma_h,
-                s.luma_v, dst, ow, oh, wide, 1.0f, max, out_shift, s.scratch);
+                s.luma_v, dst, ow, oh, out_wide, luma_gain, max, out_shift, s.scratch);
     if (p.luma_only) return;
     const uint8_t *chroma = uv + (p.crop_y / 2) * pitch + p.crop_x * bps;
-    uint8_t *u = dst + static_cast<size_t>(ow) * oh * bps, *v = u + static_cast<size_t>(ocw) * och * bps;
-    scale_plane(chroma, pitch, 2 * bps, wide, in_shift, cw, ch, s.chroma_h, s.chroma_v, u, ocw, och, wide, 1.0f,
-                max, out_shift, s.scratch);
-    scale_plane(chroma + bps, pitch, 2 * bps, wide, in_shift, cw, ch, s.chroma_h, s.chroma_v, v, ocw, och, wide,
-                1.0f, max, out_shift, s.scratch);
+    uint8_t *u = dst + static_cast<size_t>(ow) * oh * out_bps, *v = u + static_cast<size_t>(ocw) * och * out_bps;
+    scale_plane(chroma, pitch, 2 * bps, wide, in_shift, cw, ch, s.chroma_h, s.chroma_v, u, ocw, och, out_wide,
+                chroma_gain, max, out_shift, s.scratch);
+    scale_plane(chroma + bps, pitch, 2 * bps, wide, in_shift, cw, ch, s.chroma_h, s.chroma_v, v, ocw, och, out_wide,
+                chroma_gain, max, out_shift, s.scratch);
 }
