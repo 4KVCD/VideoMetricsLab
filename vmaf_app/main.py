@@ -319,4 +319,10 @@ if __name__ == "__main__":
     # libvmaf run in (vmaf_app.core.isolated): there this runs that process's
     # work and exits, before any window.
     multiprocessing.freeze_support()
+    # The packaged build's second program, VideoMetricsLab-cli.exe, is this
+    # one with a console (VideoMetricsLab.spec): the command line, no window.
+    if Path(sys.executable).stem.casefold().endswith("-cli"):
+        from vmaf_app import cli
+
+        sys.exit(cli.main())
     sys.exit(main())

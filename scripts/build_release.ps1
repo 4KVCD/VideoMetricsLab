@@ -109,6 +109,17 @@ try {
         throw 'The self-test reported a failure (see above)'
     }
 
+    # The command line: the second program in the folder. It must start,
+    # find FFmpeg and say what calculates each metric (the GPU libraries
+    # load and are probed in a process of its own, as in a comparison).
+    Write-Host '==> Command line' -ForegroundColor Cyan
+    $cli = Join-Path $output 'VideoMetricsLab-cli.exe'
+    if (-not (Test-Path $cli)) { throw 'The build has no VideoMetricsLab-cli.exe' }
+    $devices = & $cli devices 2>&1
+    $devicesExit = $LASTEXITCODE
+    $devices | ForEach-Object { "    $_" }
+    if ($devicesExit -ne 0) { throw "VideoMetricsLab-cli.exe devices failed with exit code $devicesExit" }
+
     # The native libraries and the notices of the headers built into them.
     $native = Join-Path $output '_internal/vmaf_app/native'
     foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll')) {

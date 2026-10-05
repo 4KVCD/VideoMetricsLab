@@ -124,7 +124,8 @@ class VulkanScorer:
     Only the luma is used, as by VMAF."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
-                 device: int | None = None, native_double: bool = False, in_flight: int = 3, skip: int = 0, pass_limit: int = 0):
+                 device: int | None = None, native_double: bool = False, in_flight: int = 3, skip: int = 0, pass_limit: int = 0,
+                 decouple_variant: int = 0):
         self._lib = lib = _load()
         self._vmaf = vmaf_cuda._load()
         self._models = dict(models)
@@ -136,7 +137,8 @@ class VulkanScorer:
             if chosen is None:
                 raise VmafVulkanError("no GPU that Vulkan can calculate VMAF on")
             device = chosen.index
-        flags = (1 if native_double else 0) | (max(1, min(16, in_flight)) << 8) | ((skip & 7) << 16) | ((pass_limit & 0xFF) << 20)
+        flags = ((1 if native_double else 0) | (max(1, min(16, in_flight)) << 8) | ((skip & 7) << 16)
+                 | ((pass_limit & 0xFF) << 20) | ((decouple_variant & 7) << 28))
         _check(lib, lib.vv_create(ctypes.byref(self._context), device, width, height, bit_depth, flags),
                "Starting Vulkan")
         sample = 1 if bit_depth <= 8 else 2

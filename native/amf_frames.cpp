@@ -126,23 +126,81 @@ ID3D11Device *amd_device(std::string &error) {
     return device;
 }
 
+// Each step of a decoder's shutdown, appended to the file VML_AMF_TRACE
+// names, with the thread: a shutdown that never returns (seen on a Radeon
+// 780M, inside AMF's own library) then shows which call it is in.
+void trace(const char *step) {
+    char path[MAX_PATH];
+    DWORD length = GetEnvironmentVariableA("VML_AMF_TRACE", path, sizeof path);
+    if (length == 0 || length >= sizeof path) return;
+    if (FILE *file = fopen(path, "a")) {
+        fprintf(file, "%llu thread %lu: %s\n", static_cast<unsigned long long>(GetTickCount64()),
+                GetCurrentThreadId(), step);
+        fclose(file);
+    }
+}
+
+// VML_AMF_CLOSE: other ways to end a decoder, for trying against the
+// shutdown that hangs (a decoder stopped part-way never returned from
+// Terminate on a Radeon 780M in a Vulkan VMAF run; Flush first, and closing
+// Vulkan first, changed nothing):
+//   drain    the decoder is told the stream has ended and its remaining
+//            pictures are taken and dropped, then it is ended as usual
+//   release  the decoder and context are released without Terminate
+bool close_as(const char *way) {
+    char value[16];
+    DWORD length = GetEnvironmentVariableA("VML_AMF_CLOSE", value, sizeof value);
+    return length > 0 && length < sizeof value && strcmp(value, way) == 0;
+}
+
 struct Session {
     ID3D11Device *device = nullptr;
     amf::AMFContext *context = nullptr;
     amf::AMFComponent *decoder = nullptr;
 
     void close() {
+        const bool terminate = !close_as("release");
         if (decoder) {
-            decoder->Terminate();
+            if (close_as("drain")) {
+                trace("decoder Drain");
+                decoder->Drain();
+                // Its last pictures, for at most two seconds.
+                int taken = 0;
+                const ULONGLONG until = GetTickCount64() + 2000;
+                while (GetTickCount64() < until) {
+                    amf::AMFData *data = nullptr;
+                    AMF_RESULT result = decoder->QueryOutput(&data);
+                    if (data) {
+                        data->Release();
+                        taken++;
+                        continue;
+                    }
+                    if (result == AMF_EOF) break;
+                    Sleep(1);
+                }
+                char text[64];
+                snprintf(text, sizeof text, "decoder drained: %d pictures dropped", taken);
+                trace(text);
+            }
+            if (terminate) {
+                trace("decoder Terminate");
+                decoder->Terminate();
+            }
+            trace("decoder Release");
             decoder->Release();
             decoder = nullptr;
         }
         if (context) {
-            context->Terminate();
+            if (terminate) {
+                trace("context Terminate");
+                context->Terminate();
+            }
+            trace("context Release");
             context->Release();
             context = nullptr;
         }
         if (device) {
+            trace("device Release");
             device->Release();
             device = nullptr;
         }
@@ -433,11 +491,14 @@ bool collect(Decoder *d, bool draining) {
 }
 
 void destroy(Decoder *d) {
+    trace("close: releasing the pictures held");
     for (amf::AMFSurface *surface : d->slots) {
         if (surface) surface->Release();
     }
     d->session.close();
+    trace("close: freeing the decoder");
     delete d;
+    trace("close: done");
 }
 
 void copy_text(char *out, int size, const std::string &text) {

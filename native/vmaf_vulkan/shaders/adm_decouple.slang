@@ -137,14 +137,50 @@ void main(uint3 id : SV_DispatchThreadID)
         int additive;
 #if SCALE0
         int k = 32768;
+#if VARIANT == 1
+        // As the CUDA kernel writes it, in 64 bits: what VARIANT 0 was until
+        // 2026-10. Kept for scripts/diagnose_vmaf_vulkan.py.
         if (o[b] != 0)
             k = clamp(int((int64_t(int(divTable[o[b] + 32768])) * t[b] + 16384) >> 15), 0, 32768);
         int product = k * o[b];
         int rest = saturate32(int64_t((product + 16384) >> 15) * limit);
+#else
+        int quotient = 0;  // divTable's entry: 2^30 / o
+        if (o[b] != 0)
+            quotient = int(divTable[o[b] + 32768]);
+#if VARIANT == 0
+        // k = clamp((quotient * t + 16384) >> 15, 0, 32768) and
+        // rest = ((k * o + 16384) >> 15) * limit, in 32-bit steps. The CUDA
+        // kernel's 64-bit expressions (VARIANT 1) gave rest = 0 on a Radeon
+        // 780M whenever o and t were both negative: its driver's fault, and
+        // its sums failed the probe. With quotient = high * 2^15 + low, low
+        // in 0..32767:
+        //   (quotient * t + 16384) >> 15 = high * t + ((low * t + 16384) >> 15)
+        // exactly, and neither term passes 2^30: the bands are 16-bit here.
+        // rest is at most 32768 * 100, so nothing saturates. The same sums
+        // as the 64-bit ones on every GPU that gets those right.
+        if (o[b] != 0)
+            k = clamp((quotient >> 15) * t[b] + (((quotient & 32767) * t[b] + 16384) >> 15), 0, 32768);
+        int product = k * o[b];
+        int rest = ((product + 16384) >> 15) * int(limit);
+#else
+        if (o[b] != 0)
+            k = clamp(int((int64_t(quotient) * t[b] + 16384) >> 15), 0, 32768);
+        int product = k * o[b];
+        int rest = saturate32(int64_t((product + 16384) >> 15) * limit);
+#endif
+#endif
         if (aligned) {
             if (product > 0) rest = min(rest, t[b]);
             if (product < 0) rest = max(rest, t[b]);
         }
+#if VARIANT >= 2
+        // For scripts/diagnose_vmaf_vulkan.py: one step of the above in
+        // place of the result, to see which a driver gets wrong.
+        int64_t wide = int64_t(quotient) * t[b] + 16384;
+        int shown[6] = { quotient, k, int(wide >> 15), int(uint(wide)), int(uint(wide >> 32)), product };
+        restored[to + b] = shown[VARIANT - 2];
+#else
         restored[to + b] = sext16(rest);
         additive = sext16(t[b] - rest);
 
@@ -156,6 +192,7 @@ void main(uint3 id : SV_DispatchThreadID)
         int filteredR = sext16((int(rfactor[b] * uint(sext16(rest))) + kAdd[b]) >> kShift[b]);
         csfR[to + b] = filteredR;
         csfRF[to + b] = sext16((4369 * abs(filteredR) + 2048) >> 12);
+#endif
 #endif
 #else
         uint magnitude = uint(abs(o[b]));
