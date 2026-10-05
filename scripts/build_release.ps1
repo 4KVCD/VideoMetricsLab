@@ -127,7 +127,8 @@ try {
             throw "Bundled native library is missing: $library"
         }
     }
-    foreach ($notice in @('LICENSE.nv-codec-headers.txt', 'LICENSE.onevpl.txt', 'LICENSE.amf.txt')) {
+    foreach ($notice in @('LICENSE.nv-codec-headers.txt', 'LICENSE.onevpl.txt', 'LICENSE.amf.txt',
+            'LICENSE.vulkan-headers.txt')) {
         if (-not (Test-Path (Join-Path $native "licenses/$notice"))) {
             throw "Bundled native library license notice is missing: $notice"
         }

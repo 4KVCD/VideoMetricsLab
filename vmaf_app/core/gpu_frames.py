@@ -72,6 +72,10 @@ _NATIVE = Path(__file__).resolve().parents[1] / "native"
 LIBRARIES = {"nvidia": _NATIVE / "nvdec_frames.dll", "intel": _NATIVE / "vpl_frames.dll",
              "amd": _NATIVE / "amf_frames.dll"}
 LIBRARY_PATH = LIBRARIES["nvidia"]
+#: The decoders whose pictures reach Vulkan VMAF's and libvmaf's memory on the
+#: GPU (GpuFrameStream.pin, import_memory): NVIDIA's through CUDA, AMD's
+#: through Vulkan (native/amf_handover.h) when opened with handover.
+HANDOVER_BACKENDS = ("nvidia", "amd")
 
 #: FFmpeg's codec names -> NVDEC's (cudaVideoCodec), and the bitstream filters
 #: that turn the container's packets into what NVDEC's parser reads: Annex B
@@ -128,7 +132,7 @@ class _Params(ctypes.Structure):
                 ("shift", ctypes.c_int), ("luma_only", ctypes.c_int), ("pool", ctypes.c_int),
                 ("extradata", ctypes.c_void_p), ("extradata_size", ctypes.c_int),
                 ("out_w", ctypes.c_int), ("out_h", ctypes.c_int), ("scaler", ctypes.c_int), ("widen", ctypes.c_int),
-                ("cpu_scaling", ctypes.c_int)]
+                ("cpu_scaling", ctypes.c_int), ("handover", ctypes.c_int)]
 
 
 class _Info(ctypes.Structure):
@@ -174,14 +178,18 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
             ):
                 function = getattr(lib, name)
                 function.restype, function.argtypes = restype, argtypes
-            if backend == "nvidia":  # pictures handed over without a CPU copy (GpuFrameStream.pin, import_memory)
+            if backend in HANDOVER_BACKENDS:  # pictures handed over without a CPU copy (GpuFrameStream.pin, import_memory)
                 planes, pitches = ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_longlong)
+                imported = ctypes.POINTER(ctypes.c_ulonglong), ctypes.POINTER(ctypes.c_void_p)
                 for name, restype, argtypes in (
                     ("nvf_pin", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong]),
                     ("nvf_unpin", ctypes.c_int, [handle, ctypes.c_void_p]),
                     ("nvf_download_planes", ctypes.c_int, [handle, ctypes.c_int, planes, pitches]),
-                    ("nvf_import", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_int,
-                                                  ctypes.POINTER(ctypes.c_ulonglong), ctypes.POINTER(ctypes.c_void_p)]),
+                    # NVIDIA's CUDA imports any export; AMD's Vulkan one of its own GPU and driver.
+                    ("nvf_import", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_int, *imported])
+                    if backend == "nvidia" else
+                    ("nvf_import_vulkan", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_uint,
+                                                         ctypes.c_char_p, ctypes.c_char_p, *imported]),
                     ("nvf_unimport", None, [handle, ctypes.c_void_p]),
                 ):
                     function = getattr(lib, name)
@@ -297,11 +305,21 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
                       algorithm if algorithm in _SCALERS else "bicubic", widen)
 
 
-def _params(plan: DecodePlan, device: int = 0, pool: int = 1, extradata=None, extradata_size: int = 0) -> _Params:
+def _params(plan: DecodePlan, device: int = 0, pool: int = 1, extradata=None, extradata_size: int = 0,
+            handover: bool = False) -> _Params:
     return _Params(device, _CODECS[plan.codec][0], plan.bit_depth, plan.width, plan.height,
                    plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.shift, int(plan.luma_only),
                    pool, extradata, extradata_size, plan.output_size[0], plan.output_size[1], _SCALERS[plan.scaler],
-                   plan.widen, int(plan.cpu_scaling))
+                   plan.widen, int(plan.cpu_scaling), int(handover))
+
+
+def can_hand_over(plan: DecodePlan, backend: str) -> bool:
+    """Whether `backend`'s decoder hands `plan`'s pictures over on the GPU
+    (GpuFrameStream's handover): NVIDIA's always; AMD's when they are neither
+    scaled nor widened (native/amf_handover.h)."""
+    if backend == "nvidia":
+        return True
+    return backend == "amd" and not plan.scaled and not plan.widen
 
 
 def scale_picture(plan: DecodePlan, picture: bytes, vendor: int | None, backend: str = "intel") -> bytes | None:
@@ -597,10 +615,15 @@ class GpuFrameStream:
     """One video decoded on GPU `device`, its pictures in a pool of
     `pool` slots in GPU memory, in display order. A thread feeds FFmpeg's
     packets to the decoder; next() hands out the pictures, each slot given
-    back with release() once its picture has been copied on."""
+    back with release() once its picture has been copied on.
+
+    `handover`: AMD's decoder keeps its pictures on the GPU, for pin,
+    download_planes, import_memory and copy_luma (NVIDIA's always does) --
+    where it can (can_hand_over); otherwise, or when its Vulkan cannot start,
+    it decodes as without (self.handover then says so)."""
 
     def __init__(self, info: VideoInfo, plan: DecodePlan, device: int = 0, *, pool: int = 4,
-                 process_handle=None, backend: str = "nvidia") -> None:
+                 process_handle=None, backend: str = "nvidia", handover: bool = False) -> None:
         self.info = info
         self.plan = plan
         self.backend = backend
@@ -609,12 +632,21 @@ class GpuFrameStream:
         self._reader = _PacketReader(info.path, plan.codec, process_handle)
         self._extradata = _av1_sequence_header(info.path) if plan.codec == "av1" else b""
         self._extradata_buffer = ctypes.create_string_buffer(self._extradata) if self._extradata else None
-        params = _params(
-            plan, device, pool,
-            ctypes.cast(self._extradata_buffer, ctypes.c_void_p) if self._extradata_buffer else None,
-            len(self._extradata))
+        extradata = ctypes.cast(self._extradata_buffer, ctypes.c_void_p) if self._extradata_buffer else None
+        #: The pictures are handed over on the GPU (pin, import_memory work).
+        self.handover = backend == "nvidia" or (handover and can_hand_over(plan, backend))
         error = ctypes.create_string_buffer(1024)
-        handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
+        handle = None
+        if self.handover and backend != "nvidia":
+            params = _params(plan, device, pool, extradata, len(self._extradata), handover=True)
+            handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
+            if not handle:
+                _log.info("%s: the GPU's pictures go through system memory (%s)", info.path.name,
+                          error.value.decode(errors="replace"))
+                self.handover = False
+        if not handle:
+            params = _params(plan, device, pool, extradata, len(self._extradata))
+            handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
         if not handle:
             self._reader.close()  # its pipe
             raise GpuDecodeUnavailableError(error.value.decode(errors="replace") or "the GPU's decoder could not start")
@@ -756,14 +788,15 @@ class GpuFrameStream:
         if self._lib.nvf_copy_luma(self._handle, slot, address, pitch) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
-    # Pictures handed over without a CPU copy (NVIDIA's decoder).
+    # Pictures handed over without a CPU copy (NVIDIA's decoder; AMD's with handover).
 
     def pin(self, address: int, size: int) -> bool:
         """Page-locks `size` bytes of this process's memory at `address`, so
         that the GPU writes downloads into it by itself (the driver copies
         them into ordinary memory on the CPU). False where it cannot: the
-        memory is then downloaded into as before."""
-        return self.backend == "nvidia" and self._lib.nvf_pin(self._handle, address, size) == 0
+        memory is then downloaded into as before. AMD's: memory pinned by one
+        stream is written into by every stream of the process that hands over."""
+        return self.handover and self._lib.nvf_pin(self._handle, address, size) == 0
 
     def unpin(self, address: int) -> None:
         if self._handle is not None:
@@ -778,15 +811,27 @@ class GpuFrameStream:
         if self._lib.nvf_download_planes(self._handle, slot, planes, rows) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
-    def import_memory(self, handle: int, size: int) -> tuple[int, int] | None:
+    def import_memory(self, handle: int, size: int, exporter=None) -> tuple[int, int] | None:
         """GPU memory Vulkan allocated on this GPU and exported as a Win32
         handle (vmaf_vulkan's vv_export: one buffer's allocation of `size`
         bytes), as memory copy_luma writes into: (its address, what
-        unimport takes). None where the driver cannot share it."""
-        if self.backend != "nvidia":
+        unimport takes). None where the driver cannot share it. AMD's: what
+        one stream imports, every stream of the process that hands over
+        copies into; `exporter` (libvmaf-fast's SharedDevice, from
+        vv_shared_device) names the GPU, the driver and the memory type, and
+        without it, or from another GPU or driver, nothing is imported."""
+        if not self.handover:
             return None
         address, memory = ctypes.c_ulonglong(), ctypes.c_void_p()
-        if self._lib.nvf_import(self._handle, handle, size, 1, ctypes.byref(address), ctypes.byref(memory)) != 0:
+        if self.backend == "nvidia":
+            result = self._lib.nvf_import(self._handle, handle, size, 1, ctypes.byref(address), ctypes.byref(memory))
+        elif exporter is None:
+            return None
+        else:
+            result = self._lib.nvf_import_vulkan(self._handle, handle, size, exporter.memory_type,
+                                                 bytes(exporter.device_uuid), bytes(exporter.driver_uuid),
+                                                 ctypes.byref(address), ctypes.byref(memory))
+        if result != 0:
             return None
         return address.value, memory.value
 

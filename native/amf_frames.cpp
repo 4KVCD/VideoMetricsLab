@@ -21,18 +21,25 @@
 // amfrt64.dll comes with AMD's graphics driver (System32) and is loaded at run
 // time; this library links nothing of AMD's. The decoder runs on a Direct3D
 // 11 device made on the AMD GPU. The headers in native/amf are the AMF SDK's
-// public ones (MIT).
+// public ones, those in native/vulkan Khronos' (both MIT).
+//
+// With Params.handover the pictures never come to system memory: each is
+// copied on the GPU into a texture Vulkan shares, and from there by Vulkan
+// into a slot buffer, from which nvf_copy_luma and nvf_download_planes copy
+// it by the GPU into Vulkan VMAF's memory and libvmaf's pictures
+// (deliver_on_gpu, amf_handover.h).
 //
 // AMF's decoder is used from one thread only, the one calling nvf_push and
 // nvf_finish: it submits packets, collects pictures, brings them to system
-// memory, and gives back the pictures the caller has released. nvf_pop /
-// nvf_download / nvf_release come from another thread and touch only host
-// memory and the queues.
+// memory (or into a slot buffer), and gives back the pictures the caller has
+// released. nvf_pop / nvf_download / nvf_release come from another thread
+// and touch only host memory and the queues -- and, handing over, the slot
+// buffers, by GPU copies of their own (amf_handover.h's Slots::copying).
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <d3d11.h>
-#include <dxgi.h>
+#include <d3d11_4.h>
+#include <dxgi1_2.h>
 
 #include <chrono>
 #include <condition_variable>
@@ -42,6 +49,7 @@
 #include <string>
 #include <vector>
 
+#include "amf_handover.h"
 #include "d3d11_scale.h"
 #include "gpu_frames.h"
 // AMF's interfaces overload virtual methods in ways g++ warns about.
@@ -271,6 +279,20 @@ struct Decoder {
     std::vector<std::vector<uint8_t>> buffers;  // slot -> scaled picture
     std::vector<uint8_t> check;
     std::string scale_note;  // why the CPU scales, when the GPU was meant to
+    // The hand-over (Params.handover): each picture's crop copied into
+    // `shared` (feeding thread only), which Vulkan imported into `vk`, and
+    // from there into a slot buffer.
+    bool handing_over = false;
+    ID3D11Texture2D *shared = nullptr;
+    ID3D11DeviceContext *immediate = nullptr;  // AMF's device's, used under its LockDX11
+    // The copy into `shared` done: a fence waited for (Windows 10 1703 and
+    // later), or else an event query asked until it is.
+    ID3D11DeviceContext4 *signals = nullptr;
+    ID3D11Fence *fence = nullptr;
+    UINT64 fence_value = 0;
+    HANDLE fence_event = nullptr;
+    ID3D11Query *copied = nullptr;
+    handover::Slots vk;
     Session session;
 
     std::mutex mutex;
@@ -356,23 +378,33 @@ void scale_on_cpu_from_now(Decoder *d, const std::string &why) {
 // texture (AMFTextureArrayIndexGUID in AMF's samples and FFmpeg).
 const GUID kTextureArrayIndex = {0x28115527, 0xe7c3, 0x4b66, {0x99, 0xd3, 0x4f, 0x2a, 0xe6, 0xb4, 0x7f, 0xaf}};
 
-// The decoder's picture scaled on the GPU into `out`, or why not.
-bool scale_on_gpu(Decoder *d, amf::AMFSurface *surface, uint8_t *out, std::string &why) {
+// The decoder's picture: its Direct3D 11 texture and which slice of it, or why not.
+bool decoder_texture(amf::AMFSurface *surface, ID3D11Texture2D *&texture, UINT &slice, std::string &why) {
     amf::AMFPlane *luma = surface->GetPlaneAt(0);
     if (surface->GetMemoryType() != amf::AMF_MEMORY_DX11 || !luma || !luma->GetNative()) {
         why = "AMD's decoder gave no Direct3D 11 texture";
         return false;
     }
-    ID3D11Texture2D *texture = static_cast<ID3D11Texture2D *>(luma->GetNative());
+    texture = static_cast<ID3D11Texture2D *>(luma->GetNative());
     D3D11_TEXTURE2D_DESC desc;
     texture->GetDesc(&desc);
-    UINT slice = 0, size = sizeof(slice);
+    UINT size = sizeof(slice);
+    slice = 0;
     bool named = SUCCEEDED(texture->GetPrivateData(kTextureArrayIndex, &size, &slice)) && size == sizeof(slice);
     if (!named) slice = 0;
     if (desc.ArraySize != 1 && !named) {
         why = "AMD's decoder keeps its pictures in one texture";  // which slice is not said
         return false;
     }
+    return true;
+}
+
+// The decoder's picture scaled on the GPU into `out`, or why not.
+bool scale_on_gpu(Decoder *d, amf::AMFSurface *surface, uint8_t *out, std::string &why) {
+    amf::AMFPlane *luma = surface->GetPlaneAt(0);
+    ID3D11Texture2D *texture = nullptr;
+    UINT slice = 0;
+    if (!decoder_texture(surface, texture, slice, why)) return false;
     d->session.context->LockDX11();
     bool scaled = (d->gpu.started() || d->gpu.start(texture, d->params, why))
                   && d->gpu.scale(texture, slice, luma->GetOffsetX(), luma->GetOffsetY(), out, why);
@@ -423,6 +455,143 @@ bool deliver_scaled(Decoder *d, amf::AMFSurface *surface, long long pts) {
     return true;
 }
 
+// Waits for Direct3D 11's copy into the shared texture to be done on the GPU,
+// before Vulkan reads it; false when decoding stops first.
+bool copy_done(Decoder *d) {
+    if (d->fence) {
+        if (FAILED(d->fence->SetEventOnCompletion(d->fence_value, d->fence_event))) return false;
+        while (WaitForSingleObject(d->fence_event, 100) == WAIT_TIMEOUT) {
+            if (d->stopped()) return false;
+        }
+        return true;
+    }
+    while (!d->stopped()) {
+        d->session.context->LockDX11();
+        HRESULT done = d->immediate->GetData(d->copied, nullptr, 0, 0);
+        d->session.context->UnlockDX11();
+        if (done == S_OK) return true;
+        if (done != S_FALSE) return false;
+        Sleep(0);
+    }
+    return false;
+}
+
+// A decoded picture handed over (Params.handover): its crop copied by
+// Direct3D 11 into the texture Vulkan shares, then by Vulkan into a slot
+// buffer, and queued for nvf_pop. False when decoding has stopped.
+bool deliver_on_gpu(Decoder *d, amf::AMFSurface *surface, long long pts) {
+    ID3D11Texture2D *texture = nullptr;
+    UINT slice = 0;
+    std::string why;
+    if (!decoder_texture(surface, texture, slice, why)) {
+        surface->Release();
+        d->fail(why);
+        return false;
+    }
+    int slot = take_slot(d);
+    if (slot < 0) {
+        surface->Release();
+        return false;
+    }
+    amf::AMFPlane *luma = surface->GetPlaneAt(0);
+    const UINT left = static_cast<UINT>(luma->GetOffsetX() + d->params.crop_x);
+    const UINT top = static_cast<UINT>(luma->GetOffsetY() + d->params.crop_y);
+    const D3D11_BOX box{left, top, 0, left + static_cast<UINT>(d->params.crop_w),
+                        top + static_cast<UINT>(d->params.crop_h), 1};
+    d->session.context->LockDX11();
+    d->immediate->CopySubresourceRegion(d->shared, 0, 0, 0, 0, texture, slice, &box);
+    if (d->fence) {
+        d->signals->Signal(d->fence, ++d->fence_value);
+    } else {
+        d->immediate->End(d->copied);
+    }
+    d->immediate->Flush();
+    d->session.context->UnlockDX11();
+    bool done = copy_done(d);
+    surface->Release();
+    if (!done) {
+        if (!d->stopped()) d->fail("copying a decoded picture on the GPU failed");
+        return false;
+    }
+    if (!d->vk.convert(slot)) {
+        d->fail("copying a decoded picture on the GPU failed");
+        return false;
+    }
+    std::lock_guard<std::mutex> guard(d->mutex);
+    d->ready.push_back({slot, pts});
+    d->info.displayed++;
+    d->changed.notify_all();
+    return true;
+}
+
+// The hand-over's start: the Vulkan device on the decoder's GPU, the shared
+// texture of the crop, and Vulkan's import of it; or why not.
+bool start_handover(Decoder *d, std::string &why) {
+    IDXGIDevice *dxgi = nullptr;
+    IDXGIAdapter *adapter = nullptr;
+    DXGI_ADAPTER_DESC desc{};
+    bool listed = SUCCEEDED(d->session.device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void **>(&dxgi)))
+                  && SUCCEEDED(dxgi->GetAdapter(&adapter)) && SUCCEEDED(adapter->GetDesc(&desc));
+    if (adapter) adapter->Release();
+    if (dxgi) dxgi->Release();
+    if (!listed) {
+        why = "DirectX did not say which GPU decodes";
+        return false;
+    }
+    uint8_t luid[VK_LUID_SIZE];
+    memcpy(luid, &desc.AdapterLuid, VK_LUID_SIZE);
+    if (!handover::shared(luid)) {
+        why = handover::g_device.error;
+        return false;
+    }
+    const bool wide = d->params.bit_depth > 8;
+    D3D11_TEXTURE2D_DESC shared{};
+    shared.Width = static_cast<UINT>(d->params.crop_w);
+    shared.Height = static_cast<UINT>(d->params.crop_h);
+    shared.MipLevels = shared.ArraySize = 1;
+    shared.Format = wide ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
+    shared.SampleDesc.Count = 1;
+    shared.Usage = D3D11_USAGE_DEFAULT;
+    shared.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    shared.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED;
+    IDXGIResource1 *resource = nullptr;
+    HANDLE texture = nullptr;
+    bool exported = SUCCEEDED(d->session.device->CreateTexture2D(&shared, nullptr, &d->shared))
+                    && SUCCEEDED(d->shared->QueryInterface(__uuidof(IDXGIResource1), reinterpret_cast<void **>(&resource)))
+                    && SUCCEEDED(resource->CreateSharedHandle(
+                        nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &texture));
+    if (resource) resource->Release();
+    if (!exported) {
+        why = "Direct3D 11 cannot share its pictures";
+        return false;
+    }
+    d->session.device->GetImmediateContext(&d->immediate);
+    ID3D11Device5 *device5 = nullptr;
+    if (SUCCEEDED(d->session.device->QueryInterface(__uuidof(ID3D11Device5), reinterpret_cast<void **>(&device5)))) {
+        if (FAILED(device5->CreateFence(0, D3D11_FENCE_FLAG_NONE, __uuidof(ID3D11Fence),
+                                        reinterpret_cast<void **>(&d->fence)))
+            || FAILED(d->immediate->QueryInterface(__uuidof(ID3D11DeviceContext4),
+                                                   reinterpret_cast<void **>(&d->signals)))
+            || !(d->fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr))) {
+            if (d->fence) d->fence->Release();
+            if (d->signals) d->signals->Release();
+            d->fence = nullptr;
+            d->signals = nullptr;
+        }
+        device5->Release();
+    }
+    D3D11_QUERY_DESC query{D3D11_QUERY_EVENT, 0};
+    if (!d->fence && FAILED(d->session.device->CreateQuery(&query, &d->copied))) {
+        CloseHandle(texture);
+        why = "Direct3D 11 cannot share its pictures";
+        return false;
+    }
+    bool made = d->vk.make(d->params, texture,
+                           wide ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16 : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, why);
+    CloseHandle(texture);  // Vulkan holds the texture's memory now
+    return made;
+}
+
 // One picture from the decoder: checked, brought to host memory and queued
 // for nvf_pop once a slot is free. False when decoding has stopped.
 bool deliver(Decoder *d, amf::AMFData *data) {
@@ -451,6 +620,7 @@ bool deliver(Decoder *d, amf::AMFData *data) {
         return false;
     }
     if (d->buffered) return deliver_scaled(d, surface, pts);
+    if (d->handing_over) return deliver_on_gpu(d, surface, pts);
     AMF_RESULT result = surface->Convert(amf::AMF_MEMORY_HOST);
     if (result != AMF_OK) {
         surface->Release();
@@ -500,6 +670,13 @@ void destroy(Decoder *d) {
     for (amf::AMFSurface *surface : d->slots) {
         if (surface) surface->Release();
     }
+    if (handover::g_device.device) d->vk.free();  // before the texture it imported
+    if (d->copied) d->copied->Release();
+    if (d->fence) d->fence->Release();
+    if (d->signals) d->signals->Release();
+    if (d->fence_event) CloseHandle(d->fence_event);
+    if (d->immediate) d->immediate->Release();
+    if (d->shared) d->shared->Release();
     d->session.close();
     trace("close: freeing the decoder");
     delete d;
@@ -508,6 +685,13 @@ void destroy(Decoder *d) {
 
 void copy_text(char *out, int size, const std::string &text) {
     if (out && size > 0) snprintf(out, size, "%s", text.c_str());
+}
+
+// A hand-over copy's result for the API: a failure ends the decoding, with why.
+int download_result(Decoder *d, bool copied) {
+    if (copied) return 0;
+    d->fail(d->vk.error);
+    return NVF_ERROR;
 }
 
 }  // namespace
@@ -519,7 +703,8 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         copy_text(error, error_size, g_amf_error);
         return nullptr;
     }
-    if (!params_valid(*params) || params->widen || !amf_codec(params->codec)) {
+    if (!params_valid(*params) || params->widen || !amf_codec(params->codec)
+        || (params->handover && (is_scaled(*params) || (params->crop_w & 1) || (params->crop_h & 1)))) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }
@@ -545,9 +730,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         d->check.resize(frame_bytes(d->params));
         d->info.scaled_on_gpu = 1;
     }
+    d->handing_over = params->handover != 0;
     std::string text;
-    if (!open_session(params->codec, params->bit_depth, params->width, params->height, d->extradata, !d->buffered,
-                      d->session, text)) {
+    if (!open_session(params->codec, params->bit_depth, params->width, params->height, d->extradata,
+                      !d->buffered && !d->handing_over, d->session, text)
+        || (d->handing_over && !start_handover(d, text))) {
         copy_text(error, error_size, text);
         destroy(d);
         return nullptr;
@@ -630,6 +817,7 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
 // Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
     Decoder *d = static_cast<Decoder *>(handle);
+    if (d->handing_over) return download_result(d, d->vk.download(slot, host));
     if (d->buffered) {  // scaled when it was decoded
         memcpy(host, d->buffers[slot].data(), d->buffers[slot].size());
         return 0;
@@ -643,8 +831,50 @@ NVF_API int nvf_download(void *handle, int slot, void *host) {
     return host_picture(d, surface, static_cast<uint8_t *>(host)) ? 0 : NVF_ERROR;
 }
 
-NVF_API int nvf_copy_luma(void *, int, unsigned long long, long long) {
-    return NVF_ERROR;  // pictures in system memory: there is no GPU copy to make
+// The hand-over's: the slot's luma into memory nvf_import_vulkan imported
+// (`dst`, an address it handed back), rows `dst_pitch` bytes apart, by the GPU.
+NVF_API int nvf_copy_luma(void *handle, int slot, unsigned long long dst, long long dst_pitch) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!d->handing_over) return NVF_ERROR;  // pictures in system memory: there is no GPU copy to make
+    return download_result(d, d->vk.copy_luma(slot, dst, dst_pitch));
+}
+
+// The hand-over's: libvmaf's picture memory made known to the GPU, which then
+// writes the planes into it itself (nvf_download_planes) -- for every decoder
+// of the process handing over. 0, or negative: it is then copied into by the
+// CPU.
+NVF_API int nvf_pin(void *handle, void *host, unsigned long long bytes) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    return d->handing_over ? handover::pin(host, bytes) : -1;
+}
+
+NVF_API int nvf_unpin(void *handle, void *host) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    return d->handing_over ? handover::unpin(host) : -1;
+}
+
+// The slot's planes, each to its own address (null: not wanted), rows `pitches` apart.
+NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, const long long *pitches) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!d->handing_over) return NVF_ERROR;
+    return download_result(d, d->vk.download_planes(slot, planes, pitches));
+}
+
+// The hand-over's: Vulkan VMAF's memory (vv_export's opaque Win32 handle of
+// `bytes`, from `memory_type` of the device vv_shared_device names), for
+// nvf_copy_luma: *address is what it is given, *memory what nvf_unimport
+// frees. 0, or negative (-4: Vulkan VMAF is on another GPU or driver).
+NVF_API int nvf_import_vulkan(void *handle, void *win32_handle, unsigned long long bytes, unsigned memory_type,
+                              const unsigned char *device_uuid, const unsigned char *driver_uuid,
+                              unsigned long long *address, void **memory) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!d->handing_over) return -1;
+    return handover::import_memory(win32_handle, bytes, memory_type, device_uuid, driver_uuid, address, memory);
+}
+
+NVF_API void nvf_unimport(void *handle, void *memory) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (d->handing_over && memory) handover::unimport(memory);
 }
 
 NVF_API unsigned long long nvf_slot_pointer(void *, int) {

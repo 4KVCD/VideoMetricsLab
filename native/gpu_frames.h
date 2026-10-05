@@ -45,6 +45,9 @@ struct Params {
     int cpu_scaling;     // Intel, AMD: 1 scaled on the CPU even where the GPU can (to
                          // check one against the other); 2 for the tests: the GPU's
                          // first picture is spoiled, as a driver's wrong one would be
+    int handover;        // AMD: the pictures stay on the GPU, for nvf_copy_luma,
+                         // nvf_download_planes and nvf_import_vulkan (amf_handover.h); not
+                         // scaled. NVIDIA's always do; unused elsewhere
 };
 
 inline int out_width(const Params &p) { return p.out_w > 0 ? p.out_w : p.crop_w; }

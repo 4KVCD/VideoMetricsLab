@@ -53,13 +53,14 @@ else:
 # The GPU decoders the GPU metrics read their frames from -- NVIDIA's,
 # Intel's and AMD's (scripts/build_gpu_frames.ps1) -- with the notices of the
 # headers compiled into them. Without one, FFmpeg decodes those videos, as before.
-for name, notice in (("nvdec_frames", "ffnvcodec/LICENSE.nv-codec-headers.txt"),
-                     ("vpl_frames", "onevpl/LICENSE.onevpl.txt"),
-                     ("amf_frames", "amf/LICENSE.amf.txt")):
+for name, notices in (("nvdec_frames", ("ffnvcodec/LICENSE.nv-codec-headers.txt",)),
+                      ("vpl_frames", ("onevpl/LICENSE.onevpl.txt",)),
+                      ("amf_frames", ("amf/LICENSE.amf.txt", "vulkan/LICENSE.vulkan-headers.txt"))):
     dll = PROJECT / "vmaf_app" / "native" / f"{name}.dll"
     if dll.is_file():
         datas.append((str(dll), "vmaf_app/native"))
-        datas.append((str(PROJECT / "native" / notice), "vmaf_app/native/licenses"))
+        for notice in notices:
+            datas.append((str(PROJECT / "native" / notice), "vmaf_app/native/licenses"))
     else:
         print(f"WARNING: {name}.dll is missing; FFmpeg will decode the GPU metrics' "
               "videos on that GPU. Run scripts/build_gpu_frames.ps1 first.")

@@ -438,6 +438,227 @@ def _next(stream):
             return stream.next(1000)
 
 
+# ------------------------------------- AMD's hand-over (native/amf_handover.h)
+
+def _handed_over(info: VideoInfo, plan: nv.DecodePlan, planes: bool, pin: bool) -> list[str]:
+    """Each picture's MD5, from AMD's decoder handing over: downloaded whole,
+    or plane by plane into rows longer than the picture's (as libvmaf's
+    pictures are), into memory pinned for the GPU or not."""
+    stream = nv.GpuFrameStream(info, plan, backend="amd", handover=True)
+    width, height = plan.output_size
+    sample = plan.bytes_per_sample
+    widths, heights = (width, (width + 1) // 2, (width + 1) // 2), (height, (height + 1) // 2, (height + 1) // 2)
+    pitches = tuple(w * sample + 64 for w in widths)
+    count = 1 if plan.luma_only else 3
+    rows = [np.zeros((h, pitch), np.uint8) for h, pitch in zip(heights[:count], pitches[:count], strict=True)]
+    whole = np.empty(plan.frame_bytes, np.uint8)
+    sums = []
+    try:
+        if not stream.handover:
+            pytest.skip("AMD's decoder does not hand over on this PC")
+        if pin:
+            assert all(stream.pin(plane.ctypes.data, plane.nbytes) for plane in rows)
+        stream.start()
+        while (item := _next(stream)) is not None:
+            if planes:
+                addresses = [plane.ctypes.data for plane in rows] + [None] * (3 - count)
+                stream.download_planes(item[0], tuple(addresses), pitches)
+                picture = np.concatenate([plane[:, :w * sample].ravel() for plane, w in zip(rows, widths[:count], strict=True)])
+            else:
+                stream.download(item[0], whole.ctypes.data)
+                picture = whole
+            stream.release(item[0])
+            sums.append(hashlib.md5(picture).hexdigest())
+    finally:
+        if pin:
+            for plane in rows:
+                stream.unpin(plane.ctypes.data)
+        stream.close()
+    return sums
+
+
+@pytest.mark.parametrize(("codec", "pix_fmt", "crop", "luma_only"), [
+    ("h264", "yuv420p", None, False),
+    ("h264", "yuv420p", CropBox(600, 300, 20, 30), False),
+    ("hevc", "yuv420p10le", CropBox(638, 358, 2, 2), False),
+    ("hevc", "yuv420p10le", None, True),
+    ("h264", "yuv420p", CropBox(600, 300, 20, 30), True),
+])
+@pytest.mark.parametrize(("planes", "pin"), [(False, False), (True, False), (True, True)])
+def test_pictures_amd_hands_over_are_ffmpegs_decode(tmp_path, codec, pix_fmt, crop, luma_only, planes, pin):
+    path = _clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=1.0)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, crop, shift=6, luma_only=luma_only)
+    _need(plan, "amd")
+    if luma_only:  # the luma of FFmpeg's pictures
+        expected = [hashlib.md5(picture[:plan.frame_bytes]).hexdigest() for picture in _ffmpeg_pictures(path, plan)]
+    else:
+        expected = _ffmpeg_decode(path, plan)
+    assert _handed_over(info, plan, planes, pin) == expected
+
+
+def _ffmpeg_pictures(path: Path, plan: nv.DecodePlan) -> list[bytes]:
+    fmt = "yuv420p10le" if plan.bit_depth > 8 else "yuv420p"
+    raw = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0",
+                          "-vf", f"crop={plan.crop_w}:{plan.crop_h}:{plan.crop_x}:{plan.crop_y},format={fmt}",
+                          "-fps_mode", "passthrough", "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+    size = (plan.crop_w * plan.crop_h + 2 * ((plan.crop_w + 1) // 2) * ((plan.crop_h + 1) // 2)) * plan.bytes_per_sample
+    return [raw[i:i + size] for i in range(0, len(raw), size)]
+
+
+def test_ten_bit_amd_hands_over_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path):
+    info = probe_video(_clip(tmp_path / "clip.mkv", "hevc", "yuv420p10le", seconds=0.5))
+    shifted, kept = nv.plan_decode(info, None, shift=6), nv.plan_decode(info, None, shift=0)
+    _need(shifted, "amd")
+    pictures = []
+    for plan in (shifted, kept):
+        stream = nv.GpuFrameStream(info, plan, backend="amd", handover=True)
+        out = np.empty(plan.frame_bytes // 2, dtype=np.uint16)
+        try:
+            if not stream.handover:
+                pytest.skip("AMD's decoder does not hand over on this PC")
+            stream.start()
+            item = _next(stream)
+            stream.download(item[0], out.ctypes.data)
+            stream.release(item[0])
+        finally:
+            stream.close()
+        pictures.append(out)
+    assert np.array_equal(pictures[1], pictures[0] << 6)
+
+
+def test_amd_hands_over_the_pictures_before_a_closed_gops_idr_as_ffmpeg_decodes_them(tmp_path):
+    """AMF's own decoder on Vulkan, which the hand-over first ran on, decodes
+    HEVC's last B-pictures before each IDR wrong (a Radeon 780M, driver
+    32.0.31041.1004; a UHD Blu-ray's too), on a Vulkan device AMF makes
+    itself as well, where its Direct3D 11 decoder and FFmpeg's Vulkan
+    decoding are right. The hand-over takes Direct3D 11's: a short closed
+    GOP has those pictures every 12 frames."""
+    path = tmp_path / "gop.mkv"
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
+                    "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-pix_fmt", "yuv420p10le", "-c:v", "libx265",
+                    "-preset", "ultrafast", "-x265-params", "keyint=12:min-keyint=12:no-open-gop=1:bframes=3:log-level=error",
+                    str(path)], check=True)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, shift=6)
+    _need(plan, "amd")
+    assert _handed_over(info, plan, True, True) == _ffmpeg_decode(path, plan)
+
+
+def test_pictures_amd_hands_over_and_an_edit_list_discards_are_ffmpegs(tmp_path):
+    """The pictures an edit list discards are decoded and handed over, then
+    handed back unread: the ones after them are still FFmpeg's."""
+    whole = _clip(tmp_path / "whole.mp4", "hevc", "yuv420p10le", ["-g", "48"], seconds=4.0)
+    cut = tmp_path / "cut.mp4"
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-ss", "1.3", "-i", str(whole), "-c", "copy",
+                    str(cut)], check=True)
+    info = probe_video(cut)
+    plan = nv.plan_decode(info, None, shift=6)
+    _need(plan, "amd")
+    assert _handed_over(info, plan, True, True) == _ffmpeg_decode(cut, plan)
+
+
+def test_two_amd_decoders_handing_over_at_once_give_ffmpegs_pictures(tmp_path):
+    """Scoring decodes both videos at once, and the decoders share the
+    hand-over's Vulkan device, its queue and what is imported and pinned."""
+    paths = [_clip(tmp_path / "a.mkv", "hevc", "yuv420p10le"), _clip(tmp_path / "b.mkv", "h264", "yuv420p")]
+    infos = [probe_video(path) for path in paths]
+    plans = [nv.plan_decode(info, None, shift=6) for info in infos]
+    for plan in plans:
+        _need(plan, "amd")
+    expected = [_ffmpeg_decode(path, plan) for path, plan in zip(paths, plans, strict=True)]
+    for _round in range(3):
+        results: list[list[str] | BaseException] = [[], []]
+
+        def decode(index: int, results: list = results) -> None:
+            try:
+                results[index] = _handed_over(infos[index], plans[index], True, True)
+            except BaseException as error:  # reported below
+                results[index] = error
+
+        threads = [threading.Thread(target=decode, args=(index,)) for index in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+        assert results == expected
+
+
+def test_amd_hands_over_only_unscaled_pictures_of_their_own_depth():
+    plan = nv.plan_decode(_info(), None, shift=6)
+    assert nv.can_hand_over(plan, "amd") and nv.can_hand_over(plan, "nvidia")
+    assert not nv.can_hand_over(plan, "intel")
+    assert not nv.can_hand_over(nv.plan_decode(_info(), None, size=(1280, 720)), "amd")
+    eight = nv.plan_decode(_info(pix_fmt="yuv420p"), None, widen=nv.WIDEN_SHIFT)
+    assert not nv.can_hand_over(eight, "amd") and nv.can_hand_over(eight, "nvidia")
+
+
+class _OpeningLibrary:
+    """A decoder library that records what nvf_open is asked, and refuses
+    the hand-over when told to."""
+
+    def __init__(self, hands_over: bool) -> None:
+        self.hands_over, self.asked, self.imports = hands_over, [], []
+
+    def nvf_open(self, params, error, size):
+        handover = params._obj.handover
+        self.asked.append(handover)
+        if handover and not self.hands_over:
+            error.value = b"the GPU's Vulkan driver has no VK_EXT_external_memory_host"
+            return None
+        return 7
+
+    def nvf_import_vulkan(self, handle, win32, size, memory_type, device, driver, address, memory):
+        self.imports.append((win32, size, memory_type, device, driver))
+        address._obj.value, memory._obj.value = 1 << 40, 1 << 40
+        return 0
+
+
+def _amd_stream(monkeypatch, library, plan=None) -> nv.GpuFrameStream:
+    monkeypatch.setattr(nv, "_load", lambda backend: library)
+    monkeypatch.setattr(nv, "_PacketReader", lambda *args: type("Reader", (), {"close": lambda self: None})())
+    return nv.GpuFrameStream(_info(), plan or nv.plan_decode(_info(), None, shift=6), backend="amd", handover=True)
+
+
+def test_amd_hands_over_when_its_vulkan_starts(monkeypatch):
+    library = _OpeningLibrary(hands_over=True)
+    stream = _amd_stream(monkeypatch, library)
+    assert stream.handover and library.asked == [1]
+
+
+def test_amd_decodes_as_before_when_its_vulkan_cannot_hand_over(monkeypatch, caplog):
+    caplog.set_level("INFO", logger=nv.__name__)
+    library = _OpeningLibrary(hands_over=False)
+    stream = _amd_stream(monkeypatch, library)
+    assert not stream.handover and library.asked == [1, 0]
+    assert "VK_EXT_external_memory_host" in caplog.text
+    assert not stream.pin(0x1000, 4096)
+    assert stream.import_memory(5, 1 << 20) is None
+
+
+def test_amd_is_not_asked_to_hand_over_scaled_pictures(monkeypatch):
+    library = _OpeningLibrary(hands_over=True)
+    stream = _amd_stream(monkeypatch, library, nv.plan_decode(_info(), None, shift=6, size=(1280, 720)))
+    assert not stream.handover and library.asked == [0]
+
+
+def test_amd_imports_vulkan_memory_only_knowing_its_gpu_and_driver(monkeypatch):
+    """AMD's decoder imports Vulkan VMAF's memory into its own Vulkan device,
+    which Vulkan allows only from the same GPU and driver: without them it
+    imports nothing, and the frames go through system memory."""
+    from types import SimpleNamespace
+
+    library = _OpeningLibrary(hands_over=True)
+    stream = _amd_stream(monkeypatch, library)
+    assert stream.import_memory(5, 1 << 20) is None and library.imports == []
+    exporter = SimpleNamespace(device_uuid=b"d" * 16, driver_uuid=b"r" * 16, memory_type=3)
+    assert stream.import_memory(5, 1 << 20, exporter) == (1 << 40, 1 << 40)
+    assert library.imports == [(5, 1 << 20, 3, b"d" * 16, b"r" * 16)]
+
+
 class _Library:
     """A decoder library whose nvf_close returns when `closes` says so."""
 
