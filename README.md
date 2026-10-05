@@ -113,7 +113,7 @@ Third-party components retain their own licenses; see
 
 If VideoMetricsLab has been useful to you, I'd love to hear from you!
 
-[💬 Leave a comment / say thanks](LINK_TO_DISCUSSION)
+[💬 Leave a comment / say thanks](https://github.com/4KVCD/VideoMetricsLab/discussions)
 
 You can also ⭐ star the repository — it helps me know people are finding the project useful.
 
