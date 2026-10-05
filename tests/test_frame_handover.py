@@ -95,7 +95,7 @@ def test_planes_downloaded_into_pinned_pitched_memory_are_the_packed_picture(pai
 def _without_sharing(monkeypatch):
     """As a driver whose CUDA cannot take Vulkan's memory: the frames go
     through system memory, as before."""
-    monkeypatch.setattr(gpu_frames.GpuFrameStream, "import_memory", lambda self, handle, size: None)
+    monkeypatch.setattr(gpu_frames.GpuFrameStream, "import_memory", lambda self, handle, size, exporter=None: None)
 
 
 @pytest.mark.parametrize(("models", "backend"), [

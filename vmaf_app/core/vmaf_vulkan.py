@@ -90,6 +90,10 @@ def _load() -> ctypes.CDLL:
         ):
             function = getattr(lib, name)
             function.restype, function.argtypes = restype, argtypes
+        # libvmaf-fast 3.2.0-fast.1's has none: AMD's decoder then does not share its memory.
+        if hasattr(lib, "vv_shared_device"):
+            lib.vv_shared_device.restype = ctypes.c_int
+            lib.vv_shared_device.argtypes = [handle, ctypes.c_char_p, ctypes.c_char_p, unsigned]
         _library = lib
     return _library
 
@@ -126,12 +130,27 @@ def best_device(found: list[VulkanDevice] | None = None) -> VulkanDevice | None:
 SHARED_FLAG = 1 << 19
 
 
+@dataclass(frozen=True)
+class SharedDevice:
+    """What a decoder importing a context's shared buffers on its own Vulkan
+    device must match (vv_shared_device): the GPU and the driver -- Vulkan
+    imports the memory only where both are the exporter's -- and the memory
+    type to allocate it as."""
+
+    device_uuid: bytes
+    driver_uuid: bytes
+    memory_type: int
+
+
 class SharedLumas:
     """The buffers a Vulkan context made with SHARED_FLAG copies each frame
     pair's luma planes from, as GPU memory a decoder on the same GPU writes
     them into (gpu_frames' copy_luma): the planes then never leave the GPU,
     where they used to be copied to system memory and back by the CPU.
-    `stream`: the decoder whose CUDA imports them (GpuFrameStream).
+    `stream`: the decoder that imports them (GpuFrameStream) -- with CUDA
+    (NVIDIA's), or into a Vulkan device of its own (AMD's), which takes the
+    SharedDevice vv_shared_device names: import_memory(handle, size,
+    exporter), exporter None from an engine without vv_shared_device.
     VmafVulkanError when the two cannot share memory -- another GPU, an old
     driver -- and the caller then scores from system memory as before."""
 
@@ -140,9 +159,16 @@ class SharedLumas:
         self._imports: list[tuple[int, int]] = []  # per slot: (address, what unimport takes)
         handle, size = ctypes.c_void_p(), ctypes.c_uint64()
         try:
+            exporter = None  # AMD's decoder imports nothing without it (GpuFrameStream.import_memory)
+            if hasattr(lib, "vv_shared_device"):
+                device, driver = ctypes.create_string_buffer(16), ctypes.create_string_buffer(16)
+                memory_type = ctypes.c_uint32()
+                _check(lib, lib.vv_shared_device(context, device, driver, ctypes.byref(memory_type)),
+                       "Sharing Vulkan's memory")
+                exporter = SharedDevice(device.raw, driver.raw, memory_type.value)
             while lib.vv_export(context, len(self._imports), ctypes.byref(handle), ctypes.byref(size)) == 0:
                 try:
-                    imported = stream.import_memory(handle.value, size.value)
+                    imported = stream.import_memory(handle.value, size.value, exporter)
                 finally:
                     ctypes.windll.kernel32.CloseHandle(handle)
                 if imported is None:

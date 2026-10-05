@@ -336,3 +336,63 @@ def test_every_gpu_gives_cudas_features_and_scores_bit_for_bit(bits):
                 device.name, column)
         for name in MODELS:
             assert np.array_equal(scores[name], cuda_scores[name]), (device.name, name)
+
+
+class _ExportingLibrary:
+    """vmaf_vulkan.dll as SharedLumas finds it: two shared buffers to export
+    (each a real handle, which SharedLumas closes), and vv_shared_device or
+    not (libvmaf-fast 3.2.0-fast.1 has none)."""
+
+    def __init__(self, names_device: bool) -> None:
+        if names_device:
+            self.vv_shared_device = self._shared_device
+
+    def vv_export(self, context, slot, handle, size):
+        if slot >= 2:
+            return -3
+        handle._obj.value = ctypes.windll.kernel32.CreateEventW(None, 0, 0, None)
+        size._obj.value = 1 << 20
+        return 0
+
+    @staticmethod
+    def _shared_device(context, device, driver, memory_type):
+        ctypes.memmove(device, b"d" * 16, 16)
+        ctypes.memmove(driver, b"r" * 16, 16)
+        memory_type._obj.value = 3
+        return 0
+
+    def vv_error(self):
+        return b""
+
+
+class _ImportingStream:
+    def __init__(self) -> None:
+        self.imports, self.unimported = [], []
+
+    def import_memory(self, handle, size, exporter=None):
+        self.imports.append((size, exporter))
+        return (len(self.imports) << 40, len(self.imports))
+
+    def unimport(self, memory):
+        self.unimported.append(memory)
+
+
+def test_shared_lumas_names_vulkans_gpu_and_driver_to_the_importing_decoder():
+    """AMD's decoder imports Vulkan's memory into a Vulkan device of its own,
+    which it may do only from the same GPU and driver, into the same memory
+    type: vv_shared_device names them, and every import is told."""
+    stream = _ImportingStream()
+    shared = vmaf_vulkan.SharedLumas(_ExportingLibrary(names_device=True), ctypes.c_void_p(), stream)
+    exporter = vmaf_vulkan.SharedDevice(b"d" * 16, b"r" * 16, 3)
+    assert stream.imports == [(1 << 20, exporter), (1 << 20, exporter)]
+    shared.close()
+    assert stream.unimported == [1, 2]
+
+
+def test_shared_lumas_names_nothing_with_an_engine_that_cannot():
+    """With libvmaf-fast 3.2.0-fast.1's engine NVIDIA's decoder imports as
+    before, and AMD's then imports nothing: its frames go through system
+    memory (GpuFrameStream.import_memory)."""
+    stream = _ImportingStream()
+    vmaf_vulkan.SharedLumas(_ExportingLibrary(names_device=False), ctypes.c_void_p(), stream).close()
+    assert stream.imports == [(1 << 20, None), (1 << 20, None)]

@@ -608,15 +608,19 @@ def score_decoded(
         if not supported:
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
-    test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=4, process_handle=process_handle, backend=decoder)
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=4, process_handle=process_handle, backend=decoder,
+                                     handover=True)
     try:
-        ref = gpu_frames.GpuFrameStream(source, plans[1], 0, pool=4, process_handle=process_handle, backend=decoder)
+        ref = gpu_frames.GpuFrameStream(source, plans[1], 0, pool=4, process_handle=process_handle, backend=decoder,
+                                        handover=True)
     except BaseException:
         test.close()
         raise
     scorer = None
     try:
-        if decoder == "nvidia":  # its pictures stay on the GPU, and reach libvmaf's without a CPU copy
+        # Its pictures stay on the GPU, and reach libvmaf's without a CPU copy:
+        # NVIDIA's, and AMD's handing over (to Vulkan only, not libvmaf's CUDA).
+        if test.handover and ref.handover and (decoder == "nvidia" or backend == "vulkan"):
             try:
                 scorer = MultiScorer(width, height, bit_depth, models, n_subsample, backend, device, shared=test)
             except vmaf_cuda.VmafGpuError as error:
