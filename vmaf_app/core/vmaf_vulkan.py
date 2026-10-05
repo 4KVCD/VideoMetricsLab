@@ -1,6 +1,6 @@
 """VMAF and VMAF NEG on any GPU with Vulkan: the features VMAF is predicted
 from (VIF, ADM and motion) are calculated by tools/vmaf_vulkan/vmaf_vulkan.dll
-(native/vmaf_vulkan, built by scripts/build_vmaf_vulkan.ps1), a port of
+(libvmaf-fast's fast/vulkan, from its release like libvmaf.dll), a port of
 libvmaf's CUDA feature extractors to Vulkan compute shaders.
 
 The port gives the same feature values as libvmaf's CUDA code (vmaf_cuda), to
@@ -30,7 +30,7 @@ _log = logging.getLogger(__name__)
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "vmaf_vulkan" / "vmaf_vulkan.dll"
 #: What a score records it was calculated with (its provenance).
-LIBRARY_BUILD = "vmaf_vulkan 1 (libvmaf's CUDA features, " + vmaf_cuda.LIBRARY_BUILD + ")"
+LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan)"
 
 #: Positions in the library's feature rows (vmaf_vulkan.cpp).
 _VIF, _ADM2, _MOTION2, _VIF_NEG, _ADM2_NEG, _MOTION = 0, 4, 5, 6, 10, 11
@@ -384,7 +384,7 @@ def probe() -> tuple[bool, int | None, str]:
     """(whether Vulkan scores VMAF on this PC, on which GPU, what it is or
     why not). Scores the probe's frames at 8 and 10 bits and accepts the GPU
     only if its sums are exactly the known ones: a driver that compiles a
-    shader wrongly (Intel's did one, see native/vmaf_vulkan) gives wrong
+    shader wrongly (Intel's and AMD's did, see libvmaf-fast's README) gives wrong
     scores, not an error. Run in a process of its own."""
     if not LIBRARY_PATH.is_file():
         return False, None, "vmaf_vulkan.dll is not bundled"

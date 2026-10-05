@@ -153,11 +153,11 @@ try {
         }
     }
 
-    # libvmaf with CUDA (scripts/build_libvmaf_cuda.ps1): without it, VMAF on
+    # libvmaf with CUDA (libvmaf-fast's release): without it, VMAF on
     # NVIDIA GPUs is quietly calculated on the CPU.
     $libvmaf = Join-Path $output '_internal/vmaf_app/tools/libvmaf'
     if (-not (Test-Path (Join-Path $libvmaf 'libvmaf.dll'))) {
-        throw 'Bundled libvmaf (CUDA) is missing: run scripts/build_libvmaf_cuda.ps1'
+        throw 'Bundled libvmaf (CUDA) is missing: run scripts/fetch_libvmaf_fast.ps1'
     }
     foreach ($notice in @('LICENSE.libvmaf.txt', 'LICENSE.pthreads4w.txt', 'LICENSE.nv-codec-headers.txt')) {
         if (-not (Test-Path (Join-Path $libvmaf "licenses/$notice"))) {
@@ -165,11 +165,11 @@ try {
         }
     }
 
-    # VMAF's features with Vulkan (scripts/build_vmaf_vulkan.ps1): without it,
+    # VMAF's features with Vulkan (libvmaf-fast's release): without it,
     # VMAF on Intel and AMD GPUs is quietly calculated on the CPU.
     $vmafVulkan = Join-Path $output '_internal/vmaf_app/tools/vmaf_vulkan'
     if (-not (Test-Path (Join-Path $vmafVulkan 'vmaf_vulkan.dll'))) {
-        throw 'Bundled vmaf_vulkan is missing: run scripts/build_vmaf_vulkan.ps1'
+        throw 'Bundled vmaf_vulkan is missing: run scripts/fetch_libvmaf_fast.ps1'
     }
     if (-not (Test-Path (Join-Path $vmafVulkan 'licenses/LICENSE.libvmaf.txt'))) {
         throw 'Bundled vmaf_vulkan license notice is missing: LICENSE.libvmaf.txt'

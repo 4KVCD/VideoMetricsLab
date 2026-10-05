@@ -4,7 +4,7 @@
 VMAF v1 is predicted from four features. Where each is calculated here:
 
 - ADM3 and motion3, about two thirds of the CPU's work: on the GPU, by
-  vmaf_vulkan.dll's VMAF v1 mode (native/vmaf_vulkan), which follows
+  vmaf_vulkan.dll's VMAF v1 mode (libvmaf-fast's fast/vulkan), which follows
   libvmaf's CPU code (integer_adm.c, integer_motion.c) in integer arithmetic
   and gives its values bit for bit, on any GPU.
 - CAMBI and SpEED chroma: by libvmaf's own CPU extractors, from the bundled
@@ -44,7 +44,7 @@ from vmaf_app.core import vmaf_cuda, vmaf_vulkan
 _log = logging.getLogger(__name__)
 
 #: What a score records it was calculated with (its provenance).
-LIBRARY_BUILD = "vmaf_vulkan 1 (ADM3, motion3) + " + vmaf_cuda.LIBRARY_BUILD.replace(" (CUDA)", "") + " (CAMBI, SpEED)"
+LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan: ADM3, motion3; CPU: CAMBI, SpEED)"
 
 _ADM3, _MOTION3 = "VMAF_integer_feature_adm3_score", "VMAF_integer_feature_motion3_score"
 _CAMBI, _SPEED = "Cambi_feature_cambi_score", "Speed_chroma_feature_speed_chroma_uv_score"

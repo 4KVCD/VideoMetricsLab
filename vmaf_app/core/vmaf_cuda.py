@@ -1,7 +1,8 @@
 """VMAF and VMAF NEG on the GPU. On an NVIDIA GPU: libvmaf's CUDA feature
 extractors (VIF, ADM and motion) from the bundled tools/libvmaf/libvmaf.dll,
-built by scripts/build_libvmaf_cuda.ps1 (libvmaf master with the pull requests
-that fix its CUDA code, listed there). On any other GPU, or when Settings >
+libvmaf-fast's (github.com/4KVCD/libvmaf-fast, a fork of libvmaf with the pull
+requests that fix its CUDA code merged; scripts/fetch_libvmaf_fast.ps1
+installs its release). On any other GPU, or when Settings >
 GPU metrics > GPU backend is Vulkan: the port of those extractors to Vulkan
 (vmaf_vulkan), which gives the same scores. What is said below of libvmaf's
 scores holds for both.
@@ -65,8 +66,11 @@ _log = logging.getLogger(__name__)
 _ERROR_PIPE_CONNECTED, _ERROR_NO_DATA = 535, 232
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "libvmaf" / "libvmaf.dll"
+#: The libvmaf-fast release the bundled libvmaf.dll and vmaf_vulkan.dll are
+#: (scripts/fetch_libvmaf_fast.ps1 installs this one).
+LIBVMAF_FAST_VERSION = "3.2.0-fast.1"
 #: What a GPU score records it was calculated with (its provenance).
-LIBRARY_BUILD = "libvmaf cea2b4d8 + PRs 1477 1573 1583 1644 1612 1614 1647-1652 (CUDA)"
+LIBRARY_BUILD = f"libvmaf-fast {LIBVMAF_FAST_VERSION} (CUDA)"
 
 #: The app's built-in VMAF models -> libvmaf's names for them. A custom model
 #: file is calculated on the CPU.
