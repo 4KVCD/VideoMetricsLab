@@ -12,25 +12,9 @@ before you start. Follow these rules for all work.
   `scripts\build_gpu_frames.ps1` if your copies are older than the pull.
 - `libvmaf.dll` and `vmaf_vulkan.dll` are committed and come from libvmaf-fast
   (github.com/4KVCD/libvmaf-fast), installed by
-  `scripts\fetch_libvmaf_fast.ps1`. Do not rebuild them here.
-
-## Who changes what
-
-Several sessions work on this repository, on more than one PC. Stay on the
-side the user gave you, and do not merge another session's branch yourself.
-
-- App side: the GPU decoders (`native\*_frames.cpp`, `native\d3d11_scale.h`,
-  `vmaf_app\core\gpu_frames.py`), the pipes (`vmaf_app\core\proc.py`,
-  `perceptual_vship.py`, `vmaf_runner.py`), the CLI, the UI, XPSNR, and
-  `scripts\check_gpu_decoder.py` and the `diagnose_*` scripts.
-- libvmaf side: `vmaf_app\core\vmaf_vulkan.py`, `vmaf_app\core\vmaf_v1_gpu.py`,
-  and everything inside libvmaf and the Vulkan shaders, which live in
-  libvmaf-fast. A libvmaf or shader change is made in the fork, released, then
-  fetched here. If a GPU needs one, do not patch it here: write down exactly
-  what the driver does (inputs, expected value, actual value) and report it.
-- Do not optimize CPU SSIMULACRA2/Butteraugli
-  (`vmaf_app\core\perceptual_cpu.py`) unless asked by name. Bug fixes there
-  are fine.
+  `scripts\fetch_libvmaf_fast.ps1`. They are not built in this repository: a
+  change to libvmaf or the Vulkan shaders is made in that fork, released, then
+  fetched here.
 
 ## Correctness
 
