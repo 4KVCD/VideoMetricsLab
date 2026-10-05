@@ -775,7 +775,14 @@ class GpuFrameStream:
         self._reader.close()
         if self._feeder.ident is not None:
             self._feeder.join(timeout=30)
-        if not self._feeder.is_alive():
+        if not self._feeder.is_alive() and not self._finished and os.environ.get("VML_AMF_CLOSE") == "leave":
+            # For scripts/diagnose_amf_close.py: a decoder stopped part-way
+            # is not closed at all; the process ends itself (isolated).
+            global _stuck_closes
+            _stuck_closes += 1
+            _log.warning("%s: the %s GPU decoder was stopped part-way and is left open", self.info.path.name,
+                         self.backend)
+        elif not self._feeder.is_alive():
             # On a thread of its own, waited for only so long: a close that
             # never returned hung the whole run at its end, scores and all.
             closer = threading.Thread(target=self._lib.nvf_close, args=(self._handle,), name="gpu-frames-close",
@@ -783,7 +790,6 @@ class GpuFrameStream:
             closer.start()
             closer.join(_CLOSE_SECONDS)
             if closer.is_alive():
-                global _stuck_closes
                 _stuck_closes += 1
                 _log.error("%s: the %s GPU decoder did not close in %.0f s; it is left open", self.info.path.name,
                            self.backend, _CLOSE_SECONDS)

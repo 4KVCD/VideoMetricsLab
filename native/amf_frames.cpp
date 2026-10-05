@@ -140,12 +140,17 @@ void trace(const char *step) {
     }
 }
 
-// VML_AMF_CLOSE=flush: the decoder's pictures in progress are dropped
-// (Flush) before it is ended; for trying against the shutdown that hangs.
-bool close_with_flush() {
+// VML_AMF_CLOSE: other ways to end a decoder, for trying against the
+// shutdown that hangs (a decoder stopped part-way never returned from
+// Terminate on a Radeon 780M in a Vulkan VMAF run; Flush first, and closing
+// Vulkan first, changed nothing):
+//   drain    the decoder is told the stream has ended and its remaining
+//            pictures are taken and dropped, then it is ended as usual
+//   release  the decoder and context are released without Terminate
+bool close_as(const char *way) {
     char value[16];
     DWORD length = GetEnvironmentVariableA("VML_AMF_CLOSE", value, sizeof value);
-    return length > 0 && length < sizeof value && strcmp(value, "flush") == 0;
+    return length > 0 && length < sizeof value && strcmp(value, way) == 0;
 }
 
 struct Session {
@@ -154,20 +159,42 @@ struct Session {
     amf::AMFComponent *decoder = nullptr;
 
     void close() {
+        const bool terminate = !close_as("release");
         if (decoder) {
-            if (close_with_flush()) {
-                trace("decoder Flush");
-                decoder->Flush();
+            if (close_as("drain")) {
+                trace("decoder Drain");
+                decoder->Drain();
+                // Its last pictures, for at most two seconds.
+                int taken = 0;
+                const ULONGLONG until = GetTickCount64() + 2000;
+                while (GetTickCount64() < until) {
+                    amf::AMFData *data = nullptr;
+                    AMF_RESULT result = decoder->QueryOutput(&data);
+                    if (data) {
+                        data->Release();
+                        taken++;
+                        continue;
+                    }
+                    if (result == AMF_EOF) break;
+                    Sleep(1);
+                }
+                char text[64];
+                snprintf(text, sizeof text, "decoder drained: %d pictures dropped", taken);
+                trace(text);
             }
-            trace("decoder Terminate");
-            decoder->Terminate();
+            if (terminate) {
+                trace("decoder Terminate");
+                decoder->Terminate();
+            }
             trace("decoder Release");
             decoder->Release();
             decoder = nullptr;
         }
         if (context) {
-            trace("context Terminate");
-            context->Terminate();
+            if (terminate) {
+                trace("context Terminate");
+                context->Terminate();
+            }
             trace("context Release");
             context->Release();
             context = nullptr;

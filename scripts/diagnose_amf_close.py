@@ -10,10 +10,13 @@ hung. VMAF is scored with Vulkan forced on (whatever the app's probe says of
 this GPU), both videos decoded by AMD's decoder in the scoring process, once
 for each way of shutting down:
 
-    as it is            the decoders closed, then Vulkan
-    flush               the decoder's pictures in progress dropped (Flush) first
-    scorer-first        Vulkan closed before the decoders
-    flush, scorer-first both
+    as it is   the decoder ended (Terminate) as it stands
+    drain      told the stream has ended, its last pictures taken, then ended
+    release    released without Terminate
+    leave      a decoder stopped part-way is not closed; the process ends itself
+
+(Flushing the decoder first, and closing Vulkan before the decoders, were
+tried on a Radeon 780M and changed nothing.)
 
 Each run is a process of its own, with a time limit. For each: whether it
 finished, how long it took, whether a decoder "did not close" (the app now
@@ -34,9 +37,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-VARIANTS = (("as it is", {}), ("flush", {"VML_AMF_CLOSE": "flush"}),
-            ("scorer-first", {"VML_VULKAN_CLOSE": "scorer-first"}),
-            ("flush, scorer-first", {"VML_AMF_CLOSE": "flush", "VML_VULKAN_CLOSE": "scorer-first"}))
+VARIANTS = (("as it is", {}), ("drain", {"VML_AMF_CLOSE": "drain"}), ("release", {"VML_AMF_CLOSE": "release"}),
+            ("leave", {"VML_AMF_CLOSE": "leave"}))
 
 
 def score(reference: Path, distorted: Path, seconds: float) -> int:
@@ -80,9 +82,8 @@ def main() -> int:
             trace = Path(folder) / f"trace-{number}.txt"
             environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "VML_AMF_TRACE": str(trace),
                            **variables}
-            for variable in ("VML_AMF_CLOSE", "VML_VULKAN_CLOSE"):
-                if variable not in variables:
-                    environment.pop(variable, None)
+            if "VML_AMF_CLOSE" not in variables:
+                environment.pop("VML_AMF_CLOSE", None)
             command = [sys.executable, str(Path(__file__).resolve()), str(args.reference), str(args.distorted),
                        "--seconds", str(args.seconds), "--run"]
             started = time.perf_counter()
@@ -97,10 +98,10 @@ def main() -> int:
             elapsed = time.perf_counter() - started
             lines = output.splitlines()
             result = next((line for line in lines if line.startswith("RESULT")), "RESULT none")
-            stuck = [line for line in lines if "did not close" in line]
+            stuck = [line for line in lines if "did not close" in line or "left open" in line]
             decoded = [line for line in lines if "decoded" in line.lower() and "LOG" in line][:4]
             print(f"\n{number}. {name}: exit {code}, {elapsed:.1f} s; {result[7:]}")
-            print(f"   decoder closes that never returned: {len(stuck)}")
+            print(f"   decoders that did not close, or were left open: {len(stuck)}")
             for line in stuck + decoded:
                 print(f"   {line[:200]}")
             failures = [line for line in lines if "Traceback" in line or "Error" in line][:6]

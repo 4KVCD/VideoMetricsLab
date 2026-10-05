@@ -436,7 +436,7 @@ def _open_stream(library) -> nv.GpuFrameStream:
     """A stream as close() finds it: open, its feeding thread ended."""
     stream = object.__new__(nv.GpuFrameStream)
     stream.info, stream.backend, stream._lib, stream._handle = _info(), "nvidia", library, 7
-    stream._closing = False
+    stream._closing, stream._finished = False, False
     stream._reader = type("Reader", (), {"close": lambda self: None})()
     stream._feeder = threading.Thread(target=lambda: None)
     return stream

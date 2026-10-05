@@ -3,6 +3,7 @@ scheduler is the real one; FFmpeg's and Vship's halves are faked, as in
 test_worker.py."""
 from __future__ import annotations
 
+import gc
 import io
 import json
 import subprocess
@@ -48,6 +49,13 @@ def _perceptual(key: str = "ssimulacra2", backend: str = "gpu") -> PerceptualTas
 def videos(tmp_path, monkeypatch):
     """A reference and two test files, with FFmpeg found and both halves of
     a run faked. `calls` lists the halves that ran, by video."""
+    # A window an earlier test in this process left for the garbage
+    # collector is freed here, on the main thread. Freed during a run it
+    # went on the run's own thread, where Qt waits for the main thread to
+    # close the window -- which is waiting for the run: the whole suite
+    # hung in this file (seen on the AMD PC, 2 runs of 2). The command line
+    # itself has no Qt.
+    gc.collect()
     paths = SimpleNamespace(reference=tmp_path / "reference.mkv", a=tmp_path / "a.mkv", b=tmp_path / "b.mkv",
                             calls=[], folder=tmp_path)
     for path in (paths.reference, paths.a, paths.b):

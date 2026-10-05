@@ -43,12 +43,22 @@ $shaders = [ordered]@{
     'adm_dwt_0_8'       = 'adm_dwt', 'SCALE0=1', 'BPC16=0'
     'adm_dwt_0_16'      = 'adm_dwt', 'SCALE0=1', 'BPC16=1'
     'adm_dwt'           = 'adm_dwt', 'SCALE0=0', 'BPC16=0'
-    'adm_decouple_0'    = 'adm_decouple', 'SCALE0=1', 'BPC16=0'
-    'adm_decouple'      = 'adm_decouple', 'SCALE0=0', 'BPC16=0'
+    'adm_decouple_0'    = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=0'
+    'adm_decouple'      = 'adm_decouple', 'SCALE0=0', 'BPC16=0', 'VARIANT=0'
     'adm_csf_den_0'     = 'adm_csf_den', 'SCALE0=1', 'BPC16=0'
     'adm_csf_den'       = 'adm_csf_den', 'SCALE0=0', 'BPC16=0'
     'adm_cm_0'          = 'adm_cm', 'SCALE0=1', 'BPC16=0'
     'adm_cm'            = 'adm_cm', 'SCALE0=0', 'BPC16=0'
+    # adm_decouple_0 as the CUDA kernel writes it, in 64 bits (1), and steps
+    # of that shown (2-7), for scripts/diagnose_vmaf_vulkan.py: see VARIANT
+    # in the shader.
+    'adm_decouple_0_v1' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=1'
+    'adm_decouple_0_v2' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=2'
+    'adm_decouple_0_v3' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=3'
+    'adm_decouple_0_v4' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=4'
+    'adm_decouple_0_v5' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=5'
+    'adm_decouple_0_v6' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=6'
+    'adm_decouple_0_v7' = 'adm_decouple', 'SCALE0=1', 'BPC16=0', 'VARIANT=7'
 }
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {

@@ -426,6 +426,7 @@ struct vv_context {
     bool nativeDouble = false;
     int skip = 0;  // timing tests: 1 = no motion, 2 = no VIF, 4 = no ADM
     int passLimit = 0;  // timing tests: only the first N scored passes
+    int decoupleVariant = 0;  // adm_decouple_0's VARIANT (shaders/adm_decouple.slang)
     uint32_t strideBytes = 0, planeBytes = 0;
 
     Pipeline pipelines[kShaderCount];
@@ -771,7 +772,9 @@ int vv_context::build_passes()
                                                (uint32_t)bandStride, (uint32_t)outStride,
                                                limit == 0 ? 100u : 1u,
                                                i_rfactor[scale * 3], i_rfactor[scale * 3 + 1], i_rfactor[scale * 3 + 2] };
-                error = add_pass(scored, scale == 0 ? kShader_adm_decouple_0 : kShader_adm_decouple,
+                const int decouple0 = decoupleVariant ? kShader_adm_decouple_0_v1 + decoupleVariant - 1
+                                                      : kShader_adm_decouple_0;
+                error = add_pass(scored, scale == 0 ? decouple0 : kShader_adm_decouple,
                                  { &bandsRef[set], &bandsDis[set], &admR, &admA, &admF, &divTable }, constants,
                                  sizeof constants, groups(right - left, 16), groups(bottom - top, 8));
                 if (error)
@@ -860,6 +863,7 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     nativeDouble = (flags & 1) && features.shaderFloat64;
     skip = (flags >> 16) & 7;
     passLimit = (flags >> 20) & 0xFF;
+    decoupleVariant = (flags >> 28) & 7;
     api->vkGetPhysicalDeviceMemoryProperties(physical, &memoryProperties);
 
     uint32_t familyCount = 0;
