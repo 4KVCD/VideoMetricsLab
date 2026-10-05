@@ -153,7 +153,7 @@ $run.videos[0].metrics.vmaf.score
 | `--duration SECONDS` | Compare only the start of each video. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
-| `--vmaf-on`, `--ssimulacra2-on`, `--butteraugli-on` `gpu\|cpu` | Where that one metric is calculated (`--vmaf-on` is VMAF v0.6.1 and VMAF NEG). Left out: as the app's Options panel was last set. |
+| `--vmaf-on`, `--ssimulacra2-on`, `--butteraugli-on` `gpu\|cpu` | Where that one metric is calculated (`--vmaf-on` is VMAF v0.6.1, VMAF NEG and VMAF v1). Left out: as the app's Options panel was last set. |
 | `--no-gpu-decode` | Decode the videos on the CPU. |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |

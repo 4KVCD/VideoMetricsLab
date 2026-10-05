@@ -461,15 +461,18 @@ def test_quiet_prints_no_progress():
 # ------------------------------------------------------------------ devices
 
 def test_devices_says_what_calculates_each_metric(videos, monkeypatch, capsys):
-    from vmaf_app.core import vmaf_cuda
+    from vmaf_app.core import vmaf_cuda, vmaf_v1_gpu
 
     monkeypatch.setattr(vmaf_cuda, "gpu_vmaf_available", lambda: (False, "no GPU in the tests"))
+    monkeypatch.setattr(vmaf_v1_gpu, "available", lambda: (False, "no GPU in the tests"))
     assert cli.main(["devices"]) == cli.EXIT_OK
     out = capsys.readouterr().out
     assert f"VideoMetricsLab {__version__}" in out and "FFmpeg: 9.0.1" in out
     assert "CVVDP: not available (no GPU in the tests)" in out
     assert "SSIMULACRA2: CPU (libjxl)" in out
     assert "VMAF v0.6.1, VMAF NEG: CPU (no GPU in the tests)" in out
+    assert "VMAF v1: CPU (no GPU in the tests)" in out
+    assert "PSNR, SSIM, XPSNR: CPU (FFmpeg)" in out
 
 
 def test_the_command_line_needs_no_qt():

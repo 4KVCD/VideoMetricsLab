@@ -145,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--subsample", type=_positive(int), default=1, metavar="N",
                          help="score every N-th frame (default: 1, every frame; CVVDP needs every frame)")
     compare.add_argument("--threads", type=_positive(int), metavar="N", help="libvmaf threads (default: automatic)")
-    for key, label in (("vmaf", "VMAF v0.6.1 and VMAF NEG"), ("ssimulacra2", "SSIMULACRA2"),
+    for key, label in (("vmaf", "VMAF v0.6.1, VMAF NEG and VMAF v1"), ("ssimulacra2", "SSIMULACRA2"),
                        ("butteraugli", "Butteraugli")):
         compare.add_argument(f"--{key}-on", choices=["gpu", "cpu"], dest=f"{key}_on",
                              help=f"where {label} is calculated (default: the app's)")
@@ -772,7 +772,11 @@ def devices(_args: argparse.Namespace, *, out=None, err=None) -> int:
                      + ("libvmaf CUDA" if backend == "cuda" else f"Vulkan, GPU {gpu}") + ")")
     else:
         lines.append(f"VMAF v0.6.1, VMAF NEG: CPU ({why})")
-    lines.append("VMAF v1, PSNR, SSIM, XPSNR: CPU (FFmpeg)")
+    from vmaf_app.core import vmaf_v1_gpu
+
+    with_gpu, what = vmaf_v1_gpu.available()
+    lines.append(f"VMAF v1: {'GPU (' + what + ')' if with_gpu else 'CPU (' + what + ')'}")
+    lines.append("PSNR, SSIM, XPSNR: CPU (FFmpeg)")
     print("\n".join(lines), file=out)
     return EXIT_OK if status.ok else EXIT_USAGE
 
