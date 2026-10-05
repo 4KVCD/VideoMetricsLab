@@ -1,6 +1,7 @@
 """VMAF on the GPU (vmaf_cuda), as far as it can be tested without a GPU --
 GitHub's runner has none. The scores themselves were compared on an RTX
 5090 (see vmaf_cuda's docstring)."""
+import ctypes
 import faulthandler
 import logging
 import subprocess
@@ -387,55 +388,236 @@ def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
     assert result.metric_results.get("vmaf").provenance.compute_backend == "cpu"
 
 
-def _libvmaf_picture(width: int, height: int, bit_depth: int):
-    """A picture as libvmaf allocates it (vmaf_picture_alloc): the chroma
-    planes of 4:2:0 are half the size rounded *down*, the strides whole
-    multiples of 32 samples, the planes one after another in one block.
-    Returns it with that block, which has a guard of 0xAA bytes behind it."""
-    sample = 1 if bit_depth <= 8 else 2
-    picture = vmaf_cuda._Picture(bpc=bit_depth)
-    picture.w[:] = width, width >> 1, width >> 1
-    picture.h[:] = height, height >> 1, height >> 1
-    picture.stride[:] = [(w + 31 & ~31) * sample for w in picture.w]
-    sizes = [picture.stride[plane] * picture.h[plane] for plane in range(3)]
-    block = np.zeros(sum(sizes) + 4096, dtype=np.uint8)
-    block[sum(sizes):] = 0xAA
-    picture.data[:] = [block.ctypes.data + sum(sizes[:plane]) for plane in range(3)]
-    return picture, block, sizes
+# ------------------------------------------- frames uploaded to the GPU
+
+class _FakeCuda:
+    """CUDA's driver API as _HostUpload uses it, in system memory: what is
+    allocated, made current and waited for is recorded, and a copy is made
+    as cuMemcpy2D makes it. `failing`: the call that returns an error."""
+
+    def __init__(self, failing: str = ""):
+        self.failing = failing
+        self.calls: list[str] = []
+        self.current: list[int] = []      # the contexts pushed, innermost last
+        self.host: dict[int, object] = {}  # page-locked memory not yet freed
+        self.streams: set[int] = set()
+        self.retained = 0
+        self.pending = 0                  # copies started and not waited for
+
+    def __getattr__(self, name: str):
+        def call(*arguments):
+            self.calls.append(name)
+            if name == self.failing:
+                return 2
+            return getattr(self, "_" + name)(*arguments)
+        return call
+
+    def _cuInit(self, _flags):
+        return 0
+
+    def _cuDeviceGet(self, device, ordinal):
+        device._obj.value = ordinal
+        return 0
+
+    def _cuDevicePrimaryCtxRetain(self, context, _device):
+        self.retained += 1
+        context._obj.value = 0xC0DE
+        return 0
+
+    def _cuDevicePrimaryCtxRelease_v2(self, _device):
+        self.retained -= 1
+        return 0
+
+    def _cuCtxPushCurrent_v2(self, context):
+        self.current.append(context.value)
+        return 0
+
+    def _cuCtxPopCurrent_v2(self, _context):
+        self.current.pop()
+        return 0
+
+    def _cuMemHostAlloc(self, pointer, size, flags):
+        assert self.current and flags == 1
+        block = ctypes.create_string_buffer(size)
+        pointer._obj.value = ctypes.addressof(block)
+        self.host[pointer._obj.value] = block
+        return 0
+
+    def _cuMemFreeHost(self, pointer):
+        assert self.current
+        del self.host[pointer.value]
+        return 0
+
+    def _cuStreamCreate(self, stream, flags):
+        assert self.current and flags == 1  # non-blocking: not waited for with libvmaf's work
+        stream._obj.value = 0x5700 + len(self.streams)
+        self.streams.add(stream._obj.value)
+        return 0
+
+    def _cuStreamDestroy_v2(self, stream):
+        assert self.current
+        self.streams.remove(stream.value)
+        return 0
+
+    def _cuMemcpy2DAsync_v2(self, copy, stream):
+        copy = copy._obj
+        assert self.current and stream.value in self.streams
+        assert (copy.srcMemoryType, copy.dstMemoryType) == (1, 2) and copy.srcHost in self.host
+        for row in range(copy.Height):
+            ctypes.memmove(copy.dstDevice + row * copy.dstPitch, copy.srcHost + row * copy.srcPitch,
+                           copy.WidthInBytes)
+        self.pending += 1
+        return 0
+
+    def _cuStreamSynchronize(self, stream):
+        assert self.current and stream.value in self.streams
+        self.pending = 0
+        return 0
+
+
+class _FakeLibvmaf:
+    """libvmaf as GpuScorer uses it, its pictures "in GPU memory" blocks of
+    system memory: rows a multiple of 64 bytes apart, with a guard behind."""
+
+    def __init__(self, width: int, height: int, sample: int, cuda: _FakeCuda | None = None):
+        self._cuda = cuda
+        self.pitch = (width * sample + 63) // 64 * 64
+        self.rows = height
+        self.blocks: list[np.ndarray] = []
+        self.read: list[int] = []
+        self.unreferenced = 0
+        self.closed = False
+
+    def __getattr__(self, name: str):
+        return lambda *_arguments: 0
+
+    def vmaf_cuda_fetch_preallocated_picture(self, _context, picture):
+        block = np.zeros(self.pitch * self.rows + 4096, dtype=np.uint8)
+        block[self.pitch * self.rows:] = 0xAA
+        self.blocks.append(block)
+        picture._obj.data[0] = block.ctypes.data
+        picture._obj.stride[0] = self.pitch
+        return 0
+
+    def vmaf_read_pictures(self, _context, reference, _distorted, index):
+        if reference is not None:
+            # libvmaf reads the pictures from here on: the uploads are done.
+            assert self._cuda is None or self._cuda.pending == 0
+            self.read.append(index)
+        return 0
+
+    def vmaf_picture_unref(self, _picture):
+        self.unreferenced += 1
+        return 0
+
+    def vmaf_close(self, _context):
+        self.closed = True
+        return 0
+
+
+def _scorer(monkeypatch, width: int, height: int, bit_depth: int, failing: str = "", **options):
+    cuda = _FakeCuda(failing)
+    lib = _FakeLibvmaf(width, height, 1 if bit_depth <= 8 else 2, cuda)
+    monkeypatch.setattr(vmaf_cuda, "_load", lambda: lib)
+    monkeypatch.setattr(vmaf_cuda, "_cuda", lambda: cuda)
+    try:
+        scorer = vmaf_cuda.GpuScorer(width, height, bit_depth, {"vmaf": "vmaf_v0.6.1"}, **options)
+    except vmaf_cuda.VmafGpuError:
+        scorer = None
+    if scorer is not None:
+        scorer._context = ctypes.c_void_p(1)  # as vmaf_init leaves it: close() closes libvmaf
+    return scorer, lib, cuda
 
 
 @pytest.mark.parametrize("width, height, bit_depth", [
-    (641, 361, 8),    # half the width is a whole stride: the chroma row FFmpeg writes is longer than it
+    (641, 361, 8),    # odd: FFmpeg's frame has chroma rows libvmaf's picture has no place for
     (641, 361, 10),
-    (1365, 767, 8),   # an odd height: FFmpeg writes a chroma row more than libvmaf's plane has
     (1365, 767, 10),
     (1920, 1080, 8),
+    (1920, 1080, 10),
 ])
-def test_a_frame_of_an_odd_size_is_copied_within_libvmafs_picture(monkeypatch, width, height, bit_depth):
-    """FFmpeg rounds the chroma planes of an odd size up, libvmaf down. The
-    row that is too long failed the GPU's attempt ("could not broadcast"),
-    the row too many was written behind the picture's memory."""
-    calls = ("vmaf_init", "vmaf_cuda_state_init", "vmaf_cuda_import_state", "vmaf_model_load",
-             "vmaf_use_features_from_model", "vmaf_preallocate_pictures", "vmaf_model_destroy")
-    monkeypatch.setattr(vmaf_cuda, "_load", lambda: SimpleNamespace(**{name: lambda *a: 0 for name in calls}))
-    scorer = vmaf_cuda.GpuScorer(width, height, bit_depth, {"vmaf": "vmaf_v0.6.1"})
+def test_a_frames_luma_is_uploaded_into_libvmafs_picture_and_nothing_else(monkeypatch, width, height, bit_depth):
+    """VMAF reads the luma alone. Each row goes to its place in a picture
+    whose rows are further apart than the frame's, and nothing behind it."""
+    scorer, lib, cuda = _scorer(monkeypatch, width, height, bit_depth)
     sample = 1 if bit_depth <= 8 else 2
-    chroma_w, chroma_h = (width + 1) // 2, (height + 1) // 2
-    assert scorer.frame_bytes == (width * height + 2 * chroma_w * chroma_h) * sample  # all of FFmpeg's frame
-    frame = np.random.default_rng(1).integers(1, 256, scorer.frame_bytes, dtype=np.uint8)
-    picture, block, sizes = _libvmaf_picture(width, height, bit_depth)
+    assert scorer.frame_bytes == (width * height + 2 * ((width + 1) // 2) * ((height + 1) // 2)) * sample
+    rng = np.random.default_rng(1)
+    frames = [rng.integers(1, 256, scorer.frame_bytes, dtype=np.uint8) for _ in range(4)]
 
-    scorer._fill(picture, bytearray(frame.tobytes()))
+    scorer.add(bytearray(frames[0].tobytes()), bytearray(frames[1].tobytes()))
+    scorer.add(frames[2].tobytes(), bytearray(frames[3].tobytes()))  # bytes too
 
-    assert np.all(block[sum(sizes):] == 0xAA)  # nothing behind the picture
-    offset = start = 0
-    for plane, (rows, row_bytes) in enumerate([(height, width * sample)] + [(chroma_h, chroma_w * sample)] * 2):
-        stride, kept_rows, kept_bytes = picture.stride[plane], picture.h[plane], picture.w[plane] * sample
-        written = block[start:start + sizes[plane]].reshape(kept_rows, stride)
-        source = frame[offset:offset + rows * row_bytes].reshape(rows, row_bytes)
-        assert np.array_equal(written[:, :kept_bytes], source[:kept_rows, :kept_bytes])
-        assert not written[:, kept_bytes:].any()  # the padding of each row is left alone
-        offset, start = offset + rows * row_bytes, start + sizes[plane]
+    assert lib.read == [0, 1] and len(lib.blocks) == 4  # reference, distorted, twice
+    row_bytes = width * sample
+    for frame, block in zip(frames, lib.blocks, strict=True):
+        picture = block[:lib.pitch * height].reshape(height, lib.pitch)
+        assert np.array_equal(picture[:, :row_bytes], frame[:row_bytes * height].reshape(height, row_bytes))
+        assert not picture[:, row_bytes:].any()        # each row's padding is left alone
+        assert np.all(block[lib.pitch * height:] == 0xAA)  # and nothing is written behind the picture
+    assert not cuda.current  # libvmaf's context is left as it was found
+    assert cuda.pending == 0
+    scorer.close()
+
+
+def test_the_uploads_memory_is_allocated_once_and_given_back(monkeypatch):
+    scorer, lib, cuda = _scorer(monkeypatch, 64, 36, 10)
+    assert len(cuda.host) == 2 and len(cuda.streams) == 1 and cuda.retained == 1
+    frame = bytearray(scorer.frame_bytes)
+    for _ in range(5):
+        scorer.add(frame, frame)
+    assert cuda.calls.count("cuMemHostAlloc") == 2 and cuda.calls.count("cuStreamCreate") == 1
+    assert cuda.calls.count("cuStreamSynchronize") == 5  # once a pair: both sides' copies run together
+
+    scorer.close()
+    scorer.close()
+
+    assert not cuda.host and not cuda.streams and cuda.retained == 0 and not cuda.current
+    assert lib.closed
+
+
+def test_a_scorer_of_pictures_in_gpu_memory_allocates_nothing_for_uploads(monkeypatch):
+    scorer, _lib, cuda = _scorer(monkeypatch, 64, 36, 8, on_device=True)
+    assert not cuda.calls
+    filled = []
+    scorer.add_on_device(lambda address, pitch: filled.append(("reference", pitch)),
+                         lambda address, pitch: filled.append(("distorted", pitch)))
+    assert filled == [("reference", 64), ("distorted", 64)]
+    with pytest.raises(vmaf_cuda.VmafGpuError, match="GPU memory only"):
+        scorer.add(bytearray(scorer.frame_bytes), bytearray(scorer.frame_bytes))
+    scorer.close()
+
+
+@pytest.mark.parametrize("failing", ["cuInit", "cuDeviceGet", "cuDevicePrimaryCtxRetain", "cuCtxPushCurrent_v2",
+                                     "cuStreamCreate", "cuMemHostAlloc"])
+def test_an_upload_that_cannot_be_set_up_fails_the_gpu_and_leaves_nothing_behind(monkeypatch, failing):
+    """VmafGpuError: the CPU then calculates VMAF."""
+    scorer, _lib, cuda = _scorer(monkeypatch, 64, 36, 8, failing=failing)
+    assert scorer is None
+    assert not cuda.host and not cuda.streams and cuda.retained == 0 and not cuda.current
+
+
+@pytest.mark.parametrize("short", ["reference", "distorted"])
+def test_a_frame_shorter_than_its_luma_is_refused_and_the_pictures_given_back(monkeypatch, short):
+    scorer, lib, cuda = _scorer(monkeypatch, 64, 36, 8)
+    whole, cut = bytearray(scorer.frame_bytes), bytearray(64 * 36 - 1)
+    with pytest.raises(vmaf_cuda.VmafGpuError, match="luma"):
+        scorer.add(cut if short == "reference" else whole, cut if short == "distorted" else whole)
+    assert lib.unreferenced == 2 and not lib.read
+    assert cuda.pending == 0 and not cuda.current  # the copy under way was waited for
+    scorer.add(whole, whole)  # and the scorer still works
+    assert lib.read == [0]
+    scorer.close()
+
+
+def test_a_failed_copy_is_a_gpu_failure(monkeypatch):
+    scorer, lib, cuda = _scorer(monkeypatch, 64, 36, 8)
+    cuda.failing = "cuMemcpy2DAsync_v2"
+    with pytest.raises(vmaf_cuda.VmafGpuError, match="CUDA error 2"):
+        scorer.add(bytearray(scorer.frame_bytes), bytearray(scorer.frame_bytes))
+    assert lib.unreferenced == 2 and not cuda.current
+    scorer.close()
+    assert not cuda.host and cuda.retained == 0
 
 
 # ------------------------------------- videos decoded in libvmaf's process
