@@ -126,6 +126,14 @@ case anyone overrides that.
   included; CAMBI and SpEED are calculated by the CPU extractors of the
   libvmaf above, on its thread pool, and the same libvmaf predicts the score
   from the four. Check it with `python scripts/compare_vmaf_v1.py --matrix`.
+- **Pictures without a CPU copy** (NVIDIA): `nvdec_frames.dll` and
+  `vmaf_vulkan.dll` share GPU memory. The Vulkan library exports the buffers it
+  takes each frame pair's luma planes from (`vv_export`, Vulkan's
+  `VK_KHR_external_memory_win32`), the decoder's CUDA imports them
+  (`nvf_import`) and copies its pictures into them on the GPU; and the planes
+  libvmaf's CPU extractors read are downloaded straight into libvmaf's
+  pictures, page-locked (`nvf_pin`), which the GPU then writes by itself. Both
+  fall back to system memory where a driver refuses.
 
 ## What is not, and why
 

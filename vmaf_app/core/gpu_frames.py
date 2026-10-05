@@ -160,6 +160,18 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
             ):
                 function = getattr(lib, name)
                 function.restype, function.argtypes = restype, argtypes
+            if backend == "nvidia":  # pictures handed over without a CPU copy (GpuFrameStream.pin, import_memory)
+                planes, pitches = ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_longlong)
+                for name, restype, argtypes in (
+                    ("nvf_pin", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong]),
+                    ("nvf_unpin", ctypes.c_int, [handle, ctypes.c_void_p]),
+                    ("nvf_download_planes", ctypes.c_int, [handle, ctypes.c_int, planes, pitches]),
+                    ("nvf_import", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_int,
+                                                  ctypes.POINTER(ctypes.c_ulonglong), ctypes.POINTER(ctypes.c_void_p)]),
+                    ("nvf_unimport", None, [handle, ctypes.c_void_p]),
+                ):
+                    function = getattr(lib, name)
+                    function.restype, function.argtypes = restype, argtypes
             if backend != "nvidia":  # the decoders that scale with native/d3d11_scale.h
                 lib.nvf_scale_note.restype, lib.nvf_scale_note.argtypes = ctypes.c_int, [handle, text, ctypes.c_int]
                 lib.nvf_scale_test.restype = ctypes.c_int
@@ -729,6 +741,44 @@ class GpuFrameStream:
         """Copies the slot's luma plane to GPU memory at `address`, rows `pitch` bytes apart."""
         if self._lib.nvf_copy_luma(self._handle, slot, address, pitch) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+
+    # Pictures handed over without a CPU copy (NVIDIA's decoder).
+
+    def pin(self, address: int, size: int) -> bool:
+        """Page-locks `size` bytes of this process's memory at `address`, so
+        that the GPU writes downloads into it by itself (the driver copies
+        them into ordinary memory on the CPU). False where it cannot: the
+        memory is then downloaded into as before."""
+        return self.backend == "nvidia" and self._lib.nvf_pin(self._handle, address, size) == 0
+
+    def unpin(self, address: int) -> None:
+        if self._handle is not None:
+            self._lib.nvf_unpin(self._handle, address)
+
+    def download_planes(self, slot: int, addresses: tuple[int | None, ...], pitches: tuple[int, ...]) -> None:
+        """Copies the slot's Y, U and V planes each to its own address, rows
+        `pitches` bytes apart (a libvmaf picture's planes); None: not that
+        plane."""
+        planes = (ctypes.c_void_p * 3)(*addresses)
+        rows = (ctypes.c_longlong * 3)(*pitches)
+        if self._lib.nvf_download_planes(self._handle, slot, planes, rows) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+
+    def import_memory(self, handle: int, size: int) -> tuple[int, int] | None:
+        """GPU memory Vulkan allocated on this GPU and exported as a Win32
+        handle (vmaf_vulkan's vv_export: one buffer's allocation of `size`
+        bytes), as memory copy_luma writes into: (its address, what
+        unimport takes). None where the driver cannot share it."""
+        if self.backend != "nvidia":
+            return None
+        address, memory = ctypes.c_ulonglong(), ctypes.c_void_p()
+        if self._lib.nvf_import(self._handle, handle, size, 1, ctypes.byref(address), ctypes.byref(memory)) != 0:
+            return None
+        return address.value, memory.value
+
+    def unimport(self, memory: int) -> None:
+        if self._handle is not None:
+            self._lib.nvf_unimport(self._handle, memory)
 
     def abort(self) -> None:
         """Ends every wait in next() and in the feeding thread; from any thread."""

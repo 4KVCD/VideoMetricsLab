@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,8 @@ from pathlib import Path
 import numpy as np
 
 from vmaf_app.core import vmaf_cuda
+
+_log = logging.getLogger(__name__)
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "vmaf_vulkan" / "vmaf_vulkan.dll"
 #: What a score records it was calculated with (its provenance).
@@ -79,6 +82,8 @@ def _load() -> ctypes.CDLL:
              [handle, ctypes.c_void_p, ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_ssize_t, ctypes.c_int]),
             ("vv_staging", ctypes.c_int, [handle, pointer, pointer, unsigned]),
             ("vv_commit", ctypes.c_int, [handle, ctypes.c_int]),
+            ("vv_shared_next", ctypes.c_int, [handle, ctypes.POINTER(ctypes.c_int), unsigned, unsigned]),
+            ("vv_export", ctypes.c_int, [handle, ctypes.c_int, pointer, ctypes.POINTER(ctypes.c_uint64)]),
             ("vv_flush", ctypes.c_int, [handle]),
             ("vv_features", ctypes.c_int, [handle, ctypes.c_uint, ctypes.POINTER(ctypes.c_double)]),
             ("vv_sums", ctypes.c_int, [handle, ctypes.c_uint, ctypes.POINTER(ctypes.c_uint64), ctypes.c_int]),
@@ -117,14 +122,66 @@ def best_device(found: list[VulkanDevice] | None = None) -> VulkanDevice | None:
     return usable[0] if usable else None
 
 
+#: vv_create's flag for a context whose frames come from GPU memory (SharedLumas).
+SHARED_FLAG = 1 << 28
+
+
+class SharedLumas:
+    """The buffers a Vulkan context made with SHARED_FLAG copies each frame
+    pair's luma planes from, as GPU memory a decoder on the same GPU writes
+    them into (gpu_frames' copy_luma): the planes then never leave the GPU,
+    where they used to be copied to system memory and back by the CPU.
+    `stream`: the decoder whose CUDA imports them (GpuFrameStream).
+    VmafVulkanError when the two cannot share memory -- another GPU, an old
+    driver -- and the caller then scores from system memory as before."""
+
+    def __init__(self, lib: ctypes.CDLL, context: ctypes.c_void_p, stream) -> None:
+        self._lib, self._context, self._stream = lib, context, stream
+        self._imports: list[tuple[int, int]] = []  # per slot: (address, what unimport takes)
+        handle, size = ctypes.c_void_p(), ctypes.c_uint64()
+        try:
+            while lib.vv_export(context, len(self._imports), ctypes.byref(handle), ctypes.byref(size)) == 0:
+                try:
+                    imported = stream.import_memory(handle.value, size.value)
+                finally:
+                    ctypes.windll.kernel32.CloseHandle(handle)
+                if imported is None:
+                    raise VmafVulkanError("the decoder cannot write into Vulkan's memory")
+                self._imports.append(imported)
+            if not self._imports:
+                raise VmafVulkanError(f"Vulkan's memory is not shared: {(lib.vv_error() or b'').decode(errors='replace')}")
+        except BaseException:
+            self.close()
+            raise
+
+    def next(self) -> tuple[int, int, int]:
+        """Where the next pair's planes go: (the reference's address, the
+        distorted's, the bytes from one row to the next). vv_commit scores
+        them once both are written."""
+        slot, stride, plane = ctypes.c_int(), ctypes.c_uint32(), ctypes.c_uint32()
+        _check(self._lib, self._lib.vv_shared_next(self._context, ctypes.byref(slot), ctypes.byref(stride),
+                                                   ctypes.byref(plane)), "Scoring a frame")
+        address = self._imports[slot.value][0]
+        return address, address + plane.value, stride.value
+
+    def close(self) -> None:
+        """Before the decoder and the context are closed."""
+        for _address, memory in self._imports:
+            self._stream.unimport(memory)
+        self._imports = []
+
+
 class VulkanScorer:
     """VMAF's features of frame pairs given in order, calculated with Vulkan:
     the luma and chroma planes of 4:2:0 frames, packed as FFmpeg's rawvideo
     writes them, at `bit_depth` bits (16-bit little-endian samples above 8).
-    Only the luma is used, as by VMAF."""
+    Only the luma is used, as by VMAF. `shared`: the frames come from GPU
+    memory instead (add_shared), from the decoder `shared` is."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
-                 device: int | None = None, native_double: bool = False, in_flight: int = 3, skip: int = 0, pass_limit: int = 0):
+                 device: int | None = None, native_double: bool = False, in_flight: int = 3, skip: int = 0, pass_limit: int = 0,
+                 shared=None):
+        self._shared: SharedLumas | None = None
         self._lib = lib = _load()
         self._vmaf = vmaf_cuda._load()
         self._models = dict(models)
@@ -137,8 +194,16 @@ class VulkanScorer:
                 raise VmafVulkanError("no GPU that Vulkan can calculate VMAF on")
             device = chosen.index
         flags = (1 if native_double else 0) | (max(1, min(16, in_flight)) << 8) | ((skip & 7) << 16) | ((pass_limit & 0xFF) << 20)
+        if shared is not None:
+            flags |= SHARED_FLAG
         _check(lib, lib.vv_create(ctypes.byref(self._context), device, width, height, bit_depth, flags),
                "Starting Vulkan")
+        if shared is not None:
+            try:
+                self._shared = SharedLumas(lib, self._context, shared)
+            except BaseException:
+                self.close()
+                raise
         sample = 1 if bit_depth <= 8 else 2
         self._luma_stride = width * sample
         self._luma_bytes = width * height * sample
@@ -181,6 +246,18 @@ class VulkanScorer:
         _check(self._lib, self._lib.vv_commit(self._context, int(score)), f"Scoring frame {self._count}")
         self._count += 1
 
+    def add_shared(self, reference, distorted) -> None:
+        """Scores one more pair a decoder copies on the GPU: `reference` and
+        `distorted` are each given (the GPU address to copy a luma plane to,
+        the bytes between its rows), and return once it is there."""
+        score = self._count % self._step == 0
+        ref, dist, pitch = self._shared.next()
+        reference(ref, pitch)
+        if score:
+            distorted(dist, pitch)
+        _check(self._lib, self._lib.vv_commit(self._context, int(score)), f"Scoring frame {self._count}")
+        self._count += 1
+
     def features(self) -> tuple[np.ndarray, np.ndarray]:
         """The frame numbers scored and their feature rows (FEATURE_COUNT
         doubles each), once every frame is in."""
@@ -208,6 +285,9 @@ class VulkanScorer:
         return frames, {name: predict(version, frames, rows) for name, version in self._models.items()}
 
     def close(self) -> None:
+        if self._shared is not None:
+            self._shared.close()
+            self._shared = None
         if self._context:
             self._lib.vv_destroy(self._context)
             self._context = ctypes.c_void_p()
@@ -379,7 +459,14 @@ def score_decoded(
         raise
     scorer = None
     try:
-        scorer = VulkanScorer(width, height, bit_depth, models, n_subsample, device=chosen.index)
+        if backend == "nvidia":  # the planes stay on the GPU where its decoder and Vulkan share memory
+            try:
+                scorer = VulkanScorer(width, height, bit_depth, models, n_subsample, device=chosen.index, shared=test)
+            except VmafVulkanError as error:
+                _log.info("VMAF with Vulkan: the frames go through system memory (%s)", error)
+        shared = scorer is not None
+        if scorer is None:
+            scorer = VulkanScorer(width, height, bit_depth, models, n_subsample, device=chosen.index)
         test.start()
         ref.start()
         test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
@@ -404,8 +491,12 @@ def score_decoded(
                     break
                 if ref_slot is None:
                     raise gpu_frames.GpuDecodeFailedError("the source has no frame for the test video's first")
-                scorer.add_decoded(lambda address, slot=ref_slot: ref.download(slot, address),
-                                   lambda address, slot=test_slot: test.download(slot, address))
+                if shared:
+                    scorer.add_shared(lambda address, pitch, slot=ref_slot: ref.copy_luma(slot, address, pitch),
+                                      lambda address, pitch, slot=test_slot: test.copy_luma(slot, address, pitch))
+                else:
+                    scorer.add_decoded(lambda address, slot=ref_slot: ref.download(slot, address),
+                                       lambda address, slot=test_slot: test.download(slot, address))
                 count += 1
                 now = time.perf_counter()
                 if on_progress is not None and now - reported >= 0.25:
@@ -417,7 +508,7 @@ def score_decoded(
         ref.verify()
         return scorer.finish()
     finally:
+        if scorer is not None:  # first: it gives the decoder's hold on its memory back
+            scorer.close()
         test.close()
         ref.close()
-        if scorer is not None:
-            scorer.close()

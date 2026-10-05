@@ -32,6 +32,7 @@
 // same functions as in libvmaf's own conversion of the sums.
 #define _USE_MATH_DEFINES
 #define VK_NO_PROTOTYPES
+#define VK_USE_PLATFORM_WIN32_KHR
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -56,7 +57,8 @@
 #define VK_INSTANCE_FUNCTIONS(X) \
     X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) \
     X(vkGetPhysicalDeviceFeatures) X(vkGetPhysicalDeviceMemoryProperties) \
-    X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr)
+    X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr) \
+    X(vkEnumerateDeviceExtensionProperties)
 
 #define VK_DEVICE_FUNCTIONS(X) \
     X(vkDestroyDevice) X(vkGetDeviceQueue) X(vkCreateBuffer) X(vkDestroyBuffer) \
@@ -378,6 +380,7 @@ struct Buffer {
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkDeviceSize size = 0;
+    VkDeviceSize allocation = 0;  // of its memory, which another API imports by that size
     void *mapped = nullptr;
 };
 
@@ -446,6 +449,11 @@ struct vv_context {
     int skip = 0;  // timing tests: 1 = no motion, 2 = no VIF, 4 = no ADM
     int passLimit = 0;  // timing tests: only the first N scored passes
     uint32_t strideBytes = 0, planeBytes = 0;
+    // The frames' luma planes come from another API on this GPU (a decoder's
+    // CUDA), which writes them into the slots' staging buffers: GPU memory it
+    // imports by the handles vv_export gives, in place of host memory.
+    bool shared = false;
+    PFN_vkGetMemoryWin32HandleKHR getMemoryHandle = nullptr;
 
     Pipeline pipelines[kShaderCount];
     std::vector<Buffer *> buffers;
@@ -463,7 +471,7 @@ struct vv_context {
 
     ~vv_context();
     int init(int deviceIndex, int width, int height, int bitDepth, int flags);
-    int create_buffer(Buffer &buffer, VkDeviceSize size, bool hostVisible);
+    int create_buffer(Buffer &buffer, VkDeviceSize size, bool hostVisible, bool exported = false);
     int create_pipeline(int shader, uint32_t bindings);
     int add_pass(std::vector<Pass> &list, int shader, std::initializer_list<Buffer *> bound,
                  const void *constants, uint32_t constantBytes, uint32_t gx, uint32_t gy);
@@ -503,11 +511,15 @@ vv_context::~vv_context()
     vk.vkDestroyDevice(device, nullptr);
 }
 
-int vv_context::create_buffer(Buffer &buffer, VkDeviceSize size, bool hostVisible)
+int vv_context::create_buffer(Buffer &buffer, VkDeviceSize size, bool hostVisible, bool exported)
 {
     buffers.push_back(&buffer);
     buffer.size = (size + 3) & ~VkDeviceSize(3);
     VkBufferCreateInfo info = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    VkExternalMemoryBufferCreateInfo external = { VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO };
+    external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    if (exported)
+        info.pNext = &external;
     info.size = buffer.size;
     info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                  VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -537,6 +549,17 @@ int vv_context::create_buffer(Buffer &buffer, VkDeviceSize size, bool hostVisibl
     VkMemoryAllocateInfo allocate = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
     allocate.allocationSize = requirements.size;
     allocate.memoryTypeIndex = (uint32_t)type;
+    // Exported: an allocation of this buffer alone, which is what the
+    // importing API is told it is.
+    VkExportMemoryAllocateInfo exportInfo = { VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO };
+    exportInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    VkMemoryDedicatedAllocateInfo dedicated = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO };
+    dedicated.buffer = buffer.buffer;
+    if (exported) {
+        exportInfo.pNext = &dedicated;
+        allocate.pNext = &exportInfo;
+    }
+    buffer.allocation = requirements.size;
     if (vk.vkAllocateMemory(device, &allocate, nullptr, &buffer.memory) != VK_SUCCESS)
         return fail(-2, "out of GPU memory (" + std::to_string(requirements.size >> 20) + " MB buffer)");
     if (vk.vkBindBufferMemory(device, buffer.buffer, buffer.memory, 0) != VK_SUCCESS)
@@ -1192,6 +1215,20 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     nativeDouble = (flags & 1) && features.shaderFloat64;
     skip = (flags >> 16) & 7;
     passLimit = (flags >> 20) & 0xFF;
+    shared = (flags >> 28) & 1;
+    const char *extensions[] = { VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME };
+    if (shared) {
+        uint32_t count = 0;
+        api->vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, nullptr);
+        std::vector<VkExtensionProperties> listed(count);
+        if (count)
+            api->vkEnumerateDeviceExtensionProperties(physical, nullptr, &count, listed.data());
+        bool found = false;
+        for (uint32_t i = 0; i < count; ++i)
+            found = found || !strcmp(listed[i].extensionName, extensions[0]);
+        if (!found)
+            return fail(-4, deviceName + " cannot share its memory with a decoder");
+    }
     api->vkGetPhysicalDeviceMemoryProperties(physical, &memoryProperties);
 
     uint32_t familyCount = 0;
@@ -1221,6 +1258,10 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     deviceInfo.queueCreateInfoCount = 1;
     deviceInfo.pQueueCreateInfos = &queueInfo;
     deviceInfo.pEnabledFeatures = &enabled;
+    if (shared) {
+        deviceInfo.enabledExtensionCount = 1;
+        deviceInfo.ppEnabledExtensionNames = extensions;
+    }
     VkResult result = api->vkCreateDevice(physical, &deviceInfo, nullptr, &device);
     if (result != VK_SUCCESS) {
         device = VK_NULL_HANDLE;
@@ -1230,6 +1271,11 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
     VK_DEVICE_FUNCTIONS(X)
 #undef X
     vk.vkGetDeviceQueue(device, queueFamily, 0, &queue);
+    if (shared) {
+        getMemoryHandle = (PFN_vkGetMemoryWin32HandleKHR)api->vkGetDeviceProcAddr(device, "vkGetMemoryWin32HandleKHR");
+        if (!getMemoryHandle)
+            return fail(-4, deviceName + " cannot share its memory with a decoder");
+    }
 
     VkCommandPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -1285,7 +1331,7 @@ int vv_context::init(int deviceIndex, int width, int height, int bitDepth, int f
         VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         if (vk.vkCreateFence(device, &fenceInfo, nullptr, &slot.fence) != VK_SUCCESS)
             return fail(-1, "vkCreateFence failed");
-        if (int error = create_buffer(slot.staging, (VkDeviceSize)planeBytes * 2, true))
+        if (int error = create_buffer(slot.staging, (VkDeviceSize)planeBytes * 2, !shared, shared))
             return error;
         if (int error = create_buffer(slot.result, kSlots * 8, true))
             return error;
@@ -1367,6 +1413,8 @@ int vv_context::staging(uint8_t **ref, uint8_t **dis)
 int vv_context::submit(const uint8_t *ref, ptrdiff_t refStride, const uint8_t *dis, ptrdiff_t disStride, bool score)
 {
     uint8_t *targets[2];
+    if (shared)
+        return fail(-3, "this context takes its frames from GPU memory");
     if (int error = staging(&targets[0], &targets[1]))
         return error;
     const size_t rowBytes = (size_t)w * (bpc > 8 ? 2 : 1);
@@ -1526,10 +1574,51 @@ VV_EXPORT int vv_submit(vv_context *context, const uint8_t *reference, ptrdiff_t
 VV_EXPORT int vv_staging(vv_context *context, uint8_t **reference, uint8_t **distorted, uint32_t *stride)
 {
     *stride = context->strideBytes;
+    if (context->shared)
+        return fail(-3, "this context takes its frames from GPU memory");
     return context->staging(reference, distorted);
 }
 
 VV_EXPORT int vv_commit(vv_context *context, int score) { return context->commit(score != 0); }
+
+// For a context made with flag bit 28 (frames from GPU memory): the staging
+// buffer the next pair's luma planes are to be written into by the API that
+// imported it -- *slot says which (they take turns), the reference's rows
+// start at offset 0 and the distorted's at *planeBytes, *stride bytes apart.
+// Once they are written (and that API has finished writing), vv_commit.
+// Returns how many slots there are.
+VV_EXPORT int vv_shared_next(vv_context *context, int *slot, uint32_t *stride, uint32_t *planeBytes)
+{
+    if (!context->shared)
+        return fail(-3, "this context takes its frames from host memory");
+    uint8_t *unused[2];
+    if (int error = context->staging(&unused[0], &unused[1]))
+        return error;
+    *slot = (int)context->nextSlot;
+    *stride = context->strideBytes;
+    *planeBytes = context->planeBytes;
+    return (int)context->slots.size();
+}
+
+// A slot's staging buffer as a Win32 handle another API on this GPU imports
+// (CUDA: an opaque Win32 handle of a dedicated allocation of *bytes). The
+// caller closes the handle once it has imported it; the memory lives as long
+// as the context.
+VV_EXPORT int vv_export(vv_context *context, int slot, void **handle, uint64_t *bytes)
+{
+    if (!context->shared || slot < 0 || slot >= (int)context->slots.size())
+        return fail(-3, "no such shared buffer");
+    VkMemoryGetWin32HandleInfoKHR info = { VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR };
+    info.memory = context->slots[(size_t)slot].staging.memory;
+    info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    HANDLE win32 = nullptr;
+    VkResult result = context->getMemoryHandle(context->device, &info, &win32);
+    if (result != VK_SUCCESS)
+        return fail(-1, "vkGetMemoryWin32HandleKHR failed (" + std::to_string(result) + ")");
+    *handle = win32;
+    *bytes = context->slots[(size_t)slot].staging.allocation;
+    return 0;
+}
 
 // Waits for every submitted frame.
 VV_EXPORT int vv_flush(vv_context *context) { return context->flush(); }

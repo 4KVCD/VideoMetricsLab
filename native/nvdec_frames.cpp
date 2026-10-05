@@ -88,6 +88,13 @@ struct Driver {
     tcuvidCreateVideoParser *cuvidCreateVideoParser;
     tcuvidParseVideoData *cuvidParseVideoData;
     tcuvidDestroyVideoParser *cuvidDestroyVideoParser;
+    // For handing pictures over without a CPU copy (nvf_pin, nvf_import);
+    // null in a driver without them, and those calls then say so.
+    tcuImportExternalMemory *cuImportExternalMemory = nullptr;
+    tcuDestroyExternalMemory *cuDestroyExternalMemory = nullptr;
+    tcuExternalMemoryGetMappedBuffer *cuExternalMemoryGetMappedBuffer = nullptr;
+    CUresult (CUDAAPI *cuMemHostRegister)(void *, size_t, unsigned int) = nullptr;
+    CUresult (CUDAAPI *cuMemHostUnregister)(void *) = nullptr;
 };
 
 Driver g_driver;
@@ -148,6 +155,14 @@ bool load_driver() {
         && load_symbol(d.cuvid, d.cuvidParseVideoData, "cuvidParseVideoData")
         && load_symbol(d.cuvid, d.cuvidDestroyVideoParser, "cuvidDestroyVideoParser");
     if (!ok) return false;
+    auto optional = [&](const char *name) { return reinterpret_cast<void *>(GetProcAddress(d.cuda, name)); };
+    d.cuImportExternalMemory = reinterpret_cast<tcuImportExternalMemory *>(optional("cuImportExternalMemory"));
+    d.cuDestroyExternalMemory = reinterpret_cast<tcuDestroyExternalMemory *>(optional("cuDestroyExternalMemory"));
+    d.cuExternalMemoryGetMappedBuffer =
+        reinterpret_cast<tcuExternalMemoryGetMappedBuffer *>(optional("cuExternalMemoryGetMappedBuffer"));
+    d.cuMemHostRegister =
+        reinterpret_cast<CUresult (CUDAAPI *)(void *, size_t, unsigned int)>(optional("cuMemHostRegister_v2"));
+    d.cuMemHostUnregister = reinterpret_cast<CUresult (CUDAAPI *)(void *)>(optional("cuMemHostUnregister"));
     CUresult result = d.cuInit(0);
     if (result != CUDA_SUCCESS) {
         g_driver_error = "CUDA could not start (cuInit error " + std::to_string(static_cast<int>(result)) + ")";
@@ -1078,6 +1093,98 @@ NVF_API int nvf_copy_luma(void *handle, int slot, unsigned long long dst, long l
               && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture on the GPU")
               && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture on the GPU");
     return ok ? 0 : NVF_ERROR;
+}
+
+// Page-locks `bytes` of host memory at `host` (any memory: a picture of
+// libvmaf's, a buffer of the caller's), so that the GPU writes a download
+// into it by itself instead of the driver copying it there on the CPU.
+// 0, or the CUDA error; the memory is then still downloaded into, slower.
+NVF_API int nvf_pin(void *handle, void *host, unsigned long long bytes) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!g_driver.cuMemHostRegister) return -1;
+    ContextScope scope(d);
+    return static_cast<int>(g_driver.cuMemHostRegister(host, static_cast<size_t>(bytes), 0));
+}
+
+NVF_API int nvf_unpin(void *handle, void *host) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!g_driver.cuMemHostUnregister) return -1;
+    ContextScope scope(d);
+    return static_cast<int>(g_driver.cuMemHostUnregister(host));
+}
+
+// Copies a slot's planes (Y, U, V) each into its own pitched host plane --
+// a libvmaf picture's -- returning once they are there. A null plane is not
+// copied. 0 or NVF_ERROR.
+NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, const long long *pitches) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    const Driver &cu = g_driver;
+    ContextScope scope(d);
+    const size_t sample = wide_out(d->params) ? 2 : 1;
+    const size_t widths[3] = {static_cast<size_t>(d->out_w), static_cast<size_t>((d->out_w + 1) / 2),
+                              static_cast<size_t>((d->out_w + 1) / 2)};
+    const size_t heights[3] = {static_cast<size_t>(d->out_h), static_cast<size_t>((d->out_h + 1) / 2),
+                               static_cast<size_t>((d->out_h + 1) / 2)};
+    CUdeviceptr src = d->pool + static_cast<size_t>(slot) * d->frame_bytes;
+    bool ok = true;
+    for (int plane = 0; plane < (d->params.luma_only ? 1 : 3) && ok; plane++) {
+        if (planes[plane]) {
+            CUDA_MEMCPY2D copy{};
+            copy.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+            copy.srcDevice = src;
+            copy.srcPitch = widths[plane] * sample;
+            copy.dstMemoryType = CU_MEMORYTYPE_HOST;
+            copy.dstHost = planes[plane];
+            copy.dstPitch = static_cast<size_t>(pitches[plane]);
+            copy.WidthInBytes = copy.srcPitch;
+            copy.Height = heights[plane];
+            ok = d->check(cu.cuMemcpy2DAsync(&copy, d->output_stream), "Copying a picture from the GPU");
+        }
+        src += widths[plane] * sample * heights[plane];
+    }
+    ok = ok && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture from the GPU")
+         && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture from the GPU");
+    return ok ? 0 : NVF_ERROR;
+}
+
+// GPU memory another API allocated on this GPU -- Vulkan's, by the Win32
+// handle it exports (`dedicated`: an allocation of one buffer) -- as memory
+// nvf_copy_luma copies pictures into: *device is its address here, *memory
+// what nvf_unimport takes. 0, or the CUDA error (another GPU's memory, or a
+// driver that cannot share it).
+NVF_API int nvf_import(void *handle, void *win32_handle, unsigned long long bytes, int dedicated,
+                       unsigned long long *device, void **memory) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    const Driver &cu = g_driver;
+    if (!cu.cuImportExternalMemory || !cu.cuExternalMemoryGetMappedBuffer || !cu.cuDestroyExternalMemory) return -1;
+    ContextScope scope(d);
+    CUDA_EXTERNAL_MEMORY_HANDLE_DESC description{};
+    description.type = CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32;
+    description.handle.win32.handle = win32_handle;
+    description.size = bytes;
+    description.flags = dedicated ? 1u : 0u;  // CUDA_EXTERNAL_MEMORY_DEDICATED
+    CUexternalMemory imported = nullptr;
+    CUresult result = cu.cuImportExternalMemory(&imported, &description);
+    if (result != CUDA_SUCCESS) return static_cast<int>(result);
+    CUDA_EXTERNAL_MEMORY_BUFFER_DESC buffer{};
+    buffer.offset = 0;
+    buffer.size = bytes;
+    CUdeviceptr address = 0;
+    result = cu.cuExternalMemoryGetMappedBuffer(&address, imported, &buffer);
+    if (result != CUDA_SUCCESS) {
+        cu.cuDestroyExternalMemory(imported);
+        return static_cast<int>(result);
+    }
+    *device = address;
+    *memory = imported;
+    return 0;
+}
+
+NVF_API void nvf_unimport(void *handle, void *memory) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!memory || !g_driver.cuDestroyExternalMemory) return;
+    ContextScope scope(d);
+    g_driver.cuDestroyExternalMemory(static_cast<CUexternalMemory>(memory));
 }
 
 NVF_API unsigned long long nvf_slot_pointer(void *handle, int slot) {

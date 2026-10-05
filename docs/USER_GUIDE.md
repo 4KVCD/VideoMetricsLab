@@ -49,8 +49,11 @@ libvmaf's CPU values to the last bit. The other two, banding (CAMBI) and colour
 (SpEED), are calculated by the bundled libvmaf on the CPU, and libvmaf's own
 model turns the four into the score, so VMAF v1 with the GPU is the score
 FFmpeg's libvmaf gives. Because half of it stays on the CPU it gains less than
-VMAF v0.6.1 does: about 2.5 times the CPU's speed on 4K video and 5 times on
-1080p with a fast GPU. A video too small for SpEED
+VMAF v0.6.1 does: about 5 times the CPU's speed on 4K video with a fast NVIDIA
+GPU that also decodes both videos -- their pictures then stay on the GPU, and
+the planes the CPU's half reads are written into its memory by the GPU itself
+-- and about twice where a video is decoded by the CPU (VVC, for one), or with
+another maker's GPU. A video too small for SpEED
 (under about 160 pixels a side, more with the models that scale it down) is
 calculated on the CPU. A video's VMAF on the GPU waits for the
 GPU like its other GPU metrics, one video at a time, and goes before them. If the GPU calculation fails, or crashes, that
