@@ -32,15 +32,14 @@
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
    Performance > VMAF compute set to GPU and to CPU: every
    metric but VMAF and NEG identical, those within 0.001 per frame. After
-   changing `native/vmaf_vulkan` or `scripts/build_libvmaf_cuda.ps1`, run
+   updating libvmaf-fast (`scripts/fetch_libvmaf_fast.ps1`), run
    `python scripts/compare_vmaf_vulkan.py --matrix` for every GPU
    (`--device N`): Vulkan's features and scores must be identical to CUDA's,
    and the probe's known sums (`vmaf_vulkan._PROBE_SUMS`) still the GPU's; and
    `python scripts/compare_vmaf_v1.py --matrix` for every GPU: VMAF v1's
    features and scores with the GPU must be identical to libvmaf's on the
-   CPU. After updating `scripts/build_libvmaf_cuda.ps1` (libvmaf or its pull
-   requests), check that each pull request still merges and whether upstream
-   has merged or replaced it.
+   CPU. Changes to libvmaf, its pull requests or the Vulkan engine are made in
+   libvmaf-fast, which runs the same checks before each release.
 4. Test playback on real hardware: H.264/H.265 plus supported software-decoded
    formats, source hold/release, neighbor switching, HDR/SDR, seeking and audio.
 5. Build using [BUILD.md](BUILD.md). Review self-test output: the script may

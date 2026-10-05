@@ -96,12 +96,14 @@ case anyone overrides that.
   other videos FFmpeg decodes. Vship and metric notices are packaged beside
   the libraries.
 - **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`), for VMAF and
-  VMAF NEG on NVIDIA GPUs only: libvmaf master with the open pull requests
-  that let it build with MSVC and fix its CUDA code, built by
-  `scripts/build_libvmaf_cuda.ps1` (MSVC, CUDA 13.4, meson and ninja; the
-  script lists each pull request and the commit of it merged). The C runtime
-  is linked in, so it needs only Windows and the NVIDIA driver; no CUDA
-  runtime ships. Where NVIDIA's decoder decodes both videos, they are
+  VMAF NEG on NVIDIA GPUs only: from
+  [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast), this project's fork
+  of libvmaf with the open pull requests that let it build with MSVC and fix
+  its CUDA code merged. `scripts/fetch_libvmaf_fast.ps1` installs its pinned
+  release, checked by SHA-256, into `vmaf_app/tools`; the DLLs are committed,
+  so building the app does not run it (to build them instead, see the fork's
+  `fast/README.md`). The C runtime is linked in, so it needs only Windows and
+  the NVIDIA driver; no CUDA runtime ships. Where NVIDIA's decoder decodes both videos, they are
   decoded, scaled and widened on the GPU by `nvdec_frames.dll` in libvmaf's
   process, the user's FFmpeg only copying their compressed streams out of
   the containers; otherwise FFmpeg decodes them. VMAF on any other GPU or the CPU, VMAF v1,
@@ -111,11 +113,9 @@ case anyone overrides that.
   falls back to the CPU instead of closing the app.
 - **VMAF's features with Vulkan** (`vmaf_app/tools/vmaf_vulkan/vmaf_vulkan.dll`),
   for VMAF and VMAF NEG on GPUs other than NVIDIA's, or on any GPU when the
-  GPU backend setting is Vulkan: `native/vmaf_vulkan`, a port of libvmaf's
-  CUDA feature extractors (VIF, ADM and motion) to Vulkan compute shaders,
-  built by `scripts/build_vmaf_vulkan.ps1` (MSVC with the C runtime linked in,
-  as libvmaf's; the shaders are compiled with Slang, which the script
-  downloads, and embedded). It needs only Windows and a Vulkan driver, and
+  GPU backend setting is Vulkan: libvmaf-fast's Vulkan engine (`fast/vulkan`
+  there), a port of libvmaf's CUDA feature extractors (VIF, ADM and motion)
+  to Vulkan compute shaders, from the same release. It needs only Windows and a Vulkan driver, and
   gives the same feature values as the CUDA code bit for bit; the score is
   predicted from them by the libvmaf above, on the CPU. It adds about 0.6 MB.
   It runs in the same process of its own as libvmaf does.
