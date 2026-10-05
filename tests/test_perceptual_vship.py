@@ -417,6 +417,9 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
     monkeypatch.setattr(vship, "_init_handler", lambda *_args: vship._Handle())
     monkeypatch.setattr(vship, "pick_hwaccel", hwaccel)
+    # The stand-ins write bare frames: every layout goes as raw video here.
+    # The YUV4MPEG stream has tests of its own, below.
+    monkeypatch.setattr(vship, "_piped_as", lambda pixel_format: ["-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"])
     queues = {side: list(commands) for side, commands in children.items()}
     spawned: dict[str, list[list[str]]] = {"source": [], "test": []}
     source_path = str((source or _hevc("source.mkv")).path.resolve())
@@ -832,6 +835,119 @@ def test_a_video_the_decoder_refuses_is_left_to_ffmpeg(monkeypatch):
     assert _real_native_decoder(info, None, (64, 48), image, frame_bytes, 0, None, "x") is None
     rgb = vship._ImageFormat("gbrp", 1, vship._VSHIP_ENUMS[8], 0, 0, True, (2, 0, 1))
     assert _real_native_decoder(info, None, (64, 48), rgb, rgb.frame_layout(64, 48)[0], 0, None, "x") is None
+
+
+# ------------------------------------------------ the frames as YUV4MPEG
+
+@pytest.mark.parametrize(("pixel_format", "muxer"), [
+    ("yuv420p", "yuv4mpegpipe"), ("yuv420p10le", "yuv4mpegpipe"), ("yuv420p16le", "yuv4mpegpipe"),
+    ("yuv422p10le", "yuv4mpegpipe"), ("yuv444p12le", "yuv4mpegpipe"), ("yuv411p", "yuv4mpegpipe"),
+    # What FFmpeg's YUV4MPEG muxer does not write goes as raw video.
+    ("yuv410p", "rawvideo"), ("yuv440p", "rawvideo"), ("gbrp10le", "rawvideo"), ("nv12", "rawvideo"),
+    ("p010le", "rawvideo"),
+])
+def test_planar_yuv_is_piped_as_yuv4mpeg_and_the_rest_as_raw_video(pixel_format, muxer):
+    arguments = vship._piped_as(pixel_format)
+    assert arguments[:2] == ["-pix_fmt", pixel_format] and arguments[-1] == "pipe:1"
+    assert arguments[arguments.index("-f") + 1] == muxer
+    assert ("-strict" in arguments) == (muxer == "yuv4mpegpipe")  # more than 8 bits needs it
+
+
+def _stream_frames(command: list[str], frame_bytes: int) -> tuple[list[bytes], list[int]]:
+    stream = vship._FrameStream(None, frame_bytes, [command], None, "test video")
+    stream.start()
+    frames, stamps = [], []
+    try:
+        while (slot := stream.next(None)) != vship._EOF:
+            frames.append(bytes(stream.buffers[slot].array))
+            stamps.append(stream.pts[slot])
+            stream.release(slot)
+    finally:
+        stream.close()
+    return frames, stamps
+
+
+@pytest.mark.parametrize("pixel_format", ["yuv420p", "yuv420p10le", "yuv444p16le"])
+def test_ffmpegs_yuv4mpeg_frames_are_its_raw_frames_with_the_same_timestamps(tmp_path, monkeypatch, pixel_format):
+    """Through real FFmpeg and the real pipe: the frames and timestamps the
+    scoring gets are the ones the raw video gave it."""
+    monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
+    path = _numbered_clip(tmp_path / "clip.mkv", 30, "N*40+mod(N*7\\,13)", "1/1000")
+    samples = _W * _H * {"yuv420p": 3, "yuv420p10le": 3, "yuv444p16le": 6}[pixel_format] // 2
+    frame_bytes = samples * (1 if pixel_format == "yuv420p" else 2)
+    head = [ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0",
+            "-vf", "setpts=PTS-STARTPTS", "-fps_mode", "passthrough"]
+    piped = vship._piped_as(pixel_format)
+    assert "yuv4mpegpipe" in piped
+    raw = _stream_frames([*head, "-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"], frame_bytes)
+    assert len(raw[0]) == 30
+    assert _stream_frames([*head, *piped], frame_bytes) == raw
+
+
+def _y4m_command(count: int, frame_bytes: int, *, header: bytes = b"YUV4MPEG2 W8 H8 F24:1 Ip A1:1 C420p10\n",
+                 marker: bytes = b"FRAME\n", partial: bool = False, exit_code: int = 0) -> list[str]:
+    """A child writing a YUV4MPEG stream of `count` frames whose first byte
+    is the frame's number; `partial`: then a FRAME line and half a frame."""
+    script = (
+        "import sys\n"
+        f"n, size, header, marker, partial, code = {count}, {frame_bytes}, {header!r}, {marker!r}, {partial}, "
+        f"{exit_code}\n"
+        "out = sys.stdout.buffer\n"
+        "out.write(header)\n"
+        "for i in range(n):\n"
+        "    out.write(marker + bytes([i % 256]) + bytes(size - 1))\n"
+        "if partial:\n"
+        "    out.write(marker + bytes(size // 2))\n"
+        "out.flush()\n"
+        "sys.exit(code)\n"
+    )
+    # The muxer's name is what says the stream is YUV4MPEG (_is_y4m).
+    return [STDLIB_PYTHON, "-S", "-c", script, "yuv4mpegpipe"]
+
+
+def _y4m_stream(monkeypatch, tmp_path, command: list[str], frame_bytes: int) -> list[int]:
+    """The first byte of each frame a stand-in's YUV4MPEG stream gives,
+    through the 64 MB pipe (so whole frames are gathered before a read)."""
+    monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
+    monkeypatch.setattr(vship, "_with_timestamps", lambda cmd, path: cmd)
+    stamps = SimpleNamespace(next=lambda: 0, time_base=Fraction(1, 24), close=lambda: None)
+    monkeypatch.setattr(vship, "_Timestamps", lambda *args, **kwargs: stamps)
+    stream = vship._FrameStream(None, frame_bytes, [command], None, "test video")
+    stream.start()
+    firsts = []
+    try:
+        while (slot := stream.next(None)) != vship._EOF:
+            firsts.append(stream.buffers[slot].array[0])
+            stream.release(slot)
+    finally:
+        stream.close()
+    return firsts
+
+
+def test_a_yuv4mpeg_streams_frames_arrive_whole_and_in_order(monkeypatch, tmp_path):
+    frame_bytes = 1_000_003  # far more than a pipe write, and not a power of two
+    assert _y4m_stream(monkeypatch, tmp_path, _y4m_command(7, frame_bytes), frame_bytes) == list(range(7))
+
+
+def test_a_yuv4mpeg_stream_with_no_frames_is_an_empty_video(monkeypatch, tmp_path):
+    assert _y4m_stream(monkeypatch, tmp_path, _y4m_command(0, 4096), 4096) == []
+
+
+@pytest.mark.parametrize(("child", "message"), [
+    ({"partial": True}, "partway"),  # a FRAME line and half a frame
+    ({"header": b"not a video\n"}, "not a YUV4MPEG stream"),
+    ({"marker": b"FRAMX\n"}, "not where they were expected"),
+])
+def test_a_broken_yuv4mpeg_stream_is_an_error_not_a_short_result(monkeypatch, tmp_path, child, message):
+    with pytest.raises(vship.VshipUnavailableError, match=message):
+        _y4m_stream(monkeypatch, tmp_path, _y4m_command(3, 4096, **child), 4096)
+
+
+def test_an_ffmpeg_that_fails_before_any_frame_is_reported_with_its_message(monkeypatch, tmp_path):
+    """Nothing on the pipe: the exit code and stderr say why, as with raw video."""
+    script = "import sys; sys.stderr.write('Invalid data found'); sys.exit(1)"
+    with pytest.raises(vship.VshipUnavailableError, match="Invalid data found"):
+        _y4m_stream(monkeypatch, tmp_path, [STDLIB_PYTHON, "-S", "-c", script, "yuv4mpegpipe"], 4096)
 
 
 # ----------------- which pictures a video decoded in the scoring process gives

@@ -936,6 +936,62 @@ class _PassRate:
         return (pairs - self._first_pairs) * self._step / span if span >= self.WARMUP_SECONDS else 0.0
 
 
+#: The planar layouts FFmpeg's YUV4MPEG muxer writes (-strict -1 for more
+#: than 8 bits); 4:1:0, 4:4:0, planar RGB and the semi-planar layouts a GPU
+#: decoder hands back (NV12, P010) go as raw video.
+_Y4M_FORMAT = re.compile(r"yuv(411|420|422|444)p(?:(9|10|12|14|16)le)?")
+_Y4M_FRAME = b"FRAME\n"
+
+
+def _piped_as(pixel_format: str) -> list[str]:
+    """FFmpeg's output arguments for piping frames of `pixel_format`.
+
+    YUV4MPEG where the muxer takes the layout: the same planes as raw
+    video, each after a "FRAME" line, which FFmpeg writes straight from its
+    frames -- the rawvideo encoder first copies every frame into a packet
+    it allocates. Measured on a 4K 10-bit HEVC video FFmpeg decodes: 23 ms
+    of FFmpeg's CPU a frame against 35."""
+    if _Y4M_FORMAT.fullmatch(pixel_format):
+        return ["-pix_fmt", pixel_format, "-f", "yuv4mpegpipe", "-strict", "-1", "pipe:1"]
+    return ["-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"]
+
+
+def _is_y4m(command: list[str]) -> bool:
+    return "yuv4mpegpipe" in command
+
+
+def _gather(reader, count: int, process: subprocess.Popen, stopping: threading.Event) -> None:
+    """Waits until `count` bytes of a frame are in the pipe (or all it can
+    hold), FFmpeg has ended, or the stream is stopping. Read as it comes, a
+    4K frame arrives in some 300 pieces, each a wake-up of the reading
+    thread: 6 ms of CPU a frame against 4 taken in one read."""
+    if os.name != "nt":
+        return
+    import msvcrt
+    from ctypes import wintypes
+
+    try:
+        handle = wintypes.HANDLE(msvcrt.get_osfhandle(reader.fileno()))
+    except (OSError, ValueError):
+        return
+    # Never for more than half of what the pipe holds: FFmpeg, its pipe
+    # full, would wait for this side to read while this side waited for the
+    # rest of the frame. (A pipe of Windows' default few kilobytes, as the
+    # tests' stand-ins have, is read as it comes.)
+    held = wintypes.DWORD()
+    if not ctypes.windll.kernel32.GetNamedPipeInfo(handle, None, None, ctypes.byref(held), None):
+        return
+    count = min(count, held.value // 2)
+    available = wintypes.DWORD()
+    peek = ctypes.windll.kernel32.PeekNamedPipe
+    while not stopping.is_set():
+        if not peek(handle, None, 0, None, ctypes.byref(available), None):
+            return  # closed and empty: the read says so
+        if available.value >= count or process.poll() is not None:
+            return
+        time.sleep(0.001)
+
+
 def _spawn_raw_ffmpeg(command: list[str]) -> tuple[subprocess.Popen, object]:
     """Start FFmpeg writing raw frames to a large pipe; returns (process, reader)."""
     if os.name == "nt":
@@ -1098,10 +1154,17 @@ class _FrameStream:
         )
         drain.start()
         frames = 0
+        y4m = _is_y4m(command)
         try:
-            while not self._stopping.is_set():
+            if y4m and not self._y4m_header(reader):
+                y4m = None  # FFmpeg wrote nothing: its exit code says why
+            while y4m is not None and not self._stopping.is_set():
                 slot = self._free.get()
                 if slot == _EOF:
+                    break
+                _gather(reader, len(self.views[slot]) + (len(_Y4M_FRAME) if y4m else 0), process, self._stopping)
+                if y4m and not self._y4m_frame(reader):
+                    self._free.put(slot)
                     break
                 received = self._fill(reader, slot)
                 if received == len(self.views[slot]):
@@ -1115,7 +1178,7 @@ class _FrameStream:
                     frames += 1
                     continue
                 self._free.put(slot)
-                if received:
+                if received or y4m:  # a "FRAME" line with no frame after it
                     raise VshipUnavailableError(f"FFmpeg ended partway through a {self._label} frame.")
                 break
         finally:
@@ -1128,6 +1191,31 @@ class _FrameStream:
                 self._process_handle.detach(process.pid)
         message = b"".join(stderr_tail).decode("utf-8", errors="replace").strip()
         return frames, code, message
+
+    def _y4m_header(self, reader) -> bool:
+        """Reads a YUV4MPEG stream's first line; False if there is no stream."""
+        line, byte = bytearray(), bytearray(1)
+        while reader.readinto(byte):
+            if byte == b"\n":
+                if not line.startswith(b"YUV4MPEG2 "):
+                    break
+                return True
+            line += byte
+            if len(line) > 1024:
+                break
+        if line:
+            raise VshipUnavailableError(f"FFmpeg's {self._label} frames are not a YUV4MPEG stream.")
+        return False
+
+    def _y4m_frame(self, reader) -> bool:
+        """Reads the "FRAME" line before a frame; False at the stream's end."""
+        marker = bytearray(len(_Y4M_FRAME))
+        received = _read_exact(reader, memoryview(marker))
+        if received == 0:
+            return False
+        if marker != _Y4M_FRAME:
+            raise VshipUnavailableError(f"FFmpeg's {self._label} frames are not where they were expected.")
+        return True
 
     def _fill(self, reader, slot: int) -> int:
         """Read one frame into `slot`; returns the bytes read."""
@@ -2023,8 +2111,7 @@ def _score_vship_pass_with(
             ]
             if cut and request.recipe.duration_limit > 0:
                 command += ["-t", f"{request.recipe.duration_limit:.6f}"]
-            command += ["-fps_mode", "passthrough", "-pix_fmt", pixel_format,
-                        "-f", "rawvideo", "pipe:1"]
+            command += ["-fps_mode", "passthrough", *_piped_as(pixel_format)]
             attempts.append(command)
         return attempts
 
