@@ -35,7 +35,11 @@ def setup_worker(monkeypatch, attempts):
 
     monkeypatch.setattr(playback_worker, "build_video_series_command", command)
     processes = iter(attempts)
-    monkeypatch.setattr(playback_worker.proc, "popen", lambda *args, **kwargs: next(processes))
+    def popen_piped(*_args, **_kwargs):
+        process = next(processes)
+        return process, process.stdout
+
+    monkeypatch.setattr(playback_worker.proc, "popen_piped", popen_piped)
     worker = playback_worker.StreamDecodeWorker(None, "source", 100, PreviewColorSettings(),
                                                HwAccelPlan(source="cuda"), None)
     worker._handle = SimpleNamespace(attach=lambda pid: None, detach=lambda: None, terminate=lambda: None)

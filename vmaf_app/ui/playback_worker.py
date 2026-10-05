@@ -5,7 +5,7 @@ workers never run their own playback clocks or pass image bytes through signals.
 """
 from __future__ import annotations
 
-import subprocess
+import io
 import threading
 from collections import deque
 
@@ -81,12 +81,17 @@ class StreamDecodeWorker(QThread):
                 realtime=True, processing=mode, side=self.side, paced=False,
             )
             process = None
+            frames = None
             reader = None
             tail = deque(maxlen=30)
             first = True
             attempt_error = ""
             try:
-                process = proc.popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes)
+                # Through the large pipe (proc.FRAME_PIPE_BYTES): with
+                # subprocess's own, of 4 KB, 4K RGBA came at 30 frames a
+                # second; with this, 72.
+                process, pipe = proc.popen_piped(command)
+                frames = io.BufferedReader(pipe, buffer_size=frame_bytes)
                 self._handle.attach(process.pid)
                 if self._cancelled:
                     self._handle.terminate()
@@ -101,7 +106,7 @@ class StreamDecodeWorker(QThread):
                 while not self._cancelled:
                     # BufferedReader assembles this in C, avoiding thousands
                     # of tiny Python reads and their GIL overhead on Windows.
-                    payload = process.stdout.read(frame_bytes)
+                    payload = frames.read(frame_bytes)
                     if len(payload) != frame_bytes:
                         if payload:
                             attempt_error = "Decoder returned a truncated frame."
@@ -132,8 +137,8 @@ class StreamDecodeWorker(QThread):
                     self._handle.detach()
                     if reader is not None:
                         reader.join()
-                    if process.stdout is not None:
-                        process.stdout.close()
+                    if frames is not None:
+                        frames.close()
                     if process.stderr is not None:
                         process.stderr.close()
             if self._cancelled:

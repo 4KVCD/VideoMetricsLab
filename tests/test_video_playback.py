@@ -91,5 +91,7 @@ def test_the_stream_worker_uses_a_full_frame_pipe_buffer():
         / "vmaf_app" / "ui" / "playback_worker.py"
     ).read_text(encoding="utf-8")
 
-    assert "bufsize=frame_bytes" in module
-    assert "bufsize=0" not in module
+    # A frame at a time from the large pipe, assembled by BufferedReader.
+    assert "proc.popen_piped(command)" in module
+    assert "io.BufferedReader(pipe, buffer_size=frame_bytes)" in module
+    assert "subprocess.PIPE" not in module

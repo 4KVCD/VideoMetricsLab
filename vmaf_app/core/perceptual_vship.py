@@ -814,7 +814,7 @@ _RING_SLOTS = _LANES_PER_METRIC + 3
 #: kilobytes, which caps a raw 4K stream near 55 fps no matter how fast the
 #: decoder is; 64 MB doubles that. Measured on one 4K 10-bit HEVC stream:
 #: 55 -> 107 fps alone, 46 -> 78 fps with the two inputs in parallel.
-_PIPE_BYTES = 64 * 1024 * 1024
+_PIPE_BYTES = proc_util.FRAME_PIPE_BYTES
 _EOF = -1
 #: What FFmpeg writes about each frame it pipes to Vship (-stats_enc_pre):
 #: the picture's timestamp as it leaves the filter chain, in the chain's
@@ -994,27 +994,7 @@ def _gather(reader, count: int, process: subprocess.Popen, stopping: threading.E
 
 def _spawn_raw_ffmpeg(command: list[str]) -> tuple[subprocess.Popen, object]:
     """Start FFmpeg writing raw frames to a large pipe; returns (process, reader)."""
-    if os.name == "nt":
-        import _winapi
-        import msvcrt
-
-        read_handle, write_handle = _winapi.CreatePipe(None, _PIPE_BYTES)
-        write_fd = msvcrt.open_osfhandle(write_handle, 0)
-        try:
-            process = proc_util.popen(
-                command, stdin=subprocess.DEVNULL, stdout=write_fd, stderr=subprocess.PIPE,
-            )
-        except BaseException:
-            os.close(write_fd)
-            _winapi.CloseHandle(read_handle)
-            raise
-        os.close(write_fd)  # the child holds its own copy; EOF arrives when it exits
-        reader = open(msvcrt.open_osfhandle(read_handle, os.O_RDONLY), "rb", buffering=0)  # noqa: SIM115
-        return process, reader
-    process = proc_util.popen(
-        command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
-    )
-    return process, process.stdout
+    return proc_util.popen_piped(command, _PIPE_BYTES)
 
 
 def _read_exact(reader, view: memoryview) -> int:
