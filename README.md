@@ -108,3 +108,7 @@ Build the distributable with `./scripts/build_release.ps1`. See the
 Licensed under the [MIT License](LICENSE). Copyright (c) 2026 **4KVCD**.
 Third-party components retain their own licenses; see
 [Third-Party Notices](docs/THIRD_PARTY.md).
+
+## Changelog
+
+See the [changelog](CHANGELOG.md) for what changed in each version.
