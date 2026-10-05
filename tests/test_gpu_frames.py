@@ -178,6 +178,26 @@ def test_pictures_are_ffmpegs_decode(tmp_path, backend, codec, pix_fmt, crop):
 
 
 @BACKENDS
+def test_ten_bit_h264_is_refused_or_decoded_as_ffmpeg_decodes_it(tmp_path, backend):
+    """Few GPUs decode H.264 above 8 bits, and a decoder must say so. AMD's
+    library started on it all the same (its Init takes anything): on a
+    Radeon 780M every picture was wrong, or decoding failed part-way and the
+    decoder's shutdown never returned. Its stated capabilities are asked
+    now."""
+    eight = nv.plan_decode(probe_video(_clip(tmp_path / "eight.mkv", "h264", "yuv420p", seconds=0.5)), None, shift=6)
+    _need(eight, backend)  # the PC has this maker's GPU
+    path = _clip(tmp_path / "ten.mkv", "h264", "yuv420p10le", seconds=0.5)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, shift=6)
+    supported, reason = nv.decoder_supports(0, plan, backend)
+    if not supported:
+        assert reason
+        return
+    assert backend != "amd", "no AMD GPU decodes 10-bit H.264"
+    assert _decode(info, plan, backend)[0] == _ffmpeg_decode(path, plan)
+
+
+@BACKENDS
 def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path, backend):
     path = _clip(tmp_path / "clip.mkv", "hevc", "yuv420p10le", seconds=0.5)
     info = probe_video(path)
