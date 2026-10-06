@@ -440,6 +440,25 @@ def _next(stream):
 
 # ------------------------------------- AMD's hand-over (native/amf_handover.h)
 
+@pytest.fixture(params=["windows", "amf"])
+def amd_decoder(request, monkeypatch):
+    """AMD's hand-over through Windows' own decoder (native/mf_frames.cpp),
+    which GpuFrameStream opens first, or through AMF's (native/amf_frames.cpp),
+    where Windows' does not open."""
+    if request.param == "amf":
+        monkeypatch.setattr(nv.GpuFrameStream, "_open_media_foundation", lambda *args: None)
+    else:
+        opened = nv.GpuFrameStream._open_media_foundation
+
+        def windows_only(*args):
+            if (handle := opened(*args)) is None:
+                pytest.skip("Windows' decoder does not decode this on this PC")
+            return handle
+
+        monkeypatch.setattr(nv.GpuFrameStream, "_open_media_foundation", windows_only)
+    return request.param
+
+
 def _handed_over(info: VideoInfo, plan: nv.DecodePlan, planes: bool, pin: bool) -> list[str]:
     """Each picture's MD5, from AMD's decoder handing over: downloaded whole,
     or plane by plane into rows longer than the picture's (as libvmaf's
@@ -485,7 +504,8 @@ def _handed_over(info: VideoInfo, plan: nv.DecodePlan, planes: bool, pin: bool) 
     ("h264", "yuv420p", CropBox(600, 300, 20, 30), True),
 ])
 @pytest.mark.parametrize(("planes", "pin"), [(False, False), (True, False), (True, True)])
-def test_pictures_amd_hands_over_are_ffmpegs_decode(tmp_path, codec, pix_fmt, crop, luma_only, planes, pin):
+def test_pictures_amd_hands_over_are_ffmpegs_decode(tmp_path, amd_decoder, codec, pix_fmt, crop, luma_only, planes,
+                                                    pin):
     path = _clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=1.0)
     info = probe_video(path)
     plan = nv.plan_decode(info, crop, shift=6, luma_only=luma_only)
@@ -506,7 +526,7 @@ def _ffmpeg_pictures(path: Path, plan: nv.DecodePlan) -> list[bytes]:
     return [raw[i:i + size] for i in range(0, len(raw), size)]
 
 
-def test_ten_bit_amd_hands_over_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path):
+def test_ten_bit_amd_hands_over_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path, amd_decoder):
     info = probe_video(_clip(tmp_path / "clip.mkv", "hevc", "yuv420p10le", seconds=0.5))
     shifted, kept = nv.plan_decode(info, None, shift=6), nv.plan_decode(info, None, shift=0)
     _need(shifted, "amd")
@@ -527,7 +547,7 @@ def test_ten_bit_amd_hands_over_kept_in_the_top_bits_is_the_shifted_picture_time
     assert np.array_equal(pictures[1], pictures[0] << 6)
 
 
-def test_amd_hands_over_the_pictures_before_a_closed_gops_idr_as_ffmpeg_decodes_them(tmp_path):
+def test_amd_hands_over_the_pictures_before_a_closed_gops_idr_as_ffmpeg_decodes_them(tmp_path, amd_decoder):
     """AMF's own decoder on Vulkan, which the hand-over first ran on, decodes
     HEVC's last B-pictures before each IDR wrong (a Radeon 780M, driver
     32.0.31041.1004; a UHD Blu-ray's too), on a Vulkan device AMF makes
@@ -545,7 +565,7 @@ def test_amd_hands_over_the_pictures_before_a_closed_gops_idr_as_ffmpeg_decodes_
     assert _handed_over(info, plan, True, True) == _ffmpeg_decode(path, plan)
 
 
-def test_pictures_amd_hands_over_and_an_edit_list_discards_are_ffmpegs(tmp_path):
+def test_pictures_amd_hands_over_and_an_edit_list_discards_are_ffmpegs(tmp_path, amd_decoder):
     """The pictures an edit list discards are decoded and handed over, then
     handed back unread: the ones after them are still FFmpeg's."""
     whole = _clip(tmp_path / "whole.mp4", "hevc", "yuv420p10le", ["-g", "48"], seconds=4.0)
@@ -558,7 +578,7 @@ def test_pictures_amd_hands_over_and_an_edit_list_discards_are_ffmpegs(tmp_path)
     assert _handed_over(info, plan, True, True) == _ffmpeg_decode(cut, plan)
 
 
-def test_two_amd_decoders_handing_over_at_once_give_ffmpegs_pictures(tmp_path):
+def test_two_amd_decoders_handing_over_at_once_give_ffmpegs_pictures(tmp_path, amd_decoder):
     """Scoring decodes both videos at once, and the decoders share the
     hand-over's Vulkan device, its queue and what is imported and pinned."""
     paths = [_clip(tmp_path / "a.mkv", "hevc", "yuv420p10le"), _clip(tmp_path / "b.mkv", "h264", "yuv420p")]
@@ -585,6 +605,39 @@ def test_two_amd_decoders_handing_over_at_once_give_ffmpegs_pictures(tmp_path):
             if isinstance(result, BaseException):
                 raise result
         assert results == expected
+
+
+def test_windows_decoder_whose_pictures_are_kept_many_at_once_gives_ffmpegs_pictures(tmp_path):
+    """Windows' decoder waits for a free picture of its pool inside
+    ProcessOutput when too many are kept -- it let nine of its 4K HEVC
+    pictures be, of any pool asked for -- so native/mf_frames.cpp copies the
+    pictures beyond a few into its own textures. Here all but one of 24 slots
+    are kept at once."""
+    path = _clip(tmp_path / "clip.mkv", "hevc", "yuv420p10le", seconds=2.0)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, shift=6)
+    _need(plan, "amd")
+    stream = nv.GpuFrameStream(info, plan, pool=24, backend="amd", handover=True)
+    whole, kept, sums = np.empty(plan.frame_bytes, np.uint8), [], []
+    try:
+        if not stream.handover or stream._lib is not nv._libraries.get(nv.MEDIA_FOUNDATION):
+            pytest.skip("Windows' decoder does not hand over on this PC")
+        stream.start()
+        while True:
+            try:
+                item = stream.next(20000)
+            except TimeoutError:
+                pytest.fail(f"the decoder gave no picture after {len(sums)}, {len(kept)} kept")
+            if item is None:
+                break
+            stream.download(item[0], whole.ctypes.data)
+            sums.append(hashlib.md5(whole).hexdigest())
+            kept.append(item[0])
+            while len(kept) > 23:
+                stream.release(kept.pop(0))
+    finally:
+        stream.close()
+    assert sums == _ffmpeg_decode(path, plan)
 
 
 def test_amd_hands_over_only_unscaled_pictures_of_their_own_depth():
@@ -617,10 +670,45 @@ class _OpeningLibrary:
         return 0
 
 
-def _amd_stream(monkeypatch, library, plan=None) -> nv.GpuFrameStream:
-    monkeypatch.setattr(nv, "_load", lambda backend: library)
+def _amd_stream(monkeypatch, library, plan=None, windows=None) -> nv.GpuFrameStream:
+    """A stream of AMD's decoder from fake libraries: AMF's `library`, and
+    Windows' own decoder's `windows` (None: not bundled)."""
+
+    def load(backend):
+        if backend != nv.MEDIA_FOUNDATION:
+            return library
+        if windows is None:
+            raise nv.GpuDecodeUnavailableError("the GPU frame decoder (mf_frames.dll) is not bundled")
+        return windows
+
+    monkeypatch.setattr(nv, "_load", load)
     monkeypatch.setattr(nv, "_PacketReader", lambda *args: type("Reader", (), {"close": lambda self: None})())
     return nv.GpuFrameStream(_info(), plan or nv.plan_decode(_info(), None, shift=6), backend="amd", handover=True)
+
+
+def test_amd_hands_over_through_windows_own_decoder_first(monkeypatch):
+    amf, windows = _OpeningLibrary(hands_over=True), _OpeningLibrary(hands_over=True)
+    stream = _amd_stream(monkeypatch, amf, windows=windows)
+    assert stream.handover and stream._lib is windows
+    assert windows.asked == [1] and amf.asked == []
+
+
+def test_amd_hands_over_through_amf_where_windows_own_decoder_does_not_open(monkeypatch, caplog):
+    """Windows' decoders of HEVC and AV1 come with its video extensions,
+    which a PC may not have."""
+    caplog.set_level("INFO", logger=nv.__name__)
+    amf, windows = _OpeningLibrary(hands_over=True), _OpeningLibrary(hands_over=False)
+    stream = _amd_stream(monkeypatch, amf, windows=windows)
+    assert stream.handover and stream._lib is amf
+    assert windows.asked == [1] and amf.asked == [1]
+    assert "decoded by AMF" in caplog.text
+
+
+def test_windows_own_decoder_is_not_asked_for_pictures_amd_does_not_hand_over(monkeypatch):
+    amf, windows = _OpeningLibrary(hands_over=True), _OpeningLibrary(hands_over=True)
+    stream = _amd_stream(monkeypatch, amf, nv.plan_decode(_info(), None, shift=6, size=(1280, 720)), windows=windows)
+    assert not stream.handover and stream._lib is amf
+    assert windows.asked == [] and amf.asked == [0]
 
 
 def test_amd_hands_over_when_its_vulkan_starts(monkeypatch):

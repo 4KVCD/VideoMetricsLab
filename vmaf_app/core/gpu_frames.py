@@ -1,7 +1,8 @@
 """Decoding a video on the GPU in the scoring process for the GPU metrics:
 on NVIDIA GPUs straight into GPU memory (vmaf_app/native/nvdec_frames.dll),
 on Intel's and AMD's into system memory through their makers' decoder
-libraries (vpl_frames.dll with oneVPL, amf_frames.dll with AMF) -- all built
+libraries (vpl_frames.dll with oneVPL, amf_frames.dll with AMF; on AMD's
+handing over, Windows' own decoders first, mf_frames.dll) -- all built
 by scripts/build_gpu_frames.ps1 from native/, with one C API
 (native/gpu_frames.h).
 
@@ -70,12 +71,16 @@ _NATIVE = Path(__file__).resolve().parents[1] / "native"
 #: Each GPU maker's decoder library, all with one C API (native/gpu_frames.h):
 #: NVIDIA's decoder through nvcuvid, Intel's through oneVPL, AMD's through AMF.
 LIBRARIES = {"nvidia": _NATIVE / "nvdec_frames.dll", "intel": _NATIVE / "vpl_frames.dll",
-             "amd": _NATIVE / "amf_frames.dll"}
+             "amd": _NATIVE / "amf_frames.dll", "amd-mf": _NATIVE / "mf_frames.dll"}
 LIBRARY_PATH = LIBRARIES["nvidia"]
+#: Windows' own decoders (Media Foundation's) on AMD's GPUs, which only hand
+#: their pictures over: opened first where AMD's would hand over, AMD's (AMF)
+#: where they cannot (GpuFrameStream).
+MEDIA_FOUNDATION = "amd-mf"
 #: The decoders whose pictures reach Vulkan VMAF's and libvmaf's memory on the
 #: GPU (GpuFrameStream.pin, import_memory): NVIDIA's through CUDA, AMD's
 #: through Vulkan (native/amf_handover.h) when opened with handover.
-HANDOVER_BACKENDS = ("nvidia", "amd")
+HANDOVER_BACKENDS = ("nvidia", "amd", MEDIA_FOUNDATION)
 
 #: FFmpeg's codec names -> NVDEC's (cudaVideoCodec), and the bitstream filters
 #: that turn the container's packets into what NVDEC's parser reads: Annex B
@@ -633,8 +638,9 @@ class GpuFrameStream:
 
     `handover`: AMD's decoder keeps its pictures on the GPU, for pin,
     download_planes, import_memory and copy_luma (NVIDIA's always does) --
-    where it can (can_hand_over); otherwise, or when its Vulkan cannot start,
-    it decodes as without (self.handover then says so)."""
+    where it can (can_hand_over), through Windows' own decoder where that
+    opens (_open_media_foundation), else AMF's; otherwise, or when its Vulkan
+    cannot start, it decodes as without (self.handover then says so)."""
 
     def __init__(self, info: VideoInfo, plan: DecodePlan, device: int = 0, *, pool: int = 4,
                  process_handle=None, backend: str = "nvidia", handover: bool = False) -> None:
@@ -651,7 +657,9 @@ class GpuFrameStream:
         self.handover = backend == "nvidia" or (handover and can_hand_over(plan, backend))
         error = ctypes.create_string_buffer(1024)
         handle = None
-        if self.handover and backend != "nvidia":
+        if self.handover and backend == "amd":
+            handle = self._open_media_foundation(plan, device, pool, extradata)
+        if self.handover and backend != "nvidia" and not handle:
             params = _params(plan, device, pool, extradata, len(self._extradata), handover=True)
             handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
             if not handle:
@@ -681,6 +689,28 @@ class GpuFrameStream:
         self._finished = False
         self._closing = False
         self._feeder = threading.Thread(target=self._feed, name="gpu-frames-feed", daemon=True)
+
+    def _open_media_foundation(self, plan: DecodePlan, device: int, pool: int, extradata) -> int | None:
+        """AMD's GPU handing over through Windows' own decoder (Media
+        Foundation's, native/mf_frames.cpp) rather than AMF's: the same
+        decoder hardware, faster, with less CPU. Its handle, the stream then
+        using it; None where it cannot (not bundled, no decoder of the codec
+        on the GPU -- HEVC's and AV1's come with Windows' video extensions),
+        and AMF's is opened as before."""
+        try:
+            lib = _load(MEDIA_FOUNDATION)
+        except GpuDecodeUnavailableError as error:
+            _log.info("%s: decoded by AMF (%s)", self.info.path.name, error)
+            return None
+        error = ctypes.create_string_buffer(1024)
+        params = _params(plan, device, pool, extradata, len(self._extradata), handover=True)
+        handle = lib.nvf_open(ctypes.byref(params), error, len(error))
+        if not handle:
+            _log.info("%s: decoded by AMF, not Windows' decoder (%s)", self.info.path.name,
+                      error.value.decode(errors="replace"))
+            return None
+        self._lib = lib
+        return handle
 
     def wait_time_base(self, timeout: float = 60.0) -> Fraction:
         """The stream's time base, once FFmpeg has reported it (before its
