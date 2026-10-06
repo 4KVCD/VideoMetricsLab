@@ -976,6 +976,14 @@ NVF_API int nvf_unpin(void *handle, void *host) {
     return d->handing_over ? handover::unpin(host) : -1;
 }
 
+// The hand-over's: the slot's planes into memory nvf_import_vulkan imported,
+// each at its own address (0: not wanted), rows `pitches` apart, by the GPU.
+NVF_API int nvf_copy_planes(void *handle, int slot, const unsigned long long *addresses, const long long *pitches) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!d->handing_over) return NVF_ERROR;
+    return download_result(d, d->vk.copy_planes(slot, addresses, pitches));
+}
+
 // The slot's planes, each to its own address (null: not wanted), rows `pitches` apart.
 NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, const long long *pitches) {
     Decoder *d = static_cast<Decoder *>(handle);

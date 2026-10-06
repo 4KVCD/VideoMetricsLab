@@ -185,6 +185,8 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                     ("nvf_pin", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong]),
                     ("nvf_unpin", ctypes.c_int, [handle, ctypes.c_void_p]),
                     ("nvf_download_planes", ctypes.c_int, [handle, ctypes.c_int, planes, pitches]),
+                    ("nvf_copy_planes", ctypes.c_int,
+                     [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_ulonglong), pitches]),
                     # NVIDIA's CUDA imports any export; AMD's Vulkan one of its own GPU and driver.
                     ("nvf_import", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_int, *imported])
                     if backend == "nvidia" else
@@ -809,6 +811,15 @@ class GpuFrameStream:
         planes = (ctypes.c_void_p * 3)(*addresses)
         rows = (ctypes.c_longlong * 3)(*pitches)
         if self._lib.nvf_download_planes(self._handle, slot, planes, rows) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+
+    def copy_planes(self, slot: int, addresses: tuple[int, ...], pitches: tuple[int, ...]) -> None:
+        """Copies the slot's Y, U and V planes into memory import_memory
+        imported, each to its own address (0: not that plane), rows `pitches`
+        bytes apart, on the GPU."""
+        destinations = (ctypes.c_ulonglong * 3)(*addresses)
+        rows = (ctypes.c_longlong * 3)(*pitches)
+        if self._lib.nvf_copy_planes(self._handle, slot, destinations, rows) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
     def import_memory(self, handle: int, size: int, exporter=None) -> tuple[int, int] | None:

@@ -892,6 +892,35 @@ struct Slots {
         return true;
     }
 
+    // The slot's planes each into imported memory (nvf_import_vulkan) at its
+    // own address (0: not that plane), rows `pitches` apart, on the copy queue.
+    bool copy_planes(int slot, const unsigned long long *addresses, const long long *pitches) {
+        std::lock_guard<std::mutex> lock(copy_lock);
+        if (copying.broken) {
+            error = "copying a picture on the GPU failed";
+            return false;
+        }
+        copying.begin();
+        for (int i = 0; i < (params.luma_only ? 1 : 3); ++i) {
+            if (!addresses[i]) continue;
+            const Plane p = plane(i);
+            VkBuffer buffer;
+            VkDeviceSize offset;
+            if (pitches[i] < static_cast<long long>(p.row_bytes)
+                || !find_import(addresses[i], static_cast<unsigned long long>(pitches[i]) * (p.rows - 1) + p.row_bytes,
+                                buffer, offset)) {
+                error = "a plane's destination is not memory the decoder imported";
+                return false;
+            }
+            copy_rows(copying, slot, p, buffer, offset, static_cast<VkDeviceSize>(pitches[i]));
+        }
+        if (!copying.run()) {
+            error = "copying a picture on the GPU failed";
+            return false;
+        }
+        return true;
+    }
+
     // The slot's planes each to its own address (null: not that plane), rows
     // `pitches` apart: by the GPU where the memory is pinned, else through
     // the staging buffer and memcpy.

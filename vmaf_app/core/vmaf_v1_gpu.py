@@ -114,6 +114,10 @@ def _vulkan() -> ctypes.CDLL:
                                           ctypes.POINTER(ctypes.c_uint32)]
         lib.vv_v1_speed_scores.restype = ctypes.c_int
         lib.vv_v1_speed_scores.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]
+    if hasattr(lib, "vv_shared_chroma"):  # the chroma in the shared buffers, for a decoder to copy there
+        lib.vv_shared_chroma.restype = ctypes.c_int
+        lib.vv_shared_chroma.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64),
+                                         ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)]
     return lib
 
 
@@ -354,6 +358,16 @@ class V1Scorer:
                     self._on_gpu = self._on_gpu | {_SPEED}
                 elif code != -4:
                     vmaf_vulkan._check(vulkan, code, "Starting SpEED")
+            #: From a decoder handing over: where its chroma planes go in each
+            #: shared buffer (offset, spacing, row bytes), for it to copy them
+            #: there on the GPU; None: through the engine's host memory.
+            self._shared_chroma: tuple[int, int, int] | None = None
+            if _SPEED in self._on_gpu and self._shared is not None and hasattr(vulkan, "vv_shared_chroma") \
+                    and hasattr(shared, "copy_planes"):
+                offset, spacing, stride = ctypes.c_uint64(), ctypes.c_uint32(), ctypes.c_uint32()
+                if vulkan.vv_shared_chroma(self._gpu, ctypes.byref(offset), ctypes.byref(spacing),
+                                           ctypes.byref(stride)) == 0:
+                    self._shared_chroma = (offset.value, spacing.value, stride.value)
             #: libvmaf's extractors are run only for what the GPU does not calculate.
             self._cpu_features = bool(set(_CPU_FEATURES) - self._on_gpu)
             if self._cpu_features:
@@ -411,7 +425,13 @@ class V1Scorer:
         ref_stream.copy_luma(ref_slot, ref_address, pitch)
         if score:
             test_stream.copy_luma(test_slot, dist_address, pitch)
-        if score and _SPEED in self._on_gpu:
+        if score and _SPEED in self._on_gpu and self._shared_chroma is not None:
+            # The chroma planes copied by the GPU into the slot's shared buffer.
+            offset, spacing, stride = self._shared_chroma
+            at = [ref_address + offset + i * spacing for i in range(4)]
+            ref_stream.copy_planes(ref_slot, (0, at[0], at[1]), (0, stride, stride))
+            test_stream.copy_planes(test_slot, (0, at[2], at[3]), (0, stride, stride))
+        elif score and _SPEED in self._on_gpu:
             # The chroma planes downloaded into the engine's memory for them
             # (Vulkan's, which another API is not given to pin).
             chroma, stride = (ctypes.c_void_p * 4)(), ctypes.c_uint32()

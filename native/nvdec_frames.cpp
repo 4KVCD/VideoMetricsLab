@@ -1116,6 +1116,39 @@ NVF_API int nvf_unpin(void *handle, void *host) {
 // Copies a slot's planes (Y, U, V) each into its own pitched host plane --
 // a libvmaf picture's -- returning once they are there. A null plane is not
 // copied. 0 or NVF_ERROR.
+// The slot's planes into device memory (nvf_import's), each at its own
+// address (0: not wanted), rows `pitches` apart, by the GPU.
+NVF_API int nvf_copy_planes(void *handle, int slot, const unsigned long long *addresses, const long long *pitches) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    const Driver &cu = g_driver;
+    ContextScope scope(d);
+    const size_t sample = wide_out(d->params) ? 2 : 1;
+    const size_t widths[3] = {static_cast<size_t>(d->out_w), static_cast<size_t>((d->out_w + 1) / 2),
+                              static_cast<size_t>((d->out_w + 1) / 2)};
+    const size_t heights[3] = {static_cast<size_t>(d->out_h), static_cast<size_t>((d->out_h + 1) / 2),
+                               static_cast<size_t>((d->out_h + 1) / 2)};
+    CUdeviceptr src = d->pool + static_cast<size_t>(slot) * d->frame_bytes;
+    bool ok = true;
+    for (int plane = 0; plane < (d->params.luma_only ? 1 : 3) && ok; plane++) {
+        if (addresses[plane]) {
+            CUDA_MEMCPY2D copy{};
+            copy.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+            copy.srcDevice = src;
+            copy.srcPitch = widths[plane] * sample;
+            copy.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+            copy.dstDevice = static_cast<CUdeviceptr>(addresses[plane]);
+            copy.dstPitch = static_cast<size_t>(pitches[plane]);
+            copy.WidthInBytes = copy.srcPitch;
+            copy.Height = heights[plane];
+            ok = d->check(cu.cuMemcpy2DAsync(&copy, d->output_stream), "Copying a picture on the GPU");
+        }
+        src += widths[plane] * sample * heights[plane];
+    }
+    ok = ok && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture on the GPU")
+         && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture on the GPU");
+    return ok ? 0 : NVF_ERROR;
+}
+
 NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, const long long *pitches) {
     Decoder *d = static_cast<Decoder *>(handle);
     const Driver &cu = g_driver;
