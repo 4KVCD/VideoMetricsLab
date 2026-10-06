@@ -2,7 +2,7 @@
 
 Calculate VMAF and VMAF NEG on NVIDIA GPUs, and SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-Coming in v1.5: Highly optimized VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR, SSIM and XPSNR up to 6× faster with far less memory, and a command-line version. 
+Coming in v1.5: Highly optimized VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR, SSIM and XPSNR up to 6× faster with far less memory, and CLI support. 
 
 ## Features
 
