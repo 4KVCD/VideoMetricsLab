@@ -334,6 +334,30 @@ def test_unscored_auto_crop_is_detected_once_in_the_background(qapp, tmp_path, m
     panel.close()
 
 
+def test_a_video_opens_when_its_files_black_bars_are_already_known(qapp, tmp_path, monkeypatch):
+    """The same files removed and added again: their black bars were known,
+    so the entry was swapped for a cropped copy, and the player was asked for
+    the uncropped one, which was not among the videos it was given
+    (ValueError): Video Compare stayed blank."""
+    from vmaf_app.core.models import CropBox
+    from vmaf_app.ui.video_compare_view import VideoCompareView
+
+    entry = _physical_entry(tmp_path)
+    entry = replace(entry, comparison=replace(entry.comparison, auto_crop_pending=True))
+    monkeypatch.setattr(VideoCompareView, "_restart_decoder", lambda self, **_kwargs: None)
+    panel = FrameComparePanel()
+    panel._auto_crop_files[panel._crop_file_key(tmp_path / "source.mkv")] = CropBox(1920, 816, 0, 132)
+    panel._auto_crop_files[panel._crop_file_key(tmp_path / "encode.mkv")] = CropBox(1280, 544, 0, 88)
+    panel.set_runs([entry])
+
+    panel._load_current_video()
+
+    shown = panel.video_view._comparison
+    assert shown is panel.current_entry.comparison and not shown.auto_crop_pending
+    assert shown.source_crop == CropBox(1920, 816, 0, 132)
+    panel.close()
+
+
 def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, monkeypatch):
     from dataclasses import replace as dc_replace
 

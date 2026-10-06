@@ -584,6 +584,8 @@ class FrameComparePanel(QWidget):
             return
         view = self._ensure_video_view()
         self._ensure_auto_crop(entry)
+        # Black bars already known for its files swap it for a cropped copy.
+        entry = self.current_entry
         self._seek_timer.stop()
         self._cancel_workers()
         self.content_stack.setCurrentWidget(view)
