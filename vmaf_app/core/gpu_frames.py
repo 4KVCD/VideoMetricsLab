@@ -33,6 +33,14 @@ and with which timestamps, is checked against the packets that went in
 (GpuFrameStream.verify): a picture the decoder dropped or added fails the run,
 and the caller makes it again through FFmpeg.
 
+A video FFmpeg would decode in software (no GPU decoder for it -- VVC, AV1
+on an older GPU, 10-bit H.264 -- or GPU decoding off) is decoded here too,
+on the CPU, by the "software" decoder (software_frames.dll): FFmpeg 9's
+own decoders, built for the app (vmaf_app/tools/ffmpeg), and dav1d, the
+bundled GStreamer's, so its pictures need no pipe either -- at 4K a Windows
+pipe carries 60-80 a second, and the decoders give 200 and more. They are
+FFmpeg's decode's pictures, sample for sample, film grain and all.
+
 What is not decoded here -- another GPU, a codec or format the decoder
 does not take, an interlaced or damaged stream -- goes the
 FFmpeg way as before (GpuDecodeUnavailableError before the first picture,
@@ -44,6 +52,7 @@ import _winapi
 import contextlib
 import ctypes
 import heapq
+import importlib.util
 import logging
 import msvcrt
 import os
@@ -67,25 +76,56 @@ _log = logging.getLogger(__name__)
 _ERROR_PIPE_CONNECTED, _ERROR_NO_DATA = 535, 232
 
 _NATIVE = Path(__file__).resolve().parents[1] / "native"
-#: Each GPU maker's decoder library, all with one C API (native/gpu_frames.h):
-#: NVIDIA's decoder through nvcuvid, Intel's through oneVPL, AMD's through AMF.
+#: Each decoder library, all with one C API (native/gpu_frames.h): NVIDIA's
+#: decoder through nvcuvid, Intel's through oneVPL, AMD's through AMF, and the
+#: CPU's through FFmpeg's libraries and dav1d (SOFTWARE).
 LIBRARIES = {"nvidia": _NATIVE / "nvdec_frames.dll", "intel": _NATIVE / "vpl_frames.dll",
-             "amd": _NATIVE / "amf_frames.dll"}
+             "amd": _NATIVE / "amf_frames.dll", "software": _NATIVE / "software_frames.dll"}
 LIBRARY_PATH = LIBRARIES["nvidia"]
+#: The decoder for the videos FFmpeg decodes in software.
+SOFTWARE = "software"
+#: Set to "ffmpeg", the videos FFmpeg decodes in software reach the scoring
+#: process through FFmpeg's pipes, as before the software decoder (for
+#: comparing the two).
+SOFTWARE_VARIABLE = "VML_SOFTWARE_DECODE"
+#: The software decoder's libraries: FFmpeg 9.0.2's libavutil and
+#: libavcodec, with only the decoders it asks for (LGPL; built by
+#: scripts/build_ffmpeg_decoders.ps1), and the bundled GStreamer's dav1d, in
+#: its wheels' package -- a folder of the packaged app too
+#: (scripts/gstreamer_bundle.py). What they import is beside them, or Windows'.
+FFMPEG_FOLDER = Path(__file__).resolve().parents[1] / "tools" / "ffmpeg"
+_FFMPEG_LIBRARIES = ("avutil-61.dll", "avcodec-63.dll")
+_DAV1D_PACKAGE, _DAV1D_LIBRARY = "gstreamer_plugins_libs", "dav1d.dll"
 #: The decoders whose pictures reach Vulkan VMAF's and libvmaf's memory on the
 #: GPU (GpuFrameStream.pin, import_memory): NVIDIA's through CUDA, AMD's
 #: through Vulkan (native/amf_handover.h) when opened with handover.
 HANDOVER_BACKENDS = ("nvidia", "amd")
 
-#: FFmpeg's codec names -> NVDEC's (cudaVideoCodec), and the bitstream filters
-#: that turn the container's packets into what NVDEC's parser reads: Annex B
-#: start codes for H.264 and HEVC, with the parameter sets from the stream's
+#: FFmpeg's codec names -> NVDEC's (cudaVideoCodec; VVC, which NVDEC does
+#: not have, the app's 100), and the bitstream filters that turn the
+#: container's packets into what NVDEC's parser reads: Annex B start codes for
+#: H.264, HEVC and VVC, with the parameter sets from the stream's
 #: configuration before every keyframe -- mp4toannexb adds them only before
 #: an IDR, and an open-GOP H.264 stream cut at a recovery point has none, so
 #: NVDEC decoded nothing of it. AV1's packets are its low-overhead OBU format
-#: already; its sequence header goes to the parser separately.
+#: already; its sequence header goes to the parser separately. MPEG-2's
+#: sequence header, which a container may keep only in its configuration, is
+#: put before every keyframe too; VP9's packets need nothing, and FFV1's
+#: configuration goes to its decoder separately (_configuration).
+#:
+#: VVC's packets are given decode times that count up from far below any
+#: presentation time (setts): Matroska keeps presentation times only, and
+#: FFmpeg's demuxer gives most of a VVC stream's packets decode times equal to
+#: them -- out of order -- and the rest none; its stream copy then "repairs"
+#: them by overwriting the presentation times (Beekeeper's 292 became 627),
+#: which the listing must have as they are. Nothing reads these decode times.
 _CODECS = {"h264": (4, "h264_mp4toannexb,dump_extra=freq=keyframe"),
-           "hevc": (8, "hevc_mp4toannexb,dump_extra=freq=keyframe"), "av1": (11, None)}
+           "hevc": (8, "hevc_mp4toannexb,dump_extra=freq=keyframe"), "av1": (11, None),
+           "vvc": (100, "vvc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000"),
+           "vp9": (10, None), "mpeg2video": (1, "dump_extra=freq=keyframe"), "ffv1": (101, None)}
+#: The codecs the GPU decoders are asked for; the others are the software
+#: decoder's only (NVIDIA's would take VP9 and MPEG-2 untried).
+_GPU_CODECS = frozenset({"h264", "hevc", "av1"})
 #: Packet flags (AV_PKT_FLAG_*).
 _KEY, _DISCARD = 0x1, 0x4
 #: FFmpeg warnings that mean the timestamps it copied may not be the ones its
@@ -120,7 +160,18 @@ class GpuDecodeUnavailableError(RuntimeError):
 
 class GpuDecodeFailedError(RuntimeError):
     """Decoding failed after it had started; the caller decodes the video
-    again through FFmpeg."""
+    again through FFmpeg. `backend`: the decoder's, where it is known."""
+
+    def __init__(self, message: str = "", backend: str | None = None) -> None:
+        super().__init__(message)
+        self.backend = backend
+
+
+def decoding_failed_status(error: BaseException) -> str:
+    """The status when decoding in the scoring process failed after its
+    start, naming the GPU's decoder or the app's own."""
+    what = "Decoding in the app" if getattr(error, "backend", None) == SOFTWARE else "GPU decoding"
+    return f"{what} failed ({error}); decoding through FFmpeg instead…"
 
 
 # ------------------------------------------------------------------ binding
@@ -149,12 +200,42 @@ _libraries: dict[str, ctypes.CDLL] = {}
 _library_lock = threading.Lock()
 
 
+def _software_library_paths() -> list[Path | None]:
+    """Where libavutil, libavcodec and dav1d are; None for any that is not there."""
+    spec = importlib.util.find_spec(_DAV1D_PACKAGE)
+    folders = [Path(folder) / "bin" for folder in (spec.submodule_search_locations or [])] if spec else []
+    dav1d = next((folder / _DAV1D_LIBRARY for folder in folders if (folder / _DAV1D_LIBRARY).is_file()), None)
+    ffmpeg = [FFMPEG_FOLDER / name if (FFMPEG_FOLDER / name).is_file() else None for name in _FFMPEG_LIBRARIES]
+    return [*ffmpeg, dav1d]
+
+
+def _software_libraries() -> tuple[int | None, ...]:
+    """libavutil, libavcodec and dav1d, loaded by their paths: their module
+    handles, None for any that is not there or did not load. What they import
+    is found beside them (ctypes loads a library by its path with its own
+    folder searched), so no folder goes on this process's DLL search path --
+    GStreamer's has MinGW runtimes that would be found before other
+    libraries' own."""
+    handles: list[int | None] = []
+    for path in _software_library_paths():
+        handle = None
+        if path is not None:
+            try:
+                handle = ctypes.CDLL(str(path))._handle
+            except OSError as error:
+                _log.info("The software decoder cannot use %s: %s", path.name, error)
+        handles.append(handle)
+    return tuple(handles)
+
+
 def _load(backend: str = "nvidia") -> ctypes.CDLL:
     with _library_lock:
         if backend not in _libraries:
+            if backend == SOFTWARE and os.environ.get(SOFTWARE_VARIABLE, "").casefold() == "ffmpeg":
+                raise GpuDecodeUnavailableError(f"{SOFTWARE_VARIABLE} is set to ffmpeg")
             path = LIBRARY_PATH if backend == "nvidia" else LIBRARIES[backend]
             if not path.is_file():
-                raise GpuDecodeUnavailableError(f"the GPU frame decoder ({path.name}) is not bundled")
+                raise GpuDecodeUnavailableError(f"the frame decoder ({path.name}) is not bundled")
             try:
                 lib = ctypes.CDLL(str(path))
             except OSError as error:
@@ -194,11 +275,20 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                 ):
                     function = getattr(lib, name)
                     function.restype, function.argtypes = restype, argtypes
-            if backend != "nvidia":  # the decoders that scale with native/d3d11_scale.h
+            if backend in _GPU_SCALING:  # the decoders that scale with native/d3d11_scale.h
                 lib.nvf_scale_note.restype, lib.nvf_scale_note.argtypes = ctypes.c_int, [handle, text, ctypes.c_int]
                 lib.nvf_scale_test.restype = ctypes.c_int
                 lib.nvf_scale_test.argtypes = [ctypes.c_int, ctypes.POINTER(_Params), ctypes.c_void_p, ctypes.c_int,
                                                ctypes.c_void_p, text, ctypes.c_int]
+            if backend == SOFTWARE:
+                lib.nvf_set_libraries.restype = ctypes.c_int
+                lib.nvf_set_libraries.argtypes = [ctypes.c_void_p] * 3
+                lib.nvf_libraries_error.restype, lib.nvf_libraries_error.argtypes = ctypes.c_int, [text, ctypes.c_int]
+                if lib.nvf_set_libraries(*_software_libraries()) != 0:
+                    # What it then cannot decode it refuses (nvf_supports).
+                    error = ctypes.create_string_buffer(512)
+                    lib.nvf_libraries_error(error, len(error))
+                    _log.info("The software decoder: %s", error.value.decode(errors="replace"))
             _libraries[backend] = lib
         return _libraries[backend]
 
@@ -305,6 +395,16 @@ def plan_decode(info: VideoInfo, crop: CropBox | None, *, shift: int = 0, luma_o
                       algorithm if algorithm in _SCALERS else "bicubic", widen)
 
 
+#: The decoders that scale on their GPU (native/d3d11_scale.h), with a note
+#: when they scale on the CPU instead.
+_GPU_SCALING = ("intel", "amd")
+
+
+def decodes_codec(codec: str, backend: str) -> bool:
+    """Whether `backend`'s decoder is asked for `codec` (FFmpeg's name)."""
+    return codec in _CODECS and (backend == SOFTWARE or codec in _GPU_CODECS)
+
+
 def _params(plan: DecodePlan, device: int = 0, pool: int = 1, extradata=None, extradata_size: int = 0,
             handover: bool = False) -> _Params:
     return _Params(device, _CODECS[plan.codec][0], plan.bit_depth, plan.width, plan.height,
@@ -341,6 +441,44 @@ def scale_picture(plan: DecodePlan, picture: bytes, vendor: int | None, backend:
     return out.raw
 
 
+def software_bundled() -> bool:
+    """Whether the software decoder is there to be used, as far as its files
+    say (nothing is loaded): its library and its FFmpeg, and
+    SOFTWARE_VARIABLE not set to ffmpeg. For planning a run in the app's
+    process; the scoring process finds out for sure (decoder_supports)."""
+    if os.environ.get(SOFTWARE_VARIABLE, "").casefold() == "ffmpeg" or not LIBRARIES[SOFTWARE].is_file():
+        return False
+    return all(path is not None for path in _software_library_paths()[:len(_FFMPEG_LIBRARIES)])
+
+
+def software_codecs() -> tuple[list[str], str]:
+    """The codecs (FFmpeg's names) the software decoder decodes here, its
+    libraries loaded; and, when it decodes none, why. For the self-test."""
+    try:
+        lib = _load(SOFTWARE)
+    except GpuDecodeUnavailableError as error:
+        return [], str(error)
+    codecs, why = [], ""
+    for codec, (number, _filters) in _CODECS.items():
+        error = ctypes.create_string_buffer(512)
+        if lib.nvf_supports(0, number, 8, 64, 64, error, len(error)):
+            codecs.append(codec)
+        elif not why:
+            why = error.value.decode(errors="replace")
+    return codecs, "" if codecs else why
+
+
+def decoder_pair(decoder: str | tuple[str, str]) -> tuple[str, str]:
+    """(the source's decoder, the test video's): `decoder` is one for both, or the two."""
+    return (decoder, decoder) if isinstance(decoder, str) else (decoder[0], decoder[1])
+
+
+def device_of(backend: str, gpu: int) -> int:
+    """The device a decoder is opened on: `gpu` for NVIDIA's (a CUDA device
+    ordinal), 0 for the others, which find their GPU (or need none) themselves."""
+    return gpu if backend == "nvidia" else 0
+
+
 def available(backend: str = "nvidia") -> bool:
     """Whether the decoder library is bundled and loads (the GPU is not asked)."""
     try:
@@ -351,7 +489,15 @@ def available(backend: str = "nvidia") -> bool:
 
 
 def decoder_supports(device: int, plan: DecodePlan, backend: str = "nvidia") -> tuple[bool, str]:
-    """Whether GPU `device`'s decoder takes the plan's codec, depth and size."""
+    """Whether GPU `device`'s decoder takes the plan's codec, depth and size
+    (the software decoder: whether its libraries decode the codec). The
+    software decoder is not asked to scale: it would on one thread, as each
+    picture is handed on -- a 4K source compared at 1080p went at 52 frames
+    a second against 128 with FFmpeg scaling it, in threads, before its pipe."""
+    if not decodes_codec(plan.codec, backend):
+        return False, f"{plan.codec} is not decoded by the {backend} decoder"
+    if backend == SOFTWARE and plan.scaled:
+        return False, "the software decoder does not scale; FFmpeg scales it"
     try:
         lib = _load(backend)
     except GpuDecodeUnavailableError as error:
@@ -589,10 +735,9 @@ class _PacketReader:
             self._pipe = None
 
 
-def _av1_sequence_header(path: Path) -> bytes:
-    """The AV1 sequence header OBUs of `path`'s stream configuration (its
-    av1C box minus the box's own 4-byte header), as FFmpeg's NVDEC decoder
-    gives them to NVIDIA's parser. Empty when there is none."""
+def _extradata(path: Path) -> bytes:
+    """`path`'s video stream configuration (FFmpeg's extradata), as ffprobe
+    shows it; empty when there is none or it cannot be read."""
     command = [ffprobe_path(), "-v", "error", "-select_streams", VIDEO_STREAM, "-show_entries", "stream=extradata",
                "-show_data", "-of", "default=noprint_wrappers=1", str(Path(path).resolve())]
     try:
@@ -604,9 +749,26 @@ def _av1_sequence_header(path: Path) -> bytes:
         match = re.match(r"^[0-9a-f]{8}: ((?:[0-9a-f]{2,4} ?)+)", line.strip())
         if match:
             data += bytes.fromhex(match.group(1).replace(" ", ""))
+    return bytes(data)
+
+
+def _av1_sequence_header(path: Path) -> bytes:
+    """The AV1 sequence header OBUs of `path`'s stream configuration (its
+    av1C box minus the box's own 4-byte header), as FFmpeg's NVDEC decoder
+    gives them to NVIDIA's parser. Empty when there is none."""
+    data = _extradata(path)
     if len(data) > 4 and data[0] & 0x80:
-        return bytes(data[4:])
+        return data[4:]
     return b""
+
+
+def _configuration(path: Path, codec: str) -> bytes:
+    """What a decoder is given of the stream's configuration besides its
+    packets: AV1's sequence header, FFV1's configuration record (in which a
+    version 3 stream keeps what its frames are read with)."""
+    if codec == "av1":
+        return _av1_sequence_header(path)
+    return _extradata(path) if codec == "ffv1" else b""
 
 
 # ----------------------------------------------------------------- streams
@@ -627,10 +789,12 @@ class GpuFrameStream:
         self.info = info
         self.plan = plan
         self.backend = backend
+        if not decodes_codec(plan.codec, backend):
+            raise GpuDecodeUnavailableError(f"{plan.codec} is not decoded by the {backend} decoder")
         self._lib = _load(backend)
         self._handle = None
         self._reader = _PacketReader(info.path, plan.codec, process_handle)
-        self._extradata = _av1_sequence_header(info.path) if plan.codec == "av1" else b""
+        self._extradata = _configuration(info.path, plan.codec)
         self._extradata_buffer = ctypes.create_string_buffer(self._extradata) if self._extradata else None
         extradata = ctypes.cast(self._extradata_buffer, ctypes.c_void_p) if self._extradata_buffer else None
         #: The pictures are handed over on the GPU (pin, import_memory work).
@@ -649,7 +813,7 @@ class GpuFrameStream:
             handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
         if not handle:
             self._reader.close()  # its pipe
-            raise GpuDecodeUnavailableError(error.value.decode(errors="replace") or "the GPU's decoder could not start")
+            raise GpuDecodeUnavailableError(error.value.decode(errors="replace") or f"{self.decoder} could not start")
         self._handle = handle
         self.frame_bytes = plan.frame_bytes
         self._feed_error: BaseException | None = None
@@ -667,6 +831,11 @@ class GpuFrameStream:
         self._finished = False
         self._closing = False
         self._feeder = threading.Thread(target=self._feed, name="gpu-frames-feed", daemon=True)
+
+    @property
+    def decoder(self) -> str:
+        """The decoder, for messages: "the GPU's decoder" or "the software decoder"."""
+        return "the software decoder" if self.backend == SOFTWARE else "the GPU's decoder"
 
     def wait_time_base(self, timeout: float = 60.0) -> Fraction:
         """The stream's time base, once FFmpeg has reported it (before its
@@ -721,8 +890,9 @@ class GpuFrameStream:
                 break
             try:
                 discarded = self._take(pts.value)
-            except GpuDecodeFailedError:
+            except GpuDecodeFailedError as error:
                 self.release(slot.value)
+                error.backend = self.backend
                 raise
             if not discarded:
                 return slot.value, pts.value
@@ -734,10 +904,10 @@ class GpuFrameStream:
             self.verify()
             return None
         if self._feed_error is not None:
-            raise GpuDecodeFailedError(str(self._feed_error)) from self._feed_error
+            raise GpuDecodeFailedError(str(self._feed_error), self.backend) from self._feed_error
         if code == _NVF_ABORTED:
-            raise GpuDecodeFailedError("decoding was stopped")
-        raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+            raise GpuDecodeFailedError("decoding was stopped", self.backend)
+        raise GpuDecodeFailedError(self._error() or f"{self.decoder} failed", self.backend)
 
     def _take(self, pts: int) -> bool:
         """Checks the picture stamped `pts`, as it comes out, against the
@@ -746,16 +916,16 @@ class GpuFrameStream:
         decoder dropped or made up failed the run only at its end, a whole
         pass later. Whether the picture is one the demuxer discards."""
         if self._last_shown is not None and pts <= self._last_shown:
-            raise GpuDecodeFailedError("the GPU's decoder gave pictures out of order")
+            raise GpuDecodeFailedError(f"{self.decoder} gave pictures out of order")
         with self._fed_lock:
             # A packet stamped earlier is in the heap only if it was fed: its
             # picture is owed before this one. One fed after this picture
             # came out would come out of order, which fails above.
             if self._waiting and self._waiting[0] < pts:
                 raise GpuDecodeFailedError(
-                    f"the GPU's decoder gave {self._shown_count} pictures for {self._shown_count + 1} packets")
+                    f"{self.decoder} gave {self._shown_count} pictures for {self._shown_count + 1} packets")
             if not self._waiting or self._waiting[0] != pts:
-                raise GpuDecodeFailedError("the GPU's decoder gave pictures the packets do not have")
+                raise GpuDecodeFailedError(f"{self.decoder} gave pictures the packets do not have")
             heapq.heappop(self._waiting)
             discarded = pts in self._discard
         self._shown_count += 1
@@ -772,7 +942,8 @@ class GpuFrameStream:
         with self._fed_lock:
             fed = self._fed_count
         if self._shown_count != fed:
-            raise GpuDecodeFailedError(f"the GPU's decoder gave {self._shown_count} pictures for {fed} packets")
+            raise GpuDecodeFailedError(f"{self.decoder} gave {self._shown_count} pictures for {fed} packets",
+                                       self.backend)
 
     def release(self, slot: int) -> None:
         self._lib.nvf_release(self._handle, slot)
@@ -781,7 +952,7 @@ class GpuFrameStream:
         """Copies the slot's picture, planes packed, to page-locked memory at
         `address` (frame_bytes long)."""
         if self._lib.nvf_download(self._handle, slot, address) != 0:
-            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+            raise GpuDecodeFailedError(self._error() or f"{self.decoder} failed", self.backend)
 
     def copy_luma(self, slot: int, address: int, pitch: int) -> None:
         """Copies the slot's luma plane to GPU memory at `address`, rows `pitch` bytes apart."""
@@ -853,7 +1024,7 @@ class GpuFrameStream:
     def scale_note(self) -> str:
         """Why the pictures are scaled on the CPU when the GPU was to scale
         them (Intel, AMD); empty when it does, or nothing is scaled."""
-        if self.backend == "nvidia" or self._handle is None:
+        if self.backend not in _GPU_SCALING or self._handle is None:
             return ""
         text = ctypes.create_string_buffer(1024)
         self._lib.nvf_scale_note(self._handle, text, len(text))
@@ -882,8 +1053,8 @@ class GpuFrameStream:
             if closer.is_alive():
                 global _stuck_closes
                 _stuck_closes += 1
-                _log.error("%s: the %s GPU decoder did not close in %.0f s; it is left open", self.info.path.name,
+                _log.error("%s: the %s decoder did not close in %.0f s; it is left open", self.info.path.name,
                            self.backend, _CLOSE_SECONDS)
         else:  # never seen; leaking the decoder is safer than freeing it under the thread
-            _log.error("The GPU decoder's feeding thread did not stop; its decoder is left open")
+            _log.error("The %s decoder's feeding thread did not stop; its decoder is left open", self.backend)
         self._handle = None

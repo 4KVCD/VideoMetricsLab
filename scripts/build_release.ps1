@@ -122,7 +122,8 @@ try {
 
     # The native libraries and the notices of the headers built into them.
     $native = Join-Path $output '_internal/vmaf_app/native'
-    foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll')) {
+    foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll',
+            'software_frames.dll')) {
         if (-not (Test-Path (Join-Path $native $library))) {
             throw "Bundled native library is missing: $library"
         }
@@ -132,6 +133,11 @@ try {
         if (-not (Test-Path (Join-Path $native "licenses/$notice"))) {
             throw "Bundled native library license notice is missing: $notice"
         }
+    }
+    # FFmpeg's decoders for the software frame decoder, and their licence.
+    $ffmpeg = Join-Path $output '_internal/vmaf_app/tools/ffmpeg'
+    foreach ($file in @('avcodec-63.dll', 'avutil-61.dll', 'licenses/COPYING.LGPLv2.1.txt')) {
+        if (-not (Test-Path (Join-Path $ffmpeg $file))) { throw "Bundled FFmpeg file is missing: $file" }
     }
 
     $perceptualTools = @('ssimulacra2.exe', 'butteraugli_main.exe')
@@ -194,7 +200,7 @@ try {
     Write-Host "  $output"
     Write-Host "  $zip"
     Write-Host ''
-    Write-Host 'FFmpeg is not bundled. See docs/BUILD.md.' -ForegroundColor Yellow
+    Write-Host 'FFmpeg itself (ffmpeg.exe, ffprobe.exe) is not bundled. See docs/BUILD.md.' -ForegroundColor Yellow
 } finally {
     Pop-Location
 }

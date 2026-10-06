@@ -588,6 +588,47 @@ def test_a_scorer_of_pictures_in_gpu_memory_allocates_nothing_for_uploads(monkey
     scorer.close()
 
 
+@pytest.mark.parametrize("on_device", [(True, False), (False, True), (False, False), (True, True)])
+def test_a_pair_from_two_decoders_is_copied_on_the_gpu_or_uploaded_side_by_side(monkeypatch, on_device):
+    """NVIDIA's decoder copies its pictures into libvmaf's on the GPU; the
+    software decoder's are written into the upload's page-locked memory and
+    uploaded. A pair can be one of each (an HEVC source on NVIDIA's decoder,
+    a VVC test video on the CPU)."""
+    width, height = 64, 36
+    scorer, lib, cuda = _scorer(monkeypatch, width, height, 10, on_device=all(on_device))
+    row_bytes = width * 2
+    rng = np.random.default_rng(3)
+    frames = [rng.integers(1, 256, row_bytes * height, dtype=np.uint8) for _ in range(2)]
+
+    def side(index: int):
+        frame = frames[index]
+        if on_device[index]:
+            def on_gpu(address, pitch):
+                for row in range(height):
+                    ctypes.memmove(address + row * pitch, frame.ctypes.data + row * row_bytes, row_bytes)
+            return True, on_gpu
+        return False, lambda address: ctypes.memmove(address, frame.ctypes.data, row_bytes * height)
+
+    scorer.add_sides(side(0), side(1))
+
+    assert lib.read == [0] and len(lib.blocks) == 2
+    for frame, block in zip(frames, lib.blocks, strict=True):
+        picture = block[:lib.pitch * height].reshape(height, lib.pitch)
+        assert np.array_equal(picture[:, :row_bytes], frame.reshape(height, row_bytes))
+        assert np.all(block[lib.pitch * height:] == 0xAA)
+    assert not cuda.current and cuda.pending == 0
+    if all(on_device):
+        assert not cuda.calls  # nothing allocated for uploads
+    scorer.close()
+
+
+def test_a_scorer_of_pictures_in_gpu_memory_refuses_one_to_upload(monkeypatch):
+    scorer, _lib, _cuda = _scorer(monkeypatch, 64, 36, 8, on_device=True)
+    with pytest.raises(vmaf_cuda.VmafGpuError, match="GPU memory only"):
+        scorer.add_sides((True, lambda address, pitch: None), (False, lambda address: None))
+    scorer.close()
+
+
 @pytest.mark.parametrize("failing", ["cuInit", "cuDeviceGet", "cuDevicePrimaryCtxRetain", "cuCtxPushCurrent_v2",
                                      "cuStreamCreate", "cuMemHostAlloc"])
 def test_an_upload_that_cannot_be_set_up_fails_the_gpu_and_leaves_nothing_behind(monkeypatch, failing):

@@ -119,6 +119,15 @@ def self_test() -> SelfTestReport:
             report.ok(f"{maker} frame decoder for the GPU metrics ({library})")
         else:
             report.warn(f"{maker} frame decoder absent ({library}); FFmpeg decodes the GPU metrics' videos")
+    # It decodes with the app's FFmpeg (vmaf_app/tools/ffmpeg) and GStreamer's
+    # dav1d: what it takes says the packaged build found them.
+    library = gpu_frames.LIBRARIES[gpu_frames.SOFTWARE].name
+    codecs, why = gpu_frames.software_codecs()
+    if codecs:
+        report.ok(f"software frame decoder ({library}): {', '.join(codecs)}")
+    else:
+        report.warn(f"software frame decoder absent ({library}: {why}); "
+                    "FFmpeg's pipes carry the videos it decodes in software")
 
     from vmaf_app.core.perceptual_cpu import find_metric_executable
 

@@ -1,7 +1,8 @@
 """gpu_frames: decoding on the GPU in the scoring process for the GPU
 metrics. The plan and arithmetic are checked everywhere; the decoded
 pictures against FFmpeg's decode with each GPU maker's decoder the PC has
-(NVIDIA's, Intel's, AMD's)."""
+(NVIDIA's, Intel's, AMD's), and with the software decoder where it is
+built (its library is not in git)."""
 from __future__ import annotations
 
 import contextlib
@@ -19,6 +20,9 @@ from vmaf_app.core import gpu_frames as nv
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import CropBox, VideoInfo
+
+#: The real one: conftest stands software_bundled in for each test.
+_REAL_SOFTWARE_BUNDLED = nv.software_bundled
 
 
 def _info(**overrides) -> VideoInfo:
@@ -51,7 +55,7 @@ def test_eight_bit_has_no_shift_and_packs_three_planes():
     assert plan.frame_bytes == 1918 * 1078 + 2 * 959 * 539
 
 
-@pytest.mark.parametrize(("field", "value"), [("codec_name", "vvc"), ("codec_name", "vp9"),
+@pytest.mark.parametrize(("field", "value"), [("codec_name", "mpeg4"), ("codec_name", "prores"),
                                               ("pix_fmt", "yuv422p10le"), ("pix_fmt", "yuv420p12le"),
                                               ("pix_fmt", "yuv444p"), ("width", 0),
                                               # An odd size: refused here, not once the pass has started.
@@ -59,6 +63,54 @@ def test_eight_bit_has_no_shift_and_packs_three_planes():
 def test_what_the_gpu_decoders_do_not_decode_is_left_to_ffmpeg(field, value):
     with pytest.raises(nv.GpuDecodeUnavailableError):
         nv.plan_decode(_info(**{field: value}), None)
+
+
+@pytest.mark.parametrize("codec", ["vvc", "vp9", "mpeg2video", "ffv1"])
+def test_codecs_no_gpu_decoder_here_is_asked_for_are_the_software_decoders(codec):
+    """Planned for the software decoder only: NVIDIA's would take VP9 and
+    MPEG-2 untried (it asks the driver for any codec), and none has VVC."""
+    plan = nv.plan_decode(_info(codec_name=codec), None)
+    for backend in ("nvidia", "intel", "amd"):
+        assert not nv.decodes_codec(codec, backend)
+        assert nv.decoder_supports(0, plan, backend) == (False, f"{codec} is not decoded by the {backend} decoder")
+        with pytest.raises(nv.GpuDecodeUnavailableError):
+            nv.GpuFrameStream(_info(codec_name=codec), plan, backend=backend)
+    assert nv.decodes_codec(codec, nv.SOFTWARE)
+
+
+def test_a_scaled_video_is_left_to_ffmpeg_by_the_software_decoder():
+    """It would scale on one thread: slower than FFmpeg's threads before its pipe."""
+    plan = nv.plan_decode(_info(), None, size=(1280, 720))
+    assert nv.decoder_supports(0, plan, nv.SOFTWARE) == (False, "the software decoder does not scale; FFmpeg scales it")
+
+
+def test_the_software_decoder_is_left_out_when_asked_or_not_bundled(monkeypatch):
+    monkeypatch.setenv(nv.SOFTWARE_VARIABLE, "ffmpeg")
+    assert not _REAL_SOFTWARE_BUNDLED()
+    monkeypatch.delenv(nv.SOFTWARE_VARIABLE)
+    monkeypatch.setitem(nv.LIBRARIES, nv.SOFTWARE, Path("missing/software_frames.dll"))
+    assert not _REAL_SOFTWARE_BUNDLED()
+
+
+@pytest.mark.parametrize("missing", ["avutil-61.dll", "avcodec-63.dll"])
+def test_the_software_decoder_is_left_out_without_either_ffmpeg_library(monkeypatch, tmp_path, missing):
+    """Either missing, nvf_set_libraries refuses every codec but AV1."""
+    library = tmp_path / "software_frames.dll"
+    library.write_bytes(b"")
+    monkeypatch.setitem(nv.LIBRARIES, nv.SOFTWARE, library)
+    monkeypatch.delenv(nv.SOFTWARE_VARIABLE, raising=False)
+    monkeypatch.setattr(nv, "FFMPEG_FOLDER", tmp_path)
+    for name in ("avutil-61.dll", "avcodec-63.dll"):
+        (tmp_path / name).write_bytes(b"")
+    assert _REAL_SOFTWARE_BUNDLED()
+    (tmp_path / missing).unlink()
+    assert not _REAL_SOFTWARE_BUNDLED()
+
+
+def test_a_decoder_is_one_for_both_videos_or_one_each():
+    assert nv.decoder_pair("intel") == ("intel", "intel")
+    assert nv.decoder_pair(("nvidia", "software")) == ("nvidia", "software")
+    assert nv.device_of("nvidia", 1) == 1 and nv.device_of("software", 1) == 0
 
 
 def test_a_scaled_plan_hands_back_the_size_it_is_scaled_to():
@@ -107,7 +159,7 @@ def test_a_limit_is_read_to_the_microsecond_and_held_in_the_time_base():
 # ----------------------------------------- decoding, on the PC's GPUs
 
 #: Each GPU maker's decoder: its tests run where the PC has one.
-BACKENDS = pytest.mark.parametrize("backend", ["nvidia", "intel", "amd"])
+BACKENDS = pytest.mark.parametrize("backend", ["nvidia", "intel", "amd", "software"])
 
 
 def _gpu_decodes(plan: nv.DecodePlan, backend: str = "nvidia") -> bool:
@@ -118,7 +170,7 @@ def _gpu_decodes(plan: nv.DecodePlan, backend: str = "nvidia") -> bool:
 
 def _need(plan: nv.DecodePlan, backend: str) -> None:
     if not _gpu_decodes(plan, backend):
-        pytest.skip(f"no {backend} GPU decoder for this on this PC")
+        pytest.skip(f"no {backend} decoder for this on this PC")
 
 
 def _clip(path: Path, codec: str, pix_fmt: str, extra: list[str] | None = None, seconds: float = 2.0) -> Path:
@@ -735,7 +787,7 @@ def test_a_decoder_that_never_closes_is_left_open_and_the_run_goes_on(monkeypatc
         stream.close()  # returns, though the library's close has not
         assert nv.stuck_decoders() == 1
         assert library.closed == [] and stream._handle is None
-        assert "GPU decoder did not close" in caplog.text
+        assert "nvidia decoder did not close" in caplog.text
         stream.close()  # safe to call twice
         assert nv.stuck_decoders() == 1
     finally:
@@ -758,6 +810,7 @@ def _stream_fed(*timestamps):
     import threading
 
     stream = nv.GpuFrameStream.__new__(nv.GpuFrameStream)
+    stream.backend = "nvidia"
     stream._waiting, stream._fed_count, stream._fed_lock = [], 0, threading.Lock()
     stream._discard, stream._shown_count, stream._last_shown, stream._finished = set(), 0, None, False
     for pts in timestamps:
@@ -792,3 +845,141 @@ def test_pictures_in_order_pass_and_the_end_counts_them():
     stream.verify()
     with pytest.raises(nv.GpuDecodeFailedError, match="out of order"):
         stream._take(2500)
+
+
+# ----------------------------------------------------- the software decoder
+
+#: FFmpeg's encoders for the software decoder's codecs, as FFmpeg's command line takes them.
+_SOFTWARE_ENCODERS = {
+    "h264": ["-c:v", "libx264", "-preset", "veryfast", "-bf", "3"],
+    "hevc": ["-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error"],
+    "vvc": ["-c:v", "libvvenc", "-preset", "faster"],
+    "vp9": ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8"],
+    "av1": ["-c:v", "libsvtav1", "-preset", "12"],
+    "mpeg2video": ["-c:v", "mpeg2video", "-bf", "2", "-g", "12"],
+    "ffv1": ["-c:v", "ffv1", "-level", "3", "-slices", "4"],  # its configuration in the container, not the packets
+}
+
+
+def _software_clip(path: Path, codec: str, pix_fmt: str, seconds: float = 1.0) -> Path:
+    encoder = _SOFTWARE_ENCODERS[codec]
+    listed = subprocess.run([ffmpeg_path(), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+    if f" {encoder[1]} " not in listed:
+        pytest.skip(f"this FFmpeg has no {encoder[1]}")
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
+                    "-i", f"testsrc2=s=320x240:r=24000/1001:d={seconds}", "-pix_fmt", pix_fmt, *encoder, str(path)],
+                   check=True)
+    return path
+
+
+@pytest.mark.parametrize(("codec", "pix_fmt"), [
+    ("h264", "yuv420p10le"),  # no GPU decoder here takes it
+    ("vvc", "yuv420p10le"),   # in Matroska, whose decode times FFmpeg's copy would "repair" (_CODECS)
+    ("vp9", "yuv420p10le"),
+    ("av1", "yuv420p10le"),   # dav1d's
+    ("av1", "yuv420p"),
+    ("mpeg2video", "yuv420p"),
+    ("ffv1", "yuv420p10le"),
+    ("ffv1", "yuv420p"),
+])
+@pytest.mark.parametrize("crop", [None, CropBox(318, 236, 1, 3)])
+def test_the_software_decoders_pictures_are_ffmpegs_decode(tmp_path, codec, pix_fmt, crop):
+    """Every codec it is asked for, sample for sample: whichever FFmpeg
+    decodes them, the decoders' pictures are the same."""
+    path = _software_clip(tmp_path / f"clip.{'webm' if codec == 'vp9' else 'mkv'}", codec, pix_fmt)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, crop, shift=6)
+    _need(plan, nv.SOFTWARE)
+    sums, stamps = _decode(info, plan, nv.SOFTWARE)
+    assert len(sums) == round(24000 / 1001)
+    assert sums == _ffmpeg_decode(path, plan)
+    assert stamps == sorted(stamps)
+
+
+def test_a_video_not_at_the_depth_planned_fails_once_it_is_seen(tmp_path):
+    """The decoder checks each picture against the plan: 10-bit pictures for
+    an 8-bit plan are refused, not handed out as something else."""
+    path = _software_clip(tmp_path / "ten.mkv", "hevc", "yuv420p10le", seconds=0.5)
+    info = replace(probe_video(path), pix_fmt="yuv420p")
+    plan = nv.plan_decode(info, None)
+    _need(plan, nv.SOFTWARE)
+    with pytest.raises(nv.GpuDecodeFailedError, match="4:2:0 at the video's depth"):
+        _decode(info, plan, nv.SOFTWARE)
+
+
+def test_a_stream_closed_part_way_stops_and_lets_go(tmp_path):
+    """Cancel, or the shorter video ending: the feeding thread waits for a
+    slot the caller never gives back, and close ends that wait."""
+    path = _software_clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=2.0)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None)
+    _need(plan, nv.SOFTWARE)
+    stream = nv.GpuFrameStream(info, plan, pool=2, backend=nv.SOFTWARE)
+    try:
+        stream.start()
+        taken = 0
+        while taken < 2:  # the pool's two slots, never given back
+            try:
+                stream.next(1000)
+            except TimeoutError:
+                continue
+            taken += 1
+    finally:
+        stream.close()
+    assert stream._handle is None and not stream._feeder.is_alive()
+
+
+@pytest.mark.parametrize(("backend", "status"), [("software", "Decoding in the app failed"),
+                                                 ("nvidia", "GPU decoding failed"), (None, "GPU decoding failed")])
+def test_a_failure_says_whose_decoding_failed(backend, status):
+    error = nv.GpuDecodeFailedError("a picture is 1x1, not 2x2", backend)
+    assert nv.decoding_failed_status(error) == f"{status} (a picture is 1x1, not 2x2); decoding through FFmpeg instead…"
+
+
+def test_a_stream_with_damaged_packets_is_left_to_ffmpeg(tmp_path):
+    """FFmpeg's decoders conceal damage, an older one not as a newer one (a
+    4K encode with four garbled packets: FFmpeg 9 lost 200 frames where 7.1
+    gave every one). What libavcodec reports stops the software decoder."""
+    clean = _software_clip(tmp_path / "clean.mkv", "h264", "yuv420p", seconds=2.0)
+    damaged = tmp_path / "damaged.mkv"
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-i", str(clean), "-c", "copy",
+                    "-bsf:v", r"noise=amount=if(between(n\,20\,23)\,20\,0)", str(damaged)], check=True)
+    info = probe_video(damaged)
+    plan = nv.plan_decode(info, None)
+    _need(plan, nv.SOFTWARE)
+    with pytest.raises(nv.GpuDecodeFailedError, match="found an error in the video"):
+        _decode(info, plan, nv.SOFTWARE)
+
+
+@pytest.mark.parametrize(("codec", "pix_fmt", "options", "added"), [
+    # H.274 grain from vvenc's analysis, in SEI: FFmpeg 9 leaves VVC's out
+    # (it adds AOM's AFGS1 grain to VVC: checked on real encodes).
+    ("vvc", "yuv420p10le", ["-vvenc-params", "FGA=1"], False),
+    ("av1", "yuv420p10le", ["-svtav1-params", "film-grain=12"], True),  # AV1's own, dav1d's
+])
+def test_film_grain_is_added_as_ffmpegs_decode_adds_it(tmp_path, codec, pix_fmt, options, added):
+    """The pictures with the grain a stream asks for are FFmpeg 9's, which
+    7.1's VVC decoder's were not (a VVC encode with AFGS1 grain: 43 of 300
+    pictures the same)."""
+    encoder = _SOFTWARE_ENCODERS[codec]
+    listed = subprocess.run([ffmpeg_path(), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+    if f" {encoder[1]} " not in listed:
+        pytest.skip(f"this FFmpeg has no {encoder[1]}")
+    path = tmp_path / "grain.mkv"
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
+                    "-i", "testsrc2=s=320x240:r=24:d=1,noise=alls=24:allf=t", "-pix_fmt", pix_fmt, *encoder,
+                    *options, str(path)], check=True)
+    info = probe_video(path)
+    plan = nv.plan_decode(info, None, shift=6)
+    _need(plan, nv.SOFTWARE)
+    without_grain = subprocess.run(
+        [ffmpeg_path(), "-nostdin", "-v", "error", "-export_side_data", "film_grain", "-i", str(path),
+         "-map", "0:v:0", "-vf", f"format={pix_fmt}", "-fps_mode", "passthrough", "-f", "framemd5", "-"],
+        capture_output=True, text=True, check=True).stdout
+    sums = _decode(info, plan, nv.SOFTWARE)[0]
+    expected = _ffmpeg_decode(path, plan)
+    assert sums == expected
+    plain = [line.split(",")[5].strip() for line in without_grain.splitlines() if line and not line.startswith("#")]
+    assert len(plain) == len(expected)
+    differ = sum(a != b for a, b in zip(expected, plain, strict=True))
+    assert differ > len(expected) // 2 if added else differ == 0

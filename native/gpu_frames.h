@@ -1,6 +1,7 @@
-// The C API every GPU frame decoder library of the app's exports
+// The C API every frame decoder library of the app's exports
 // (nvdec_frames.dll for NVIDIA, vpl_frames.dll for Intel, amf_frames.dll for
-// AMD), so vmaf_app/core/nvdec_frames.py drives any of them the same way:
+// AMD, software_frames.dll for what FFmpeg decodes in software), so
+// vmaf_app/core/gpu_frames.py drives any of them the same way:
 //
 //   nvf_open(params) -> decoder, nvf_push(packet, pts) ... nvf_finish(),
 //   nvf_pop() -> (slot, pts) in display order, nvf_download(slot, host) or
@@ -24,8 +25,12 @@
 
 enum Status { NVF_FRAME = 1, NVF_END = 0, NVF_ERROR = -1, NVF_ABORTED = -2, NVF_TIMEOUT = 2 };
 
-// The codecs, by NVIDIA's numbers (cudaVideoCodec), for every library.
-enum Codec { CODEC_H264 = 4, CODEC_HEVC = 8, CODEC_AV1 = 11 };
+// The codecs, by NVIDIA's numbers (cudaVideoCodec), for every library; VVC
+// and FFV1, which NVIDIA's decoder does not have, by the app's. The GPU
+// decoders are asked for H.264, HEVC and AV1 only (gpu_frames.py).
+enum Codec {
+    CODEC_MPEG2 = 1, CODEC_H264 = 4, CODEC_HEVC = 8, CODEC_VP9 = 10, CODEC_AV1 = 11, CODEC_VVC = 100, CODEC_FFV1 = 101
+};
 
 struct Params {
     int device;          // GPU: CUDA device ordinal (NVIDIA); unused elsewhere
@@ -37,7 +42,7 @@ struct Params {
     int shift;           // right shift of 16-bit samples: 0 or 6
     int luma_only;       // only the Y plane is produced
     int pool;            // pictures decoded ahead
-    const unsigned char *extradata;  // AV1: the sequence header OBUs (may be null)
+    const unsigned char *extradata;  // AV1: the sequence header OBUs; FFV1: its configuration (may be null)
     int extradata_size;
     int out_w, out_h;    // the crop scaled to this size (0: not scaled)
     int scaler;          // Scaler (scale_filter.h)

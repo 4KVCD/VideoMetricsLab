@@ -93,8 +93,12 @@ KEEP_TOOLS = (
     "gstreamer_libs/bin/gspawn-win64-helper-console.exe",
 )
 
-#: Loaded by the app itself through ctypes, by name (vmaf_app/core/d3d11_tonemap.py).
-KEEP_LIBRARIES = ("gstd3d11-1.0-0.dll",)
+#: Loaded by the app itself through ctypes: the HDR tone-map's, by name
+#: (vmaf_app/core/d3d11_tonemap.py), and dav1d, by its path in the
+#: gstreamer_plugins_libs package, which the software frame decoder decodes
+#: AV1 with (vmaf_app/core/gpu_frames.py) -- also GStreamer's dav1d plugin's
+#: today, kept should that go.
+KEEP_LIBRARIES = ("gstd3d11-1.0-0.dll", "dav1d.dll")
 
 #: Copied whole: the gi bindings the app imports, and every typelib (3 MB
 #: in all; choosing among them would save nothing worth a missed dependency).

@@ -33,13 +33,15 @@ Qt at all. Native playback in core does load GI bindings.
    require a VMAF score. Where PSNR, SSIM and XPSNR are the run's only
    metrics (no VMAF on the CPU), the bundled libvmaf-fast scores them in a
    process of its own (`vmaf_runner._run_cpu_metrics`, `vmaf_cuda.CpuScorer`),
-   on luma-only pictures from a pool of bounded size: decoded there by the
-   GPU's own decoder when nothing is scaled (`vmaf_cuda.score_decoded_cpu`),
-   else from frames FFmpeg writes to pipes. XPSNR is libvmaf-fast's port of
+   on luma-only pictures from a pool of bounded size: decoded there when
+   nothing is scaled (`vmaf_cuda.score_decoded_cpu`) -- by the GPU's own
+   decoder, or by the software decoder for a video FFmpeg would decode in
+   software (`gpu_frames`, `vmaf_runner._decoders_here`) -- else from frames
+   FFmpeg writes to pipes. XPSNR is libvmaf-fast's port of
    FFmpeg's filter where that gives FFmpeg's score to the bit
    (`_xpsnr_frame_rate`, `_xpsnr_in_app`), else FFmpeg's, in an FFmpeg
-   beside it; XPSNR alone stays FFmpeg's unless the GPU's decoder feeds the
-   app. FFmpeg's filters score them whenever the app's way fails.
+   beside it; XPSNR alone stays FFmpeg's unless the app decodes the videos
+   itself. FFmpeg's filters score them whenever the app's way fails.
    SSIMULACRA2 and Butteraugli use the perceptual backend,
    which tries Vship GPU scoring and falls back to the bundled libjxl CPU tools.
 5. Parse per-frame logs into `FrameScores`, a collection of packed NumPy arrays.

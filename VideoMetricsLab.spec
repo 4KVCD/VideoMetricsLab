@@ -1,7 +1,8 @@
 # PyInstaller spec for a self-contained Windows build.
 #
 # Everything the app needs at runtime is inside the output folder except
-# FFmpeg, which is deliberately not bundled -- see docs/BUILD.md.
+# FFmpeg itself (ffmpeg.exe, ffprobe.exe), which is deliberately not bundled
+# -- see docs/BUILD.md.
 #
 # Build it with scripts/build_release.ps1 rather than calling pyinstaller
 # directly: the tone-map DLL has to exist before this file is read.
@@ -50,12 +51,14 @@ else:
     print("WARNING: d3d11_tonemap.dll is missing; the build will fall back "
           "to FFmpeg tone mapping. Run scripts/build_d3d11_tonemap.ps1 first.")
 
-# The GPU decoders the GPU metrics read their frames from -- NVIDIA's,
-# Intel's and AMD's (scripts/build_gpu_frames.ps1) -- with the notices of the
-# headers compiled into them. Without one, FFmpeg decodes those videos, as before.
+# The decoders the GPU metrics read their frames from -- NVIDIA's, Intel's
+# and AMD's, and the software decoder for what FFmpeg decodes in software
+# (scripts/build_gpu_frames.ps1) -- with the notices of the headers compiled
+# into them. Without one, FFmpeg decodes those videos, as before.
 for name, notices in (("nvdec_frames", ("ffnvcodec/LICENSE.nv-codec-headers.txt",)),
                       ("vpl_frames", ("onevpl/LICENSE.onevpl.txt",)),
-                      ("amf_frames", ("amf/LICENSE.amf.txt", "vulkan/LICENSE.vulkan-headers.txt"))):
+                      ("amf_frames", ("amf/LICENSE.amf.txt", "vulkan/LICENSE.vulkan-headers.txt")),
+                      ("software_frames", ())):
     dll = PROJECT / "vmaf_app" / "native" / f"{name}.dll"
     if dll.is_file():
         datas.append((str(dll), "vmaf_app/native"))
@@ -98,6 +101,15 @@ else:
 # libvmaf with CUDA, for VMAF and VMAF NEG on NVIDIA GPUs (libvmaf-fast's
 # release, scripts/fetch_libvmaf_fast.ps1): needs only Windows and the NVIDIA driver.
 # Without it VMAF is calculated by FFmpeg's libvmaf, as on other GPUs.
+# FFmpeg's decoders for the software frame decoder (vmaf_app/core/gpu_frames.py):
+# libavcodec and libavutil with six decoders, LGPL, built by
+# scripts/build_ffmpeg_decoders.ps1 and committed.
+FFMPEG_DECODERS = PROJECT / "vmaf_app" / "tools" / "ffmpeg"
+if (FFMPEG_DECODERS / "avcodec-63.dll").is_file():
+    datas.append((str(FFMPEG_DECODERS), "vmaf_app/tools/ffmpeg"))
+else:
+    print("WARNING: FFmpeg's decoders are missing; FFmpeg's pipes carry the videos it decodes in software")
+
 LIBVMAF_TOOLS = PROJECT / "vmaf_app" / "tools" / "libvmaf"
 if LIBVMAF_TOOLS.is_dir():
     datas.append((str(LIBVMAF_TOOLS), "vmaf_app/tools/libvmaf"))

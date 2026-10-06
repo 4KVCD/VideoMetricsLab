@@ -449,7 +449,8 @@ def score_decoded(
     and each frame's luma written by the decoder straight into the memory
     Vulkan copies it to the GPU from. FFmpeg only copies the compressed
     streams out of their containers. `decoder`: gpu_frames' library
-    ("nvidia", "intel", "amd"); by default the one of the GPU scored on."""
+    ("nvidia", "intel", "amd", "software"), one for both videos or (the
+    source's, the test video's); by default the one of the GPU scored on."""
     import time
     from dataclasses import replace
 
@@ -460,11 +461,12 @@ def score_decoded(
     chosen = best_device(found) if device is None else next((d for d in found if d.index == device), None)
     if chosen is None:
         raise VmafVulkanError("no GPU that Vulkan can calculate VMAF on")
-    backend = decoder or _DECODERS.get(chosen.vendor)
-    if backend is None or not gpu_frames.available(backend):
-        raise gpu_frames.GpuDecodeUnavailableError(f"no decoder library for {chosen.name}")
+    source_backend, test_backend = gpu_frames.decoder_pair(decoder or _DECODERS.get(chosen.vendor) or "")
+    for library in (source_backend, test_backend):
+        if not library or not gpu_frames.available(library):
+            raise gpu_frames.GpuDecodeUnavailableError(f"no decoder library for {chosen.name}")
     plans = []
-    for info, crop in ((distorted, distorted_crop), (source, source_crop)):
+    for info, crop, library in ((distorted, distorted_crop, test_backend), (source, source_crop, source_backend)):
         plan = gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
                                       algorithm=scale_algorithm)
         if plan.bit_depth < bit_depth:
@@ -474,19 +476,26 @@ def score_decoded(
         if plan.bit_depth > bit_depth:
             raise gpu_frames.GpuDecodeUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        supported, refusal = gpu_frames.decoder_supports(0, plan, backend)
+        supported, refusal = gpu_frames.decoder_supports(0, plan, library)
         if not supported:
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
-    test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=4, process_handle=process_handle, backend=backend)
+    # The decoders write each luma plane into memory of the size compared at.
+    luma_bytes = width * height * (2 if bit_depth > 8 else 1)
+    if any(plan.frame_bytes != luma_bytes for plan in plans):
+        raise gpu_frames.GpuDecodeUnavailableError("the decoders' frames are not the size compared at")
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=4, process_handle=process_handle,
+                                     backend=test_backend)
     try:
-        ref = gpu_frames.GpuFrameStream(source, plans[1], 0, pool=4, process_handle=process_handle, backend=backend)
+        ref = gpu_frames.GpuFrameStream(source, plans[1], 0, pool=4, process_handle=process_handle,
+                                        backend=source_backend)
     except BaseException:
         test.close()
         raise
     scorer = None
     try:
-        if backend == "nvidia":  # the planes stay on the GPU where its decoder and Vulkan share memory
+        # The planes stay on the GPU where its decoder and Vulkan share memory: both NVIDIA's.
+        if source_backend == test_backend == "nvidia":
             try:
                 scorer = VulkanScorer(width, height, bit_depth, models, n_subsample, device=chosen.index, shared=test)
             except VmafVulkanError as error:

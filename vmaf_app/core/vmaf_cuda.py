@@ -315,6 +315,15 @@ class _HostUpload:
                        WidthInBytes=self._row_bytes, Height=self._rows)
         _cuda_check(self._cu.cuMemcpy2DAsync_v2(ctypes.byref(copy), self._stream), "Uploading a frame")
 
+    def send_filled(self, side: int, fill: Callable[[int], None], address: int, pitch: int) -> None:
+        """send, with the luma written by `fill` (given the side's page-locked
+        buffer, rows packed) rather than copied in from a frame."""
+        fill(self._staging[side].value)
+        copy = _Copy2D(srcMemoryType=_CU_MEMORYTYPE_HOST, srcHost=self._staging[side].value, srcPitch=self._row_bytes,
+                       dstMemoryType=_CU_MEMORYTYPE_DEVICE, dstDevice=address, dstPitch=pitch,
+                       WidthInBytes=self._row_bytes, Height=self._rows)
+        _cuda_check(self._cu.cuMemcpy2DAsync_v2(ctypes.byref(copy), self._stream), "Uploading a frame")
+
     def wait(self) -> None:
         _cuda_check(self._cu.cuStreamSynchronize(self._stream), "Uploading a frame")
 
@@ -404,6 +413,35 @@ class GpuScorer:
         to fill, and return once it is filled."""
         self._add(lambda picture: reference(picture.data[0], picture.stride[0]),
                   lambda picture: distorted(picture.data[0], picture.stride[0]))
+
+    def add_sides(self, reference: tuple[bool, Callable], distorted: tuple[bool, Callable]) -> None:
+        """Scores one more pair, each side as (on_device, fill): on the
+        device, fill(address, pitch) fills the picture's luma plane in GPU
+        memory itself (add_on_device); otherwise fill(address) writes the
+        luma, rows packed, into the page-locked memory it is uploaded from
+        (as add's frames are)."""
+        upload = self._upload
+        if upload is None and not (reference[0] and distorted[0]):
+            raise VmafGpuError("this scorer takes pictures in GPU memory only")
+
+        def filler(side: int, on_device: bool, fill: Callable):
+            if on_device:
+                return lambda picture: fill(picture.data[0], picture.stride[0])
+            return lambda picture: upload.send_filled(side, fill, picture.data[0], picture.stride[0])
+
+        fill_reference, fill_distorted = filler(0, *reference), filler(1, *distorted)
+        if upload is None:
+            self._add(fill_reference, fill_distorted)
+            return
+
+        def fill_distorted_and_wait(picture: _Picture) -> None:
+            try:
+                fill_distorted(picture)
+            finally:
+                upload.wait()
+
+        with upload:
+            self._add(fill_reference, fill_distorted_and_wait)
 
     def _add(self, fill_reference, fill_distorted) -> None:
         fetch = self._lib.vmaf_cuda_fetch_preallocated_picture
@@ -724,8 +762,9 @@ def score_decoded_cpu(
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """PSNR and SSIM (CpuScorer; `models`: CPU_FEATURES keys) with both videos
     decoded in this process by the GPU's own decoder (gpu_frames: NVIDIA's,
-    Intel's or AMD's), luma only, as score_decoded does for VMAF: the frames
-    FFmpeg's outputs carry -- the decoders crop as FFmpeg's crop filter does
+    Intel's or AMD's) or the software decoder -- `decoder` one for both, or
+    (the source's, the test video's) -- luma only, as score_decoded does for
+    VMAF: the frames FFmpeg's outputs carry -- the decoders crop as FFmpeg's crop filter does
     and widen 8-bit samples as FFmpeg converts them -- paired as libvmaf's
     filter pairs them (frame_sync) and cut where FFmpeg's -t would cut them.
     Not for a comparison scaled to a size: the decoders do not scale as
@@ -734,8 +773,8 @@ def score_decoded_cpu(
     for any video they do not take). GpuDecodeFailedError when decoding
     failed after the start."""
     plans = []
-    device = _GPU if decoder == "nvidia" else 0
-    for info, crop in ((distorted, distorted_crop), (source, source_crop)):
+    source_decoder, test_decoder = gpu_frames.decoder_pair(decoder)
+    for info, crop, backend in ((distorted, distorted_crop, test_decoder), (source, source_crop, source_decoder)):
         plan = gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
                                       algorithm=scale_algorithm)
         if plan.scaled:
@@ -747,15 +786,15 @@ def score_decoded_cpu(
         if plan.bit_depth > bit_depth:
             raise gpu_frames.GpuDecodeUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        supported, refusal = gpu_frames.decoder_supports(device, plan, decoder)
+        supported, refusal = gpu_frames.decoder_supports(gpu_frames.device_of(backend, _GPU), plan, backend)
         if not supported:
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
-    test = gpu_frames.GpuFrameStream(distorted, plans[0], device, pool=4, process_handle=process_handle,
-                                     backend=decoder)
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], gpu_frames.device_of(test_decoder, _GPU), pool=4,
+                                     process_handle=process_handle, backend=test_decoder)
     try:
-        ref = gpu_frames.GpuFrameStream(source, plans[1], device, pool=4, process_handle=process_handle,
-                                        backend=decoder)
+        ref = gpu_frames.GpuFrameStream(source, plans[1], gpu_frames.device_of(source_decoder, _GPU), pool=4,
+                                        process_handle=process_handle, backend=source_decoder)
     except BaseException:
         test.close()
         raise
@@ -1264,10 +1303,12 @@ def score_decoded(
     duration_limit: str | None, total_frames: int, scale_algorithm: str = "bicubic",
     on_progress: Callable[[int, int, float], None] | None = None,
     check_cancel: Callable[[], None] = lambda: None,
-    process_handle=None,
+    process_handle=None, decoder: str | tuple[str, str] = "nvidia",
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """VMAF and NEG with both videos decoded by NVIDIA's decoder in this
-    process: what GpuAttempt scores from FFmpeg's raw outputs, the same
+    """VMAF and NEG with both videos decoded in this process -- by NVIDIA's
+    decoder, whose pictures stay on the GPU, or the software decoder, whose
+    are uploaded (`decoder`: one for both, or the source's and the test
+    video's) -- what GpuAttempt scores from FFmpeg's raw outputs, the same
     frames compared.
 
     FFmpeg's graph for those outputs -- the decoded frames cropped, scaled to
@@ -1286,7 +1327,10 @@ def score_decoded(
     take. GpuDecodeFailedError when decoding failed after the start -- the run
     is then made again through FFmpeg."""
     plans = []
-    for info, crop in ((distorted, distorted_crop), (source, source_crop)):
+    source_decoder, test_decoder = gpu_frames.decoder_pair(decoder)
+    if not {source_decoder, test_decoder} <= {"nvidia", gpu_frames.SOFTWARE}:
+        raise gpu_frames.GpuDecodeUnavailableError("libvmaf's CUDA code takes NVIDIA's and the software decoder's")
+    for info, crop, backend in ((distorted, distorted_crop, test_decoder), (source, source_crop, source_decoder)):
         plan = gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=(width, height),
                                         algorithm=scale_algorithm)
         if plan.bit_depth < bit_depth:
@@ -1296,21 +1340,34 @@ def score_decoded(
         if plan.bit_depth > bit_depth:
             raise gpu_frames.GpuDecodeUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        supported, refusal = gpu_frames.decoder_supports(_GPU, plan)
+        supported, refusal = gpu_frames.decoder_supports(gpu_frames.device_of(backend, _GPU), plan, backend)
         if not supported:
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
+    # The software decoder writes each luma plane into the upload's memory,
+    # which is of the size compared at.
+    if any(plan.frame_bytes != width * height * (2 if bit_depth > 8 else 1) for plan in plans):
+        raise gpu_frames.GpuDecodeUnavailableError("the decoders' frames are not the size compared at")
     # The decoders first: the first to start CUDA sets its waits to sleep
     # rather than spin (gpu_frames), and libvmaf's then do too.
-    test = gpu_frames.GpuFrameStream(distorted, plans[0], _GPU, pool=4, process_handle=process_handle)
+    test = gpu_frames.GpuFrameStream(distorted, plans[0], gpu_frames.device_of(test_decoder, _GPU), pool=4,
+                                     process_handle=process_handle, backend=test_decoder)
     try:
-        ref = gpu_frames.GpuFrameStream(source, plans[1], _GPU, pool=4, process_handle=process_handle)
+        ref = gpu_frames.GpuFrameStream(source, plans[1], gpu_frames.device_of(source_decoder, _GPU), pool=4,
+                                        process_handle=process_handle, backend=source_decoder)
     except BaseException:
         test.close()
         raise
     scorer = None
     try:
-        scorer = GpuScorer(width, height, bit_depth, models, n_subsample, on_device=True)
+        on_device = source_decoder == test_decoder == "nvidia"
+        scorer = GpuScorer(width, height, bit_depth, models, n_subsample, on_device=on_device)
+
+        def side(stream, slot: int) -> tuple[bool, Callable]:
+            if stream.backend == "nvidia":  # copied on the GPU
+                return True, lambda address, pitch: stream.copy_luma(slot, address, pitch)
+            return False, lambda address: stream.download(slot, address)  # into the upload's memory
+
         test.start()
         ref.start()
         test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
@@ -1335,8 +1392,7 @@ def score_decoded(
                     break
                 if ref_slot is None:
                     raise gpu_frames.GpuDecodeFailedError("the source has no frame for the test video's first")
-                scorer.add_on_device(lambda address, pitch, slot=ref_slot: ref.copy_luma(slot, address, pitch),
-                                     lambda address, pitch, slot=test_slot: test.copy_luma(slot, address, pitch))
+                scorer.add_sides(side(ref, ref_slot), side(test, test_slot))
                 count += 1
                 # Four times a second, about as often as FFmpeg's -progress:
                 # each report crosses to the app's process.

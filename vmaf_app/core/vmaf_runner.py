@@ -1281,16 +1281,18 @@ def _score_on_gpu(
     """Run by _run_on_gpu in its own process: FFmpeg decodes and pairs the
     frames as on the CPU, and they are fed to libvmaf.
 
-    When the GPU's own decoder decodes both videos, they are decoded in this
-    process instead (vmaf_cuda.score_decoded, vmaf_vulkan.score_decoded):
-    the same frames, without FFmpeg's decode and the CPU copies and pipes
-    behind it. libvmaf's CUDA code takes NVIDIA's decoder's pictures on the
-    GPU; the Vulkan scorer takes the decoder FFmpeg would have used for both
-    videos -- NVIDIA's, Intel's or AMD's (_DECODED_HERE) -- whose pictures
-    it uploads. If that decoding fails after it has started, the run is
-    made again with FFmpeg's, as before."""
-    decoder = _DECODED_HERE.get(hwaccel.source or "") if hwaccel.source == hwaccel.distorted else None
-    if decoder is not None and ("vmaf_v1" in plan.models or plan.backend == "vulkan" or decoder == "nvidia"):
+    When this process has a decoder for each video (_decoders_here), they
+    are decoded here instead (vmaf_cuda.score_decoded,
+    vmaf_vulkan.score_decoded): the same frames, without FFmpeg's decode and
+    the CPU copies and pipes behind it -- by the decoder FFmpeg would have
+    used, NVIDIA's, Intel's or AMD's, or for a video FFmpeg would decode in
+    software, the software decoder. libvmaf's CUDA code takes NVIDIA's
+    decoder's pictures on the GPU and uploads the software decoder's; the
+    Vulkan scorer uploads any but NVIDIA's. If that decoding fails after it
+    has started, the run is made again with FFmpeg's, as before."""
+    decoders = _decoders_here(hwaccel)
+    if decoders is not None and ("vmaf_v1" in plan.models or plan.backend == "vulkan"
+                                 or set(decoders) <= {"nvidia", gpu_frames.SOFTWARE}):
         try:
             return _score_decoded_on_gpu(
                 plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
@@ -1299,9 +1301,9 @@ def _score_on_gpu(
         except gpu_frames.GpuDecodeUnavailableError as error:
             _log.info("VMAF on the GPU: the videos are decoded by FFmpeg (%s)", error)
         except gpu_frames.GpuDecodeFailedError as error:
-            _log.warning("GPU decoding for VMAF on the GPU failed; decoding through FFmpeg instead: %s", error)
+            _log.warning("Decoding for VMAF on the GPU failed; decoding through FFmpeg instead: %s", error)
             if on_status:
-                on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
+                on_status(gpu_frames.decoding_failed_status(error))
 
     def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
         filtergraph = _build_filtergraph(
@@ -1365,7 +1367,11 @@ def _decoded_in_app(source_info: VideoInfo, distorted_info: VideoInfo, source_cr
     """Whether the scoring process decodes both videos itself
     (vmaf_cuda.score_decoded_cpu), as far as is known before it asks the
     decoder, rather than taking FFmpeg's frames through pipes."""
-    if hwaccel.source != hwaccel.distorted or hwaccel.source not in _DECODED_HERE:
+    decoders = _decoders_here(hwaccel)
+    if decoders is None:
+        return False
+    if any(not gpu_frames.decodes_codec((info.codec_name or "").casefold(), decoder)
+           for info, decoder in ((source_info, decoders[0]), (distorted_info, decoders[1]))):
         return False
     try:
         return not any(gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=size).scaled
@@ -1553,11 +1559,13 @@ def _score_cpu_metrics(
 ) -> FrameScores:
     """Run by _run_cpu_metrics in its own process: FFmpeg decodes, crops,
     scales and converts the videos as for its libvmaf filter, and the app
-    pairs and scores them (vmaf_cuda.GpuAttempt with a CpuScorer). Where the
-    GPU's own decoder decodes both videos, and nothing is scaled, they are
-    decoded in this process instead (vmaf_cuda.score_decoded_cpu): the same
-    frames, without FFmpeg, its conversions and the pipes."""
-    if hwaccel.source == hwaccel.distorted and hwaccel.source in _DECODED_HERE:
+    pairs and scores them (vmaf_cuda.GpuAttempt with a CpuScorer). Where this
+    process has a decoder for each video (_decoders_here: the GPU's, or the
+    software decoder), and nothing is scaled, they are decoded here instead
+    (vmaf_cuda.score_decoded_cpu): the same frames, without FFmpeg, its
+    conversions and the pipes."""
+    decoders = _decoders_here(hwaccel)
+    if decoders is not None:
         try:
             return _score_decoded_on_gpu(
                 plan, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
@@ -1566,10 +1574,10 @@ def _score_cpu_metrics(
         except gpu_frames.GpuDecodeUnavailableError as error:
             _log.info("%s in the app: the videos are decoded by FFmpeg (%s)", _cpu_metric_names(plan.models), error)
         except gpu_frames.GpuDecodeFailedError as error:
-            _log.warning("GPU decoding for %s failed; decoding through FFmpeg instead: %s",
+            _log.warning("Decoding for %s failed; decoding through FFmpeg instead: %s",
                          _cpu_metric_names(plan.models), error)
             if on_status:
-                on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
+                on_status(gpu_frames.decoding_failed_status(error))
 
     def build_command(hw, resolved_model, log_path, xpsnr_log_path, gpu_outputs):
         filtergraph = _build_filtergraph(
@@ -1594,6 +1602,26 @@ def _score_cpu_metrics(
 _DECODED_HERE = {"cuda": "nvidia", "qsv": "intel", "d3d11va": "amd"}
 
 
+def _decoders_here(hwaccel: HwAccelPlan) -> tuple[str, str] | None:
+    """The decoders the scoring process decodes the source and the test video
+    with itself (gpu_frames' libraries): for each, the GPU's FFmpeg would
+    decode it with (_DECODED_HERE), or the software decoder where FFmpeg
+    would decode it in software -- the two can differ (an HEVC source on
+    NVIDIA's decoder, a VVC test video on the CPU). None when FFmpeg decodes
+    either: a -hwaccel without a decoder here, or no software decoder; and
+    for two GPU makers' decoders, which are not tried together."""
+    decoders = []
+    for accel in (hwaccel.source, hwaccel.distorted):
+        decoder = _DECODED_HERE.get(accel) if accel else gpu_frames.SOFTWARE if gpu_frames.software_bundled() else None
+        if decoder is None:
+            return None
+        decoders.append(decoder)
+    if len(set(decoders) - {gpu_frames.SOFTWARE}) > 1:
+        return None
+    return decoders[0], decoders[1]
+
+
+
 def _score_decoded_on_gpu(
     plan: _GpuPlan, source_info: VideoInfo, distorted_info: VideoInfo, options: VmafOptions,
     source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
@@ -1607,6 +1635,9 @@ def _score_decoded_on_gpu(
     # As _execute_run: one frame more than the limit, which FFmpeg's libvmaf
     # filter scores before its output stops.
     limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
+    decoders = _decoders_here(hwaccel)
+    if decoders is None:
+        raise gpu_frames.GpuDecodeUnavailableError("FFmpeg decodes the videos")
     if on_status:
         on_status(Status.decoding(f"Running {_cpu_metric_names(plan.models)} in the app" if plan.backend == "cpu"
                                   else "Running VMAF on the GPU", hwaccel, ending="..."))
@@ -1614,18 +1645,16 @@ def _score_decoded_on_gpu(
     def check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
             raise Cancelled("Cancelled by user")
-
     if plan.backend == "cpu":
         score_decoded = functools.partial(vmaf_cuda.score_decoded_cpu, threads=plan.threads,
-                                          frame_rate=plan.frame_rate, decoder=_DECODED_HERE[hwaccel.source])
+                                          frame_rate=plan.frame_rate, decoder=decoders)
     elif "vmaf_v1" in plan.models:  # whole frames, for its scorers and any of VMAF v0.6.1's beside them
         score_decoded = functools.partial(vmaf_v1_gpu.score_decoded, backend=plan.backend, device=plan.device,
-                                          decoder=_DECODED_HERE[hwaccel.source])
+                                          decoder=decoders)
     elif plan.backend == "vulkan":
-        score_decoded = functools.partial(vmaf_vulkan.score_decoded, device=plan.device,
-                                          decoder=_DECODED_HERE[hwaccel.source])
+        score_decoded = functools.partial(vmaf_vulkan.score_decoded, device=plan.device, decoder=decoders)
     else:
-        score_decoded = vmaf_cuda.score_decoded
+        score_decoded = functools.partial(vmaf_cuda.score_decoded, decoder=decoders)
     scores = score_decoded(
         source_info, distorted_info, source_crop, distorted_crop, width=plan.width, height=plan.height,
         bit_depth=plan.bit_depth, models=plan.models, n_subsample=options.n_subsample,

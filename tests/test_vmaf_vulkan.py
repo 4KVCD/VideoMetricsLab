@@ -94,18 +94,28 @@ def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):
     assert seen["args"] == (64, 48, 8, {"vmaf": "vmaf_v0.6.1"}, 1, "vulkan", 1)
 
 
-@pytest.mark.parametrize(("backend", "hwaccel", "expected"), [
-    ("cuda", ("cuda", "cuda"), "cuda nvidia"),     # NVIDIA's decoder, libvmaf's CUDA code (as master)
-    ("vulkan", ("cuda", "cuda"), "vulkan nvidia"),  # the Vulkan setting on NVIDIA
-    ("vulkan", ("qsv", "qsv"), "vulkan intel"),     # Intel's GPU: oneVPL
-    ("vulkan", ("d3d11va", "d3d11va"), "vulkan amd"),
-    ("cuda", ("qsv", "qsv"), "pipes"),              # libvmaf's CUDA code takes NVIDIA's pictures only
-    ("vulkan", ("cuda", None), "pipes"),            # one video FFmpeg decodes in software (VVC, ...)
-    ("vulkan", ("qsv", "cuda"), "pipes"),
+@pytest.mark.parametrize(("backend", "hwaccel", "software", "expected"), [
+    ("cuda", ("cuda", "cuda"), False, "cuda nvidia/nvidia"),     # NVIDIA's decoder, libvmaf's CUDA code (as master)
+    ("vulkan", ("cuda", "cuda"), False, "vulkan nvidia/nvidia"),  # the Vulkan setting on NVIDIA
+    ("vulkan", ("qsv", "qsv"), False, "vulkan intel/intel"),     # Intel's GPU: oneVPL
+    ("vulkan", ("d3d11va", "d3d11va"), False, "vulkan amd/amd"),
+    ("cuda", ("qsv", "qsv"), False, "pipes"),              # libvmaf's CUDA code takes NVIDIA's pictures only
+    ("vulkan", ("cuda", None), False, "pipes"),            # one video FFmpeg decodes in software (VVC, ...)
+    ("vulkan", ("qsv", "cuda"), False, "pipes"),           # two GPU makers' decoders are not tried together
+    ("vulkan", ("qsv", "cuda"), True, "pipes"),
+    # ... decoded here by the software decoder where it is bundled:
+    ("vulkan", ("cuda", None), True, "vulkan nvidia/software"),
+    ("cuda", ("cuda", None), True, "cuda nvidia/software"),   # its pictures uploaded
+    ("cuda", (None, None), True, "cuda software/software"),
+    ("vulkan", (None, "qsv"), True, "vulkan software/intel"),
+    ("cuda", ("qsv", None), True, "pipes"),                 # CUDA's code takes no Intel pictures
 ])
-def test_a_gpu_run_decodes_in_its_own_process_where_the_gpus_decoder_can(monkeypatch, backend, hwaccel, expected):
-    """Where FFmpeg would decode both videos with the GPU, the scoring process
-    decodes them itself; anything else goes through FFmpeg's pipes."""
+def test_a_gpu_run_decodes_in_its_own_process_where_the_gpus_decoder_can(monkeypatch, backend, hwaccel, software,
+                                                                          expected):
+    """Where this process has a decoder for both videos -- the GPU's FFmpeg
+    would decode them with, or the software decoder for a video FFmpeg
+    decodes in software -- it decodes them itself; anything else goes
+    through FFmpeg's pipes."""
     from pathlib import Path
 
     from vmaf_app.core.models import VideoInfo
@@ -114,12 +124,14 @@ def test_a_gpu_run_decodes_in_its_own_process_where_the_gpus_decoder_can(monkeyp
     # conftest turns decoding in the scoring process off; this test is about it
     monkeypatch.setattr(vr, "_score_decoded_on_gpu", _REAL_SCORE_DECODED_ON_GPU)
 
-    def cuda_decoded(*args, **kwargs):
-        taken.append("cuda nvidia")
+    monkeypatch.setattr(vr.gpu_frames, "software_bundled", lambda: software)
+
+    def cuda_decoded(*args, decoder=None, **kwargs):
+        taken.append(f"cuda {'/'.join(decoder)}")
         return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
 
     def vulkan_decoded(*args, decoder=None, **kwargs):
-        taken.append(f"vulkan {decoder}")
+        taken.append(f"vulkan {'/'.join(decoder)}")
         return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
 
     monkeypatch.setattr(vmaf_cuda, "score_decoded", cuda_decoded)
