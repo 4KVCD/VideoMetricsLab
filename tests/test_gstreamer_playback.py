@@ -247,3 +247,43 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll():
 
     assert player._ready is True
     assert player._pipeline.states[-1] == "playing"
+
+
+class _StandInToneMapper:
+    """For the pad probe's sake: the real one needs a GPU."""
+
+    def __init__(self, _device, _kind) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.mark.parametrize("display_hdr", [True, False])
+def test_a_stopped_player_is_freed(monkeypatch, display_hdr):
+    """Issue #3: the decoder's signal handlers and the tone mapper's pad
+    probe call back into the player, which holds the pipeline -- cycles
+    through GStreamer's C side that Python's collector cannot see. Every
+    stopped player stayed, with its decoder's GPU surfaces: moving the
+    window between an HDR and an SDR display rebuilds them, and the GPU's
+    memory grew by up to 1.8 GB a move with 4K video."""
+    import gc
+    import weakref
+
+    pytest.importorskip("gi")
+    try:
+        gstreamer_playback._load_gstreamer()
+    except gstreamer_playback.GStreamerPlaybackError:
+        pytest.skip("GStreamer is not installed")
+    monkeypatch.setattr(d3d11_tonemap, "D3D11ToneMapper", _StandInToneMapper)
+    settings = PreviewColorSettings(display_hdr_enabled=display_hdr)  # HDR video on an SDR display: tone mapped
+    try:
+        player = gstreamer_playback.GstComparePipeline(_comparison(), settings, "source")
+    except gstreamer_playback.GStreamerPlaybackError as error:
+        pytest.skip(f"no D3D11 device here: {error}")
+    assert player._handlers and bool(player._probes) is not display_hdr
+    freed = weakref.ref(player)
+    player.stop()
+    del player
+    gc.collect()
+    assert freed() is None

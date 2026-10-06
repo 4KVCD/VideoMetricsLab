@@ -289,6 +289,10 @@ class GstComparePipeline:
         self._initial_seek_sent = False
         self._tone_mappers = []
         self._tone_error = None
+        #: Signal handlers and pad probes that call back into this object,
+        #: (object, id): stop() removes them (_release).
+        self._handlers: list[tuple[Any, int]] = []
+        self._probes: list[tuple[Any, int]] = []
         self._device = device
         if device is not None or (needs_sdr_tonemap(settings) and any(
             hdr_kind(i) for i in (comparison.source_info, comparison.distorted_info)
@@ -346,8 +350,8 @@ class GstComparePipeline:
         source = self._make("filesrc", f"{side}-file")
         source.set_property("location", str(frame_input_path(self._comparison, side).resolve()))
         decoder = self._make("decodebin3", f"{side}-decoder")
-        decoder.connect("select-stream", self._select_stream, side)
-        decoder.connect("pad-added", self._pad_added, side)
+        self._handlers.append((decoder, decoder.connect("select-stream", self._select_stream, side)))
+        self._handlers.append((decoder, decoder.connect("pad-added", self._pad_added, side)))
         queue = self._make("queue", f"{side}-video-queue")
         queue.set_property("max-size-buffers", 2)
         queue.set_property("max-size-bytes", 0)
@@ -410,10 +414,11 @@ class GstComparePipeline:
                 f"width={width},height={height},pixel-aspect-ratio=1/1,"
                 "colorimetry=sRGB"
             ))
-            capsfilter.get_static_pad("src").add_probe(
+            pad = capsfilter.get_static_pad("src")
+            self._probes.append((pad, pad.add_probe(
                 self.Gst.PadProbeType.BUFFER | self.Gst.PadProbeType.EVENT_DOWNSTREAM,
                 self._tone_probe, (mapper, retag),
-            )
+            )))
         capsfilter.set_property("caps", caps)
         sink = self._make("appsink", f"{side}-video-sink")
         # Retain references to GPU textures, not CPU-mapped pixel arrays.
@@ -496,6 +501,24 @@ class GstComparePipeline:
         self._pipeline.set_state(self.Gst.State.NULL)
         for mapper in self._tone_mappers:
             mapper.close()
+        self._release()
+
+    def _release(self) -> None:
+        """Removes the callbacks into this object that the pipeline's
+        elements hold. Each is a cycle -- the decoder or a pad holds a bound
+        method, which holds this object, which holds the pipeline -- that
+        passes through GStreamer's C side, where Python's collector cannot
+        see it: a stopped pipeline, with its decoder's D3D11 surfaces, was
+        never freed. Moving the window between an HDR and an SDR display
+        rebuilds the players each time; 4K video kept 0.8-1.8 GB of the
+        GPU's memory a move (issue #3). After NULL nothing calls them."""
+        for element, handler in self._handlers:
+            if element.handler_is_connected(handler):
+                element.disconnect(handler)
+        for pad, probe in self._probes:
+            pad.remove_probe(probe)
+        self._handlers.clear()
+        self._probes.clear()
 
     def set_playing(self, playing: bool) -> None:
         self._wanted_playing = bool(playing)
