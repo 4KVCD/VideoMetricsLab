@@ -59,7 +59,7 @@ def test_writes_run_in_the_order_they_were_submitted(qapp):
     assert order == list(range(10))
 
 
-def test_cyclic_gc_and_runnable_cleanup_return_to_the_gui_thread(qapp):
+def test_cyclic_gc_returns_to_the_gui_thread(qapp):
     queue = FileWriteQueue()
     gc_state_in_worker: list[bool] = []
 
@@ -68,7 +68,26 @@ def test_cyclic_gc_and_runnable_cleanup_return_to_the_gui_thread(qapp):
     assert queue.wait_until_idle(10.0)
     assert gc_state_in_worker == [False]
     assert gc.isenabled(), "automatic collection was not restored after the write"
-    assert not queue._tasks, "the GUI-thread completion did not release the runnable"
+
+
+def test_a_written_result_is_released_on_the_gui_thread(qapp):
+    """Each write was a QRunnable owned by the QThreadPool it ran on, which
+    never let go of it: every cached result and export stayed in memory for
+    as long as the app ran."""
+    released_on_gui_thread: list[bool] = []
+
+    class Result:
+        def __del__(self):
+            released_on_gui_thread.append(threading.current_thread() is threading.main_thread())
+
+    queue = FileWriteQueue()
+    for _ in range(3):
+        result = Result()
+        queue.submit("write", lambda result=result: None)
+        del result
+
+    assert queue.wait_until_idle(10.0)
+    assert released_on_gui_thread == [True, True, True]
 
 
 def test_a_failing_write_is_reported_and_does_not_stop_the_queue(qapp):

@@ -4082,6 +4082,7 @@ class MainWindow(QMainWindow):
         self._worker.result_updated.connect(self._on_result_updated)
         self._worker.cancelled.connect(self._on_run_cancelled)
         self._worker.all_finished.connect(self._on_all_finished)
+        self._worker.finished.connect(lambda w=self._worker: self._on_run_thread_finished(w))
         self._worker.start()
 
     def _confirm_skipping(self, skipped: list[tuple[RowData, str]], others: bool) -> bool:
@@ -4621,6 +4622,14 @@ class MainWindow(QMainWindow):
 
     def _on_run_cancelled(self) -> None:
         self._run_was_cancelled = True
+
+    def _on_run_thread_finished(self, worker: VmafWorker) -> None:
+        """Lets a run's thread go once it has ended (after _on_all_finished).
+        It was the window's child, and with it its jobs and the results they
+        carry, one set for each run, for as long as the window was open."""
+        if worker is self._worker:
+            self._worker = None
+        worker.deleteLater()
 
     def _on_all_finished(self) -> None:
         for rd in self._job_rows:

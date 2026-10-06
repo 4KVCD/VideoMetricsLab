@@ -189,6 +189,12 @@ Shutdown cancels workers and waits for pending writes before closing.
 - Prefer per-input hardware decisions with software fallback.
 - Profile CPU, memory, GPU and I/O separately before attributing a bottleneck.
 - Background file writes temporarily suspend automatic cyclic collection;
-  runnable cleanup and the deferred collection return to the GUI thread so
+  each write's release and the deferred collection return to the GUI thread so
   PySide wrappers are never finalized by the writer. Reference counting stays
   active throughout. Preserve that thread-affinity rule when changing writes.
+- A QThread or QRunnable whose parent or pool is a long-lived object lives as
+  long as that object unless it is deleted: release finished workers
+  (deleteLater on QThread.finished), and do not start Python-owned QRunnables
+  on a QThreadPool, which keeps them.
+- numpy's OpenBLAS is limited to one thread (vmaf_app/__init__.py): it would
+  commit a 32 MB buffer per CPU thread in every process, for no BLAS use.

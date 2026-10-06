@@ -345,6 +345,36 @@ def test_run_clicked_only_queues_unscored_rows(qapp):
     win._worker.wait(5000)
 
 
+def test_a_finished_runs_thread_is_let_go(qapp, monkeypatch):
+    """Each run's thread was a child of the window, and with it its jobs and
+    the results they carry, for as long as the window was open: one more set
+    for every run."""
+    import gc
+    import weakref
+
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    from vmaf_app.ui.worker import VmafWorker
+
+    monkeypatch.setattr(VmafWorker, "run", lambda self: self.all_finished.emit())
+    win = MainWindow()
+    win._source_info = _fake_video_info("source.mp4")
+    row = win._add_table_row(Path("tests/fixtures/distorted.mp4"))
+    win._rows[row].video_info = _fake_video_info("tests/fixtures/distorted.mp4")
+
+    win._on_run_clicked()
+    worker = weakref.ref(win._worker)
+    assert win._worker.wait(5000)
+    for _ in range(3):
+        QApplication.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    gc.collect()
+
+    assert win._worker is None and worker() is None
+    assert not win.findChildren(VmafWorker)
+    assert win.run_btn.isEnabled()  # the run ended as before
+
+
 # ------------------------------------------------------------------ resolve_model / clone_options
 
 
@@ -1752,7 +1782,8 @@ class _FakeRunWorker:
     def __init__(self, jobs, *_args, **_kwargs):
         _FakeRunWorker.started_with.append([job.label for job in jobs])
         for name in ("job_started", "halves", "task_progress", "planned", "progress", "status", "job_finished",
-                     "job_failed", "job_partially_failed", "result_updated", "cancelled", "all_finished"):
+                     "job_failed", "job_partially_failed", "result_updated", "cancelled", "all_finished",
+                     "finished"):
             setattr(self, name, self._Signal())
 
     def start(self):
