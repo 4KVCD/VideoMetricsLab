@@ -124,9 +124,8 @@ struct Decoder {
     IMFTransform *mft = nullptr;
     bool streaming = false;
 
-    // The hand-over's (as amf_frames.cpp's): the textures Slots::make imports,
-    // the fence a picture's 2 x 2 copy into `touch` is signalled with.
-    ID3D11Texture2D *shared[2] = {nullptr, nullptr};
+    // The hand-over's (as amf_frames.cpp's): the fence a picture's 2 x 2 copy
+    // into `touch` is signalled with.
     ID3D11DeviceContext4 *signals = nullptr;
     ID3D11Fence *fence = nullptr;
     UINT64 fence_value = 0;
@@ -299,18 +298,8 @@ bool wait_timeline(Decoder *d, uint64_t value) {
 
 // A decoded picture that is a layer of a texture array: its crop copied into
 // its slot's own texture (Decoder::own), and held there.
-bool deliver_copied(Decoder *d, IMFSample *sample, ID3D11Texture2D *texture, UINT subresource, long long pts) {
-    bool full;
-    {
-        std::lock_guard<std::mutex> guard(d->mutex);
-        full = d->free_slots.empty();
-    }
-    const int slot = confirm(d, full) ? take_slot(d) : -1;
-    if (slot < 0) {
-        texture->Release();
-        sample->Release();
-        return false;
-    }
+bool deliver_copied(Decoder *d, IMFSample *sample, ID3D11Texture2D *texture, UINT subresource, long long pts,
+                    int slot) {
     if (!d->own[slot]) {
         D3D11_TEXTURE2D_DESC own{};
         own.Width = static_cast<UINT>(d->params.crop_w);
@@ -404,20 +393,9 @@ bool deliver(Decoder *d, IMFSample *sample) {
     std::string why;
     const VkFormat format = d->params.bit_depth > 8 ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16
                                                     : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
-    size_t held;  // the decoder's samples kept (Decoder::kMostHeld)
-    {
-        std::lock_guard<std::mutex> guard(d->mutex);
-        held = d->deferred.size();
-        for (IMFSample *kept : d->slots) held += kept != nullptr;
-    }
-    if (desc.ArraySize > 1 || held >= Decoder::kMostHeld) return deliver_copied(d, sample, texture, subresource, pts);
-    const int source = d->vk.source_of(handle, desc.Width, desc.Height, format, why);
-    if (source < 0) {
-        texture->Release();
-        sample->Release();
-        d->fail("Vulkan cannot read the decoder's pictures: " + why);
-        return false;
-    }
+    // Its slot first: the samples kept counted once one is free (counted
+    // before, a picture that waited for a slot was copied though a slot's
+    // sample had gone back meanwhile -- at 4K, every slot's own texture made).
     bool full;
     {
         std::lock_guard<std::mutex> guard(d->mutex);
@@ -427,6 +405,21 @@ bool deliver(Decoder *d, IMFSample *sample) {
     if (slot < 0) {
         texture->Release();
         sample->Release();
+        return false;
+    }
+    size_t held;  // the decoder's samples kept (Decoder::kMostHeld)
+    {
+        std::lock_guard<std::mutex> guard(d->mutex);
+        held = d->deferred.size();
+        for (IMFSample *kept : d->slots) held += kept != nullptr;
+    }
+    if (desc.ArraySize > 1 || held >= Decoder::kMostHeld)
+        return deliver_copied(d, sample, texture, subresource, pts, slot);
+    const int source = d->vk.source_of(handle, desc.Width, desc.Height, format, why);
+    if (source < 0) {
+        texture->Release();
+        sample->Release();
+        d->fail("Vulkan cannot read the decoder's pictures: " + why);
         return false;
     }
     const int left = d->params.crop_x, top = d->params.crop_y;
@@ -514,28 +507,8 @@ bool start_handover(Decoder *d, std::string &why) {
         return false;
     }
     const bool wide = d->params.bit_depth > 8;
-    D3D11_TEXTURE2D_DESC shared{};
-    shared.Width = static_cast<UINT>(d->params.crop_w);
-    shared.Height = static_cast<UINT>(d->params.crop_h);
-    shared.MipLevels = shared.ArraySize = 1;
-    shared.Format = wide ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
-    shared.SampleDesc.Count = 1;
-    shared.Usage = D3D11_USAGE_DEFAULT;
-    shared.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    shared.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED;
-    HANDLE textures[2] = {nullptr, nullptr};
-    bool exported = true;
-    for (int i = 0; i < 2 && exported; ++i) {
-        IDXGIResource1 *resource = nullptr;
-        exported = SUCCEEDED(d->device->CreateTexture2D(&shared, nullptr, &d->shared[i]))
-                   && SUCCEEDED(d->shared[i]->QueryInterface(__uuidof(IDXGIResource1), reinterpret_cast<void **>(&resource)))
-                   && SUCCEEDED(resource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-                                                             nullptr, &textures[i]));
-        release(resource);
-    }
     ID3D11Device5 *device5 = nullptr;
-    const bool fenced = exported
-                        && SUCCEEDED(d->device->QueryInterface(__uuidof(ID3D11Device5), reinterpret_cast<void **>(&device5)))
+    const bool fenced = SUCCEEDED(d->device->QueryInterface(__uuidof(ID3D11Device5), reinterpret_cast<void **>(&device5)))
                         && SUCCEEDED(device5->CreateFence(0, D3D11_FENCE_FLAG_NONE, __uuidof(ID3D11Fence),
                                                           reinterpret_cast<void **>(&d->fence)))
                         && SUCCEEDED(d->immediate->QueryInterface(__uuidof(ID3D11DeviceContext4),
@@ -543,24 +516,23 @@ bool start_handover(Decoder *d, std::string &why) {
                         && (d->fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr)) != nullptr;
     release(device5);
     if (!fenced) {
-        for (HANDLE texture : textures)
-            if (texture) CloseHandle(texture);
-        why = "Direct3D 11 cannot share its pictures, or has no fences";
+        why = "Direct3D 11 has no fences";
         return false;
     }
-    const bool made = d->vk.make(d->params, textures,
-                                 wide ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16 : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
-                                 why);
-    for (HANDLE texture : textures) CloseHandle(texture);
-    if (!made) return false;
+    // Every picture held (no textures for amf_frames.cpp's copies).
+    if (!d->vk.make(d->params, nullptr,
+                    wide ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16 : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, why))
+        return false;
     if (!d->vk.can_hold()) {  // (reading the decoder's own textures: amf_direct.slang)
         why = "Vulkan cannot read the decoder's pictures where they are";
         return false;
     }
-    D3D11_TEXTURE2D_DESC touch = shared;
+    D3D11_TEXTURE2D_DESC touch{};
     touch.Width = touch.Height = 2;
-    touch.BindFlags = 0;
-    touch.MiscFlags = 0;
+    touch.MipLevels = touch.ArraySize = 1;
+    touch.Format = wide ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
+    touch.SampleDesc.Count = 1;
+    touch.Usage = D3D11_USAGE_DEFAULT;
     if (FAILED(d->device->CreateTexture2D(&touch, nullptr, &d->touch))) {
         why = "Direct3D 11 could not make a texture";
         return false;
@@ -652,7 +624,6 @@ void destroy(Decoder *d) {
     release(d->signals);
     if (d->fence_event) CloseHandle(d->fence_event);
     release(d->touch);
-    for (ID3D11Texture2D *&texture : d->shared) release(texture);
     release(d->manager);
     release(d->multithread);
     release(d->immediate);

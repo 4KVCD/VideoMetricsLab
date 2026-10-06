@@ -825,8 +825,14 @@ struct Slots {
     int next_ring = 0;
     Commands *active = &direct;
     static constexpr uint32_t kMaxSources = 64, kMaxOutputs = 64;
-    std::vector<Buffer> slots;  // the pictures, planar (frame_bytes each)
+    std::vector<Buffer> slots;  // the pictures, planar (frame_bytes each): those not held (amf_frames.cpp's copies)
     Buffer chroma;              // the crop's U and V, interleaved, on their way into a slot
+    // A held picture planar, for the copies out of it (convert_held): one for
+    // every slot, made with the slots -- a decoder that holds its every
+    // picture (mf_frames.cpp's) has no slot buffers, which at 4K took 6 x
+    // 25 MB of GPU memory a decoder. `scratch_slot`: whose picture it has.
+    Buffer scratch;
+    int scratch_slot = -1;
     Buffer staging;             // host-visible, for destinations that are not pinned (made when first needed)
     // The decoding thread's: two, so that Direct3D 11 copies a picture into
     // one while the other's goes on into its slot.
@@ -919,11 +925,20 @@ struct Slots {
 
     // The slots and buffers, and `textures` (Direct3D 11's two shared textures
     // of the crop, in `format`) imported.
+    // `textures`: amf_frames.cpp's, which the crop is copied into by Direct3D
+    // 11 where a picture is not held, imported, with a buffer for each slot
+    // that picture goes on into; null: every picture is held (mf_frames.cpp's),
+    // no slot buffers.
     bool make(const Params &p, const HANDLE textures[2], VkFormat format, std::string &why) {
         Device &g = g_device;
         params = p;
         sample = p.bit_depth > 8 ? 2 : 1;
         slots.resize(static_cast<size_t>(p.pool));
+        if (!make_buffer(scratch, frame_bytes(p), false) || !copying.make(true)) {
+            why = "making the hand-over's buffers failed";
+            return false;
+        }
+        if (!textures) return true;
         for (Buffer &slot : slots) {
             if (!make_buffer(slot, frame_bytes(p), false)) {
                 why = "out of GPU memory for the hand-over's pictures";
@@ -931,7 +946,7 @@ struct Slots {
             }
         }
         const size_t cw = static_cast<size_t>((p.crop_w + 1) / 2), ch = static_cast<size_t>((p.crop_h + 1) / 2);
-        if (!make_buffer(chroma, cw * ch * 2 * sample, false) || !copying.make(true)) {
+        if (!make_buffer(chroma, cw * ch * 2 * sample, false)) {
             why = "making the hand-over's buffers failed";
             return false;
         }
@@ -1121,7 +1136,17 @@ struct Slots {
 
     // `slot` holds AMF's picture in sources[source], the crop's first luma
     // sample at (x, y) (the decoding thread, before the slot is queued).
-    void hold(int slot, int source, int x, int y) { held[static_cast<size_t>(slot)] = {source, x, y}; }
+    void hold(int slot, int source, int x, int y) {
+        held[static_cast<size_t>(slot)] = {source, x, y};
+        if (scratch_slot == slot) scratch_slot = -1;  // (a new picture)
+    }
+
+    // Where the slot's picture is planar for the copies out of it: the
+    // scratch buffer for a held picture (convert_held put it there), else its
+    // slot buffer.
+    VkBuffer planar(int slot) const {
+        return holds(slot) ? scratch.buffer : slots[static_cast<size_t>(slot)].buffer;
+    }
 
     // The slot's picture is in its buffer again (the slot given back).
     void unhold(int slot) {
@@ -1262,16 +1287,16 @@ struct Slots {
     // read the slot buffer (nvf_download, nvf_download_planes); then held no
     // longer. Under `copy_lock`.
     bool convert_held(int slot) {
-        if (!holds(slot)) return true;
-        VkBuffer buffers[3] = {slots[static_cast<size_t>(slot)].buffer, slots[static_cast<size_t>(slot)].buffer,
-                               slots[static_cast<size_t>(slot)].buffer};
+        if (!holds(slot) || scratch_slot == slot) return true;
+        VkBuffer buffers[3] = {scratch.buffer, scratch.buffer, scratch.buffer};
         VkDeviceSize offsets[3], pitches[3];
         for (int i = 0; i < 3; ++i) {
             offsets[i] = plane(i).offset;
             pitches[i] = plane(i).row_bytes;
         }
+        scratch_slot = -1;
         if (!direct_copy(slot, buffers, offsets, pitches)) return false;
-        held[static_cast<size_t>(slot)].source = -1;
+        scratch_slot = slot;
         return true;
     }
 
@@ -1279,12 +1304,12 @@ struct Slots {
     void copy_rows(Commands &c, int slot, const Plane &p, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize pitch) {
         if (pitch == p.row_bytes) {
             VkBufferCopy whole{p.offset, offset, p.row_bytes * p.rows};
-            g_device.vkCmdCopyBuffer(c.buffer, slots[slot].buffer, buffer, 1, &whole);
+            g_device.vkCmdCopyBuffer(c.buffer, planar(slot), buffer, 1, &whole);
             return;
         }
         std::vector<VkBufferCopy> rows(p.rows);
         for (size_t r = 0; r < p.rows; ++r) rows[r] = {p.offset + r * p.row_bytes, offset + r * pitch, p.row_bytes};
-        g_device.vkCmdCopyBuffer(c.buffer, slots[slot].buffer, buffer, static_cast<uint32_t>(rows.size()), rows.data());
+        g_device.vkCmdCopyBuffer(c.buffer, planar(slot), buffer, static_cast<uint32_t>(rows.size()), rows.data());
     }
 
     bool ensure_staging() {
@@ -1387,7 +1412,7 @@ struct Slots {
                     return false;
                 }
                 VkBufferCopy whole{p.offset, p.offset, p.row_bytes * p.rows};
-                g_device.vkCmdCopyBuffer(copying.buffer, slots[slot].buffer, staging.buffer, 1, &whole);
+                g_device.vkCmdCopyBuffer(copying.buffer, planar(slot), staging.buffer, 1, &whole);
                 staged[i] = true;
             }
         }
@@ -1416,7 +1441,7 @@ struct Slots {
         }
         copying.begin();
         VkBufferCopy whole{0, 0, frame_bytes(params)};
-        g_device.vkCmdCopyBuffer(copying.buffer, slots[slot].buffer, staging.buffer, 1, &whole);
+        g_device.vkCmdCopyBuffer(copying.buffer, planar(slot), staging.buffer, 1, &whole);
         if (!copying.run()) {
             error = "copying a picture from the GPU failed";
             return false;
@@ -1442,6 +1467,8 @@ struct Slots {
         direct_descriptors = VK_NULL_HANDLE;
         for (Buffer &slot : slots) free_buffer(slot);
         free_buffer(chroma);
+        free_buffer(scratch);
+        scratch_slot = -1;
         free_buffer(staging);
         for (Picture &picture : pictures) {
             if (picture.image) g_device.vkDestroyImage(g_device.device, picture.image, nullptr);
