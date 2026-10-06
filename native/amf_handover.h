@@ -86,6 +86,13 @@ struct Device {
     VkDevice device = VK_NULL_HANDLE;
     uint32_t family = 0;
     VkQueue queue = VK_NULL_HANDLE;
+    // The copies into other memory (nvf_copy_luma, nvf_download_planes): on
+    // a transfer-only queue (the GPU's copy engine) where there is one, which
+    // works beside the compute queues -- on the compute queue they waited
+    // behind Vulkan VMAF's frame, as long as it took (10 ms a 4K copy).
+    uint32_t copy_family = 0;
+    VkQueue copy_queue = VK_NULL_HANDLE;
+    bool copy_compute = true;  // whether the copy queue also computes (the stages it may wait on)
     VkPhysicalDeviceMemoryProperties memory{};
     uint8_t luid[VK_LUID_SIZE] = {};  // the GPU's: Direct3D 11's adapter
     uint8_t device_uuid[VK_UUID_SIZE] = {}, driver_uuid[VK_UUID_SIZE] = {};  // what an exporter must match
@@ -247,15 +254,28 @@ inline Device *shared(const uint8_t *luid) {
         return nullptr;
     }
     g.family = static_cast<uint32_t>(family);
+    g.copy_family = g.family;
+    for (uint32_t i = 0; i < families_count; ++i) {
+        const VkQueueFlags flags = families[i].queueFlags;
+        if ((flags & VK_QUEUE_TRANSFER_BIT) && !(flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))) {
+            g.copy_family = i;
+            g.copy_compute = false;
+            break;
+        }
+    }
     const float priority = 1.0f;
-    VkDeviceQueueCreateInfo queue{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-    queue.queueFamilyIndex = g.family;
-    queue.queueCount = 1;
-    queue.pQueuePriorities = &priority;
+    VkDeviceQueueCreateInfo queues[2] = {{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO},
+                                         {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}};
+    queues[0].queueFamilyIndex = g.family;
+    queues[0].queueCount = 1;
+    queues[0].pQueuePriorities = &priority;
+    queues[1].queueFamilyIndex = g.copy_family;
+    queues[1].queueCount = 1;
+    queues[1].pQueuePriorities = &priority;
     VkDeviceCreateInfo device_info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     device_info.pNext = &want;
-    device_info.queueCreateInfoCount = 1;
-    device_info.pQueueCreateInfos = &queue;
+    device_info.queueCreateInfoCount = g.copy_family != g.family ? 2 : 1;
+    device_info.pQueueCreateInfos = queues;
     device_info.enabledExtensionCount = 2;
     device_info.ppEnabledExtensionNames = extensions;
     result = g.vkCreateDevice(g.physical, &device_info, nullptr, &g.device);
@@ -268,6 +288,7 @@ inline Device *shared(const uint8_t *luid) {
     HANDOVER_DEVICE_FUNCTIONS(X)
 #undef X
     g.vkGetDeviceQueue(g.device, g.family, 0, &g.queue);
+    g.vkGetDeviceQueue(g.device, g.copy_family, 0, &g.copy_queue);
 
     VkDescriptorSetLayoutBinding bindings[2] = {};
     for (uint32_t i = 0; i < 2; ++i) {
@@ -327,11 +348,25 @@ struct Buffer {
     VkDeviceSize size = 0;
 };
 
+// A buffer both queues use (written by one, read by the other): shared by
+// their families, where they are two.
+inline void both_families(VkBufferCreateInfo &info, uint32_t families[2]) {
+    Device &g = g_device;
+    families[0] = g.family;
+    families[1] = g.copy_family;
+    if (g.family == g.copy_family) return;
+    info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+    info.queueFamilyIndexCount = 2;
+    info.pQueueFamilyIndices = families;
+}
+
 inline bool make_buffer(Buffer &out, VkDeviceSize size, bool host_visible) {
     Device &g = g_device;
     VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     info.size = std::max<VkDeviceSize>(4, (size + 3) & ~VkDeviceSize(3));
     info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    uint32_t families[2];
+    both_families(info, families);
     if (g.vkCreateBuffer(g.device, &info, nullptr, &out.buffer) != VK_SUCCESS) return false;
     VkMemoryRequirements requirements;
     g.vkGetBufferMemoryRequirements(g.device, out.buffer, &requirements);
@@ -369,12 +404,15 @@ struct Commands {
     // the GPU's, and are never used again (each later run fails).
     bool broken = false;
     bool pending = false;  // submitted, not yet waited for
+    bool copies_only = false;  // on the copy queue (copy_queue), which may not compute
 
-    bool make() {
+    // `copies`: for the copy queue.
+    bool make(bool copies = false) {
         Device &g = g_device;
+        copies_only = copies;
         VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        pool_info.queueFamilyIndex = g.family;
+        pool_info.queueFamilyIndex = copies ? g.copy_family : g.family;
         VkCommandBufferAllocateInfo allocate{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         allocate.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocate.commandBufferCount = 1;
@@ -394,7 +432,13 @@ struct Commands {
         VkCommandBufferBeginInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         g.vkBeginCommandBuffer(buffer, &info);
-        barrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        barrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, stages());
+    }
+
+    // The stages its commands run in: a transfer-only queue has no compute stage.
+    VkPipelineStageFlags stages() const {
+        return copies_only && !g_device.copy_compute ? VK_PIPELINE_STAGE_TRANSFER_BIT
+                                                      : VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
     }
 
     void barrier(VkPipelineStageFlags from, VkPipelineStageFlags to) {
@@ -409,7 +453,7 @@ struct Commands {
     bool submit() {
         Device &g = g_device;
         if (broken) return false;
-        barrier(VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+        barrier(stages(), VK_PIPELINE_STAGE_HOST_BIT);
         g.vkEndCommandBuffer(buffer);
         VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         submit.commandBufferCount = 1;
@@ -417,7 +461,7 @@ struct Commands {
         VkResult result;
         {
             std::lock_guard<std::mutex> lock(g.mutex);
-            result = g.vkQueueSubmit(g.queue, 1, &submit, fence);
+            result = g.vkQueueSubmit(copies_only ? g.copy_queue : g.queue, 1, &submit, fence);
         }
         if (result != VK_SUCCESS) {
             broken = true;
@@ -728,7 +772,7 @@ struct Slots {
             }
         }
         const size_t cw = static_cast<size_t>((p.crop_w + 1) / 2), ch = static_cast<size_t>((p.crop_h + 1) / 2);
-        if (!make_buffer(chroma, cw * ch * 2 * sample, false) || !copying.make()) {
+        if (!make_buffer(chroma, cw * ch * 2 * sample, false) || !copying.make(true)) {
             why = "making the hand-over's buffers failed";
             return false;
         }
