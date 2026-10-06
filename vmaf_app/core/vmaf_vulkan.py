@@ -176,6 +176,9 @@ class SharedLumas:
                 self._imports.append(imported)
             if not self._imports:
                 raise VmafVulkanError(f"Vulkan's memory is not shared: {(lib.vv_error() or b'').decode(errors='replace')}")
+            #: The engine's slots: a frame begun (next) waits for the one this
+            #: many before it to be done.
+            self.slots = len(self._imports)
         except BaseException:
             self.close()
             raise

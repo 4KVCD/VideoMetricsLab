@@ -1,7 +1,10 @@
 """Pictures handed from NVIDIA's decoder to the scorers without a CPU copy
 (gpu_frames' pin, download_planes and import_memory; vmaf_vulkan.SharedLumas;
 vmaf_v1_gpu's add_decoded): the same pictures, and the same scores, as
-through system memory. On a PC with an NVIDIA GPU; GitHub's runner has none."""
+through system memory. On a PC with an NVIDIA GPU; GitHub's runner has none.
+And AMD's pictures read where Windows' decoder left them (vv_pictures): the
+same scores as from the pictures copied, on a PC with an AMD GPU."""
+import collections
 import ctypes
 import subprocess
 from pathlib import Path
@@ -155,3 +158,73 @@ def test_memory_that_is_not_vulkans_is_refused_not_scored_from(pair):
             ctypes.windll.kernel32.CloseHandle(event)
     finally:
         stream.close()
+
+
+# ------------------------------------- AMD's: the pictures read where they are
+
+def _amd_gives_textures(info, bits: int) -> bool:
+    try:
+        if not gpu_frames.hands_over_textures("amd") or not vmaf_vulkan.LIBRARY_PATH.is_file():
+            return False
+        plan = gpu_frames.plan_decode(info, None, shift=6 if bits > 8 else 0)
+        return gpu_frames.decoder_supports(0, plan, "amd")[0] and any(
+            device.vendor == 0x1002 and device.usable for device in vmaf_vulkan.devices())
+    except (OSError, vmaf_cuda.VmafGpuError, gpu_frames.GpuDecodeUnavailableError):
+        return False
+
+
+@pytest.mark.parametrize(("models", "n_subsample"), [({"vmaf_v1": V1}, 1), ({"vmaf_v1": V1}, 2),
+                                                     ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, 1)],
+                         ids=["v1", "v1-every-2nd", "vulkan+v1"])
+def test_vmaf_v1_scores_the_same_from_amds_textures_as_from_copies(tmp_path, monkeypatch, models, n_subsample):
+    """Vulkan VMAF reading the HEVC pictures where Windows' decoder left them
+    (vv_pictures, their slots given back once the GPU has read them) scores
+    what it scores from the pictures copied into its memory."""
+    source = probe_video(_clip(tmp_path / "source.mkv", "yuv420p10le", 4))
+    distorted = probe_video(_clip(tmp_path / "distorted.mkv", "yuv420p10le", 38))
+    if not _amd_gives_textures(source, 10):
+        pytest.skip("no AMD GPU whose Windows decoder gives its pictures as textures")
+    arguments = dict(width=W, height=H, bit_depth=10, models=models, n_subsample=n_subsample, duration_limit=None,
+                     total_frames=0, backend="vulkan", decoder="amd")
+    used = []
+    real = vmaf_v1_gpu.V1Scorer.add_decoded
+    monkeypatch.setattr(vmaf_v1_gpu.V1Scorer, "add_decoded",
+                        lambda self, *args: (used.append(self.pictures), real(self, *args))[1])
+    frames, scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
+    assert used and all(used)  # read where they were
+    monkeypatch.setattr(gpu_frames, "hands_over_textures", lambda backend: False)
+    used.clear()
+    old_frames, old_scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
+    assert used and not any(used)  # copied
+    assert np.array_equal(frames, old_frames) and set(scores) == set(models)
+    for key in models:
+        assert np.array_equal(scores[key], old_scores[key]), key
+        assert np.all((scores[key] > 0) & (scores[key] <= 100)) and len(set(scores[key].tolist())) > 1
+
+
+class _Stream:
+    def __init__(self) -> None:
+        self.released = []
+
+    def release(self, slot: int) -> None:
+        self.released.append(slot)
+
+
+def test_slots_read_where_they_are_are_given_back_once_the_gpu_is_done():
+    """A distorted picture's slot back once its frame is done, a reference's
+    once the next frame is (its motion reads it): with three slots, frame k
+    begun means frame k - 3 is done."""
+    scorer = object.__new__(vmaf_v1_gpu.V1Scorer)
+    scorer._held = collections.deque()
+    scorer._shared = type("Shared", (), {"slots": 3})()
+    ref, test = _Stream(), _Stream()
+    for frame in range(6):
+        scorer._count = frame
+        scorer._release_done()  # as add_decoded does once frame `frame` is begun
+        scorer._count = frame + 1  # frame `frame` given
+        scorer.release_later(test, 100 + frame, reference=False)
+        scorer.release_later(ref, 200 + frame, reference=True)
+    # Frame 5 begun: frames 0-2 done -- the distorted pictures of 0-2, the references of 0-1.
+    assert test.released == [100, 101, 102] and ref.released == [200, 201]
+    scorer._release_all()
+    assert test.released == [100 + frame for frame in range(6)] and ref.released == [200 + frame for frame in range(6)]

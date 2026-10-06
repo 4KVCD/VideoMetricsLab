@@ -213,6 +213,11 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                 ):
                     function = getattr(lib, name)
                     function.restype, function.argtypes = restype, argtypes
+            if hasattr(lib, "nvf_slot_texture"):  # a slot's picture where it is (Windows' decoder's)
+                lib.nvf_slot_texture.restype = ctypes.c_int
+                lib.nvf_slot_texture.argtypes = [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p),
+                                                 ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint),
+                                                 ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)]
             if backend != "nvidia":  # the decoders that scale with native/d3d11_scale.h
                 lib.nvf_scale_note.restype, lib.nvf_scale_note.argtypes = ctypes.c_int, [handle, text, ctypes.c_int]
                 lib.nvf_scale_test.restype = ctypes.c_int
@@ -330,6 +335,19 @@ def _params(plan: DecodePlan, device: int = 0, pool: int = 1, extradata=None, ex
                    plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.shift, int(plan.luma_only),
                    pool, extradata, extradata_size, plan.output_size[0], plan.output_size[1], _SCALERS[plan.scaler],
                    plan.widen, int(plan.cpu_scaling), int(handover))
+
+
+def hands_over_textures(backend: str) -> bool:
+    """Whether `backend`'s decoder may give its pictures where they are, as
+    textures (GpuFrameStream.slot_texture): AMD's through Windows' own decoder
+    (native/mf_frames.cpp), where it is bundled -- whether a stream does
+    depends on its codec."""
+    if backend != "amd":
+        return False
+    try:
+        return hasattr(_load(MEDIA_FOUNDATION), "nvf_slot_texture")
+    except GpuDecodeUnavailableError:
+        return False
 
 
 def can_hand_over(plan: DecodePlan, backend: str) -> bool:
@@ -851,6 +869,23 @@ class GpuFrameStream:
         if self._lib.nvf_copy_luma_async(self._handle, slot, address, pitch, ctypes.byref(value)) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
         return value.value
+
+    @property
+    def gives_textures(self) -> bool:
+        """Whether slot_texture gives this stream's pictures."""
+        return self.handover and hasattr(self._lib, "nvf_slot_texture")
+
+    def slot_texture(self, slot: int) -> tuple[int, int, int, int, int]:
+        """The slot's picture where the decoder left it: its texture's KMT
+        handle (a Direct3D 11 texture shared without a mutex), the texture's
+        width and height and the picture's first sample (x, y) in it -- as it
+        is while the slot is not released."""
+        texture, width, height = ctypes.c_void_p(), ctypes.c_uint(), ctypes.c_uint()
+        x, y = ctypes.c_int(), ctypes.c_int()
+        if self._lib.nvf_slot_texture(self._handle, slot, ctypes.byref(texture), ctypes.byref(width),
+                                      ctypes.byref(height), ctypes.byref(x), ctypes.byref(y)) != 0:
+            raise GpuDecodeFailedError(self._error() or "the decoder's picture is not a texture")
+        return texture.value, width.value, height.value, x.value, y.value
 
     def copy_planes_async(self, slot: int, addresses: tuple[int, ...], pitches: tuple[int, ...]) -> int:
         """copy_planes, not waited for, as copy_luma_async."""

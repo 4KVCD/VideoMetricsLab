@@ -166,6 +166,15 @@ struct Decoder {
     std::vector<ID3D11Texture2D *> own;
     std::vector<int> own_source;
     std::vector<uint64_t> own_busy;
+    std::vector<HANDLE> own_handle;  // (its KMT handle, for nvf_slot_texture)
+    // Each slot's picture's texture as nvf_slot_texture gives it: its KMT
+    // handle, size and the picture's first sample in it.
+    struct Texture {
+        HANDLE handle = nullptr;
+        UINT width = 0, height = 0;
+        int x = 0, y = 0;
+    };
+    std::vector<Texture> textures;
     handover::Slots vk;
 
     std::mutex mutex;
@@ -321,6 +330,7 @@ bool deliver_copied(Decoder *d, IMFSample *sample, ID3D11Texture2D *texture, UIN
             || FAILED(d->own[slot]->QueryInterface(__uuidof(IDXGIResource), reinterpret_cast<void **>(&resource)))
             || FAILED(resource->GetSharedHandle(&handle)) || !handle
             || (d->own_source[slot] = d->vk.source_of(handle, own.Width, own.Height, format, why)) < 0) {
+            d->own_handle[slot] = nullptr;
             release(resource);
             texture->Release();
             sample->Release();
@@ -328,6 +338,7 @@ bool deliver_copied(Decoder *d, IMFSample *sample, ID3D11Texture2D *texture, UIN
             return false;
         }
         release(resource);
+        d->own_handle[slot] = handle;
     }
     if (!wait_timeline(d, d->own_busy[slot])) {  // its last picture's copies
         texture->Release();
@@ -345,6 +356,7 @@ bool deliver_copied(Decoder *d, IMFSample *sample, ID3D11Texture2D *texture, UIN
     texture->Release();
     sample->Release();
     d->vk.hold(slot, d->own_source[slot], 0, 0);
+    d->textures[slot] = {d->own_handle[slot], static_cast<UINT>(d->params.crop_w), static_cast<UINT>(d->params.crop_h), 0, 0};
     d->unconfirmed.push_back({slot, pts, d->fence_value});
     return confirm(d, false);
 }
@@ -427,6 +439,7 @@ bool deliver(Decoder *d, IMFSample *sample) {
     d->multithread->Leave();
     texture->Release();
     d->vk.hold(slot, source, left, top);
+    d->textures[slot] = {handle, desc.Width, desc.Height, left, top};
     {
         std::lock_guard<std::mutex> guard(d->mutex);
         d->slots[slot] = sample;
@@ -745,6 +758,8 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->own.assign(params->pool, nullptr);
     d->own_source.assign(params->pool, -1);
     d->own_busy.assign(params->pool, 0);
+    d->own_handle.assign(params->pool, nullptr);
+    d->textures.assign(params->pool, Decoder::Texture{});
     for (int slot = 0; slot < params->pool; slot++) d->free_slots.push_back(slot);
     try {
         d->sweeper = std::thread(sweep_thread, d);
@@ -904,6 +919,24 @@ NVF_API int nvf_import_vulkan(void *, void *win32_handle, unsigned long long byt
 
 NVF_API void nvf_unimport(void *, void *memory) {
     if (memory) handover::unimport(memory);
+}
+
+// The slot's picture where it is, for Vulkan VMAF to read it there
+// (vv_pictures): its texture's KMT handle (a Direct3D 11 texture shared
+// without a mutex), the texture's size and the picture's first sample in it.
+// The texture stays as it is while the slot is the caller's.
+NVF_API int nvf_slot_texture(void *handle, int slot, void **texture, unsigned *width, unsigned *height, int *x,
+                             int *y) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (slot < 0 || static_cast<size_t>(slot) >= d->textures.size() || !d->textures[static_cast<size_t>(slot)].handle)
+        return NVF_ERROR;
+    const Decoder::Texture &t = d->textures[static_cast<size_t>(slot)];
+    *texture = t.handle;
+    *width = t.width;
+    *height = t.height;
+    *x = t.x;
+    *y = t.y;
+    return 0;
 }
 
 NVF_API unsigned long long nvf_slot_pointer(void *, int) {
