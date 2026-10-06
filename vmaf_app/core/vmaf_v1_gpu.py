@@ -7,9 +7,13 @@ VMAF v1 is predicted from four features. Where each is calculated here:
   vmaf_vulkan.dll's VMAF v1 mode (libvmaf-fast's fast/vulkan), which follows
   libvmaf's CPU code (integer_adm.c, integer_motion.c) in integer arithmetic
   and gives its values bit for bit, on any GPU.
-- CAMBI and SpEED chroma: by libvmaf's own CPU extractors, from the bundled
-  libvmaf.dll, on a pool of threads beside the GPU. They are the same code
-  on the same frames, so the same values.
+- CAMBI and SpEED chroma: on the GPU too where the engine calculates the
+  model's options (vv_v1_cambi, vv_v1_speed), bit for bit as libvmaf's CPU
+  code: CAMBI wholly; SpEED's filtering of the chroma planes, and what is
+  left of it (its 25x25 covariance in double, eigenvalues, CRT log2) by
+  libvmaf's own lines compiled into the engine. Otherwise by libvmaf's own
+  CPU extractors, from the bundled libvmaf.dll, on a pool of threads beside
+  the GPU: the same code on the same frames.
 
 The score is then predicted by libvmaf itself from the four (as vmaf_vulkan
 predicts VMAF v0.6.1), so it is libvmaf's CPU score, not an approximation of
@@ -44,7 +48,7 @@ from vmaf_app.core import vmaf_cuda, vmaf_vulkan
 _log = logging.getLogger(__name__)
 
 #: What a score records it was calculated with (its provenance).
-LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan: ADM3, motion3; CPU: CAMBI, SpEED)"
+LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan: ADM3, motion3, CAMBI, SpEED)"
 
 _ADM3, _MOTION3 = "VMAF_integer_feature_adm3_score", "VMAF_integer_feature_motion3_score"
 _CAMBI, _SPEED = "Cambi_feature_cambi_score", "Speed_chroma_feature_speed_chroma_uv_score"
@@ -94,7 +98,75 @@ def _vulkan() -> ctypes.CDLL:
                                  ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_double)]
     lib.vv_features_v1.restype = ctypes.c_int
     lib.vv_features_v1.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]
+    if hasattr(lib, "vv_v1_cambi"):  # CAMBI on the GPU
+        lib.vv_v1_cambi.restype = ctypes.c_int
+        lib.vv_v1_cambi.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_double)]
+        lib.vv_v1_cambi_scores.restype = ctypes.c_int
+        lib.vv_v1_cambi_scores.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]
+    if hasattr(lib, "vv_v1_speed"):  # SpEED chroma on the GPU
+        lib.vv_v1_speed.restype = ctypes.c_int
+        lib.vv_v1_speed.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_double)]
+        lib.vv_submit_v1.restype = ctypes.c_int
+        lib.vv_submit_v1.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+                                     ctypes.POINTER(ctypes.c_ssize_t), ctypes.c_int]
+        lib.vv_chroma_staging.restype = ctypes.c_int
+        lib.vv_chroma_staging.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+                                          ctypes.POINTER(ctypes.c_uint32)]
+        lib.vv_v1_speed_scores.restype = ctypes.c_int
+        lib.vv_v1_speed_scores.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]
     return lib
+
+
+#: CAMBI's options the GPU takes (vv_v1_cambi), with cambi.c's defaults.
+_CAMBI_DEFAULTS = {"cambi_high_res_speedup": 0, "cambi_vis_lum_threshold": 0.0, "cambi_max_val": 1000.0,
+                   "topk": 0.6, "cambi_topk": 0.6, "window_size": 65, "tvi_threshold": 0.019,
+                   "max_log_contrast": 2, "eotf": "bt1886", "cambi_eotf": "bt1886"}
+
+
+def _cambi_gpu_options(options: dict) -> ctypes.Array | None:
+    """vv_v1_cambi's nine doubles for the model's CAMBI options, None when it
+    sets one the GPU does not take (full_ref, heatmaps, enc_* and src_* sizes,
+    another max_log_contrast or EOTF): libvmaf calculates it then."""
+    if set(options) - set(_CAMBI_DEFAULTS):
+        return None
+    o = {**_CAMBI_DEFAULTS, **options}
+    # cambi.c: topk and eotf if set to other than their default, else cambi_topk and cambi_eotf.
+    topk = float(o["topk"]) if float(o["topk"]) != 0.6 else float(o["cambi_topk"])
+    eotf = str(o["cambi_eotf"]) if str(o["cambi_eotf"]) != "bt1886" else str(o["eotf"])
+    if eotf not in ("bt1886", "pq") or int(o["max_log_contrast"]) != 2:
+        return None
+    return (ctypes.c_double * 9)(float(o["cambi_high_res_speedup"]), float(o["cambi_vis_lum_threshold"]),
+                                 float(o["cambi_max_val"]), topk, float(o["window_size"]), float(o["tvi_threshold"]),
+                                 float(o["max_log_contrast"]), 0.0 if eotf == "bt1886" else 1.0,
+                                 float((1 if os.environ.get("VMAF_FAST_TEST_CAMBI_POOL_ON_CPU") else 0)
+                                       | (2 if os.environ.get("VMAF_FAST_TEST_CAMBI_BRUTE_FORCE") else 0)))
+
+
+#: SpEED chroma's options the GPU takes (vv_v1_speed), with speed.c's
+#: defaults, and the aliases libvmaf also reads them by.
+_SPEED_DEFAULTS = {"speed_kernelscale": 1.0, "speed_prescale": 1.0, "speed_prescale_method": "nearest",
+                   "speed_sigma_nn": 0.29, "speed_nn_floor": 0.0, "speed_weight_var_mode": 0,
+                   "speed_max_val": 1000.0}
+_SPEED_ALIASES = {"ks": "speed_kernelscale", "ps": "speed_prescale", "psm": "speed_prescale_method",
+                  "snn": "speed_sigma_nn", "nnf": "speed_nn_floor", "wvm": "speed_weight_var_mode",
+                  "mxv": "speed_max_val"}
+
+
+def _speed_gpu_options(options: dict) -> ctypes.Array | None:
+    """vv_v1_speed's seven doubles for the model's SpEED options, None when it
+    sets one the GPU does not take: libvmaf calculates it then."""
+    named = {_SPEED_ALIASES.get(key, key): value for key, value in options.items()}
+    if len(named) != len(options) or set(named) - set(_SPEED_DEFAULTS):
+        return None
+    o = {**_SPEED_DEFAULTS, **named}
+
+    def number(key: str) -> float:  # as libvmaf parses the option's text
+        return float(_text(o[key]))
+
+    return (ctypes.c_double * 7)(number("speed_kernelscale"), number("speed_prescale"),
+                                 1.0 if _text(o["speed_prescale_method"]) == "bilinear" else 0.0,
+                                 number("speed_sigma_nn"), number("speed_nn_floor"),
+                                 float(int(_text(o["speed_weight_var_mode"]))), number("speed_max_val"))
 
 
 def model_options(model_path: Path) -> dict[str, dict]:
@@ -126,8 +198,11 @@ def _text(value) -> str:
     return str(value)
 
 
-def _use_cpu_features(lib: ctypes.CDLL, context: ctypes.c_void_p, options: dict[str, dict]) -> None:
+def _use_cpu_features(lib: ctypes.CDLL, context: ctypes.c_void_p, options: dict[str, dict],
+                      on_gpu: frozenset = frozenset()) -> None:
     for feature, (extractor, _prefix) in _CPU_FEATURES.items():
+        if feature in on_gpu:
+            continue
         dictionary = ctypes.c_void_p()
         for key, value in options[feature].items():
             vmaf_cuda._check(lib.vmaf_feature_dictionary_set(ctypes.byref(dictionary), key.encode(),
@@ -217,8 +292,10 @@ class V1Scorer:
     above 8). `threads`: libvmaf's for CAMBI and SpEED."""
 
     def __init__(self, width: int, height: int, bit_depth: int, model_path: Path, n_subsample: int = 1,
-                 device: int | None = None, threads: int | None = None, name: str = "vmaf_v1", shared=None):
-        """`shared`: the decoder (GpuFrameStream) the frames come from without
+                 device: int | None = None, threads: int | None = None, name: str = "vmaf_v1", shared=None,
+                 gpu_cambi: bool = True, gpu_speed: bool = True):
+        """`gpu_cambi`, `gpu_speed`: CAMBI, SpEED chroma on the GPU where the
+        engine calculates it (False: libvmaf's CPU code). `shared`: the decoder (GpuFrameStream) the frames come from without
         a CPU copy (add_decoded): its lumas copied on the GPU into Vulkan's
         memory, the planes libvmaf's extractors read downloaded by the GPU
         into their pictures."""
@@ -261,14 +338,33 @@ class V1Scorer:
                 if width & 1 or height & 1:
                     raise VmafV1Error("an odd size is not handed over on the GPU")
                 self._shared = vmaf_vulkan.SharedLumas(vulkan, self._gpu, shared)
-            workers = threads if threads is not None else max(2, min(16, (os.cpu_count() or 4) - 2))
-            configuration = vmaf_cuda._Configuration(vmaf_cuda._VMAF_LOG_LEVEL_ERROR, workers, 1, 0, 0)
-            vmaf_cuda._check(lib.vmaf_init(ctypes.byref(self._cpu), configuration), "Starting libvmaf")
-            _use_cpu_features(lib, self._cpu, options)
-            pictures = vmaf_cuda._PictureConfiguration(
-                vmaf_cuda._PictureParameters(width, height, bit_depth, vmaf_cuda._VMAF_PIX_FMT_YUV420P),
-                2 * (workers + 2))
-            vmaf_cuda._check(lib.vmaf_preallocate_pictures(self._cpu, pictures), "Allocating pictures")
+            #: The features the GPU calculates beyond ADM3 and motion3.
+            self._on_gpu: frozenset = frozenset()
+            cambi = _cambi_gpu_options(options[_CAMBI]) if gpu_cambi and hasattr(vulkan, "vv_v1_cambi") else None
+            if cambi is not None:
+                code = vulkan.vv_v1_cambi(self._gpu, cambi)
+                if code == 0:
+                    self._on_gpu = self._on_gpu | {_CAMBI}
+                elif code != -4:  # -4: options it does not calculate; libvmaf does then
+                    vmaf_vulkan._check(vulkan, code, "Starting CAMBI")
+            speed = _speed_gpu_options(options[_SPEED]) if gpu_speed and hasattr(vulkan, "vv_v1_speed") else None
+            if speed is not None:
+                code = vulkan.vv_v1_speed(self._gpu, speed)
+                if code == 0:
+                    self._on_gpu = self._on_gpu | {_SPEED}
+                elif code != -4:
+                    vmaf_vulkan._check(vulkan, code, "Starting SpEED")
+            #: libvmaf's extractors are run only for what the GPU does not calculate.
+            self._cpu_features = bool(set(_CPU_FEATURES) - self._on_gpu)
+            if self._cpu_features:
+                workers = threads if threads is not None else max(2, min(16, (os.cpu_count() or 4) - 2))
+                configuration = vmaf_cuda._Configuration(vmaf_cuda._VMAF_LOG_LEVEL_ERROR, workers, 1, 0, 0)
+                vmaf_cuda._check(lib.vmaf_init(ctypes.byref(self._cpu), configuration), "Starting libvmaf")
+                _use_cpu_features(lib, self._cpu, options, self._on_gpu)
+                pictures = vmaf_cuda._PictureConfiguration(
+                    vmaf_cuda._PictureParameters(width, height, bit_depth, vmaf_cuda._VMAF_PIX_FMT_YUV420P),
+                    2 * (workers + 2))
+                vmaf_cuda._check(lib.vmaf_preallocate_pictures(self._cpu, pictures), "Allocating pictures")
         except BaseException:
             self.close()
             raise
@@ -294,10 +390,16 @@ class V1Scorer:
         score = self._count % self._step == 0
         ref = (ctypes.c_char * len(reference)).from_buffer(reference)
         dist = (ctypes.c_char * len(distorted)).from_buffer(distorted)
-        vmaf_vulkan._check(self._vulkan, self._vulkan.vv_submit(
-            self._gpu, ctypes.addressof(ref), self._luma_stride, ctypes.addressof(dist), self._luma_stride,
-            int(score)), f"Scoring frame {self._count}")
-        if score:
+        if _SPEED in self._on_gpu:  # with the chroma planes
+            bases = (ctypes.addressof(ref), ctypes.addressof(dist))
+            planes = (ctypes.c_void_p * 6)(*(base + offset for base in bases for offset, _r, _b in self._planes))
+            strides = (ctypes.c_ssize_t * 6)(*(row_bytes for _base in bases for _o, _r, row_bytes in self._planes))
+            code = self._vulkan.vv_submit_v1(self._gpu, planes, strides, int(score))
+        else:
+            code = self._vulkan.vv_submit(self._gpu, ctypes.addressof(ref), self._luma_stride, ctypes.addressof(dist),
+                                          self._luma_stride, int(score))
+        vmaf_vulkan._check(self._vulkan, code, f"Scoring frame {self._count}")
+        if score and self._cpu_features:
             self._to_libvmaf(reference, distorted)
         self._count += 1
 
@@ -309,9 +411,18 @@ class V1Scorer:
         ref_stream.copy_luma(ref_slot, ref_address, pitch)
         if score:
             test_stream.copy_luma(test_slot, dist_address, pitch)
+        if score and _SPEED in self._on_gpu:
+            # The chroma planes downloaded into the engine's memory for them
+            # (Vulkan's, which another API is not given to pin).
+            chroma, stride = (ctypes.c_void_p * 4)(), ctypes.c_uint32()
+            vmaf_vulkan._check(self._vulkan, self._vulkan.vv_chroma_staging(self._gpu, chroma, ctypes.byref(stride)),
+                               f"Scoring frame {self._count}")
+            pitches = (0, stride.value, stride.value)
+            ref_stream.download_planes(ref_slot, (None, chroma[0], chroma[1]), pitches)
+            test_stream.download_planes(test_slot, (None, chroma[2], chroma[3]), pitches)
         vmaf_vulkan._check(self._vulkan, self._vulkan.vv_commit(self._gpu, int(score)),
                            f"Scoring frame {self._count}")
-        if score:
+        if score and self._cpu_features:
             lib = self._lib
             ref, dist = vmaf_cuda._Picture(), vmaf_cuda._Picture()
             vmaf_cuda._check(lib.vmaf_fetch_preallocated_picture(self._cpu, ctypes.byref(ref)), "Taking a picture")
@@ -386,11 +497,26 @@ class V1Scorer:
         frames = np.arange(0, self._count, self._step, dtype=np.int32)
         rows = np.zeros((self._count, 6), dtype=np.float64)
         if self._count:
-            vmaf_cuda._check(lib.vmaf_read_pictures(self._cpu, None, None, 0), "Finishing")
+            if self._cpu_features:
+                vmaf_cuda._check(lib.vmaf_read_pictures(self._cpu, None, None, 0), "Finishing")
             self._vulkan.vv_features_v1(self._gpu, rows.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), self._count)
         values = {_ADM3: rows[frames, 0], _MOTION3: rows[frames, 3]}
+        if _SPEED in self._on_gpu:
+            speed = np.full((self._count, 3), np.nan, dtype=np.float64)
+            if self._count:
+                vmaf_vulkan._check(self._vulkan, self._vulkan.vv_v1_speed_scores(
+                    self._gpu, speed.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), self._count), "Reading SpEED")
+            values[_SPEED] = speed[frames, 2]  # speed_chroma_uv_score
+        if _CAMBI in self._on_gpu:
+            cambi = np.full(self._count, np.nan, dtype=np.float64)
+            if self._count:
+                vmaf_vulkan._check(self._vulkan, self._vulkan.vv_v1_cambi_scores(
+                    self._gpu, cambi.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), self._count), "Reading CAMBI")
+            values[_CAMBI] = cambi[frames]
         value = ctypes.c_double()
         for feature, name in self._cpu_names.items():
+            if feature in self._on_gpu:
+                continue
             column = np.empty(len(frames), dtype=np.float64)
             for slot, frame in enumerate(frames):
                 vmaf_cuda._check(lib.vmaf_feature_score_at_index(self._cpu, name.encode(), ctypes.byref(value),
