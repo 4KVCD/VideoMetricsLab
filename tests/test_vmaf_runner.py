@@ -395,7 +395,8 @@ def test_each_graph_reads_both_videos_itself_and_pairs_its_own_copies():
     for graph, suffix in ((libvmaf, "v"), (xpsnr, "x")):
         assert graph.count("[0:V:0]") == 1 and graph.count("[1:V:0]") == 1
         assert graph.count(f"[main_{suffix}]") == 2 and graph.count(f"[ref_{suffix}]") == 2  # made once, used once
-        assert f"[main_{suffix}][ref_{suffix}]" in graph
+    assert "[main_v][ref_v]libvmaf=" in libvmaf
+    assert "[ref_x][main_x]xpsnr=" in xpsnr  # the source first: its activity weights the errors
     # The same preparation in both: crop, conversion, scaling of the source to the test video's size.
     assert libvmaf.split(";")[:2] == [chain.replace("_x]", "_v]") for chain in xpsnr.split(";")[:2]]
     assert "crop=3840:1608:0:276" in libvmaf and "scale=1920:1080" in libvmaf
@@ -438,7 +439,10 @@ def test_a_single_metric_family_keeps_one_graph_and_its_gpu_download():
         assert cmd.count("-lavfi") == 1 and cmd.count("-hwaccel_output_format") == 2
 
 
-def test_xpsnr_reference_split_also_applies_to_resample_tests():
+def test_chained_xpsnr_takes_the_source_first_and_passes_it_on_to_libvmaf():
+    """XPSNR weights each block's error by its first input's activity: the
+    source's, as it is defined. It consumes the test video too, so that is
+    split for libvmaf, which takes the source from XPSNR's output."""
     source_info = _info("source.mov", 1920, 1080)
     options = VmafOptions(
         model="version=vmaf_v0.6.1", compute_xpsnr=True, resample_test=ResampleTarget(width=960, label="480p"),
@@ -449,9 +453,31 @@ def test_xpsnr_reference_split_also_applies_to_resample_tests():
         log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
     )
 
-    assert "[ref]split=2[ref_xpsnr][ref_vmaf]" in graph
-    assert "[xmain][ref_vmaf]libvmaf=" in graph
-    assert "xpsnr=stats_file=xpsnr_log.txt" in graph
+    assert "[main]split=2[main_xpsnr][main_vmaf]" in graph
+    assert "[ref][main_xpsnr]xpsnr=stats_file=xpsnr_log.txt:" in graph
+    assert "[main_vmaf][xref]libvmaf=" in graph
+    for label in ("[main_xpsnr]", "[main_vmaf]", "[xref]"):
+        assert graph.count(label) == 2  # made once, used once
+
+
+def test_xpsnr_alone_takes_the_source_first():
+    graph = _build_filtergraph(
+        _info("source.mov", 1920, 1080), _info("distorted.mp4", 1920, 1080),
+        VmafOptions(compute_vmaf=False, compute_xpsnr=True), None, None,
+        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
+    )
+    assert "[ref][main]xpsnr=stats_file=xpsnr_log.txt:" in graph
+
+
+def test_xpsnrs_scores_since_the_order_changed_are_not_taken_for_older_ones():
+    """Weighted by the encode's activity, as before, they were other numbers."""
+    from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+    from vmaf_app.core.metric_results import XPSNR_COMPATIBILITY_ID, current_ffmpeg_provenance
+
+    request = analysis_request_from_vmaf_options(VmafOptions(compute_vmaf=False, compute_xpsnr=True))
+    spec = next(spec for spec in request.metrics if spec.key == "xpsnr")
+    assert spec.implementation_compatibility_id == XPSNR_COMPATIBILITY_ID != "ffmpeg-xpsnr-v1"
+    assert current_ffmpeg_provenance("xpsnr", "9.0").implementation_compatibility_id == XPSNR_COMPATIBILITY_ID
 
 
 def test_xpsnr_requested_but_no_log_path_is_a_noop():

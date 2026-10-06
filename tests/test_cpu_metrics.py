@@ -83,14 +83,14 @@ def test_the_scorers_psnr_and_ssim_are_ffmpegs_libvmafs(tmp_path, width, height,
 
 
 def _ffmpegs_xpsnr(tmp_path: Path, width: int, height: int, bits: int, rate: int, reference, distorted) -> list:
-    """XPSNR (Y) of the frames by FFmpeg's xpsnr filter, the test video its
-    first input as the app's commands give it, from its stats file."""
+    """XPSNR (Y) of the frames by FFmpeg's xpsnr filter, the source its first
+    input as the app's commands give it, from its stats file."""
     fmt = "yuv420p10le" if bits > 8 else "yuv420p"
     for name, frames in (("ref.yuv", reference), ("dis.yuv", distorted)):
         (tmp_path / name).write_bytes(b"".join(frames))
     raw = ["-f", "rawvideo", "-pix_fmt", fmt, "-s", f"{width}x{height}", "-r", str(rate)]
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", *raw, "-i", "dis.yuv", *raw, "-i", "ref.yuv",
-                    "-lavfi", "[0:v][1:v]xpsnr=stats_file=xpsnr.txt", "-f", "null", "-"],
+                    "-lavfi", "[1:v][0:v]xpsnr=stats_file=xpsnr.txt", "-f", "null", "-"],
                    check=True, cwd=tmp_path, capture_output=True)
     values = vr._parse_xpsnr_log(tmp_path / "xpsnr.txt")
     return [values[number] for number in sorted(values)]
@@ -224,10 +224,11 @@ def test_xpsnr_joins_them_in_the_app_where_it_can(app_scores, monkeypatch):
     monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: True)
     options = VmafOptions(compute_vmaf=False, extra_features=["name=psnr"], compute_xpsnr=True)
     cuda = HwAccelPlan(source="cuda", distorted="cuda")
-    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv", 60.0, 60.0), _rated("d.mkv"), cuda)
+    # The test video's rate, which FFmpeg's filter takes from its second input.
+    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv"), _rated("d.mkv", 60.0, 60.0), cuda)
     assert plan.models == {"psnr": "psnr", "xpsnr": "xpsnr"} and plan.frame_rate == 60
     # A frame rate FFmpeg might not take as known here: FFmpeg's, beside them.
-    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv", 0.0, 25.0), _rated("d.mkv"), cuda)
+    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv"), _rated("d.mkv", 0.0, 25.0), cuda)
     assert plan.models == {"psnr": "psnr"}
 
 

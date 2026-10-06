@@ -9,6 +9,11 @@ import numpy as np
 
 from vmaf_app.core.metrics import FRAME_METRICS, METRIC_BY_KEY, MetricAggregation
 
+#: The identity cached and saved XPSNR scores are reused by. v2 since
+#: October 2026: weighted by the source's activity (vmaf_runner._xpsnr_filter),
+#: not the encode's as before, which gave other scores.
+XPSNR_COMPATIBILITY_ID = "ffmpeg-xpsnr-v2"
+
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 
@@ -76,7 +81,7 @@ def current_ffmpeg_provenance(key: str, version: str, parameters: dict[str, JSON
         implementation_version=f"ffmpeg {version}",
         compute_backend="cpu",
         implementation_compatibility_id=(
-            "ffmpeg-xpsnr-v1" if key == "xpsnr" else "ffmpeg-libvmaf-v1"
+            XPSNR_COMPATIBILITY_ID if key == "xpsnr" else "ffmpeg-libvmaf-v1"
         ),
         parameters=parameters or {},
     )

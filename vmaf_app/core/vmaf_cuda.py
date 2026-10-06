@@ -527,9 +527,10 @@ class CpuScorer:
                 extractor = CPU_FEATURES[metric][0]
                 options = ctypes.c_void_p()
                 if metric == "xpsnr":
-                    # FFmpeg's filter weights by the activity of its first
-                    # input, which the app's commands make the test video.
-                    settings = [("frame_rate", str(int(frame_rate))), ("weights_from_dist", "true")]
+                    # Weighted by the source's activity (the extractor's
+                    # default), as FFmpeg's filter weights by its first input,
+                    # the source in the app's commands (vmaf_runner._xpsnr_filter).
+                    settings = [("frame_rate", str(int(frame_rate)))]
                     if fused:
                         settings.append(("psnr", "true"))
                     for key, value in settings:

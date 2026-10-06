@@ -328,6 +328,18 @@ def _split_graphs(options: VmafOptions, xpsnr_log_path: Path | None) -> bool:
                 and (_uses_vmaf_model(options) or options.extra_features))
 
 
+def _xpsnr_filter(source_label: str, test_label: str, xpsnr_log_path: Path) -> str:
+    """FFmpeg's xpsnr filter on the two videos, the source first: it weights
+    each block's error by the activity of its first input -- the original's,
+    as XPSNR is defined -- and takes the frame rate that picks its temporal
+    activity from its second (_xpsnr_frame_rate). It passes its first input
+    on. With the test video first, as before October 2026, the weights came
+    from the encode: XPSNR 1.2 dB lower on a 4K film's 3 Mb/s encode, 0.9 dB
+    on its 12 Mb/s one, 1.8 dB on a 1080p test pattern's."""
+    return (f"[{source_label}][{test_label}]xpsnr=stats_file={xpsnr_log_path.name}:"
+            + ":".join(FRAMESYNC_OPTS))
+
+
 def _build_libvmaf_stage(
     options: VmafOptions, log_path: Path, model: str | None, xpsnr_log_path: Path | None,
     main_label: str = "main", ref_label: str = "ref", output_label: str = "",
@@ -335,7 +347,7 @@ def _build_libvmaf_stage(
     """The XPSNR + libvmaf tail shared by both filtergraph builders. XPSNR
     isn't a libvmaf "feature" like PSNR/SSIM -- it's a fully separate ffmpeg
     filter with its own stats file -- so when requested it sits between
-    decode and libvmaf, passing [main] through under a new label.
+    decode and libvmaf, passing [ref] through under a new label.
     `output_label` names its output (the GPU VMAF graph maps it explicitly).
     """
     if not options.requested_metrics():
@@ -344,25 +356,22 @@ def _build_libvmaf_stage(
     # XPSNR-only needs no libvmaf filter or model at all.
     if not _uses_vmaf_model(options) and not options.extra_features:
         assert xpsnr_log_path is not None
-        return (f"[{main_label}][{ref_label}]xpsnr=stats_file={xpsnr_log_path.name}:"
-                + ":".join(FRAMESYNC_OPTS) + output)
+        return _xpsnr_filter(ref_label, main_label, xpsnr_log_path) + output
     libvmaf_opts = _build_libvmaf_opts(options, log_path, model)
     chains = []
     if options.compute_xpsnr and xpsnr_log_path is not None:
-        # xpsnr consumes [ref], and libvmaf needs it too -- but a filtergraph
+        # xpsnr consumes [main], and libvmaf needs it too -- but a filtergraph
         # label can only be consumed once. Without this explicit split,
         # ffmpeg silently wires libvmaf up to the wrong stream and it ends up
-        # comparing the distorted video against itself, reporting a perfect
-        # VMAF 100 / PSNR 60 / SSIM 1.0 for every frame no matter how bad the
-        # encode actually is. It does NOT error out, so the scores just come
-        # back quietly, plausibly wrong.
-        chains.append(f"[{ref_label}]split=2[ref_xpsnr][ref_vmaf]")
-        chains.append(
-            f"[{main_label}][ref_xpsnr]xpsnr=stats_file={xpsnr_log_path.name}:"
-            + ":".join(FRAMESYNC_OPTS) + "[xmain]"
-        )
-        main_label = "xmain"
-        ref_label = "ref_vmaf"
+        # comparing one video against itself, reporting a perfect VMAF 100 /
+        # PSNR 60 / SSIM 1.0 for every frame no matter how bad the encode
+        # actually is. It does NOT error out, so the scores just come back
+        # quietly, plausibly wrong. libvmaf takes the source from xpsnr,
+        # which passes its first input on.
+        chains.append(f"[{main_label}]split=2[main_xpsnr][main_vmaf]")
+        chains.append(_xpsnr_filter(ref_label, "main_xpsnr", xpsnr_log_path) + "[xref]")
+        main_label = "main_vmaf"
+        ref_label = "xref"
     chains.append(f"[{main_label}][{ref_label}]libvmaf=" + ":".join(libvmaf_opts) + output)
     return ";".join(chains)
 
@@ -454,12 +463,11 @@ def _build_filtergraph(
             return (f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[main_{suffix}];"
                     f"[1:{VIDEO_STREAM}]{','.join(ref_ops)}[ref_{suffix}]")
 
-        sync = ":".join(FRAMESYNC_OPTS)
         assert xpsnr_log_path is not None
         return _GRAPH_SEPARATOR.join([
             chains("v") + ";[main_v][ref_v]libvmaf=" + ":".join(_build_libvmaf_opts(options, log_path, model))
             + "[graph0]",
-            chains("x") + f";[main_x][ref_x]xpsnr=stats_file={xpsnr_log_path.name}:{sync}[graph1]",
+            chains("x") + ";" + _xpsnr_filter("ref_x", "main_x", xpsnr_log_path) + "[graph1]",
         ])
     if not gpu_vmaf:
         tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
@@ -1330,9 +1338,9 @@ def _cpu_metric_names(metrics) -> str:
 
 
 def _xpsnr_frame_rate(info: VideoInfo) -> int | None:
-    """XPSNR's frame rate as FFmpeg's xpsnr filter has it from its reference
-    input (the source), in whole frames a second: below 32 its temporal
-    activity is first-order, else second. FFmpeg gives the input
+    """XPSNR's frame rate as FFmpeg's xpsnr filter has it from its second
+    input (the test video: _xpsnr_filter), in whole frames a second: below
+    32 its temporal activity is first-order, else second. FFmpeg gives the input
     av_guess_frame_rate() (fftools/ffmpeg_demux.c): r_frame_rate where the
     average rate is known and within a tenth of it. Otherwise it may be the
     codec's own (for a codec with fields, H.264) or the average: None, and
@@ -1391,7 +1399,7 @@ def _cpu_metrics_plan(options: VmafOptions, dimensions: tuple[int, int], source_
     if not vmaf_cuda.pairs_in_app() and (width & 1 or height & 1 or bit_depth > 10):
         return None
     metrics = list(dict.fromkeys(_CPU_METRIC_OF_FEATURE[feature] for feature in options.extra_features))
-    frame_rate = _xpsnr_frame_rate(source_info) if options.compute_xpsnr else None
+    frame_rate = _xpsnr_frame_rate(distorted_info) if options.compute_xpsnr else None
     if frame_rate is not None and _xpsnr_in_app(width, height, bit_depth):
         metrics.append("xpsnr")
     elif options.compute_xpsnr and not (hwaccel.source and hwaccel.distorted):

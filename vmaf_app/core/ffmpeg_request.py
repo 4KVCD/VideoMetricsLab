@@ -12,6 +12,7 @@ from vmaf_app.core.analysis_request import (
 )
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import CvvdpSettings
+from vmaf_app.core.metric_results import XPSNR_COMPATIBILITY_ID
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, metric_definition
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE
 from vmaf_app.core.models import ResampleTarget, VmafOptions, clone_options
@@ -103,7 +104,7 @@ def metric_request_specs(
             )
         elif key == "vmaf_neg":
             parameters = (("model", "version=vmaf_v0.6.1neg"),)
-        compatibility = "ffmpeg-xpsnr-v1" if key == "xpsnr" else "ffmpeg-libvmaf-v1"
+        compatibility = XPSNR_COMPATIBILITY_ID if key == "xpsnr" else "ffmpeg-libvmaf-v1"
         spec = MetricRequestSpec(
             key=key,
             backend_id="ffmpeg",
