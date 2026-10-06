@@ -443,19 +443,22 @@ class V1Scorer:
         # timeline's value once the last of them is done.
         luma = (lambda stream, *a: stream.copy_luma_async(*a)) if self._after else             (lambda stream, *a: stream.copy_luma(*a) or 0)
         planes = (lambda stream, *a: stream.copy_planes_async(*a)) if self._after else             (lambda stream, *a: stream.copy_planes(*a) or 0)
-        copied = luma(ref_stream, ref_slot, ref_address, pitch)
-        if score:
-            copied = max(copied, luma(test_stream, test_slot, dist_address, pitch))
-        if score and _SPEED in self._on_gpu and self._shared_chroma is not None:
-            # The chroma planes copied by the GPU into the slot's shared buffer.
+        chroma_copied = score and _SPEED in self._on_gpu and self._shared_chroma is not None
+        if chroma_copied:
+            # The chroma planes copied by the GPU into the slot's shared buffer,
+            # each picture's with its luma (one copy on the GPU a picture).
             offset, spacing, stride = self._shared_chroma
             at = [ref_address + offset + i * spacing for i in range(4)]
-            copied = max(copied, planes(ref_stream, ref_slot, (0, at[0], at[1]), (0, stride, stride)))
-            copied = max(copied, planes(test_stream, test_slot, (0, at[2], at[3]), (0, stride, stride)))
+            copied = max(planes(ref_stream, ref_slot, (ref_address, at[0], at[1]), (pitch, stride, stride)),
+                         planes(test_stream, test_slot, (dist_address, at[2], at[3]), (pitch, stride, stride)))
+        else:
+            copied = luma(ref_stream, ref_slot, ref_address, pitch)
+            if score:
+                copied = max(copied, luma(test_stream, test_slot, dist_address, pitch))
         if copied:
             vmaf_vulkan._check(self._vulkan, self._vulkan.vv_commit_after(self._gpu, copied),
                                f"Scoring frame {self._count}")
-        elif score and _SPEED in self._on_gpu:
+        if score and _SPEED in self._on_gpu and not chroma_copied:
             # The chroma planes downloaded into the engine's memory for them
             # (Vulkan's, which another API is not given to pin).
             chroma, stride = (ctypes.c_void_p * 4)(), ctypes.c_uint32()
