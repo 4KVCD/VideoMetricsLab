@@ -625,7 +625,9 @@ struct Slots {
     std::vector<Buffer> slots;  // the pictures, planar (frame_bytes each)
     Buffer chroma;              // the crop's U and V, interleaved, on their way into a slot
     Buffer staging;             // host-visible, for destinations that are not pinned (made when first needed)
-    Picture picture;            // the decoding thread's
+    // The decoding thread's: two, so that Direct3D 11 copies a picture into
+    // one while the other's goes on into its slot.
+    Picture pictures[2];
     VkDescriptorPool descriptors = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> sets;  // per slot: the slot and `chroma`
     Commands copying;  // nvf_copy_luma / nvf_download*'s (one caller at a time: `copy_lock`)
@@ -640,9 +642,10 @@ struct Slots {
     }
 
     // Direct3D 11's shared texture `texture` (an NT handle), `format` and the
-    // crop's size, as `picture`; in the general layout from then on.
-    bool import_picture(HANDLE texture, VkFormat format, std::string &why) {
+    // crop's size, as pictures[index]; in the general layout from then on.
+    bool import_picture(int index, HANDLE texture, VkFormat format, std::string &why) {
         Device &g = g_device;
+        Picture &picture = pictures[index];
         if (!picture.convert.make()) {
             why = "making the hand-over's commands failed";
             return false;
@@ -686,7 +689,7 @@ struct Slots {
         }
         // Into the general layout once, before Direct3D 11 writes into it.
         picture.convert.begin();
-        image_barrier(VK_IMAGE_LAYOUT_UNDEFINED, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
+        image_barrier(picture, VK_IMAGE_LAYOUT_UNDEFINED, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
         if (!picture.convert.run()) {
             why = "Vulkan cannot take Direct3D 11's pictures";
             return false;
@@ -696,7 +699,7 @@ struct Slots {
 
     // `picture` from `from` (layout, queue family) to the general layout on
     // `to`: Direct3D 11 writes it as the external queue family.
-    void image_barrier(VkImageLayout layout, uint32_t from, uint32_t to) {
+    void image_barrier(Picture &picture, VkImageLayout layout, uint32_t from, uint32_t to) {
         VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -711,9 +714,9 @@ struct Slots {
                                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 
-    // The slots and buffers, and `texture` (Direct3D 11's shared texture of
-    // the crop, in `format`) imported.
-    bool make(const Params &p, HANDLE texture, VkFormat format, std::string &why) {
+    // The slots and buffers, and `textures` (Direct3D 11's two shared textures
+    // of the crop, in `format`) imported.
+    bool make(const Params &p, const HANDLE textures[2], VkFormat format, std::string &why) {
         Device &g = g_device;
         params = p;
         sample = p.bit_depth > 8 ? 2 : 1;
@@ -729,7 +732,7 @@ struct Slots {
             why = "making the hand-over's buffers failed";
             return false;
         }
-        if (!import_picture(texture, format, why)) return false;
+        if (!import_picture(0, textures[0], format, why) || !import_picture(1, textures[1], format, why)) return false;
         VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, static_cast<uint32_t>(2 * p.pool)};
         VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         pool_info.maxSets = static_cast<uint32_t>(p.pool);
@@ -765,14 +768,15 @@ struct Slots {
         return true;
     }
 
-    // The picture Direct3D 11 has copied into `picture` (and finished
+    // The picture Direct3D 11 has copied into pictures[index] (and finished
     // copying) into `slot`, once it is there.
-    bool convert(int slot) {
+    bool convert(int slot, int index) {
         Device &g = g_device;
+        Picture &picture = pictures[index];
         Commands &c = picture.convert;
         c.begin();
         if (c.broken) return false;
-        image_barrier(VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_EXTERNAL, g.family);  // from Direct3D 11
+        image_barrier(picture, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_EXTERNAL, g.family);  // from Direct3D 11
         VkBufferImageCopy luma{};
         luma.bufferRowLength = static_cast<uint32_t>(params.crop_w);
         luma.imageSubresource = {VK_IMAGE_ASPECT_PLANE_0_BIT, 0, 0, 1};
@@ -800,7 +804,7 @@ struct Slots {
             g.vkCmdPushConstants(c.buffer, g.pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof constants, constants);
             g.vkCmdDispatch(c.buffer, groups, 1, 1);
         }
-        image_barrier(VK_IMAGE_LAYOUT_GENERAL, g.family, VK_QUEUE_FAMILY_EXTERNAL);  // back to Direct3D 11
+        image_barrier(picture, VK_IMAGE_LAYOUT_GENERAL, g.family, VK_QUEUE_FAMILY_EXTERNAL);  // back to Direct3D 11
         return c.run();
     }
 
@@ -911,15 +915,17 @@ struct Slots {
     }
 
     void free() {
-        picture.convert.free();  // once its last copy is done
+        for (Picture &picture : pictures) picture.convert.free();  // once its last copy is done
         copying.free();
         for (Buffer &slot : slots) free_buffer(slot);
         free_buffer(chroma);
         free_buffer(staging);
-        if (picture.image) g_device.vkDestroyImage(g_device.device, picture.image, nullptr);
-        if (picture.memory) g_device.vkFreeMemory(g_device.device, picture.memory, nullptr);
-        picture.image = VK_NULL_HANDLE;
-        picture.memory = VK_NULL_HANDLE;
+        for (Picture &picture : pictures) {
+            if (picture.image) g_device.vkDestroyImage(g_device.device, picture.image, nullptr);
+            if (picture.memory) g_device.vkFreeMemory(g_device.device, picture.memory, nullptr);
+            picture.image = VK_NULL_HANDLE;
+            picture.memory = VK_NULL_HANDLE;
+        }
         if (descriptors) g_device.vkDestroyDescriptorPool(g_device.device, descriptors, nullptr);
         descriptors = VK_NULL_HANDLE;
     }

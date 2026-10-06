@@ -35,6 +35,14 @@
 // released. nvf_pop / nvf_download / nvf_release come from another thread
 // and touch only host memory and the queues -- and, handing over, the slot
 // buffers, by GPU copies of their own (amf_handover.h's Slots::copying).
+//
+// Handing over, the pictures are collected by a thread of the decoder's own
+// (collect_thread) instead: a picture's copy waits for its decoding to end,
+// and the thread that submits the packets waiting with it left the decoder
+// idle in between (the two 4K streams of a VMAF run decoded at 72 pictures a
+// second each on a Radeon 780M, where the GPU decodes about 123). nvf_push
+// then only submits (SubmitInput and QueryOutput from two threads, as AMF
+// allows).
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -43,6 +51,11 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <thread>
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002  // Windows 10 1803; older MinGW headers lack it
+#endif
 #include <cstdio>
 #include <deque>
 #include <mutex>
@@ -280,10 +293,20 @@ struct Decoder {
     std::vector<uint8_t> check;
     std::string scale_note;  // why the CPU scales, when the GPU was meant to
     // The hand-over (Params.handover): each picture's crop copied into
-    // `shared` (feeding thread only), which Vulkan imported into `vk`, and
-    // from there into a slot buffer.
+    // shared[0] or shared[1] in turn (the collecting thread only), which
+    // Vulkan imported into `vk`, and from there into a slot buffer. While one
+    // picture is copied into one, the one before goes on from the other
+    // (`pending`, its decoder surface held until its copy is done).
     bool handing_over = false;
-    ID3D11Texture2D *shared = nullptr;
+    ID3D11Texture2D *shared[2] = {nullptr, nullptr};
+    int next_shared = 0;
+    struct Pending {
+        bool active = false;
+        int slot = 0, index = 0;
+        long long pts = 0;
+        UINT64 fence = 0;
+        amf::AMFSurface *surface = nullptr;
+    } pending;
     ID3D11DeviceContext *immediate = nullptr;  // AMF's device's, used under its LockDX11
     // The copy into `shared` done: a fence waited for (Windows 10 1703 and
     // later), or else an event query asked until it is.
@@ -303,6 +326,10 @@ struct Decoder {
     std::deque<Ready> ready;
     bool ended = false, aborted = false, failed = false;
     std::string error;
+    // Handing over: the thread collecting the pictures, and its end of the
+    // stream (AMF_EOF after nvf_finish's Drain).
+    std::thread collector;
+    bool drained = false;
 
     void fail(const std::string &text) {
         std::lock_guard<std::mutex> guard(mutex);
@@ -457,9 +484,9 @@ bool deliver_scaled(Decoder *d, amf::AMFSurface *surface, long long pts) {
 
 // Waits for Direct3D 11's copy into the shared texture to be done on the GPU,
 // before Vulkan reads it; false when decoding stops first.
-bool copy_done(Decoder *d) {
+bool copy_done(Decoder *d, UINT64 value) {
     if (d->fence) {
-        if (FAILED(d->fence->SetEventOnCompletion(d->fence_value, d->fence_event))) return false;
+        if (FAILED(d->fence->SetEventOnCompletion(value, d->fence_event))) return false;
         while (WaitForSingleObject(d->fence_event, 100) == WAIT_TIMEOUT) {
             if (d->stopped()) return false;
         }
@@ -476,8 +503,33 @@ bool copy_done(Decoder *d) {
     return false;
 }
 
+// The pending picture finished: its copy waited for, its surface given back
+// to the decoder, the copy taken on by Vulkan into its slot, and the slot
+// queued for nvf_pop. False when decoding has stopped.
+bool finish_pending(Decoder *d) {
+    Decoder::Pending p = d->pending;
+    d->pending = Decoder::Pending();
+    if (!p.active) return true;
+    bool done = copy_done(d, p.fence);
+    p.surface->Release();
+    if (!done) {
+        if (!d->stopped()) d->fail("copying a decoded picture on the GPU failed");
+        return false;
+    }
+    if (!d->vk.convert(p.slot, p.index)) {
+        d->fail("copying a decoded picture on the GPU failed");
+        return false;
+    }
+    std::lock_guard<std::mutex> guard(d->mutex);
+    d->ready.push_back({p.slot, p.pts});
+    d->info.displayed++;
+    d->changed.notify_all();
+    return true;
+}
+
 // A decoded picture handed over (Params.handover): its crop copied by
-// Direct3D 11 into the texture Vulkan shares, then by Vulkan into a slot
+// Direct3D 11 into the next shared texture, then (once the next picture's
+// copy is under way, with a fence; at once without) by Vulkan into a slot
 // buffer, and queued for nvf_pop. False when decoding has stopped.
 bool deliver_on_gpu(Decoder *d, amf::AMFSurface *surface, long long pts) {
     ID3D11Texture2D *texture = nullptr;
@@ -493,13 +545,15 @@ bool deliver_on_gpu(Decoder *d, amf::AMFSurface *surface, long long pts) {
         surface->Release();
         return false;
     }
+    const int index = d->next_shared;
+    d->next_shared ^= 1;
     amf::AMFPlane *luma = surface->GetPlaneAt(0);
     const UINT left = static_cast<UINT>(luma->GetOffsetX() + d->params.crop_x);
     const UINT top = static_cast<UINT>(luma->GetOffsetY() + d->params.crop_y);
     const D3D11_BOX box{left, top, 0, left + static_cast<UINT>(d->params.crop_w),
                         top + static_cast<UINT>(d->params.crop_h), 1};
     d->session.context->LockDX11();
-    d->immediate->CopySubresourceRegion(d->shared, 0, 0, 0, 0, texture, slice, &box);
+    d->immediate->CopySubresourceRegion(d->shared[index], 0, 0, 0, 0, texture, slice, &box);
     if (d->fence) {
         d->signals->Signal(d->fence, ++d->fence_value);
     } else {
@@ -507,20 +561,12 @@ bool deliver_on_gpu(Decoder *d, amf::AMFSurface *surface, long long pts) {
     }
     d->immediate->Flush();
     d->session.context->UnlockDX11();
-    bool done = copy_done(d);
-    surface->Release();
-    if (!done) {
-        if (!d->stopped()) d->fail("copying a decoded picture on the GPU failed");
+    if (!finish_pending(d)) {  // the picture before, from the other texture
+        surface->Release();
         return false;
     }
-    if (!d->vk.convert(slot)) {
-        d->fail("copying a decoded picture on the GPU failed");
-        return false;
-    }
-    std::lock_guard<std::mutex> guard(d->mutex);
-    d->ready.push_back({slot, pts});
-    d->info.displayed++;
-    d->changed.notify_all();
+    d->pending = {true, slot, index, pts, d->fence_value, surface};
+    if (!d->fence) return finish_pending(d);  // an event query: one picture at a time
     return true;
 }
 
@@ -554,14 +600,20 @@ bool start_handover(Decoder *d, std::string &why) {
     shared.Usage = D3D11_USAGE_DEFAULT;
     shared.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     shared.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED;
-    IDXGIResource1 *resource = nullptr;
-    HANDLE texture = nullptr;
-    bool exported = SUCCEEDED(d->session.device->CreateTexture2D(&shared, nullptr, &d->shared))
-                    && SUCCEEDED(d->shared->QueryInterface(__uuidof(IDXGIResource1), reinterpret_cast<void **>(&resource)))
-                    && SUCCEEDED(resource->CreateSharedHandle(
-                        nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &texture));
-    if (resource) resource->Release();
+    HANDLE textures[2] = {nullptr, nullptr};
+    bool exported = true;
+    for (int i = 0; i < 2 && exported; ++i) {
+        IDXGIResource1 *resource = nullptr;
+        exported = SUCCEEDED(d->session.device->CreateTexture2D(&shared, nullptr, &d->shared[i]))
+                   && SUCCEEDED(d->shared[i]->QueryInterface(__uuidof(IDXGIResource1), reinterpret_cast<void **>(&resource)))
+                   && SUCCEEDED(resource->CreateSharedHandle(
+                       nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &textures[i]));
+        if (resource) resource->Release();
+    }
     if (!exported) {
+        for (HANDLE texture : textures) {
+            if (texture) CloseHandle(texture);
+        }
         why = "Direct3D 11 cannot share its pictures";
         return false;
     }
@@ -582,13 +634,13 @@ bool start_handover(Decoder *d, std::string &why) {
     }
     D3D11_QUERY_DESC query{D3D11_QUERY_EVENT, 0};
     if (!d->fence && FAILED(d->session.device->CreateQuery(&query, &d->copied))) {
-        CloseHandle(texture);
+        for (HANDLE texture : textures) CloseHandle(texture);
         why = "Direct3D 11 cannot share its pictures";
         return false;
     }
-    bool made = d->vk.make(d->params, texture,
+    bool made = d->vk.make(d->params, textures,
                            wide ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16 : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, why);
-    CloseHandle(texture);  // Vulkan holds the texture's memory now
+    for (HANDLE texture : textures) CloseHandle(texture);  // Vulkan holds the textures' memory now
     return made;
 }
 
@@ -665,7 +717,55 @@ bool collect(Decoder *d, bool draining) {
     return false;
 }
 
+// Handing over: the pictures collected as they are decoded, until the end
+// of the stream or decoding stops. Between pictures it waits half a
+// millisecond at a time (a high-resolution timer: Sleep's can be 15.6 ms).
+void collect_thread(Decoder *d) {
+    HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    auto nap = [timer] {
+        LARGE_INTEGER due;
+        due.QuadPart = -5000;  // 0.5 ms, in 100 ns units, relative
+        if (timer && SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE))
+            WaitForSingleObject(timer, 100);
+        else
+            Sleep(1);
+    };
+    while (!d->stopped()) {
+        amf::AMFData *data = nullptr;
+        AMF_RESULT result = d->session.decoder->QueryOutput(&data);
+        if (result == AMF_EOF) {
+            if (!finish_pending(d)) break;  // the last picture
+            std::lock_guard<std::mutex> guard(d->mutex);
+            d->drained = true;
+            d->changed.notify_all();
+            break;
+        }
+        if (data) {
+            if (!deliver(d, data)) break;
+            continue;
+        }
+        if (result == AMF_REPEAT || result == AMF_OK) {
+            nap();  // the next picture is still being decoded
+            continue;
+        }
+        if (result == AMF_RESOLUTION_CHANGED || result == AMF_RESOLUTION_UPDATED)
+            d->fail("the video's format changes partway through");
+        else
+            d->fail("AMD's GPU decoder failed (" + result_text(result) + ")");
+        break;
+    }
+    if (timer) CloseHandle(timer);
+}
+
 void destroy(Decoder *d) {
+    if (d->collector.joinable()) {
+        {
+            std::lock_guard<std::mutex> guard(d->mutex);
+            d->aborted = true;
+            d->changed.notify_all();
+        }
+        d->collector.join();
+    }
     trace("close: releasing the pictures held");
     for (amf::AMFSurface *surface : d->slots) {
         if (surface) surface->Release();
@@ -676,7 +776,10 @@ void destroy(Decoder *d) {
     if (d->signals) d->signals->Release();
     if (d->fence_event) CloseHandle(d->fence_event);
     if (d->immediate) d->immediate->Release();
-    if (d->shared) d->shared->Release();
+    if (d->pending.surface) d->pending.surface->Release();  // decoding stopped with a copy pending
+    for (ID3D11Texture2D *texture : d->shared) {
+        if (texture) texture->Release();
+    }
     d->session.close();
     trace("close: freeing the decoder");
     delete d;
@@ -741,6 +844,15 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     d->slots.assign(params->pool, nullptr);
     for (int slot = 0; slot < params->pool; slot++) d->free_slots.push_back(slot);
+    if (d->handing_over) {
+        try {
+            d->collector = std::thread(collect_thread, d);
+        } catch (...) {
+            copy_text(error, error_size, "a thread could not be started");
+            destroy(d);
+            return nullptr;
+        }
+    }
     return d;
 }
 
@@ -756,9 +868,17 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
     memcpy(buffer->GetNative(), data, static_cast<size_t>(size));
     buffer->SetPts(pts);
     while (true) {
-        recycle(d);
+        if (!d->handing_over) recycle(d);
         result = d->session.decoder->SubmitInput(buffer);
         if (result == AMF_INPUT_FULL || result == AMF_DECODER_NO_FREE_SURFACES) {
+            if (d->handing_over) {
+                // Its queue is full: once the collecting thread has taken a
+                // picture (or a millisecond on), try again.
+                std::unique_lock<std::mutex> guard(d->mutex);
+                d->changed.wait_for(guard, std::chrono::milliseconds(1), [d] { return d->failed || d->aborted; });
+                if (d->failed || d->aborted) break;
+                continue;
+            }
             // Its queue is full: take its pictures, then try again.
             if (!collect(d, false)) break;
             Sleep(1);
@@ -775,7 +895,7 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
         break;
     }
     buffer->Release();
-    if (!d->stopped()) collect(d, false);
+    if (!d->handing_over && !d->stopped()) collect(d, false);
     std::lock_guard<std::mutex> guard(d->mutex);
     return d->aborted ? NVF_ABORTED : d->failed ? NVF_ERROR : 0;
 }
@@ -786,6 +906,9 @@ NVF_API int nvf_finish(void *handle) {
         AMF_RESULT result = d->session.decoder->Drain();
         if (result != AMF_OK && result != AMF_INPUT_FULL) {
             d->fail("Finishing the video failed (" + result_text(result) + ")");
+        } else if (d->handing_over) {  // the collecting thread takes the rest, to the end
+            std::unique_lock<std::mutex> guard(d->mutex);
+            d->changed.wait(guard, [d] { return d->drained || d->failed || d->aborted; });
         } else {
             collect(d, true);
         }
