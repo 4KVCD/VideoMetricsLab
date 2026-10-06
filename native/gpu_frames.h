@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <emmintrin.h>
 
 #include "scale_filter.h"
 
@@ -81,6 +82,28 @@ inline size_t frame_bytes(const Params &p) {
     return luma + 2 * ((w + 1) / 2) * ((h + 1) / 2) * sample;
 }
 
+// One row of 16-bit samples shifted from the decoder's alignment to the one
+// handed back, 8 at a time. Into a row 16-byte aligned (libvmaf's pictures
+// are) by streaming stores, which do not read the destination into the cache
+// first: a 4K picture (16 MB) is out of the cache before it is scored, and
+// on an iGPU the CPU's reads compete with the decoder's for the same memory.
+// True when it streamed: the caller fences once it is done.
+inline bool shift_row(const uint16_t *src, uint16_t *dst, size_t w, int down, int up) {
+    const bool stream = (reinterpret_cast<uintptr_t>(dst) & 15) == 0;
+    const __m128i right = _mm_cvtsi32_si128(down), left = _mm_cvtsi32_si128(up);
+    size_t i = 0;
+    for (; i + 8 <= w; i += 8) {
+        __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i *>(src + i));
+        v = _mm_sll_epi16(_mm_srl_epi16(v, right), left);
+        if (stream)
+            _mm_stream_si128(reinterpret_cast<__m128i *>(dst + i), v);
+        else
+            _mm_storeu_si128(reinterpret_cast<__m128i *>(dst + i), v);
+    }
+    for (; i < w; i++) dst[i] = static_cast<uint16_t>((src[i] >> down) << up);
+    return stream;
+}
+
 // Copies the crop of a decoded NV12/P010 picture -- the luma plane at `y`,
 // U and V interleaved at `uv`, rows `pitch` bytes apart -- into `dst`, planes
 // packed. 10-bit samples sit in the top bits of 16 when `msb`, else in the
@@ -135,15 +158,17 @@ inline void convert_frame(const Params &p, const uint8_t *y, const uint8_t *uv, 
     // 16-bit samples: from the decoder's alignment to the one handed back.
     const int down = msb ? 6 : 0, up = p.shift ? 0 : 6;
     uint16_t *out = reinterpret_cast<uint16_t *>(dst);
+    bool streamed = false;
     for (size_t row = 0; row < h; row++) {
         const uint16_t *src = reinterpret_cast<const uint16_t *>(y + (p.crop_y + row) * pitch) + p.crop_x;
         uint16_t *o = out + row * w;
         if (down == 6 && up == 6) {
             memcpy(o, src, w * 2);
         } else {
-            for (size_t i = 0; i < w; i++) o[i] = static_cast<uint16_t>((src[i] >> down) << up);
+            streamed |= shift_row(src, o, w, down, up);
         }
     }
+    if (streamed) _mm_sfence();  // the streamed rows are written before another thread reads them
     if (p.luma_only) return;
     uint16_t *u = out + w * h, *v = u + cw * ch;
     for (size_t row = 0; row < ch; row++) {

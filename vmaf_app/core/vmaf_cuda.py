@@ -516,13 +516,23 @@ class CpuScorer:
         configuration = _Configuration(_VMAF_LOG_LEVEL_ERROR, threads, self._step, 0, 0)
         _check(lib.vmaf_init(ctypes.byref(self._context), configuration), "Starting libvmaf")
         try:
+            # With XPSNR, PSNR comes from the squared errors it sums anyway
+            # (its option "psnr"), not a pass of its own over both pictures:
+            # 4K PSNR + SSIM + XPSNR 6% faster with Intel's decoder, 11% with
+            # NVIDIA's.
+            fused = "psnr" in self._metrics and "xpsnr" in self._metrics
             for metric in self._metrics:
+                if fused and metric == "psnr":
+                    continue
                 extractor = CPU_FEATURES[metric][0]
                 options = ctypes.c_void_p()
                 if metric == "xpsnr":
                     # FFmpeg's filter weights by the activity of its first
                     # input, which the app's commands make the test video.
-                    for key, value in (("frame_rate", str(int(frame_rate))), ("weights_from_dist", "true")):
+                    settings = [("frame_rate", str(int(frame_rate))), ("weights_from_dist", "true")]
+                    if fused:
+                        settings.append(("psnr", "true"))
+                    for key, value in settings:
                         if lib.vmaf_feature_dictionary_set(ctypes.byref(options), key.encode(), value.encode()):
                             lib.vmaf_feature_dictionary_free(ctypes.byref(options))
                             raise VmafGpuError(f"Setting {extractor}'s {key} failed")
@@ -652,16 +662,39 @@ class CpuScorer:
 @functools.cache
 def cpu_scores_xpsnr() -> bool:
     """Whether the bundled libvmaf-fast has the xpsnr extractor (a port of
-    FFmpeg's filter, in its builds after 3.2.0-fast.1)."""
+    FFmpeg's filter, in its builds after 3.2.0-fast.1) with its option
+    "psnr", which CpuScorer uses: a pair of tiny pictures is scored, as
+    libvmaf ignores an option it does not know."""
     try:
-        lib = _load()
+        return _scores_xpsnr_and_psnr()
     except (OSError, VmafGpuError):
         return False
+
+
+def _scores_xpsnr_and_psnr() -> bool:
+    lib = _load()
     context = ctypes.c_void_p()
-    if lib.vmaf_init(ctypes.byref(context), _Configuration(_VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0)):
-        return False
+    _check(lib.vmaf_init(ctypes.byref(context), _Configuration(_VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0)), "Starting libvmaf")
     try:
-        return lib.vmaf_use_feature(context, b"xpsnr", None) == 0
+        options = ctypes.c_void_p()
+        _check(lib.vmaf_feature_dictionary_set(ctypes.byref(options), b"psnr", b"true"), "Setting an option")
+        if lib.vmaf_use_feature(context, b"xpsnr", options):
+            return False
+        parameters = _PictureParameters(64, 64, 8, _VMAF_PIX_FMT_YUV400P)
+        _check(lib.vmaf_preallocate_pictures(context, _PictureConfiguration(parameters, 2)), "Allocating pictures")
+        ref, dist = _Picture(), _Picture()
+        _check(lib.vmaf_fetch_preallocated_picture(context, ctypes.byref(ref)), "Taking a picture")
+        try:  # a picture never handed back keeps vmaf_close waiting for it
+            _check(lib.vmaf_fetch_preallocated_picture(context, ctypes.byref(dist)), "Taking a picture")
+        except BaseException:
+            lib.vmaf_picture_unref(ctypes.byref(ref))
+            raise
+        # libvmaf takes both pictures, also when it fails.
+        _check(lib.vmaf_read_pictures(context, ctypes.byref(ref), ctypes.byref(dist), 0), "Scoring")
+        _check(lib.vmaf_read_pictures(context, None, None, 0), "Finishing")
+        value = ctypes.c_double()
+        return all(lib.vmaf_feature_score_at_index(context, name, ctypes.byref(value), 0) == 0
+                   for name in (b"xpsnr_y", b"psnr_y"))
     finally:
         lib.vmaf_close(context)
 

@@ -104,7 +104,8 @@ def _ffmpegs_xpsnr(tmp_path: Path, width: int, height: int, bits: int, rate: int
 ])
 def test_the_scorers_xpsnr_is_ffmpegs(tmp_path, width, height, bits, rate):
     """To the four decimals FFmpeg's stats file keeps, frame after frame (its
-    temporal activity reads the frames before)."""
+    temporal activity reads the frames before); PSNR beside it, from XPSNR's
+    own squared errors, FFmpeg's libvmaf's to its six."""
     reference, distorted = _frames(width, height, bits, 5, 5), _frames(width, height, bits, 5, 6)
     scorer = vmaf_cuda.CpuScorer(width, height, bits, ("psnr", "xpsnr"), threads=4, frame_rate=rate)
     try:
@@ -115,6 +116,7 @@ def test_the_scorers_xpsnr_is_ffmpegs(tmp_path, width, height, bits, rate):
         scorer.close()
     assert frames.tolist() == list(range(5))
     assert scores["xpsnr"].tolist() == _ffmpegs_xpsnr(tmp_path, width, height, bits, rate, reference, distorted)
+    assert scores["psnr"].tolist() == _ffmpegs_scores(tmp_path, width, height, bits, reference, distorted)["psnr"]
 
 
 @needs_libvmaf
