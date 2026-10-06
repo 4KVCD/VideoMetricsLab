@@ -1,7 +1,8 @@
-"""PSNR and SSIM by the bundled libvmaf's CPU extractors in the app
+"""PSNR, SSIM and XPSNR by the bundled libvmaf's CPU extractors in the app
 (vmaf_cuda.CpuScorer, vmaf_runner._run_cpu_metrics), in place of FFmpeg's
-libvmaf filter: the same scores, and FFmpeg's filter again whenever the app's
-way fails. The scorer runs for real -- libvmaf's CPU code needs no GPU."""
+libvmaf and xpsnr filters: the same scores, and FFmpeg's filters again
+whenever the app's way fails. The scorer runs for real -- libvmaf's CPU code
+needs no GPU."""
 import json
 import subprocess
 from pathlib import Path
@@ -16,10 +17,18 @@ from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import FrameScores, ResampleTarget, VideoInfo, VmafOptions
 
 needs_libvmaf = pytest.mark.skipif(not vmaf_cuda.LIBRARY_PATH.is_file(), reason="libvmaf.dll is not bundled")
+needs_xpsnr = pytest.mark.skipif(not (vmaf_cuda.LIBRARY_PATH.is_file() and vmaf_cuda.cpu_scores_xpsnr()),
+                                 reason="the bundled libvmaf-fast has no XPSNR")
 
 
 def _info(path: str, width: int = 1920, height: int = 1080) -> VideoInfo:
     return VideoInfo(Path(path), width, height, 24.0, 10.0, 240, "hevc", pix_fmt="yuv420p")
+
+
+def _rated(path: str, average: float = 24.0, nominal: float = 24.0) -> VideoInfo:
+    """ffprobe's avg_frame_rate (0: none) and r_frame_rate."""
+    return VideoInfo(Path(path), 1920, 1080, average or nominal, 10.0, 240, "hevc", pix_fmt="yuv420p",
+                     nominal_fps=nominal, average_fps=average)
 
 
 def _frames(width: int, height: int, bits: int, count: int, seed: int) -> list[bytes]:
@@ -71,6 +80,41 @@ def test_the_scorers_psnr_and_ssim_are_ffmpegs_libvmafs(tmp_path, width, height,
     assert frames.tolist() == list(range(5))
     assert scores["psnr"].tolist() == want["psnr"]
     assert scores["ssim"].tolist() == want["ssim"]
+
+
+def _ffmpegs_xpsnr(tmp_path: Path, width: int, height: int, bits: int, rate: int, reference, distorted) -> list:
+    """XPSNR (Y) of the frames by FFmpeg's xpsnr filter, the test video its
+    first input as the app's commands give it, from its stats file."""
+    fmt = "yuv420p10le" if bits > 8 else "yuv420p"
+    for name, frames in (("ref.yuv", reference), ("dis.yuv", distorted)):
+        (tmp_path / name).write_bytes(b"".join(frames))
+    raw = ["-f", "rawvideo", "-pix_fmt", fmt, "-s", f"{width}x{height}", "-r", str(rate)]
+    subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", *raw, "-i", "dis.yuv", *raw, "-i", "ref.yuv",
+                    "-lavfi", "[0:v][1:v]xpsnr=stats_file=xpsnr.txt", "-f", "null", "-"],
+                   check=True, cwd=tmp_path, capture_output=True)
+    values = vr._parse_xpsnr_log(tmp_path / "xpsnr.txt")
+    return [values[number] for number in sorted(values)]
+
+
+@needs_xpsnr
+@pytest.mark.parametrize(("width", "height", "bits", "rate"), [
+    (320, 240, 8, 24),  # small: the weights min-smoothed
+    (641, 361, 10, 60),  # odd, second-order temporal activity
+    (2304, 1296, 10, 30),  # above 2048x1152: downsampled activity
+])
+def test_the_scorers_xpsnr_is_ffmpegs(tmp_path, width, height, bits, rate):
+    """To the four decimals FFmpeg's stats file keeps, frame after frame (its
+    temporal activity reads the frames before)."""
+    reference, distorted = _frames(width, height, bits, 5, 5), _frames(width, height, bits, 5, 6)
+    scorer = vmaf_cuda.CpuScorer(width, height, bits, ("psnr", "xpsnr"), threads=4, frame_rate=rate)
+    try:
+        for ref, dist in zip(reference, distorted, strict=True):
+            scorer.add(ref, dist)
+        frames, scores = scorer.finish()
+    finally:
+        scorer.close()
+    assert frames.tolist() == list(range(5))
+    assert scores["xpsnr"].tolist() == _ffmpegs_xpsnr(tmp_path, width, height, bits, rate, reference, distorted)
 
 
 @needs_libvmaf
@@ -152,6 +196,62 @@ def test_ffmpegs_own_pairing_takes_an_even_size_and_at_most_10_bits(monkeypatch)
     assert vr._cpu_metrics_plan(options, (1921, 1080), _info("s.mkv"), _info("d.mkv"), HwAccelPlan()) is None
 
 
+@pytest.mark.parametrize(("average", "nominal", "rate"), [
+    (24000 / 1001, 24000 / 1001, 23),
+    (60.0, 60.0, 60),
+    (29.97, 30.0, 30),
+    (0.0, 25.0, None),  # no average: FFmpeg may take the codec's rate
+    (25.0, 50.0, None),  # fields: the same
+    (24.0, 0.0, None),
+])
+def test_xpsnrs_frame_rate_is_ffmpegs_where_that_is_known(average, nominal, rate):
+    assert vr._xpsnr_frame_rate(_rated("s.mkv", average, nominal)) == rate
+
+
+def test_xpsnr_is_the_apps_only_where_it_is_ffmpegs_to_the_bit(monkeypatch):
+    monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: True)
+    assert vr._xpsnr_in_app(1920, 1080, 10) and vr._xpsnr_in_app(1279, 719, 12)
+    assert not vr._xpsnr_in_app(2561, 1440, 10)  # FFmpeg's filter reads beyond an odd picture
+    assert not vr._xpsnr_in_app(1920, 1080, 16)
+    monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: False)  # a libvmaf-fast without it
+    assert not vr._xpsnr_in_app(1920, 1080, 10)
+
+
+@needs_libvmaf
+def test_xpsnr_joins_them_in_the_app_where_it_can(app_scores, monkeypatch):
+    monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: True)
+    options = VmafOptions(compute_vmaf=False, extra_features=["name=psnr"], compute_xpsnr=True)
+    cuda = HwAccelPlan(source="cuda", distorted="cuda")
+    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv", 60.0, 60.0), _rated("d.mkv"), cuda)
+    assert plan.models == {"psnr": "psnr", "xpsnr": "xpsnr"} and plan.frame_rate == 60
+    # A frame rate FFmpeg might not take as known here: FFmpeg's, beside them.
+    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv", 0.0, 25.0), _rated("d.mkv"), cuda)
+    assert plan.models == {"psnr": "psnr"}
+
+
+@needs_libvmaf
+def test_xpsnr_alone_is_the_apps_only_from_the_gpus_decoder(app_scores, monkeypatch):
+    """From FFmpeg's pipes FFmpeg's filter keeps up, in less memory."""
+    monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: True)
+    options = VmafOptions(compute_vmaf=False, compute_xpsnr=True)
+    cuda = HwAccelPlan(source="cuda", distorted="cuda")
+    monkeypatch.setattr(vr, "_decoded_in_app", lambda *_args: True)
+    plan = vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv"), _rated("d.mkv"), cuda)
+    assert plan.models == {"xpsnr": "xpsnr"} and plan.frame_rate == 24
+    monkeypatch.setattr(vr, "_decoded_in_app", lambda *_args: False)
+    assert vr._cpu_metrics_plan(options, (1920, 1080), _rated("s.mkv"), _rated("d.mkv"), cuda) is None
+
+
+def test_the_app_decodes_when_one_gpu_decodes_both_and_nothing_is_scaled():
+    cuda = HwAccelPlan(source="cuda", distorted="cuda")
+    source, test = _info("s.mkv"), _info("d.mkv")
+    assert vr._decoded_in_app(source, test, None, None, (1920, 1080), cuda)
+    assert not vr._decoded_in_app(source, test, None, None, (1280, 720), cuda)  # scaled
+    assert not vr._decoded_in_app(source, test, None, None, (1920, 1080), HwAccelPlan(source="cuda"))
+    prores = VideoInfo(Path("p.mov"), 1920, 1080, 24.0, 10.0, 240, "prores", pix_fmt="yuv422p10le")
+    assert not vr._decoded_in_app(prores, test, None, None, (1920, 1080), cuda)
+
+
 @needs_libvmaf
 @pytest.mark.parametrize(("hwaccel", "in_the_app"), [
     (HwAccelPlan(source="cuda", distorted="cuda"), True),
@@ -214,6 +314,29 @@ def test_xpsnr_is_ffmpegs_beside_them_taken_for_the_frames_they_scored(monkeypat
     assert "xpsnr=" in command and "libvmaf" not in command  # FFmpeg scored them again beside XPSNR
 
 
+@pytest.mark.parametrize(("features", "subsample"), [(["name=psnr"], 3), ([], 1)])
+def test_xpsnr_in_the_app_needs_no_ffmpeg_of_its_own(monkeypatch, features, subsample):
+    """XPSNR alone is scored for every frame, as FFmpeg's filter scores it."""
+    seen = {}
+
+    def isolated(target, plan, source, distorted, options, *args, **kwargs):
+        seen["options"] = options
+        return _scores([0, 3], psnr=[30.0, 31.0], xpsnr=[40.0, 41.0])
+
+    def execute_run(*_args, **_kwargs):
+        raise AssertionError("an FFmpeg for XPSNR")
+
+    monkeypatch.setattr(vr, "run_isolated", isolated)
+    monkeypatch.setattr(vr, "_execute_run", execute_run)
+    models = {"psnr": "psnr", "xpsnr": "xpsnr"} if features else {"xpsnr": "xpsnr"}
+    plan = vr._GpuPlan(models, 1920, 1080, 8, backend="cpu", threads=4, frame_rate=24)
+    options = VmafOptions(compute_vmaf=False, extra_features=features, compute_xpsnr=True, n_subsample=3)
+    frames = vr._run_cpu_metrics(plan, _info("s.mkv"), _info("d.mkv"), options, None, None, HwAccelPlan(), 240,
+                                 model="", on_progress=None, on_status=None, cancel_event=None, process_handle=None)
+    assert seen["options"].compute_xpsnr and seen["options"].n_subsample == subsample
+    assert frames.values("xpsnr").tolist() == [40.0, 41.0]
+
+
 def test_a_failure_in_the_app_leaves_them_to_ffmpegs_filter(monkeypatch):
     statuses = []
 
@@ -255,6 +378,9 @@ def test_two_runs_progress_is_the_one_behinds():
 def test_their_scores_say_they_are_the_apps_libvmafs_with_ffmpegs_identity():
     frames = _scores([0, 1], psnr=[30.0, 31.0], ssim=[0.9, 0.91], xpsnr=[40.0, 41.0])
     results = vr._metric_results_for_current_run(frames, "", cpu_keys={"psnr", "ssim"})
+    in_the_app = vr._metric_results_for_current_run(frames, "", cpu_keys={"xpsnr"}).get("xpsnr").provenance
+    assert in_the_app.implementation == "libvmaf" and in_the_app.implementation_version == vmaf_cuda.CPU_BUILD
+    assert in_the_app.implementation_compatibility_id == results.get("xpsnr").provenance.implementation_compatibility_id
     for key in ("psnr", "ssim"):
         provenance = results.get(key).provenance
         assert provenance.implementation == "libvmaf" and provenance.implementation_version == vmaf_cuda.CPU_BUILD
@@ -265,7 +391,9 @@ def test_their_scores_say_they_are_the_apps_libvmafs_with_ffmpegs_identity():
 
 def test_the_gpus_frame_scores_take_psnr_and_ssim():
     frames = vr._gpu_frame_scores((np.array([0, 1], dtype=np.int32), {"psnr": np.array([30.123456, 31.0]),
-                                                                      "ssim": np.array([0.9, 0.95])}), 24.0)
+                                                                      "ssim": np.array([0.9, 0.95]),
+                                                                      "xpsnr": np.array([40.1234, np.inf])}), 24.0)
+    assert frames.values("xpsnr").dtype == np.float32 and frames.values("xpsnr")[1] == np.inf
     assert frames.values("psnr").dtype == np.float32
     assert frames.values("psnr").tolist() == np.array([30.123456, 31.0], dtype=np.float32).tolist()
     assert frames.has("ssim") and not frames.has("vmaf")

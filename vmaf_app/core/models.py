@@ -74,6 +74,9 @@ class VideoInfo:
     # ffprobe's r_frame_rate. A meaningful difference from average fps is a
     # practical warning that frame-number/fps timestamps are unsafe (VFR).
     nominal_fps: float = 0.0
+    # ffprobe's avg_frame_rate as it gives it: 0 where it gives none, and
+    # `fps` is then the nominal rate (vmaf_runner._xpsnr_frame_rate).
+    average_fps: float = 0.0
     # Stream colour tags are needed to distinguish a 10-bit SDR encode from
     # PQ/HLG HDR.  Empty means the container did not declare the value.
     color_range: str = ""

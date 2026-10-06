@@ -144,7 +144,7 @@ def _info_to_dict(info: VideoInfo) -> dict:
         "fps": info.fps, "duration": info.duration, "nb_frames": info.nb_frames,
         "codec_name": info.codec_name, "sar": info.sar, "pix_fmt": info.pix_fmt,
         "bit_rate": info.bit_rate, "bit_rate_whole_file": info.bit_rate_whole_file,
-        "nominal_fps": info.nominal_fps,
+        "nominal_fps": info.nominal_fps, "average_fps": info.average_fps,
         "color_range": info.color_range, "color_space": info.color_space,
         "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
         "chroma_location": info.chroma_location,
@@ -157,7 +157,8 @@ def _info_from_dict(data: dict) -> VideoInfo:
                      codec_name=data["codec_name"], sar=data.get("sar", "1:1"),
                      pix_fmt=data.get("pix_fmt", ""), bit_rate=data.get("bit_rate", 0),
                      bit_rate_whole_file=bool(data.get("bit_rate_whole_file", False)),
-                     nominal_fps=data.get("nominal_fps", 0.0), color_range=data.get("color_range", ""),
+                     nominal_fps=data.get("nominal_fps", 0.0), average_fps=data.get("average_fps", 0.0),
+                     color_range=data.get("color_range", ""),
                      color_space=data.get("color_space", ""), color_transfer=data.get("color_transfer", ""),
                      color_primaries=data.get("color_primaries", ""),
                      chroma_location=data.get("chroma_location", ""))

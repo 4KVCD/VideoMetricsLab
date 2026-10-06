@@ -672,3 +672,16 @@ def test_a_context_saved_without_the_algorithm_takes_the_recipes(tmp_path):
     context_path.write_text(json.dumps(context), encoding="utf-8")
     found, _label = _load_cached(source, test, options, tmp_path)
     assert found.scale_algorithm == "spline"
+
+
+@pytest.mark.parametrize("module", ["metric_cache", "run_io"])
+def test_the_probed_average_rate_is_kept_and_an_older_entry_has_none(module):
+    from vmaf_app.core import run_io
+    from vmaf_app.core.models import VideoInfo
+
+    store = {"metric_cache": metric_cache, "run_io": run_io}[module]
+    info = VideoInfo(Path("v.mkv"), 1920, 1080, 23.976, 10.0, 240, "hevc", nominal_fps=23.976, average_fps=23.976)
+    saved = store._info_to_dict(info)
+    assert store._info_from_dict(saved).average_fps == 23.976
+    del saved["average_fps"]
+    assert store._info_from_dict(saved).average_fps == 0.0

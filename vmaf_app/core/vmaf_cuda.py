@@ -166,6 +166,8 @@ def _load() -> ctypes.CDLL:
             ("vmaf_model_destroy", None, [handle]),
             ("vmaf_close", ctypes.c_int, [handle]),
             ("vmaf_use_feature", ctypes.c_int, [handle, ctypes.c_char_p, handle]),
+            ("vmaf_feature_dictionary_set", ctypes.c_int, [pointer, ctypes.c_char_p, ctypes.c_char_p]),
+            ("vmaf_feature_dictionary_free", ctypes.c_int, [pointer]),
             ("vmaf_feature_score_at_index", ctypes.c_int,
              [handle, ctypes.c_char_p, ctypes.POINTER(ctypes.c_double), ctypes.c_uint]),
         ):
@@ -458,23 +460,30 @@ class GpuScorer:
 
 
 #: libvmaf's CPU feature extractors scored by CpuScorer: the app's metric key
-#: -> (the extractor, the feature whose score is the metric's), as FFmpeg's
-#: libvmaf filter is asked for them ("name=psnr", "name=float_ssim") and as
-#: its log names the scores the app reads (vmaf_runner._parse_log).
-CPU_FEATURES = {"psnr": ("psnr", "psnr_y"), "ssim": ("float_ssim", "float_ssim")}
+#: -> (the extractor, the feature whose score is the metric's, the decimals
+#: kept of it), as FFmpeg's libvmaf filter is asked for them ("name=psnr",
+#: "name=float_ssim") and as its log names and rounds the scores the app
+#: reads (vmaf_runner._parse_log); XPSNR as FFmpeg's xpsnr filter writes it
+#: in its stats file ("%3.4f"), by libvmaf-fast's port of that filter.
+CPU_FEATURES = {"psnr": ("psnr", "psnr_y", 6), "ssim": ("float_ssim", "float_ssim", 6),
+                "xpsnr": ("xpsnr", "xpsnr_y", 4)}
 #: What a CPU score records it was calculated with.
 CPU_BUILD = f"libvmaf-fast {LIBVMAF_FAST_VERSION} (CPU)"
 #: The most memory CpuScorer's pictures take, unless two pairs of them take
 #: more (8K): page-locked, from NVIDIA's decoder. 4K 10-bit from NVIDIA's
 #: decoder, PSNR + SSIM: 2 pairs 49 fps, 3 93, 4 129, 5 159, 6 (this) and 8
-#: 172 fps, where the decoders' feed levels off.
+#: 172 fps, where the decoders' feed levels off. With XPSNR, whose pairs
+#: take longer, and the pair it keeps from the frames before on top: 7
+#: pairs 135 fps, 8 154, 9 169 (CPU_XPSNR_PICTURE_MEMORY), 10 171.
 CPU_PICTURE_MEMORY = 200 << 20
+CPU_XPSNR_PICTURE_MEMORY = 270 << 20
 
 
 class CpuScorer:
-    """PSNR and SSIM of frame pairs given in order, by libvmaf-fast's own CPU
-    extractors -- the ones FFmpeg's libvmaf filter runs, which give the same
-    scores to the six decimals its log keeps -- in this process, on its
+    """PSNR, SSIM and XPSNR of frame pairs given in order, by libvmaf-fast's
+    own CPU extractors -- the ones FFmpeg's libvmaf filter runs, which give
+    the same scores to the six decimals its log keeps, and its port of
+    FFmpeg's xpsnr filter (CPU_FEATURES) -- in this process, on its
     pictures (vmaf_preallocate_pictures). FFmpeg's filter allocates, zeroes
     and copies two new pictures for every pair on its one filter thread
     before libvmaf's threads see them: 4K PSNR + SSIM ran at 67 fps there,
@@ -486,7 +495,9 @@ class CpuScorer:
     writes them; their luma is read), or a decoder's (add_decoded)."""
 
     def __init__(self, width: int, height: int, bit_depth: int, metrics: tuple[str, ...], n_subsample: int = 1,
-                 threads: int = 0):
+                 threads: int = 0, frame_rate: int = 0):
+        """`frame_rate`: XPSNR's, as FFmpeg's filter takes it (whole frames a
+        second of the reference video, vmaf_runner._xpsnr_frame_rate)."""
         self._lib = lib = _load()
         self._step = max(1, n_subsample)
         self._metrics = tuple(metrics)
@@ -507,11 +518,20 @@ class CpuScorer:
         try:
             for metric in self._metrics:
                 extractor = CPU_FEATURES[metric][0]
-                _check(lib.vmaf_use_feature(self._context, extractor.encode(), None), f"Starting {extractor}")
+                options = ctypes.c_void_p()
+                if metric == "xpsnr":
+                    # FFmpeg's filter weights by the activity of its first
+                    # input, which the app's commands make the test video.
+                    for key, value in (("frame_rate", str(int(frame_rate))), ("weights_from_dist", "true")):
+                        if lib.vmaf_feature_dictionary_set(ctypes.byref(options), key.encode(), value.encode()):
+                            lib.vmaf_feature_dictionary_free(ctypes.byref(options))
+                            raise VmafGpuError(f"Setting {extractor}'s {key} failed")
+                # libvmaf frees the options (one it refuses early keeps a few bytes).
+                _check(lib.vmaf_use_feature(self._context, extractor.encode(), options), f"Starting {extractor}")
+            pairs = cpu_pairs(width, height, bit_depth, threads, xpsnr="xpsnr" in self._metrics)
             parameters = _PictureParameters(width, height, bit_depth, _VMAF_PIX_FMT_YUV400P)
-            _check(lib.vmaf_preallocate_pictures(
-                self._context, _PictureConfiguration(parameters, 2 * cpu_pairs(width, height, bit_depth, threads))),
-                "Allocating pictures")
+            _check(lib.vmaf_preallocate_pictures(self._context, _PictureConfiguration(parameters, 2 * pairs)),
+                   "Allocating pictures")
         except BaseException:
             self.close()
             raise
@@ -595,7 +615,8 @@ class CpuScorer:
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
         """The frame numbers scored (every n_subsample-th) and each metric's
-        scores for them, as libvmaf's JSON log rounds them: six decimals."""
+        scores for them, rounded as the files the app reads FFmpeg's from
+        round them (CPU_FEATURES)."""
         if not self._count:
             return np.zeros(0, dtype=np.int32), {metric: np.zeros(0) for metric in self._metrics}
         _check(self._lib.vmaf_read_pictures(self._context, None, None, 0), "Finishing")
@@ -603,12 +624,13 @@ class CpuScorer:
         scores = {}
         value = ctypes.c_double()
         for metric in self._metrics:
-            feature = CPU_FEATURES[metric][1].encode()
+            _extractor, feature, decimals = CPU_FEATURES[metric]
             column = np.empty(len(frames), dtype=np.float64)
             for slot, frame in enumerate(frames):
-                _check(self._lib.vmaf_feature_score_at_index(self._context, feature, ctypes.byref(value), int(frame)),
+                _check(self._lib.vmaf_feature_score_at_index(self._context, feature.encode(), ctypes.byref(value),
+                                                             int(frame)),
                        f"Reading {metric} for frame {frame}")
-                column[slot] = float(f"{value.value:.6f}")
+                column[slot] = float(f"{value.value:.{decimals}f}")
             scores[metric] = column
         return frames, scores
 
@@ -627,21 +649,40 @@ class CpuScorer:
             self._context = ctypes.c_void_p()
 
 
-def cpu_pairs(width: int, height: int, bit_depth: int, threads: int) -> int:
+@functools.cache
+def cpu_scores_xpsnr() -> bool:
+    """Whether the bundled libvmaf-fast has the xpsnr extractor (a port of
+    FFmpeg's filter, in its builds after 3.2.0-fast.1)."""
+    try:
+        lib = _load()
+    except (OSError, VmafGpuError):
+        return False
+    context = ctypes.c_void_p()
+    if lib.vmaf_init(ctypes.byref(context), _Configuration(_VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0)):
+        return False
+    try:
+        return lib.vmaf_use_feature(context, b"xpsnr", None) == 0
+    finally:
+        lib.vmaf_close(context)
+
+
+def cpu_pairs(width: int, height: int, bit_depth: int, threads: int, xpsnr: bool = False) -> int:
     """How many pairs of pictures CpuScorer's pool holds: one for each of
     libvmaf's threads and one being filled, up to 8 threads' worth -- PSNR
     and SSIM of 4K pairs from memory went little faster with more (139 fps
-    with 8 threads, 152 with 24) -- in at most CPU_PICTURE_MEMORY, but two.
-    A pair is scored on one thread: each more in the pool is one more
-    scored at a time."""
+    with 8 threads, 152 with 24) -- in at most CPU_PICTURE_MEMORY
+    (CPU_XPSNR_PICTURE_MEMORY with XPSNR), but two; with XPSNR, one more for
+    the two test pictures it keeps from the frames before. A pair is scored
+    on one thread: each more in the pool is one more scored at a time."""
     picture = ((width + 31) & ~31) * height * (1 if bit_depth <= 8 else 2)
-    return max(2, min(min(8, max(1, threads)) + 1, CPU_PICTURE_MEMORY // (2 * picture)))
+    memory = CPU_XPSNR_PICTURE_MEMORY if xpsnr else CPU_PICTURE_MEMORY
+    return max(2, min(min(8, max(1, threads)) + 1, memory // (2 * picture))) + xpsnr
 
 
 def score_decoded_cpu(
     source: VideoInfo, distorted: VideoInfo, source_crop: CropBox | None, distorted_crop: CropBox | None, *,
     width: int, height: int, bit_depth: int, models: dict[str, str] | tuple[str, ...], n_subsample: int,
-    duration_limit: str | None, total_frames: int, decoder: str, threads: int = 0,
+    duration_limit: str | None, total_frames: int, decoder: str, threads: int = 0, frame_rate: int = 0,
     scale_algorithm: str = "bicubic",
     on_progress: Callable[[int, int, float], None] | None = None,
     check_cancel: Callable[[], None] = lambda: None,
@@ -686,7 +727,7 @@ def score_decoded_cpu(
         raise
     scorer = None
     try:
-        scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads)
+        scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads, frame_rate)
         if test.frame_bytes != scorer.luma_bytes or ref.frame_bytes != scorer.luma_bytes:
             raise gpu_frames.GpuDecodeUnavailableError("the decoders' frames are not the size compared at")
         test.start()
@@ -1059,12 +1100,12 @@ class GpuAttempt:
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
                  backend: str = "cuda", device: int | None = None, paired: bool | None = None,
-                 threads: int = 0):
+                 threads: int = 0, frame_rate: int = 0):
         """`backend` "cpu": `models` are CPU_FEATURES keys, scored by
-        CpuScorer with `threads` of libvmaf's."""
+        CpuScorer with `threads` of libvmaf's (XPSNR's `frame_rate`)."""
         self.paired = not pairs_in_app() if paired is None else paired
         if backend == "cpu":
-            self._scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads)
+            self._scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads, frame_rate)
         elif "vmaf_v1" in models:
             from vmaf_app.core import vmaf_v1_gpu
 

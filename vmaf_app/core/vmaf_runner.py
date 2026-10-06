@@ -902,6 +902,8 @@ class _GpuPlan:
     backend: str = "cuda"
     device: int | None = None
     threads: int = 0
+    #: XPSNR's, "cpu" (_xpsnr_frame_rate).
+    frame_rate: int = 0
 
 
 def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
@@ -917,7 +919,7 @@ def _gpu_frame_scores(gpu_scores, fps: float) -> FrameScores:
         return None if scores.get(key) is None else np.asarray(scores[key], dtype=np.float32)
 
     return FrameScores(numbers, time, vmaf=scores.get("vmaf"), vmaf_neg=scores.get("vmaf_neg"),
-                       psnr=column("psnr"), ssim=column("ssim"),
+                       psnr=column("psnr"), ssim=column("ssim"), xpsnr=column("xpsnr"),
                        metrics=None if v1 is None else {"vmaf_v1": np.asarray(v1, dtype=np.float32)})
 
 
@@ -1013,7 +1015,7 @@ def _execute_run(
             # A libvmaf context and pipes of its own for each attempt: a
             # failed attempt's are spent.
             attempt = vmaf_cuda.GpuAttempt(gpu.width, gpu.height, gpu.bit_depth, gpu.models, options.n_subsample,
-                                           gpu.backend, gpu.device, threads=gpu.threads)
+                                           gpu.backend, gpu.device, threads=gpu.threads, frame_rate=gpu.frame_rate)
             try:
                 # One frame more than the limit: FFmpeg's libvmaf filter scores
                 # the first frame at or past it (stamped 30.03 s for a 30 s
@@ -1046,8 +1048,8 @@ def _execute_run(
         for attempt, plan in enumerate(ladder):
             if on_status:
                 if attempt == 0:
-                    doing = ("" if gpu is None else ", PSNR and SSIM in the app" if gpu.backend == "cpu"
-                             else ", VMAF on the GPU")
+                    doing = ("" if gpu is None else f", {_cpu_metric_names(gpu.models)} in the app"
+                             if gpu.backend == "cpu" else ", VMAF on the GPU")
                     on_status(Status.decoding(f"Running ffmpeg{doing}", plan, ending="...", kind=STARTING))
                 else:
                     on_status(Status.decoding("GPU decode failed, retrying", plan, ending="..."))
@@ -1171,8 +1173,8 @@ def run_vmaf(
         if frames is None:
             gpu_models = None
     cpu_keys: set[str] = set()
-    if frames is None and (cpu := _cpu_metrics_plan(options, dimensions, source_info, distorted_info,
-                                                     hwaccel)) is not None:
+    if frames is None and (cpu := _cpu_metrics_plan(options, dimensions, source_info, distorted_info, hwaccel,
+                                                     source_crop, distorted_crop)) is not None:
         frames = _run_cpu_metrics(
             cpu, source_info, distorted_info, options, source_crop, distorted_crop, hwaccel, total_frames,
             model=effective_model, on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
@@ -1318,25 +1320,67 @@ CPU_METRICS_VARIABLE = "VML_CPU_METRICS"
 _CPU_METRIC_OF_FEATURE = {"name=psnr": "psnr", "name=float_ssim": "ssim"}
 
 
+_CPU_METRIC_NAMES = {"psnr": "PSNR", "ssim": "SSIM", "xpsnr": "XPSNR"}
+
+
+def _cpu_metric_names(metrics) -> str:
+    """"PSNR, SSIM and XPSNR", for the statuses and the log."""
+    names = [_CPU_METRIC_NAMES.get(metric, metric) for metric in metrics]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _xpsnr_frame_rate(info: VideoInfo) -> int | None:
+    """XPSNR's frame rate as FFmpeg's xpsnr filter has it from its reference
+    input (the source), in whole frames a second: below 32 its temporal
+    activity is first-order, else second. FFmpeg gives the input
+    av_guess_frame_rate() (fftools/ffmpeg_demux.c): r_frame_rate where the
+    average rate is known and within a tenth of it. Otherwise it may be the
+    codec's own (for a codec with fields, H.264) or the average: None, and
+    FFmpeg's filter scores XPSNR."""
+    average, nominal = info.average_fps, info.nominal_fps
+    if average <= 0 or nominal <= 0 or abs(1.0 - average / nominal) >= 0.09:
+        return None
+    return int(nominal)
+
+
+def _xpsnr_in_app(width: int, height: int, bit_depth: int) -> bool:
+    """Where libvmaf-fast's port of FFmpeg's xpsnr filter gives its score to
+    the last bit: up to 12 bits, and an even size above 2048x1152 (where
+    FFmpeg's filter reads beyond the picture of an odd one)."""
+    if bit_depth > 12 or (width * height > 2048 * 1152 and (width & 1 or height & 1)):
+        return False
+    return vmaf_cuda.cpu_scores_xpsnr()
+
+
+def _decoded_in_app(source_info: VideoInfo, distorted_info: VideoInfo, source_crop: CropBox | None,
+                    distorted_crop: CropBox | None, size: tuple[int, int], hwaccel: HwAccelPlan) -> bool:
+    """Whether the scoring process decodes both videos itself
+    (vmaf_cuda.score_decoded_cpu), as far as is known before it asks the
+    decoder, rather than taking FFmpeg's frames through pipes."""
+    if hwaccel.source != hwaccel.distorted or hwaccel.source not in _DECODED_HERE:
+        return False
+    try:
+        return not any(gpu_frames.plan_decode(info, crop, shift=6, luma_only=True, size=size).scaled
+                       for info, crop in ((source_info, source_crop), (distorted_info, distorted_crop)))
+    except gpu_frames.GpuDecodeUnavailableError:
+        return False
+
+
 def _cpu_metrics_plan(options: VmafOptions, dimensions: tuple[int, int], source_info: VideoInfo,
-                      distorted_info: VideoInfo, hwaccel: HwAccelPlan) -> _GpuPlan | None:
-    """PSNR and SSIM scored by the bundled libvmaf in the app
-    (_run_cpu_metrics) instead of by FFmpeg's libvmaf filter: where they are
-    libvmaf's only metrics in the run (VMAF on the CPU keeps them in
-    FFmpeg's filter, which it runs anyway), and frames can come to the app
-    as for VMAF on the GPU. None: FFmpeg's filter, as before."""
+                      distorted_info: VideoInfo, hwaccel: HwAccelPlan, source_crop: CropBox | None = None,
+                      distorted_crop: CropBox | None = None) -> _GpuPlan | None:
+    """PSNR, SSIM and XPSNR scored by the bundled libvmaf in the app
+    (_run_cpu_metrics) instead of by FFmpeg's libvmaf and xpsnr filters:
+    where they are the run's only metrics (VMAF on the CPU keeps them in
+    FFmpeg's filters, which it runs anyway), and frames can come to the app
+    as for VMAF on the GPU. XPSNR stays FFmpeg's where libvmaf-fast's would
+    not be its score to the bit (_xpsnr_frame_rate, _xpsnr_in_app), beside
+    PSNR and SSIM in the app. None: FFmpeg's filters, as before."""
     if os.environ.get(CPU_METRICS_VARIABLE, "").casefold() == "ffmpeg":
         return None
-    if not options.extra_features or _uses_vmaf_model(options) or options.resample_test is not None:
+    if _uses_vmaf_model(options) or options.resample_test is not None:
         return None
     if any(feature not in _CPU_METRIC_OF_FEATURE for feature in options.extra_features):
-        return None
-    if options.compute_xpsnr and not (hwaccel.source and hwaccel.distorted):
-        # XPSNR's FFmpeg beside them decodes the videos again, and a video
-        # the CPU decodes is then decoded twice on it -- 70% more CPU a
-        # frame for a 4K film against its encode, and a 4K film against a
-        # 1080p encode ran slower (97 fps, 112 in FFmpeg's one run) -- where
-        # FFmpeg's one run decodes each once for its libvmaf and XPSNR.
         return None
     if not vmaf_cuda.LIBRARY_PATH.is_file():
         return None
@@ -1346,10 +1390,30 @@ def _cpu_metrics_plan(options: VmafOptions, dimensions: tuple[int, int], source_
     # formats overlay holds unchanged (_gpu_pairs_stage).
     if not vmaf_cuda.pairs_in_app() and (width & 1 or height & 1 or bit_depth > 10):
         return None
-    metrics = tuple(dict.fromkeys(_CPU_METRIC_OF_FEATURE[feature] for feature in options.extra_features))
+    metrics = list(dict.fromkeys(_CPU_METRIC_OF_FEATURE[feature] for feature in options.extra_features))
+    frame_rate = _xpsnr_frame_rate(source_info) if options.compute_xpsnr else None
+    if frame_rate is not None and _xpsnr_in_app(width, height, bit_depth):
+        metrics.append("xpsnr")
+    elif options.compute_xpsnr and not (hwaccel.source and hwaccel.distorted):
+        # XPSNR's FFmpeg beside them decodes the videos again, and a video
+        # the CPU decodes is then decoded twice on it -- 70% more CPU a
+        # frame for a 4K film against its encode, and a 4K film against a
+        # 1080p encode ran slower (97 fps, 112 in FFmpeg's one run) -- where
+        # FFmpeg's one run decodes each once for its libvmaf and XPSNR.
+        return None
+    if not metrics:
+        return None
+    if metrics == ["xpsnr"] and not _decoded_in_app(source_info, distorted_info, source_crop, distorted_crop,
+                                                     dimensions, hwaccel):
+        # XPSNR alone from FFmpeg's pipes: FFmpeg's filter keeps up with its
+        # decoding there, in far less -- a 4K film against a 1080p encode,
+        # NVIDIA decoding: 128 fps, 159 in the app, with twice the CPU and
+        # 825 MB against 453; decoded on the CPU, 77 fps and 81, 1.8 GB and
+        # 2.7.
+        return None
     threads = options.n_threads if options.n_threads > 0 else auto_threads()
     return _GpuPlan({metric: metric for metric in metrics}, width, height, bit_depth, backend="cpu",
-                    threads=threads)
+                    threads=threads, frame_rate=frame_rate or 0)
 
 
 class _Progress:
@@ -1380,27 +1444,29 @@ def _run_cpu_metrics(
     source_crop: CropBox | None, distorted_crop: CropBox | None, hwaccel: HwAccelPlan, total_frames: int, *,
     model: str, on_progress, on_status, cancel_event, process_handle,
 ) -> FrameScores | None:
-    """PSNR and SSIM by the bundled libvmaf's CPU extractors, in a process of
-    their own (a crash ends that, not the app), from the videos' frames as
-    they would reach FFmpeg's libvmaf filter -- decoded there by the GPU's
-    decoder, or written by each video's FFmpeg (_score_cpu_metrics) -- and
-    paired as that filter pairs them (frame_sync), as for VMAF on the GPU.
-    XPSNR, when asked for too, is FFmpeg's, in an
-    FFmpeg of its own beside them, its scores taken for the frames PSNR and
-    SSIM were scored for (as _parse_log takes them).
+    """PSNR, SSIM and XPSNR by the bundled libvmaf's CPU extractors, in a
+    process of their own (a crash ends that, not the app), from the videos'
+    frames as they would reach FFmpeg's filters -- decoded there by the
+    GPU's decoder, or written by each video's FFmpeg (_score_cpu_metrics)
+    -- and paired as those filters pair them (frame_sync), as for VMAF on
+    the GPU. XPSNR the plan leaves to FFmpeg is scored in an FFmpeg of its
+    own beside them, its scores taken for the frames PSNR and SSIM were
+    scored for (as _parse_log takes them). XPSNR alone is scored for every
+    frame, as FFmpeg's filter scores it whatever n_subsample.
 
     FFmpeg's libvmaf filter allocates, zeroes and copies two new pictures
     for every pair on its one filter thread before libvmaf's threads see
     them. None when the run fails for any reason but Cancel: FFmpeg's
     filter then calculates them, as before."""
-    _log.info("PSNR and SSIM in the app (%s): %s, %d threads", ", ".join(plan.models), vmaf_cuda.CPU_BUILD,
-              plan.threads)
+    names = _cpu_metric_names(plan.models)
+    _log.info("%s in the app: %s, %d threads", names, vmaf_cuda.CPU_BUILD, plan.threads)
+    beside = options.compute_xpsnr and "xpsnr" not in plan.models
     xpsnr_frames: list[FrameScores] = []
     xpsnr_error: list[BaseException] = []
-    progress = _Progress(on_progress, 2 if options.compute_xpsnr else 1)
+    progress = _Progress(on_progress, 2 if beside else 1)
     stop = threading.Event()
     xpsnr_thread = None
-    if options.compute_xpsnr:
+    if beside:
         xpsnr_options = replace(options, extra_features=[])
 
         def build_command(hw, resolved_model, log_path, xpsnr_log_path):
@@ -1434,9 +1500,15 @@ def _run_cpu_metrics(
                 stop.set()
             xpsnr_thread.join(timeout=0.1)
 
+    if beside:
+        scored = replace(options, compute_xpsnr=False)
+    elif not options.extra_features:  # XPSNR alone
+        scored = replace(options, n_subsample=1)
+    else:
+        scored = options
     try:
         frames = run_isolated(
-            _score_cpu_metrics, plan, source_info, distorted_info, replace(options, compute_xpsnr=False),
+            _score_cpu_metrics, plan, source_info, distorted_info, scored,
             source_crop, distorted_crop, hwaccel, total_frames, what="libvmaf",
             callbacks=("on_progress", "on_status"), on_progress=progress.part(0), on_status=on_status,
             cancel_event=cancel_event, process_handle=process_handle, cancelled=Cancelled,
@@ -1448,9 +1520,9 @@ def _run_cpu_metrics(
     except Exception as error:
         stop.set()
         wait_for_xpsnr()
-        _log.error("PSNR and SSIM in the app failed; FFmpeg's libvmaf calculates them: %s", error, exc_info=error)
+        _log.error("%s in the app failed; FFmpeg calculates them: %s", names, error, exc_info=error)
         if on_status:
-            on_status(f"PSNR and SSIM in the app failed ({error}); calculating them with FFmpeg…")
+            on_status(f"{names} in the app failed ({error}); calculating them with FFmpeg…")
         return None
     wait_for_xpsnr()
     if cancel_event is not None and cancel_event.is_set():
@@ -1484,9 +1556,10 @@ def _score_cpu_metrics(
                 on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
                 process_handle=process_handle)
         except gpu_frames.GpuDecodeUnavailableError as error:
-            _log.info("PSNR and SSIM in the app: the videos are decoded by FFmpeg (%s)", error)
+            _log.info("%s in the app: the videos are decoded by FFmpeg (%s)", _cpu_metric_names(plan.models), error)
         except gpu_frames.GpuDecodeFailedError as error:
-            _log.warning("GPU decoding for PSNR and SSIM failed; decoding through FFmpeg instead: %s", error)
+            _log.warning("GPU decoding for %s failed; decoding through FFmpeg instead: %s",
+                         _cpu_metric_names(plan.models), error)
             if on_status:
                 on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
 
@@ -1527,7 +1600,7 @@ def _score_decoded_on_gpu(
     # filter scores before its output stops.
     limit = options.duration_limit + 1 / fps if options.duration_limit > 0 and fps > 0 else 0.0
     if on_status:
-        on_status(Status.decoding("Running PSNR and SSIM in the app" if plan.backend == "cpu"
+        on_status(Status.decoding(f"Running {_cpu_metric_names(plan.models)} in the app" if plan.backend == "cpu"
                                   else "Running VMAF on the GPU", hwaccel, ending="..."))
 
     def check_cancel() -> None:
@@ -1536,7 +1609,7 @@ def _score_decoded_on_gpu(
 
     if plan.backend == "cpu":
         score_decoded = functools.partial(vmaf_cuda.score_decoded_cpu, threads=plan.threads,
-                                          decoder=_DECODED_HERE[hwaccel.source])
+                                          frame_rate=plan.frame_rate, decoder=_DECODED_HERE[hwaccel.source])
     elif "vmaf_v1" in plan.models:  # whole frames, for its scorers and any of VMAF v0.6.1's beside them
         score_decoded = functools.partial(vmaf_v1_gpu.score_decoded, backend=plan.backend, device=plan.device,
                                           decoder=_DECODED_HERE[hwaccel.source])

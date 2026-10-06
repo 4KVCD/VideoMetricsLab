@@ -221,3 +221,13 @@ def test_with_nothing_but_the_files_rate_it_says_so(monkeypatch):
     assert (info.bit_rate, info.bit_rate_whole_file) == (10_640_000, True)
     assert bitrate_string(info) == "≈10.6 Mb/s"
     assert "whole file" in bitrate_note(info)
+
+
+def test_the_average_rate_is_kept_as_ffprobe_gives_it(monkeypatch):
+    """vmaf_runner._xpsnr_frame_rate tells an average ffprobe gave from one
+    it did not, where fps is the nominal rate."""
+    info = _probe_payload(monkeypatch, [{**_VIDEO, "duration": "1.0"}], {"duration": "1.0"})
+    assert info.average_fps == pytest.approx(24000 / 1001)
+    unknown = _probe_payload(monkeypatch, [{**_VIDEO, "avg_frame_rate": "0/0", "duration": "1.0"}],
+                             {"duration": "1.0"})
+    assert unknown.average_fps == 0.0 and unknown.fps == pytest.approx(24000 / 1001)

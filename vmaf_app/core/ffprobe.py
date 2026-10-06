@@ -197,6 +197,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
     if fps <= 0:
         fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
     nominal_fps = _parse_frame_rate(v.get("r_frame_rate") or "0/1")
+    average_fps = _parse_frame_rate(v.get("avg_frame_rate") or "0/1")
 
     try:
         container = float(fmt.get("duration") or 0.0)
@@ -226,6 +227,7 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         bit_rate=bit_rate,
         bit_rate_whole_file=bit_rate_whole_file,
         nominal_fps=nominal_fps,
+        average_fps=average_fps,
         color_range=v.get("color_range", "") or "",
         color_space=v.get("color_space", "") or "",
         color_transfer=v.get("color_transfer", "") or "",
