@@ -2,7 +2,16 @@
 // nvdec_frames' pictures that never leave the GPU, for the GPU metrics'
 // Vulkan VMAF (vmaf_vulkan.dll) and libvmaf's CPU features.
 //
-// AMF decodes on Direct3D 11 as without it. Each picture's crop is copied
+// AMF decodes on Direct3D 11 as without it. Where Vulkan can import AMF's
+// own textures (which Direct3D 11 shares), a slot holds its picture's texture
+// and every copy out of it reads the texture where it is (Slots::hold,
+// direct_copy, amf_direct.slang): into Vulkan VMAF's memory at once, and into
+// the slot buffer for the other copies, which go on from there as below. On
+// a Radeon 780M that decoded a 4K pair at 113 pictures a second instead of
+// 99 (AMF's own speed), and scored VMAF v1 at 75 frames a second instead of
+// 60, every frame's score the same.
+//
+// Otherwise each picture's crop is copied
 // by Direct3D 11 into a texture shared with a Vulkan device made here on the
 // same GPU (one for the whole process, so that every decoder in it writes
 // into the same memory), and by Vulkan out of it into a slot buffer -- the
@@ -72,7 +81,7 @@ namespace handover {
     X(vkCreateDescriptorSetLayout) X(vkCreatePipelineLayout) X(vkCreateComputePipelines) X(vkCreateDescriptorPool)    \
     X(vkDestroyDescriptorPool) X(vkAllocateDescriptorSets) X(vkUpdateDescriptorSets)                                  \
     X(vkGetMemoryHostPointerPropertiesEXT) X(vkCreateImage) X(vkDestroyImage) X(vkGetImageMemoryRequirements)      \
-    X(vkBindImageMemory) X(vkGetMemoryWin32HandlePropertiesKHR)
+    X(vkBindImageMemory) X(vkGetMemoryWin32HandlePropertiesKHR) X(vkCreateImageView) X(vkDestroyImageView)
 
 // The process's Vulkan device for AMF's decoders, made once (shared()).
 struct Device {
@@ -100,6 +109,11 @@ struct Device {
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipeline pipelines[2] = {};  // 8-bit, 16-bit samples
+    // amf_direct.slang (Slots::direct_plane): set 0 a picture's two plane
+    // views, set 1 the buffer it writes; no pipelines if they could not be made.
+    VkDescriptorSetLayout direct_layouts[2] = {};
+    VkPipelineLayout direct_layout = VK_NULL_HANDLE;
+    VkPipeline direct_pipelines[2] = {};  // 8-bit, 16-bit samples
 #define X(name) PFN_##name name = nullptr;
     HANDOVER_INSTANCE_FUNCTIONS(X)
     HANDOVER_DEVICE_FUNCTIONS(X)
@@ -142,6 +156,60 @@ inline bool has_extension(const std::vector<VkExtensionProperties> &listed, cons
     for (const VkExtensionProperties &extension : listed)
         if (!strcmp(extension.extensionName, name)) return true;
     return false;
+}
+
+// amf_direct.slang's pipelines, for Slots::direct_plane; none if any part
+// cannot be made (the hand-over then copies by Direct3D 11, as before).
+inline void make_direct(Device &g) {
+    VkDescriptorSetLayoutBinding views[2] = {};
+    for (uint32_t i = 0; i < 2; ++i) {
+        views[i].binding = i;
+        views[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        views[i].descriptorCount = 1;
+        views[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+    VkDescriptorSetLayoutBinding outputs[2] = {};  // the buffer, as samples and as 16 bytes at a time
+    for (uint32_t i = 0; i < 2; ++i) {
+        outputs[i].binding = i;
+        outputs[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        outputs[i].descriptorCount = 1;
+        outputs[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+    VkDescriptorSetLayoutCreateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    set_info.bindingCount = 2;
+    set_info.pBindings = views;
+    if (g.vkCreateDescriptorSetLayout(g.device, &set_info, nullptr, &g.direct_layouts[0]) != VK_SUCCESS) return;
+    set_info.bindingCount = 2;
+    set_info.pBindings = outputs;
+    if (g.vkCreateDescriptorSetLayout(g.device, &set_info, nullptr, &g.direct_layouts[1]) != VK_SUCCESS) return;
+    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, 9 * sizeof(uint32_t)};
+    VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    layout_info.setLayoutCount = 2;
+    layout_info.pSetLayouts = g.direct_layouts;
+    layout_info.pushConstantRangeCount = 1;
+    layout_info.pPushConstantRanges = &push;
+    if (g.vkCreatePipelineLayout(g.device, &layout_info, nullptr, &g.direct_layout) != VK_SUCCESS) return;
+    const uint32_t *code[2] = {kDirectSpirv8, kDirectSpirv16};
+    const size_t bytes[2] = {sizeof kDirectSpirv8, sizeof kDirectSpirv16};
+    VkPipeline made[2] = {};
+    for (int i = 0; i < 2; ++i) {
+        VkShaderModuleCreateInfo module_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        module_info.codeSize = bytes[i];
+        module_info.pCode = code[i];
+        VkShaderModule module = VK_NULL_HANDLE;
+        if (g.vkCreateShaderModule(g.device, &module_info, nullptr, &module) != VK_SUCCESS) return;
+        VkComputePipelineCreateInfo pipeline_info{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        pipeline_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pipeline_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        pipeline_info.stage.module = module;
+        pipeline_info.stage.pName = "main";
+        pipeline_info.layout = g.direct_layout;
+        const VkResult compiled = g.vkCreateComputePipelines(g.device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &made[i]);
+        g.vkDestroyShaderModule(g.device, module, nullptr);
+        if (compiled != VK_SUCCESS) return;
+    }
+    g.direct_pipelines[0] = made[0];
+    g.direct_pipelines[1] = made[1];
 }
 
 // The device, made on first use on the GPU whose LUID (DXGI's adapter LUID)
@@ -336,6 +404,7 @@ inline Device *shared(const uint8_t *luid) {
             return nullptr;
         }
     }
+    make_direct(g);  // (without it, the pictures go through Direct3D 11's copies)
     g.ready = true;
     return &g;
 }
@@ -662,10 +731,36 @@ struct Picture {
     Commands convert;
 };
 
+// One of AMF's own pictures (a texture of its pool, shared by Direct3D 11 as
+// a KMT handle), imported by Vulkan, with views of its two planes.
+struct Source {
+    HANDLE handle = nullptr;  // its KMT handle: which texture it is
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView views[2] = {};  // luma, chroma (UINT: the samples' bits)
+    VkDescriptorSet set = VK_NULL_HANDLE;
+};
+
 // One decoder's slots and commands.
 struct Slots {
     Params params{};
     size_t sample = 1;
+    // Straight from AMF's pictures (Params.handover where Vulkan imports
+    // them): a slot holds its picture's texture (held[slot]), and each copy
+    // out of it reads the texture itself (direct_plane, amf_direct.slang) --
+    // into Vulkan VMAF's memory at once, or into the slot buffer first for
+    // the other copies (convert_held). AMF's surface stays the slot's until
+    // the slot is given back.
+    struct Held {
+        int source = -1;  // in `sources`; -1: the slot buffer holds the picture (as without)
+        int x = 0, y = 0;  // the crop's first luma sample in the texture
+    };
+    std::vector<Source> sources;
+    std::vector<Held> held;  // per slot
+    std::vector<std::pair<VkBuffer, VkDescriptorSet>> outputs;  // the buffers direct_plane has written, and their sets
+    VkDescriptorPool direct_descriptors = VK_NULL_HANDLE;
+    Commands direct;  // direct_plane's (on the queue that computes; one caller at a time: `copy_lock`)
+    static constexpr uint32_t kMaxSources = 64, kMaxOutputs = 64;
     std::vector<Buffer> slots;  // the pictures, planar (frame_bytes each)
     Buffer chroma;              // the crop's U and V, interleaved, on their way into a slot
     Buffer staging;             // host-visible, for destinations that are not pinned (made when first needed)
@@ -852,6 +947,243 @@ struct Slots {
         return c.run();
     }
 
+    // Whether AMF's pictures can be read where they are (the device made
+    // amf_direct.slang's pipelines); making what that takes the first time.
+    bool can_hold() {
+        Device &g = g_device;
+        if (!g.direct_pipelines[0] || !g.direct_pipelines[1]) return false;
+        if (direct_descriptors) return true;
+        held.assign(slots.size(), Held{});
+        VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 2 * kMaxSources},
+                                         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 * kMaxOutputs}};
+        VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        pool_info.maxSets = kMaxSources + kMaxOutputs;
+        pool_info.poolSizeCount = 2;
+        pool_info.pPoolSizes = sizes;
+        if (!direct.make()) return false;
+        return g.vkCreateDescriptorPool(g.device, &pool_info, nullptr, &direct_descriptors) == VK_SUCCESS;
+    }
+
+    // AMF's texture `handle` (KMT), `width` x `height` in `format`, as one of
+    // `sources`: its index (imported the first time), or -1 and why not.
+    int source_of(HANDLE handle, uint32_t width, uint32_t height, VkFormat format, std::string &why) {
+        for (size_t i = 0; i < sources.size(); ++i)
+            if (sources[i].handle == handle) return static_cast<int>(i);
+        if (sources.size() >= kMaxSources) {
+            why = "AMD's decoder has more pictures than the hand-over takes";
+            return -1;
+        }
+        Device &g = g_device;
+        Source source;
+        source.handle = handle;
+        VkExternalMemoryImageCreateInfo external{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO};
+        external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT;
+        VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        info.pNext = &external;
+        info.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;  // its planes viewed as UINT
+        info.imageType = VK_IMAGE_TYPE_2D;
+        info.format = format;
+        info.extent = {width, height, 1};
+        info.mipLevels = info.arrayLayers = 1;
+        info.samples = VK_SAMPLE_COUNT_1_BIT;
+        info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        auto discard = [&](const char *text) {
+            for (VkImageView view : source.views)
+                if (view) g.vkDestroyImageView(g.device, view, nullptr);
+            if (source.image) g.vkDestroyImage(g.device, source.image, nullptr);
+            if (source.memory) g.vkFreeMemory(g.device, source.memory, nullptr);
+            why = text;
+            return -1;
+        };
+        if (g.vkCreateImage(g.device, &info, nullptr, &source.image) != VK_SUCCESS)
+            return discard("Vulkan cannot take AMD's decoded pictures");
+        VkMemoryWin32HandlePropertiesKHR properties{VK_STRUCTURE_TYPE_MEMORY_WIN32_HANDLE_PROPERTIES_KHR};
+        g.vkGetMemoryWin32HandlePropertiesKHR(g.device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT, handle,
+                                              &properties);
+        VkMemoryRequirements requirements;
+        g.vkGetImageMemoryRequirements(g.device, source.image, &requirements);
+        const int type = memory_type(requirements.memoryTypeBits & properties.memoryTypeBits, 0);
+        VkMemoryDedicatedAllocateInfo exclusive{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
+        exclusive.image = source.image;
+        VkImportMemoryWin32HandleInfoKHR import{VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR};
+        import.pNext = &exclusive;
+        import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT;
+        import.handle = handle;
+        VkMemoryAllocateInfo allocate{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        allocate.pNext = &import;
+        allocate.allocationSize = requirements.size;
+        allocate.memoryTypeIndex = static_cast<uint32_t>(type);
+        if (type < 0 || g.vkAllocateMemory(g.device, &allocate, nullptr, &source.memory) != VK_SUCCESS
+            || g.vkBindImageMemory(g.device, source.image, source.memory, 0) != VK_SUCCESS)
+            return discard("Vulkan cannot take AMD's decoded pictures");
+        const bool wide = sample == 2;
+        for (int plane = 0; plane < 2; ++plane) {
+            VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+            view.image = source.image;
+            view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            view.format = plane == 0 ? (wide ? VK_FORMAT_R16_UINT : VK_FORMAT_R8_UINT)
+                                     : (wide ? VK_FORMAT_R16G16_UINT : VK_FORMAT_R8G8_UINT);
+            view.subresourceRange = {static_cast<VkImageAspectFlags>(plane == 0 ? VK_IMAGE_ASPECT_PLANE_0_BIT
+                                                                                : VK_IMAGE_ASPECT_PLANE_1_BIT),
+                                     0, 1, 0, 1};
+            if (g.vkCreateImageView(g.device, &view, nullptr, &source.views[plane]) != VK_SUCCESS)
+                return discard("Vulkan cannot view AMD's decoded pictures' planes");
+        }
+        VkDescriptorSetAllocateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        set_info.descriptorPool = direct_descriptors;
+        set_info.descriptorSetCount = 1;
+        set_info.pSetLayouts = &g.direct_layouts[0];
+        if (g.vkAllocateDescriptorSets(g.device, &set_info, &source.set) != VK_SUCCESS)
+            return discard("making the hand-over's descriptors failed");
+        VkDescriptorImageInfo images[2] = {{VK_NULL_HANDLE, source.views[0], VK_IMAGE_LAYOUT_GENERAL},
+                                           {VK_NULL_HANDLE, source.views[1], VK_IMAGE_LAYOUT_GENERAL}};
+        VkWriteDescriptorSet writes[2] = {};
+        for (uint32_t b = 0; b < 2; ++b) {
+            writes[b].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[b].dstSet = source.set;
+            writes[b].dstBinding = b;
+            writes[b].descriptorCount = 1;
+            writes[b].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            writes[b].pImageInfo = &images[b];
+        }
+        g.vkUpdateDescriptorSets(g.device, 2, writes, 0, nullptr);
+        sources.push_back(source);
+        return static_cast<int>(sources.size() - 1);
+    }
+
+    // `slot` holds AMF's picture in sources[source], the crop's first luma
+    // sample at (x, y) (the decoding thread, before the slot is queued).
+    void hold(int slot, int source, int x, int y) { held[static_cast<size_t>(slot)] = {source, x, y}; }
+
+    // The slot's picture is in its buffer again (the slot given back).
+    void unhold(int slot) {
+        if (static_cast<size_t>(slot) < held.size()) held[static_cast<size_t>(slot)] = Held{};
+    }
+
+    bool holds(int slot) const {
+        return static_cast<size_t>(slot) < held.size() && held[static_cast<size_t>(slot)].source >= 0;
+    }
+
+    // The descriptor set of `buffer` as amf_direct.slang's output; null if none can be made.
+    VkDescriptorSet output_set(VkBuffer buffer) {
+        for (const auto &known : outputs)
+            if (known.first == buffer) return known.second;
+        Device &g = g_device;
+        if (outputs.size() >= kMaxOutputs) return VK_NULL_HANDLE;
+        VkDescriptorSetAllocateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        set_info.descriptorPool = direct_descriptors;
+        set_info.descriptorSetCount = 1;
+        set_info.pSetLayouts = &g.direct_layouts[1];
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        if (g.vkAllocateDescriptorSets(g.device, &set_info, &set) != VK_SUCCESS) return VK_NULL_HANDLE;
+        VkDescriptorBufferInfo info{buffer, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[2] = {};
+        for (uint32_t b = 0; b < 2; ++b) {  // as samples, and as 16 bytes at a time
+            writes[b].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[b].dstSet = set;
+            writes[b].dstBinding = b;
+            writes[b].descriptorCount = 1;
+            writes[b].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writes[b].pBufferInfo = &info;
+        }
+        g.vkUpdateDescriptorSets(g.device, 2, writes, 0, nullptr);
+        outputs.emplace_back(buffer, set);
+        return set;
+    }
+
+    // The held picture's texture taken from Direct3D 11 (the external queue
+    // family) before `direct`'s reads, or given back after them.
+    void source_barrier(const Source &source, bool acquire) {
+        Device &g = g_device;
+        VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        barrier.srcAccessMask = acquire ? 0 : VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = acquire ? VK_ACCESS_SHADER_READ_BIT : 0;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        barrier.srcQueueFamilyIndex = acquire ? VK_QUEUE_FAMILY_EXTERNAL : g.family;
+        barrier.dstQueueFamilyIndex = acquire ? g.family : VK_QUEUE_FAMILY_EXTERNAL;
+        barrier.image = source.image;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        g.vkCmdPipelineBarrier(direct.buffer,
+                               acquire ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                               acquire ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
+                               nullptr, 0, nullptr, 1, &barrier);
+    }
+
+    // Plane `index` (0 Y, 1 U, 2 V) of the held picture of `slot` into
+    // `buffer` at `offset` bytes, rows `pitch` bytes apart, recorded into
+    // `direct` (begun, the texture acquired). False if `buffer` cannot be written.
+    bool direct_plane(int slot, int index, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize pitch) {
+        Device &g = g_device;
+        const Held &h = held[static_cast<size_t>(slot)];
+        const VkDescriptorSet output = output_set(buffer);
+        if (!output || offset % sample || pitch % sample) return false;
+        const Plane p = plane(index);
+        const uint32_t width = static_cast<uint32_t>(p.row_bytes / sample), height = static_cast<uint32_t>(p.rows);
+        const bool wide = offset % 16 == 0 && pitch % 16 == 0;  // rows starting on 16 bytes: written 16 bytes at a time
+        const uint32_t constants[9] = {static_cast<uint32_t>(index == 0 ? h.x : h.x / 2),
+                                       static_cast<uint32_t>(index == 0 ? h.y : h.y / 2),
+                                       width, height,
+                                       static_cast<uint32_t>(offset / sample), static_cast<uint32_t>(pitch / sample),
+                                       static_cast<uint32_t>(params.shift), static_cast<uint32_t>(index),
+                                       wide ? 1u : 0u};
+        const uint32_t across = wide ? (width + static_cast<uint32_t>(16 / sample) - 1) / static_cast<uint32_t>(16 / sample)
+                                     : width;  // threads across a row
+        const VkDescriptorSet sets_[2] = {sources[static_cast<size_t>(h.source)].set, output};
+        g.vkCmdBindPipeline(direct.buffer, VK_PIPELINE_BIND_POINT_COMPUTE, g.direct_pipelines[sample == 2 ? 1 : 0]);
+        g.vkCmdBindDescriptorSets(direct.buffer, VK_PIPELINE_BIND_POINT_COMPUTE, g.direct_layout, 0, 2, sets_, 0, nullptr);
+        g.vkCmdPushConstants(direct.buffer, g.direct_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof constants, constants);
+        g.vkCmdDispatch(direct.buffer, (across + 15) / 16, (height + 15) / 16, 1);
+        return true;
+    }
+
+    // The held picture of `slot`, planes `count` of them from `first`, each
+    // into its (buffer, offset, pitch) of `to` (a null buffer: not that
+    // plane), on the queue that computes, waited for.
+    bool direct_copy(int slot, const VkBuffer *buffers, const VkDeviceSize *offsets, const VkDeviceSize *pitches) {
+        if (direct.broken) {
+            error = "copying a picture on the GPU failed";
+            return false;
+        }
+        const Source &source = sources[static_cast<size_t>(held[static_cast<size_t>(slot)].source)];
+        direct.begin();
+        source_barrier(source, true);
+        for (int i = 0; i < (params.luma_only ? 1 : 3); ++i) {
+            if (!buffers[i]) continue;
+            if (!direct_plane(slot, i, buffers[i], offsets[i], pitches[i])) {
+                error = "a plane's destination cannot be written by the hand-over's shader";
+                source_barrier(source, false);
+                direct.run();
+                return false;
+            }
+        }
+        source_barrier(source, false);
+        if (!direct.run()) {
+            error = "copying a picture on the GPU failed";
+            return false;
+        }
+        return true;
+    }
+
+    // The held picture of `slot` into its slot buffer, for the copies that
+    // read the slot buffer (nvf_download, nvf_download_planes); then held no
+    // longer. Under `copy_lock`.
+    bool convert_held(int slot) {
+        if (!holds(slot)) return true;
+        VkBuffer buffers[3] = {slots[static_cast<size_t>(slot)].buffer, slots[static_cast<size_t>(slot)].buffer,
+                               slots[static_cast<size_t>(slot)].buffer};
+        VkDeviceSize offsets[3], pitches[3];
+        for (int i = 0; i < 3; ++i) {
+            offsets[i] = plane(i).offset;
+            pitches[i] = plane(i).row_bytes;
+        }
+        if (!direct_copy(slot, buffers, offsets, pitches)) return false;
+        held[static_cast<size_t>(slot)].source = -1;
+        return true;
+    }
+
     // Copies rows of `plane` of `slot` to `buffer` at `offset`, `pitch` bytes apart.
     void copy_rows(Commands &c, int slot, const Plane &p, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize pitch) {
         if (pitch == p.row_bytes) {
@@ -879,6 +1211,11 @@ struct Slots {
             return false;
         }
         std::lock_guard<std::mutex> lock(copy_lock);
+        if (holds(slot)) {  // straight from AMF's picture
+            const VkBuffer buffers[3] = {buffer, VK_NULL_HANDLE, VK_NULL_HANDLE};
+            const VkDeviceSize offsets[3] = {offset, 0, 0}, pitches[3] = {static_cast<VkDeviceSize>(pitch), 0, 0};
+            return direct_copy(slot, buffers, offsets, pitches);
+        }
         if (copying.broken) {
             error = "copying a picture on the GPU failed";
             return false;
@@ -896,23 +1233,27 @@ struct Slots {
     // own address (0: not that plane), rows `pitches` apart, on the copy queue.
     bool copy_planes(int slot, const unsigned long long *addresses, const long long *pitches) {
         std::lock_guard<std::mutex> lock(copy_lock);
+        VkBuffer buffers[3] = {};
+        VkDeviceSize offsets[3] = {}, steps[3] = {};
+        for (int i = 0; i < (params.luma_only ? 1 : 3); ++i) {
+            if (!addresses[i]) continue;
+            const Plane p = plane(i);
+            if (pitches[i] < static_cast<long long>(p.row_bytes)
+                || !find_import(addresses[i], static_cast<unsigned long long>(pitches[i]) * (p.rows - 1) + p.row_bytes,
+                                buffers[i], offsets[i])) {
+                error = "a plane's destination is not memory the decoder imported";
+                return false;
+            }
+            steps[i] = static_cast<VkDeviceSize>(pitches[i]);
+        }
+        if (holds(slot)) return direct_copy(slot, buffers, offsets, steps);  // straight from AMF's picture
         if (copying.broken) {
             error = "copying a picture on the GPU failed";
             return false;
         }
         copying.begin();
         for (int i = 0; i < (params.luma_only ? 1 : 3); ++i) {
-            if (!addresses[i]) continue;
-            const Plane p = plane(i);
-            VkBuffer buffer;
-            VkDeviceSize offset;
-            if (pitches[i] < static_cast<long long>(p.row_bytes)
-                || !find_import(addresses[i], static_cast<unsigned long long>(pitches[i]) * (p.rows - 1) + p.row_bytes,
-                                buffer, offset)) {
-                error = "a plane's destination is not memory the decoder imported";
-                return false;
-            }
-            copy_rows(copying, slot, p, buffer, offset, static_cast<VkDeviceSize>(pitches[i]));
+            if (buffers[i]) copy_rows(copying, slot, plane(i), buffers[i], offsets[i], steps[i]);
         }
         if (!copying.run()) {
             error = "copying a picture on the GPU failed";
@@ -926,6 +1267,7 @@ struct Slots {
     // the staging buffer and memcpy.
     bool download_planes(int slot, void *const *planes, const long long *pitches) {
         std::lock_guard<std::mutex> lock(copy_lock);
+        if (!convert_held(slot)) return false;
         if (copying.broken) {
             error = "copying a picture from the GPU failed";
             return false;
@@ -972,6 +1314,7 @@ struct Slots {
     // The slot's picture, planes packed (frame_bytes), into `host`.
     bool download(int slot, void *host) {
         std::lock_guard<std::mutex> lock(copy_lock);
+        if (!convert_held(slot)) return false;
         if (!ensure_staging() || copying.broken) {
             error = copying.broken ? "copying a picture from the GPU failed" : "making the hand-over's staging buffer failed";
             return false;
@@ -990,6 +1333,17 @@ struct Slots {
     void free() {
         for (Picture &picture : pictures) picture.convert.free();  // once its last copy is done
         copying.free();
+        direct.free();
+        for (Source &source : sources) {
+            for (VkImageView view : source.views)
+                if (view) g_device.vkDestroyImageView(g_device.device, view, nullptr);
+            if (source.image) g_device.vkDestroyImage(g_device.device, source.image, nullptr);
+            if (source.memory) g_device.vkFreeMemory(g_device.device, source.memory, nullptr);
+        }
+        sources.clear();
+        outputs.clear();
+        if (direct_descriptors) g_device.vkDestroyDescriptorPool(g_device.device, direct_descriptors, nullptr);
+        direct_descriptors = VK_NULL_HANDLE;
         for (Buffer &slot : slots) free_buffer(slot);
         free_buffer(chroma);
         free_buffer(staging);

@@ -23,11 +23,15 @@
 // 11 device made on the AMD GPU. The headers in native/amf are the AMF SDK's
 // public ones, those in native/vulkan Khronos' (both MIT).
 //
-// With Params.handover the pictures never come to system memory: each is
-// copied on the GPU into a texture Vulkan shares, and from there by Vulkan
-// into a slot buffer, from which nvf_copy_luma and nvf_download_planes copy
-// it by the GPU into Vulkan VMAF's memory and libvmaf's pictures
-// (deliver_on_gpu, amf_handover.h).
+// With Params.handover the pictures never come to system memory: AMF's own
+// texture of each (which Direct3D 11 shares) is imported by Vulkan and read
+// where it is -- into Vulkan VMAF's memory by nvf_copy_luma and
+// nvf_copy_planes, and into a slot buffer for the other copies, from which
+// nvf_download_planes copies it into libvmaf's pictures -- the slot holding
+// AMF's surface until it is given back (deliver_on_gpu, amf_handover.h).
+// Where Vulkan cannot import AMF's texture, each picture is copied on the
+// GPU into a texture Vulkan shares, and from there by Vulkan into a slot
+// buffer (deliver_through_copies).
 //
 // AMF's decoder is used from one thread only, the one calling nvf_push and
 // nvf_finish: it submits packets, collects pictures, brings them to system
@@ -315,6 +319,19 @@ struct Decoder {
     UINT64 fence_value = 0;
     HANDLE fence_event = nullptr;
     ID3D11Query *copied = nullptr;
+    // Reading AMF's own textures (amf_handover.h's Slots::hold): decided at the
+    // first picture (`holding`). A picture is queued for nvf_pop once it is
+    // known to be decoded: the fence reached after a copy of 2 x 2 of its
+    // samples into `touch`, which Direct3D 11 makes wait for the decoder.
+    // Until then it is `unconfirmed` (the collecting thread's, in order).
+    bool holding = false, holding_decided = false;
+    ID3D11Texture2D *touch = nullptr;
+    struct Unconfirmed {
+        int slot;
+        long long pts;
+        UINT64 fence;
+    };
+    std::deque<Unconfirmed> unconfirmed;
     handover::Slots vk;
     Session session;
 
@@ -353,6 +370,7 @@ void recycle(Decoder *d) {
             d->returned.pop_front();
             if (d->slots[slot]) back.push_back(d->slots[slot]);  // a scaled picture is its buffer's
             d->slots[slot] = nullptr;
+            if (d->handing_over) d->vk.unhold(slot);
             d->free_slots.push_back(slot);
             d->changed.notify_all();
         }
@@ -527,10 +545,93 @@ bool finish_pending(Decoder *d) {
     return true;
 }
 
-// A decoded picture handed over (Params.handover): its crop copied by
-// Direct3D 11 into the next shared texture, then (once the next picture's
-// copy is under way, with a fence; at once without) by Vulkan into a slot
-// buffer, and queued for nvf_pop. False when decoding has stopped.
+// The held pictures whose decoding is done, queued for nvf_pop in order;
+// `all`: every one, waiting for them. False when decoding has stopped.
+bool confirm(Decoder *d, bool all) {
+    while (!d->unconfirmed.empty()) {
+        const Decoder::Unconfirmed picture = d->unconfirmed.front();
+        if (d->fence->GetCompletedValue() < picture.fence) {
+            if (!all) return true;
+            if (!copy_done(d, picture.fence)) {
+                if (!d->stopped()) d->fail("AMD's decoder did not finish a picture");
+                return false;
+            }
+        }
+        d->unconfirmed.pop_front();
+        std::lock_guard<std::mutex> guard(d->mutex);
+        d->ready.push_back({picture.slot, picture.pts});
+        d->info.displayed++;
+        d->changed.notify_all();
+    }
+    return true;
+}
+
+// A decoded picture handed over (Params.handover), held: AMF's texture
+// imported by Vulkan (the first time it comes), the slot holding the surface
+// and queued for nvf_pop. False when it cannot be (`surface` is then still
+// the caller's), or decoding has stopped (`stopped`).
+bool deliver_held(Decoder *d, amf::AMFSurface *surface, long long pts, ID3D11Texture2D *texture, UINT slice,
+                  bool &stopped) {
+    stopped = false;
+    D3D11_TEXTURE2D_DESC desc{};
+    texture->GetDesc(&desc);
+    IDXGIResource *resource = nullptr;
+    HANDLE handle = nullptr;
+    if (desc.ArraySize != 1 || slice != 0
+        || FAILED(texture->QueryInterface(__uuidof(IDXGIResource), reinterpret_cast<void **>(&resource)))) {
+        return false;
+    }
+    const bool shared = SUCCEEDED(resource->GetSharedHandle(&handle)) && handle;
+    resource->Release();
+    if (!shared) return false;
+    std::string why;
+    const VkFormat format = d->params.bit_depth > 8 ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16
+                                                    : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+    const int source = d->vk.source_of(handle, desc.Width, desc.Height, format, why);
+    if (source < 0) {
+        trace(("hand-over: through Direct3D 11's copies from now on: " + why).c_str());
+        return false;
+    }
+    bool full;  // every slot unconfirmed or the caller's: those decoded first, so that the caller can go on
+    {
+        std::lock_guard<std::mutex> guard(d->mutex);
+        full = d->free_slots.empty() && d->returned.empty();
+    }
+    const int slot = confirm(d, full) ? take_slot(d) : -1;
+    if (slot < 0) {
+        surface->Release();
+        stopped = true;
+        return true;
+    }
+    amf::AMFPlane *luma = surface->GetPlaneAt(0);
+    const int left = luma->GetOffsetX() + d->params.crop_x, top = luma->GetOffsetY() + d->params.crop_y;
+    // The picture decoded: Direct3D 11 makes a copy out of the texture wait
+    // for the decoder, and the fence for the copy. (Waited for by this thread,
+    // which waits on the fence for the copies too: a wait on it from the
+    // thread copying the picture out never returned for the second of two
+    // decoders, on a Radeon 780M.)
+    const D3D11_BOX box{static_cast<UINT>(left & ~1), static_cast<UINT>(top & ~1), 0, static_cast<UINT>((left & ~1) + 2),
+                        static_cast<UINT>((top & ~1) + 2), 1};
+    d->session.context->LockDX11();
+    d->immediate->CopySubresourceRegion(d->touch, 0, 0, 0, 0, texture, 0, &box);
+    d->signals->Signal(d->fence, ++d->fence_value);
+    d->immediate->Flush();
+    d->session.context->UnlockDX11();
+    d->vk.hold(slot, source, left, top);
+    {
+        std::lock_guard<std::mutex> guard(d->mutex);
+        d->slots[slot] = surface;  // given back to AMF when the slot is (recycle)
+    }
+    d->unconfirmed.push_back({slot, pts, d->fence_value});
+    stopped = !confirm(d, false);
+    return true;
+}
+
+// A decoded picture handed over (Params.handover): held where Vulkan can
+// read AMF's texture (deliver_held); otherwise copied (deliver_through_copies).
+bool deliver_through_copies(Decoder *d, amf::AMFSurface *surface, long long pts, ID3D11Texture2D *texture,
+                            UINT slice);
+
 bool deliver_on_gpu(Decoder *d, amf::AMFSurface *surface, long long pts) {
     ID3D11Texture2D *texture = nullptr;
     UINT slice = 0;
@@ -540,6 +641,28 @@ bool deliver_on_gpu(Decoder *d, amf::AMFSurface *surface, long long pts) {
         d->fail(why);
         return false;
     }
+    if (!d->holding_decided) {
+        d->holding_decided = true;
+        d->holding = d->touch && d->fence && d->vk.can_hold();
+    }
+    if (d->holding) {
+        bool stopped = false;
+        if (deliver_held(d, surface, pts, texture, slice, stopped)) return !stopped;
+        d->holding = false;  // through Direct3D 11's copies from now on, after the held ones
+        if (!confirm(d, true)) {
+            surface->Release();
+            return false;
+        }
+    }
+    return deliver_through_copies(d, surface, pts, texture, slice);
+}
+
+// A decoded picture handed over by copies: its crop copied by Direct3D 11
+// into the next shared texture, then (once the next picture's copy is under
+// way, with a fence; at once without) by Vulkan into a slot buffer, and
+// queued for nvf_pop. False when decoding has stopped.
+bool deliver_through_copies(Decoder *d, amf::AMFSurface *surface, long long pts, ID3D11Texture2D *texture,
+                            UINT slice) {
     int slot = take_slot(d);
     if (slot < 0) {
         surface->Release();
@@ -641,6 +764,13 @@ bool start_handover(Decoder *d, std::string &why) {
     bool made = d->vk.make(d->params, textures,
                            wide ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16 : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, why);
     for (HANDLE texture : textures) CloseHandle(texture);  // Vulkan holds the textures' memory now
+    if (made && d->fence) {  // for holding AMF's pictures (deliver_held); without, they are copied
+        D3D11_TEXTURE2D_DESC touch = shared;
+        touch.Width = touch.Height = 2;
+        touch.BindFlags = 0;
+        touch.MiscFlags = 0;
+        if (FAILED(d->session.device->CreateTexture2D(&touch, nullptr, &d->touch))) d->touch = nullptr;
+    }
     return made;
 }
 
@@ -731,10 +861,13 @@ void collect_thread(Decoder *d) {
             Sleep(1);
     };
     while (!d->stopped()) {
+        // The surfaces of the pictures the caller has given back, back to the
+        // decoder: holding AMF's pictures, it decodes no more without them.
+        recycle(d);
         amf::AMFData *data = nullptr;
         AMF_RESULT result = d->session.decoder->QueryOutput(&data);
         if (result == AMF_EOF) {
-            if (!finish_pending(d)) break;  // the last picture
+            if (!confirm(d, true) || !finish_pending(d)) break;  // the last pictures
             std::lock_guard<std::mutex> guard(d->mutex);
             d->drained = true;
             d->changed.notify_all();
@@ -745,6 +878,7 @@ void collect_thread(Decoder *d) {
             continue;
         }
         if (result == AMF_REPEAT || result == AMF_OK) {
+            if (!confirm(d, false)) break;
             nap();  // the next picture is still being decoded
             continue;
         }
@@ -775,6 +909,7 @@ void destroy(Decoder *d) {
     if (d->fence) d->fence->Release();
     if (d->signals) d->signals->Release();
     if (d->fence_event) CloseHandle(d->fence_event);
+    if (d->touch) d->touch->Release();
     if (d->immediate) d->immediate->Release();
     if (d->pending.surface) d->pending.surface->Release();  // decoding stopped with a copy pending
     for (ID3D11Texture2D *texture : d->shared) {
