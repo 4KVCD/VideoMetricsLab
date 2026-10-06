@@ -332,6 +332,14 @@ struct Decoder {
         UINT64 fence;
     };
     std::deque<Unconfirmed> unconfirmed;
+    // The surfaces of slots given back while a copy out of them not waited for
+    // (nvf_copy_luma_async) may still be reading them: given back to AMF once
+    // the timeline passes `copied` (the collecting thread's).
+    struct Deferred {
+        amf::AMFSurface *surface;
+        uint64_t copied;
+    };
+    std::vector<Deferred> deferred;
     handover::Slots vk;
     Session session;
 
@@ -368,11 +376,25 @@ void recycle(Decoder *d) {
         while (!d->returned.empty()) {
             int slot = d->returned.front();
             d->returned.pop_front();
-            if (d->slots[slot]) back.push_back(d->slots[slot]);  // a scaled picture is its buffer's
+            const uint64_t copied = d->handing_over ? d->vk.copy_pending(slot) : 0;
+            if (d->slots[slot]) {  // a scaled picture is its buffer's
+                if (copied && !handover::timeline_reached(copied))
+                    d->deferred.push_back({d->slots[slot], copied});
+                else
+                    back.push_back(d->slots[slot]);
+            }
             d->slots[slot] = nullptr;
             if (d->handing_over) d->vk.unhold(slot);
             d->free_slots.push_back(slot);
             d->changed.notify_all();
+        }
+        for (size_t i = 0; i < d->deferred.size();) {  // those whose copies are done
+            if (handover::timeline_reached(d->deferred[i].copied)) {
+                back.push_back(d->deferred[i].surface);
+                d->deferred.erase(d->deferred.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
         }
     }
     for (amf::AMFSurface *surface : back) surface->Release();
@@ -901,9 +923,11 @@ void destroy(Decoder *d) {
         d->collector.join();
     }
     trace("close: releasing the pictures held");
+    if (handover::g_device.device) d->vk.finish_copies();  // (the copies still reading them)
     for (amf::AMFSurface *surface : d->slots) {
         if (surface) surface->Release();
     }
+    for (const Decoder::Deferred &later : d->deferred) later.surface->Release();
     if (handover::g_device.device) d->vk.free();  // before the texture it imported
     if (d->copied) d->copied->Release();
     if (d->fence) d->fence->Release();
@@ -1095,6 +1119,49 @@ NVF_API int nvf_copy_luma(void *handle, int slot, unsigned long long dst, long l
     Decoder *d = static_cast<Decoder *>(handle);
     if (!d->handing_over) return NVF_ERROR;  // pictures in system memory: there is no GPU copy to make
     return download_result(d, d->vk.copy_luma(slot, dst, dst_pitch));
+}
+
+// nvf_copy_luma, not waited for where the picture is held and the GPU has a
+// timeline semaphore (nvf_timeline): *value is the semaphore's value once the
+// copy is done, which the caller has the GPU wait for (Vulkan VMAF's
+// vv_commit_after); 0 when the copy was waited for.
+NVF_API int nvf_copy_luma_async(void *handle, int slot, unsigned long long dst, long long dst_pitch,
+                                unsigned long long *value) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!d->handing_over) return NVF_ERROR;
+    uint64_t signalled = 0;
+    const int result = download_result(d, d->vk.copy_luma(slot, dst, dst_pitch, &signalled));
+    *value = signalled;
+    return result;
+}
+
+// nvf_copy_planes, not waited for as nvf_copy_luma_async.
+NVF_API int nvf_copy_planes_async(void *handle, int slot, const unsigned long long *addresses,
+                                  const long long *pitches, unsigned long long *value) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    if (!d->handing_over) return NVF_ERROR;
+    uint64_t signalled = 0;
+    const int result = download_result(d, d->vk.copy_planes(slot, addresses, pitches, &signalled));
+    *value = signalled;
+    return result;
+}
+
+// The hand-over's timeline semaphore, which nvf_copy_luma_async's copies
+// signal, as an opaque Win32 handle (Vulkan's) the caller imports and
+// closes. 0, or -1 if the GPU has none (the copies are then waited for).
+NVF_API int nvf_timeline(void *handle, void **win32) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    handover::Device &g = handover::g_device;
+    *win32 = nullptr;
+    if (!d->handing_over || !g.timeline || !g.direct_pipelines[0]) return -1;
+    VkSemaphoreGetWin32HandleInfoKHR info{};
+    info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR;
+    info.semaphore = g.timeline;
+    info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    HANDLE exported = nullptr;
+    if (g.vkGetSemaphoreWin32HandleKHR(g.device, &info, &exported) != VK_SUCCESS || !exported) return -1;
+    *win32 = exported;
+    return 0;
 }
 
 // The hand-over's: libvmaf's picture memory made known to the GPU, which then

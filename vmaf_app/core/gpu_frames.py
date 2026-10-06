@@ -196,6 +196,18 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                 ):
                     function = getattr(lib, name)
                     function.restype, function.argtypes = restype, argtypes
+            if hasattr(lib, "nvf_timeline"):  # AMD's copies the GPU waits for instead of the CPU
+                value = ctypes.POINTER(ctypes.c_ulonglong)
+                for name, restype, argtypes in (
+                    ("nvf_timeline", ctypes.c_int, [handle, ctypes.POINTER(ctypes.c_void_p)]),
+                    ("nvf_copy_luma_async", ctypes.c_int,
+                     [handle, ctypes.c_int, ctypes.c_ulonglong, ctypes.c_longlong, value]),
+                    ("nvf_copy_planes_async", ctypes.c_int,
+                     [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_ulonglong), ctypes.POINTER(ctypes.c_longlong),
+                      value]),
+                ):
+                    function = getattr(lib, name)
+                    function.restype, function.argtypes = restype, argtypes
             if backend != "nvidia":  # the decoders that scale with native/d3d11_scale.h
                 lib.nvf_scale_note.restype, lib.nvf_scale_note.argtypes = ctypes.c_int, [handle, text, ctypes.c_int]
                 lib.nvf_scale_test.restype = ctypes.c_int
@@ -789,6 +801,35 @@ class GpuFrameStream:
         """Copies the slot's luma plane to GPU memory at `address`, rows `pitch` bytes apart."""
         if self._lib.nvf_copy_luma(self._handle, slot, address, pitch) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+
+    def timeline(self) -> int | None:
+        """The timeline semaphore copy_luma_async's copies signal (AMD's
+        hand-over), as an opaque Win32 handle for another Vulkan device on
+        the GPU to import (the caller closes it); None where there is none:
+        the copies are then waited for."""
+        if not self.handover or not hasattr(self._lib, "nvf_timeline"):
+            return None
+        handle = ctypes.c_void_p()
+        if self._lib.nvf_timeline(self._handle, ctypes.byref(handle)) != 0 or not handle.value:
+            return None
+        return handle.value
+
+    def copy_luma_async(self, slot: int, address: int, pitch: int) -> int:
+        """copy_luma, not waited for: the timeline semaphore's value once
+        the copy is done, for the GPU to wait for (0: it was waited for)."""
+        value = ctypes.c_ulonglong()
+        if self._lib.nvf_copy_luma_async(self._handle, slot, address, pitch, ctypes.byref(value)) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+        return value.value
+
+    def copy_planes_async(self, slot: int, addresses: tuple[int, ...], pitches: tuple[int, ...]) -> int:
+        """copy_planes, not waited for, as copy_luma_async."""
+        destinations = (ctypes.c_ulonglong * 3)(*addresses)
+        rows = (ctypes.c_longlong * 3)(*pitches)
+        value = ctypes.c_ulonglong()
+        if self._lib.nvf_copy_planes_async(self._handle, slot, destinations, rows, ctypes.byref(value)) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+        return value.value
 
     # Pictures handed over without a CPU copy (NVIDIA's decoder; AMD's with handover).
 

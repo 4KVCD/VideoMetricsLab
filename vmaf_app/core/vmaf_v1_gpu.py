@@ -118,6 +118,11 @@ def _vulkan() -> ctypes.CDLL:
         lib.vv_shared_chroma.restype = ctypes.c_int
         lib.vv_shared_chroma.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64),
                                          ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)]
+    if hasattr(lib, "vv_import_timeline"):  # a decoder's copies the GPU waits for (vv_commit_after)
+        lib.vv_import_timeline.restype = ctypes.c_int
+        lib.vv_import_timeline.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        lib.vv_commit_after.restype = ctypes.c_int
+        lib.vv_commit_after.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
     return lib
 
 
@@ -368,6 +373,18 @@ class V1Scorer:
                 if vulkan.vv_shared_chroma(self._gpu, ctypes.byref(offset), ctypes.byref(spacing),
                                            ctypes.byref(stride)) == 0:
                     self._shared_chroma = (offset.value, spacing.value, stride.value)
+            #: Whether the decoder's copies into the shared buffers are waited for
+            #: by the GPU (its timeline semaphore, imported) instead of by this
+            #: thread, which then goes on to the next pair at once.
+            self._after = False
+            if self._shared is not None and hasattr(vulkan, "vv_import_timeline") \
+                    and hasattr(shared, "copy_luma_async"):
+                timeline = shared.timeline()
+                if timeline is not None:
+                    try:
+                        self._after = vulkan.vv_import_timeline(self._gpu, timeline) == 0
+                    finally:
+                        ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(timeline))
             #: libvmaf's extractors are run only for what the GPU does not calculate.
             self._cpu_features = bool(set(_CPU_FEATURES) - self._on_gpu)
             if self._cpu_features:
@@ -422,15 +439,22 @@ class V1Scorer:
         way in): nothing of it is copied by the CPU."""
         score = self._count % self._step == 0
         ref_address, dist_address, pitch = self._shared.next()
-        ref_stream.copy_luma(ref_slot, ref_address, pitch)
+        # Not waited for where the GPU waits for them (self._after): the
+        # timeline's value once the last of them is done.
+        luma = (lambda stream, *a: stream.copy_luma_async(*a)) if self._after else             (lambda stream, *a: stream.copy_luma(*a) or 0)
+        planes = (lambda stream, *a: stream.copy_planes_async(*a)) if self._after else             (lambda stream, *a: stream.copy_planes(*a) or 0)
+        copied = luma(ref_stream, ref_slot, ref_address, pitch)
         if score:
-            test_stream.copy_luma(test_slot, dist_address, pitch)
+            copied = max(copied, luma(test_stream, test_slot, dist_address, pitch))
         if score and _SPEED in self._on_gpu and self._shared_chroma is not None:
             # The chroma planes copied by the GPU into the slot's shared buffer.
             offset, spacing, stride = self._shared_chroma
             at = [ref_address + offset + i * spacing for i in range(4)]
-            ref_stream.copy_planes(ref_slot, (0, at[0], at[1]), (0, stride, stride))
-            test_stream.copy_planes(test_slot, (0, at[2], at[3]), (0, stride, stride))
+            copied = max(copied, planes(ref_stream, ref_slot, (0, at[0], at[1]), (0, stride, stride)))
+            copied = max(copied, planes(test_stream, test_slot, (0, at[2], at[3]), (0, stride, stride)))
+        if copied:
+            vmaf_vulkan._check(self._vulkan, self._vulkan.vv_commit_after(self._gpu, copied),
+                               f"Scoring frame {self._count}")
         elif score and _SPEED in self._on_gpu:
             # The chroma planes downloaded into the engine's memory for them
             # (Vulkan's, which another API is not given to pin).

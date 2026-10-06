@@ -114,6 +114,16 @@ struct Device {
     VkDescriptorSetLayout direct_layouts[2] = {};
     VkPipelineLayout direct_layout = VK_NULL_HANDLE;
     VkPipeline direct_pipelines[2] = {};  // 8-bit, 16-bit samples
+    // A timeline semaphore the copies into other APIs' memory signal when
+    // they are not waited for (Slots::copy_luma's `signal`), which Vulkan
+    // VMAF imports (nvf_timeline) and waits for on the GPU; none if the GPU
+    // cannot share one. `timeline_value`: the last value signalled (under `mutex`).
+    VkSemaphore timeline = VK_NULL_HANDLE;
+    uint64_t timeline_value = 0;
+    PFN_vkGetSemaphoreWin32HandleKHR vkGetSemaphoreWin32HandleKHR = nullptr;
+    PFN_vkGetSemaphoreCounterValue vkGetSemaphoreCounterValue = nullptr;
+    PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
+    PFN_vkDestroySemaphore vkDestroySemaphore = nullptr;
 #define X(name) PFN_##name name = nullptr;
     HANDOVER_INSTANCE_FUNCTIONS(X)
     HANDOVER_DEVICE_FUNCTIONS(X)
@@ -160,6 +170,8 @@ inline bool has_extension(const std::vector<VkExtensionProperties> &listed, cons
 
 // amf_direct.slang's pipelines, for Slots::direct_plane; none if any part
 // cannot be made (the hand-over then copies by Direct3D 11, as before).
+inline void make_timeline(Device &g);
+
 inline void make_direct(Device &g) {
     VkDescriptorSetLayoutBinding views[2] = {};
     for (uint32_t i = 0; i < 2; ++i) {
@@ -210,6 +222,33 @@ inline void make_direct(Device &g) {
     }
     g.direct_pipelines[0] = made[0];
     g.direct_pipelines[1] = made[1];
+}
+
+// The device's timeline semaphore, exportable as an opaque Win32 handle; none
+// if it cannot be made (every copy is then waited for).
+inline void make_timeline(Device &g) {
+    g.vkCreateSemaphore = reinterpret_cast<PFN_vkCreateSemaphore>(g.vkGetDeviceProcAddr(g.device, "vkCreateSemaphore"));
+    g.vkDestroySemaphore = reinterpret_cast<PFN_vkDestroySemaphore>(g.vkGetDeviceProcAddr(g.device, "vkDestroySemaphore"));
+    g.vkGetSemaphoreWin32HandleKHR = reinterpret_cast<PFN_vkGetSemaphoreWin32HandleKHR>(
+        g.vkGetDeviceProcAddr(g.device, "vkGetSemaphoreWin32HandleKHR"));
+    g.vkGetSemaphoreCounterValue = reinterpret_cast<PFN_vkGetSemaphoreCounterValue>(
+        g.vkGetDeviceProcAddr(g.device, "vkGetSemaphoreCounterValue"));
+    if (!g.vkCreateSemaphore || !g.vkGetSemaphoreWin32HandleKHR || !g.vkGetSemaphoreCounterValue) return;
+    VkExportSemaphoreCreateInfo exported{VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO};
+    exported.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    VkSemaphoreTypeCreateInfo type{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
+    type.pNext = &exported;
+    type.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    VkSemaphoreCreateInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    info.pNext = &type;
+    if (g.vkCreateSemaphore(g.device, &info, nullptr, &g.timeline) != VK_SUCCESS) g.timeline = VK_NULL_HANDLE;
+}
+
+// Whether the timeline semaphore has reached `value` (0: nothing to wait for).
+inline bool timeline_reached(uint64_t value) {
+    if (!value) return true;
+    uint64_t now = 0;
+    return g_device.vkGetSemaphoreCounterValue(g_device.device, g_device.timeline, &now) == VK_SUCCESS && now >= value;
 }
 
 // The device, made on first use on the GPU whose LUID (DXGI's adapter LUID)
@@ -281,13 +320,15 @@ inline Device *shared(const uint8_t *luid) {
     g.vkEnumerateDeviceExtensionProperties(g.physical, nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> listed(count);
     if (count) g.vkEnumerateDeviceExtensionProperties(g.physical, nullptr, &count, listed.data());
-    const char *extensions[] = {VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME};
-    for (const char *name : extensions) {
-        if (!has_extension(listed, name)) {
-            g.error = std::string("the GPU's Vulkan driver has no ") + name;
+    const char *extensions[3] = {VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
+                                 VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME};
+    for (int i = 0; i < 2; ++i) {
+        if (!has_extension(listed, extensions[i])) {
+            g.error = std::string("the GPU's Vulkan driver has no ") + extensions[i];
             return nullptr;
         }
     }
+    const bool share_semaphores = has_extension(listed, extensions[2]);
     // The shader's 8- and 16-bit buffers.
     VkPhysicalDeviceVulkan12Features have12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     VkPhysicalDeviceVulkan11Features have11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
@@ -305,6 +346,8 @@ inline Device *shared(const uint8_t *luid) {
     VkPhysicalDeviceVulkan11Features want11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
     want11.pNext = &want12;
     want11.storageBuffer16BitAccess = want11.uniformAndStorageBuffer16BitAccess = VK_TRUE;
+    const bool timelines = share_semaphores && have12.timelineSemaphore;  // (else every copy is waited for)
+    want12.timelineSemaphore = timelines ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceFeatures2 want{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
     want.pNext = &want11;
     want.features.shaderInt16 = VK_TRUE;
@@ -344,7 +387,7 @@ inline Device *shared(const uint8_t *luid) {
     device_info.pNext = &want;
     device_info.queueCreateInfoCount = g.copy_family != g.family ? 2 : 1;
     device_info.pQueueCreateInfos = queues;
-    device_info.enabledExtensionCount = 2;
+    device_info.enabledExtensionCount = timelines ? 3 : 2;
     device_info.ppEnabledExtensionNames = extensions;
     result = g.vkCreateDevice(g.physical, &device_info, nullptr, &g.device);
     if (result != VK_SUCCESS) {
@@ -357,6 +400,7 @@ inline Device *shared(const uint8_t *luid) {
 #undef X
     g.vkGetDeviceQueue(g.device, g.family, 0, &g.queue);
     g.vkGetDeviceQueue(g.device, g.copy_family, 0, &g.copy_queue);
+    if (timelines) make_timeline(g);
 
     VkDescriptorSetLayoutBinding bindings[2] = {};
     for (uint32_t i = 0; i < 2; ++i) {
@@ -518,8 +562,9 @@ struct Commands {
         g_device.vkCmdPipelineBarrier(buffer, from, to, 0, 1, &memory, 0, nullptr, 0, nullptr);
     }
 
-    // Ends the batch and submits it.
-    bool submit() {
+    // Ends the batch and submits it; `signal`: also signalling the device's
+    // timeline semaphore, with the value given back.
+    bool submit(uint64_t *signal = nullptr) {
         Device &g = g_device;
         if (broken) return false;
         barrier(stages(), VK_PIPELINE_STAGE_HOST_BIT);
@@ -527,11 +572,23 @@ struct Commands {
         VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         submit.commandBufferCount = 1;
         submit.pCommandBuffers = &buffer;
+        VkTimelineSemaphoreSubmitInfo timeline{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
+        uint64_t value = 0;
+        if (signal) {
+            timeline.signalSemaphoreValueCount = 1;
+            timeline.pSignalSemaphoreValues = &value;
+            submit.pNext = &timeline;
+            submit.signalSemaphoreCount = 1;
+            submit.pSignalSemaphores = &g.timeline;
+        }
         VkResult result;
         {
-            std::lock_guard<std::mutex> lock(g.mutex);
+            std::lock_guard<std::mutex> lock(g.mutex);  // (the values in the order of the submissions)
+            if (signal) value = ++g.timeline_value;
             result = g.vkQueueSubmit(copies_only ? g.copy_queue : g.queue, 1, &submit, fence);
+            if (signal && result != VK_SUCCESS) --g.timeline_value;
         }
+        if (signal) *signal = value;
         if (result != VK_SUCCESS) {
             broken = true;
             return false;
@@ -754,12 +811,19 @@ struct Slots {
     struct Held {
         int source = -1;  // in `sources`; -1: the slot buffer holds the picture (as without)
         int x = 0, y = 0;  // the crop's first luma sample in the texture
+        uint64_t copied = 0;  // the timeline's value once its last copy not waited for is done (0: none)
     };
     std::vector<Source> sources;
     std::vector<Held> held;  // per slot
     std::vector<std::pair<VkBuffer, VkDescriptorSet>> outputs;  // the buffers direct_plane has written, and their sets
     VkDescriptorPool direct_descriptors = VK_NULL_HANDLE;
     Commands direct;  // direct_plane's (on the queue that computes; one caller at a time: `copy_lock`)
+    // The copies not waited for (Device::timeline), taken in turn; `active`:
+    // the batch direct_plane records into.
+    static constexpr int kRing = 8;
+    Commands ring[kRing];
+    int next_ring = 0;
+    Commands *active = &direct;
     static constexpr uint32_t kMaxSources = 64, kMaxOutputs = 64;
     std::vector<Buffer> slots;  // the pictures, planar (frame_bytes each)
     Buffer chroma;              // the crop's U and V, interleaved, on their way into a slot
@@ -961,6 +1025,8 @@ struct Slots {
         pool_info.poolSizeCount = 2;
         pool_info.pPoolSizes = sizes;
         if (!direct.make()) return false;
+        for (Commands &c : ring)
+            if (!c.make()) return false;
         return g.vkCreateDescriptorPool(g.device, &pool_info, nullptr, &direct_descriptors) == VK_SUCCESS;
     }
 
@@ -1062,6 +1128,20 @@ struct Slots {
         if (static_cast<size_t>(slot) < held.size()) held[static_cast<size_t>(slot)] = Held{};
     }
 
+    // The timeline's value once the slot's last copy not waited for is done (0: none).
+    uint64_t copy_pending(int slot) const {
+        return static_cast<size_t>(slot) < held.size() ? held[static_cast<size_t>(slot)].copied : 0;
+    }
+
+    // Whether copies need not be waited for: the device has a timeline semaphore.
+    bool can_signal() const { return g_device.timeline != VK_NULL_HANDLE && direct_descriptors; }
+
+    // Every copy not waited for, done.
+    void finish_copies() {
+        std::lock_guard<std::mutex> lock(copy_lock);
+        for (Commands &c : ring) c.finish();
+    }
+
     bool holds(int slot) const {
         return static_cast<size_t>(slot) < held.size() && held[static_cast<size_t>(slot)].source >= 0;
     }
@@ -1106,7 +1186,7 @@ struct Slots {
         barrier.dstQueueFamilyIndex = acquire ? g.family : VK_QUEUE_FAMILY_EXTERNAL;
         barrier.image = source.image;
         barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        g.vkCmdPipelineBarrier(direct.buffer,
+        g.vkCmdPipelineBarrier(active->buffer,
                                acquire ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                                acquire ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
                                nullptr, 0, nullptr, 1, &barrier);
@@ -1132,35 +1212,46 @@ struct Slots {
         const uint32_t across = wide ? (width + static_cast<uint32_t>(16 / sample) - 1) / static_cast<uint32_t>(16 / sample)
                                      : width;  // threads across a row
         const VkDescriptorSet sets_[2] = {sources[static_cast<size_t>(h.source)].set, output};
-        g.vkCmdBindPipeline(direct.buffer, VK_PIPELINE_BIND_POINT_COMPUTE, g.direct_pipelines[sample == 2 ? 1 : 0]);
-        g.vkCmdBindDescriptorSets(direct.buffer, VK_PIPELINE_BIND_POINT_COMPUTE, g.direct_layout, 0, 2, sets_, 0, nullptr);
-        g.vkCmdPushConstants(direct.buffer, g.direct_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof constants, constants);
-        g.vkCmdDispatch(direct.buffer, (across + 15) / 16, (height + 15) / 16, 1);
+        g.vkCmdBindPipeline(active->buffer, VK_PIPELINE_BIND_POINT_COMPUTE, g.direct_pipelines[sample == 2 ? 1 : 0]);
+        g.vkCmdBindDescriptorSets(active->buffer, VK_PIPELINE_BIND_POINT_COMPUTE, g.direct_layout, 0, 2, sets_, 0, nullptr);
+        g.vkCmdPushConstants(active->buffer, g.direct_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof constants, constants);
+        g.vkCmdDispatch(active->buffer, (across + 15) / 16, (height + 15) / 16, 1);
         return true;
     }
 
-    // The held picture of `slot`, planes `count` of them from `first`, each
-    // into its (buffer, offset, pitch) of `to` (a null buffer: not that
-    // plane), on the queue that computes, waited for.
-    bool direct_copy(int slot, const VkBuffer *buffers, const VkDeviceSize *offsets, const VkDeviceSize *pitches) {
-        if (direct.broken) {
+    // The held picture of `slot`, each plane into its (buffer, offset, pitch)
+    // (a null buffer: not that plane), on the queue that computes: waited
+    // for, or (`signal`) not, the timeline's value once it is done given back.
+    bool direct_copy(int slot, const VkBuffer *buffers, const VkDeviceSize *offsets, const VkDeviceSize *pitches,
+                     uint64_t *signal = nullptr) {
+        active = signal ? &ring[next_ring++ % kRing] : &direct;
+        Commands &c = *active;
+        if (c.broken) {
             error = "copying a picture on the GPU failed";
             return false;
         }
         const Source &source = sources[static_cast<size_t>(held[static_cast<size_t>(slot)].source)];
-        direct.begin();
+        c.begin();  // (a batch of the ring: once its last one is done)
         source_barrier(source, true);
         for (int i = 0; i < (params.luma_only ? 1 : 3); ++i) {
             if (!buffers[i]) continue;
             if (!direct_plane(slot, i, buffers[i], offsets[i], pitches[i])) {
                 error = "a plane's destination cannot be written by the hand-over's shader";
                 source_barrier(source, false);
-                direct.run();
+                c.run();
                 return false;
             }
         }
         source_barrier(source, false);
-        if (!direct.run()) {
+        if (signal) {
+            if (!c.submit(signal)) {
+                error = "copying a picture on the GPU failed";
+                return false;
+            }
+            held[static_cast<size_t>(slot)].copied = *signal;
+            return true;
+        }
+        if (!c.run()) {
             error = "copying a picture on the GPU failed";
             return false;
         }
@@ -1201,7 +1292,7 @@ struct Slots {
     }
 
     // The slot's luma into imported memory at `address`, rows `pitch` apart.
-    bool copy_luma(int slot, unsigned long long address, long long pitch) {
+    bool copy_luma(int slot, unsigned long long address, long long pitch, uint64_t *signal = nullptr) {
         const Plane p = plane(0);
         VkBuffer buffer;
         VkDeviceSize offset;
@@ -1214,8 +1305,9 @@ struct Slots {
         if (holds(slot)) {  // straight from AMF's picture
             const VkBuffer buffers[3] = {buffer, VK_NULL_HANDLE, VK_NULL_HANDLE};
             const VkDeviceSize offsets[3] = {offset, 0, 0}, pitches[3] = {static_cast<VkDeviceSize>(pitch), 0, 0};
-            return direct_copy(slot, buffers, offsets, pitches);
+            return direct_copy(slot, buffers, offsets, pitches, signal && can_signal() ? signal : nullptr);
         }
+        if (signal) *signal = 0;  // (waited for)
         if (copying.broken) {
             error = "copying a picture on the GPU failed";
             return false;
@@ -1231,7 +1323,8 @@ struct Slots {
 
     // The slot's planes each into imported memory (nvf_import_vulkan) at its
     // own address (0: not that plane), rows `pitches` apart, on the copy queue.
-    bool copy_planes(int slot, const unsigned long long *addresses, const long long *pitches) {
+    bool copy_planes(int slot, const unsigned long long *addresses, const long long *pitches,
+                     uint64_t *signal = nullptr) {
         std::lock_guard<std::mutex> lock(copy_lock);
         VkBuffer buffers[3] = {};
         VkDeviceSize offsets[3] = {}, steps[3] = {};
@@ -1246,7 +1339,9 @@ struct Slots {
             }
             steps[i] = static_cast<VkDeviceSize>(pitches[i]);
         }
-        if (holds(slot)) return direct_copy(slot, buffers, offsets, steps);  // straight from AMF's picture
+        if (holds(slot))  // straight from AMF's picture
+            return direct_copy(slot, buffers, offsets, steps, signal && can_signal() ? signal : nullptr);
+        if (signal) *signal = 0;  // (waited for)
         if (copying.broken) {
             error = "copying a picture on the GPU failed";
             return false;
@@ -1334,6 +1429,7 @@ struct Slots {
         for (Picture &picture : pictures) picture.convert.free();  // once its last copy is done
         copying.free();
         direct.free();
+        for (Commands &c : ring) c.free();
         for (Source &source : sources) {
             for (VkImageView view : source.views)
                 if (view) g_device.vkDestroyImageView(g_device.device, view, nullptr);
