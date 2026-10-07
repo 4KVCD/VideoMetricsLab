@@ -13,13 +13,26 @@ param(
     # Videos to decode for real through the packaged GStreamer, in addition
     # to the structural checks that always run. Any files with video and
     # audio will do; the more codecs they cover, the more the build proves.
-    [string[]]$VerifyMedia = @()
+    [string[]]$VerifyMedia = @(),
+    # Builds with a local build of libvmaf-fast, to test; see below.
+    [switch]$AllowLocalLibvmaf
 )
 $ErrorActionPreference = 'Stop'
 
 $projectDirectory = Split-Path $PSScriptRoot -Parent
 Push-Location $projectDirectory
 try {
+    # 0. A release takes a release of libvmaf-fast (fetch_libvmaf_fast.ps1),
+    #    published before it, not the local build of the fork the app is
+    #    developed with (build_libvmaf_fast_local.ps1): its source is public.
+    $libvmafFast = Get-Content -Raw (Join-Path $projectDirectory 'vmaf_app/tools/libvmaf/libvmaf-fast.json') |
+        ConvertFrom-Json
+    if (-not $libvmafFast.release -and -not $AllowLocalLibvmaf) {
+        throw ("libvmaf-fast is a local build ($($libvmafFast.version)): publish libvmaf-fast and install " +
+               'its release with scripts/fetch_libvmaf_fast.ps1 (docs/RELEASING.md), or pass ' +
+               '-AllowLocalLibvmaf to build one to test')
+    }
+
     $python = Join-Path $projectDirectory '.venv/Scripts/python.exe'
     if (-not (Test-Path $python)) { $python = 'python' }
     $workPath = Join-Path $OutputRoot 'work'
@@ -154,19 +167,23 @@ try {
         }
     }
 
-    # libvmaf with CUDA (libvmaf-fast's release): without it, VMAF on
-    # NVIDIA GPUs is quietly calculated on the CPU.
+    # libvmaf with CUDA (libvmaf-fast's): without it, VMAF on NVIDIA GPUs is
+    # quietly calculated on the CPU; without its record, scores name no
+    # version of it.
     $libvmaf = Join-Path $output '_internal/vmaf_app/tools/libvmaf'
-    if (-not (Test-Path (Join-Path $libvmaf 'libvmaf.dll'))) {
-        throw 'Bundled libvmaf (CUDA) is missing: run scripts/fetch_libvmaf_fast.ps1'
+    foreach ($file in @('libvmaf.dll', 'libvmaf-fast.json')) {
+        if (-not (Test-Path (Join-Path $libvmaf $file))) {
+            throw "Bundled libvmaf (CUDA) is missing $file`: run scripts/fetch_libvmaf_fast.ps1"
+        }
     }
-    foreach ($notice in @('LICENSE.libvmaf.txt', 'LICENSE.pthreads4w.txt', 'LICENSE.nv-codec-headers.txt')) {
+    foreach ($notice in @('LICENSE.libvmaf.txt', 'LICENSE.pthreads4w.txt', 'LICENSE.nv-codec-headers.txt',
+                          'LICENSE.xpsnr.txt')) {
         if (-not (Test-Path (Join-Path $libvmaf "licenses/$notice"))) {
             throw "Bundled libvmaf license notice is missing: $notice"
         }
     }
 
-    # VMAF's features with Vulkan (libvmaf-fast's release): without it,
+    # VMAF's features with Vulkan (libvmaf-fast's too): without it,
     # VMAF on Intel and AMD GPUs is quietly calculated on the CPU.
     $vmafVulkan = Join-Path $output '_internal/vmaf_app/tools/vmaf_vulkan'
     if (-not (Test-Path (Join-Path $vmafVulkan 'vmaf_vulkan.dll'))) {

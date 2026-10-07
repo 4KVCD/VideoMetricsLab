@@ -1,8 +1,12 @@
-"""The GPU VMAF libraries are libvmaf-fast's release (github.com/4KVCD/
-libvmaf-fast), installed by scripts/fetch_libvmaf_fast.ps1 and committed:
-the release the script installs, the one the app says its scores come from
-and what is in vmaf_app/tools must agree."""
+"""The GPU VMAF libraries are libvmaf-fast's (github.com/4KVCD/libvmaf-fast),
+committed in vmaf_app/tools: a release, installed by
+scripts/fetch_libvmaf_fast.ps1, or while the app is developed a build of the
+fork's latest commit, by scripts/build_libvmaf_fast_local.ps1. Either records
+what it installed in libvmaf/libvmaf-fast.json: what the libraries are, what
+the app says its scores come from and, for a release, the one the fetch
+script pins must agree."""
 import ctypes
+import json
 import re
 from pathlib import Path
 
@@ -11,19 +15,60 @@ from vmaf_app.core import vmaf_cuda, vmaf_v1_gpu, vmaf_vulkan
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_the_fetched_release_is_the_one_scores_are_recorded_with():
+def _record() -> dict:
+    return json.loads(vmaf_cuda.BUILD_RECORD.read_text(encoding="utf-8"))
+
+
+def test_the_bundled_build_is_the_one_scores_are_recorded_with():
+    record = _record()
+    assert record["version"] == vmaf_cuda.LIBVMAF_FAST_VERSION
+    for build in (vmaf_cuda.LIBRARY_BUILD, vmaf_cuda.CPU_BUILD, vmaf_vulkan.LIBRARY_BUILD, vmaf_v1_gpu.LIBRARY_BUILD):
+        assert build.startswith(f"libvmaf-fast {record['version']} (")
+    assert re.fullmatch(r"[0-9a-f]{40}", record["commit"])
     script = (ROOT / "scripts" / "fetch_libvmaf_fast.ps1").read_text(encoding="utf-8")
-    version = re.search(r"\[string\]\$Version = '([^']+)'", script).group(1)
-    assert version == vmaf_cuda.LIBVMAF_FAST_VERSION
     assert re.search(r"\[string\]\$Sha256 = '[0-9a-f]{64}'", script)  # pinned, not trusted on download
-    for build in (vmaf_cuda.LIBRARY_BUILD, vmaf_vulkan.LIBRARY_BUILD, vmaf_v1_gpu.LIBRARY_BUILD):
-        assert f"libvmaf-fast {version}" in build
+    if record["release"]:
+        assert record["version"] == re.search(r"\[string\]\$Version = '([^']+)'", script).group(1)
+    else:
+        # git describe of the commit: the release it follows, how far, which commit.
+        follows, _, commit = re.fullmatch(r"(.+)-(\d+)-g([0-9a-f]+)", record["version"]).groups()
+        assert re.fullmatch(r"\d+\.\d+\.\d+-fast\.\d+", follows)
+        assert record["commit"].startswith(commit)
 
 
-def test_the_release_and_its_licences_are_bundled():
+def test_both_libraries_are_the_recorded_commit():
+    """Each reports the commit it was built from: one left from another build
+    would score without the scores saying so (release/v1.5 had a Vulkan
+    engine of a31318b9 beside the release's libvmaf, both named 3.2.0-fast.1)."""
+    commit = _record()["commit"]
+    libvmaf = ctypes.CDLL(str(vmaf_cuda.LIBRARY_PATH))
+    libvmaf.vmaf_version.restype = ctypes.c_char_p
+    vulkan = ctypes.CDLL(str(vmaf_vulkan.LIBRARY_PATH))
+    vulkan.vv_version.restype = ctypes.c_char_p
+    for reported in (libvmaf.vmaf_version().decode(), vulkan.vv_version().decode()):
+        assert reported and commit.startswith(reported), reported
+
+
+def test_both_installers_write_the_record_the_app_reads():
+    for name, release in (("fetch_libvmaf_fast.ps1", "true"), ("build_libvmaf_fast_local.ps1", "false")):
+        script = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        assert f"'libvmaf/{vmaf_cuda.BUILD_RECORD.name}'" in script, name
+        assert f'`"release`": {release}' in script, name
+    assert vmaf_cuda.BUILD_RECORD.parent == vmaf_cuda.LIBRARY_PATH.parent  # packaged with the library's folder
+
+
+def test_without_a_record_the_version_is_unknown(tmp_path):
+    assert vmaf_cuda._bundled_version(tmp_path / "missing.json") == "unknown"
+    for text in ("{", "[]", '{"commit": "a1af96ff"}'):
+        (tmp_path / "bad.json").write_text(text, encoding="utf-8")
+        assert vmaf_cuda._bundled_version(tmp_path / "bad.json") == "unknown", text
+
+
+def test_the_build_and_its_licences_are_bundled():
     tools = ROOT / "vmaf_app" / "tools"
     for name in ("libvmaf/libvmaf.dll", "libvmaf/licenses/LICENSE.libvmaf.txt",
                  "libvmaf/licenses/LICENSE.pthreads4w.txt", "libvmaf/licenses/LICENSE.nv-codec-headers.txt",
+                 "libvmaf/licenses/LICENSE.xpsnr.txt",  # libvmaf-fast's XPSNR, FFmpeg's filter ported: LGPL
                  "vmaf_vulkan/vmaf_vulkan.dll", "vmaf_vulkan/licenses/LICENSE.libvmaf.txt"):
         assert (tools / name).is_file(), name
     assert tools / "libvmaf" / "libvmaf.dll" == vmaf_cuda.LIBRARY_PATH

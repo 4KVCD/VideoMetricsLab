@@ -99,10 +99,17 @@ case anyone overrides that.
   VMAF NEG on NVIDIA GPUs only: from
   [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast), this project's fork
   of libvmaf with the open pull requests that let it build with MSVC and fix
-  its CUDA code merged. `scripts/fetch_libvmaf_fast.ps1` installs its pinned
-  release, checked by SHA-256, into `vmaf_app/tools`; the DLLs are committed,
-  so building the app does not run it (to build them instead, see the fork's
-  `fast/README.md`). The C runtime is linked in, so it needs only Windows and
+  its CUDA code merged. The DLLs are committed, so building the app does not
+  build them. While the app is developed they are a build of the fork's
+  latest commit: `scripts/build_libvmaf_fast_local.ps1` builds the `fast`
+  branch of its local clone (`Documents\libvmaf-fast` by default; it needs
+  the fork's build tools, see its `fast/README.md`) into `vmaf_app/tools`. A
+  release of the app takes a release of libvmaf-fast, published first:
+  `scripts/fetch_libvmaf_fast.ps1` installs its pinned release, checked by
+  SHA-256, and `scripts/build_release.ps1` refuses a local build
+  ([RELEASING.md](RELEASING.md)). Either writes
+  `vmaf_app/tools/libvmaf/libvmaf-fast.json`, whose version every score made
+  with these libraries records. The C runtime is linked in, so it needs only Windows and
   the NVIDIA driver; no CUDA runtime ships. Where NVIDIA's decoder decodes both videos, they are
   decoded, scaled and widened on the GPU by `nvdec_frames.dll` in libvmaf's
   process, the user's FFmpeg only copying their compressed streams out of
@@ -115,7 +122,7 @@ case anyone overrides that.
   for VMAF and VMAF NEG on GPUs other than NVIDIA's, or on any GPU when the
   GPU backend setting is Vulkan: libvmaf-fast's Vulkan engine (`fast/vulkan`
   there), a port of libvmaf's CUDA feature extractors (VIF, ADM and motion)
-  to Vulkan compute shaders, from the same release. It needs only Windows and a Vulkan driver, and
+  to Vulkan compute shaders, from the same build. It needs only Windows and a Vulkan driver, and
   gives the same feature values as the CUDA code bit for bit; the score is
   predicted from them by the libvmaf above, on the CPU. It adds about 0.6 MB.
   It runs in the same process of its own as libvmaf does.
