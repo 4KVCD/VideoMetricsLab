@@ -123,3 +123,27 @@ def test_the_graph_statistics_are_tinted_for_the_theme(qapp, dark):
         assert all(item.background().color().lightness() > 180 for item in tinted)
     finally:
         win.close()
+
+
+def test_every_colour_value_is_its_own():
+    """A switch recolours a cell by its colour's value (theme.recolour): two
+    names sharing a value could not be told apart."""
+    values = [value.lower() for pair in theme._COLOURS.values() for value in pair]
+    assert len(values) == len(set(values))
+
+
+def test_a_switch_recolours_every_coloured_cell_and_leaves_the_rest(qapp, dark):
+    win = MainWindow()
+    try:
+        row = win._add_table_row(Path("a.mkv"))
+        win._on_probed(Path("a.mkv"), None, "could not read it")  # "Probe failed", in the failed colour
+        from vmaf_app.ui.main_window import COL_INFO
+        info = win.distorted_table.item(row, COL_INFO)
+        assert info.foreground().color() == theme.color("failed")
+        plain = win.distorted_table.item(row, COL_VMAF)
+        dark["dark"] = False
+        win._apply_theme_colours()
+        assert info.foreground().color() == theme.color("failed")  # now the light value
+        assert plain.data(Qt.ForegroundRole) is None
+    finally:
+        win.close()

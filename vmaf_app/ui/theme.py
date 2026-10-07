@@ -18,6 +18,7 @@ the window shows: they are read elsewhere, and on paper.
 """
 from __future__ import annotations
 
+import functools
 import logging
 import weakref
 from dataclasses import dataclass
@@ -117,6 +118,26 @@ def foreground(item, colour: QColor | None) -> None:
     the palette as the theme changes. A colour copied from the palette
     would stay that theme's: white text on a light table after a switch."""
     item.setData(Qt.ForegroundRole, colour)
+
+
+@functools.cache
+def _counterparts(dark: bool) -> dict[str, QColor]:
+    """Either theme's value of each colour -> its value in that theme."""
+    return {value.lower(): QColor(pair[1] if dark else pair[0])
+            for pair in _COLOURS.values() for value in pair}
+
+
+def recolour(item) -> None:
+    """A table cell coloured from this module, in its colour's value for the
+    theme now in use; a cell without a colour of its own is left alone (it
+    follows the palette)."""
+    brush = item.data(Qt.ForegroundRole)
+    if brush is None:
+        return
+    name = (brush.color() if hasattr(brush, "color") else QColor(brush)).name().lower()
+    counterpart = _counterparts(is_dark()).get(name)
+    if counterpart is not None:
+        item.setData(Qt.ForegroundRole, counterpart)
 
 
 def refresh() -> None:

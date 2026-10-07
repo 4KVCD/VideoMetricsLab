@@ -580,6 +580,7 @@ class MainWindow(QMainWindow):
         self._cache_generation = 0
         self._source_probe_worker: ProbeWorker | None = None
         self._source_reading: Path | None = None  # the reference being read, until it is
+        self._columns_to_fit: set[int] = set()  # see _fit_columns
         self._reference_drop: list[str] = []  # the files a drag over the reference box carries
         self._probe_workers: list[ProbeWorker] = []
         self._source_probe_generation = 0
@@ -673,6 +674,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._theme_refresh_due = False  # see changeEvent
+        self._theme_applied: tuple | None = None  # the theme _apply_theme_colours last coloured for
         # Light or dark changed (Settings, or Windows when following it).
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._theme_changed)
         self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
@@ -697,13 +699,27 @@ class MainWindow(QMainWindow):
 
     def _apply_theme_colours(self) -> None:
         """Colours the app sets itself, again in the theme now in use: the
-        styled labels (theme.refresh), each row's cells, the graph
+        styled labels (theme.refresh), the table's coloured cells, the graph
         statistics. The palette's own colours and the charts follow by
         themselves."""
         self._theme_refresh_due = False
+        # Once per theme: the colour scheme's signal and the palette's event
+        # both ask, and the second finds the work done when the palette was
+        # already in place for the first.
+        palette = QApplication.palette()  # the accent (highlight) too: the graph's tabs are drawn in it
+        applied = (theme.is_dark(), palette.window().color().rgba(), palette.highlight().color().rgba())
+        if applied == self._theme_applied:
+            return
+        self._theme_applied = applied
         theme.refresh()
-        for row in range(len(self._rows)):
-            self._set_row_metrics(row)
+        # Only the cells with a colour of their own, each to its counterpart:
+        # drawing every row again took 160-190 ms for 300 rows, per switch.
+        table = self.distorted_table
+        for row in range(table.rowCount()):
+            for column in range(table.columnCount()):
+                item = table.item(row, column)
+                if item is not None:
+                    theme.recolour(item)
         self.graph_panel.refresh_theme()
 
     def _close_when_idle(self) -> None:
@@ -2693,6 +2709,19 @@ class MainWindow(QMainWindow):
                from_size=f"{ref[0]}x{ref[1]}", to_size=f"{dist[0]}x{dist[1]}", cropped=cropped)
         )
 
+    def _fit_columns(self, *columns: int) -> None:
+        """Fits `columns` to their contents, once, when the window is next
+        idle. Fitting a column measures every row's cell; done for each row
+        as it was drawn, 300 rows took 90,000 measurements per column."""
+        if not self._columns_to_fit:
+            QTimer.singleShot(0, self, self._fit_pending_columns)
+        self._columns_to_fit.update(columns)
+
+    def _fit_pending_columns(self) -> None:
+        columns, self._columns_to_fit = self._columns_to_fit, set()
+        for column in sorted(columns):
+            self.distorted_table.resizeColumnToContents(column)
+
     def _set_row_scaling(self, row: int) -> None:
         item = self.distorted_table.item(row, COL_SCALING)
         if item is None:
@@ -2700,7 +2729,7 @@ class MainWindow(QMainWindow):
         tag, explanation = self._resize_mismatch(row)
         item.setText(tag)
         item.setToolTip(explanation)
-        self.distorted_table.resizeColumnToContents(COL_SCALING)
+        self._fit_columns(COL_SCALING)
 
     def _set_row_info(self, row: int, info: VideoInfo | None, error: str | None = None) -> None:
         item = self.distorted_table.item(row, COL_INFO)
@@ -2731,9 +2760,7 @@ class MainWindow(QMainWindow):
             self._set_row_black_bars(row)
         # Keeps these snug to whatever's actually in them (never wider than
         # needed) while staying user-draggable in between updates.
-        self.distorted_table.resizeColumnToContents(COL_INFO)
-        self.distorted_table.resizeColumnToContents(COL_BITRATE)
-        self.distorted_table.resizeColumnToContents(COL_SCALING)
+        self._fit_columns(COL_INFO, COL_BITRATE, COL_SCALING)
 
     def _set_row_vmaf_text(self, row: int, text: str, *, bold: bool = False, color=None) -> None:
         item = self.distorted_table.item(row, COL_VMAF)
@@ -2748,7 +2775,7 @@ class MainWindow(QMainWindow):
         item.setFont(font)
         if color is not None:
             item.setForeground(color)
-        self.distorted_table.resizeColumnToContents(COL_VMAF)
+        self._fit_columns(COL_VMAF)
 
     def _set_resample_row_info(self, row: int, target: ResampleTarget) -> None:
         info = self._source_info
@@ -2760,8 +2787,7 @@ class MainWindow(QMainWindow):
         item.setToolTip(format_hms(info.duration, decimals=1))
         self.distorted_table.item(row, COL_BITRATE).setText("N/A")
         self._set_row_black_bars(row)
-        self.distorted_table.resizeColumnToContents(COL_INFO)
-        self.distorted_table.resizeColumnToContents(COL_BITRATE)
+        self._fit_columns(COL_INFO, COL_BITRATE)
 
     def _on_add_resample_test(self) -> None:
         if self._source_info is None:
