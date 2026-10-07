@@ -67,7 +67,9 @@ def _stderr_note(error: BaseException) -> str:
 
 
 class _TaskCancelToken:
-    """Cancel one job's sibling tasks without cancelling the entire queue."""
+    """Cancel one job's sibling tasks without cancelling the entire queue.
+    It goes where a threading.Event is taken (cancel_event), so it answers
+    as one: is_set and wait."""
 
     def __init__(self, run_cancel: threading.Event) -> None:
         self._run_cancel = run_cancel
@@ -75,6 +77,18 @@ class _TaskCancelToken:
 
     def is_set(self) -> bool:
         return self._run_cancel.is_set() or self._job_cancel.is_set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """As threading.Event.wait: True once either the run or the job is
+        cancelled, False if `timeout` seconds pass first. It waits on the
+        job's event in short turns, checking the run's between them."""
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while not self.is_set():
+            left = None if deadline is None else deadline - time.monotonic()
+            if left is not None and left <= 0:
+                return False
+            self._job_cancel.wait(0.05 if left is None else min(left, 0.05))
+        return True
 
     def cancel_job(self) -> None:
         self._job_cancel.set()
