@@ -105,10 +105,28 @@ class _Configuration(ctypes.Structure):
                 ("cpumask", ctypes.c_uint64), ("gpumask", ctypes.c_uint64)]
 
 
-class _Picture(ctypes.Structure):
+class _PlainPicture(ctypes.Structure):
+    """libvmaf's VmafPicture, as libvmaf-fast v3.2.0-fast.1 lays it out."""
     _fields_ = [("pix_fmt", ctypes.c_int), ("bpc", ctypes.c_uint), ("w", ctypes.c_uint * 3),
                 ("h", ctypes.c_uint * 3), ("stride", ctypes.c_ssize_t * 3), ("data", ctypes.c_void_p * 3),
                 ("ref", ctypes.c_void_p), ("priv", ctypes.c_void_p)]
+
+
+class _ColorPicture(ctypes.Structure):
+    """VmafPicture since upstream libvmaf's vmaf_picture_convert (Netflix/vmaf
+    0497a0f2, in libvmaf-fast after v3.2.0-fast.1): a VmafColor (range,
+    primaries, transfer, matrix: four enums) between data and ref. With the
+    old layout against such a libvmaf, it writes past the app's pictures
+    (vmaf_picture_alloc: heap corruption) and reads ref and priv from the
+    wrong place."""
+    _fields_ = [("pix_fmt", ctypes.c_int), ("bpc", ctypes.c_uint), ("w", ctypes.c_uint * 3),
+                ("h", ctypes.c_uint * 3), ("stride", ctypes.c_ssize_t * 3), ("data", ctypes.c_void_p * 3),
+                ("color", ctypes.c_int * 4), ("ref", ctypes.c_void_p), ("priv", ctypes.c_void_p)]
+
+
+#: The VmafPicture layout of the libvmaf loaded: _load sets it, and pictures
+#: are made through this name after _load, never before.
+_Picture: type[ctypes.Structure] = _PlainPicture
 
 
 class _PictureParameters(ctypes.Structure):
@@ -144,9 +162,12 @@ _library: ctypes.CDLL | None = None
 
 
 def _load() -> ctypes.CDLL:
-    global _library
+    global _library, _Picture
     if _library is None:
         lib = ctypes.CDLL(str(LIBRARY_PATH))
+        # The picture layout this libvmaf has: vmaf_picture_convert came with
+        # the colour field.
+        _Picture = _ColorPicture if hasattr(lib, "vmaf_picture_convert") else _PlainPicture
         handle, pointer = ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)
         for name, restype, argtypes in (
             ("vmaf_version", ctypes.c_char_p, []),
