@@ -2,7 +2,8 @@
 extractors (VIF, ADM and motion) from the bundled tools/libvmaf/libvmaf.dll,
 libvmaf-fast's (github.com/4KVCD/libvmaf-fast, a fork of libvmaf with the pull
 requests that fix its CUDA code merged; scripts/fetch_libvmaf_fast.ps1
-installs its release). On any other GPU, or when Settings >
+installs a release of it, scripts/build_libvmaf_fast_local.ps1 a build of its
+latest commit while the app is developed). On any other GPU, or when Settings >
 GPU metrics > GPU backend is Vulkan: the port of those extractors to Vulkan
 (vmaf_vulkan), which gives the same scores. What is said below of libvmaf's
 scores holds for both.
@@ -41,6 +42,7 @@ from __future__ import annotations
 import _winapi
 import ctypes
 import functools
+import json
 import logging
 import msvcrt
 import os
@@ -67,9 +69,24 @@ _log = logging.getLogger(__name__)
 _ERROR_PIPE_CONNECTED, _ERROR_NO_DATA = 535, 232
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "libvmaf" / "libvmaf.dll"
-#: The libvmaf-fast release the bundled libvmaf.dll and vmaf_vulkan.dll are
-#: (scripts/fetch_libvmaf_fast.ps1 installs this one).
-LIBVMAF_FAST_VERSION = "3.2.0-fast.1"
+#: What the bundled libvmaf.dll and vmaf_vulkan.dll were built from, as the
+#: script that installed them recorded it: a libvmaf-fast release
+#: (scripts/fetch_libvmaf_fast.ps1) or, while the app is developed, a local
+#: build of the fork's latest commit (scripts/build_libvmaf_fast_local.ps1).
+BUILD_RECORD = LIBRARY_PATH.with_name("libvmaf-fast.json")
+
+
+def _bundled_version(record: Path) -> str:
+    """The libvmaf-fast version `record` names -- 3.2.0-fast.1 for that
+    release, 3.2.0-fast.1-146-ga1af96ff for a local build 146 commits after
+    it -- or "unknown" without one."""
+    try:
+        return str(json.loads(record.read_text(encoding="utf-8"))["version"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return "unknown"
+
+
+LIBVMAF_FAST_VERSION = _bundled_version(BUILD_RECORD)
 #: What a GPU score records it was calculated with (its provenance).
 LIBRARY_BUILD = f"libvmaf-fast {LIBVMAF_FAST_VERSION} (CUDA)"
 

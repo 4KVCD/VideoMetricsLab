@@ -5,13 +5,15 @@
 #                                predicts with and VMAF v1's CAMBI and SpEED
 #   vmaf_vulkan/vmaf_vulkan.dll  VMAF's features with Vulkan, and VMAF v1's
 #                                ADM3 and motion3
-# each with its licences.
+# each with its licences, and libvmaf/libvmaf-fast.json saying which release.
 #
 # The release is pinned by its version and the SHA-256 of its archive, and
 # every file in it is checked against the archive's SHA256SUMS as well. The
 # DLLs are committed, as Vship's are: building the app does not run this,
-# only updating them does. Building them instead is the fork's
-# fast/scripts (see its fast/README.md).
+# only updating them does. A release of the app takes a release of
+# libvmaf-fast, published first (docs/RELEASING.md); while the app is
+# developed, build_libvmaf_fast_local.ps1 builds the fork's latest commit
+# into the same place instead.
 param(
     [string]$Version = '3.2.0-fast.1',
     [string]$Sha256 = '3ad8ab2b0fd26f0c89389d55e086f4cad1d0e059d63845ecf88e5aaed6c38f9c',
@@ -52,14 +54,21 @@ try {
         if ($actual -ne $entry.Value) { throw "$($entry.Key) does not match the release's SHA256SUMS" }
     }
 
-    # Replaced whole, licences included: nothing of an older release stays.
+    $build = Get-Content (Join-Path $unpacked 'BUILD.txt')
+    $line = $build | Select-String '/commit/([0-9a-f]{40})$' | Select-Object -First 1
+    if (-not $line) { throw "BUILD.txt does not say which commit $name was built from" }
+    $commit = $line.Matches[0].Groups[1].Value
+
+    # Replaced whole, licences included: nothing of an older build stays.
     foreach ($folder in 'libvmaf', 'vmaf_vulkan') {
         $target = Join-Path $tools $folder
         if (Test-Path $target) { Remove-Item -Recurse -Force $target }
         Copy-Item -Recurse (Join-Path $unpacked $folder) $target
     }
+    [System.IO.File]::WriteAllText((Join-Path $tools 'libvmaf/libvmaf-fast.json'),
+        "{`n  `"version`": `"$Version`",`n  `"commit`": `"$commit`",`n  `"release`": true`n}`n")
     Write-Host "libvmaf-fast $Version into $tools"
-    Get-Content (Join-Path $unpacked 'BUILD.txt') | Select-Object -Skip 1 -First 2 | ForEach-Object { Write-Host "  $_" }
+    $build | Select-Object -Skip 1 -First 2 | ForEach-Object { Write-Host "  $_" }
     foreach ($file in $libraries) { Write-Host "  $file SHA-256 $($listed[$file])" }
 }
 finally {

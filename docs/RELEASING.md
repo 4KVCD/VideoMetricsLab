@@ -18,11 +18,18 @@
 
 1. Select a clean commit and record its hash. Keep individual bug fixes in
    separate commits with regression tests.
-2. Install development dependencies in a fresh environment. Run `pip check`,
+2. Publish libvmaf-fast first. The app is developed with a build of the
+   fork's latest commit (`scripts/build_libvmaf_fast_local.ps1`); a release
+   takes a release of it. Release libvmaf-fast from that commit, after its
+   own checks (its `fast/scripts/package.ps1`), then set the new version and
+   the archive's SHA-256 in `scripts/fetch_libvmaf_fast.ps1`, run it and
+   commit what it installs. `scripts/build_release.ps1` refuses a local build
+   (`release` false in `vmaf_app/tools/libvmaf/libvmaf-fast.json`).
+3. Install development dependencies in a fresh environment. Run `pip check`,
    Ruff and `pytest --packaging` (the packaging checks against the installed
    wheels are skipped without it). Record Python, dependency and FFmpeg
    versions.
-3. Test every metric, including SSIMULACRA2 and Butteraugli through both the
+4. Test every metric, including SSIMULACRA2 and Butteraugli through both the
    Vship GPU path and the libjxl CPU fallback, with Settings > GPU metrics >
    GPU backend on Auto and on Vulkan. After updating Vship, compare each
    build's SSIMULACRA2, Butteraugli and CVVDP against the CUDA build and
@@ -32,7 +39,7 @@
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
    Performance > VMAF compute set to GPU and to CPU: every
    metric but VMAF and NEG identical, those within 0.001 per frame. After
-   updating libvmaf-fast (`scripts/fetch_libvmaf_fast.ps1`), run
+   updating libvmaf-fast (either script), run
    `python scripts/compare_vmaf_vulkan.py --matrix` for every GPU
    (`--device N`): Vulkan's features and scores must be identical to CUDA's,
    and the probe's known sums (`vmaf_vulkan._PROBE_SUMS`) still the GPU's; and
@@ -40,19 +47,19 @@
    features and scores with the GPU must be identical to libvmaf's on the
    CPU. Changes to libvmaf, its pull requests or the Vulkan engine are made in
    libvmaf-fast, which runs the same checks before each release.
-4. Test playback on real hardware: H.264/H.265 plus supported software-decoded
+5. Test playback on real hardware: H.264/H.265 plus supported software-decoded
    formats, source hold/release, neighbor switching, HDR/SDR, seeking and audio.
-5. Build using [BUILD.md](BUILD.md). Review self-test output: the script may
+6. Build using [BUILD.md](BUILD.md). Review self-test output: the script may
    produce a zip even when self-test warns of failure. Do not release that zip.
-6. Launch the extracted bundle from a different directory on a clean Windows
+7. Launch the extracted bundle from a different directory on a clean Windows
    account or machine. Verify external FFmpeg discovery and graceful fallback.
-7. Audit the exact bundled components, preserve their notices, and satisfy
+8. Audit the exact bundled components, preserve their notices, and satisfy
    applicable source/relinking obligations. See [THIRD_PARTY.md](THIRD_PARTY.md).
-8. Update the changelog, choose a version/tag, and write release notes with
+9. Update the changelog, choose a version/tag, and write release notes with
    known issues, requirements and tested hardware. Do not invent a release
    version from the development commit count.
-9. Compute a SHA-256 checksum for the final zip using `Get-FileHash -Algorithm SHA256`.
-10. Upload the zip and checksum to a GitHub Release only after approval.
+10. Compute a SHA-256 checksum for the final zip using `Get-FileHash -Algorithm SHA256`.
+11. Upload the zip and checksum to a GitHub Release only after approval.
 
 The CI workflow checks code and offscreen tests, not GPU correctness or complete
 binary licensing. A source upload and a redistributable Windows release are

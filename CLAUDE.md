@@ -11,10 +11,13 @@ before you start. Follow these rules for all work.
 - After pulling, rebuild the GPU decoder DLLs with
   `scripts\build_gpu_frames.ps1` if your copies are older than the pull.
 - `libvmaf.dll` and `vmaf_vulkan.dll` are committed and come from libvmaf-fast
-  (github.com/4KVCD/libvmaf-fast), installed by
-  `scripts\fetch_libvmaf_fast.ps1`. They are not built in this repository: a
-  change to libvmaf or the Vulkan shaders is made in that fork, released, then
-  fetched here.
+  (github.com/4KVCD/libvmaf-fast). A change to libvmaf or the Vulkan shaders
+  is made in that fork, not here. During development they are a build of the
+  latest commit of the fork's local `fast` branch: run
+  `scripts\build_libvmaf_fast_local.ps1` after it changes, and commit what it
+  installs. At release, libvmaf-fast is published first, then
+  `scripts\fetch_libvmaf_fast.ps1` installs that release, then this app is
+  released (`docs\RELEASING.md`).
 
 ## Correctness
 
