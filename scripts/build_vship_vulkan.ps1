@@ -1,22 +1,20 @@
 # Builds Vship's Vulkan library (vmaf_app/tools/vship/vulkan/libvship.dll)
-# from a pinned commit, with the MinGW-w64 g++ that builds the D3D11 tone
-# mapper (WinLibs, UCRT, POSIX threads).
+# from a pinned commit -- the v5.1.2 release's tag -- with the MinGW-w64 g++
+# that builds the D3D11 tone mapper (WinLibs, UCRT, POSIX threads).
 #
-# Why a commit and not a release: Vship 5.1.1's Vulkan build cannot be loaded
-# on a PC whose only GPU is Intel's (WinError 1114: it starts Vulkan inside
-# DllMain, where Intel's driver cannot initialise), and the app then crashes
-# as it exits. That fix (3fa9ed6) and those for issues 18-21 came after 5.1.1:
-# SSIMULACRA2 far too high on NVIDIA GPUs, whose Vulkan driver miscompiled a
-# small two-dimensional array in its blur (97d0dc5); SMPTE 170M/240M primaries;
-# the BT.470BG transfer; and 4:1:0 video. 97d0dc5 is to be released as 5.1.2,
-# the version it reports. Built the same way, v5.1.1 scores exactly as the
-# official release does.
+# Built rather than taken from the release, as the bundle has been since
+# 5.1.2's fixes were only on Vship's main branch (5.1.1's Vulkan build could
+# not be loaded on a PC whose only GPU is Intel's, and scored SSIMULACRA2 far
+# too high on NVIDIA GPUs): the file follows from the source and this script
+# alone. Built this way, v5.1.2 scores Butteraugli and CVVDP exactly as the
+# release's own Vulkan library does, and SSIMULACRA2 within 0.00003 (the
+# rounding of another compiler's build; measured 2026-10-06 on three videos).
 #
 # The shaders are the SPIR-V committed in Vship's libvshipSpvShaders.
 #
 # Needs git, g++ on PATH and a Vulkan driver (vulkan-1.dll is linked by name).
 param(
-    [string]$VshipCommit = '97d0dc55b273f8f370496d0e206d94413f44e62f',          # 2026-10-03
+    [string]$VshipCommit = '5a627933274196219f782b3b74e13fad47cd6370',          # v5.1.2, 2026-10-06
     [string]$VulkanHeadersCommit = '3c65a01745e4a1134d32b9c2c456472212dba16d',  # 2026-09-25
     [string]$WorkDirectory = (Join-Path $env:TEMP 'vship-vulkan-build')
 )
@@ -59,14 +57,17 @@ try {
     }
     # The Makefile's Vulkan flags. libstdc++, libgcc and winpthreads are linked
     # in, so the DLL needs only vulkan-1.dll and Windows' own runtime. No link
-    # time in its header: the same source gives the same file.
+    # time in its header, and no image base of ld's choosing -- ld hashes the
+    # output file's path into it, so the same source built in another folder
+    # gave another file (Windows relocates the DLL wherever it loads it
+    # anyway): the same source gives the same file.
     Invoke-Checked 'Building libvship.dll' {
         g++ src/VshipLib.cpp `
             "-DVSHIP_VERSION_MAJOR=$($version[0])" "-DVSHIP_VERSION_MINOR=$($version[1])" `
             "-DVSHIP_VERSION_MINORMINOR=$($version[2])" `
             -std=c++17 -I include -I (Join-Path $headers 'include') -DNDEBUG -O3 -DVULKANBUILD -w `
             -shared -static-libgcc -static-libstdc++ '-Wl,-Bstatic' -lwinpthread '-Wl,-Bdynamic' `
-            '-Wl,--no-insert-timestamp' `
+            '-Wl,--no-insert-timestamp' '-Wl,--disable-auto-image-base' `
             (Join-Path $env:SystemRoot 'System32/vulkan-1.dll') -o $output
     }
 }

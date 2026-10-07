@@ -364,7 +364,7 @@ _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
 #: maker could not be told counts as every maker. Add an entry only for a
 #: bundled build measured to disagree with CUDA and libjxl on the same frames.
 #:
-#: Empty since the bundled Vulkan build is Vship 5.1.2 (commit 97d0dc5).
+#: Empty since the bundled Vulkan build is Vship 5.1.2 (its fix is commit 97d0dc5).
 #: Before it, Vship's Vulkan build (5.1.1, and commit 0732ed3) scored
 #: SSIMULACRA2 far too high on NVIDIA GPUs -- HoneyBee 4K against a CRF 22
 #: HEVC encode: libjxl 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at 360p
@@ -478,11 +478,12 @@ def _vulkan_unavailable() -> str | None:
     """Why no GPU is usable through Vulkan here, or None if one is.
 
     Asked of the Vulkan loader itself before Vship's Vulkan build is
-    loaded: where the loader is installed but no driver answers -- a virtual
-    machine, GitHub's test runner -- that build's DLL initialisation fails
-    (WinError 1114), and the process then crashes with an access violation
-    as it exits, after everything else has finished. The loader alone
-    answers "no driver" and exits cleanly."""
+    loaded. Where the loader is installed but no driver answers -- a virtual
+    machine, GitHub's test runner -- Vship's Vulkan builds before 5.1.2
+    failed their DLL initialisation (WinError 1114), and the process then
+    crashed with an access violation as it exited. The bundled build starts
+    Vulkan on first use and loads there (tests/test_perceptual_vship.py); the
+    loader is still asked first, as it says why without loading Vship."""
     try:
         vulkan = ctypes.WinDLL("vulkan-1.dll")
     except OSError:

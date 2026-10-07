@@ -1966,8 +1966,9 @@ def test_auto_tries_cuda_then_hip_then_vulkan_and_a_choice_goes_first():
 @pytest.mark.skipif(sys.platform != "win32", reason="Vship is only bundled for Windows")
 def test_vships_vulkan_build_is_not_loaded_where_vulkan_has_no_gpu(monkeypatch):
     """Where the Vulkan loader is installed but no driver answers, loading
-    Vship's Vulkan build fails (WinError 1114) and the process then crashes
-    as it exits: every test run on GitHub's runner ended in exit code 1."""
+    Vship's Vulkan builds before 5.1.2 failed (WinError 1114) and the process
+    then crashed as it exited: every test run on GitHub's runner ended in exit
+    code 1. The loader is still asked first."""
     loaded = []
 
     def cdll(path):
