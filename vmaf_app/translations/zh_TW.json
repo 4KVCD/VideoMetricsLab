@@ -687,7 +687,17 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整個檔案的位元率，包含音軌：檔案中沒有記錄影片本身的位元率。",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} 已在清單中。改為顯示已儲存執行的分數嗎？",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg 沒有提供 {side} 一個影格的時間戳記。",
-  "The source has no frame at the test video's first.": "來源影片在測試影片第一個影格的時間點沒有影格。"
+  "The source has no frame at the test video's first.": "來源影片在測試影片第一個影格的時間點沒有影格。",
+  "Drop a video here, paste its path, or click Browse...": "將影片拖放到此處、貼上其路徑，或按一下「瀏覽...」",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "將影片檔拖放到此處以新增，拖曳列以調整順序，按一下欄標題以排序。",
+  "No such video": "影片不存在",
+  "Reopen the videos that were open when the app was last closed": "重新開啟上次關閉應用程式時開啟的影片",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "參考影片和測試影片（仍存在者）。解析度測試不會重新開啟。",
+  "There is no file at {path}.": "{path} 沒有檔案。",
+  "Theme:": "主題：",
+  "Same as Windows": "與 Windows 相同",
+  "Light": "淺色",
+  "Dark": "深色"
  },
  "plurals": {
   "about {count} day": [

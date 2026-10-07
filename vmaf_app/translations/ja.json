@@ -687,7 +687,17 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "音声トラックを含むファイル全体のビットレートです。ファイルに映像のみのビットレートが記録されていません。",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} は既に一覧にあります。代わりに保存した実行のスコアを表示しますか？",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg が {side} のフレームのタイムスタンプを出力しませんでした。",
-  "The source has no frame at the test video's first.": "テスト動画の最初のフレームの時刻に、ソースのフレームがありません。"
+  "The source has no frame at the test video's first.": "テスト動画の最初のフレームの時刻に、ソースのフレームがありません。",
+  "Drop a video here, paste its path, or click Browse...": "ここに動画をドロップするか、パスを貼り付けるか、[参照...] をクリック",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "動画ファイルをここにドロップして追加し、行をドラッグして並べ替え、列見出しをクリックして並べ替えます。",
+  "No such video": "動画がありません",
+  "Reopen the videos that were open when the app was last closed": "前回アプリを閉じたときに開いていた動画を再び開く",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "参照動画とテスト動画（まだ存在するもの）。解像度テストは再び開かれません。",
+  "There is no file at {path}.": "{path} にファイルがありません。",
+  "Theme:": "テーマ：",
+  "Same as Windows": "Windows と同じ",
+  "Light": "ライト",
+  "Dark": "ダーク"
  },
  "plurals": {
   "about {count} day": [

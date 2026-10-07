@@ -687,7 +687,17 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate całego pliku, łącznie ze ścieżką dźwiękową: plik nie zapisuje bitrate samego wideo.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} jest już na liście. Pokazać zamiast tego wyniki zapisanego przebiegu?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg nie podał znacznika czasu klatki {side}.",
-  "The source has no frame at the test video's first.": "Źródło nie ma klatki w chwili pierwszej klatki wideo testowego."
+  "The source has no frame at the test video's first.": "Źródło nie ma klatki w chwili pierwszej klatki wideo testowego.",
+  "Drop a video here, paste its path, or click Browse...": "Upuść tutaj wideo, wklej jego ścieżkę lub kliknij Przeglądaj...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Upuść tutaj pliki wideo, aby je dodać, przeciągnij wiersze, aby zmienić ich kolejność, i kliknij nagłówek kolumny, aby sortować.",
+  "No such video": "Nie ma takiego wideo",
+  "Reopen the videos that were open when the app was last closed": "Ponownie otwieraj wideo, które były otwarte przy ostatnim zamknięciu aplikacji",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "Wideo referencyjne i testowe, które nadal istnieją. Testy rozdzielczości nie są ponownie otwierane.",
+  "There is no file at {path}.": "Nie ma pliku w {path}.",
+  "Theme:": "Motyw:",
+  "Same as Windows": "Jak w Windows",
+  "Light": "Jasny",
+  "Dark": "Ciemny"
  },
  "plurals": {
   "about {count} day": [

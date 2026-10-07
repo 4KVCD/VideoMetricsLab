@@ -687,7 +687,17 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate seluruh file, termasuk audio: file tidak mencatat bitrate videonya sendiri.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} sudah ada di daftar. Tampilkan skor dari proses tersimpan sebagai gantinya?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg tidak memberikan stempel waktu sebuah bingkai {side}.",
-  "The source has no frame at the test video's first.": "Sumber tidak memiliki bingkai pada waktu bingkai pertama video uji."
+  "The source has no frame at the test video's first.": "Sumber tidak memiliki bingkai pada waktu bingkai pertama video uji.",
+  "Drop a video here, paste its path, or click Browse...": "Letakkan video di sini, tempel jalurnya, atau klik Telusuri...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Letakkan file video di sini untuk menambahkannya, seret baris untuk mengubah urutannya, dan klik judul kolom untuk mengurutkan.",
+  "No such video": "Video tidak ada",
+  "Reopen the videos that were open when the app was last closed": "Buka kembali video yang terbuka saat aplikasi terakhir ditutup",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "Video referensi dan video uji yang masih ada. Uji resolusi tidak dibuka kembali.",
+  "There is no file at {path}.": "Tidak ada file di {path}.",
+  "Theme:": "Tema:",
+  "Same as Windows": "Sama seperti Windows",
+  "Light": "Terang",
+  "Dark": "Gelap"
  },
  "plurals": {
   "about {count} day": [

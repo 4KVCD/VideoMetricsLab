@@ -19,6 +19,7 @@ import contextlib
 import copy
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -26,8 +27,8 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTime, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QFont
+from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, Qt, QTime, QTimer, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -111,6 +112,7 @@ from vmaf_app.core.vmaf_runner import (
     validate_video_pair,
 )
 from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
+from vmaf_app.ui import theme
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string
@@ -171,10 +173,7 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
 #: an unticked box is "not selected", a ticked empty one is "not calculated
 #: yet", a score is "done" -- so only these two, which nothing else shows,
 #: need a mark of their own.
-_STATE_COLOURS = {
-    "failed": "#a03030",
-    "stale": "#8a6d00",
-}
+_STATE_COLOURS = {"failed": "failed", "stale": "stale"}  # theme.py's names
 
 # Metric Graphs displays results; Video Compare and Bitrate Viewer also work
 # independently of calculation. Settings remains the final page.
@@ -304,7 +303,7 @@ class CvvdpDisplayDialog(QDialog):
                                   tr("How far the viewer's eyes are from the screen. Closer makes "
                                   "small artifacts easier to see."))
         self.distance_note = QLabel()
-        self.distance_note.setStyleSheet("color: #666;")
+        theme.style(self.distance_note, "color: {muted};")
         distance = QHBoxLayout()
         distance.addWidget(self.distance_spin)
         distance.addWidget(self.distance_note)
@@ -527,6 +526,9 @@ class MainWindow(QMainWindow):
     # A newer release than this one (update_check.Release), found by the
     # startup check off the UI thread.
     update_found = Signal(object)
+    # The remembered videos still there (reference, tests), found at
+    # startup off the UI thread: _restore_open_videos.
+    _open_videos_found = Signal(str, list)
 
     def __init__(self):
         super().__init__()
@@ -535,6 +537,7 @@ class MainWindow(QMainWindow):
         # both come from them, so they must be applied before the startup
         # tool check or any row is added.
         self.update_found.connect(self._on_update_found)
+        self._open_videos_found.connect(self._reopen_videos)
         self._update_box: QMessageBox | None = None
         self._settings = Settings.load()
         _log.info(
@@ -576,6 +579,9 @@ class MainWindow(QMainWindow):
         self._cache_lookup_paths: list[Path] = []  # the rows the running lookup was asked about
         self._cache_generation = 0
         self._source_probe_worker: ProbeWorker | None = None
+        self._source_reading: Path | None = None  # the reference being read, until it is
+        self._columns_to_fit: set[int] = set()  # see _fit_columns
+        self._reference_drop: list[str] = []  # the files a drag over the reference box carries
         self._probe_workers: list[ProbeWorker] = []
         self._source_probe_generation = 0
         # These track the active run by RowData *identity*, not by table row
@@ -667,8 +673,54 @@ class MainWindow(QMainWindow):
         self._syncing_table = False  # ditto for the table's own metric tick boxes
 
         self._build_ui()
+        self._theme_refresh_due = False  # see changeEvent
+        self._theme_applied: tuple | None = None  # the theme _apply_theme_colours last coloured for
+        # Light or dark changed (Settings, or Windows when following it).
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self._theme_changed)
         self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
+        self._restore_open_videos()
         self._on_table_selection_changed()
+
+    def changeEvent(self, event) -> None:
+        # The palette replaced, which comes after the colour scheme's signal:
+        # coloured again then too, as the style sheets resolve palette() from
+        # it and the scheme's signal may have come before it was in place.
+        if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange):
+            self._theme_changed()
+        super().changeEvent(event)
+
+    def _theme_changed(self, *_args) -> None:
+        """What the window colours itself is coloured again, once for each
+        burst of these signals and events. (Not while the window is being
+        built: it sets the flag when done.)"""
+        if not getattr(self, "_theme_refresh_due", True):
+            self._theme_refresh_due = True
+            QTimer.singleShot(0, self, self._apply_theme_colours)  # not after the window is gone
+
+    def _apply_theme_colours(self) -> None:
+        """Colours the app sets itself, again in the theme now in use: the
+        styled labels (theme.refresh), the table's coloured cells, the graph
+        statistics. The palette's own colours and the charts follow by
+        themselves."""
+        self._theme_refresh_due = False
+        # Once per theme: the colour scheme's signal and the palette's event
+        # both ask, and the second finds the work done when the palette was
+        # already in place for the first.
+        palette = QApplication.palette()  # the accent (highlight) too: the graph's tabs are drawn in it
+        applied = (theme.is_dark(), palette.window().color().rgba(), palette.highlight().color().rgba())
+        if applied == self._theme_applied:
+            return
+        self._theme_applied = applied
+        theme.refresh()
+        # Only the cells with a colour of their own, each to its counterpart:
+        # drawing every row again took 160-190 ms for 300 rows, per switch.
+        table = self.distorted_table
+        for row in range(table.rowCount()):
+            for column in range(table.columnCount()):
+                item = table.item(row, column)
+                if item is not None:
+                    theme.recolour(item)
+        self.graph_panel.refresh_theme()
 
     def _close_when_idle(self) -> None:
         """Retries the close once the work it was waiting on has finished."""
@@ -714,13 +766,62 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(200, self._close_when_idle)
             event.ignore()
             return
-        # Remember the window size, if asked to. The graph is a tab now, so
-        # there is no second window to tear down.
+        # Remember the window size and the videos, if asked to. The graph is
+        # a tab now, so there is no second window to tear down.
         if self._settings.remember_window_size:
             self._settings.window_width = self.width()
             self._settings.window_height = self.height()
+        if self._settings.remember_window_size or self._settings.remember_videos:
+            self._store_open_videos()
             self._settings.save()
         super().closeEvent(event)
+
+    def _store_open_videos(self) -> None:
+        """Keeps the reference and the test videos for the next start
+        (Settings > remember_videos): the files themselves, in the table's
+        order. Resolution tests and opposite-direction rows are made from
+        other rows and are not kept."""
+        if not self._settings.remember_videos:
+            return
+        self._settings.remembered_reference = self._shown_source_path()
+        self._settings.remembered_tests = list(dict.fromkeys(
+            str(row.path) for row in self._rows
+            if row.options.resample_test is None and not row.scale_direction_pinned))
+
+    def _restore_open_videos(self) -> None:
+        """At startup: the videos kept by _store_open_videos, those still
+        there. Looked for on a thread of its own: a path on a network drive
+        that is not there can take many seconds to say so, and the window
+        would not respond meanwhile."""
+        if not self._settings.remember_videos:
+            return
+        reference = self._settings.remembered_reference
+        tests = list(self._settings.remembered_tests)
+        if not reference and not tests:
+            return
+
+        def look() -> None:
+            present_reference = reference if reference and Path(reference).is_file() else ""
+            present = [path for path in tests if Path(path).is_file()]
+            with contextlib.suppress(RuntimeError):  # the window closed meanwhile
+                self._open_videos_found.emit(present_reference, present)
+
+        threading.Thread(target=look, name="reopen-videos", daemon=True).start()
+
+    def _reopen_videos(self, reference: str, tests: list) -> None:
+        """The remembered videos still there (_restore_open_videos), added
+        unless the window has gained videos of its own since."""
+        if self._rows or self._source_info is not None or self._source_reading is not None or self._run_active:
+            return
+        remembered = self._settings.remembered_tests
+        if len(tests) < len(remembered):
+            _log.info("Reopening %d of the %d test videos open last time; the rest are no longer there",
+                      len(tests), len(remembered))
+        if reference:
+            self._choose_source(Path(reference))
+        elif self._settings.remembered_reference:
+            _log.info("The reference open last time is no longer there")
+        self._add_test_videos([Path(path) for path in tests])
 
     # ------------------------------------------------------------------ UI construction
     def _build_ui(self) -> None:
@@ -734,7 +835,8 @@ class MainWindow(QMainWindow):
         # warning was unactionable.
         banner_row = QHBoxLayout()
         self._ffmpeg_banner = QLabel()
-        self._ffmpeg_banner.setStyleSheet("background: #fff3cd; padding: 6px; border: 1px solid #ffe08a;")
+        theme.style(self._ffmpeg_banner, "background: {banner_background}; color: {banner_text}; padding: 6px; "
+                                         "border: 1px solid {banner_border};")
         self._ffmpeg_banner.setWordWrap(True)
         self._ffmpeg_banner.setVisible(False)
         self._locate_ffmpeg_btn = QPushButton(tr("Locate ffmpeg.exe..."))
@@ -905,7 +1007,7 @@ class MainWindow(QMainWindow):
             tr("These are only a starting point -- each video's own settings are "
             "edited in the Videos tab.")
         )
-        hint.setStyleSheet("color: #666; font-style: italic;")
+        theme.style(hint, "color: {muted}; font-style: italic;")
         defaults_layout.addWidget(hint)
         self.settings_default_gpu = QCheckBox(tr("Use GPU decoding"))
         self.settings_default_gpu.setChecked(self._settings.default_gpu_decode)
@@ -1001,7 +1103,7 @@ class MainWindow(QMainWindow):
             tr("Decodes each video once instead of once per metric: much less CPU work for 4K VVC. "
             "Very heavy on GPU memory at 4K: about 7.3 GB for all three together."))
         gpu_note.setWordWrap(True)
-        gpu_note.setStyleSheet("color: #666;")
+        theme.style(gpu_note, "color: {muted};")
         gpu_layout.addWidget(gpu_note)
         outer.addWidget(gpu_box)
 
@@ -1061,10 +1163,30 @@ class MainWindow(QMainWindow):
         language_row.addWidget(self.settings_language)
         language_row.addStretch(1)
         window_layout.addLayout(language_row)
+        # Light or dark, at once; "Same as Windows" also follows Windows
+        # changing while the app is open.
+        self.settings_theme = QComboBox()
+        for label, value in ((tr("Same as Windows"), ""), (tr("Light"), "light"), (tr("Dark"), "dark")):
+            self.settings_theme.addItem(label, value)
+        self.settings_theme.setCurrentIndex(max(0, self.settings_theme.findData(self._settings.theme)))
+        self.settings_theme.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.settings_theme.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.settings_theme.currentIndexChanged.connect(self._on_settings_edited)
+        theme_row = QHBoxLayout()
+        theme_row.addWidget(QLabel(tr("Theme:")))
+        theme_row.addWidget(self.settings_theme)
+        theme_row.addStretch(1)
+        window_layout.addLayout(theme_row)
         self.settings_remember_size = QCheckBox(tr("Reopen at the size the window was last closed at"))
         self.settings_remember_size.setChecked(self._settings.remember_window_size)
         self.settings_remember_size.toggled.connect(self._on_settings_edited)
         window_layout.addWidget(self.settings_remember_size)
+        self.settings_remember_videos = QCheckBox(tr("Reopen the videos that were open when the app was last closed"))
+        self.settings_remember_videos.setToolTip(tr(
+            "The reference and the test videos, those still there. Resolution tests are not reopened."))
+        self.settings_remember_videos.setChecked(self._settings.remember_videos)
+        self.settings_remember_videos.toggled.connect(self._on_settings_edited)
+        window_layout.addWidget(self.settings_remember_videos)
         self.settings_check_updates = QCheckBox(tr("Check GitHub for a newer version when the app starts"))
         self.settings_check_updates.setToolTip(
             tr("Once, at startup, asks GitHub's public list of releases whether there is a newer one, "
@@ -1077,7 +1199,7 @@ class MainWindow(QMainWindow):
 
         outer.addStretch(1)
         self.settings_status = QLabel()
-        self.settings_status.setStyleSheet("color: #666;")
+        theme.style(self.settings_status, "color: {muted};")
         outer.addWidget(self.settings_status)
 
         self._refresh_settings_status()
@@ -1093,7 +1215,7 @@ class MainWindow(QMainWindow):
             tr("ffmpeg {version} and ffprobe found.", version=format_version(tools.ffmpeg.version))
             if ok else " ".join(tr_message(problem) for problem in problems)
         )
-        self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
+        theme.style(self.settings_ffmpeg_status, "color: {good};" if ok else "color: {failed};")
 
         directory = result_cache.cache_dir()
         count, size_bytes = result_cache.cache_summary(directory)
@@ -1124,9 +1246,18 @@ class MainWindow(QMainWindow):
         self._settings.compare_decoded_videos = int(self.settings_decoded_videos.currentData())
         self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
         self._settings.remember_window_size = self.settings_remember_size.isChecked()
+        self._settings.remember_videos = self.settings_remember_videos.isChecked()
+        if not self._settings.remember_videos:
+            # Paths are kept only while asked for.
+            self._settings.remembered_reference = ""
+            self._settings.remembered_tests = []
         self._settings.check_for_updates = self.settings_check_updates.isChecked()
         language_before = self._settings.language
         self._settings.language = self.settings_language.currentData() or ""
+        chosen_theme = self.settings_theme.currentData() or ""
+        if chosen_theme != self._settings.theme:
+            self._settings.theme = chosen_theme
+            theme.apply_theme(chosen_theme)  # at once; changeEvent follows
         self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
         backend = self.settings_gpu_backend.currentData() or "auto"
         if backend != self._settings.gpu_backend:
@@ -1325,15 +1456,19 @@ class MainWindow(QMainWindow):
 
         files_layout.addWidget(QLabel(tr("Reference video:")))
         src_row = QHBoxLayout()
+        # A path can be pasted or typed in (Enter, or leaving the box, reads
+        # it), and a file dropped on it from a file manager.
         self.source_edit = QLineEdit()
-        self.source_edit.setReadOnly(True)
+        self.source_edit.setPlaceholderText(tr("Drop a video here, paste its path, or click Browse..."))
+        self.source_edit.editingFinished.connect(self._on_source_path_entered)
+        self.source_edit.installEventFilter(self)
         self.source_browse_btn = src_browse = QPushButton(tr("Browse..."))
         src_browse.clicked.connect(self._on_browse_source)
         src_row.addWidget(self.source_edit, stretch=1)
         src_row.addWidget(src_browse)
         files_layout.addLayout(src_row)
         self.source_info_label = QLabel(tr("No reference selected."))
-        self.source_info_label.setStyleSheet("color: #666;")
+        theme.style(self.source_info_label, "color: {muted};")
         files_layout.addWidget(self.source_info_label)
 
         # The metric picker belongs to the table: every metric is a column
@@ -1354,6 +1489,8 @@ class MainWindow(QMainWindow):
         table_hint = QLabel(
             tr("Test videos to compare against the reference. Check rows to calculate; "
             "select rows to edit their settings below. Metric header shortcuts apply to all rows.")
+            + " " + tr("Drop video files here to add them, drag rows to reorder them, and click a column "
+                       "heading to sort.")
         )
         # Wrapped where it does not fit: on one line, in a longer language,
         # it set the window's minimum width.
@@ -1415,6 +1552,18 @@ class MainWindow(QMainWindow):
         self.distorted_table.itemChanged.connect(self._on_table_item_changed)
         self.distorted_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.distorted_table.customContextMenuRequested.connect(self._on_table_context_menu)
+        # Files dropped from a file manager are added; rows dragged within it
+        # are reordered (FillColumnTable takes both drops and draws where a
+        # dragged row will land). A click on a heading -- not on a metric's
+        # tick box -- sorts by that column; another click reverses it.
+        self.distorted_table.setDragEnabled(True)
+        self.distorted_table.setDragDropMode(QAbstractItemView.DragDrop)
+        self.distorted_table.setDropIndicatorShown(False)
+        self.distorted_table.filesDropped.connect(self._on_files_dropped_on_table)
+        self.distorted_table.rowsMoved.connect(self._on_rows_dragged)
+        self._sort_column: int | None = None
+        self._sort_order = Qt.AscendingOrder
+        self.metric_header.sectionClicked.connect(self._on_header_clicked)
         # All columns are Interactive (drag-resizable), including PATH --
         # FillColumnTable makes PATH additionally auto-fill whatever space is
         # left over (see its docstring) instead of sitting at a fixed width
@@ -1497,7 +1646,7 @@ class MainWindow(QMainWindow):
         self.options_box = options_box
 
         self.panel_target_label = QLabel("")
-        self.panel_target_label.setStyleSheet("color: #666; font-style: italic;")
+        theme.style(self.panel_target_label, "color: {muted}; font-style: italic;")
         self.panel_target_label.setWordWrap(True)
         options_layout.addWidget(self.panel_target_label)
 
@@ -1670,7 +1819,7 @@ class MainWindow(QMainWindow):
         self.cvvdp_preset_combo.currentIndexChanged.connect(self._on_cvvdp_preset_chosen)
         metric_options_form.addRow(tr("CVVDP display:"), self.cvvdp_preset_combo)
         self.cvvdp_display_label = QLabel()
-        self.cvvdp_display_label.setStyleSheet("color: #666;")
+        theme.style(self.cvvdp_display_label, "color: {muted};")
         self.cvvdp_display_label.setWordWrap(True)
         metric_options_form.addRow("", self.cvvdp_display_label)
         cvvdp_buttons = QHBoxLayout()
@@ -1749,7 +1898,7 @@ class MainWindow(QMainWindow):
             tr("Cropping and scaling here affect scores. Video Compare's tone mapping and "
             "playback resolution are display-only settings and do not change calculated metrics.")
         )
-        metrics_hint.setStyleSheet("color: #666; font-style: italic;")
+        theme.style(metrics_hint, "color: {muted}; font-style: italic;")
         metrics_hint.setWordWrap(True)
         options_layout.addWidget(metrics_hint)
 
@@ -1843,7 +1992,7 @@ class MainWindow(QMainWindow):
         # One more than the CPU lanes: the video on the GPU can be a third.
         for _ in range(MAX_VIDEOS_IN_FLIGHT):
             line = ElidedLabel()
-            line.setStyleSheet("color: #444;")
+            theme.style(line, "color: {run_line};")
             line.setVisible(False)
             layout.addWidget(line)
             self.job_progress_labels.append(line)
@@ -1940,12 +2089,84 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ source selection
     def _on_browse_source(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, tr("Select reference video"))
+        path, _ = QFileDialog.getOpenFileName(self, tr("Select reference video"), self._video_dialog_dir())
         if not path:
             return
-        self.source_info_label.setText(tr("Reading {name}...", name=Path(path).name))
+        self._remember_video_dir(Path(path))
+        self._choose_source(Path(path))
+
+    def _choose_source(self, path: Path) -> None:
+        """Reads `path` as the new reference (picked, dropped or typed in).
+        The box shows it once it is read (_apply_source_info)."""
+        self._source_reading = path
+        self.source_info_label.setText(tr("Reading {name}...", name=path.name))
         self._show_reading(tr("Reading reference video..."))
-        self._start_source_probe(Path(path))
+        self._start_source_probe(path)
+
+    def _shown_source_path(self) -> str:
+        """The reference the box should show: the one read, or none."""
+        return str(self._source_info.path) if self._source_info is not None else ""
+
+    def _on_source_path_entered(self) -> None:
+        """A path typed or pasted into the reference box, read when Enter is
+        pressed or the box is left. Quotes, as Explorer's "Copy as path"
+        puts them, are taken off."""
+        if self._run_active or self.source_edit.isReadOnly():
+            return
+        text = self.source_edit.text().strip().strip('"').strip()
+        shown = self._shown_source_path()
+        # Compared as paths (c:/v.mkv is the same file as C:/V.MKV): reading
+        # the reference again would remove its resolution tests
+        # (_apply_source_info).
+        if not text or (shown and Path(text) == Path(shown)):
+            self.source_edit.setText(shown)
+            return
+        if self._source_reading is not None and Path(text) == self._source_reading:
+            return  # already being read: editingFinished comes for Enter and again for leaving the box
+        path = Path(text)
+        if not path.is_file():
+            # Said on Enter only. Leaving the box -- for another program, to
+            # copy the rest of the path, say -- keeps what was typed.
+            if self.source_edit.hasFocus():
+                self.source_edit.setText(self._shown_source_path())
+                QMessageBox.warning(self, tr("No such video"), tr("There is no file at {path}.", path=text))
+            return
+        self._choose_source(path)
+
+    def eventFilter(self, watched, event) -> bool:
+        # A file dropped on the reference box replaces the reference; the
+        # line edit's own drop would only paste the file's URL in as text.
+        if watched is getattr(self, "source_edit", None) and event.type() in (
+                QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):
+            # Found when the drag enters: a drag move comes with every mouse
+            # move, and each look at the files is a trip to the disk.
+            if event.type() != QEvent.DragMove:
+                self._reference_drop = FillColumnTable.dropped_files(event.mimeData())
+            files = self._reference_drop
+            if self._run_active or len(files) != 1:
+                event.ignore()
+                return True
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+            if event.type() == QEvent.Drop:
+                self._remember_video_dir(Path(files[0]))
+                self._choose_source(Path(files[0]))
+            return True
+        return super().eventFilter(watched, event)
+
+    # ------------------------------------------------------------------ file dialogs' folder
+    def _video_dialog_dir(self) -> str:
+        """Where the video file dialogs open: the folder a video last came
+        from, while it still exists; else the dialog's default."""
+        folder = self._settings.last_video_dir
+        return folder if folder and Path(folder).is_dir() else ""
+
+    def _remember_video_dir(self, path: Path) -> None:
+        folder = str(path.parent)
+        if folder != self._settings.last_video_dir:
+            self._settings.last_video_dir = folder
+            if error := self._settings.save():
+                _log.warning("%s", error)
 
     def _start_source_probe(self, path: Path) -> None:
         """Reads a selected reference without freezing the main window."""
@@ -1970,8 +2191,10 @@ class MainWindow(QMainWindow):
     ) -> None:
         if generation != self._source_probe_generation:
             return
+        self._source_reading = None
         if info is None:
             previous = self._source_info
+            self.source_edit.setText(self._shown_source_path())  # a path typed in that would not read
             self.source_info_label.setText(
                 (
                     f"{media_info_string(previous)}, {bitrate_string(previous)}  "
@@ -2080,12 +2303,16 @@ class MainWindow(QMainWindow):
         worker.deleteLater()
         if generation == self._source_probe_generation:
             self._source_probe_worker = None
+            self._source_reading = None  # also when it stopped without a result
             if not self._run_active:
                 self._show_ready()
             self._on_table_selection_changed()
 
     # ------------------------------------------------------------------ distorted-file table
     def _add_table_row(self, path: Path) -> int:
+        # Added at the end, so the table is no longer in the order a
+        # heading's sort arrow says.
+        self._clear_sort_indicator()
         row = self.distorted_table.rowCount()
         self.distorted_table.insertRow(row)
 
@@ -2161,7 +2388,7 @@ class MainWindow(QMainWindow):
                     item.setData(Qt.CheckStateRole, None)
                     item.setText("n/a")
                     item.setToolTip(unavailable)
-                    item.setForeground(QColor("#888"))
+                    item.setForeground(theme.color("faint"))
                     item.setBackground(QColor(0, 0, 0, 0))
                     item.setFont(QFont())
                     continue
@@ -2179,9 +2406,7 @@ class MainWindow(QMainWindow):
                         if enabled else
                         tr("Not selected. Tick to calculate this metric.")
                     ) + (self._cvvdp_elsewhere_note(row_data) if metric_column.key == "cvvdp" else ""))
-                    item.setForeground(
-                        QColor("#a03030") if failed else self.distorted_table.palette().text()
-                    )
+                    theme.foreground(item, theme.color("failed") if failed else None)
                     item.setBackground(QColor(0, 0, 0, 0))
                     item.setFont(QFont())
                     continue
@@ -2209,7 +2434,7 @@ class MainWindow(QMainWindow):
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
-                item.setForeground(QColor("#000"))
+                theme.foreground(item, None)
                 item.setBackground(QColor(0, 0, 0, 0))
         finally:
             self._syncing_table = False
@@ -2258,9 +2483,9 @@ class MainWindow(QMainWindow):
             # _on_job_finished. Without a mark the row would look untouched.
             colour = _STATE_COLOURS["stale"]
         else:
-            item.setForeground(self.distorted_table.palette().text())
+            theme.foreground(item, None)
             return
-        item.setForeground(QColor(colour))
+        item.setForeground(theme.color(colour))
 
     @staticmethod
     def _identical_frames_note(run: CompletedRun, column: int) -> str:
@@ -2370,9 +2595,7 @@ class MainWindow(QMainWindow):
         def show(text: str, tooltip: str, *, muted: bool = False) -> None:
             item.setText(text)
             item.setToolTip(tooltip)
-            item.setForeground(
-                QColor("#999") if muted else self.distorted_table.palette().text()
-            )
+            theme.foreground(item, theme.color("dimmed") if muted else None)
 
         if probe_failed:
             show(tr("Unknown"), tr("Black bars could not be checked because the video could not be read."), muted=True)
@@ -2486,6 +2709,19 @@ class MainWindow(QMainWindow):
                from_size=f"{ref[0]}x{ref[1]}", to_size=f"{dist[0]}x{dist[1]}", cropped=cropped)
         )
 
+    def _fit_columns(self, *columns: int) -> None:
+        """Fits `columns` to their contents, once, when the window is next
+        idle. Fitting a column measures every row's cell; done for each row
+        as it was drawn, 300 rows took 90,000 measurements per column."""
+        if not self._columns_to_fit:
+            QTimer.singleShot(0, self, self._fit_pending_columns)
+        self._columns_to_fit.update(columns)
+
+    def _fit_pending_columns(self) -> None:
+        columns, self._columns_to_fit = self._columns_to_fit, set()
+        for column in sorted(columns):
+            self.distorted_table.resizeColumnToContents(column)
+
     def _set_row_scaling(self, row: int) -> None:
         item = self.distorted_table.item(row, COL_SCALING)
         if item is None:
@@ -2493,7 +2729,7 @@ class MainWindow(QMainWindow):
         tag, explanation = self._resize_mismatch(row)
         item.setText(tag)
         item.setToolTip(explanation)
-        self.distorted_table.resizeColumnToContents(COL_SCALING)
+        self._fit_columns(COL_SCALING)
 
     def _set_row_info(self, row: int, info: VideoInfo | None, error: str | None = None) -> None:
         item = self.distorted_table.item(row, COL_INFO)
@@ -2502,7 +2738,7 @@ class MainWindow(QMainWindow):
             self._set_row_status(row, RowState.FAILED, error)
             item.setText(tr("Probe failed"))
             item.setToolTip(error)
-            item.setForeground(Qt.red)
+            item.setForeground(theme.color("failed"))
             self.distorted_table.item(row, COL_BITRATE).setText("")
             scaling_item.setText("")
             scaling_item.setToolTip("")
@@ -2512,7 +2748,7 @@ class MainWindow(QMainWindow):
             # Back to normal text: the placeholder shown while probing greys
             # this cell out, and leaving it grey makes a probed row look
             # disabled.
-            item.setForeground(self.distorted_table.palette().text())
+            theme.foreground(item, None)
             item.setToolTip(format_hms(info.duration, decimals=1))
             self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
             self.distorted_table.item(row, COL_BITRATE).setToolTip(bitrate_note(info))
@@ -2524,9 +2760,7 @@ class MainWindow(QMainWindow):
             self._set_row_black_bars(row)
         # Keeps these snug to whatever's actually in them (never wider than
         # needed) while staying user-draggable in between updates.
-        self.distorted_table.resizeColumnToContents(COL_INFO)
-        self.distorted_table.resizeColumnToContents(COL_BITRATE)
-        self.distorted_table.resizeColumnToContents(COL_SCALING)
+        self._fit_columns(COL_INFO, COL_BITRATE, COL_SCALING)
 
     def _set_row_vmaf_text(self, row: int, text: str, *, bold: bool = False, color=None) -> None:
         item = self.distorted_table.item(row, COL_VMAF)
@@ -2541,7 +2775,7 @@ class MainWindow(QMainWindow):
         item.setFont(font)
         if color is not None:
             item.setForeground(color)
-        self.distorted_table.resizeColumnToContents(COL_VMAF)
+        self._fit_columns(COL_VMAF)
 
     def _set_resample_row_info(self, row: int, target: ResampleTarget) -> None:
         info = self._source_info
@@ -2553,8 +2787,7 @@ class MainWindow(QMainWindow):
         item.setToolTip(format_hms(info.duration, decimals=1))
         self.distorted_table.item(row, COL_BITRATE).setText("N/A")
         self._set_row_black_bars(row)
-        self.distorted_table.resizeColumnToContents(COL_INFO)
-        self.distorted_table.resizeColumnToContents(COL_BITRATE)
+        self._fit_columns(COL_INFO, COL_BITRATE)
 
     def _on_add_resample_test(self) -> None:
         if self._source_info is None:
@@ -2604,11 +2837,22 @@ class MainWindow(QMainWindow):
         self._try_load_cached_result(row)
 
     def _on_add_distorted(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, tr("Select test videos"))
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Select test videos"), self._video_dialog_dir())
         if not paths:
             return
+        self._remember_video_dir(Path(paths[0]))
+        self._add_test_videos([Path(p) for p in paths])
+
+    def _on_files_dropped_on_table(self, paths: list[str]) -> None:
+        if self._run_active or not paths:
+            return
+        self._remember_video_dir(Path(paths[0]))
+        self._add_test_videos([Path(p) for p in paths])
+
+    def _add_test_videos(self, paths: list[Path]) -> None:
+        """Adds a row for each of `paths` not already in the table, in order."""
         existing = {r.path for r in self._rows}
-        new_paths = [Path(p) for p in paths if Path(p) not in existing]
+        new_paths = list(dict.fromkeys(p for p in paths if p not in existing))
         if not new_paths:
             return
 
@@ -2847,6 +3091,111 @@ class MainWindow(QMainWindow):
             # "Ready." made a live job look finished.
             self._show_ready()
         self._on_table_selection_changed()
+
+    # ------------------------------------------------------------------ row order
+    def _apply_row_order(self, order: list[int]) -> None:
+        """Puts the rows in `order` (the current index of the row for each
+        new position). The table's cells and self._rows move together, and
+        the same videos stay selected. Every other piece of state finds its
+        row by identity (_row_index_of) or by path, never by position."""
+        table = self.distorted_table
+        if sorted(order) != list(range(len(self._rows))) or order == list(range(len(order))):
+            return
+        selected = {id(self._rows[index.row()]) for index in table.selectionModel().selectedRows()}
+        current = table.currentIndex()
+        current_row = self._rows[current.row()] if current.isValid() else None
+        columns = table.columnCount()
+        table.blockSignals(True)
+        table.selectionModel().blockSignals(True)
+        self._syncing_table = True
+        try:
+            cells = [[table.takeItem(row, col) for col in range(columns)] for row in range(len(order))]
+            for new, old in enumerate(order):
+                for col, item in enumerate(cells[old]):
+                    if item is not None:
+                        table.setItem(new, col, item)
+            self._rows = [self._rows[old] for old in order]
+            table.clearSelection()
+            selection = QItemSelection()
+            for row, row_data in enumerate(self._rows):
+                if id(row_data) in selected:
+                    selection.select(table.model().index(row, 0), table.model().index(row, columns - 1))
+            table.selectionModel().select(selection, QItemSelectionModel.Select)
+            if current_row is not None:
+                table.selectionModel().setCurrentIndex(
+                    table.model().index(self._row_index_of(current_row), current.column()),
+                    QItemSelectionModel.NoUpdate)
+        finally:
+            self._syncing_table = False
+            table.selectionModel().blockSignals(False)
+            table.blockSignals(False)
+        table.viewport().update()
+        self._on_table_selection_changed()
+        self._sync_frame_compare()  # Video Compare lists the videos in the table's order
+
+    def _on_rows_dragged(self, rows: list[int], target: int) -> None:
+        """Rows dragged within the table: they go, in their order, before `target`."""
+        if self._run_active or not rows:
+            return
+        moved = set(rows)
+        rest = [row for row in range(len(self._rows)) if row not in moved]
+        at = target - sum(1 for row in rows if row < target)
+        order = rest[:at] + sorted(rows) + rest[at:]
+        if order != list(range(len(order))):
+            self._clear_sort_indicator()
+        self._apply_row_order(order)
+
+    def _sort_key(self, row: int, column: int):
+        """What `column` sorts `row` by; None for a row without it, which
+        goes last whichever way the column is sorted."""
+        row_data = self._rows[row]
+        info = row_data.video_info
+        if column == COL_PATH:
+            return [int(part) if part.isdigit() else part.casefold()
+                    for part in re.split(r"(\d+)", row_data.path.name)]
+        if column == COL_INFO:
+            return None if info is None else (info.width * info.height, info.fps, info.duration)
+        if column == COL_BITRATE:
+            return info.bit_rate if info is not None and info.bit_rate else None
+        if column == COL_CHECK:
+            item = self.distorted_table.item(row, COL_CHECK)
+            return 0 if item is not None and item.checkState() == Qt.Checked else 1
+        if column == COL_SCALING:
+            item = self.distorted_table.item(row, COL_SCALING)
+            return item.text().casefold() if item is not None and item.text() else None
+        if column in _METRIC_COLUMN_BY_INDEX:
+            run = row_data.completed_run
+            value = self._metric_mean(run, column) if run is not None else None
+            return None if value is None or value != value else value  # NaN would scramble the sort
+        return None
+
+    def _on_header_clicked(self, column: int) -> None:
+        """Sorts the rows by the column whose heading was clicked; the same
+        heading again reverses it."""
+        if self._run_active or not self._rows:
+            return
+        if column == self._sort_column:
+            order = Qt.DescendingOrder if self._sort_order == Qt.AscendingOrder else Qt.AscendingOrder
+        else:
+            order = Qt.AscendingOrder
+        keys = [self._sort_key(row, column) for row in range(len(self._rows))]
+        present = [row for row in range(len(keys)) if keys[row] is not None]
+        if not present:
+            return  # nothing in that column to sort by
+        present.sort(key=lambda row: keys[row], reverse=order == Qt.DescendingOrder)
+        missing = [row for row in range(len(keys)) if keys[row] is None]
+        self._sort_column, self._sort_order = column, order
+        header = self.distorted_table.horizontalHeader()
+        header.setSortIndicator(column, order)
+        header.setSortIndicatorShown(True)
+        self._apply_row_order(present + missing)
+
+    def _clear_sort_indicator(self) -> None:
+        """The table is no longer in the order of the heading's arrow."""
+        if self._sort_column is None:
+            return
+        self._sort_column = None
+        self.distorted_table.horizontalHeader().setSortIndicatorShown(False)
 
     def _row_index_of_path(self, path: Path) -> int | None:
         for i, row in enumerate(self._rows):
@@ -4120,6 +4469,11 @@ class MainWindow(QMainWindow):
         # once when the run starts, and the context menu is suppressed below.
         for widget in self._file_action_widgets:
             widget.setEnabled(not active)
+        # The same for what the table and the reference box take by hand:
+        # dropped files, dragged rows, a typed path, a click to sort.
+        self.distorted_table.drops_allowed = not active
+        self.distorted_table.setDragEnabled(not active)
+        self.source_edit.setReadOnly(active)
         self.options_box.setEnabled(not active and bool(self._panel_target_rows))
         self.tabs.setTabEnabled(TAB_SETTINGS, not active)
         self.run_btn.setEnabled(not active)

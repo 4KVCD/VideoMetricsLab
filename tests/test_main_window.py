@@ -637,15 +637,33 @@ def test_path_column_shrinks_when_another_column_is_widened(qapp):
 def test_info_bitrate_vmaf_columns_stay_snug_to_their_content(qapp):
     win = MainWindow()
     row = win._add_table_row(Path("x.mkv"))
+    QApplication.processEvents()  # columns are fitted when the window is next idle (_fit_columns)
     before = win.distorted_table.columnWidth(COL_VMAF)
 
     win._set_row_vmaf_text(row, "Frame 151056/151056")
+    QApplication.processEvents()
     after_progress = win.distorted_table.columnWidth(COL_VMAF)
     assert after_progress > before  # widened to fit the longer progress text
 
     win._set_row_vmaf_text(row, "94.76", bold=True)
+    QApplication.processEvents()
     after_score = win.distorted_table.columnWidth(COL_VMAF)
     assert after_score < after_progress  # shrinks back down once the final score lands
+
+
+def test_rows_drawn_together_fit_each_column_once(qapp, monkeypatch):
+    """Fitting a column measures every row: done per row drawn, 300 rows
+    measured each column's 300 cells 300 times."""
+    win = MainWindow()
+    fitted = []
+    monkeypatch.setattr(win.distorted_table, "resizeColumnToContents", fitted.append)
+    for index in range(20):
+        row = win._add_table_row(Path(f"v{index}.mkv"))
+        win._rows[row].video_info = _fake_video_info(f"v{index}.mkv")
+        win._set_row_scaling(row)
+        win._set_row_vmaf_text(row, "Frame 1/10")
+    QApplication.processEvents()
+    assert sorted(fitted) == sorted({COL_SCALING, COL_VMAF})
 
 
 def test_file_name_column_header_and_shows_just_the_name(qapp):

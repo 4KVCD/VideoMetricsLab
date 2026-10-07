@@ -687,7 +687,17 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Бітрейт усього файлу разом зі звуковою доріжкою: бітрейт самого відео у файлі не записано.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} уже є у списку. Показати замість цього оцінки збереженого запуску?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg не видав мітку часу кадру {side}.",
-  "The source has no frame at the test video's first.": "У вихідного відео немає кадру в момент першого кадру тестового відео."
+  "The source has no frame at the test video's first.": "У вихідного відео немає кадру в момент першого кадру тестового відео.",
+  "Drop a video here, paste its path, or click Browse...": "Перетягніть сюди відео, вставте шлях до нього або натисніть «Огляд...»",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Перетягніть сюди відеофайли, щоб додати їх, перетягуйте рядки, щоб змінити порядок, і клацніть заголовок стовпця для сортування.",
+  "No such video": "Відео не знайдено",
+  "Reopen the videos that were open when the app was last closed": "Відкривати відео, що були відкриті під час останнього закриття застосунку",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "Еталонне й тестові відео, якщо вони ще на місці. Тести роздільності не відкриваються повторно.",
+  "There is no file at {path}.": "Файлу {path} не існує.",
+  "Theme:": "Тема:",
+  "Same as Windows": "Як у Windows",
+  "Light": "Світла",
+  "Dark": "Темна"
  },
  "plurals": {
   "about {count} day": [

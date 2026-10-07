@@ -115,10 +115,26 @@ class Settings:
     # the same as Windows', or English when there is no translation for it.
     language: str = ""
 
+    # The window's colours: "" as Windows' (light or dark, following it
+    # when it changes), or "light" or "dark" whatever Windows uses
+    # (vmaf_app.ui.theme; issue #5).
+    theme: str = ""
+
     # Restore the window to the size it was closed at.
     remember_window_size: bool = True
     window_width: int = 1280
     window_height: int = 800
+
+    # The folder the video file dialogs open in: the one a video was last
+    # chosen or dropped from. Empty: the dialogs' own default.
+    last_video_dir: str = ""
+    # Reopen, at startup, the reference and test videos that were in the
+    # window when it was closed, those still there. Off by default (Brian,
+    # issue #4): a new session starts empty unless asked otherwise. The
+    # paths are kept only while it is on.
+    remember_videos: bool = False
+    remembered_reference: str = ""
+    remembered_tests: list[str] = field(default_factory=list)
 
     # Frame Compare is an SDR QWidget surface. This controls how HDR frames
     # are converted for preview and is independent of the VMAF recipe.
