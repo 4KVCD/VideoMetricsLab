@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "معدل البت للملف كله بما فيه الصوت: لا يسجّل الملف معدل الفيديو وحده.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} موجود في القائمة بالفعل. هل تُعرض درجات التشغيل المحفوظ مكانه؟",
   "FFmpeg did not give the timestamp of a {side} frame.": "لم يُعطِ FFmpeg الطابع الزمني لإطار من {side}.",
-  "The source has no frame at the test video's first.": "لا يحتوي المصدر على إطار عند وقت الإطار الأول من فيديو الاختبار."
+  "The source has no frame at the test video's first.": "لا يحتوي المصدر على إطار عند وقت الإطار الأول من فيديو الاختبار.",
+  "Drop a video here, paste its path, or click Browse...": "أفلت فيديو هنا، أو الصق مساره، أو انقر استعراض...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "أفلت ملفات الفيديو هنا لإضافتها، واسحب الصفوف لتغيير ترتيبها، وانقر عنوان عمود للفرز.",
+  "No such video": "لا يوجد هذا الفيديو",
+  "Reopen the videos that were open when the app was last closed": "إعادة فتح الفيديوهات التي كانت مفتوحة عند آخر إغلاق للتطبيق",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "الفيديو المرجعي وفيديوهات الاختبار، ما دامت موجودة. لا يُعاد فتح اختبارات الدقة.",
+  "There is no file at {path}.": "لا يوجد ملف في {path}."
  },
  "plurals": {
   "about {count} day": [

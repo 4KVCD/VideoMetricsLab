@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Битрейт всего файла вместе со звуковой дорожкой: битрейт самого видео в файле не записан.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} уже есть в списке. Показать вместо этого оценки сохранённого запуска?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg не выдал метку времени кадра {side}.",
-  "The source has no frame at the test video's first.": "У исходника нет кадра в момент первого кадра тестового видео."
+  "The source has no frame at the test video's first.": "У исходника нет кадра в момент первого кадра тестового видео.",
+  "Drop a video here, paste its path, or click Browse...": "Перетащите сюда видео, вставьте путь к нему или нажмите «Обзор...»",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Перетащите сюда видеофайлы, чтобы добавить их, перетаскивайте строки, чтобы изменить порядок, и щёлкните заголовок столбца для сортировки.",
+  "No such video": "Видео не найдено",
+  "Reopen the videos that were open when the app was last closed": "Открывать видео, которые были открыты при последнем закрытии приложения",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "Эталонное и тестовые видео, если они ещё на месте. Тесты разрешения не открываются повторно.",
+  "There is no file at {path}.": "Файла {path} не существует."
  },
  "plurals": {
   "about {count} day": [

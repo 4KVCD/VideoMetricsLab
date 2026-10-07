@@ -6,7 +6,10 @@ that module about *this app's* window and these about Qt.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QHeaderView, QLabel, QSizePolicy, QStyle, QStyleOptionButton, QTableWidget
 
 _INDICATOR_MARGIN = 4
@@ -104,8 +107,24 @@ class FillColumnTable(QTableWidget):
     work when that's the one column users most want to resize (Path).
     """
 
+    #: Files dropped on the table from outside it (a file manager): their paths.
+    filesDropped = Signal(list)
+    #: Rows dragged within the table: the rows moved, in order, and the row
+    #: they go before (rowCount() for the end). The table moves nothing
+    #: itself: what a row is lives with its owner.
+    rowsMoved = Signal(list, int)
+
     def __init__(self, rows: int, cols: int, fill_column: int, other_columns: list[int], parent=None):
         super().__init__(rows, cols, parent)
+        # Drops are taken by dragEnterEvent and friends below, not by Qt's
+        # item-view handling, which would write the dragged cells over the
+        # ones dropped on.
+        self.drops_allowed = True
+        self._drop_line: int | None = None  # the row a dragged row would go before, while dragging
+        # What the drag over the table carries, found when it enters: a drag
+        # move comes with every mouse move, and finding it again then looked
+        # at every dragged file on disk each time (slow on a network drive).
+        self._drag_kind: str | None = None
         self._fill_column = fill_column
         self._other_columns = other_columns
         self._recalculating = False
@@ -129,6 +148,102 @@ class FillColumnTable(QTableWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._recalculate_fill_column()
+
+    # ------------------------------------------------------------ drag and drop
+    @staticmethod
+    def dropped_files(mime) -> list[str]:
+        """The local files (not folders) a drag carries."""
+        if not mime.hasUrls():
+            return []
+        paths = (url.toLocalFile() for url in mime.urls() if url.isLocalFile())
+        return [path for path in paths if path and Path(path).is_file()]
+
+    def _drop_kind(self, event) -> str | None:
+        """"rows" for this table's own rows, "files" for files from outside, else None."""
+        if not self.drops_allowed:
+            return None
+        if event.source() is self:
+            return "rows" if self.selectionModel().selectedRows() else None
+        return "files" if self.dropped_files(event.mimeData()) else None
+
+    def _insertion_row(self, event) -> int:
+        """The row a drop at the event's position goes before: the nearer
+        boundary of the row under it, or the end below the last."""
+        y = event.position().toPoint().y()
+        row = self.rowAt(y)
+        if row < 0:
+            return self.rowCount() if y > 0 else 0
+        middle = self.rowViewportPosition(row) + self.rowHeight(row) // 2
+        return row if y < middle else row + 1
+
+    def _set_drop_line(self, row: int | None) -> None:
+        if row != self._drop_line:
+            self._drop_line = row
+            self.viewport().update()
+
+    def dragEnterEvent(self, event) -> None:
+        kind = self._drag_kind = self._drop_kind(event)
+        if kind is None:
+            event.ignore()
+            return
+        event.setDropAction(Qt.MoveAction if kind == "rows" else Qt.CopyAction)
+        event.accept()
+
+    def dragMoveEvent(self, event) -> None:
+        kind = self._drag_kind if self.drops_allowed else None
+        if kind is None:
+            self._set_drop_line(None)
+            event.ignore()
+            return
+        self._set_drop_line(self._insertion_row(event) if kind == "rows" else None)
+        event.setDropAction(Qt.MoveAction if kind == "rows" else Qt.CopyAction)
+        event.accept()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._drag_kind = None
+        self._set_drop_line(None)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        self._set_drop_line(None)
+        self._drag_kind = None
+        kind = self._drop_kind(event)
+        if kind is None:
+            event.ignore()
+            return
+        if kind == "rows":
+            rows = sorted(index.row() for index in self.selectionModel().selectedRows())
+            target = self._insertion_row(event)
+            # Reported as a copy (a drag from this table offers both): on a
+            # move, Qt's drag would then delete the dragged rows itself. A
+            # drag offering only a move is turned down instead.
+            event.setDropAction(Qt.CopyAction)
+            if event.dropAction() != Qt.CopyAction:
+                event.ignore()
+                return
+            event.accept()
+            self.rowsMoved.emit(rows, target)
+            return
+        files = self.dropped_files(event.mimeData())
+        event.setDropAction(Qt.CopyAction)
+        event.accept()
+        self.filesDropped.emit(files)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._drop_line is None:
+            return
+        if self._drop_line < self.rowCount():
+            y = self.rowViewportPosition(self._drop_line)
+        elif self.rowCount():
+            last = self.rowCount() - 1
+            y = self.rowViewportPosition(last) + self.rowHeight(last) - 1
+        else:
+            y = 0
+        painter = QPainter(self.viewport())
+        painter.setPen(QPen(self.palette().highlight().color(), 2))
+        painter.drawLine(0, y, self.viewport().width(), y)
+        painter.end()
 
     def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
         if self._recalculating:

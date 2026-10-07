@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "La tasa de bits de todo el archivo, con el audio incluido: el archivo no registra la del video.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} ya está en la lista. ¿Mostrar en su lugar las puntuaciones de la ejecución guardada?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg no dio la marca de tiempo de un fotograma de {side}.",
-  "The source has no frame at the test video's first.": "El original no tiene ningún fotograma en el momento del primer fotograma del video de prueba."
+  "The source has no frame at the test video's first.": "El original no tiene ningún fotograma en el momento del primer fotograma del video de prueba.",
+  "Drop a video here, paste its path, or click Browse...": "Suelte un video aquí, pegue su ruta o haga clic en Examinar...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Suelte archivos de video aquí para agregarlos, arrastre filas para reordenarlas y haga clic en el encabezado de una columna para ordenar.",
+  "No such video": "No existe el video",
+  "Reopen the videos that were open when the app was last closed": "Volver a abrir los videos que estaban abiertos al cerrar la aplicación por última vez",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "El video de referencia y los videos de prueba que sigan existiendo. Las pruebas de resolución no se vuelven a abrir.",
+  "There is no file at {path}.": "No hay ningún archivo en {path}."
  },
  "plurals": {
   "about {count} day": [

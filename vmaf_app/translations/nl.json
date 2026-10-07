@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "De bitrate van het hele bestand, inclusief geluid: het bestand vermeldt die van de video niet.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} staat al in de lijst. In plaats daarvan de scores van de opgeslagen run tonen?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg gaf de tijdstempel van een {side}-frame niet.",
-  "The source has no frame at the test video's first.": "De bron heeft geen frame op het moment van het eerste frame van de testvideo."
+  "The source has no frame at the test video's first.": "De bron heeft geen frame op het moment van het eerste frame van de testvideo.",
+  "Drop a video here, paste its path, or click Browse...": "Sleep hier een video naartoe, plak het pad of klik op Bladeren...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Sleep videobestanden hierheen om ze toe te voegen, sleep rijen om ze te herschikken en klik op een kolomkop om te sorteren.",
+  "No such video": "Video bestaat niet",
+  "Reopen the videos that were open when the app was last closed": "De video's heropenen die open waren toen de app voor het laatst werd gesloten",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "De referentievideo en de testvideo's die er nog zijn. Resolutietests worden niet heropend.",
+  "There is no file at {path}.": "Er is geen bestand op {path}."
  },
  "plurals": {
   "about {count} day": [

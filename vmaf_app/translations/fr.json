@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Le débit du fichier entier, piste audio comprise : le fichier n'indique pas celui de la vidéo.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} est déjà dans la liste. Afficher à la place les scores de l'exécution enregistrée ?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg n'a pas donné l'horodatage d'une image de {side}.",
-  "The source has no frame at the test video's first.": "La source n'a aucune image à l'instant de la première image de la vidéo de test."
+  "The source has no frame at the test video's first.": "La source n'a aucune image à l'instant de la première image de la vidéo de test.",
+  "Drop a video here, paste its path, or click Browse...": "Déposez une vidéo ici, collez son chemin ou cliquez sur Parcourir...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Déposez des fichiers vidéo ici pour les ajouter, faites glisser les lignes pour les réordonner et cliquez sur un en-tête de colonne pour trier.",
+  "No such video": "Vidéo introuvable",
+  "Reopen the videos that were open when the app was last closed": "Rouvrir les vidéos ouvertes lors de la dernière fermeture de l'application",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "La vidéo de référence et les vidéos de test, celles qui existent encore. Les tests de résolution ne sont pas rouverts.",
+  "There is no file at {path}.": "Il n'y a aucun fichier à {path}."
  },
  "plurals": {
   "about {count} day": [

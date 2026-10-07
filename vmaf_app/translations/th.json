@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "บิตเรตของทั้งไฟล์ รวมแทร็กเสียง: ไฟล์ไม่ได้บันทึกบิตเรตของวิดีโอไว้",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} อยู่ในรายการแล้ว แสดงคะแนนของการรันที่บันทึกไว้แทนหรือไม่",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg ไม่ได้ให้เวลาประทับของเฟรม{side}",
-  "The source has no frame at the test video's first.": "ต้นฉบับไม่มีเฟรม ณ เวลาของเฟรมแรกของวิดีโอทดสอบ"
+  "The source has no frame at the test video's first.": "ต้นฉบับไม่มีเฟรม ณ เวลาของเฟรมแรกของวิดีโอทดสอบ",
+  "Drop a video here, paste its path, or click Browse...": "วางวิดีโอที่นี่ วางพาธ หรือคลิกเรียกดู...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "วางไฟล์วิดีโอที่นี่เพื่อเพิ่ม ลากแถวเพื่อจัดลำดับใหม่ และคลิกหัวคอลัมน์เพื่อเรียงลำดับ",
+  "No such video": "ไม่มีวิดีโอนี้",
+  "Reopen the videos that were open when the app was last closed": "เปิดวิดีโอที่เปิดอยู่ตอนปิดแอปครั้งล่าสุดอีกครั้ง",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "วิดีโออ้างอิงและวิดีโอทดสอบที่ยังมีอยู่ จะไม่เปิดการทดสอบความละเอียดอีก",
+  "There is no file at {path}.": "ไม่มีไฟล์ที่ {path}"
  },
  "plurals": {
   "about {count} day": [

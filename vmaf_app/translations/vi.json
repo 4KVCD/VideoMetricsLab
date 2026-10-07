@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate của cả tệp, gồm cả âm thanh: tệp không ghi bitrate riêng của video.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} đã có trong danh sách. Hiển thị điểm của lần chạy đã lưu thay thế?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg không cho biết dấu thời gian của một khung {side}.",
-  "The source has no frame at the test video's first.": "Nguồn không có khung nào tại thời điểm khung đầu tiên của video thử."
+  "The source has no frame at the test video's first.": "Nguồn không có khung nào tại thời điểm khung đầu tiên của video thử.",
+  "Drop a video here, paste its path, or click Browse...": "Thả video vào đây, dán đường dẫn của nó hoặc bấm Duyệt...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Thả tệp video vào đây để thêm, kéo các hàng để sắp xếp lại và bấm vào tiêu đề cột để sắp xếp.",
+  "No such video": "Không có video này",
+  "Reopen the videos that were open when the app was last closed": "Mở lại các video đang mở khi ứng dụng được đóng lần trước",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "Video tham chiếu và các video thử còn tồn tại. Các phép thử độ phân giải không được mở lại.",
+  "There is no file at {path}.": "Không có tệp tại {path}."
  },
  "plurals": {
   "about {count} day": [

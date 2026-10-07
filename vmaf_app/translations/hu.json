@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "A teljes fájl bitrátája a hangsávval együtt: a fájl nem rögzíti a videó saját bitrátáját.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} már szerepel a listában. A mentett futtatás pontszámai jelenjenek meg helyette?",
   "FFmpeg did not give the timestamp of a {side} frame.": "Az FFmpeg nem adta meg egy képkocka időbélyegét ({side}).",
-  "The source has no frame at the test video's first.": "A forrásnak nincs képkockája a tesztvideó első képkockájának időpontjában."
+  "The source has no frame at the test video's first.": "A forrásnak nincs képkockája a tesztvideó első képkockájának időpontjában.",
+  "Drop a video here, paste its path, or click Browse...": "Húzzon ide egy videót, illessze be az elérési útját, vagy kattintson a Tallózás... gombra",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Videófájlok hozzáadásához húzza őket ide, a sorok átrendezéséhez húzza a sorokat, a rendezéshez kattintson egy oszlopfejlécre.",
+  "No such video": "Nincs ilyen videó",
+  "Reopen the videos that were open when the app was last closed": "Az alkalmazás legutóbbi bezárásakor megnyitott videók újbóli megnyitása",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "A referencia- és a tesztvideók, amelyek még megvannak. A felbontásteszteket nem nyitja meg újra.",
+  "There is no file at {path}.": "Nincs fájl itt: {path}."
  },
  "plurals": {
   "about {count} day": [

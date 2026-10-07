@@ -120,6 +120,17 @@ class Settings:
     window_width: int = 1280
     window_height: int = 800
 
+    # The folder the video file dialogs open in: the one a video was last
+    # chosen or dropped from. Empty: the dialogs' own default.
+    last_video_dir: str = ""
+    # Reopen, at startup, the reference and test videos that were in the
+    # window when it was closed, those still there. Off by default (Brian,
+    # issue #4): a new session starts empty unless asked otherwise. The
+    # paths are kept only while it is on.
+    remember_videos: bool = False
+    remembered_reference: str = ""
+    remembered_tests: list[str] = field(default_factory=list)
+
     # Frame Compare is an SDR QWidget surface. This controls how HDR frames
     # are converted for preview and is independent of the VMAF recipe.
     frame_preview_color_mode: str = "display_aware"

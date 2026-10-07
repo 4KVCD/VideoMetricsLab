@@ -687,7 +687,13 @@
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Datový tok celého souboru včetně zvuku: soubor neuvádí datový tok samotného videa.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} už je v seznamu. Zobrazit místo toho skóre uloženého běhu?",
   "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg neudal časovou značku snímku {side}.",
-  "The source has no frame at the test video's first.": "Zdroj nemá žádný snímek v čase prvního snímku testovacího videa."
+  "The source has no frame at the test video's first.": "Zdroj nemá žádný snímek v čase prvního snímku testovacího videa.",
+  "Drop a video here, paste its path, or click Browse...": "Přetáhněte sem video, vložte jeho cestu nebo klikněte na Procházet...",
+  "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Přetažením videosouborů sem je přidáte, přetažením řádků změníte jejich pořadí a kliknutím na záhlaví sloupce je seřadíte.",
+  "No such video": "Video neexistuje",
+  "Reopen the videos that were open when the app was last closed": "Znovu otevřít videa, která byla otevřená při posledním zavření aplikace",
+  "The reference and the test videos, those still there. Resolution tests are not reopened.": "Referenční a testovací videa, pokud stále existují. Testy rozlišení se znovu neotevírají.",
+  "There is no file at {path}.": "Soubor {path} neexistuje."
  },
  "plurals": {
   "about {count} day": [
