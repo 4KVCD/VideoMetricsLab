@@ -1950,6 +1950,53 @@ def test_each_gpu_metrics_pass_is_handed_on_as_it_finishes(monkeypatch):
     assert [output.metrics.keys() for output in done] == [("ssimulacra2",), ("cvvdp",)]
 
 
+def _sized(width: int, height: int) -> VideoInfo:
+    return VideoInfo(Path(f"{width}x{height}.mkv"), width, height, 24.0, 60.0, 1440, "hevc", pix_fmt="yuv420p10le")
+
+
+def test_cvvdp_above_1080p_is_not_started_on_an_intel_gpu(monkeypatch):
+    """Vship's Vulkan CVVDP hung the 285K's Intel GPU at 4K (Windows reset
+    it, the screen went black): it is refused before any GPU work, with the
+    reason, and SSIMULACRA2 beside it still runs."""
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    intel = vship.VshipDevice("vulkan", "Intel(R) Graphics", 0, "5.1.2", None, GpuVendor.INTEL)
+    passes = []
+
+    def one_pass(_s, _t, _r, specs, *_a, **_k):
+        passes.append(tuple(spec.key for spec in specs))
+        return _single_metric_output(specs[0].key, 80.0, "gpu")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", one_pass)
+    output = vship.run_vship_task(_sized(3840, 2160), _sized(3840, 2160), request, request.metrics, intel, None, None)
+    assert passes == [("ssimulacra2",)]
+    assert output.metrics.keys() == ("ssimulacra2",)
+    assert output.failures == {"cvvdp": "on Intel GPUs above 1920x1080 it is not calculated, as Vship's Vulkan "
+                                        "build hangs the GPU (this comparison is 3840x2160)"}
+
+    only = _cvvdp_request("cvvdp")
+    with pytest.raises(vship.VshipPassesFailedError) as raised:  # alone: nothing to run
+        vship.run_vship_task(_sized(3840, 2160), _sized(3840, 2160), only, only.metrics, intel, None, None)
+    assert set(raised.value.failures) == {"cvvdp"}
+    assert passes == [("ssimulacra2",)]
+
+
+def test_cvvdp_runs_at_1080p_on_intel_and_at_4k_elsewhere(monkeypatch):
+    """The size compared at decides (a 4K source against a 1080p encode is
+    compared at 1080p), and only on Intel's GPU with the Vulkan build."""
+    request = _cvvdp_request("cvvdp")
+    passes = []
+    monkeypatch.setattr(vship, "_run_vship_pass", lambda _s, _t, _r, specs, *_a, **_k: passes.append(
+        specs[0].key) or _single_metric_output(specs[0].key, 9.0, "gpu"))
+    intel = vship.VshipDevice("vulkan", "Intel(R) Graphics", 0, "5.1.2", None, GpuVendor.INTEL)
+    nvidia = vship.VshipDevice("vulkan", "RTX", 0, "5.1.2", None, GpuVendor.NVIDIA)
+    vship.run_vship_task(_sized(3840, 2160), _sized(1920, 1080), request, request.metrics, intel, None, None)
+    vship.run_vship_task(_sized(3840, 2160), _sized(3840, 2160), request, request.metrics, nvidia, None, None)
+    assert passes == ["cvvdp", "cvvdp"]
+    assert vship.size_refusal(intel, "cvvdp", (1920, 1080)) is None
+    assert vship.size_refusal(intel, "ssimulacra2", (3840, 2160)) is None
+    assert vship.size_refusal(intel, "cvvdp", (2560, 1440)) is not None  # untested sizes refused too
+
+
 
 # ------------------------------------------------------------------ backends
 
