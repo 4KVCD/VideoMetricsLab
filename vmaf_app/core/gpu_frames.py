@@ -1,7 +1,8 @@
 """Decoding a video on the GPU in the scoring process for the GPU metrics:
 on NVIDIA GPUs straight into GPU memory (vmaf_app/native/nvdec_frames.dll),
 on Intel's and AMD's into system memory through their makers' decoder
-libraries (vpl_frames.dll with oneVPL, amf_frames.dll with AMF) -- all built
+libraries (vpl_frames.dll with oneVPL, amf_frames.dll with AMF; on AMD's
+handing over, Windows' own decoders first, mf_frames.dll) -- all built
 by scripts/build_gpu_frames.ps1 from native/, with one C API
 (native/gpu_frames.h).
 
@@ -70,12 +71,16 @@ _NATIVE = Path(__file__).resolve().parents[1] / "native"
 #: Each GPU maker's decoder library, all with one C API (native/gpu_frames.h):
 #: NVIDIA's decoder through nvcuvid, Intel's through oneVPL, AMD's through AMF.
 LIBRARIES = {"nvidia": _NATIVE / "nvdec_frames.dll", "intel": _NATIVE / "vpl_frames.dll",
-             "amd": _NATIVE / "amf_frames.dll"}
+             "amd": _NATIVE / "amf_frames.dll", "amd-mf": _NATIVE / "mf_frames.dll"}
 LIBRARY_PATH = LIBRARIES["nvidia"]
+#: Windows' own decoders (Media Foundation's) on AMD's GPUs, which only hand
+#: their pictures over: opened first where AMD's would hand over, AMD's (AMF)
+#: where they cannot (GpuFrameStream).
+MEDIA_FOUNDATION = "amd-mf"
 #: The decoders whose pictures reach Vulkan VMAF's and libvmaf's memory on the
 #: GPU (GpuFrameStream.pin, import_memory): NVIDIA's through CUDA, AMD's
 #: through Vulkan (native/amf_handover.h) when opened with handover.
-HANDOVER_BACKENDS = ("nvidia", "amd")
+HANDOVER_BACKENDS = ("nvidia", "amd", MEDIA_FOUNDATION)
 
 #: FFmpeg's codec names -> NVDEC's (cudaVideoCodec), and the bitstream filters
 #: that turn the container's packets into what NVDEC's parser reads: Annex B
@@ -185,6 +190,8 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                     ("nvf_pin", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong]),
                     ("nvf_unpin", ctypes.c_int, [handle, ctypes.c_void_p]),
                     ("nvf_download_planes", ctypes.c_int, [handle, ctypes.c_int, planes, pitches]),
+                    ("nvf_copy_planes", ctypes.c_int,
+                     [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_ulonglong), pitches]),
                     # NVIDIA's CUDA imports any export; AMD's Vulkan one of its own GPU and driver.
                     ("nvf_import", ctypes.c_int, [handle, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_int, *imported])
                     if backend == "nvidia" else
@@ -194,6 +201,23 @@ def _load(backend: str = "nvidia") -> ctypes.CDLL:
                 ):
                     function = getattr(lib, name)
                     function.restype, function.argtypes = restype, argtypes
+            if hasattr(lib, "nvf_timeline"):  # AMD's copies the GPU waits for instead of the CPU
+                value = ctypes.POINTER(ctypes.c_ulonglong)
+                for name, restype, argtypes in (
+                    ("nvf_timeline", ctypes.c_int, [handle, ctypes.POINTER(ctypes.c_void_p)]),
+                    ("nvf_copy_luma_async", ctypes.c_int,
+                     [handle, ctypes.c_int, ctypes.c_ulonglong, ctypes.c_longlong, value]),
+                    ("nvf_copy_planes_async", ctypes.c_int,
+                     [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_ulonglong), ctypes.POINTER(ctypes.c_longlong),
+                      value]),
+                ):
+                    function = getattr(lib, name)
+                    function.restype, function.argtypes = restype, argtypes
+            if hasattr(lib, "nvf_slot_texture"):  # a slot's picture where it is (Windows' decoder's)
+                lib.nvf_slot_texture.restype = ctypes.c_int
+                lib.nvf_slot_texture.argtypes = [handle, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p),
+                                                 ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint),
+                                                 ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)]
             if backend != "nvidia":  # the decoders that scale with native/d3d11_scale.h
                 lib.nvf_scale_note.restype, lib.nvf_scale_note.argtypes = ctypes.c_int, [handle, text, ctypes.c_int]
                 lib.nvf_scale_test.restype = ctypes.c_int
@@ -311,6 +335,19 @@ def _params(plan: DecodePlan, device: int = 0, pool: int = 1, extradata=None, ex
                    plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.shift, int(plan.luma_only),
                    pool, extradata, extradata_size, plan.output_size[0], plan.output_size[1], _SCALERS[plan.scaler],
                    plan.widen, int(plan.cpu_scaling), int(handover))
+
+
+def hands_over_textures(backend: str) -> bool:
+    """Whether `backend`'s decoder may give its pictures where they are, as
+    textures (GpuFrameStream.slot_texture): AMD's through Windows' own decoder
+    (native/mf_frames.cpp), where it is bundled -- whether a stream does
+    depends on its codec."""
+    if backend != "amd":
+        return False
+    try:
+        return hasattr(_load(MEDIA_FOUNDATION), "nvf_slot_texture")
+    except GpuDecodeUnavailableError:
+        return False
 
 
 def can_hand_over(plan: DecodePlan, backend: str) -> bool:
@@ -619,8 +656,9 @@ class GpuFrameStream:
 
     `handover`: AMD's decoder keeps its pictures on the GPU, for pin,
     download_planes, import_memory and copy_luma (NVIDIA's always does) --
-    where it can (can_hand_over); otherwise, or when its Vulkan cannot start,
-    it decodes as without (self.handover then says so)."""
+    where it can (can_hand_over), through Windows' own decoder where that
+    opens (_open_media_foundation), else AMF's; otherwise, or when its Vulkan
+    cannot start, it decodes as without (self.handover then says so)."""
 
     def __init__(self, info: VideoInfo, plan: DecodePlan, device: int = 0, *, pool: int = 4,
                  process_handle=None, backend: str = "nvidia", handover: bool = False) -> None:
@@ -637,7 +675,9 @@ class GpuFrameStream:
         self.handover = backend == "nvidia" or (handover and can_hand_over(plan, backend))
         error = ctypes.create_string_buffer(1024)
         handle = None
-        if self.handover and backend != "nvidia":
+        if self.handover and backend == "amd":
+            handle = self._open_media_foundation(plan, device, pool, extradata)
+        if self.handover and backend != "nvidia" and not handle:
             params = _params(plan, device, pool, extradata, len(self._extradata), handover=True)
             handle = self._lib.nvf_open(ctypes.byref(params), error, len(error))
             if not handle:
@@ -667,6 +707,28 @@ class GpuFrameStream:
         self._finished = False
         self._closing = False
         self._feeder = threading.Thread(target=self._feed, name="gpu-frames-feed", daemon=True)
+
+    def _open_media_foundation(self, plan: DecodePlan, device: int, pool: int, extradata) -> int | None:
+        """AMD's GPU handing over through Windows' own decoder (Media
+        Foundation's, native/mf_frames.cpp) rather than AMF's: the same
+        decoder hardware, faster, with less CPU. Its handle, the stream then
+        using it; None where it cannot (not bundled, no decoder of the codec
+        on the GPU -- HEVC's and AV1's come with Windows' video extensions),
+        and AMF's is opened as before."""
+        try:
+            lib = _load(MEDIA_FOUNDATION)
+        except GpuDecodeUnavailableError as error:
+            _log.info("%s: decoded by AMF (%s)", self.info.path.name, error)
+            return None
+        error = ctypes.create_string_buffer(1024)
+        params = _params(plan, device, pool, extradata, len(self._extradata), handover=True)
+        handle = lib.nvf_open(ctypes.byref(params), error, len(error))
+        if not handle:
+            _log.info("%s: decoded by AMF, not Windows' decoder (%s)", self.info.path.name,
+                      error.value.decode(errors="replace"))
+            return None
+        self._lib = lib
+        return handle
 
     def wait_time_base(self, timeout: float = 60.0) -> Fraction:
         """The stream's time base, once FFmpeg has reported it (before its
@@ -788,6 +850,52 @@ class GpuFrameStream:
         if self._lib.nvf_copy_luma(self._handle, slot, address, pitch) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
+    def timeline(self) -> int | None:
+        """The timeline semaphore copy_luma_async's copies signal (AMD's
+        hand-over), as an opaque Win32 handle for another Vulkan device on
+        the GPU to import (the caller closes it); None where there is none:
+        the copies are then waited for."""
+        if not self.handover or not hasattr(self._lib, "nvf_timeline"):
+            return None
+        handle = ctypes.c_void_p()
+        if self._lib.nvf_timeline(self._handle, ctypes.byref(handle)) != 0 or not handle.value:
+            return None
+        return handle.value
+
+    def copy_luma_async(self, slot: int, address: int, pitch: int) -> int:
+        """copy_luma, not waited for: the timeline semaphore's value once
+        the copy is done, for the GPU to wait for (0: it was waited for)."""
+        value = ctypes.c_ulonglong()
+        if self._lib.nvf_copy_luma_async(self._handle, slot, address, pitch, ctypes.byref(value)) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+        return value.value
+
+    @property
+    def gives_textures(self) -> bool:
+        """Whether slot_texture gives this stream's pictures."""
+        return self.handover and hasattr(self._lib, "nvf_slot_texture")
+
+    def slot_texture(self, slot: int) -> tuple[int, int, int, int, int]:
+        """The slot's picture where the decoder left it: its texture's KMT
+        handle (a Direct3D 11 texture shared without a mutex), the texture's
+        width and height and the picture's first sample (x, y) in it -- as it
+        is while the slot is not released."""
+        texture, width, height = ctypes.c_void_p(), ctypes.c_uint(), ctypes.c_uint()
+        x, y = ctypes.c_int(), ctypes.c_int()
+        if self._lib.nvf_slot_texture(self._handle, slot, ctypes.byref(texture), ctypes.byref(width),
+                                      ctypes.byref(height), ctypes.byref(x), ctypes.byref(y)) != 0:
+            raise GpuDecodeFailedError(self._error() or "the decoder's picture is not a texture")
+        return texture.value, width.value, height.value, x.value, y.value
+
+    def copy_planes_async(self, slot: int, addresses: tuple[int, ...], pitches: tuple[int, ...]) -> int:
+        """copy_planes, not waited for, as copy_luma_async."""
+        destinations = (ctypes.c_ulonglong * 3)(*addresses)
+        rows = (ctypes.c_longlong * 3)(*pitches)
+        value = ctypes.c_ulonglong()
+        if self._lib.nvf_copy_planes_async(self._handle, slot, destinations, rows, ctypes.byref(value)) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+        return value.value
+
     # Pictures handed over without a CPU copy (NVIDIA's decoder; AMD's with handover).
 
     def pin(self, address: int, size: int) -> bool:
@@ -809,6 +917,15 @@ class GpuFrameStream:
         planes = (ctypes.c_void_p * 3)(*addresses)
         rows = (ctypes.c_longlong * 3)(*pitches)
         if self._lib.nvf_download_planes(self._handle, slot, planes, rows) != 0:
+            raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
+
+    def copy_planes(self, slot: int, addresses: tuple[int, ...], pitches: tuple[int, ...]) -> None:
+        """Copies the slot's Y, U and V planes into memory import_memory
+        imported, each to its own address (0: not that plane), rows `pitches`
+        bytes apart, on the GPU."""
+        destinations = (ctypes.c_ulonglong * 3)(*addresses)
+        rows = (ctypes.c_longlong * 3)(*pitches)
+        if self._lib.nvf_copy_planes(self._handle, slot, destinations, rows) != 0:
             raise GpuDecodeFailedError(self._error() or "the GPU's decoder failed")
 
     def import_memory(self, handle: int, size: int, exporter=None) -> tuple[int, int] | None:

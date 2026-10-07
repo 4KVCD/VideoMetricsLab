@@ -176,6 +176,9 @@ class SharedLumas:
                 self._imports.append(imported)
             if not self._imports:
                 raise VmafVulkanError(f"Vulkan's memory is not shared: {(lib.vv_error() or b'').decode(errors='replace')}")
+            #: The engine's slots: a frame begun (next) waits for the one this
+            #: many before it to be done.
+            self.slots = len(self._imports)
         except BaseException:
             self.close()
             raise
@@ -360,6 +363,10 @@ DEVICE_VARIABLE = "VML_VMAF_VULKAN_DEVICE"
 #: SHA-256 of the sums the probe's frames give (8-bit, then 10-bit), which
 #: are the sums behind feature values identical to libvmaf's CUDA code's
 #: (tests/test_vmaf_vulkan.py compares them where CUDA runs).
+#: VMAF v0.6.1's sums in the engine's accumulator, which the probe checks:
+#: motion's, VIF's (4 scales of 9), ADM's denominators (4 x 3) and its
+#: numerators (2 limits x 4 scales x 3); VMAF v1's CAMBI follows them.
+_PROBE_SLOTS = 1 + 4 * 9 + 4 * 3 + 2 * 4 * 3
 _PROBE_SUMS = ("33668b74708340de30734d996e3b60ea025c4c55a5d977707ea6482467f85dee",
                "76f6f75034298e831c97642952e3682d896b85713efddf8e32d65a19c09bc3b1")
 _PROBE_SIZE = (320, 192)
@@ -400,7 +407,8 @@ def probe_sums(device: int, bits: int) -> str:
         scorer.features()
         digest = hashlib.sha256()
         for frame in range(len(reference)):
-            digest.update(scorer.sums(frame).astype("<u8").tobytes())
+            # VMAF v0.6.1's sums: the engine keeps VMAF v1's after them.
+            digest.update(scorer.sums(frame)[:_PROBE_SLOTS].astype("<u8").tobytes())
         return digest.hexdigest()
     finally:
         scorer.close()
