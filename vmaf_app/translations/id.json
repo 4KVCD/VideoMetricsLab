@@ -693,7 +693,11 @@
   "No such video": "Video tidak ada",
   "Reopen the videos that were open when the app was last closed": "Buka kembali video yang terbuka saat aplikasi terakhir ditutup",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "Video referensi dan video uji yang masih ada. Uji resolusi tidak dibuka kembali.",
-  "There is no file at {path}.": "Tidak ada file di {path}."
+  "There is no file at {path}.": "Tidak ada file di {path}.",
+  "Theme:": "Tema:",
+  "Same as Windows": "Sama seperti Windows",
+  "Light": "Terang",
+  "Dark": "Gelap"
  },
  "plurals": {
   "about {count} day": [

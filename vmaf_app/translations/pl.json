@@ -693,7 +693,11 @@
   "No such video": "Nie ma takiego wideo",
   "Reopen the videos that were open when the app was last closed": "Ponownie otwieraj wideo, które były otwarte przy ostatnim zamknięciu aplikacji",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "Wideo referencyjne i testowe, które nadal istnieją. Testy rozdzielczości nie są ponownie otwierane.",
-  "There is no file at {path}.": "Nie ma pliku w {path}."
+  "There is no file at {path}.": "Nie ma pliku w {path}.",
+  "Theme:": "Motyw:",
+  "Same as Windows": "Jak w Windows",
+  "Light": "Jasny",
+  "Dark": "Ciemny"
  },
  "plurals": {
   "about {count} day": [

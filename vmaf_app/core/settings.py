@@ -115,6 +115,11 @@ class Settings:
     # the same as Windows', or English when there is no translation for it.
     language: str = ""
 
+    # The window's colours: "" as Windows' (light or dark, following it
+    # when it changes), or "light" or "dark" whatever Windows uses
+    # (vmaf_app.ui.theme; issue #5).
+    theme: str = ""
+
     # Restore the window to the size it was closed at.
     remember_window_size: bool = True
     window_width: int = 1280

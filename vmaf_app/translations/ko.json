@@ -693,7 +693,11 @@
   "No such video": "영상이 없음",
   "Reopen the videos that were open when the app was last closed": "마지막으로 앱을 닫을 때 열려 있던 영상 다시 열기",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "참조 영상과 테스트 영상 중 아직 있는 것. 해상도 테스트는 다시 열지 않습니다.",
-  "There is no file at {path}.": "{path}에 파일이 없습니다."
+  "There is no file at {path}.": "{path}에 파일이 없습니다.",
+  "Theme:": "테마:",
+  "Same as Windows": "Windows와 같게",
+  "Light": "밝게",
+  "Dark": "어둡게"
  },
  "plurals": {
   "about {count} day": [

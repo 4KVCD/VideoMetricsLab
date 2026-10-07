@@ -693,7 +693,11 @@
   "No such video": "Nincs ilyen videó",
   "Reopen the videos that were open when the app was last closed": "Az alkalmazás legutóbbi bezárásakor megnyitott videók újbóli megnyitása",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "A referencia- és a tesztvideók, amelyek még megvannak. A felbontásteszteket nem nyitja meg újra.",
-  "There is no file at {path}.": "Nincs fájl itt: {path}."
+  "There is no file at {path}.": "Nincs fájl itt: {path}.",
+  "Theme:": "Téma:",
+  "Same as Windows": "Mint a Windows",
+  "Light": "Világos",
+  "Dark": "Sötét"
  },
  "plurals": {
   "about {count} day": [

@@ -44,14 +44,44 @@ def test_chart_cache_tracks_display_pixel_density(qapp, monkeypatch):
     chart = _chart(qapp)
     monkeypatch.setattr(chart, "devicePixelRatioF", lambda: 1.5)
     exported = chart.render_to_pixmap()
+    assert (exported.width(), exported.height()) == (1200, 600)
+    assert exported.devicePixelRatioF() == 1
+    chart._rebuild_cache()
     assert chart._cache.width() == 1200
     assert chart._cache.height() == 600
     assert chart._cache.devicePixelRatioF() == 1.5
-    assert exported.devicePixelRatioF() == 1
     monkeypatch.setattr(chart, "devicePixelRatioF", lambda: 2.0)
-    chart.render_to_pixmap()
+    assert not chart._cache_matches_display()
+    chart._rebuild_cache()
     assert chart._cache.width() == 1600
     assert chart._cache.devicePixelRatioF() == 2
+
+
+def _corner(pixmap):
+    return pixmap.toImage().pixelColor(1, 1)
+
+
+def test_the_chart_is_drawn_in_the_window_s_theme_and_again_when_it_changes(qapp, monkeypatch):
+    """Issue #5: a white chart in a dark window."""
+    from vmaf_app.ui import theme
+
+    chart = _chart(qapp)
+    monkeypatch.setattr(theme, "is_dark", lambda: True)
+    chart._rebuild_cache()
+    assert _corner(chart._cache).lightness() < 64
+    monkeypatch.setattr(theme, "is_dark", lambda: False)
+    assert not chart._cache_matches_display()  # drawn again at the next paint
+    chart._rebuild_cache()
+    assert _corner(chart._cache).lightness() > 240
+
+
+def test_an_exported_chart_is_light_in_a_dark_window(qapp, monkeypatch):
+    """A file is read elsewhere and printed: it keeps the light colours."""
+    from vmaf_app.ui import theme
+
+    chart = _chart(qapp)
+    monkeypatch.setattr(theme, "is_dark", lambda: True)
+    assert _corner(chart.render_to_pixmap()).lightness() > 240
 
 
 def test_cursor_damage_covers_both_endpoints(qapp, monkeypatch):

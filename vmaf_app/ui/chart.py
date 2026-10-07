@@ -23,23 +23,18 @@ from dataclasses import dataclass
 from math import ceil
 
 import numpy as np
-from PySide6.QtCore import QLineF, QPoint, QPointF, QRect, Qt, Signal
+from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRect, Qt, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core.time_format import format_hms
+from vmaf_app.ui import theme
 
 # Room for the axis labels around the plotting area.
 _MARGIN_LEFT = 62
 _MARGIN_RIGHT = 12
 _MARGIN_TOP = 10
 _MARGIN_BOTTOM = 38
-
-_GRID_COLOR = QColor(0, 0, 0, 40)
-_AXIS_COLOR = QColor(90, 90, 90)
-_TEXT_COLOR = QColor(40, 40, 40)
-_BACKGROUND = QColor("white")
-_CROSSHAIR_COLOR = QColor(120, 120, 120)
 
 # Tick spacings that read naturally on a time axis, in seconds.
 _TIME_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400]
@@ -100,6 +95,7 @@ class ChartWidget(QWidget):
         self.invert_y = invert_y
         self._series: dict[int, ChartSeries] = {}
         self._cache: QPixmap | None = None
+        self._cache_dark = False  # the theme the cache was drawn in (theme.chart_colours)
         self._cursor_x: int | None = None
         self._view_x: tuple[float, float] | None = None   # None = fit all data
         self._y_range: tuple[float, float] = (0.0, 1.0)
@@ -255,6 +251,13 @@ class ChartWidget(QWidget):
         self._cache = None
         super().resizeEvent(event)
 
+    def changeEvent(self, event) -> None:
+        # The window's theme changed: drawn again in its colours.
+        if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange, QEvent.StyleChange):
+            self._cache = None
+            self.update()
+        super().changeEvent(event)
+
     def paintEvent(self, event) -> None:
         if not self._cache_matches_display():
             self._rebuild_cache()
@@ -265,39 +268,46 @@ class ChartWidget(QWidget):
         # high-DPI pixmap's source coordinates are not confused with DIP.
         painter.drawPixmap(0, 0, self._cache)
         if self._cursor_x is not None:
-            painter.setPen(QPen(_CROSSHAIR_COLOR, 1))
+            painter.setPen(QPen(theme.chart_colours(self._cache_dark).crosshair, 1))
             rect = self.plot_rect()
             painter.drawLine(self._cursor_x, rect.top(), self._cursor_x, rect.bottom())
         painter.end()
 
     def _rebuild_cache(self) -> None:
+        self._cache_dark = theme.is_dark()
+        self._cache = self._render(theme.chart_colours(self._cache_dark))
+
+    def _render(self, colours: theme.ChartColours) -> QPixmap:
+        """The chart without the crosshair, in `colours`, at the screen's pixel ratio."""
         ratio = self.devicePixelRatioF()
         pixmap = QPixmap(ceil(self.width() * ratio), ceil(self.height() * ratio))
         pixmap.setDevicePixelRatio(ratio)
-        pixmap.fill(_BACKGROUND)
+        pixmap.fill(colours.background)
         painter = QPainter(pixmap)
         painter.setFont(self.font())
         rect = self.plot_rect()
-        self._draw_axes(painter, rect)
+        self._draw_axes(painter, rect, colours)
         for series in self._visible_series():
             self._draw_series(painter, rect, series)
-        painter.setPen(QPen(_AXIS_COLOR, 1))
+        painter.setPen(QPen(colours.axis, 1))
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
         painter.end()
-        self._cache = pixmap
+        return pixmap
 
     def _cache_matches_display(self) -> bool:
         ratio = self.devicePixelRatioF()
+        # Drawn again when the window's theme changed since (theme.py).
         return (self._cache is not None
+                and self._cache_dark == theme.is_dark()
                 and self._cache.devicePixelRatioF() == ratio
                 and self._cache.width() == ceil(self.width() * ratio)
                 and self._cache.height() == ceil(self.height() * ratio))
 
-    def _draw_axes(self, painter: QPainter, rect: QRect) -> None:
+    def _draw_axes(self, painter: QPainter, rect: QRect, colours: theme.ChartColours) -> None:
         x0, x1 = self.x_range()
         metrics = QFontMetrics(painter.font())
 
-        painter.setPen(QPen(_GRID_COLOR, 1))
+        painter.setPen(QPen(colours.grid, 1))
         step = _nice_time_step(x1 - x0)
         tick = np.ceil(x0 / step) * step
         time_ticks = []
@@ -311,7 +321,7 @@ class ChartWidget(QWidget):
         for py, _label in value_ticks:
             painter.drawLine(rect.left(), py, rect.right(), py)
 
-        painter.setPen(QPen(_TEXT_COLOR, 1))
+        painter.setPen(QPen(colours.text, 1))
         for px, tick_time in time_ticks:
             label = format_hms(tick_time)
             painter.drawText(px - metrics.horizontalAdvance(label) // 2,
@@ -485,10 +495,9 @@ class ChartWidget(QWidget):
         self.view_changed.emit()
 
     def render_to_pixmap(self) -> QPixmap:
-        """A standalone copy of the current chart, for PNG export."""
-        if not self._cache_matches_display():
-            self._rebuild_cache()
-        exported = QPixmap(self._cache)
+        """The current chart for PNG export: in the light theme's colours
+        whatever the window shows, as an exported file is read elsewhere."""
+        exported = self._render(theme.chart_colours(dark=False))
         # Export compositors use physical pixel dimensions for layout.
         exported.setDevicePixelRatio(1.0)
         return exported

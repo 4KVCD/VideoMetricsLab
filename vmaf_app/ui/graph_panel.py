@@ -49,6 +49,7 @@ from vmaf_app.core.run_io import (
 from vmaf_app.core.stats import VmafStats, aggregate_scores, compute_stats
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.i18n import N_, ntr, tr
+from vmaf_app.ui import theme
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
 
@@ -56,11 +57,6 @@ from vmaf_app.ui.file_worker import FileWriteQueue
 #: fallback is whatever Qt substitutes, which is still better aligned than a
 #: proportional face because the cells are right-aligned regardless.
 _NUMBER_FONT_FAMILY = "Consolas"
-
-_MEAN_TINT = (244, 246, 250)
-_SELECTED_MEAN_TINT = (207, 224, 250)
-_CLICKABLE_HEADER = "#2a5db0"
-_SELECTED_HEADER = "#12327a"
 
 _PALETTE = [
     "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
@@ -270,7 +266,7 @@ class _MetricPage(QWidget):
                 "to see it here.", label=metric.label)
         )
         self.no_data_label.setAlignment(Qt.AlignCenter)
-        self.no_data_label.setStyleSheet("color: #888; font-style: italic; padding: 12px;")
+        theme.style(self.no_data_label, "color: {faint}; font-style: italic; padding: 12px;")
         self.no_data_label.setVisible(False)
         layout.addWidget(self.no_data_label)
 
@@ -826,7 +822,7 @@ class GraphPanel(QWidget):
         # Without this, nothing said the metric columns could be clicked, or
         # that the detail to their right belonged to whichever one was.
         self.stats_hint = QLabel()
-        self.stats_hint.setStyleSheet("color: #666;")
+        theme.style(self.stats_hint, "color: {muted};")
         top_layout.addWidget(self.stats_hint)
 
         self.stats_table = QTableWidget()
@@ -886,7 +882,7 @@ class GraphPanel(QWidget):
         # than the thing it announces.
         self.status_label = QLabel("")
         self.status_label.hide()
-        self.status_label.setStyleSheet("color: #666;")
+        theme.style(self.status_label, "color: {muted};")
         root.addWidget(self.status_label)
         self.metric_hint = QLabel(tr("Calculate metrics or load analysis results to view graphs."))
         root.addWidget(self.metric_hint)
@@ -1064,7 +1060,7 @@ class GraphPanel(QWidget):
             )
             # Link-coloured, so the four that can be clicked look different
             # from the fourteen that cannot.
-            head.setForeground(QColor(_CLICKABLE_HEADER) if not selected else QColor(_SELECTED_HEADER))
+            head.setForeground(theme.color("link_selected" if selected else "link"))
             font = QFont()
             font.setBold(selected)
             head.setFont(font)
@@ -1086,7 +1082,7 @@ class GraphPanel(QWidget):
         font = item.font()
         font.setBold(True)
         item.setFont(font)
-        item.setForeground(QColor(entry.color))
+        item.setForeground(theme.readable(entry.color))
         return item
 
     @staticmethod
@@ -1450,6 +1446,11 @@ class GraphPanel(QWidget):
         )
 
     # ------------------------------------------------------------------ stats table
+    def refresh_theme(self) -> None:
+        """The window's theme changed: the statistics' colours are set per
+        cell, so the table is filled again. The charts redraw themselves."""
+        self._refresh_stats_table()
+
     def _refresh_stats_table(self) -> None:
         self._populating_stats = True
         try:
@@ -1481,8 +1482,7 @@ class GraphPanel(QWidget):
                                 "distortion, with their frames included in the count.", identical=identical)
                         )
                     selected = spec.key == metric.key
-                    item.setBackground(QColor(*(
-                        _SELECTED_MEAN_TINT if selected else _MEAN_TINT)))
+                    item.setBackground(theme.color("mean_selected" if selected else "mean_tint"))
                     if selected:
                         font = QFont(item.font())
                         font.setBold(True)

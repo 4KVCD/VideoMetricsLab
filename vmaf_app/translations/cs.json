@@ -693,7 +693,11 @@
   "No such video": "Video neexistuje",
   "Reopen the videos that were open when the app was last closed": "Znovu otevřít videa, která byla otevřená při posledním zavření aplikace",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "Referenční a testovací videa, pokud stále existují. Testy rozlišení se znovu neotevírají.",
-  "There is no file at {path}.": "Soubor {path} neexistuje."
+  "There is no file at {path}.": "Soubor {path} neexistuje.",
+  "Theme:": "Motiv:",
+  "Same as Windows": "Stejně jako Windows",
+  "Light": "Světlý",
+  "Dark": "Tmavý"
  },
  "plurals": {
   "about {count} day": [

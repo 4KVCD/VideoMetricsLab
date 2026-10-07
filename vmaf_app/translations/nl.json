@@ -693,7 +693,11 @@
   "No such video": "Video bestaat niet",
   "Reopen the videos that were open when the app was last closed": "De video's heropenen die open waren toen de app voor het laatst werd gesloten",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "De referentievideo en de testvideo's die er nog zijn. Resolutietests worden niet heropend.",
-  "There is no file at {path}.": "Er is geen bestand op {path}."
+  "There is no file at {path}.": "Er is geen bestand op {path}.",
+  "Theme:": "Thema:",
+  "Same as Windows": "Zelfde als Windows",
+  "Light": "Licht",
+  "Dark": "Donker"
  },
  "plurals": {
   "about {count} day": [

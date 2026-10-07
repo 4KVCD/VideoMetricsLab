@@ -296,7 +296,13 @@ def main() -> int:
         logging.getLogger("vmaf_app.main").info("ffmpeg folder moved from the registry to the settings: %s", adopted)
     from vmaf_app.core.settings import Settings
 
-    apply_language(app, Settings.load().language)
+    settings = Settings.load()
+    apply_language(app, settings.language)
+    # Before the window is built: what it colours itself reads the theme.
+    from vmaf_app.ui import theme
+
+    theme.apply_theme(settings.theme)
+    logging.getLogger("vmaf_app.main").info("Theme: %s", settings.theme or "as Windows")
     from vmaf_app.core.perceptual_vship import set_vship_backend, start_vship_probe
 
     set_vship_backend(Settings.load().gpu_backend)

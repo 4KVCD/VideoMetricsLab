@@ -40,6 +40,7 @@ from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
 from vmaf_app.i18n import N_, tr, tr_message
+from vmaf_app.ui import theme
 from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.video_compare_view import VideoCompareView
@@ -232,7 +233,7 @@ class FrameComparePanel(QWidget):
         )
         self.color_mode_combo.currentIndexChanged.connect(self._on_color_mode_changed)
         self.color_status_label = QLabel()
-        self.color_status_label.setStyleSheet("color: #666;")
+        theme.style(self.color_status_label, "color: {muted};")
         color_row.addWidget(QLabel(tr("HDR preview:")))
         color_row.addWidget(self.color_mode_combo)
         self.source_resolution_combo = QComboBox()
@@ -330,7 +331,7 @@ class FrameComparePanel(QWidget):
             "Space: play/pause")
         )
         self.guide_label.setAlignment(Qt.AlignCenter)
-        self.guide_label.setStyleSheet("color: #666;")
+        theme.style(self.guide_label, "color: {muted};")
         self.guide_label.setWordWrap(True)
         root.addWidget(self.guide_label)
 
@@ -689,10 +690,10 @@ class FrameComparePanel(QWidget):
         try:
             seconds = parse_timestamp(self.timestamp_edit.text())
         except ValueError as exc:
-            self.timestamp_edit.setStyleSheet("border: 1px solid #c33;")
+            theme.style(self.timestamp_edit, "border: 1px solid {error_border};")
             self.timestamp_edit.setToolTip(str(exc))
             return
-        self.timestamp_edit.setStyleSheet("")
+        theme.style(self.timestamp_edit, "")
         self.timestamp_edit.setToolTip(tr("Enter seconds, M:SS, or H:MM:SS.sss"))
         self.set_frame(round(seconds * entry.comparison.fps))
 

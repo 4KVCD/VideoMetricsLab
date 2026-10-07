@@ -693,7 +693,11 @@
   "No such video": "视频不存在",
   "Reopen the videos that were open when the app was last closed": "重新打开上次关闭应用时打开的视频",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "参考视频和测试视频（仍存在的）。分辨率测试不会重新打开。",
-  "There is no file at {path}.": "{path} 处没有文件。"
+  "There is no file at {path}.": "{path} 处没有文件。",
+  "Theme:": "主题：",
+  "Same as Windows": "跟随 Windows",
+  "Light": "浅色",
+  "Dark": "深色"
  },
  "plurals": {
   "about {count} day": [

@@ -693,7 +693,11 @@
   "No such video": "ไม่มีวิดีโอนี้",
   "Reopen the videos that were open when the app was last closed": "เปิดวิดีโอที่เปิดอยู่ตอนปิดแอปครั้งล่าสุดอีกครั้ง",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "วิดีโออ้างอิงและวิดีโอทดสอบที่ยังมีอยู่ จะไม่เปิดการทดสอบความละเอียดอีก",
-  "There is no file at {path}.": "ไม่มีไฟล์ที่ {path}"
+  "There is no file at {path}.": "ไม่มีไฟล์ที่ {path}",
+  "Theme:": "ธีม:",
+  "Same as Windows": "เหมือน Windows",
+  "Light": "สว่าง",
+  "Dark": "มืด"
  },
  "plurals": {
   "about {count} day": [

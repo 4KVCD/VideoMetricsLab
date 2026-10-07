@@ -693,7 +693,11 @@
   "No such video": "Không có video này",
   "Reopen the videos that were open when the app was last closed": "Mở lại các video đang mở khi ứng dụng được đóng lần trước",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "Video tham chiếu và các video thử còn tồn tại. Các phép thử độ phân giải không được mở lại.",
-  "There is no file at {path}.": "Không có tệp tại {path}."
+  "There is no file at {path}.": "Không có tệp tại {path}.",
+  "Theme:": "Giao diện:",
+  "Same as Windows": "Giống Windows",
+  "Light": "Sáng",
+  "Dark": "Tối"
  },
  "plurals": {
   "about {count} day": [

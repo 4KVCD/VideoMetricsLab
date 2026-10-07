@@ -693,7 +693,11 @@
   "No such video": "Відео не знайдено",
   "Reopen the videos that were open when the app was last closed": "Відкривати відео, що були відкриті під час останнього закриття застосунку",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "Еталонне й тестові відео, якщо вони ще на місці. Тести роздільності не відкриваються повторно.",
-  "There is no file at {path}.": "Файлу {path} не існує."
+  "There is no file at {path}.": "Файлу {path} не існує.",
+  "Theme:": "Тема:",
+  "Same as Windows": "Як у Windows",
+  "Light": "Світла",
+  "Dark": "Темна"
  },
  "plurals": {
   "about {count} day": [

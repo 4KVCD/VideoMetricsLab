@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, Qt, QTime, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QFont
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -112,6 +112,7 @@ from vmaf_app.core.vmaf_runner import (
     validate_video_pair,
 )
 from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
+from vmaf_app.ui import theme
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string
@@ -172,10 +173,7 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
 #: an unticked box is "not selected", a ticked empty one is "not calculated
 #: yet", a score is "done" -- so only these two, which nothing else shows,
 #: need a mark of their own.
-_STATE_COLOURS = {
-    "failed": "#a03030",
-    "stale": "#8a6d00",
-}
+_STATE_COLOURS = {"failed": "failed", "stale": "stale"}  # theme.py's names
 
 # Metric Graphs displays results; Video Compare and Bitrate Viewer also work
 # independently of calculation. Settings remains the final page.
@@ -305,7 +303,7 @@ class CvvdpDisplayDialog(QDialog):
                                   tr("How far the viewer's eyes are from the screen. Closer makes "
                                   "small artifacts easier to see."))
         self.distance_note = QLabel()
-        self.distance_note.setStyleSheet("color: #666;")
+        theme.style(self.distance_note, "color: {muted};")
         distance = QHBoxLayout()
         distance.addWidget(self.distance_spin)
         distance.addWidget(self.distance_note)
@@ -674,9 +672,39 @@ class MainWindow(QMainWindow):
         self._syncing_table = False  # ditto for the table's own metric tick boxes
 
         self._build_ui()
+        self._theme_refresh_due = False  # see changeEvent
+        # Light or dark changed (Settings, or Windows when following it).
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self._theme_changed)
         self._check_ffmpeg(prompt=True)  # startup check: both tools present, ffmpeg new enough
         self._restore_open_videos()
         self._on_table_selection_changed()
+
+    def changeEvent(self, event) -> None:
+        # The palette replaced, which comes after the colour scheme's signal:
+        # coloured again then too, as the style sheets resolve palette() from
+        # it and the scheme's signal may have come before it was in place.
+        if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange):
+            self._theme_changed()
+        super().changeEvent(event)
+
+    def _theme_changed(self, *_args) -> None:
+        """What the window colours itself is coloured again, once for each
+        burst of these signals and events. (Not while the window is being
+        built: it sets the flag when done.)"""
+        if not getattr(self, "_theme_refresh_due", True):
+            self._theme_refresh_due = True
+            QTimer.singleShot(0, self, self._apply_theme_colours)  # not after the window is gone
+
+    def _apply_theme_colours(self) -> None:
+        """Colours the app sets itself, again in the theme now in use: the
+        styled labels (theme.refresh), each row's cells, the graph
+        statistics. The palette's own colours and the charts follow by
+        themselves."""
+        self._theme_refresh_due = False
+        theme.refresh()
+        for row in range(len(self._rows)):
+            self._set_row_metrics(row)
+        self.graph_panel.refresh_theme()
 
     def _close_when_idle(self) -> None:
         """Retries the close once the work it was waiting on has finished."""
@@ -791,7 +819,8 @@ class MainWindow(QMainWindow):
         # warning was unactionable.
         banner_row = QHBoxLayout()
         self._ffmpeg_banner = QLabel()
-        self._ffmpeg_banner.setStyleSheet("background: #fff3cd; padding: 6px; border: 1px solid #ffe08a;")
+        theme.style(self._ffmpeg_banner, "background: {banner_background}; color: {banner_text}; padding: 6px; "
+                                         "border: 1px solid {banner_border};")
         self._ffmpeg_banner.setWordWrap(True)
         self._ffmpeg_banner.setVisible(False)
         self._locate_ffmpeg_btn = QPushButton(tr("Locate ffmpeg.exe..."))
@@ -962,7 +991,7 @@ class MainWindow(QMainWindow):
             tr("These are only a starting point -- each video's own settings are "
             "edited in the Videos tab.")
         )
-        hint.setStyleSheet("color: #666; font-style: italic;")
+        theme.style(hint, "color: {muted}; font-style: italic;")
         defaults_layout.addWidget(hint)
         self.settings_default_gpu = QCheckBox(tr("Use GPU decoding"))
         self.settings_default_gpu.setChecked(self._settings.default_gpu_decode)
@@ -1058,7 +1087,7 @@ class MainWindow(QMainWindow):
             tr("Decodes each video once instead of once per metric: much less CPU work for 4K VVC. "
             "Very heavy on GPU memory at 4K: about 7.3 GB for all three together."))
         gpu_note.setWordWrap(True)
-        gpu_note.setStyleSheet("color: #666;")
+        theme.style(gpu_note, "color: {muted};")
         gpu_layout.addWidget(gpu_note)
         outer.addWidget(gpu_box)
 
@@ -1118,6 +1147,20 @@ class MainWindow(QMainWindow):
         language_row.addWidget(self.settings_language)
         language_row.addStretch(1)
         window_layout.addLayout(language_row)
+        # Light or dark, at once; "Same as Windows" also follows Windows
+        # changing while the app is open.
+        self.settings_theme = QComboBox()
+        for label, value in ((tr("Same as Windows"), ""), (tr("Light"), "light"), (tr("Dark"), "dark")):
+            self.settings_theme.addItem(label, value)
+        self.settings_theme.setCurrentIndex(max(0, self.settings_theme.findData(self._settings.theme)))
+        self.settings_theme.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.settings_theme.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.settings_theme.currentIndexChanged.connect(self._on_settings_edited)
+        theme_row = QHBoxLayout()
+        theme_row.addWidget(QLabel(tr("Theme:")))
+        theme_row.addWidget(self.settings_theme)
+        theme_row.addStretch(1)
+        window_layout.addLayout(theme_row)
         self.settings_remember_size = QCheckBox(tr("Reopen at the size the window was last closed at"))
         self.settings_remember_size.setChecked(self._settings.remember_window_size)
         self.settings_remember_size.toggled.connect(self._on_settings_edited)
@@ -1140,7 +1183,7 @@ class MainWindow(QMainWindow):
 
         outer.addStretch(1)
         self.settings_status = QLabel()
-        self.settings_status.setStyleSheet("color: #666;")
+        theme.style(self.settings_status, "color: {muted};")
         outer.addWidget(self.settings_status)
 
         self._refresh_settings_status()
@@ -1156,7 +1199,7 @@ class MainWindow(QMainWindow):
             tr("ffmpeg {version} and ffprobe found.", version=format_version(tools.ffmpeg.version))
             if ok else " ".join(tr_message(problem) for problem in problems)
         )
-        self.settings_ffmpeg_status.setStyleSheet("color: #207020;" if ok else "color: #a03030;")
+        theme.style(self.settings_ffmpeg_status, "color: {good};" if ok else "color: {failed};")
 
         directory = result_cache.cache_dir()
         count, size_bytes = result_cache.cache_summary(directory)
@@ -1195,6 +1238,10 @@ class MainWindow(QMainWindow):
         self._settings.check_for_updates = self.settings_check_updates.isChecked()
         language_before = self._settings.language
         self._settings.language = self.settings_language.currentData() or ""
+        chosen_theme = self.settings_theme.currentData() or ""
+        if chosen_theme != self._settings.theme:
+            self._settings.theme = chosen_theme
+            theme.apply_theme(chosen_theme)  # at once; changeEvent follows
         self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
         backend = self.settings_gpu_backend.currentData() or "auto"
         if backend != self._settings.gpu_backend:
@@ -1405,7 +1452,7 @@ class MainWindow(QMainWindow):
         src_row.addWidget(src_browse)
         files_layout.addLayout(src_row)
         self.source_info_label = QLabel(tr("No reference selected."))
-        self.source_info_label.setStyleSheet("color: #666;")
+        theme.style(self.source_info_label, "color: {muted};")
         files_layout.addWidget(self.source_info_label)
 
         # The metric picker belongs to the table: every metric is a column
@@ -1583,7 +1630,7 @@ class MainWindow(QMainWindow):
         self.options_box = options_box
 
         self.panel_target_label = QLabel("")
-        self.panel_target_label.setStyleSheet("color: #666; font-style: italic;")
+        theme.style(self.panel_target_label, "color: {muted}; font-style: italic;")
         self.panel_target_label.setWordWrap(True)
         options_layout.addWidget(self.panel_target_label)
 
@@ -1756,7 +1803,7 @@ class MainWindow(QMainWindow):
         self.cvvdp_preset_combo.currentIndexChanged.connect(self._on_cvvdp_preset_chosen)
         metric_options_form.addRow(tr("CVVDP display:"), self.cvvdp_preset_combo)
         self.cvvdp_display_label = QLabel()
-        self.cvvdp_display_label.setStyleSheet("color: #666;")
+        theme.style(self.cvvdp_display_label, "color: {muted};")
         self.cvvdp_display_label.setWordWrap(True)
         metric_options_form.addRow("", self.cvvdp_display_label)
         cvvdp_buttons = QHBoxLayout()
@@ -1835,7 +1882,7 @@ class MainWindow(QMainWindow):
             tr("Cropping and scaling here affect scores. Video Compare's tone mapping and "
             "playback resolution are display-only settings and do not change calculated metrics.")
         )
-        metrics_hint.setStyleSheet("color: #666; font-style: italic;")
+        theme.style(metrics_hint, "color: {muted}; font-style: italic;")
         metrics_hint.setWordWrap(True)
         options_layout.addWidget(metrics_hint)
 
@@ -1929,7 +1976,7 @@ class MainWindow(QMainWindow):
         # One more than the CPU lanes: the video on the GPU can be a third.
         for _ in range(MAX_VIDEOS_IN_FLIGHT):
             line = ElidedLabel()
-            line.setStyleSheet("color: #444;")
+            theme.style(line, "color: {run_line};")
             line.setVisible(False)
             layout.addWidget(line)
             self.job_progress_labels.append(line)
@@ -2325,7 +2372,7 @@ class MainWindow(QMainWindow):
                     item.setData(Qt.CheckStateRole, None)
                     item.setText("n/a")
                     item.setToolTip(unavailable)
-                    item.setForeground(QColor("#888"))
+                    item.setForeground(theme.color("faint"))
                     item.setBackground(QColor(0, 0, 0, 0))
                     item.setFont(QFont())
                     continue
@@ -2343,9 +2390,7 @@ class MainWindow(QMainWindow):
                         if enabled else
                         tr("Not selected. Tick to calculate this metric.")
                     ) + (self._cvvdp_elsewhere_note(row_data) if metric_column.key == "cvvdp" else ""))
-                    item.setForeground(
-                        QColor("#a03030") if failed else self.distorted_table.palette().text()
-                    )
+                    theme.foreground(item, theme.color("failed") if failed else None)
                     item.setBackground(QColor(0, 0, 0, 0))
                     item.setFont(QFont())
                     continue
@@ -2373,7 +2418,7 @@ class MainWindow(QMainWindow):
                 font = QFont()
                 font.setBold(True)
                 item.setFont(font)
-                item.setForeground(QColor("#000"))
+                theme.foreground(item, None)
                 item.setBackground(QColor(0, 0, 0, 0))
         finally:
             self._syncing_table = False
@@ -2422,9 +2467,9 @@ class MainWindow(QMainWindow):
             # _on_job_finished. Without a mark the row would look untouched.
             colour = _STATE_COLOURS["stale"]
         else:
-            item.setForeground(self.distorted_table.palette().text())
+            theme.foreground(item, None)
             return
-        item.setForeground(QColor(colour))
+        item.setForeground(theme.color(colour))
 
     @staticmethod
     def _identical_frames_note(run: CompletedRun, column: int) -> str:
@@ -2534,9 +2579,7 @@ class MainWindow(QMainWindow):
         def show(text: str, tooltip: str, *, muted: bool = False) -> None:
             item.setText(text)
             item.setToolTip(tooltip)
-            item.setForeground(
-                QColor("#999") if muted else self.distorted_table.palette().text()
-            )
+            theme.foreground(item, theme.color("dimmed") if muted else None)
 
         if probe_failed:
             show(tr("Unknown"), tr("Black bars could not be checked because the video could not be read."), muted=True)
@@ -2666,7 +2709,7 @@ class MainWindow(QMainWindow):
             self._set_row_status(row, RowState.FAILED, error)
             item.setText(tr("Probe failed"))
             item.setToolTip(error)
-            item.setForeground(Qt.red)
+            item.setForeground(theme.color("failed"))
             self.distorted_table.item(row, COL_BITRATE).setText("")
             scaling_item.setText("")
             scaling_item.setToolTip("")
@@ -2676,7 +2719,7 @@ class MainWindow(QMainWindow):
             # Back to normal text: the placeholder shown while probing greys
             # this cell out, and leaving it grey makes a probed row look
             # disabled.
-            item.setForeground(self.distorted_table.palette().text())
+            theme.foreground(item, None)
             item.setToolTip(format_hms(info.duration, decimals=1))
             self.distorted_table.item(row, COL_BITRATE).setText(bitrate_string(info))
             self.distorted_table.item(row, COL_BITRATE).setToolTip(bitrate_note(info))

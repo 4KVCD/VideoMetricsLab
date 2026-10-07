@@ -693,7 +693,11 @@
   "No such video": "Böyle bir video yok",
   "Reopen the videos that were open when the app was last closed": "Uygulama en son kapatıldığında açık olan videoları yeniden aç",
   "The reference and the test videos, those still there. Resolution tests are not reopened.": "Hâlâ yerinde olan referans ve test videoları. Çözünürlük testleri yeniden açılmaz.",
-  "There is no file at {path}.": "{path} konumunda dosya yok."
+  "There is no file at {path}.": "{path} konumunda dosya yok.",
+  "Theme:": "Tema:",
+  "Same as Windows": "Windows ile aynı",
+  "Light": "Açık",
+  "Dark": "Koyu"
  },
  "plurals": {
   "about {count} day": [
