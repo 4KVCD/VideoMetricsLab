@@ -810,6 +810,14 @@ def test_each_gpu_makers_decoder_takes_what_ffmpeg_would_decode_with_it(hwaccel,
     assert vship._decoded_here(hwaccel, device) == expected
 
 
+@pytest.mark.parametrize("build", ["cuda", "hip", "vulkan"])
+def test_what_ffmpeg_would_decode_in_software_the_software_decoder_decodes(monkeypatch, build):
+    """Its pictures are in system memory: any build's ring takes them."""
+    monkeypatch.setattr(vship.gpu_frames, "software_bundled", lambda: True)
+    device = vship.VshipDevice(build, "GPU", 0, "5.1.1", None)
+    assert vship._decoded_here(None, device) == "software"
+
+
 def test_a_scaled_video_is_scaled_by_the_gpu_decoder_with_the_rows_algorithm(monkeypatch):
     """Scaled any way, a comparison is the same comparison (the user's
     decision): a video FFmpeg would scale is scaled where it is decoded."""

@@ -47,6 +47,29 @@ case anyone overrides that.
   style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
+- **`software_frames.dll`**, the decoder for the videos FFmpeg would decode
+  in software -- no GPU decoder takes them (VVC, AV1 on an older GPU, 10-bit
+  H.264) or GPU decoding is off -- so that their frames reach the GPU metrics
+  and the app's PSNR, SSIM and XPSNR without FFmpeg's pipes, which carry 4K
+  frames at 60-80 a second. Built from `native/software_frames.cpp` by
+  `scripts/build_gpu_frames.ps1` with the GPU decoders below, about 0.3 MB,
+  against FFmpeg's headers in `native/ffmpeg`. It decodes H.264, HEVC, VVC,
+  VP9, MPEG-2 and FFV1 with FFmpeg 9.0.2's decoders and AV1 with dav1d --
+  FFmpeg's decode's pictures, sample for sample, film grain and all. A video
+  of another codec or format, one that must be scaled, or a damaged one goes
+  through FFmpeg's pipes as before. `VML_SOFTWARE_DECODE=ffmpeg` sends them
+  all that way.
+- **FFmpeg's decoders** (`vmaf_app/tools/ffmpeg`: `avcodec-63.dll`,
+  `avutil-61.dll`, 8.4 MB), for the software frame decoder: FFmpeg 9.0.2's
+  libavcodec and libavutil with only those six decoders, configured LGPL with
+  nothing external, built from FFmpeg's release source by
+  `scripts/build_ffmpeg_decoders.ps1` (MinGW-w64 GCC and NASM; the source is
+  pinned by its SHA-256), which also vendors the headers the decoder is
+  compiled against. They are committed, as libvmaf-fast's DLLs are: building
+  the app does not build them. FFmpeg itself (`ffmpeg.exe`) is still the
+  user's. AV1 is decoded by the bundled GStreamer's `dav1d.dll`, as FFmpeg's
+  libdav1d decoder decodes it (`KEEP_LIBRARIES` in
+  `scripts/gstreamer_bundle.py`).
 - **`nvdec_frames.dll`, `vpl_frames.dll` and `amf_frames.dll`**, the
   NVIDIA, Intel and AMD decoders the GPU metrics read their frames from
   (`vmaf_app/core/gpu_frames.py`), built from `native/nvdec_frames.cpp`,
@@ -114,7 +137,9 @@ case anyone overrides that.
   the NVIDIA driver; no CUDA runtime ships. Where NVIDIA's decoder decodes both videos, they are
   decoded, scaled and widened on the GPU by `nvdec_frames.dll` in libvmaf's
   process, the user's FFmpeg only copying their compressed streams out of
-  the containers; otherwise FFmpeg decodes them. VMAF on any other GPU or the CPU, VMAF v1,
+  the containers -- and a video FFmpeg would decode in software is decoded
+  there by `software_frames.dll`, its pictures uploaded; otherwise FFmpeg
+  decodes them. VMAF on any other GPU or the CPU, VMAF v1,
   PSNR, SSIM and XPSNR still come from the user's FFmpeg. It adds about 3.3 MB installed,
   1 MB compressed. libvmaf and Vship each run in a process of their own
   (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,
@@ -145,11 +170,12 @@ case anyone overrides that.
 
 ## What is not, and why
 
-**FFmpeg and libvmaf.** The app finds them at runtime and prompts for their
-location if they are missing. They are left out deliberately (the bundled
-libvmaf above scores only VMAF and VMAF NEG on NVIDIA GPUs, and the NVIDIA
-decoder above decodes from the compressed streams the user's FFmpeg copies out
-of the containers):
+**FFmpeg (`ffmpeg.exe`, `ffprobe.exe`) and libvmaf.** The app finds them at
+runtime and prompts for their location if they are missing. They are left out
+deliberately (the bundled libvmaf above scores only VMAF and VMAF NEG on NVIDIA
+GPUs, FFmpeg's decoders above are six of libavcodec's decoders and nothing
+else, and the frame decoders above decode from the compressed streams the
+user's FFmpeg copies out of the containers):
 
 - A libvmaf-enabled FFmpeg is another ~80 MB on an already large download.
 - FFmpeg licensing depends on its build configuration and linked libraries.

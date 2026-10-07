@@ -1387,12 +1387,16 @@ _GPU_DECODERS = {"cuda": "nvidia", "qsv": "intel", "d3d11va": "amd"}
 
 
 def _decoded_here(hwaccel: str | None, device: VshipDevice) -> str | None:
-    """The GPU decoder an input FFmpeg would decode with `hwaccel` is decoded
-    by in the scoring process, or None. NVIDIA's copies each picture with the
-    GPU into the ring, which must then be CUDA's page-locked memory (Vship's
-    CUDA build); Intel's and AMD's hand pictures over in system memory, and
-    the CPU copies them into any build's ring in one pass."""
-    backend = _GPU_DECODERS.get(hwaccel or "")
+    """The decoder an input FFmpeg would decode with `hwaccel` is decoded by
+    in the scoring process, or None: the GPU's, or, for an input FFmpeg would
+    decode in software (`hwaccel` None), the software decoder. NVIDIA's copies
+    each picture with the GPU into the ring, which must then be CUDA's
+    page-locked memory (Vship's CUDA build); Intel's, AMD's and the software
+    decoder hand pictures over in system memory, and the CPU copies them into
+    any build's ring in one pass."""
+    if hwaccel is None:
+        return gpu_frames.SOFTWARE if gpu_frames.software_bundled() else None
+    backend = _GPU_DECODERS.get(hwaccel)
     if backend == "nvidia" and device.backend != "cuda":
         return None
     return backend
@@ -1428,7 +1432,7 @@ def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int]
         except gpu_frames.GpuDecodeUnavailableError as error:
             reason = str(error)
         else:
-            _log.info("Vship: the %s is decoded on the GPU (%s) in the scoring process", label, backend)
+            _log.info("Vship: the %s is decoded by the %s decoder in the scoring process", label, backend)
             return decoder
     _log.info("Vship: the %s is decoded by FFmpeg (%s)", label, reason)
     return None
@@ -1974,9 +1978,9 @@ def _score_vship_pass(
         except gpu_frames.GpuDecodeFailedError as error:
             if not native:
                 raise
-            _log.warning("GPU decoding in the Vship pass failed; decoding through FFmpeg instead: %s", error)
+            _log.warning("Decoding in the Vship pass failed; decoding through FFmpeg instead: %s", error)
             if on_status:
-                on_status(f"GPU decoding failed ({error}); decoding through FFmpeg instead…")
+                on_status(gpu_frames.decoding_failed_status(error))
             native = False
         except _FramesApartError as error:
             if every_source_frame:

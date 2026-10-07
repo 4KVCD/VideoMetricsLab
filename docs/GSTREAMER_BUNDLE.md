@@ -21,7 +21,8 @@ everything else from it:
    `capssetter`, `appsink`, `appsrc`, `playbin3`), the parsers and demuxers
    `decodebin3` needs for the files people compare, `libav` and `dav1d` for what no GPU
    decodes (VVC, 10-bit H.264, ProRes), and the soundtrack path down to
-   `wasapi2sink`.
+   `wasapi2sink`. Its dav1d library is the app's software frame decoder's
+   too (step 3).
 2. **Their dependencies**, read from the DLL import tables (normal and
    delay-loaded) with `pefile` and followed transitively across all the
    wheels. This is why an upgrade of the wheels needs no edit here: a new
@@ -31,7 +32,9 @@ everything else from it:
 3. **What imports cannot reveal**: `gst-plugin-scanner.exe` (spawned, so it
    loads plugins out of process), the two `gspawn-win64-helper*.exe` GLib
    spawns it with, `gstd3d11-1.0-0.dll` (loaded by name through ctypes for
-   the HDR tone-map), the `gi` bindings and their extension modules, and every
+   the HDR tone-map), `dav1d.dll` (loaded by its path for the software frame
+   decoder, for AV1: `vmaf_app/core/gpu_frames.py`),
+   the `gi` bindings and their extension modules, and every
    typelib (3 MB; choosing among them would save nothing worth a missed one).
 4. **Each wheel's `__init__.py`**, because `gstreamer_libs.gstreamer_env()`
    imports the other packages by name to assemble `PATH` and the plugin path.

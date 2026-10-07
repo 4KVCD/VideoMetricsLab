@@ -227,3 +227,41 @@ def test_the_probe_accepts_this_pc_and_refuses_a_gpu_that_calculates_wrongly(mon
     monkeypatch.setattr(vmaf_v1_gpu, "cpu_reference", wrong)
     available, text = vmaf_v1_gpu.probe()
     assert not available and "calculates VMAF v1 wrongly" in text
+
+
+@pytest.mark.parametrize("backend", ["cuda", "vulkan"])
+@pytest.mark.parametrize("decoder", ["nvidia", ("nvidia", "software"), ("software", "software")])
+def test_the_scorers_take_the_runs_backend_whatever_decodes_the_videos(monkeypatch, backend, decoder):
+    """The loop over the two videos' decoders once reused the name of the
+    run's backend: the scorers were then asked for the decoder's ("software")
+    instead of CUDA or Vulkan."""
+    from vmaf_app.core import gpu_frames
+
+    made = []
+
+    class StopError(Exception):
+        pass
+
+    def scorer(width, height, bit_depth, models, n_subsample, scoring, device, shared=None):
+        made.append(scoring)
+        raise StopError
+
+    class Stream:
+        handover = False
+
+        def __init__(self, info, plan, device, *, pool, process_handle, backend, handover):
+            self.backend, self.frame_bytes = backend, plan.frame_bytes
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vmaf_v1_gpu, "MultiScorer", scorer)
+    monkeypatch.setattr(gpu_frames, "available", lambda library: True)
+    monkeypatch.setattr(gpu_frames, "decoder_supports", lambda *_args: (True, ""))
+    monkeypatch.setattr(gpu_frames, "GpuFrameStream", Stream)
+    info = VideoInfo(Path("a.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p")
+    with pytest.raises(StopError):
+        vmaf_v1_gpu.score_decoded(info, info, width=64, height=48, bit_depth=8, models={"vmaf_v1": "path=x"},
+                                  n_subsample=1, duration_limit=None, total_frames=0, backend=backend,
+                                  decoder=decoder)
+    assert made == [backend]

@@ -255,6 +255,25 @@ def test_the_app_decodes_when_one_gpu_decodes_both_and_nothing_is_scaled():
     assert not vr._decoded_in_app(prores, test, None, None, (1920, 1080), cuda)
 
 
+def test_a_video_ffmpeg_would_decode_in_software_is_decoded_by_the_apps_software_decoder(monkeypatch):
+    """With the software decoder bundled, a VVC test video beside an HEVC
+    source NVIDIA decodes is decoded in the app too, and so are two videos
+    FFmpeg would decode in software."""
+    monkeypatch.setattr(vr.gpu_frames, "software_bundled", lambda: True)
+    source = _info("s.mkv")
+    vvc = VideoInfo(Path("d.mkv"), 1920, 1080, 24.0, 10.0, 240, "vvc", pix_fmt="yuv420p10le")
+    for hwaccel in (HwAccelPlan(source="cuda"), HwAccelPlan(), HwAccelPlan(distorted="qsv")):
+        assert vr._decoded_in_app(source, vvc if hwaccel.distorted is None else source, None, None, (1920, 1080),
+                                  hwaccel)
+    assert vr._decoders_here(HwAccelPlan(source="cuda")) == ("nvidia", "software")
+    # A codec only the software decoder takes, planned for a GPU's: FFmpeg decodes.
+    assert not vr._decoded_in_app(source, vvc, None, None, (1920, 1080), HwAccelPlan("cuda", "cuda"))
+    # Two GPU makers' decoders are not tried together.
+    assert vr._decoders_here(HwAccelPlan("qsv", "cuda")) is None
+    monkeypatch.setattr(vr.gpu_frames, "software_bundled", lambda: False)
+    assert not vr._decoded_in_app(source, vvc, None, None, (1920, 1080), HwAccelPlan(source="cuda"))
+
+
 @needs_libvmaf
 @pytest.mark.parametrize(("hwaccel", "in_the_app"), [
     (HwAccelPlan(source="cuda", distorted="cuda"), True),

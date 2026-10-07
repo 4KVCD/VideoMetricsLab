@@ -132,6 +132,9 @@ def isolate_user_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(perceptual_vship, "_native_decoder", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(vmaf_runner, "_score_decoded_on_gpu", ffmpeg_decodes)
+    # And the software decoder: whether its library was built on this PC (it
+    # is not in git) must not change which way a test's run goes.
+    monkeypatch.setattr(gpu_frames, "software_bundled", lambda: False)
     # PSNR and SSIM are FFmpeg's libvmaf filter's unless a test asks for the
     # app's own (vmaf_runner._run_cpu_metrics): it runs in a process of its
     # own, which a test faking FFmpeg's run would start for real.

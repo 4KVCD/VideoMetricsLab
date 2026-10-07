@@ -842,17 +842,20 @@ def score_decoded(
     SpEED reads the chroma -- cropped, scaled and widened there, paired as
     libvmaf's filter pairs them (frame_sync), and each pair given to the
     run's scorers (MultiScorer). FFmpeg only copies the compressed streams
-    out of their containers."""
+    out of their containers. `decoder`: gpu_frames' library, one for both
+    videos or (the source's, the test video's)."""
     import time
     from dataclasses import replace
 
     from vmaf_app.core import gpu_frames
     from vmaf_app.core.frame_sync import frame_pairs
 
-    if not gpu_frames.available(decoder):
-        raise gpu_frames.GpuDecodeUnavailableError(f"the {decoder} decoder library is not bundled")
+    source_decoder, test_decoder = gpu_frames.decoder_pair(decoder)
+    for library in (source_decoder, test_decoder):
+        if not gpu_frames.available(library):
+            raise gpu_frames.GpuDecodeUnavailableError(f"the {library} decoder library is not bundled")
     plans = []
-    for info, crop in ((distorted, distorted_crop), (source, source_crop)):
+    for info, crop, library in ((distorted, distorted_crop, test_decoder), (source, source_crop, source_decoder)):
         plan = gpu_frames.plan_decode(info, crop, shift=6, size=(width, height), algorithm=scale_algorithm)
         if plan.bit_depth < bit_depth:
             full = (info.color_range or "").casefold() in {"pc", "jpeg", "full"} or (
@@ -861,7 +864,7 @@ def score_decoded(
         if plan.bit_depth > bit_depth:
             raise gpu_frames.GpuDecodeUnavailableError(
                 f"the videos are compared at {bit_depth} bits and one is {plan.bit_depth}-bit")
-        supported, refusal = gpu_frames.decoder_supports(0, plan, decoder)
+        supported, refusal = gpu_frames.decoder_supports(0, plan, library)
         if not supported:
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
@@ -874,20 +877,23 @@ def score_decoded(
     # (native/mf_frames.cpp): the speed the same (1080p: 251.0 -> 251.3 fps),
     # the GPU memory less -- the engine's buffers for the planes are not made
     # (1080p: 342 -> 291 MB committed).
-    pool = 6 if backend == "vulkan" and V1_KEY in models and gpu_frames.hands_over_textures(decoder) else 4
+    pool = 6 if (backend == "vulkan" and V1_KEY in models and source_decoder == test_decoder
+                 and gpu_frames.hands_over_textures(test_decoder)) else 4
     test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=pool, process_handle=process_handle,
-                                     backend=decoder, handover=True)
+                                     backend=test_decoder, handover=True)
     try:
         ref = gpu_frames.GpuFrameStream(source, plans[1], 0, pool=pool, process_handle=process_handle,
-                                        backend=decoder, handover=True)
+                                        backend=source_decoder, handover=True)
     except BaseException:
         test.close()
         raise
     scorer = None
     try:
         # Its pictures stay on the GPU, and reach libvmaf's without a CPU copy:
-        # NVIDIA's, and AMD's handing over (to Vulkan only, not libvmaf's CUDA).
-        if test.handover and ref.handover and (decoder == "nvidia" or backend == "vulkan"):
+        # NVIDIA's, and AMD's handing over (to Vulkan only, not libvmaf's CUDA)
+        # -- one decoder's for both videos.
+        if (test.handover and ref.handover and source_decoder == test_decoder
+                and (test_decoder == "nvidia" or backend == "vulkan")):
             try:
                 scorer = MultiScorer(width, height, bit_depth, models, n_subsample, backend, device, shared=test,
                                      pictures=pool > 4 and test.gives_textures and ref.gives_textures)
