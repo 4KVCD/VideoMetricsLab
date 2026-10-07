@@ -21,10 +21,11 @@ V1 = f"path={MODELS / 'vmaf_v1.0.16' / 'vmaf_v1.0.16_3d0h.json'}"
 W, H = 640, 360
 
 
-def _clip(path: Path, pix_fmt: str, quality: int) -> Path:
+def _clip(path: Path, pix_fmt: str, quality: int, codec: str = "hevc") -> Path:
+    encoder = ["-c:v", "libx264", "-qp", str(quality)] if codec == "h264" else         ["-c:v", "libx265", "-x265-params", f"qp={quality}:log-level=error"]
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
-                    "-i", f"testsrc2=s={W}x{H}:r=24000/1001:d=1", "-pix_fmt", pix_fmt, "-c:v", "libx265",
-                    "-preset", "ultrafast", "-x265-params", f"qp={quality}:log-level=error", str(path)], check=True)
+                    "-i", f"testsrc2=s={W}x{H}:r=24000/1001:d=1", "-pix_fmt", pix_fmt, "-preset", "ultrafast",
+                    *encoder, str(path)], check=True)
     return path
 
 
@@ -173,18 +174,21 @@ def _amd_gives_textures(info, bits: int) -> bool:
         return False
 
 
-@pytest.mark.parametrize(("models", "n_subsample"), [({"vmaf_v1": V1}, 1), ({"vmaf_v1": V1}, 2),
-                                                     ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, 1)],
-                         ids=["v1", "v1-every-2nd", "vulkan+v1"])
-def test_vmaf_v1_scores_the_same_from_amds_textures_as_from_copies(tmp_path, monkeypatch, models, n_subsample):
-    """Vulkan VMAF reading the HEVC pictures where Windows' decoder left them
+@pytest.mark.parametrize(("models", "n_subsample", "codec"), [({"vmaf_v1": V1}, 1, "hevc"), ({"vmaf_v1": V1}, 2, "hevc"),
+                                                              ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, 1, "hevc"),
+                                                              ({"vmaf_v1": V1}, 1, "h264")],
+                         ids=["v1", "v1-every-2nd", "vulkan+v1", "v1-h264"])
+def test_vmaf_v1_scores_the_same_from_amds_textures_as_from_copies(tmp_path, monkeypatch, models, n_subsample, codec):
+    """Vulkan VMAF reading the pictures where Windows' decoder left them
     (vv_pictures, their slots given back once the GPU has read them) scores
-    what it scores from the pictures copied into its memory."""
-    source = probe_video(_clip(tmp_path / "source.mkv", "yuv420p10le", 4))
-    distorted = probe_video(_clip(tmp_path / "distorted.mkv", "yuv420p10le", 38))
-    if not _amd_gives_textures(source, 10):
+    what it scores from the pictures copied into its memory: HEVC's, and
+    H.264's (layers of a texture array, copied into textures of their own)."""
+    pix_fmt, bits = ("yuv420p", 8) if codec == "h264" else ("yuv420p10le", 10)
+    source = probe_video(_clip(tmp_path / "source.mkv", pix_fmt, 4, codec))
+    distorted = probe_video(_clip(tmp_path / "distorted.mkv", pix_fmt, 38, codec))
+    if not _amd_gives_textures(source, bits):
         pytest.skip("no AMD GPU whose Windows decoder gives its pictures as textures")
-    arguments = dict(width=W, height=H, bit_depth=10, models=models, n_subsample=n_subsample, duration_limit=None,
+    arguments = dict(width=W, height=H, bit_depth=bits, models=models, n_subsample=n_subsample, duration_limit=None,
                      total_frames=0, backend="vulkan", decoder="amd")
     used = []
     real = vmaf_v1_gpu.V1Scorer.add_decoded

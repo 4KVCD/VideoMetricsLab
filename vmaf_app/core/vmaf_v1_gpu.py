@@ -859,12 +859,13 @@ def score_decoded(
     # Pictures the engine reads where the decoder left them (V1Scorer's
     # pictures) stay the decoder's until the GPU is done with them: two pairs
     # being matched up, the frames in flight (3) and the reference before for
-    # motion, which takes six of a decoder's slots. Not for two H.264 videos:
-    # Windows' H.264 decoder's pictures are layers of a texture array, copied
-    # into textures of their own anyway (native/mf_frames.cpp) -- no copy saved
-    # (1080p H.264: 314 -> 309 fps; 4K HEVC: 98.2 -> 106.1).
-    pool = 6 if (backend == "vulkan" and V1_KEY in models and gpu_frames.hands_over_textures(decoder)
-                 and any(plan.codec != "h264" for plan in plans)) else 4
+    # motion, which takes six of a decoder's slots (4K HEVC: 98.2 -> 106.1
+    # fps). Two H.264 videos too, though Windows' H.264 decoder's pictures are
+    # layers of a texture array, copied into textures of their own anyway
+    # (native/mf_frames.cpp): the speed the same (1080p: 251.0 -> 251.3 fps),
+    # the GPU memory less -- the engine's buffers for the planes are not made
+    # (1080p: 342 -> 291 MB committed).
+    pool = 6 if backend == "vulkan" and V1_KEY in models and gpu_frames.hands_over_textures(decoder) else 4
     test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=pool, process_handle=process_handle,
                                      backend=decoder, handover=True)
     try:
