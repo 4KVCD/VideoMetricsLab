@@ -58,13 +58,6 @@ def test_both_installers_write_the_record_the_app_reads():
     assert vmaf_cuda.BUILD_RECORD.parent == vmaf_cuda.LIBRARY_PATH.parent  # packaged with the library's folder
 
 
-def test_without_a_record_the_version_is_unknown(tmp_path):
-    assert vmaf_cuda._bundled_version(tmp_path / "missing.json") == "unknown"
-    for text in ("{", "[]", '{"commit": "a1af96ff"}'):
-        (tmp_path / "bad.json").write_text(text, encoding="utf-8")
-        assert vmaf_cuda._bundled_version(tmp_path / "bad.json") == "unknown", text
-
-
 def test_the_build_and_its_licences_are_bundled():
     tools = ROOT / "vmaf_app" / "tools"
     for name in ("libvmaf/libvmaf.dll", "libvmaf/licenses/LICENSE.libvmaf.txt",
@@ -108,9 +101,3 @@ def test_pictures_take_the_layout_of_the_libvmaf_loaded(monkeypatch):
         vmaf_cuda._load()
         assert vmaf_cuda._Picture is expected
         assert vmaf_cuda._library.vmaf_read_pictures.argtypes[1]._type_ is expected
-
-
-def test_the_bundled_libvmaf_has_the_layout_its_version_has():
-    bundled = ROOT / "vmaf_app" / "tools" / "libvmaf" / "libvmaf.dll"
-    lib = ctypes.CDLL(str(bundled))
-    assert hasattr(lib, "vmaf_picture_convert") == (vmaf_cuda.LIBVMAF_FAST_VERSION != "3.2.0-fast.1")

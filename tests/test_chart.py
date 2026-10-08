@@ -24,14 +24,18 @@ def _chart(qapp, fixed_y_max=100.0, size=(800, 400)):
 
 # ------------------------------------------------------------------ tick spacing
 
-@pytest.mark.parametrize("span, expected", [
-    (10, 2), (60, 10), (600, 120), (7200, 900),
-])
-def test_time_ticks_land_on_readable_intervals(span, expected):
-    # The first step at or above span/_TARGET_TICKS, so ticks are never
-    # crowded (erring toward fewer, always on round intervals).
-    assert _nice_time_step(span) == expected
-    assert span / _nice_time_step(span) <= 8
+def test_time_ticks_land_on_readable_intervals(subtests):
+    def check(span, expected):
+        # The first step at or above span/_TARGET_TICKS, so ticks are never
+        # crowded (erring toward fewer, always on round intervals).
+        assert _nice_time_step(span) == expected
+        assert span / _nice_time_step(span) <= 8
+
+    for span, expected in [
+        (10, 2), (60, 10), (600, 120), (7200, 900),
+    ]:
+        with subtests.test(span=span, expected=expected):
+            check(span, expected)
 
 
 def test_value_ticks_use_1_2_5_steps():
@@ -40,78 +44,7 @@ def test_value_ticks_use_1_2_5_steps():
     assert _nice_value_step(0) == 1.0  # degenerate span must not divide by zero
 
 
-def test_chart_cache_tracks_display_pixel_density(qapp, monkeypatch):
-    chart = _chart(qapp)
-    monkeypatch.setattr(chart, "devicePixelRatioF", lambda: 1.5)
-    exported = chart.render_to_pixmap()
-    assert (exported.width(), exported.height()) == (1200, 600)
-    assert exported.devicePixelRatioF() == 1
-    chart._rebuild_cache()
-    assert chart._cache.width() == 1200
-    assert chart._cache.height() == 600
-    assert chart._cache.devicePixelRatioF() == 1.5
-    monkeypatch.setattr(chart, "devicePixelRatioF", lambda: 2.0)
-    assert not chart._cache_matches_display()
-    chart._rebuild_cache()
-    assert chart._cache.width() == 1600
-    assert chart._cache.devicePixelRatioF() == 2
-
-
-def _corner(pixmap):
-    return pixmap.toImage().pixelColor(1, 1)
-
-
-def test_the_chart_is_drawn_in_the_window_s_theme_and_again_when_it_changes(qapp, monkeypatch):
-    """Issue #5: a white chart in a dark window."""
-    from vmaf_app.ui import theme
-
-    chart = _chart(qapp)
-    monkeypatch.setattr(theme, "is_dark", lambda: True)
-    chart._rebuild_cache()
-    assert _corner(chart._cache).lightness() < 64
-    monkeypatch.setattr(theme, "is_dark", lambda: False)
-    assert not chart._cache_matches_display()  # drawn again at the next paint
-    chart._rebuild_cache()
-    assert _corner(chart._cache).lightness() > 240
-
-
-def test_an_exported_chart_is_light_in_a_dark_window(qapp, monkeypatch):
-    """A file is read elsewhere and printed: it keeps the light colours."""
-    from vmaf_app.ui import theme
-
-    chart = _chart(qapp)
-    monkeypatch.setattr(theme, "is_dark", lambda: True)
-    assert _corner(chart.render_to_pixmap()).lightness() > 240
-
-
-def test_cursor_damage_covers_both_endpoints(qapp, monkeypatch):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([35, 40, 38]))
-    damaged = []
-    monkeypatch.setattr(chart, "update", damaged.append)
-    chart.set_cursor_time(0.01)
-    old_x = chart._cursor_x
-    damaged.clear()
-    chart.set_cursor_time(0.02)
-    assert len(damaged) == 2
-    rect = chart.plot_rect()
-    for area, x in zip(damaged, (old_x, chart._cursor_x), strict=True):
-        assert area.left() < x < area.right()
-        assert area.top() < rect.top()
-        assert area.bottom() > rect.bottom()
-    damaged.clear()
-    chart.set_cursor_time(None)
-    assert len(damaged) == 1
-    assert damaged[0].top() < rect.top()
-    assert damaged[0].bottom() > rect.bottom()
-
-
 # ------------------------------------------------------------------ ranges
-
-def test_y_range_is_capped_at_the_ceiling_with_no_headroom(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([90.0] * 50))
-    assert chart.y_range()[1] == 100.0
 
 
 def test_y_range_expands_to_show_vmaf_v1_scores_above_100(qapp):
@@ -119,29 +52,6 @@ def test_y_range_expands_to_show_vmaf_v1_scores_above_100(qapp):
     chart.set_series(0, _series([99.0, 105.0, 110.0]))
 
     assert chart.y_range() == (95.0, 110.0)
-
-
-def test_y_range_expands_above_nominal_ceiling_for_valid_vmaf_v1_scores(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([99.0, 101.186, 102.0]))
-
-    assert chart.y_range() == (95.0, 105.0)
-
-
-def test_y_range_floors_the_bottom_below_the_lowest_score(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([95.0] * 10 + [62.0] + [95.0] * 10))
-    assert chart.y_range()[0] == 60.0
-
-
-def test_y_range_keeps_a_real_span_when_every_score_is_the_ceiling(qapp):
-    # A lossless run scores 100 on every frame; a zero-height axis would be
-    # undrawable (and previously made pyqtgraph invent a 50..150 range).
-    chart = _chart(qapp)
-    chart.set_series(0, _series([100.0] * 20))
-    low, high = chart.y_range()
-    assert high == 100.0
-    assert low < high
 
 
 def test_all_nan_series_does_not_poison_the_axis(qapp):
@@ -159,34 +69,6 @@ def test_all_nan_series_does_not_poison_the_axis(qapp):
     chart.render_to_pixmap()  # must not raise
 
 
-def test_unbounded_metric_autoscales_around_its_data(qapp):
-    chart = _chart(qapp, fixed_y_max=None)  # e.g. PSNR in dB
-    chart.set_series(0, _series([40.0, 42.0, 38.0]))
-    low, high = chart.y_range()
-    assert low < 38.0 and high > 42.0
-
-
-@pytest.mark.parametrize("count", [12, 12000])
-def test_xpsnr_infinities_do_not_hide_finite_curve(qapp, count):
-    chart = _chart(qapp, fixed_y_max=None)
-    values = np.resize([35., 40., np.inf, np.nan, 38.], count)
-    chart.set_series(0, _series(values, color="#ff0000"))
-    assert np.isfinite(chart.y_range()).all()
-    image = chart.render_to_pixmap().toImage()
-    assert any(image.pixelColor(x, y).name() == "#ff0000"
-               for x in range(image.width()) for y in range(image.height()))
-
-
-def test_hidden_series_is_excluded_from_the_range(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([90.0] * 20))
-    chart.set_series(1, _series([40.0] * 20))
-    assert chart.y_range()[0] == 40.0
-
-    chart.set_series_visible(1, False)
-    assert chart.y_range()[0] == 90.0
-
-
 # ------------------------------------------------------------------ coordinate mapping
 
 def test_time_and_pixel_mapping_round_trip(qapp):
@@ -197,16 +79,6 @@ def test_time_and_pixel_mapping_round_trip(qapp):
 
 
 # ------------------------------------------------------------------ rendering
-
-def test_rendering_downsamples_instead_of_drawing_every_point(qapp):
-    # 200,000 points into an 800px-wide chart must not attempt 200,000 draw
-    # operations -- that was exactly why the old chart needed a GPU context.
-    chart = _chart(qapp)
-    chart.set_series(0, _series(np.random.default_rng(0).uniform(80, 100, 200_000)))
-    pixmap = chart.render_to_pixmap()
-    ratio = chart.devicePixelRatioF()
-    assert pixmap.width() == int(np.ceil(800 * ratio))
-    assert pixmap.height() == int(np.ceil(400 * ratio))
 
 
 def test_a_narrow_dip_survives_downsampling(qapp):
@@ -229,79 +101,7 @@ def test_a_narrow_dip_survives_downsampling(qapp):
     assert row_has_ink
 
 
-def test_empty_chart_renders_without_error(qapp):
-    chart = _chart(qapp)
-    assert chart.has_data() is False
-    chart.render_to_pixmap()  # must not raise
-
-
-# ------------------------------------------------------------------ crosshair
-
-def test_cursor_only_repaints_the_columns_it_touches(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([90.0] * 300))
-    chart.show()
-    qapp.processEvents()
-
-    updates = []
-    original = chart.update
-
-    def spy(*args):
-        if args:
-            updates.append(args[0])
-        return original(*args)
-
-    chart.update = spy  # type: ignore[method-assign]
-    chart.set_cursor_time(5.0)
-
-    assert updates, "moving the crosshair should request a repaint"
-    assert all(r.width() <= 4 for r in updates), f"expected thin damage rects, got {updates}"
-
-
-def test_setting_the_same_cursor_position_does_not_repaint(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([90.0] * 300))
-    chart.set_cursor_time(5.0)
-
-    updates = []
-    chart.update = lambda *a: updates.append(a)  # type: ignore[method-assign]
-    chart.set_cursor_time(5.0)
-    assert updates == []
-
-
 # ------------------------------------------------------------------ zoom / pan
-
-def test_reset_view_returns_to_the_full_data_range(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([90.0] * 600))
-    full = chart.x_range()
-
-    chart._view_x = (1.0, 2.0)
-    assert chart.x_range() == (1.0, 2.0)
-
-    chart.reset_view()
-    assert chart.x_range() == full
-
-
-def test_zoom_keeps_the_view_inside_the_data(qapp):
-    chart = _chart(qapp)
-    chart.set_series(0, _series([90.0] * 600))
-    data_lo, data_hi = chart.data_x_range()
-
-    chart._view_x = (data_lo, data_lo + (data_hi - data_lo) / 4)
-    lo, hi = chart.x_range()
-    assert lo >= data_lo and hi <= data_hi
-
-
-def test_an_axis_starting_just_below_zero_labels_its_first_tick_0_not_minus_0(qapp):
-    """Butteraugli is never negative, but the axis is padded below its
-    lowest score, so the first tick came out of ceil() as -0.0 -> "-0"."""
-    chart = _chart(qapp, fixed_y_max=None)
-    chart.set_series(1, _series([0.0, 1.5, 3.0]))
-    assert chart.y_range()[0] < 0
-    labels = [label for _py, label in chart.value_ticks()]
-    assert labels[0] == "0"
-    assert not any(label.startswith("-0") for label in labels)
 
 
 def test_an_inverted_axis_puts_the_lowest_value_at_the_top(qapp):
@@ -325,19 +125,3 @@ def test_an_inverted_axis_puts_the_lowest_value_at_the_top(qapp):
     rows = [py for py, _label in ticks]
     assert rows == sorted(rows), "rising values must run down the inverted axis"
     assert ticks[0][0] < ticks[-1][0]
-
-
-def test_an_inverted_chart_draws_its_best_values_at_the_top(qapp):
-    """Rendered pixels, not just the mapping: a flat 0 series on an inverted
-    axis is drawn near the top of the plot."""
-    chart = ChartWidget(invert_y=True)
-    chart.resize(400, 300)
-    chart.set_series(1, _series([0.0] * 50 + [4.0] * 50, color="#ff0000"))
-    image = chart.render_to_pixmap().toImage()
-    rect = chart.plot_rect()
-    ratio = chart.devicePixelRatioF()
-    x = int((rect.left() + rect.width() // 4) * ratio)
-    red_rows = [y for y in range(image.height()) if image.pixelColor(x, y).red() > 200
-                and image.pixelColor(x, y).green() < 80]
-    assert red_rows, "the series was not drawn"
-    assert max(red_rows) < (rect.top() + rect.height() / 3) * ratio

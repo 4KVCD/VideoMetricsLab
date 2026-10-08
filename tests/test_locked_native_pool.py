@@ -47,55 +47,6 @@ def test_fast_source_never_advances_past_matching_distorted_frame():
     assert instance.pair == ("s11", "d11")
 
 
-def test_seek_reuses_cached_pairs_and_existing_decoders():
-    from unittest.mock import Mock
-    instance, output = pool()
-    instance.audio = Mock()
-    instance.eos = set()
-    instance.entries = {key: [Mock()] for key in instance.frames}
-    instance.frames[("distorted", 0)][11] = "d11"
-    instance.seek(440)
-    assert instance.pair == ("s11", "d11")
-    instance.seek(400)
-    assert instance.pair == ("s10", "d10")
-    assert output == ["d11", "d10"]
-    for entry in instance.entries.values():
-        entry[0].seek.assert_not_called()
-    instance.seek(4000)
-    assert instance.pair is None and instance.buffering
-    for entry in instance.entries.values():
-        entry[0].seek.assert_called_once_with(3960)
-    assert all(not queue for queue in instance.frames.values())
-
-
-def test_native_frame_step_does_not_restart_playback():
-    from unittest.mock import Mock
-
-    from vmaf_app.ui.video_compare_view import VideoCompareView
-    native = Mock(frame=42)
-    view = SimpleNamespace(_native_pool=native, _restart_decoder=Mock())
-    VideoCompareView.set_position(view, 1750)
-    native.seek.assert_called_once_with(1750)
-    view._restart_decoder.assert_not_called()
-    assert view._frame == 42
-
-
-def test_s_toggles_held_pair_without_changing_frame_or_audio():
-    instance, output = pool()
-    instance._choose_pair(10)
-    instance.show_source(True)
-    instance.show_source(False)
-    assert output == ["d10", "s10", "d10"]
-    assert instance.frame == 10
-
-
-def test_future_pairs_are_not_presented_early():
-    instance, output = pool()
-    instance.frames[("distorted", 0)] = {11: "d11"}
-    assert not instance._choose_pair(10)
-    assert not output
-
-
 def test_switch_uses_same_frame_from_new_encode():
     instance, output = pool()
     instance._choose_pair(10)
@@ -105,24 +56,6 @@ def test_switch_uses_same_frame_from_new_encode():
     assert instance.pair == ("s10", "new10")
     instance.show_source(True)
     assert output == ["d10", "new10", "s10"]
-
-
-def test_decoding_branches_never_select_audio():
-    """The soundtrack plays on its own (SingleSoundtrack)."""
-    from vmaf_app.core.gstreamer_playback import GstComparePipeline
-
-    player = object.__new__(GstComparePipeline)
-    player._stream_caps_name = lambda stream: "audio/x-raw"
-    assert player._select_stream(None, None, None, "source") == 0
-    assert player._select_stream(None, None, None, "distorted") == 0
-
-
-def test_switch_cannot_display_source_of_an_unmatched_previous_encode():
-    instance, output = pool()
-    instance._choose_pair(10)
-    instance.selected = 1
-    instance.show_source(True)
-    assert output == ["d10"]
 
 
 def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume():

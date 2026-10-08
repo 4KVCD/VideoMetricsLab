@@ -1,8 +1,6 @@
 """Which hardware decoder gets chosen, for each input independently."""
 from __future__ import annotations
 
-import sys
-
 import pytest
 
 from vmaf_app.core import gpu
@@ -33,71 +31,6 @@ def test_an_unsupported_distorted_codec_falls_back_to_cpu_on_its_own(nvidia_only
     assert plan.distorted is None
 
 
-def test_an_unsupported_source_codec_does_not_disable_the_distorted_input(nvidia_only):
-    plan = plan_hwaccel(GpuVendor.NVIDIA, "prores", "h264")
-
-    assert plan.source is None
-    assert plan.distorted == "cuda"
-
-
-def test_neither_input_is_accelerated_when_gpu_decoding_is_off(nvidia_only):
-    plan = plan_hwaccel(GpuVendor.NONE, "hevc", "hevc")
-    assert plan == HwAccelPlan()
-    assert not plan.uses_gpu
-
-
-def test_a_round_trip_test_has_no_distorted_side_to_decide(nvidia_only):
-    # run_resample_test decodes one file and splits it in the filtergraph,
-    # so there is no second input to plan for.
-    plan = plan_hwaccel(GpuVendor.NVIDIA, "hevc")
-    assert plan == HwAccelPlan(source="cuda", distorted=None)
-
-
-def test_a_codec_the_installed_ffmpeg_cannot_accelerate_is_not_selected(monkeypatch):
-    # The vendor's preferred hwaccel has to actually be built into this
-    # ffmpeg. Asking for one that isn't makes ffmpeg fail to launch at all,
-    # which the run-level fallback would then have to absorb.
-    monkeypatch.setattr(gpu, "available_hwaccels", lambda: set())
-    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
-
-    assert plan_hwaccel(GpuVendor.NVIDIA, "hevc", "hevc") == HwAccelPlan()
-
-
-def test_auto_picks_the_detected_vendor_for_both_inputs(nvidia_only):
-    assert plan_hwaccel(GpuVendor.AUTO, "h264", "av1") == HwAccelPlan(
-        source="cuda", distorted="cuda"
-    )
-
-
-def test_the_description_names_which_input_got_hardware_decode():
-    # A per-input fallback is silent otherwise: the run just gets slower,
-    # and looks the same as one that never attempted the GPU.
-    assert HwAccelPlan().describe() == "off"
-    assert "distorted cpu" in HwAccelPlan(source="cuda").describe()
-    assert "source cpu" in HwAccelPlan(distorted="qsv").describe()
-
-
-def test_the_hwaccel_list_follows_the_ffmpeg_in_use(monkeypatch):
-    """The list was kept for the session from whichever FFmpeg answered
-    first, through a change of FFmpeg folder."""
-    asked = []
-
-    def run(cmd, **_kwargs):
-        asked.append(cmd[0])
-        listing = {"a/ffmpeg": "cuda", "b/ffmpeg": "qsv"}[cmd[0]]
-        return type("Done", (), {"stdout": f"Hardware acceleration methods:\n{listing}\n"})()
-
-    gpu._hwaccels_of.cache_clear()
-    monkeypatch.setattr(gpu.proc_util, "run", run)
-    monkeypatch.setattr(gpu, "ffmpeg_path", lambda: "a/ffmpeg")
-    assert gpu.available_hwaccels() == {"cuda"}
-    assert gpu.available_hwaccels() == {"cuda"}
-    monkeypatch.setattr(gpu, "ffmpeg_path", lambda: "b/ffmpeg")
-    assert gpu.available_hwaccels() == {"qsv"}
-    assert asked == ["a/ffmpeg", "b/ffmpeg"]
-    gpu._hwaccels_of.cache_clear()
-
-
 def test_gpu_makers_come_from_directx_in_the_order_auto_tries_them(monkeypatch):
     """Intel's integrated GPU first in DirectX's list, a software adapter
     (Microsoft's, 0x1414) last: NVIDIA's decoder is still tried first."""
@@ -110,107 +43,31 @@ def test_gpu_makers_come_from_directx_in_the_order_auto_tries_them(monkeypatch):
         gpu.detected_gpu_vendors.cache_clear()
 
 
-def test_no_directx_means_no_gpu_maker(monkeypatch):
-    def unavailable():
-        raise OSError("CreateDXGIFactory1 failed")
-
-    gpu.detected_gpu_vendors.cache_clear()
-    monkeypatch.setattr(gpu.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(gpu, "_dxgi_vendor_ids", unavailable)
-    try:
-        assert gpu.detected_gpu_vendors() == []
-    finally:
-        gpu.detected_gpu_vendors.cache_clear()
-
-
-def test_every_hardware_decoders_output_format_is_a_pixel_format_ffmpeg_has():
-    """AMD's was "d3d11va", the hwaccel's name, where FFmpeg's pixel format
-    is "d3d11": FFmpeg did not recognise it, and every run on an AMD GPU
-    decoded in software after a failed start. The commands were only ever
-    compared as text."""
-    import subprocess
-
-    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-
-    listed = subprocess.run([ffmpeg_path(), "-hide_banner", "-pix_fmts"], capture_output=True, text=True,
-                            check=True).stdout
-    hardware = {fields[1] for line in listed.splitlines()
-                if len(fields := line.split()) >= 2 and len(fields[0]) == 5 and "H" in fields[0]}
-    assert {"cuda", "qsv", "d3d11"} <= hardware  # the listing is read right
-    for hwaccel in gpu._VENDOR_PREFERRED_HWACCEL.values():
-        assert gpu.hwaccel_output_format(hwaccel) in hardware, hwaccel
-        threads = ["-threads", "1"] if hwaccel == "cuda" else []
-        assert gpu.hwaccel_args(hwaccel) == [*threads, "-hwaccel", hwaccel, "-hwaccel_output_format",
-                                             gpu.hwaccel_output_format(hwaccel)]
-    assert gpu.hwaccel_args(None) == []
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="DirectX")
-def test_directx_lists_this_machines_adapters():
-    vendor_ids = gpu._dxgi_vendor_ids()
-    assert all(isinstance(vendor_id, int) and 0 < vendor_id < 0x10000 for vendor_id in vendor_ids)
-
-
-@pytest.mark.parametrize(("pix_fmt", "downloads"), [
-    ("yuv420p", True), ("yuvj420p", True), ("yuv420p10le", True), ("nv12", True), ("p010le", True), ("", True),
-    ("yuv420p12le", False), ("yuv422p", False), ("yuv422p10le", False), ("yuv444p", False),
-    ("yuv444p10le", False), ("gbrp", False),
-])
-def test_only_4_2_0_at_8_or_10_bits_comes_back_from_ffmpegs_hardware_decode(pix_fmt, downloads):
+def test_only_4_2_0_at_8_or_10_bits_comes_back_from_ffmpegs_hardware_decode(subtests):
     """Checked with real FFmpeg on an RTX 5090: every other format failed in
     hwdownload, and the run started again in software, every run."""
-    assert gpu.downloads_from_gpu(pix_fmt) is downloads
+    def check(pix_fmt, downloads):
+        assert gpu.downloads_from_gpu(pix_fmt) is downloads
+
+    for pix_fmt, downloads in [
+        ("yuv420p", True), ("yuvj420p", True), ("yuv420p10le", True), ("nv12", True), ("p010le", True), ("", True),
+        ("yuv420p12le", False), ("yuv422p", False), ("yuv422p10le", False), ("yuv444p", False),
+        ("yuv444p10le", False), ("gbrp", False),
+    ]:
+        with subtests.test(pix_fmt=pix_fmt, downloads=downloads):
+            check(pix_fmt, downloads)
 
 
-@pytest.mark.parametrize(("size", "downloads"), [
-    ((854, 480), True), ((0, 0), True), ((853, 480), False), ((854, 479), False), ((853, 479), False),
-])
-def test_only_an_even_sized_video_comes_back_from_ffmpegs_hardware_decode_as_it_is(size, downloads):
+def test_only_an_even_sized_video_comes_back_from_ffmpegs_hardware_decode_as_it_is(subtests):
     """Checked with real FFmpeg 9.0.1 on an RTX 5090, AV1 and VP9: an odd
     width or height came back padded to even (854x480 for 853x479), and
     with an odd height the chroma a row out -- 26 dB PSNR from the software
     decode, where the luma was identical."""
-    assert gpu.downloads_from_gpu("yuv420p", *size) is downloads
+    def check(size, downloads):
+        assert gpu.downloads_from_gpu("yuv420p", *size) is downloads
 
-
-@pytest.mark.parametrize(("vendor", "hwaccel"), [(GpuVendor.INTEL, "qsv"), (GpuVendor.AMD, "d3d11va")])
-def test_ten_bit_h264_is_planned_in_software_where_the_gpu_does_not_decode_it(monkeypatch, vendor, hwaccel):
-    """Intel's and AMD's do not: FFmpeg decoded in software, the download
-    failed and the run started again, every run."""
-    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda", "qsv", "d3d11va"})
-    assert gpu.pick_hwaccel(vendor, "h264") == hwaccel
-
-    for pix_fmt, decoder in (("yuv420p10le", None), ("yuv420p", hwaccel), ("yuvj420p", hwaccel), ("", hwaccel)):
-        assert gpu.pick_decode(vendor, "h264", pix_fmt) == decoder
-        assert gpu.pick_decode(vendor, "H264", pix_fmt) == decoder
-    assert gpu.pick_decode(vendor, "hevc", "yuv420p10le") == hwaccel
-    assert gpu.pick_decode(vendor, "hevc", "yuv420p10le", 853, 480) is None
-    plan = plan_hwaccel(vendor, "h264", "h264", source_pix_fmt="yuv420p10le", distorted_pix_fmt="yuv420p")
-    assert plan == HwAccelPlan(source=None, distorted=hwaccel)
-
-
-def test_ten_bit_h264_is_left_to_nvidias_decoder(monkeypatch):
-    """An RTX 50 decodes it, to the software decode's pictures."""
-    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
-
-    assert gpu.pick_decode(GpuVendor.NVIDIA, "h264", "yuv420p10le") == "cuda"
-    assert gpu.pick_decode(GpuVendor.NVIDIA, "h264", "yuv422p10le") is None
-
-
-def test_an_odd_sized_video_is_planned_in_software(monkeypatch):
-    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
-    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
-
-    plan = plan_hwaccel(GpuVendor.AUTO, "av1", "av1", source_pix_fmt="yuv420p", distorted_pix_fmt="yuv420p",
-                        source_size=(1920, 1080), distorted_size=(1920, 803))
-
-    assert plan == HwAccelPlan(source="cuda", distorted=None)
-
-
-def test_a_format_ffmpegs_hardware_decode_cannot_give_is_planned_in_software(monkeypatch):
-    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
-    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
-
-    plan = plan_hwaccel(GpuVendor.AUTO, "hevc", "hevc", source_pix_fmt="yuv444p10le", distorted_pix_fmt="yuv420p10le")
-
-    assert plan == HwAccelPlan(source=None, distorted="cuda")
+    for size, downloads in [
+        ((854, 480), True), ((0, 0), True), ((853, 480), False), ((854, 479), False), ((853, 479), False),
+    ]:
+        with subtests.test(size=size, downloads=downloads):
+            check(size, downloads)

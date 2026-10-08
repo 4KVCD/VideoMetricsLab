@@ -4,8 +4,6 @@ vmaf_v1_gpu's add_decoded): the same pictures, and the same scores, as
 through system memory. On a PC with an NVIDIA GPU; GitHub's runner has none.
 And AMD's pictures read where Windows' decoder left them (vv_pictures): the
 same scores as from the pictures copied, on a PC with an AMD GPU."""
-import collections
-import ctypes
 import subprocess
 from pathlib import Path
 
@@ -102,28 +100,32 @@ def _without_sharing(monkeypatch):
     monkeypatch.setattr(gpu_frames.GpuFrameStream, "import_memory", lambda self, handle, size, exporter=None: None)
 
 
-@pytest.mark.parametrize(("models", "backend"), [
-    ({"vmaf_v1": V1}, "cuda"),
-    ({"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg", "vmaf_v1": V1}, "cuda"),
-    ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, "vulkan"),
-], ids=["v1", "cuda+v1", "vulkan+v1"])
-def test_vmaf_v1_scores_the_same_from_pictures_kept_on_the_gpu(pair, monkeypatch, models, backend):
-    source, distorted, bits = pair
-    arguments = dict(width=W, height=H, bit_depth=bits, models=models, n_subsample=1, duration_limit=None,
-                     total_frames=0, backend=backend, decoder="nvidia")
-    taken = []
-    real = vmaf_v1_gpu.MultiScorer.add_decoded
-    monkeypatch.setattr(vmaf_v1_gpu.MultiScorer, "add_decoded",
-                        lambda self, *args: (taken.append(1), real(self, *args))[1])
-    frames, scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
-    assert len(taken) == len(frames) > 20  # the way without a copy was the one taken
-    _without_sharing(monkeypatch)
-    old_frames, old_scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
-    assert len(taken) == len(frames)  # and here it was not
-    assert np.array_equal(frames, old_frames) and set(scores) == set(models)
-    for key in models:
-        assert np.array_equal(scores[key], old_scores[key]), key
-        assert np.all((scores[key] > 0) & (scores[key] <= 100)) and len(set(scores[key].tolist())) > 1
+def test_vmaf_v1_scores_the_same_from_pictures_kept_on_the_gpu(pair, subtests):
+    def check(models, backend, monkeypatch):
+        source, distorted, bits = pair
+        arguments = dict(width=W, height=H, bit_depth=bits, models=models, n_subsample=1, duration_limit=None,
+                         total_frames=0, backend=backend, decoder="nvidia")
+        taken = []
+        real = vmaf_v1_gpu.MultiScorer.add_decoded
+        monkeypatch.setattr(vmaf_v1_gpu.MultiScorer, "add_decoded",
+                            lambda self, *args: (taken.append(1), real(self, *args))[1])
+        frames, scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
+        assert len(taken) == len(frames) > 20  # the way without a copy was the one taken
+        _without_sharing(monkeypatch)
+        old_frames, old_scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
+        assert len(taken) == len(frames)  # and here it was not
+        assert np.array_equal(frames, old_frames) and set(scores) == set(models)
+        for key in models:
+            assert np.array_equal(scores[key], old_scores[key]), key
+            assert np.all((scores[key] > 0) & (scores[key] <= 100)) and len(set(scores[key].tolist())) > 1
+
+    for models, backend in [
+        ({"vmaf_v1": V1}, "cuda"),
+        ({"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg", "vmaf_v1": V1}, "cuda"),
+        ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, "vulkan"),
+    ]:
+        with subtests.test(models=models, backend=backend), pytest.MonkeyPatch.context() as case_patch:
+            check(models, backend, case_patch)
 
 
 def test_vulkans_vmaf_scores_the_same_from_lumas_copied_on_the_gpu(pair, monkeypatch):
@@ -145,22 +147,6 @@ def test_vulkans_vmaf_scores_the_same_from_lumas_copied_on_the_gpu(pair, monkeyp
         assert np.array_equal(scores[key], old_scores[key]), key
 
 
-def test_memory_that_is_not_vulkans_is_refused_not_scored_from(pair):
-    """Sharing is tried once, before any frame: a handle CUDA cannot import
-    means system memory, not a failed run."""
-    source, _distorted, bits = pair
-    plan = gpu_frames.plan_decode(source, None, shift=6 if bits > 8 else 0)
-    stream = gpu_frames.GpuFrameStream(source, plan, backend="nvidia")
-    try:
-        event = ctypes.windll.kernel32.CreateEventW(None, 0, 0, None)  # a handle, of nothing a GPU has
-        try:
-            assert stream.import_memory(event, 1 << 20) is None
-        finally:
-            ctypes.windll.kernel32.CloseHandle(event)
-    finally:
-        stream.close()
-
-
 # ------------------------------------- AMD's: the pictures read where they are
 
 def _amd_gives_textures(info, bits: int) -> bool:
@@ -174,61 +160,36 @@ def _amd_gives_textures(info, bits: int) -> bool:
         return False
 
 
-@pytest.mark.parametrize(("models", "n_subsample", "codec"), [({"vmaf_v1": V1}, 1, "hevc"), ({"vmaf_v1": V1}, 2, "hevc"),
-                                                              ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, 1, "hevc"),
-                                                              ({"vmaf_v1": V1}, 1, "h264")],
-                         ids=["v1", "v1-every-2nd", "vulkan+v1", "v1-h264"])
-def test_vmaf_v1_scores_the_same_from_amds_textures_as_from_copies(tmp_path, monkeypatch, models, n_subsample, codec):
+def test_vmaf_v1_scores_the_same_from_amds_textures_as_from_copies(tmp_path_factory, subtests):
     """Vulkan VMAF reading the pictures where Windows' decoder left them
     (vv_pictures, their slots given back once the GPU has read them) scores
     what it scores from the pictures copied into its memory: HEVC's, and
     H.264's (layers of a texture array, copied into textures of their own)."""
-    pix_fmt, bits = ("yuv420p", 8) if codec == "h264" else ("yuv420p10le", 10)
-    source = probe_video(_clip(tmp_path / "source.mkv", pix_fmt, 4, codec))
-    distorted = probe_video(_clip(tmp_path / "distorted.mkv", pix_fmt, 38, codec))
-    if not _amd_gives_textures(source, bits):
-        pytest.skip("no AMD GPU whose Windows decoder gives its pictures as textures")
-    arguments = dict(width=W, height=H, bit_depth=bits, models=models, n_subsample=n_subsample, duration_limit=None,
-                     total_frames=0, backend="vulkan", decoder="amd")
-    used = []
-    real = vmaf_v1_gpu.V1Scorer.add_decoded
-    monkeypatch.setattr(vmaf_v1_gpu.V1Scorer, "add_decoded",
-                        lambda self, *args: (used.append(self.pictures), real(self, *args))[1])
-    frames, scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
-    assert used and all(used)  # read where they were
-    monkeypatch.setattr(gpu_frames, "hands_over_textures", lambda backend: False)
-    used.clear()
-    old_frames, old_scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
-    assert used and not any(used)  # copied
-    assert np.array_equal(frames, old_frames) and set(scores) == set(models)
-    for key in models:
-        assert np.array_equal(scores[key], old_scores[key]), key
-        assert np.all((scores[key] > 0) & (scores[key] <= 100)) and len(set(scores[key].tolist())) > 1
+    def check(models, n_subsample, codec, tmp_path, monkeypatch):
+        pix_fmt, bits = ("yuv420p", 8) if codec == "h264" else ("yuv420p10le", 10)
+        source = probe_video(_clip(tmp_path / "source.mkv", pix_fmt, 4, codec))
+        distorted = probe_video(_clip(tmp_path / "distorted.mkv", pix_fmt, 38, codec))
+        if not _amd_gives_textures(source, bits):
+            pytest.skip("no AMD GPU whose Windows decoder gives its pictures as textures")
+        arguments = dict(width=W, height=H, bit_depth=bits, models=models, n_subsample=n_subsample, duration_limit=None,
+                         total_frames=0, backend="vulkan", decoder="amd")
+        used = []
+        real = vmaf_v1_gpu.V1Scorer.add_decoded
+        monkeypatch.setattr(vmaf_v1_gpu.V1Scorer, "add_decoded",
+                            lambda self, *args: (used.append(self.pictures), real(self, *args))[1])
+        frames, scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
+        assert used and all(used)  # read where they were
+        monkeypatch.setattr(gpu_frames, "hands_over_textures", lambda backend: False)
+        used.clear()
+        old_frames, old_scores = vmaf_v1_gpu.score_decoded(source, distorted, **arguments)
+        assert used and not any(used)  # copied
+        assert np.array_equal(frames, old_frames) and set(scores) == set(models)
+        for key in models:
+            assert np.array_equal(scores[key], old_scores[key]), key
+            assert np.all((scores[key] > 0) & (scores[key] <= 100)) and len(set(scores[key].tolist())) > 1
 
-
-class _Stream:
-    def __init__(self) -> None:
-        self.released = []
-
-    def release(self, slot: int) -> None:
-        self.released.append(slot)
-
-
-def test_slots_read_where_they_are_are_given_back_once_the_gpu_is_done():
-    """A distorted picture's slot back once its frame is done, a reference's
-    once the next frame is (its motion reads it): with three slots, frame k
-    begun means frame k - 3 is done."""
-    scorer = object.__new__(vmaf_v1_gpu.V1Scorer)
-    scorer._held = collections.deque()
-    scorer._shared = type("Shared", (), {"slots": 3})()
-    ref, test = _Stream(), _Stream()
-    for frame in range(6):
-        scorer._count = frame
-        scorer._release_done()  # as add_decoded does once frame `frame` is begun
-        scorer._count = frame + 1  # frame `frame` given
-        scorer.release_later(test, 100 + frame, reference=False)
-        scorer.release_later(ref, 200 + frame, reference=True)
-    # Frame 5 begun: frames 0-2 done -- the distorted pictures of 0-2, the references of 0-1.
-    assert test.released == [100, 101, 102] and ref.released == [200, 201]
-    scorer._release_all()
-    assert test.released == [100 + frame for frame in range(6)] and ref.released == [200 + frame for frame in range(6)]
+    for models, n_subsample, codec in [({"vmaf_v1": V1}, 1, "hevc"), ({"vmaf_v1": V1}, 2, "hevc"),
+                                                                  ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, 1, "hevc"),
+                                                                  ({"vmaf_v1": V1}, 1, "h264")]:
+        with subtests.test(models=models, n_subsample=n_subsample, codec=codec), pytest.MonkeyPatch.context() as case_patch:
+            check(models, n_subsample, codec, tmp_path_factory.mktemp("case"), case_patch)

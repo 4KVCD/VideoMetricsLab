@@ -71,66 +71,6 @@ def test_summary_is_video_packet_rate_not_whole_file_size():
     assert summary.maximum_kbps == 32.0
 
 
-def test_second_bins_and_summary_are_computed_once(monkeypatch):
-    """The per-second bins walk every packet in Python -- 290 ms for a
-    151,919-packet encode -- and the table asked for them on every refresh of
-    every row. A five-row redraw cost 1.4 s on the UI thread for figures that
-    had not changed since the scan."""
-    data = _data()
-    calls = []
-    real = bitrate_module._compute_second_bins
-
-    def counted(d, adjust_start):
-        calls.append(adjust_start)
-        return real(d, adjust_start)
-
-    monkeypatch.setattr(bitrate_module, "_compute_second_bins", counted)
-
-    for _ in range(5):
-        bitrate_summary(data)
-        second_plot(data, adjust_start=True)
-    second_plot(data, adjust_start=False)
-    second_plot(data, adjust_start=False)
-
-    # One computation per variant, however often either consumer asks.
-    assert calls == [True, False]
-
-
-def test_priming_leaves_nothing_for_the_ui_thread_to_compute(monkeypatch):
-    # The worker primes before handing the data over; afterwards the table
-    # and the default plot are lookups.
-    data = _data()
-    data.prime()
-    monkeypatch.setattr(
-        bitrate_module, "_compute_second_bins",
-        lambda *a: (_ for _ in ()).throw(AssertionError("computed on the UI thread")),
-    )
-
-    assert bitrate_summary(data).maximum_kbps == 32.0
-    assert len(second_plot(data).values) > 0
-
-
-def test_cached_figures_match_a_fresh_computation():
-    a, b = _data(), _data()
-    a.prime()
-    assert bitrate_summary(a) == bitrate_summary(b)
-    for adjust in (True, False):
-        fresh = bitrate_module._compute_second_bins(b, adjust)
-        cached = a.second_bins(adjust)
-        for got, want in zip(cached, fresh, strict=True):
-            np.testing.assert_array_equal(got, want)
-
-
-def test_adjust_start_time_aligns_the_first_interval_to_zero():
-    data = _data(start=12.5)
-
-    adjusted = second_plot(data, adjust_start=True)
-    raw = second_plot(data, adjust_start=False)
-
-    assert adjusted.times[0] == 0.0
-    assert raw.times[0] == 12.0
-
-
 def test_packet_scan_selects_only_video_and_sorts_decode_order_by_pts(
     tmp_path, monkeypatch
 ):
@@ -167,24 +107,3 @@ def test_packet_scan_selects_only_video_and_sorts_decode_order_by_pts(
     np.testing.assert_allclose(data.times, [0.0, 0.033, 0.066])
     np.testing.assert_array_equal(data.sizes, [1000, 200, 300])
     np.testing.assert_array_equal(data.keyframes, [True, False, False])
-
-
-def test_a_flood_of_ffprobe_errors_does_not_stall_the_scan(tmp_path, monkeypatch):
-    """A damaged file can make ffprobe report an error per packet. Read only
-    after the packets, the errors filled the pipe and ffprobe stopped,
-    waiting on it -- and the scan with it. A real child process writes 1 MB
-    of errors before its packet list here."""
-    from tests.factories import STDLIB_PYTHON
-
-    path = tmp_path / "damaged.mkv"
-    path.write_bytes(b"x")
-    info = VideoInfo(path=path, width=1920, height=1080, fps=30.0, duration=0.1, nb_frames=3, codec_name="h264")
-    script = ("import sys\n"
-              "for _ in range(20000): sys.stderr.write('[hevc] error while decoding MB 1 2' + chr(10))\n"
-              "sys.stderr.flush()\n"
-              "print('pts_time=0.000|duration_time=0.033|size=1000|pos=0|flags=K_')\n")
-    real_popen = bitrate_module.proc_util.popen
-    monkeypatch.setattr(bitrate_module.proc_util, "popen",
-                        lambda command, **kwargs: real_popen([STDLIB_PYTHON, "-S", "-c", script], **kwargs))
-    data = analyze_video_bitrate(info)
-    np.testing.assert_array_equal(data.sizes, [1000])

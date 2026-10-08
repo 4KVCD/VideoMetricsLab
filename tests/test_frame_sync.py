@@ -117,15 +117,19 @@ CASES = {
 }
 
 
-@pytest.mark.parametrize("name", list(CASES))
-def test_pairs_are_ffmpegs(tmp_path, name):
-    test_spec, source_spec, *rest = CASES[name]
-    limit = rest[0] if rest else None
-    main = _clip(tmp_path / f"main.{test_spec[3]}", *test_spec[:3])
-    ref = _clip(tmp_path / f"ref.{source_spec[3]}", *source_spec[:3])
-    expected = _ffmpeg_pairs(main, ref, tmp_path, limit)
-    assert expected, "FFmpeg paired nothing"
-    assert _our_pairs(main, ref, limit) == expected
+def test_pairs_are_ffmpegs(tmp_path_factory, subtests):
+    def check(name, tmp_path):
+        test_spec, source_spec, *rest = CASES[name]
+        limit = rest[0] if rest else None
+        main = _clip(tmp_path / f"main.{test_spec[3]}", *test_spec[:3])
+        ref = _clip(tmp_path / f"ref.{source_spec[3]}", *source_spec[:3])
+        expected = _ffmpeg_pairs(main, ref, tmp_path, limit)
+        assert expected, "FFmpeg paired nothing"
+        assert _our_pairs(main, ref, limit) == expected
+
+    for name in list(CASES):
+        with subtests.test(name=name):
+            check(name, tmp_path_factory.mktemp("case"))
 
 
 def test_frames_are_released_once_no_pair_needs_them():

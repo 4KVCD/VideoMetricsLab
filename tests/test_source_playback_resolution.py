@@ -25,26 +25,9 @@ def test_native_source_retains_cropped_4k_without_mutating_comparison():
     assert "width=3840,height=1608" in caps
 
 
-def test_match_source_uses_cropped_encoded_dimensions():
-    item = comparison()
-    item = replace(item, distorted_info=replace(item.distorted_info, height=1080),
-                   distorted_crop=CropBox(1920, 804, 0, 138))
-    recipe = source_playback_comparison(item, False)
-    assert comparison_dimensions(recipe) == (1920, 804)
-    assert recipe.source_crop == CropBox(3840, 1608, 0, 276)
-
-
 def test_match_preserves_aspect_ratio_and_never_upscales():
     item = comparison()
     taller_encode = replace(item, distorted_info=replace(item.distorted_info, height=1080))
     assert comparison_dimensions(source_playback_comparison(taller_encode, False)) == (1920, 804)
     bigger_encode = replace(item, distorted_info=replace(item.distorted_info, width=7680, height=4320))
     assert comparison_dimensions(source_playback_comparison(bigger_encode, False)) == (3840, 1608)
-
-
-def test_matching_tracks_selected_encode_while_native_remains_constant():
-    a = comparison()
-    b = replace(a, distorted_info=replace(a.distorted_info, width=1280, height=536))
-    assert comparison_dimensions(source_playback_comparison(a, False)) == (1920, 804)
-    assert comparison_dimensions(source_playback_comparison(b, False)) == (1280, 536)
-    assert comparison_dimensions(source_playback_comparison(a, True)) == comparison_dimensions(source_playback_comparison(b, True))

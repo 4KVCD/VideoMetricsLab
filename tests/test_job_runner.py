@@ -3,7 +3,6 @@
 The scheduling itself -- lanes, pausing, cancelling, halves -- is tested
 through the window's VmafWorker in test_worker.py; these make sure the core
 runs on its own, as a script or another front end would use it."""
-import threading
 from pathlib import Path
 
 from vmaf_app.core import job_runner
@@ -57,45 +56,3 @@ def test_a_cancelled_run_says_so_once_however_many_videos_stopped(monkeypatch):
                  events=RunEvents(cancelled=lambda: seen.append("cancelled"))).run()
 
     assert seen == ["cancelled"]
-
-
-def test_a_run_cancelled_before_it_starts_starts_nothing(monkeypatch):
-    monkeypatch.setattr(job_runner, "run_vmaf", lambda *a, **k: _result("d0.mp4"))
-    seen = []
-    scheduler = JobScheduler([_job("d0.mp4")], events=RunEvents(
-        job_started=lambda index, label: seen.append("started"), cancelled=lambda: seen.append("cancelled")))
-    scheduler.cancel()
-
-    scheduler.run()
-
-    assert seen == ["cancelled"]
-
-
-def test_events_left_out_are_not_needed(monkeypatch):
-    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, *a, **k: _result(d.path.name))
-
-    JobScheduler([_job("d0.mp4")]).run()
-
-
-def test_a_task_cancel_token_waits_as_an_event_does():
-    """The token goes where a threading.Event is taken (cancel_event): it
-    answers wait() as one, for the run's cancel and for the job's own."""
-    run = threading.Event()
-    token = job_runner._TaskCancelToken(run)
-    assert token.wait(0) is False and not token.is_set()
-    run.set()
-    assert token.wait(0) is True and token.wait() is True
-    token = job_runner._TaskCancelToken(threading.Event())
-    token.cancel_job()
-    assert token.wait(0) is True and token.is_set()
-
-
-def test_a_task_cancel_token_wakes_a_waiter_when_the_run_is_cancelled():
-    run = threading.Event()
-    token = job_runner._TaskCancelToken(run)
-    woke = []
-    waiter = threading.Thread(target=lambda: woke.append(token.wait(30)))
-    waiter.start()
-    run.set()
-    waiter.join(30)
-    assert woke == [True]

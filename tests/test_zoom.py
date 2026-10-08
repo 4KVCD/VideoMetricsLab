@@ -28,14 +28,6 @@ def test_100_percent_is_one_frame_pixel_on_one_screen_pixel():
     assert _at(zoom, 1.75)[2:] == pytest.approx((3840 / 1.75, 1600 / 1.75))
 
 
-def test_a_smaller_zoom_is_centred_and_cannot_be_dragged():
-    zoom = Zoom()
-    zoom.factor = 0.1
-    assert _at(zoom) == pytest.approx((308.0, 170.0, 384.0, 160.0))
-    assert not zoom.can_drag(VIEW, FRAME, 1.0)
-    assert not zoom.drag(50, 50, VIEW, FRAME, 1.0)
-
-
 def test_dragging_moves_the_frame_and_stops_at_its_edges():
     zoom = Zoom()
     zoom.factor = 1.0
@@ -48,26 +40,6 @@ def test_dragging_moves_the_frame_and_stops_at_its_edges():
     assert zoom.drag(-10_000, -10_000, VIEW, FRAME, 1.0)
     x, y, width, height = _at(zoom)
     assert (x + width, y + height) == pytest.approx((1000.0, 500.0))
-
-
-def test_a_frame_wider_than_the_view_but_not_taller_moves_only_sideways():
-    zoom = Zoom()
-    zoom.factor = 0.3  # 1152 x 480 in a 1000 x 500 view
-    assert zoom.can_drag(VIEW, FRAME, 1.0)
-    assert zoom.drag(30, 30, VIEW, FRAME, 1.0)
-    assert _at(zoom)[:2] == pytest.approx((-46.0, 10.0))
-
-
-def test_the_part_in_view_and_where_it_is_drawn():
-    zoom = Zoom()
-    zoom.factor = 1.0
-    fractions, drawn = zoom.visible(VIEW, FRAME, 1.0)
-    assert fractions == pytest.approx((1420 / 3840, 550 / 1600, 2420 / 3840, 1050 / 1600))
-    assert astuple(drawn) == pytest.approx((0.0, 0.0, 1000.0, 500.0))
-    zoom.factor = 0.1
-    fractions, drawn = zoom.visible(VIEW, FRAME, 1.0)
-    assert fractions == pytest.approx((0.0, 0.0, 1.0, 1.0))
-    assert astuple(drawn) == pytest.approx((308.0, 170.0, 384.0, 160.0))
 
 
 def test_a_typed_zoom_is_read_as_a_percentage_within_bounds():

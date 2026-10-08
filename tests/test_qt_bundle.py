@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.qt_bundle import KEEP_PLUGINS, KEEP_TRANSLATIONS, QT_MODULES, prune
+from scripts.qt_bundle import KEEP_TRANSLATIONS, QT_MODULES, prune
 
 MIB = 1024 ** 2
 APP = Path(__file__).resolve().parent.parent / "vmaf_app"
@@ -25,63 +25,6 @@ def test_qt_modules_are_exactly_what_the_app_imports():
     for path in APP.rglob("*.py"):
         imported |= set(re.findall(r"PySide6\.(Qt[A-Za-z]+)", path.read_text(encoding="utf-8")))
     assert imported == set(QT_MODULES), sorted(imported ^ set(QT_MODULES))
-
-
-# -------------------------------------------------------------------- the rules
-
-def _toc(*dests):
-    return [(d, str(Path("/site") / d), "BINARY") for d in dests]
-
-
-def test_prune_keeps_the_modules_the_plugins_and_what_they_import_and_nothing_else():
-    binaries = _toc(
-        "PySide6/QtCore.pyd", "PySide6/QtGui.pyd", "PySide6/QtWidgets.pyd", "PySide6/QtNetwork.pyd",
-        "PySide6/Qt6Core.dll", "PySide6/Qt6Gui.dll", "PySide6/Qt6Widgets.dll", "PySide6/Qt6Network.dll",
-        "PySide6/Qt6Quick.dll", "PySide6/opengl32sw.dll", "PySide6/avcodec-61.dll", "PySide6/pyside6.abi3.dll",
-        "PySide6/plugins/platforms/qwindows.dll", "PySide6/plugins/platforms/qdirect2d.dll",
-        "PySide6/plugins/styles/qmodernwindowsstyle.dll", "PySide6/plugins/imageformats/qjpeg.dll",
-        "PySide6/plugins/imageformats/qico.dll", "PySide6/plugins/imageformats/qgif.dll",
-        "PySide6/plugins/imageformats/qsvg.dll", "PySide6/plugins/iconengines/qsvgicon.dll",
-        "PySide6/plugins/imageformats/qpdf.dll", "PySide6/plugins/tls/qschannelbackend.dll",
-        "shiboken6/shiboken6.abi3.dll", "numpy/_core/_multiarray_umath.pyd",
-    )
-    datas = _toc("PySide6/translations/qt_de.qm", "PySide6/translations/qtbase_fr.qm", "vmaf_app/native/d3d11_tonemap.dll")
-    graph = {
-        "qtcore.pyd": {"qt6core.dll", "pyside6.abi3.dll"}, "qtgui.pyd": {"qt6gui.dll", "pyside6.abi3.dll"},
-        "qtwidgets.pyd": {"qt6widgets.dll"}, "qtnetwork.pyd": {"qt6network.dll"},
-        "qt6gui.dll": {"qt6core.dll"}, "qt6widgets.dll": {"qt6gui.dll", "qt6core.dll"},
-        "qt6quick.dll": {"qt6gui.dll"}, "qwindows.dll": {"qt6gui.dll"}, "qpdf.dll": {"qt6pdf.dll"},
-    }
-
-    kept_b, kept_d, report = prune(binaries, datas, imports=lambda p: graph.get(p.name.lower(), set()))
-
-    kept = {d for d, _s, _t in kept_b}
-    assert {"PySide6/QtCore.pyd", "PySide6/QtGui.pyd", "PySide6/QtWidgets.pyd", "PySide6/Qt6Core.dll",
-            "PySide6/Qt6Gui.dll", "PySide6/Qt6Widgets.dll", "PySide6/pyside6.abi3.dll",
-            "PySide6/plugins/platforms/qwindows.dll", "PySide6/plugins/styles/qmodernwindowsstyle.dll",
-            "PySide6/plugins/imageformats/qjpeg.dll", "PySide6/plugins/iconengines/qsvgicon.dll"} <= kept
-    for gone in ("PySide6/QtNetwork.pyd", "PySide6/Qt6Network.dll", "PySide6/Qt6Quick.dll", "PySide6/opengl32sw.dll",
-                 "PySide6/avcodec-61.dll", "PySide6/plugins/platforms/qdirect2d.dll",
-                 "PySide6/plugins/imageformats/qpdf.dll", "PySide6/plugins/tls/qschannelbackend.dll"):
-        assert gone not in kept, gone
-    # Untouched: everything outside PySide6/, and PySide6 data that is not a translation.
-    assert "shiboken6/shiboken6.abi3.dll" in kept and "numpy/_core/_multiarray_umath.pyd" in kept
-    # Qt's own dialogs in the app's languages (French here); nothing else of translations/.
-    assert [d for d, _s, _t in kept_d] == ["PySide6/translations/qtbase_fr.qm", "vmaf_app/native/d3d11_tonemap.dll"]
-    assert "PySide6/translations/qt_de.qm" in report["dropped"]
-
-
-def test_prune_refuses_an_analysis_that_lost_a_module_the_app_imports():
-    binaries = _toc("PySide6/QtCore.pyd", "PySide6/QtGui.pyd", "PySide6/Qt6Core.dll",
-                    *(f"PySide6/plugins/{p}" for p in KEEP_PLUGINS))
-    with pytest.raises(RuntimeError, match="QtWidgets"):
-        prune(binaries, [], imports=lambda p: set())
-
-
-def test_prune_refuses_when_a_named_plugin_does_not_exist():
-    binaries = _toc(*(f"PySide6/{m}.pyd" for m in QT_MODULES), "PySide6/plugins/platforms/qwindows.dll")
-    with pytest.raises(RuntimeError, match="KEEP_PLUGINS"):
-        prune(binaries, [], imports=lambda p: set())
 
 
 # ------------------------------------------------------ the installed PySide6

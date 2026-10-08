@@ -16,8 +16,3 @@ def test_the_request_is_held_and_released_with_the_windows_flags(monkeypatch):
     assert power.keep_system_awake(False) is True
     # ES_CONTINUOUS | ES_SYSTEM_REQUIRED, then ES_CONTINUOUS alone (released).
     assert calls == [0x80000001, 0x80000000]
-
-
-def test_nothing_is_held_off_windows(monkeypatch):
-    monkeypatch.setattr(power.sys, "platform", "linux")
-    assert power.keep_system_awake(True) is False

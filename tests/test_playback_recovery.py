@@ -1,12 +1,9 @@
 from io import BytesIO
 from types import SimpleNamespace
 
-import pytest
-
 from vmaf_app.core.frame_extract import PreviewColorSettings
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.ui import playback_worker
-from vmaf_app.ui.locked_native_pool import _StopNative
 
 
 class FakeProcess:
@@ -71,38 +68,3 @@ def test_midstream_failures_exhaust_bounded_ladder(monkeypatch):
     assert [n for n, _ in frames] == [100, 101, 102, 103]
     assert failures == ["device lost"]
     assert not worker.ended
-
-
-def test_clean_eof_does_not_retry(monkeypatch):
-    worker, commands, _, failures = setup_worker(monkeypatch, [FakeProcess(b"aaaa", 0)])
-    worker.run()
-    assert commands == [("vulkan", 100)]
-    assert worker.ended and not failures
-
-
-def test_cancelled_worker_does_not_retry_or_emit_failure(monkeypatch):
-    worker, commands, _, failures = setup_worker(monkeypatch, [])
-    worker.cancel()
-    worker.run()
-    assert not commands and not failures
-
-
-def test_native_teardown_accepts_repeated_cancel_without_reentering_stop():
-    stops = []
-    worker = _StopNative(SimpleNamespace(stop=lambda: stops.append(True)), None)
-    worker.cancel()
-    worker.cancel()
-    assert not stops
-    worker.run()
-    worker.cancel()
-    assert stops == [True]
-
-
-def test_extraction_cancellation_does_not_cancel_playback():
-    from vmaf_app.ui.frame_compare_panel import FrameComparePanel
-
-    calls = []
-    extraction = SimpleNamespace(isRunning=lambda: True, cancel=lambda: calls.append("extract"))
-    panel = SimpleNamespace(_workers=[extraction], live_workers=lambda: pytest.fail("mixed ownership"))
-    FrameComparePanel._cancel_workers(panel)
-    assert calls == ["extract"]

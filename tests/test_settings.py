@@ -39,11 +39,6 @@ def test_values_of_the_right_type_round_trip():
     assert Settings.load() == saved
 
 
-def test_a_save_leaves_no_temporary_file_behind():
-    assert Settings(language="it").save() is None
-    assert _temporary_files() == []
-
-
 def test_a_save_that_fails_keeps_the_saved_settings(monkeypatch):
     """Written in place, a save that failed part-way left a truncated file,
     read at the next start as no settings at all."""

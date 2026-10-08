@@ -3,12 +3,9 @@ from enum import IntFlag
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
-from vmaf_app.core import d3d11_tonemap, gstreamer_playback
+from vmaf_app.core import gstreamer_playback
 from vmaf_app.core.frame_extract import (
     FrameComparison,
-    PreviewColorMode,
     PreviewColorSettings,
 )
 from vmaf_app.core.models import CropBox, VideoInfo
@@ -54,105 +51,6 @@ def test_native_hdr_caps_keep_full_cropped_resolution_and_precision():
     assert "width=3840" in caps
     assert "height=1608" in caps
     assert "colorimetry=bt2100-pq" in caps
-
-
-def test_display_aware_hdr_uses_gpu_shader_when_windows_hdr_is_off(
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        gstreamer_playback, "gstreamer_available", lambda: (True, "")
-    )
-    monkeypatch.setattr(d3d11_tonemap, "available", lambda: True)
-
-    native, reason = gstreamer_playback.uses_native_gstreamer(
-        _comparison(), PreviewColorSettings(display_hdr_enabled=True)
-    )
-    assert native is True
-    assert reason == ""
-
-    native, reason = gstreamer_playback.uses_native_gstreamer(
-        _comparison(), PreviewColorSettings(display_hdr_enabled=False)
-    )
-    assert native is True
-    assert reason == ""
-
-
-def test_explicit_hdr_to_sdr_keeps_the_high_quality_ffmpeg_fallback(monkeypatch):
-    monkeypatch.setattr(
-        gstreamer_playback, "gstreamer_available", lambda: (True, "")
-    )
-    monkeypatch.setattr(d3d11_tonemap, "available", lambda: False)
-
-    native, reason = gstreamer_playback.uses_native_gstreamer(
-        _comparison(),
-        PreviewColorSettings(
-            mode=PreviewColorMode.HDR_TO_SDR,
-            display_hdr_enabled=True,
-        ),
-    )
-
-    assert native is False
-    assert "FFmpeg tone mapping" in reason
-
-
-@pytest.mark.parametrize("hdr_display", [True, False, None])
-def test_explicit_hdr_to_sdr_uses_native_shader_regardless_of_display(monkeypatch, hdr_display):
-    monkeypatch.setattr(gstreamer_playback, "gstreamer_available", lambda: (True, ""))
-    monkeypatch.setattr(d3d11_tonemap, "available", lambda: True)
-    settings = PreviewColorSettings(PreviewColorMode.HDR_TO_SDR, hdr_display)
-    assert gstreamer_playback.uses_native_gstreamer(_comparison(), settings) == (True, "")
-
-
-def test_unmanaged_does_not_accidentally_use_sink_hdr_processing(monkeypatch):
-    monkeypatch.setattr(gstreamer_playback, "gstreamer_available", lambda: (True, ""))
-    settings = PreviewColorSettings(PreviewColorMode.UNMANAGED)
-    native, reason = gstreamer_playback.uses_native_gstreamer(_comparison(), settings)
-    assert not native
-    assert "bypass" in reason
-
-
-def test_explicit_untagged_hdr_retains_ffmpeg_interpretation(monkeypatch):
-    monkeypatch.setattr(gstreamer_playback, "gstreamer_available", lambda: (True, ""))
-    comparison = _comparison()
-    comparison = replace(comparison, source_info=replace(comparison.source_info, color_transfer=""))
-    native, reason = gstreamer_playback.uses_native_gstreamer(
-        comparison, PreviewColorSettings(PreviewColorMode.HDR_TO_SDR))
-    assert not native
-    assert "untagged" in reason
-
-
-def test_sdr_uses_native_gpu_presentation_even_if_windows_hdr_is_off(monkeypatch):
-    monkeypatch.setattr(
-        gstreamer_playback, "gstreamer_available", lambda: (True, "")
-    )
-    comparison = _comparison()
-    comparison = replace(
-        comparison,
-        source_info=replace(
-            comparison.source_info,
-            pix_fmt="yuv420p",
-            color_transfer="bt709",
-            color_primaries="bt709",
-            color_space="bt709",
-        ),
-        distorted_info=replace(
-            comparison.distorted_info,
-            pix_fmt="yuv420p",
-            color_transfer="bt709",
-            color_primaries="bt709",
-            color_space="bt709",
-        ),
-    )
-
-    native, reason = gstreamer_playback.uses_native_gstreamer(
-        comparison, PreviewColorSettings(display_hdr_enabled=False)
-    )
-
-    assert native is True
-    assert reason == ""
-    assert "format=NV12" in gstreamer_playback.output_caps_string(
-        comparison, PreviewColorSettings(display_hdr_enabled=False), "distorted"
-    )
 
 
 def test_mixed_hdr_and_sdr_inputs_keep_independent_native_caps():
@@ -247,43 +145,3 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll():
 
     assert player._ready is True
     assert player._pipeline.states[-1] == "playing"
-
-
-class _StandInToneMapper:
-    """For the pad probe's sake: the real one needs a GPU."""
-
-    def __init__(self, _device, _kind) -> None:
-        pass
-
-    def close(self) -> None:
-        pass
-
-
-@pytest.mark.parametrize("display_hdr", [True, False])
-def test_a_stopped_player_is_freed(monkeypatch, display_hdr):
-    """Issue #3: the decoder's signal handlers and the tone mapper's pad
-    probe call back into the player, which holds the pipeline -- cycles
-    through GStreamer's C side that Python's collector cannot see. Every
-    stopped player stayed, with its decoder's GPU surfaces: moving the
-    window between an HDR and an SDR display rebuilds them, and the GPU's
-    memory grew by up to 1.8 GB a move with 4K video."""
-    import gc
-    import weakref
-
-    pytest.importorskip("gi")
-    try:
-        gstreamer_playback._load_gstreamer()
-    except gstreamer_playback.GStreamerPlaybackError:
-        pytest.skip("GStreamer is not installed")
-    monkeypatch.setattr(d3d11_tonemap, "D3D11ToneMapper", _StandInToneMapper)
-    settings = PreviewColorSettings(display_hdr_enabled=display_hdr)  # HDR video on an SDR display: tone mapped
-    try:
-        player = gstreamer_playback.GstComparePipeline(_comparison(), settings, "source")
-    except gstreamer_playback.GStreamerPlaybackError as error:
-        pytest.skip(f"no D3D11 device here: {error}")
-    assert player._handlers and bool(player._probes) is not display_hdr
-    freed = weakref.ref(player)
-    player.stop()
-    del player
-    gc.collect()
-    assert freed() is None

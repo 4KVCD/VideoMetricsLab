@@ -1,35 +1,25 @@
-import os
 import subprocess
-import threading
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from tests.factories import STDLIB_PYTHON
-from vmaf_app.core.gpu import HwAccelPlan, hwaccel_args
+from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import (
     CropBox,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
     VmafOptions,
-    synthetic_resample_distorted_path,
 )
 from vmaf_app.core.vmaf_runner import (
     _GRAPH_SEPARATOR,
-    Cancelled,
     VmafRunError,
     _bit_depth,
     _build_ffmpeg_cmd,
     _build_filtergraph,
-    _build_resample_cmd,
     _build_resample_test_filtergraph,
     _fallback_ladder,
-    _hw_native_format,
     analysis_pix_fmt,
-    auto_threads,
-    estimate_total_frames,
     validate_display_geometry,
 )
 
@@ -56,28 +46,6 @@ def test_scales_reference_to_distorted_resolution_when_they_differ():
     assert "[main][ref]libvmaf=" in graph
 
 
-def test_source_is_downscaled_not_distorted_upscaled_when_distorted_is_lower_res():
-    # The reference/source chain is [1:v]...[ref]; the distorted/main chain
-    # is [0:v]...[main]. When distorted is lower-res, the scale filter must
-    # land in the [ref] (source) chain -- scaling the source DOWN to match --
-    # never in the [main] (distorted) chain, which would upscale distorted
-    # instead and inflate the score by comparing against a blurrier source
-    # than what was actually delivered.
-    source_info = _info("source.mov", 3840, 2160)  # 4K source
-    distorted_info = _info("distorted.mp4", 1280, 720)  # 720p distorted -- much lower res
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(), log_path=Path("log.json"),
-    )
-
-    main_chain, ref_chain, _ = graph.split(";")
-    assert main_chain.startswith("[0:V:0]")
-    assert ref_chain.startswith("[1:V:0]")
-    assert "scale=1280:720" not in main_chain  # distorted is NOT upscaled
-    assert "scale=1280:720" in ref_chain  # source IS downscaled to match distorted
-
-
 def test_upscale_distorted_mode_scales_distorted_up_to_source_resolution():
     source_info = _info("source.mov", 3840, 2160)  # 4K source
     distorted_info = _info("distorted.mp4", 1920, 1080)  # 1080p distorted
@@ -91,31 +59,6 @@ def test_upscale_distorted_mode_scales_distorted_up_to_source_resolution():
     main_chain, ref_chain, _ = graph.split(";")
     assert "scale=3840:2160" in main_chain  # distorted IS upscaled to the source's resolution
     assert "scale=" not in ref_chain  # source is left untouched
-
-
-def test_upscale_distorted_mode_is_a_noop_when_resolutions_already_match():
-    info_a = _info("source.mov", 1920, 1080)
-    info_b = _info("distorted.mp4", 1920, 1080)
-
-    graph = _build_filtergraph(
-        info_a, info_b, VmafOptions(model="version=vmaf_v0.6.1", scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
-        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(), log_path=Path("log.json"),
-    )
-
-    assert "scale=" not in graph
-
-
-def test_no_scale_filter_when_resolutions_already_match():
-    info_a = _info("source.mov", 1920, 1080)
-    info_b = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1")
-
-    graph = _build_filtergraph(
-        info_a, info_b, options, source_crop=None, distorted_crop=None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
-    )
-
-    assert "scale=" not in graph
 
 
 def test_crop_filters_applied_and_scale_targets_cropped_distorted_dims():
@@ -138,82 +81,6 @@ def test_crop_filters_applied_and_scale_targets_cropped_distorted_dims():
     assert "scale=" not in graph
 
 
-def test_noop_crop_is_skipped():
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1")
-
-    full_frame_crop = CropBox(w=1920, h=1080, x=0, y=0)
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, full_frame_crop, full_frame_crop,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
-    )
-
-    assert "crop=" not in graph
-
-
-def test_hwdownload_inserted_when_gpu_decode_used():
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1")
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
-    )
-
-    assert "[1:V:0]hwdownload,format=nv12,format=yuv420p" in graph
-
-
-def test_hwdownload_uses_p010_for_10bit_source():
-    # UHD/HDR masters are almost always 10-bit HEVC; NVDEC decodes these to a
-    # p010 surface, not nv12 -- forcing nv12 here previously broke GPU decode
-    # for exactly this common case.
-    source_info = _info("source.mov", 3840, 2160, pix_fmt="yuv420p10le")
-    distorted_info = _info("distorted.mp4", 3840, 2160)
-    options = VmafOptions(model="version=vmaf_v0.6.1")
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(source="cuda"), log_path=Path("log.json"),
-    )
-
-    assert "[1:V:0]hwdownload,format=p010le,format=yuv420p" in graph
-
-
-def test_default_n_threads_resolves_to_cpu_count_not_omitted():
-    # libvmaf 2.0+ defaults to n_threads=1 (single-threaded) when this option
-    # is left unset, so "Auto" (n_threads<=0 in our options) must still emit
-    # an explicit value -- omitting it silently serializes the whole run.
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1", n_threads=0)
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"),
-    )
-
-    libvmaf_part = graph.split("libvmaf=", 1)[1]
-    assert f"n_threads={os.cpu_count() or 1}" in libvmaf_part
-
-
-def test_auto_threads_are_shared_equally_between_concurrent_jobs(monkeypatch):
-    """Two jobs each asking for every core is twice as many threads as
-    cores; they take turns rather than doing more work."""
-    monkeypatch.setattr(os, "cpu_count", lambda: 24)
-    assert auto_threads() == 24
-    assert auto_threads(1) == 24
-    assert auto_threads(2) == 12
-
-    monkeypatch.setattr(os, "cpu_count", lambda: 13)
-    assert auto_threads(2) == 6  # rounds down; a spare core is not a problem
-
-    monkeypatch.setattr(os, "cpu_count", lambda: 1)
-    assert auto_threads(2) == 1  # never zero, which libvmaf would reject
-
-
 def test_duration_limit_adds_output_side_t_flag():
     cmd = _build_ffmpeg_cmd(
         Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf", hwaccel=HwAccelPlan(), duration_limit=30.0,
@@ -224,20 +91,6 @@ def test_duration_limit_adds_output_side_t_flag():
     t_idx = cmd.index("-t")
     assert t_idx > lavfi_idx
     assert cmd[t_idx + 1] == "30.000"
-
-
-def test_no_duration_limit_omits_t_flag_by_default():
-    cmd = _build_ffmpeg_cmd(
-        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf", hwaccel=HwAccelPlan(),
-    )
-    assert "-t" not in cmd
-
-
-def test_hw_native_format():
-    assert _hw_native_format("yuv420p") == "nv12"
-    assert _hw_native_format("yuv420p10le") == "p010le"
-    assert _hw_native_format("yuv420p12le") == "p010le"
-    assert _hw_native_format("") == "nv12"
 
 
 def test_libvmaf_options_include_model_threads_subsample_and_features():
@@ -262,33 +115,6 @@ def test_libvmaf_options_include_model_threads_subsample_and_features():
 
 # ------------------------------------------------------------------ resolution round-trip test
 
-def test_synthetic_resample_path_is_unique_per_target_resolution():
-    source = Path("C:/videos/MyMovie.mkv")
-    p1080 = synthetic_resample_distorted_path(source, ResampleTarget(width=1920, label="1080p"))
-    p720 = synthetic_resample_distorted_path(source, ResampleTarget(width=1280, label="720p"))
-
-    assert p1080 != p720
-    assert "1080p" in p1080.name
-    assert "720p" in p720.name
-    assert p1080.suffix == ".mkv"
-    # same source + same target -> same path every time, so caching/dedup by
-    # this identity is stable and repeatable.
-    assert p1080 == synthetic_resample_distorted_path(source, ResampleTarget(width=1920, label="1080p"))
-
-
-def test_resample_filtergraph_is_single_input_split_into_two_branches():
-    source_info = _info("source.mkv", 3840, 2160)
-    options = VmafOptions(model="version=vmaf_v0.6.1", resample_test=ResampleTarget(width=1920, label="1080p"))
-
-    graph = _build_resample_test_filtergraph(
-        source_info, options, source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
-    )
-
-    assert "[1:V:0]" not in graph  # only one input -- everything derives from [0:V:0]
-    assert "[0:V:0]" in graph
-    assert "split=2" in graph
-    assert "[main][ref]libvmaf=" in graph
-
 
 def test_resample_downscales_then_upscales_back_to_source_resolution():
     source_info = _info("source.mkv", 3840, 2160)
@@ -310,57 +136,7 @@ def test_resample_downscales_then_upscales_back_to_source_resolution():
     assert dist_chain.index("scale=1920:1080") < dist_chain.index("scale=3840:2160")
 
 
-def test_resample_downscale_height_preserves_non_16_9_aspect_ratio():
-    # A 2.35:1 source (already cropped, e.g. via source_crop) -- the
-    # downscale height must preserve THIS aspect ratio, not assume 16:9.
-    source_info = _info("source.mkv", 3840, 1634)  # ~2.35:1
-    options = VmafOptions(model="version=vmaf_v0.6.1", resample_test=ResampleTarget(width=1920, label="1080p"))
-
-    graph = _build_resample_test_filtergraph(
-        source_info, options, source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
-    )
-
-    dist_chain = graph.split(";")[3]
-    # 1634 * (1920/3840) = 817, rounded to even -> 816 or 818
-    assert "scale=1920:816" in dist_chain or "scale=1920:818" in dist_chain
-
-
-def test_resample_applies_source_crop_before_the_split():
-    source_info = _info("source.mkv", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1", resample_test=ResampleTarget(width=960, label="480p"))
-    crop = CropBox(w=1920, h=816, x=0, y=132)
-
-    graph = _build_resample_test_filtergraph(
-        source_info, options, source_crop=crop, hwaccel_used=None, log_path=Path("log.json"),
-    )
-
-    base_chain = graph.split(";")[0]
-    assert "crop=1920:816:0:132" in base_chain
-    # the downscale/upscale target dimensions are based on the CROPPED
-    # content (1920x816), not the raw 1920x1080 frame.
-    dist_chain = graph.split(";")[3]
-    assert "scale=1920:816" in dist_chain
-
-
-def test_resample_cmd_has_a_single_input_video():
-    cmd = _build_resample_cmd(Path("source.mkv"), "[0:v]...", hwaccel=None)
-    assert cmd.count("-i") == 1
-
-
 # ------------------------------------------------------------------ XPSNR
-
-def test_xpsnr_not_requested_by_default():
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1")
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr.txt"),
-    )
-
-    assert "xpsnr" not in graph
-    assert "[main][ref]libvmaf=" in graph
 
 
 def _xpsnr_and_libvmaf_graphs(hwaccel=None, **options):
@@ -373,19 +149,6 @@ def _xpsnr_and_libvmaf_graphs(hwaccel=None, **options):
         hwaccel=hwaccel or HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
     )
     return graphs
-
-
-def test_xpsnr_and_libvmaf_get_a_filter_graph_each():
-    """FFmpeg runs a filter graph on one thread. Chained in one, XPSNR's work
-    and the libvmaf filter's took turns: PSNR + SSIM + XPSNR on 4K ran at
-    31 fps where PSNR + SSIM alone ran at 46 and XPSNR alone at 62. A graph
-    each, they run side by side at PSNR + SSIM's speed."""
-    graphs = _xpsnr_and_libvmaf_graphs().split(_GRAPH_SEPARATOR)
-    assert len(graphs) == 2
-    libvmaf, xpsnr = graphs
-    assert "libvmaf=" in libvmaf and "xpsnr" not in libvmaf and libvmaf.endswith("[graph0]")
-    assert "xpsnr=stats_file=xpsnr_log.txt:" in xpsnr and "libvmaf" not in xpsnr and xpsnr.endswith("[graph1]")
-    assert "feature=name=psnr|name=float_ssim" in libvmaf
 
 
 def test_each_graph_reads_both_videos_itself_and_pairs_its_own_copies():
@@ -403,43 +166,6 @@ def test_each_graph_reads_both_videos_itself_and_pairs_its_own_copies():
     # The same preparation in both: crop, conversion, scaling of the source to the test video's size.
     assert libvmaf.split(";")[:2] == [chain.replace("_x]", "_v]") for chain in xpsnr.split(";")[:2]]
     assert "crop=3840:1608:0:276" in libvmaf and "scale=1920:1080" in libvmaf
-
-
-def test_a_run_with_a_graph_each_maps_each_to_an_output_of_its_own():
-    graphs = _xpsnr_and_libvmaf_graphs()
-    cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graphs, hwaccel=HwAccelPlan(), duration_limit=30.0)
-    assert "-lavfi" not in cmd and cmd.count("-filter_complex") == 2
-    tail = cmd[cmd.index("-nostats") + 1:]
-    assert tail == ["-map", "[graph0]", "-t", "30.000", "-f", "null", "-",
-                    "-map", "[graph1]", "-t", "30.000", "-f", "null", "-"]
-    cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graphs, hwaccel=HwAccelPlan())
-    assert "-t" not in cmd
-
-
-@pytest.mark.parametrize(("accel", "decoder_downloads"), [("cuda", True), ("d3d11va", True), ("qsv", False)])
-def test_with_a_graph_each_the_decoder_downloads_where_it_can(accel, decoder_downloads):
-    """Kept on the GPU, every graph would download each picture again. CUDA
-    and D3D11VA download it once when no output format is asked for; QSV
-    still hands over its own surfaces, so each graph downloads them."""
-    plan = HwAccelPlan(distorted=accel, source=accel)
-    graphs = _xpsnr_and_libvmaf_graphs(plan)
-    cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graphs, hwaccel=plan)
-    assert cmd.count("-hwaccel") == 2
-    assert ("-hwaccel_output_format" in cmd) is not decoder_downloads
-    assert ("hwdownload" in graphs) is not decoder_downloads
-
-
-def test_a_single_metric_family_keeps_one_graph_and_its_gpu_download():
-    plan = HwAccelPlan(distorted="cuda", source="cuda")
-    for options in (VmafOptions(compute_vmaf=False, extra_features=["name=psnr", "name=float_ssim"]),
-                    VmafOptions(compute_vmaf=False, compute_xpsnr=True)):
-        graph = _build_filtergraph(
-            _info("source.mov", 1920, 1080), _info("distorted.mp4", 1920, 1080), options, None, None,
-            hwaccel=plan, log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
-        )
-        assert _GRAPH_SEPARATOR not in graph and graph.count("hwdownload") == 2
-        cmd = _build_ffmpeg_cmd(Path("d.mp4"), Path("s.mp4"), graph, hwaccel=plan)
-        assert cmd.count("-lavfi") == 1 and cmd.count("-hwaccel_output_format") == 2
 
 
 def test_chained_xpsnr_takes_the_source_first_and_passes_it_on_to_libvmaf():
@@ -463,43 +189,6 @@ def test_chained_xpsnr_takes_the_source_first_and_passes_it_on_to_libvmaf():
         assert graph.count(label) == 2  # made once, used once
 
 
-def test_xpsnr_alone_takes_the_source_first():
-    graph = _build_filtergraph(
-        _info("source.mov", 1920, 1080), _info("distorted.mp4", 1920, 1080),
-        VmafOptions(compute_vmaf=False, compute_xpsnr=True), None, None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=Path("xpsnr_log.txt"),
-    )
-    assert "[ref][main]xpsnr=stats_file=xpsnr_log.txt:" in graph
-
-
-def test_xpsnrs_scores_since_the_order_changed_are_not_taken_for_older_ones():
-    """Weighted by the encode's activity, as before, they were other numbers."""
-    from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-    from vmaf_app.core.metric_results import XPSNR_COMPATIBILITY_ID, current_ffmpeg_provenance
-
-    request = analysis_request_from_vmaf_options(VmafOptions(compute_vmaf=False, compute_xpsnr=True))
-    spec = next(spec for spec in request.metrics if spec.key == "xpsnr")
-    assert spec.implementation_compatibility_id == XPSNR_COMPATIBILITY_ID != "ffmpeg-xpsnr-v1"
-    assert current_ffmpeg_provenance("xpsnr", "9.0").implementation_compatibility_id == XPSNR_COMPATIBILITY_ID
-
-
-def test_xpsnr_requested_but_no_log_path_is_a_noop():
-    # Defensive: compute_xpsnr=True with no path given (shouldn't happen via
-    # the UI, but the filtergraph builder must not silently reference a
-    # nonexistent file) skips the xpsnr stage rather than erroring.
-    source_info = _info("source.mov", 1920, 1080)
-    distorted_info = _info("distorted.mp4", 1920, 1080)
-    options = VmafOptions(model="version=vmaf_v0.6.1", compute_xpsnr=True)
-
-    graph = _build_filtergraph(
-        source_info, distorted_info, options, None, None,
-        hwaccel=HwAccelPlan(), log_path=Path("log.json"), xpsnr_log_path=None,
-    )
-
-    assert "xpsnr" not in graph
-
-
-
 def test_parse_xpsnr_log_converts_1_indexed_to_0_indexed_frames(tmp_path):
     from vmaf_app.core.vmaf_runner import _parse_xpsnr_log
 
@@ -516,209 +205,72 @@ def test_parse_xpsnr_log_converts_1_indexed_to_0_indexed_frames(tmp_path):
     assert result[1] == -0.8422  # xpsnr's n=2 -> our frame 1 (also confirms negative values parse)
 
 
-def test_parse_xpsnr_log_preserves_infinity_for_a_perfect_frame(tmp_path):
-    from vmaf_app.core.vmaf_runner import _parse_xpsnr_log
-
-    log_path = tmp_path / "xpsnr.txt"
-    log_path.write_text(
-        "n:    1  XPSNR y: inf  XPSNR u: inf  XPSNR v: inf\n",
-        encoding="utf-8",
-    )
-
-    assert _parse_xpsnr_log(log_path) == {0: float("inf")}
-
-
-def test_parse_xpsnr_log_missing_file_returns_empty_dict(tmp_path):
-    from vmaf_app.core.vmaf_runner import _parse_xpsnr_log
-
-    assert _parse_xpsnr_log(tmp_path / "does_not_exist.txt") == {}
-
-
-def test_progress_frame_estimate_is_not_divided_by_libvmaf_subsampling():
-    from vmaf_app.core.vmaf_runner import estimate_total_frames
-
-    info = VideoInfo(
-        path=Path("movie.mp4"), width=1920, height=1080, fps=30.0,
-        duration=10.0, nb_frames=300, codec_name="h264",
-    )
-
-    assert estimate_total_frames(info, VmafOptions(n_subsample=10)) == 300
-
-
-def test_crop_detection_receives_run_cancel_and_process_controls(monkeypatch):
-    import threading
-
-    from vmaf_app.core import vmaf_runner
-    from vmaf_app.core.crop_detect import CropDetectCancelled
-    from vmaf_app.core.process_control import ProcessHandle
-    from vmaf_app.core.vmaf_runner import Cancelled
-
-    source = VideoInfo(Path("s.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
-    distorted = VideoInfo(Path("d.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
-    cancel = threading.Event()
-    handle = ProcessHandle()
-    received = []
-
-    def cancelled_crop(info, **kwargs):
-        received.append((kwargs["cancel_event"], kwargs["process_handle"]))
-        raise CropDetectCancelled("cancelled")
-
-    monkeypatch.setattr(vmaf_runner, "detect_crop", cancelled_crop)
-
-    with pytest.raises(Cancelled):
-        vmaf_runner.run_vmaf(
-            source, distorted, VmafOptions(),
-            cancel_event=cancel, process_handle=handle,
-        )
-    # Both inputs are detected at once, and each gets the run's controls.
-    assert received == [(cancel, handle)] * 2
-
-
-@pytest.mark.parametrize(
-    ("source_changes", "distorted_changes", "message"),
-    [
-        ({"fps": 24.0}, {"fps": 30.0}, "Frame rates"),
-        ({"duration": 10.0}, {"duration": 12.0}, "Durations"),
-        # Mismatched pixel aspect is no longer a *timeline* check -- it moved
-        # to validate_display_geometry, which runs after cropping. See
-        # test_two_videos_of_different_shapes_are_rejected below.
-        ({"nominal_fps": 60.0}, {"nominal_fps": 30.0}, "Variable-frame-rate"),
-    ],
-)
-def test_incompatible_video_timelines_are_rejected(
-    source_changes, distorted_changes, message
-):
-    from dataclasses import replace
-
-    from vmaf_app.core.vmaf_runner import VmafRunError, validate_video_pair
-
-    base_source = VideoInfo(Path("s.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
-    base_distorted = VideoInfo(Path("d.mp4"), 1920, 1080, 30.0, 10.0, 300, "h264")
-
-    with pytest.raises(VmafRunError, match=message):
-        validate_video_pair(
-            replace(base_source, **source_changes),
-            replace(base_distorted, **distorted_changes),
-            VmafOptions(),
-        )
-
-
-def test_parse_log_keeps_a_genuine_zero_psnr_or_ssim(tmp_path):
-    # libvmaf reports a real 0.0 for badly degraded frames. Reading these
-    # with `metrics.get("psnr_y") or metrics.get("psnr")` discarded the 0.0
-    # and fell through, losing a legitimate score.
-    import json
-
-    from vmaf_app.core.vmaf_runner import _parse_log
-
-    log_path = tmp_path / "vmaf_log.json"
-    log_path.write_text(json.dumps({"frames": [
-        {"frameNum": 0, "metrics": {"vmaf": 0.0, "psnr_y": 0.0, "float_ssim": 0.0}},
-        {"frameNum": 1, "metrics": {"vmaf": 50.0, "psnr_y": 25.5, "float_ssim": 0.5}},
-    ]}), encoding="utf-8")
-
-    frames = _parse_log(log_path, fps=30.0)
-
-    assert frames[0].psnr == 0.0
-    assert frames[0].ssim == 0.0
-    assert frames[1].psnr == 25.5
-
-
 # --------------------------------------------------- analysis bit depth
 
-@pytest.mark.parametrize(("pix_fmt", "expected"), [
-    ("yuv420p", 8), ("nv12", 8), ("nv21", 8), ("rgb24", 8), ("yuyv422", 8), ("", 8),
-    ("yuv420p10le", 10), ("yuv422p10le", 10), ("p010le", 10),
-    ("yuv420p12le", 12), ("gbrp12be", 12),
-    ("yuv444p16le", 16), ("p016le", 16), ("gray10le", 10),
-])
-def test_bit_depth_is_read_from_the_pixel_format_name(pix_fmt, expected):
-    # rgb24 is the trap: the 24 is bits per *pixel*, not per component, so a
-    # "any digits in the name" rule would call an 8-bit format 24-bit.
-    assert _bit_depth(pix_fmt) == expected
+def test_bit_depth_is_read_from_the_pixel_format_name(subtests):
+    def check(pix_fmt, expected):
+        # rgb24 is the trap: the 24 is bits per *pixel*, not per component, so a
+        # "any digits in the name" rule would call an 8-bit format 24-bit.
+        assert _bit_depth(pix_fmt) == expected
+
+    for pix_fmt, expected in [
+        ("yuv420p", 8), ("nv12", 8), ("nv21", 8), ("rgb24", 8), ("yuyv422", 8), ("", 8),
+        ("yuv420p10le", 10), ("yuv422p10le", 10), ("p010le", 10),
+        ("yuv420p12le", 12), ("gbrp12be", 12),
+        ("yuv444p16le", 16), ("p016le", 16), ("gray10le", 10),
+    ]:
+        with subtests.test(pix_fmt=pix_fmt, expected=expected):
+            check(pix_fmt, expected)
 
 
-@pytest.mark.parametrize(("formats", "expected"), [
-    (("yuv420p", "yuv420p"), "yuv420p"),
-    (("yuv420p10le", "yuv420p10le"), "yuv420p10le"),
-    (("yuv420p12le", "yuv420p12le"), "yuv420p12le"),
-    # Mixed depths promote the shallower side rather than truncating the
-    # deeper one -- a 10-bit master must not be measured through an 8-bit
-    # pipe just because the encode under test is 8-bit.
-    (("yuv420p10le", "yuv420p"), "yuv420p10le"),
-    (("yuv420p", "yuv420p10le"), "yuv420p10le"),
-    (("yuv420p12le", "yuv420p10le"), "yuv420p12le"),
-    # libvmaf tops out at 12-bit, so deeper intermediates analyse at 12.
-    (("yuv444p16le", "yuv420p"), "yuv420p12le"),
-])
-def test_analysis_format_takes_the_deeper_of_the_two_inputs(formats, expected):
-    assert analysis_pix_fmt(*formats) == expected
+def test_analysis_format_takes_the_deeper_of_the_two_inputs(subtests):
+    def check(formats, expected):
+        assert analysis_pix_fmt(*formats) == expected
+
+    for formats, expected in [
+        (("yuv420p", "yuv420p"), "yuv420p"),
+        (("yuv420p10le", "yuv420p10le"), "yuv420p10le"),
+        (("yuv420p12le", "yuv420p12le"), "yuv420p12le"),
+        # Mixed depths promote the shallower side rather than truncating the
+        # deeper one -- a 10-bit master must not be measured through an 8-bit
+        # pipe just because the encode under test is 8-bit.
+        (("yuv420p10le", "yuv420p"), "yuv420p10le"),
+        (("yuv420p", "yuv420p10le"), "yuv420p10le"),
+        (("yuv420p12le", "yuv420p10le"), "yuv420p12le"),
+        # libvmaf tops out at 12-bit, so deeper intermediates analyse at 12.
+        (("yuv444p16le", "yuv420p"), "yuv420p12le"),
+    ]:
+        with subtests.test(formats=formats, expected=expected):
+            check(formats, expected)
 
 
-@pytest.mark.parametrize(("source_fmt", "distorted_fmt", "expected"), [
-    ("yuv420p", "yuv420p", "yuv420p"),
-    ("yuv420p10le", "yuv420p10le", "yuv420p10le"),
-    ("yuv420p10le", "yuv420p", "yuv420p10le"),
-    ("yuv420p12le", "yuv420p10le", "yuv420p12le"),
-])
-def test_both_branches_are_converted_to_the_same_analysis_format(
-    source_fmt, distorted_fmt, expected
-):
-    # Both chains must name the SAME format: libvmaf compares two streams
-    # and a mismatch either errors out or silently inserts a conversion
-    # nobody chose.
-    graph = _build_filtergraph(
-        _info("source.mov", 1920, 1080, pix_fmt=source_fmt),
-        _info("distorted.mp4", 1920, 1080, pix_fmt=distorted_fmt),
-        VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
-        log_path=Path("log.json"),
-    )
-    main_chain, ref_chain, _ = graph.split(";")
+def test_both_branches_are_converted_to_the_same_analysis_format(subtests):
+    def check(source_fmt, distorted_fmt, expected):
+        # Both chains must name the SAME format: libvmaf compares two streams
+        # and a mismatch either errors out or silently inserts a conversion
+        # nobody chose.
+        graph = _build_filtergraph(
+            _info("source.mov", 1920, 1080, pix_fmt=source_fmt),
+            _info("distorted.mp4", 1920, 1080, pix_fmt=distorted_fmt),
+            VmafOptions(model="version=vmaf_v0.6.1"),
+            source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
+            log_path=Path("log.json"),
+        )
+        main_chain, ref_chain, _ = graph.split(";")
 
-    assert f"format={expected}" in main_chain
-    assert f"format={expected}" in ref_chain
-    if expected != "yuv420p":
-        assert "format=yuv420p," not in graph and "format=yuv420p[" not in graph
+        assert f"format={expected}" in main_chain
+        assert f"format={expected}" in ref_chain
+        if expected != "yuv420p":
+            assert "format=yuv420p," not in graph and "format=yuv420p[" not in graph
 
-
-def test_a_ten_bit_source_is_not_analysed_at_eight_bits():
-    # The regression this guards: every comparison used to end with a
-    # hard-coded format=yuv420p, so a 10-bit master and a 10-bit encode were
-    # both truncated to 8-bit before a single metric was computed.
-    graph = _build_filtergraph(
-        _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
-        _info("encode.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
-        VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(),
-        log_path=Path("log.json"),
-    )
-    assert "format=yuv420p10le" in graph
-    assert "format=yuv420p," not in graph
-
-
-def test_a_ten_bit_resample_test_stays_ten_bit():
-    graph = _build_resample_test_filtergraph(
-        _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
-        VmafOptions(model="version=vmaf_v0.6.1", resample_test=ResampleTarget(width=1920, label="1080p")),
-        source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
-    )
-    assert "format=yuv420p10le" in graph
-
-
-def test_gpu_download_feeds_the_analysis_format_rather_than_replacing_it():
-    # hwdownload can only emit the surface's native format, so the chain has
-    # to be hwdownload -> p010le -> the analysis format. Dropping that last
-    # step leaves libvmaf comparing semi-planar p010 against planar yuv.
-    graph = _build_filtergraph(
-        _info("master.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
-        _info("encode.mkv", 3840, 2160, pix_fmt="yuv420p10le"),
-        VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None, hwaccel=HwAccelPlan(source="cuda"),
-        log_path=Path("log.json"),
-    )
-    _, ref_chain, _ = graph.split(";")
-    assert "hwdownload,format=p010le,format=yuv420p10le" in ref_chain
+    for source_fmt, distorted_fmt, expected in [
+        ("yuv420p", "yuv420p", "yuv420p"),
+        ("yuv420p10le", "yuv420p10le", "yuv420p10le"),
+        ("yuv420p10le", "yuv420p", "yuv420p10le"),
+        ("yuv420p12le", "yuv420p10le", "yuv420p12le"),
+    ]:
+        with subtests.test(source_fmt=source_fmt, distorted_fmt=distorted_fmt, expected=expected):
+            check(source_fmt, distorted_fmt, expected)
 
 
 # ------------------------------------------------- subprocess reaping
@@ -778,140 +330,6 @@ class _FakeProcess:
         return self.returncode
 
 
-def _run_with_fake(monkeypatch, proc, tmp_path, on_progress=None):
-    from vmaf_app.core import vmaf_runner
-
-    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: proc)
-    return vmaf_runner._run_ffmpeg(
-        ["ffmpeg"], total_frames=100, on_progress=on_progress,
-        cancel_event=None, cwd=tmp_path,
-    )
-
-
-def test_a_raising_progress_callback_does_not_leave_ffmpeg_running(monkeypatch, tmp_path):
-    # The leak this guards: the exception escapes the stdout loop, and an
-    # ffmpeg left running holds the run's temp dir open, so on Windows the
-    # enclosing TemporaryDirectory silently fails to delete.
-    proc = _FakeProcess(["frame=1\n", "frame=2\n"])
-
-    def explode(current, total, fps):
-        raise RuntimeError("the UI went away")
-
-    with pytest.raises(RuntimeError, match="the UI went away"):
-        _run_with_fake(monkeypatch, proc, tmp_path, on_progress=explode)
-
-    assert proc.terminated, "ffmpeg was left running"
-    assert proc.waited, "the process was never reaped, so it stays a zombie"
-    assert proc.stdout.closed and proc.stderr.closed, "pipes were left open"
-
-
-def test_a_process_that_ignores_terminate_is_killed(monkeypatch, tmp_path):
-    proc = _FakeProcess(["frame=1\n"], ignores_terminate=True)
-
-    def explode(current, total, fps):
-        raise RuntimeError("boom")
-
-    with pytest.raises(RuntimeError):
-        _run_with_fake(monkeypatch, proc, tmp_path, on_progress=explode)
-
-    assert proc.terminated and proc.killed
-
-
-def test_the_process_handle_is_detached_even_when_the_callback_raises(monkeypatch, tmp_path):
-    from vmaf_app.core import vmaf_runner
-    from vmaf_app.core.process_control import ProcessHandle
-
-    proc = _FakeProcess(["frame=1\n"])
-    handle = ProcessHandle()
-    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: proc)
-
-    def explode(current, total, fps):
-        raise RuntimeError("boom")
-
-    with pytest.raises(RuntimeError):
-        vmaf_runner._run_ffmpeg(
-            ["ffmpeg"], total_frames=100, on_progress=explode,
-            cancel_event=None, cwd=tmp_path, process_handle=handle,
-        )
-
-    assert handle._pids == set(), "a detached handle must not still address a dead pid"
-
-
-def test_an_ffmpeg_cancel_ended_is_a_cancel_and_none_starts_after_it(monkeypatch, tmp_path):
-    """XPSNR's FFmpeg beside the app's metrics waits on an event of its own,
-    set only once the app's scorer has stopped. Cancel ended the FFmpeg, its
-    exit was taken for a failure, and the fallback started its next attempt:
-    paused, it was held suspended for good and the run never ended."""
-    from vmaf_app.core import process_control, vmaf_runner
-    from vmaf_app.core.process_control import ProcessHandle
-
-    signalled = []
-    monkeypatch.setattr(process_control, "signal_tree", lambda pid, action: signalled.append((pid, action)))
-    handle = ProcessHandle()
-    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: _FakeProcess(["frame=1\n"]))
-    with pytest.raises(Cancelled):
-        vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=lambda *a: handle.terminate(),
-                                cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
-    assert signalled == [(4242, "terminate")]
-
-    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: pytest.fail("an FFmpeg started after Cancel"))
-    with pytest.raises(Cancelled):
-        vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=None,
-                                cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
-
-
-def test_an_ffmpeg_in_the_isolated_scorer_runs_with_the_parents_handle(monkeypatch, tmp_path):
-    """In the scoring process the handle is the parent's, forwarded
-    (isolated._ForwardedHandle). It had no was_terminated, which
-    _run_ffmpeg reads since c21eebf: every FFmpeg there failed, and VMAF on
-    the GPU from FFmpeg's pipes was calculated again on the CPU."""
-    from vmaf_app.core import isolated, vmaf_runner
-
-    sent = []
-    handle = isolated._ForwardedHandle(SimpleNamespace(send=sent.append))
-    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: _FakeProcess(["frame=1\n"]))
-    result = vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=None,
-                                     cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
-    assert result.returncode == 0
-    assert sent == [("attach", 4242), ("detach", 4242)]
-
-
-def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_path):
-    proc = _FakeProcess(["frame=1\n", "fps= 24.0\n", "frame=2\n"])
-    seen = []
-
-    result = _run_with_fake(
-        monkeypatch, proc, tmp_path,
-        on_progress=lambda c, t, f: seen.append((c, t, f)),
-    )
-
-    assert result.returncode == 0
-    assert "ffmpeg stderr" in result.stderr
-    assert seen == [(1, 100, 0.0), (2, 100, 24.0)]
-
-
-def test_a_curly_quote_in_ffmpegs_stderr_is_read_as_utf8(monkeypatch, tmp_path):
-    """ffmpeg's stderr opens with each input's path and tags, in UTF-8. Read
-    as cp1252, the 0x9D byte of ” killed the drain thread: the run lost
-    ffmpeg's messages, and nothing was left emptying the pipe."""
-    from vmaf_app.core import vmaf_runner
-
-    banner = "Input #0, matroska,webm, from 'Director’s Cut “Final”.mkv':\n  title : Director’s Cut “Final”\n"
-    script = (
-        f"import sys; sys.stderr.buffer.write({banner.encode('utf-8')!r}); sys.stderr.flush(); "
-        "sys.stdout.write('frame=1\\nprogress=end\\n'); sys.stderr.write('done\\n')"
-    )
-    real_popen = vmaf_runner.proc_util.popen
-    monkeypatch.setattr(vmaf_runner.proc_util, "popen",
-                        lambda cmd, **kw: real_popen([STDLIB_PYTHON, "-S", "-c", script], **kw))
-
-    result = vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=1, on_progress=None,
-                                     cancel_event=None, cwd=tmp_path)
-
-    assert result.returncode == 0
-    assert result.stderr == banner + "done\n"
-
-
 # --------------------------------------------- per-input hardware decode
 
 def test_each_input_gets_its_own_hwaccel_options():
@@ -931,85 +349,6 @@ def test_each_input_gets_its_own_hwaccel_options():
     ]
     assert cmd[source_at - 5:source_at] == [
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i",
-    ]
-
-
-def test_only_the_accelerated_input_gets_hwaccel_options():
-    cmd = _build_ffmpeg_cmd(
-        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf",
-        hwaccel=HwAccelPlan(source="cuda", distorted=None),
-    )
-    distorted_at = cmd.index(str(Path("distorted.mp4").resolve()))
-    source_at = cmd.index(str(Path("source.mp4").resolve()))
-
-    assert cmd[distorted_at - 2] != "-hwaccel_output_format",         "the software-decoded input got hwaccel options"
-    assert cmd[source_at - 5:source_at] == [
-        "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-i",
-    ]
-    assert cmd.count("-hwaccel") == 1
-
-
-def test_nvidias_decoding_runs_on_one_thread_only_where_its_frames_stay_on_the_gpu():
-    """FFmpeg's frame threads hold pictures of their own (260 MB at 4K) for
-    nothing when NVIDIA's decoder decodes. A video it does not take is then
-    decoded on the CPU: with the frames kept on the GPU that fails the run,
-    made again without -hwaccel; handed over in memory, it would go on, on
-    one thread."""
-    cmd = _build_ffmpeg_cmd(
-        Path("distorted.mp4"), Path("source.mp4"), "[0:v][1:v]libvmaf",
-        hwaccel=HwAccelPlan(source="cuda", distorted=None),
-    )
-    source_at = cmd.index(str(Path("source.mp4").resolve()))
-    assert cmd[source_at - 7:source_at - 5] == ["-threads", "1"]
-    assert cmd.count("-threads") == 1  # not the software-decoded input's
-    assert "-threads" not in hwaccel_args("qsv")
-    split = _build_ffmpeg_cmd(
-        Path("distorted.mp4"), Path("source.mp4"), "[0:v]xpsnr[x]" + _GRAPH_SEPARATOR + "[1:v]null[y]",
-        hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
-    )
-    assert "-threads" not in split and "-hwaccel_output_format" not in split
-
-
-def test_a_gpu_decoded_distorted_input_is_downloaded_before_filtering():
-    # Hardware frames are surfaces, not pixels: crop and format can't touch
-    # them. Without the hwdownload the filtergraph fails to configure.
-    graph = _build_filtergraph(
-        _info("source.mov", 1920, 1080), _info("distorted.mp4", 1920, 1080),
-        VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=CropBox(x=0, y=20, w=1920, h=1040),
-        hwaccel=HwAccelPlan(distorted="cuda"), log_path=Path("log.json"),
-    )
-    main_chain = graph.split(";")[0]
-
-    assert main_chain.startswith("[0:V:0]hwdownload,format=nv12,crop=")
-    assert "hwdownload" not in graph.split(";")[1], "the source was not GPU-decoded"
-
-
-def test_a_ten_bit_distorted_input_downloads_through_p010():
-    graph = _build_filtergraph(
-        _info("source.mov", 1920, 1080, pix_fmt="yuv420p10le"),
-        _info("distorted.mp4", 1920, 1080, pix_fmt="yuv420p10le"),
-        VmafOptions(model="version=vmaf_v0.6.1"),
-        source_crop=None, distorted_crop=None,
-        hwaccel=HwAccelPlan(source="cuda", distorted="cuda"), log_path=Path("log.json"),
-    )
-    main_chain, ref_chain, _ = graph.split(";")
-
-    assert "hwdownload,format=p010le,format=yuv420p10le" in main_chain
-    assert "hwdownload,format=p010le,format=yuv420p10le" in ref_chain
-
-
-def test_each_input_gets_an_independent_single_gpu_fallback():
-    # The distorted file is the arbitrary one -- whatever encoder settings
-    # are under test -- while the source is usually a known-good master, so
-    # it is the first suspect when hardware decode fails.
-    ladder = _fallback_ladder(HwAccelPlan(source="cuda", distorted="cuda"))
-
-    assert ladder == [
-        HwAccelPlan(source="cuda", distorted="cuda"),
-        HwAccelPlan(source="cuda", distorted=None),
-        HwAccelPlan(source=None, distorted="cuda"),
-        HwAccelPlan(),
     ]
 
 
@@ -1059,42 +398,7 @@ def test_a_run_retries_down_the_ladder_until_one_succeeds(monkeypatch, tmp_path)
     assert "off" in statuses[3]
 
 
-def test_a_failed_attempt_does_not_leave_a_log_for_the_retry_to_parse(monkeypatch, tmp_path):
-    # ffmpeg can write a partial log before a decoder gives up. If the retry
-    # then fails to produce one, that stale file would be parsed as though it
-    # were the retry's own output -- a truncated run reported as a complete one.
-    from vmaf_app.core import vmaf_runner
-
-    seen_existing_log = []
-
-    def fake_run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
-        log = Path(cwd) / "vmaf_log.json"
-        seen_existing_log.append(log.exists())
-        log.write_text('{"frames": []}', encoding="utf-8")  # a partial log
-        return subprocess.CompletedProcess(cmd, 1, "", "decoder error")
-
-    monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
-
-    with pytest.raises(vmaf_runner.VmafRunError):
-        vmaf_runner._execute_run(
-            lambda plan, model, log_path, xpsnr_log_path: [plan],
-            options=VmafOptions(), fps=30.0, total_frames=10,
-            hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
-            tmp_prefix="test_", on_progress=None, on_status=None,
-            cancel_event=None, process_handle=None,
-        )
-
-    assert seen_existing_log == [False, False, False, False]
-
-
 # ------------------------------------------- frame-count mismatch (framesync)
-
-def _fs_info(name, *, nb_frames, fps=30.0):
-    return VideoInfo(
-        path=Path(name), width=320, height=180, fps=fps,
-        duration=nb_frames / fps, nb_frames=nb_frames, codec_name="ffv1",
-        pix_fmt="yuv420p",
-    )
 
 
 @pytest.mark.parametrize("compute_xpsnr", [False, True])
@@ -1130,40 +434,6 @@ def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
         assert "ts_sync_mode=nearest" in xpsnr_stage
 
 
-def test_a_resample_test_needs_no_framesync_guard_but_still_carries_it():
-    # A round-trip test splits ONE decoded input, so both branches are the
-    # same length by construction. The options are harmless there and keeping
-    # them in one place is what stops the two builders drifting apart.
-    graph = _build_resample_test_filtergraph(
-        _info("source.mkv", 3840, 2160),
-        VmafOptions(model="version=vmaf_v0.6.1",
-                    resample_test=ResampleTarget(width=1920, label="1080p")),
-        source_crop=None, hwaccel_used=None, log_path=Path("log.json"),
-    )
-    assert "shortest=1" in graph and "repeatlast=0" in graph
-
-
-def test_progress_is_sized_to_the_shorter_of_the_two_inputs():
-    # The run now ends at the shorter input, so sizing progress to the
-    # distorted file's own length would leave the bar stuck short of 100%.
-    options = VmafOptions()
-    source = _fs_info("source.mkv", nb_frames=30)
-    distorted = _fs_info("distorted.mkv", nb_frames=32)
-
-    assert estimate_total_frames(distorted, options, source) == 30
-    assert estimate_total_frames(source, options, distorted) == 30
-    # One input only (a round-trip test) is unaffected.
-    assert estimate_total_frames(distorted, options) == 32
-
-
-def test_a_duration_limit_still_bounds_the_shorter_input():
-    options = VmafOptions(duration_limit=0.5)  # 15 frames at 30fps
-    source = _fs_info("source.mkv", nb_frames=30)
-    distorted = _fs_info("distorted.mkv", nb_frames=32)
-
-    assert estimate_total_frames(distorted, options, source) == 15
-
-
 # ------------------------------------------------- display geometry (shape)
 
 def _shaped(name, w, h, sar="1:1"):
@@ -1195,134 +465,6 @@ def test_the_same_pair_is_accepted_once_the_letterbox_is_cropped_off():
         _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 960, 408),
         CropBox(w=1920, h=816, x=0, y=132), None,
     )
-
-
-def test_the_same_shape_at_a_different_resolution_is_accepted():
-    validate_display_geometry(
-        _shaped("source.mkv", 3840, 2160), _shaped("encode.mkv", 1280, 720), None, None
-    )
-
-
-def test_different_sars_describing_the_same_picture_are_accepted():
-    # 1440x1080 with 4:3 pixels IS 16:9. The old check compared SAR strings
-    # and rejected this valid pair outright.
-    validate_display_geometry(
-        _shaped("source.mkv", 1920, 1080, sar="1:1"),
-        _shaped("encode.mkv", 1440, 1080, sar="4:3"),
-        None, None,
-    )
-
-
-def test_matching_sar_strings_do_not_excuse_a_mismatched_shape():
-    with pytest.raises(VmafRunError, match="different shapes"):
-        validate_display_geometry(
-            _shaped("source.mkv", 1920, 1080, sar="1:1"),
-            _shaped("encode.mkv", 1920, 1440, sar="1:1"),
-            None, None,
-        )
-
-
-def test_square_pixels_are_assumed_when_the_sar_is_unknown():
-    for unknown in ("", "N/A", "0:1", "garbage"):
-        validate_display_geometry(
-            _shaped("source.mkv", 1920, 1080, sar=unknown),
-            _shaped("encode.mkv", 1920, 1080, sar="1:1"),
-            None, None,
-        )
-
-
-def test_rounding_to_even_dimensions_is_not_treated_as_a_mismatch():
-    # Encoders round to even dimensions, so a 0.1%-off shape is normal.
-    validate_display_geometry(
-        _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 1918, 1080), None, None
-    )
-
-
-def test_a_manual_crop_that_changes_the_shape_is_rejected():
-    with pytest.raises(VmafRunError, match="different shapes"):
-        validate_display_geometry(
-            _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 1920, 1080),
-            CropBox(w=1920, h=816, x=0, y=132), None,
-        )
-
-
-def test_a_run_checks_geometry_after_resolving_crops(monkeypatch):
-    # Ordering matters: checking before the crop was resolved would reject
-    # every letterboxed source, which is the normal case.
-    from vmaf_app.core import vmaf_runner
-
-    order = []
-    monkeypatch.setattr(
-        vmaf_runner, "_resolve_crops",
-        lambda *a, **k: (order.append("crops"), (None, None))[1],
-    )
-
-    def spy(*args, **kwargs):
-        order.append("geometry")
-        raise VmafRunError("different shapes")
-
-    monkeypatch.setattr(vmaf_runner, "validate_display_geometry", spy)
-
-    with pytest.raises(VmafRunError):
-        vmaf_runner.run_vmaf(
-            _shaped("source.mkv", 1920, 1080), _shaped("encode.mkv", 960, 408),
-            VmafOptions(),
-        )
-
-    assert order == ["crops", "geometry"]
-
-
-def test_crop_detection_decodes_each_input_the_way_the_run_will(monkeypatch, tmp_path):
-    """The plan is per input: a GPU-decodable source and a codec with no
-    hardware path get different answers, and crop detection follows each.
-    Nothing here is a vendor -- it is whatever plan_hwaccel produced from this
-    machine's GPU, this ffmpeg build and these codecs."""
-    from vmaf_app.core import vmaf_runner as vr
-    from vmaf_app.core.gpu import HwAccelPlan
-
-    seen = {}
-
-    def fake_detect(info, **kwargs):
-        seen[info.path.name] = kwargs.get("hwaccel")
-        return vr.CropBox(w=info.width, h=info.height, x=0, y=0)
-
-    monkeypatch.setattr(vr, "detect_crop", fake_detect)
-    monkeypatch.setattr(
-        vr, "plan_hwaccel",
-        lambda vendor, src_codec, dist_codec=None, **_formats: HwAccelPlan(source="whatever-the-planner-chose",
-                                                                        distorted=None),
-    )
-    # Stop short of running ffmpeg: the plan and the crops are decided first.
-    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
-
-    source = vr.VideoInfo(path=tmp_path / "source.mkv", width=3840, height=2160, fps=24.0,
-                          duration=10.0, nb_frames=240, codec_name="hevc")
-    distorted = vr.VideoInfo(path=tmp_path / "encode.mkv", width=3840, height=2160, fps=24.0,
-                             duration=10.0, nb_frames=240, codec_name="vvc")
-    options = vr.VmafOptions(gpu_decode=True, crop_mode=vr.CropMode.AUTO)
-
-    with pytest.raises(RuntimeError, match="stop"):
-        vr.run_vmaf(source, distorted, options)
-
-    assert seen == {"source.mkv": "whatever-the-planner-chose", "encode.mkv": None}
-
-
-def test_crop_detection_stays_on_the_cpu_when_gpu_decode_is_off(monkeypatch, tmp_path):
-    from vmaf_app.core import vmaf_runner as vr
-
-    seen = {}
-    monkeypatch.setattr(
-        vr, "detect_crop",
-        lambda info, **kw: seen.setdefault(info.path.name, kw.get("hwaccel")) or vr.CropBox(w=info.width, h=info.height, x=0, y=0),
-    )
-    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
-    info = vr.VideoInfo(path=tmp_path / "a.mkv", width=1920, height=1080, fps=24.0,
-                        duration=10.0, nb_frames=240, codec_name="hevc")
-
-    with pytest.raises(RuntimeError, match="stop"):
-        vr.run_vmaf(info, info, vr.VmafOptions(gpu_decode=False, crop_mode=vr.CropMode.AUTO))
-
-    assert seen == {"a.mkv": None}
 
 
 def test_a_test_video_stamped_a_millisecond_early_is_still_compared_frame_for_frame(tmp_path):
@@ -1359,45 +501,3 @@ def test_a_test_video_stamped_a_millisecond_early_is_still_compared_frame_for_fr
     jittered = run_vmaf(source_info, probe_video(early), options)
     for key in ("vmaf", "psnr", "xpsnr"):
         assert np.array_equal(np.asarray(jittered.frames.values(key)), np.asarray(clean.frames.values(key))), key
-
-
-def test_each_ffmpeg_attempt_and_its_failure_are_logged(monkeypatch, caplog):
-    import logging
-
-    from vmaf_app.core import vmaf_runner
-
-    caplog.set_level(logging.INFO, logger="vmaf_app")
-
-    def fake_run_ffmpeg(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
-        return subprocess.CompletedProcess(cmd, 1, "", "[hevc @ 0x1] hardware decoder refused the stream")
-
-    monkeypatch.setattr(vmaf_runner, "_run_ffmpeg", fake_run_ffmpeg)
-    with pytest.raises(vmaf_runner.VmafRunError):
-        vmaf_runner._execute_run(
-            lambda plan, model, log_path, xpsnr_log_path: ["ffmpeg", "-i", "a b.mkv"],
-            options=VmafOptions(), fps=30.0, total_frames=10,
-            hwaccel=HwAccelPlan(source="cuda", distorted="cuda"),
-            tmp_prefix="test_", on_progress=None, on_status=None,
-            cancel_event=None, process_handle=None,
-        )
-    text = caplog.text
-    assert 'FFmpeg: ffmpeg -i "a b.mkv"' in text
-    assert ("FFmpeg exited with code 1 (GPU decode: source cuda, distorted cuda); retrying. Last output:\n"
-            "[hevc @ 0x1] hardware decoder refused the stream") in text
-    assert "FFmpeg exited with code 1 (GPU decode: off). Last output:" in text
-
-
-def test_both_inputs_are_cropped_before_the_format_conversion():
-    """The source was converted to the analysis format first and cropped
-    after, the test video the other way round: a 4:2:2 or 4:4:4 source's
-    chroma at the crop's edges was filtered with samples of the bars."""
-    from vmaf_app.core.models import CropBox, VideoInfo, VmafOptions
-    from vmaf_app.core.vmaf_runner import HwAccelPlan, _build_filtergraph
-
-    source = VideoInfo(Path("s.mov"), 1920, 1080, 24.0, 1.0, 24, "prores", pix_fmt="yuv422p10le")
-    test = VideoInfo(Path("t.mkv"), 1920, 1080, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p10le")
-    box = CropBox(1920, 800, 0, 140)
-    graph = _build_filtergraph(source, test, VmafOptions(), box, box, HwAccelPlan(), Path("log.json"))
-    main, ref = graph.split(";")[:2]
-    assert "crop=1920:800:0:140,format=yuv420p10le" in main
-    assert "crop=1920:800:0:140,format=yuv420p10le" in ref

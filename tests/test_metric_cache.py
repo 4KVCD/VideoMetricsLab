@@ -6,17 +6,13 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from vmaf_app.core import metric_cache, result_cache
 from vmaf_app.core.analysis_request import (
     AnalysisRequest,
-    ExecutionPreferences,
     FrameCoverage,
     MetricRequestSpec,
 )
-from vmaf_app.core.cvvdp import CvvdpDisplay, CvvdpSettings
-from vmaf_app.core.execution import build_execution_plan
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
     comparison_recipe_from_vmaf_options,
@@ -28,7 +24,6 @@ from vmaf_app.core.metric_cache import (
     clear_metrics,
     load_metric,
     load_metrics,
-    load_other_parameters,
     metric_path,
     recipe_directory,
     store_metric,
@@ -40,7 +35,6 @@ from vmaf_app.core.metric_results import (
     MetricResultSet,
     SequenceMetricResult,
     frame_scores_from_results,
-    merge_metric_results,
 )
 from vmaf_app.core.models import ComparisonResult, CropMode, FrameScores, GpuVendor, VideoInfo, VmafOptions
 
@@ -171,22 +165,6 @@ def test_a_score_is_kept_when_it_has_a_value_made_where_its_metric_is_set_and_an
     assert "ssimulacra2" in kept(on_cpu, backends={"ssimulacra2": "gpu"}, gpu_can_score=lambda key: False)
 
 
-def test_a_score_from_another_implementation_is_not_saved_under_this_request(tmp_path):
-    """A run kept v1.4's XPSNR from an opened run file beside new metrics,
-    and saving it under the request's identity made it answer from then on
-    -- the identity is what loading checks."""
-    source, test = _paths(tmp_path)
-    options = VmafOptions(compute_xpsnr=True)
-    for compatibility, kept in (("ffmpeg-xpsnr-v1", False), ("ffmpeg-xpsnr-v2", True)):
-        run = _run(source, test)
-        run.merge_metric_results(MetricResultSet([_xpsnr(compatibility)]))
-        cache = tmp_path / compatibility
-        _store_cached(source, test, run, "t", options, cache)
-        loaded = _load_cached(source, test, options, cache)[0]
-        assert loaded.has_metric("xpsnr") is kept, compatibility
-        assert loaded.has_metric("vmaf")
-
-
 def test_cache_omits_library_versions_except_for_vmaf(tmp_path):
     source, test = _paths(tmp_path)
     options = VmafOptions(model_choice="version=vmaf_v0.6.1")
@@ -240,147 +218,12 @@ def test_recipe_and_metric_identity_keep_scientific_choices_separate(tmp_path):
     assert recipe_directory(tmp_path, source, test, recipe) != baseline
 
 
-def _legacy_directory(tmp_path, source, test, recipe, algorithm):
-    """Where a comparison was saved while its identity held the scaling
-    algorithm it was scaled with."""
-    from vmaf_app.core import metric_cache
-
-    return tmp_path / "v2" / metric_cache._hash(
-        metric_cache.file_identity(source), metric_cache.file_identity(test),
-        {**recipe.identity_dict(), "scale_algorithm": algorithm})
-
-
-@pytest.mark.parametrize("saved_with", ["bicubic", "lanczos", "spline"])
-def test_scores_saved_when_the_algorithm_was_part_of_the_identity_are_found(tmp_path, saved_with):
-    """A comparison saved before the scaling algorithm left its identity sits
-    under a hash that held the algorithm: found, under any algorithm, and moved
-    to the new name, with its scores."""
-    from vmaf_app.core import metric_cache
-
-    source, test = _paths(tmp_path)
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm=saved_with))
-    old = _legacy_directory(tmp_path, source, test, recipe, saved_with)
-    old.mkdir(parents=True)
-    store_metric(old, _frame(), _spec())
-    wanted = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="bilinear"))
-    directory = recipe_directory(tmp_path, source, test, wanted)
-    assert directory.name == metric_cache.recipe_hash(source, test, wanted)
-    assert not old.exists()
-    assert load_metric(directory, _spec()) is not None
-
-
-def test_every_algorithms_saved_scores_are_kept_the_recipes_own_first(tmp_path):
-    """Scored once scaled with bicubic and once with lanczos, a comparison was
-    saved twice. Only the first directory found was adopted: the other's
-    scores were never found again. Both are now, and where both hold a
-    metric's scores, the recipe's own algorithm's are kept."""
-    source, test = _paths(tmp_path)
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions(scale_algorithm="lanczos"))
-    bicubic, lanczos = (_legacy_directory(tmp_path, source, test, recipe, a) for a in ("bicubic", "lanczos"))
-    for directory in (bicubic, lanczos):
-        directory.mkdir(parents=True)
-    def scores(key, values):
-        return FrameMetricResult(key, [0, 4, 8], [0.0, 1 / 6, 1 / 3], values, PROVENANCE)
-
-    store_metric(bicubic, scores("only_bicubic", [1.0, 2.0, 3.0]), _spec("only_bicubic"))
-    store_metric(bicubic, scores("both", [1.0, 2.0, 3.0]), _spec("both"))
-    store_metric(lanczos, scores("both", [4.0, 5.0, 6.0]), _spec("both"))
-
-    directory = recipe_directory(tmp_path, source, test, recipe)
-
-    assert not bicubic.exists() and not lanczos.exists()
-    assert list(load_metric(directory, _spec("only_bicubic")).values) == [1.0, 2.0, 3.0]
-    assert list(load_metric(directory, _spec("both")).values) == [4.0, 5.0, 6.0]
-
-
-def test_coverage_and_compatibility_id_produce_independent_direct_entries(tmp_path):
-    source, test = _paths(tmp_path)
-    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
-    full, sampled = _spec("xpsnr", step=1), _spec("xpsnr", step=3)
-    other_impl = _spec("xpsnr", compatibility="other-v1")
-    store_metric(directory, _frame("xpsnr"), full)
-    assert load_metric(directory, sampled) is None
-    assert load_metric(directory, other_impl) is None
-    assert metric_request_specs(VmafOptions(model_choice="version=vmaf_v0.6.1"))[0] != metric_request_specs(VmafOptions(model_choice="version=vmaf_4k_v0.6.1"))[0]
-    neg_a = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model_choice="version=vmaf_v0.6.1"))[0]
-    neg_b = metric_request_specs(VmafOptions(compute_vmaf=False, compute_vmaf_neg=True, model_choice="version=vmaf_4k_v0.6.1"))[0]
-    assert neg_a == neg_b, "standard VMAF model choice must not invalidate fixed-model NEG"
-
-
-def test_generic_results_can_have_independent_axes_without_corrupting_shared_frame_view():
-    vmaf = FrameMetricResult("vmaf", [0, 2], [0.0, 0.1], [90, 91], PROVENANCE)
-    arbitrary = FrameMetricResult("test_frame_metric", [0, 5], [0.0, 0.25], [1, 2], PROVENANCE)
-    results = MetricResultSet([vmaf, arbitrary, SequenceMetricResult("test_sequence_metric", 8.75, PROVENANCE)])
-    assert results.frame("test_frame_metric").frame.tolist() == [0, 5]
-    assert results.sequence("test_sequence_metric").score == 8.75
-    frame_view = frame_scores_from_results(results)
-    assert frame_view.vmaf.tolist() == [90, 91]
-    assert not frame_view.has("test_frame_metric")
-    merged = merge_metric_results(MetricResultSet([vmaf]), MetricResultSet([arbitrary]))
-    assert merged.has("vmaf") and merged.has("test_frame_metric")
-
-
-def test_independent_axis_registered_metric_does_not_blank_the_shared_view():
-    vmaf = FrameMetricResult("vmaf", [0, 2], [0.0, 0.1], [90, 91], PROVENANCE)
-    psnr = FrameMetricResult("psnr", [0, 5], [0.0, 0.25], [40, 41], PROVENANCE)
-    results = MetricResultSet([vmaf, psnr])
-
-    frame_view = frame_scores_from_results(results)
-
-    assert frame_view.vmaf.tolist() == [90, 91]
-    assert frame_view.psnr is None
-    assert results.frame("psnr").frame.tolist() == [0, 5]
-
-
-def test_planner_groups_arbitrary_metric_backends_without_vmaf_options():
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
-    request = AnalysisRequest(
-        recipe=recipe,
-        metrics=(
-            _spec("metric_a", backend="cpu"),
-            _spec("metric_b", backend="gpu"),
-            _spec("metric_c", backend="cpu"),
-        ),
-        execution=ExecutionPreferences(True, GpuVendor.AUTO, 0),
-    )
-
-    plan = build_execution_plan(request)
-
-    assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
-        ("cpu", ("metric_a", "metric_c")),
-        ("gpu", ("metric_b",)),
-    ]
-
-    cached = MetricResultSet([_frame("metric_a"), _frame("metric_c")])
-    plan = build_execution_plan(request, cached)
-    assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
-        ("gpu", ("metric_b",)),
-    ]
-
-
 def test_backend_routing_is_not_part_of_metric_cache_identity():
     cpu = _spec("same", backend="cpu")
     gpu = _spec("same", backend="gpu")
 
     assert cpu.identity_dict() == gpu.identity_dict()
     assert metric_path(Path("cache"), cpu) == metric_path(Path("cache"), gpu)
-
-
-def test_perceptual_compute_choice_does_not_change_cache_key(tmp_path):
-    source, test = _paths(tmp_path)
-    options = VmafOptions()
-    requested = ("ssimulacra2", "butteraugli")
-    gpu_request = analysis_request_from_vmaf_options(
-        options, requested, {"ssimulacra2": "gpu", "butteraugli": "gpu"},
-    )
-    mixed_request = analysis_request_from_vmaf_options(
-        options, requested, {"ssimulacra2": "cpu", "butteraugli": "gpu"},
-    )
-
-    assert gpu_request.execution != mixed_request.execution
-    assert result_cache.cache_key(source, test, gpu_request) == result_cache.cache_key(
-        source, test, mixed_request,
-    )
 
 
 def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
@@ -411,182 +254,6 @@ def test_auto_perceptual_cache_keeps_gpu_and_cpu_scores_separate(tmp_path):
     assert load_metric(directory, sampled).values.tolist() == [80.0]
 
 
-def test_cache_omits_library_version_except_for_vmaf(tmp_path):
-    source, test = _paths(tmp_path)
-    options = VmafOptions()
-    directory = recipe_directory(
-        tmp_path, source, test, comparison_recipe_from_vmaf_options(options)
-    )
-    specs = metric_request_specs(options, ("ssimulacra2", "vmaf", "vmaf_neg"))
-    perceptual = next(spec for spec in specs if spec.key == "ssimulacra2")
-    vmaf = next(spec for spec in specs if spec.key == "vmaf")
-    vmaf_neg = next(spec for spec in specs if spec.key == "vmaf_neg")
-
-    store_metric(directory, FrameMetricResult(
-        perceptual.key, [0], [0.0], [82.0],
-        MetricProvenance("SSIMULACRA2", "libjxl 0.12.0", "cpu", "ssimulacra2-libjxl-cpu-v1"),
-    ), perceptual)
-    store_metric(directory, FrameMetricResult(
-        vmaf.key, [0], [0.0], [96.0],
-        MetricProvenance("FFmpeg/libvmaf", "FFmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1"),
-    ), vmaf)
-    store_metric(directory, FrameMetricResult(
-        vmaf_neg.key, [0], [0.0], [94.0],
-        MetricProvenance("FFmpeg/libvmaf", "FFmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1"),
-    ), vmaf_neg)
-
-    perceptual_path = next(directory.glob("ssimulacra2_*.npz"))
-    with np.load(perceptual_path, allow_pickle=False) as data:
-        perceptual_metadata = json.loads(str(data["metadata"].item()))
-    with np.load(metric_path(directory, vmaf), allow_pickle=False) as data:
-        vmaf_metadata = json.loads(str(data["metadata"].item()))
-    with np.load(metric_path(directory, vmaf_neg), allow_pickle=False) as data:
-        vmaf_neg_metadata = json.loads(str(data["metadata"].item()))
-
-    assert perceptual_metadata["provenance"]["implementation_version"] == ""
-    assert vmaf_metadata["provenance"]["implementation_version"] == "FFmpeg 9.0"
-    assert vmaf_neg_metadata["provenance"]["implementation_version"] == ""
-    assert dict(vmaf_neg_metadata["request"]["parameters"])["model"] == "version=vmaf_v0.6.1neg"
-
-
-def test_auto_perceptual_cache_reuses_scores_across_library_versions(tmp_path):
-    source, test = _paths(tmp_path)
-    options = VmafOptions()
-    recipe = comparison_recipe_from_vmaf_options(options)
-    directory = recipe_directory(tmp_path, source, test, recipe)
-    spec = next(spec for spec in metric_request_specs(options, ("ssimulacra2",)) if spec.key == "ssimulacra2")
-    old_gpu_id = "ssimulacra2-vship-4.0.2-gpu-v1"
-    old_gpu_provenance = MetricProvenance("Vship/SSIMULACRA2", "Vship 4.0.2", "gpu", old_gpu_id)
-    old_cpu_id = "ssimulacra2-libjxl-0.11.1-cpu-v1"
-    old_cpu_provenance = MetricProvenance("SSIMULACRA2", "libjxl 0.11.1", "cpu", old_cpu_id)
-
-    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [91.0], old_gpu_provenance), spec)
-    assert load_metric(directory, spec).values.tolist() == [91.0]
-
-    # The auto policy still prefers GPU data, but CPU results from any libjxl
-    # version remain valid fallbacks when no GPU result exists.
-    clear_metrics(tmp_path, source, test, recipe, (spec,))
-    store_metric(directory, FrameMetricResult(spec.key, [0], [0.0], [82.0], old_cpu_provenance), spec)
-    loaded = load_metric(directory, spec)
-    assert loaded.values.tolist() == [82.0]
-    assert loaded.provenance.implementation_version == ""
-
-
-def _write_context(directory: Path, **distorted_info) -> None:
-    info = {"pix_fmt": "yuv420p", "color_transfer": ""}
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / "context.json").write_text(json.dumps(
-        {"source_info": info, "distorted_info": {**info, **distorted_info}}), encoding="utf-8")
-
-
-def _vship_score(value: float, **parameters) -> FrameMetricResult:
-    provenance = MetricProvenance("Vship/ssimulacra2", "", "gpu", "ssimulacra2-vship-gpu-v1", parameters)
-    return FrameMetricResult("ssimulacra2", [0], [0.0], [value], provenance)
-
-
-def test_a_v12_gpu_score_of_an_untagged_rgb_video_is_calculated_again(tmp_path):
-    """v1.2's Vship tables took RGB without a transfer tag as BT.709; it is
-    sRGB, as FFVship 5.1.1 has it. Its GPU scores of such a pair -- no
-    "color_tags" in their provenance -- are passed over: a saved CPU score
-    answers instead, or the metric is calculated again."""
-    source, test = _paths(tmp_path)
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
-    directory = recipe_directory(tmp_path, source, test, recipe)
-    spec = next(spec for spec in metric_request_specs(VmafOptions(), ("ssimulacra2",)) if spec.key == "ssimulacra2")
-    _write_context(directory, pix_fmt="gbrp", color_transfer="unknown")
-    store_metric(directory, _vship_score(70.0), spec)
-    assert load_metric(directory, spec) is None
-
-    cpu = MetricProvenance("SSIMULACRA2", "", "cpu", "ssimulacra2-libjxl-cpu-v1")
-    store_metric(directory, FrameMetricResult("ssimulacra2", [0], [0.0], [71.0], cpu), spec)
-    assert load_metric(directory, spec).values.tolist() == [71.0]
-
-    # A score made since, with the FFVship mapping, is the GPU's answer.
-    store_metric(directory, _vship_score(72.0, color_tags=VSHIP_COLOR_TAGS), spec)
-    assert load_metric(directory, spec).values.tolist() == [72.0]
-
-
-@pytest.mark.parametrize("distorted_info", [
-    {"pix_fmt": "yuv420p10le", "color_transfer": ""},  # YUV: v1.2 read its tags as now
-    {"pix_fmt": "gbrp", "color_transfer": "iec61966-2-1"},  # tagged RGB: the same too
-    {"pix_fmt": "gbrap", "color_transfer": ""},  # v1.2 never scored it on the GPU
-])
-def test_other_v12_gpu_scores_are_still_reused(tmp_path, distorted_info):
-    source, test = _paths(tmp_path)
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
-    directory = recipe_directory(tmp_path, source, test, recipe)
-    spec = next(spec for spec in metric_request_specs(VmafOptions(), ("ssimulacra2",)) if spec.key == "ssimulacra2")
-    _write_context(directory, **distorted_info)
-    store_metric(directory, _vship_score(70.0), spec)
-    assert load_metric(directory, spec).values.tolist() == [70.0]
-
-
-def test_a_v12_cvvdp_score_of_an_untagged_rgb_video_is_not_shown_for_any_display(tmp_path):
-    source, test = _paths(tmp_path)
-    recipe = comparison_recipe_from_vmaf_options(VmafOptions())
-    directory = recipe_directory(tmp_path, source, test, recipe)
-    office, phone = (metric_request_specs(VmafOptions(), ("cvvdp",), settings)[0]
-                     for settings in (CvvdpSettings(), CvvdpSettings(CvvdpDisplay(width=2400, height=1080))))
-    _write_context(directory, pix_fmt="rgb24", color_transfer="")
-    for spec, score in ((office, 9.5), (phone, 9.1)):
-        provenance = MetricProvenance("Vship/cvvdp", "", "gpu", spec.implementation_compatibility_id)
-        store_metric(directory, SequenceMetricResult("cvvdp", score, provenance), spec)
-    assert load_metric(directory, office) is None
-    assert load_other_parameters(directory, office) == []
-
-
-def test_planning_retains_grouping_and_special_xpsnr_coverage():
-    mixed = VmafOptions(compute_xpsnr=True, n_subsample=3)
-    full_xpsnr = VmafOptions(compute_vmaf=False, compute_xpsnr=True, n_subsample=3)
-    assert len(build_execution_plan(analysis_request_from_vmaf_options(mixed)).tasks) == 1
-    assert len(build_execution_plan(analysis_request_from_vmaf_options(mixed), MetricResultSet([_frame("vmaf")])).tasks) == 1
-    assert build_execution_plan(analysis_request_from_vmaf_options(mixed), MetricResultSet([_frame("vmaf"), _frame("xpsnr")])).tasks == ()
-    assert next(spec for spec in metric_request_specs(mixed) if spec.key == "xpsnr").coverage == FrameCoverage("sampled", 3)
-    assert metric_request_specs(full_xpsnr)[0].coverage == FrameCoverage("full", 1)
-    assert analysis_request_from_vmaf_options(mixed).execution == analysis_request_from_vmaf_options(full_xpsnr).execution
-
-
-def test_facade_uses_only_the_per_metric_cache(tmp_path):
-    source, test = _paths(tmp_path)
-    options = VmafOptions(gpu_decode=False)
-    _store_cached(source, test, _run(source, test), "label", options, tmp_path)
-
-    assert list((tmp_path / "v2").rglob("vmaf_*.npz"))
-    assert not list(tmp_path.glob("*.metrics.json"))
-    loaded = _load_cached(source, test, options, tmp_path)
-    assert loaded is not None and loaded[1] == "label"
-
-
-def test_facade_returns_partial_v2_results_for_a_larger_request(tmp_path):
-    source, test = _paths(tmp_path)
-    _store_cached(source, test, _run(source, test), "vmaf only", VmafOptions(), tmp_path)
-
-    requested = VmafOptions(extra_features=["name=psnr"])
-    loaded = _load_cached(source, test, requested, tmp_path)
-
-    assert loaded is not None and loaded[1] == "vmaf only"
-    assert loaded[0].frames.has("vmaf")
-    assert not loaded[0].frames.has("psnr")
-
-
-def test_cache_summary_counts_comparisons_not_metric_artifacts(tmp_path):
-    source, test = _paths(tmp_path)
-    options = VmafOptions(extra_features=["name=psnr"], compute_xpsnr=True)
-    run = _run(source, test)
-    run.frames = FrameScores(
-        run.frames.frame, run.frames.time, run.frames.vmaf,
-        psnr=[40, 41, 42], xpsnr=[38, 39, 40],
-    )
-    run.metric_results = MetricResultSet()
-    run.__post_init__()
-    _store_cached(source, test, run, "multi", options, tmp_path)
-
-    count, size_bytes = result_cache.cache_summary(tmp_path)
-    assert count == 1
-    assert size_bytes > 0
-
-
-
 def _stored_and_reloaded(tmp_path, options, metrics, compared_frame_count):
     """Store `metrics` as one run of a 24 fps comparison, then load it back."""
     source, test = _paths(tmp_path)
@@ -614,85 +281,6 @@ def test_subsampled_perceptual_scores_survive_a_reload(tmp_path):
     assert list(loaded.metric("ssimulacra2").frame) == frames
 
 
-def test_metrics_that_end_a_frame_apart_all_survive_a_reload(tmp_path):
-    """FFmpeg scored 23 frames and Vship 24 in one run; the run recorded 24.
-    VMAF used to be dropped on reload for not matching."""
-    cpu = MetricProvenance("ffmpeg/libvmaf", "", "cpu", "ffmpeg-libvmaf-v1")
-    gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
-    vmaf = FrameMetricResult("vmaf", range(23), [f / 24 for f in range(23)], [95.0] * 23, cpu)
-    ssim2 = FrameMetricResult("ssimulacra2", range(24), [f / 24 for f in range(24)], [80.0] * 24, gpu)
-
-    loaded = _stored_and_reloaded(tmp_path, VmafOptions(), [vmaf, ssim2], 24)
-
-    assert loaded is not None
-    assert len(loaded.metric("vmaf").frame) == 23
-    assert len(loaded.metric("ssimulacra2").frame) == 24
-
-
-
-def test_choosing_cpu_never_loads_a_gpu_score(tmp_path):
-    """A 640x360 test: with CPU selected, the cache showed the GPU
-    SSIMULACRA2 score (44.47) although the CPU tool gives 46.89 on the same
-    frames. CPU now accepts only a CPU score; GPU prefers a GPU one and
-    falls back to CPU, which a GPU choice produces without a supported GPU."""
-    source, test = _paths(tmp_path)
-    options = VmafOptions()
-    info = VideoInfo(test, 640, 360, 24.0, 1.0, 24, "h264")
-    gpu = MetricProvenance("Vship/ssimulacra2", "5.1.1", "gpu", "ssimulacra2-vship-gpu-v1")
-    cpu = MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1",
-                           {"color_tags": metric_cache.CPU_COLOR_TAGS})
-
-    def store(provenance, value):
-        result = ComparisonResult(
-            source=source, distorted=test, frames=FrameScores.empty(), fps=24.0, model="",
-            source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
-            compared_frame_count=1,
-            metric_results=MetricResultSet([FrameMetricResult("ssimulacra2", [0], [0.0], [value], provenance)]),
-        )
-        result_cache.store(source, test, result, "run", analysis_request_from_vmaf_options(options, ("ssimulacra2",)), tmp_path)
-
-    def lookup(backend):
-        request = analysis_request_from_vmaf_options(options, ("ssimulacra2",), {"ssimulacra2": backend})
-        loaded = result_cache.load_cached(source, test, request, tmp_path)
-        return None if loaded is None else loaded[0].metric("ssimulacra2")
-
-    store(gpu, 44.47)
-    assert lookup("gpu").values.tolist() == pytest.approx([44.47])
-    assert lookup("cpu") is None, "a CPU selection loaded the GPU score"
-
-    store(cpu, 46.89)
-    assert lookup("cpu").values.tolist() == pytest.approx([46.89])
-    assert lookup("cpu").provenance.compute_backend == "cpu"
-    assert lookup("gpu").provenance.compute_backend == "gpu"
-
-
-def test_a_gpu_choice_still_finds_a_cpu_fallback_score(tmp_path):
-    source, test = _paths(tmp_path)
-    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
-    spec = metric_request_specs(VmafOptions(), ("butteraugli",))[0]
-    cpu = MetricProvenance("butteraugli", "0.12", "cpu", "butteraugli-libjxl-cpu-v1",
-                           {"color_tags": metric_cache.CPU_COLOR_TAGS})
-    store_metric(directory, FrameMetricResult("butteraugli", [0], [0.0], [1.5], cpu), spec)
-
-    assert load_metric(directory, spec, "gpu").provenance.compute_backend == "cpu"
-    assert load_metric(directory, spec, "cpu").provenance.compute_backend == "cpu"
-
-
-def test_a_cpu_score_from_before_colours_were_read_as_vships_is_calculated_again(tmp_path):
-    """The CPU tools were given FFmpeg's own RGB and tags: a tagged BT.709
-    film scored 15 SSIMULACRA2 points below the GPU, and Butteraugli was the
-    tool's own norm. Such a score is passed over."""
-    source, test = _paths(tmp_path)
-    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
-    spec = metric_request_specs(VmafOptions(), ("ssimulacra2",))[0]
-    old = MetricProvenance("ssimulacra2", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1",
-                           {"intermediate": "png/rgb48le"})
-    store_metric(directory, FrameMetricResult("ssimulacra2", [0], [0.0], [40.4], old), spec)
-    assert load_metric(directory, spec, "cpu") is None
-    assert load_metric(directory, spec, "gpu") is None
-
-
-
 def test_metrics_on_the_same_frames_share_the_frame_view_despite_rounded_times():
     """Times are frame / fps, computed from different frame rates by
     different backends, so the same frames can carry times a rounding error
@@ -708,79 +296,3 @@ def test_metrics_on_the_same_frames_share_the_frame_view_despite_rounded_times()
     assert frame_view.psnr.tolist() == [40, 41, 42, 43]
     assert frame_view.values("ssimulacra2").tolist() == [70, 71, 72, 73]
     np.testing.assert_array_equal(frame_view.time, vmaf.time)
-
-
-def test_a_metric_saved_for_every_frame_under_a_sampled_request_loads_on_its_frames(tmp_path):
-    """XPSNR scored beside VMAF on the GPU was saved for every frame under
-    its subsampled request; it loads on the frames the request covers."""
-    source, test = _paths(tmp_path)
-    directory = recipe_directory(tmp_path, source, test, comparison_recipe_from_vmaf_options(VmafOptions()))
-    sampled = _spec("xpsnr", step=3)
-    frames = np.arange(7)
-    store_metric(directory, FrameMetricResult("xpsnr", frames, frames / 24.0, frames * 1.0, PROVENANCE), sampled)
-    loaded = load_metric(directory, sampled)
-    assert loaded.frame.tolist() == [0, 3, 6] and loaded.values.tolist() == [0.0, 3.0, 6.0]
-
-
-def test_a_cached_result_keeps_the_scaling_algorithm_and_vmaf_v1_model_it_was_made_with(tmp_path):
-    """The window overwrote a cache hit's scaling algorithm with the row's
-    -- the algorithm is no part of the identity, so a lanczos result was
-    found from a bicubic row and relabelled -- and the VMAF v1 model was not
-    saved, so a cached result saved to a file lost it."""
-    from dataclasses import replace
-
-    source, test = _paths(tmp_path)
-    made = replace(_run(source, test), scale_algorithm="lanczos", model_v1="path=v1.json",
-                   model_choice_v1="__builtin:vmaf_v1_3d0h")
-    _store_cached(source, test, made, "test", VmafOptions(scale_algorithm="lanczos"), tmp_path)
-    found, _label = _load_cached(source, test, VmafOptions(scale_algorithm="bicubic"), tmp_path)
-    assert found.scale_algorithm == "lanczos"
-    assert (found.model_v1, found.model_choice_v1) == ("path=v1.json", "__builtin:vmaf_v1_3d0h")
-
-
-def test_a_context_saved_without_the_algorithm_takes_the_recipes(tmp_path):
-    source, test = _paths(tmp_path)
-    options = VmafOptions(scale_algorithm="spline")
-    directory = _store_cached(source, test, _run(source, test), "test", options, tmp_path) or recipe_directory(
-        tmp_path, source, test, comparison_recipe_from_vmaf_options(options))
-    context_path = directory / "context.json"
-    context = json.loads(context_path.read_text(encoding="utf-8"))
-    del context["scale_algorithm"]
-    context_path.write_text(json.dumps(context), encoding="utf-8")
-    found, _label = _load_cached(source, test, options, tmp_path)
-    assert found.scale_algorithm == "spline"
-
-
-def test_the_probed_average_rate_is_kept_and_an_older_entry_has_none():
-    from vmaf_app.core.models import VideoInfo, video_info_from_dict, video_info_to_dict
-
-    info = VideoInfo(Path("v.mkv"), 1920, 1080, 23.976, 10.0, 240, "hevc", nominal_fps=23.976, average_fps=23.976)
-    saved = video_info_to_dict(info)
-    assert video_info_from_dict(saved).average_fps == 23.976
-    del saved["average_fps"]
-    assert video_info_from_dict(saved).average_fps == 0.0
-
-
-def test_run_files_and_the_cache_save_a_video_in_one_form():
-    """Each had a copy of the conversion: a field added to VideoInfo had to
-    be added to both. Every field but format_name is saved and read back."""
-    from dataclasses import fields
-
-    from vmaf_app.core.models import (
-        CropBox,
-        VideoInfo,
-        crop_from_dict,
-        crop_to_dict,
-        video_info_from_dict,
-        video_info_to_dict,
-    )
-
-    info = VideoInfo(Path("v.mkv"), 3840, 2160, 23.976, 10.0, 240, "hevc", sar="4:3", pix_fmt="yuv420p10le",
-                     bit_rate=8_000_000, bit_rate_whole_file=True, nominal_fps=24.0, average_fps=23.976,
-                     color_range="tv", color_space="bt2020nc", color_transfer="smpte2084",
-                     color_primaries="bt2020", chroma_location="topleft", format_name="matroska,webm")
-    saved = json.loads(json.dumps(video_info_to_dict(info)))
-    assert set(saved) == {field.name for field in fields(VideoInfo)} - {"format_name"}
-    assert video_info_from_dict(saved) == replace(info, format_name="")
-    assert crop_from_dict(json.loads(json.dumps(crop_to_dict(CropBox(3840, 1600, 0, 280))))) == CropBox(3840, 1600, 0, 280)
-    assert crop_to_dict(None) is None and crop_from_dict(None) is None

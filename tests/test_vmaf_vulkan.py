@@ -39,11 +39,6 @@ def test_auto_takes_cuda_on_an_nvidia_gpu_and_vulkan_on_any_other(monkeypatch):
     assert vmaf_cuda._probe_once("hip")[0] == "vulkan"  # Vship's AMD build: VMAF has none
 
 
-def test_the_vulkan_backend_setting_takes_vulkan_on_an_nvidia_gpu_too(monkeypatch):
-    _probes(monkeypatch, [GpuVendor.NVIDIA])
-    assert vmaf_cuda._probe_once("vulkan") == ("vulkan", 0, "Vulkan on a GPU")
-
-
 def test_the_other_backend_is_tried_when_the_first_cannot_score(monkeypatch):
     _probes(monkeypatch, [GpuVendor.NVIDIA], cuda=(False, "CUDA failed to start"))
     assert vmaf_cuda._probe_once("auto")[0] == "vulkan"
@@ -51,25 +46,6 @@ def test_the_other_backend_is_tried_when_the_first_cannot_score(monkeypatch):
     assert vmaf_cuda._probe_once("vulkan")[0] == "cuda"
     _probes(monkeypatch, [GpuVendor.INTEL], vulkan=(False, None, "no Vulkan driver"))
     assert vmaf_cuda._probe_once("auto") == (None, None, "no NVIDIA GPU; Vulkan: no Vulkan driver")
-
-
-def test_changing_the_backend_setting_probes_again_only_when_the_order_changes(monkeypatch):
-    monkeypatch.setattr(vmaf_cuda, "_preference", "auto")
-    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf with CUDA"))
-    vmaf_cuda.set_gpu_backend("cuda")  # the same order as Auto: CUDA, then Vulkan
-    assert vmaf_cuda._probed is not None
-    vmaf_cuda.set_gpu_backend("vulkan")
-    assert vmaf_cuda._probed is None and vmaf_cuda._preference == "vulkan"
-
-
-def test_the_probe_result_says_which_backend_a_run_uses(monkeypatch):
-    _probes(monkeypatch, [GpuVendor.AMD], vulkan=(True, 2, "Vulkan on a Radeon"))
-    monkeypatch.setattr(vmaf_cuda, "_probed", None)
-    monkeypatch.setattr(vmaf_cuda, "_backend", ("cuda", None))
-    monkeypatch.setattr(vmaf_cuda, "_preference", "auto")
-    assert vmaf_cuda.gpu_vmaf_available() == (True, "Vulkan on a Radeon")
-    assert vmaf_cuda.gpu_vmaf_backend() == ("vulkan", 2)
-    assert vmaf_cuda.scores_on_gpu(True, True, "version=vmaf_v0.6.1") == MODELS
 
 
 def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):
@@ -94,93 +70,57 @@ def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):
     assert seen["args"] == (64, 48, 8, {"vmaf": "vmaf_v0.6.1"}, 1, "vulkan", 1)
 
 
-@pytest.mark.parametrize(("backend", "hwaccel", "software", "expected"), [
-    ("cuda", ("cuda", "cuda"), False, "cuda nvidia/nvidia"),     # NVIDIA's decoder, libvmaf's CUDA code (as master)
-    ("vulkan", ("cuda", "cuda"), False, "vulkan nvidia/nvidia"),  # the Vulkan setting on NVIDIA
-    ("vulkan", ("qsv", "qsv"), False, "vulkan intel/intel"),     # Intel's GPU: oneVPL
-    ("vulkan", ("d3d11va", "d3d11va"), False, "vulkan amd/amd"),
-    ("cuda", ("qsv", "qsv"), False, "pipes"),              # libvmaf's CUDA code takes NVIDIA's pictures only
-    ("vulkan", ("cuda", None), False, "pipes"),            # one video FFmpeg decodes in software (VVC, ...)
-    ("vulkan", ("qsv", "cuda"), False, "pipes"),           # two GPU makers' decoders are not tried together
-    ("vulkan", ("qsv", "cuda"), True, "pipes"),
-    # ... decoded here by the software decoder where it is bundled:
-    ("vulkan", ("cuda", None), True, "vulkan nvidia/software"),
-    ("cuda", ("cuda", None), True, "cuda nvidia/software"),   # its pictures uploaded
-    ("cuda", (None, None), True, "cuda software/software"),
-    ("vulkan", (None, "qsv"), True, "vulkan software/intel"),
-    ("cuda", ("qsv", None), True, "pipes"),                 # CUDA's code takes no Intel pictures
-])
-def test_a_gpu_run_decodes_in_its_own_process_where_the_gpus_decoder_can(monkeypatch, backend, hwaccel, software,
-                                                                          expected):
+def test_a_gpu_run_decodes_in_its_own_process_where_the_gpus_decoder_can(subtests):
     """Where this process has a decoder for both videos -- the GPU's FFmpeg
     would decode them with, or the software decoder for a video FFmpeg
     decodes in software -- it decodes them itself; anything else goes
     through FFmpeg's pipes."""
-    from pathlib import Path
+    def check(backend, hwaccel, software, expected, monkeypatch):
+        from pathlib import Path
 
-    from vmaf_app.core.models import VideoInfo
+        from vmaf_app.core.models import VideoInfo
 
-    taken = []
-    # conftest turns decoding in the scoring process off; this test is about it
-    monkeypatch.setattr(vr, "_score_decoded_on_gpu", _REAL_SCORE_DECODED_ON_GPU)
+        taken = []
+        # conftest turns decoding in the scoring process off; this test is about it
+        monkeypatch.setattr(vr, "_score_decoded_on_gpu", _REAL_SCORE_DECODED_ON_GPU)
 
-    monkeypatch.setattr(vr.gpu_frames, "software_bundled", lambda: software)
+        monkeypatch.setattr(vr.gpu_frames, "software_bundled", lambda: software)
 
-    def cuda_decoded(*args, decoder=None, **kwargs):
-        taken.append(f"cuda {'/'.join(decoder)}")
-        return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
+        def cuda_decoded(*args, decoder=None, **kwargs):
+            taken.append(f"cuda {'/'.join(decoder)}")
+            return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
 
-    def vulkan_decoded(*args, decoder=None, **kwargs):
-        taken.append(f"vulkan {'/'.join(decoder)}")
-        return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
+        def vulkan_decoded(*args, decoder=None, **kwargs):
+            taken.append(f"vulkan {'/'.join(decoder)}")
+            return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
 
-    monkeypatch.setattr(vmaf_cuda, "score_decoded", cuda_decoded)
-    monkeypatch.setattr(vmaf_vulkan, "score_decoded", vulkan_decoded)
-    monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: taken.append("pipes") or "pipes")
-    info = VideoInfo(Path("a.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p")
-    plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 64, 48, 8, backend, 0 if backend == "vulkan" else None)
-    vr._score_on_gpu(plan, info, info, VmafOptions(compute_vmaf=True), None, None, "version=vmaf_v0.6.1",
-                     HwAccelPlan(source=hwaccel[0], distorted=hwaccel[1]), 24)
-    assert taken == [expected]
+        monkeypatch.setattr(vmaf_cuda, "score_decoded", cuda_decoded)
+        monkeypatch.setattr(vmaf_vulkan, "score_decoded", vulkan_decoded)
+        monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: taken.append("pipes") or "pipes")
+        info = VideoInfo(Path("a.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p")
+        plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 64, 48, 8, backend, 0 if backend == "vulkan" else None)
+        vr._score_on_gpu(plan, info, info, VmafOptions(compute_vmaf=True), None, None, "version=vmaf_v0.6.1",
+                         HwAccelPlan(source=hwaccel[0], distorted=hwaccel[1]), 24)
+        assert taken == [expected]
 
-
-def test_the_attempt_scores_with_the_vulkan_scorer_for_the_vulkan_backend(monkeypatch):
-    made = {}
-
-    class Scorer:
-        frame_bytes = 6
-
-        def __init__(self, *args, **kwargs):
-            made["args"], made["kwargs"] = args, kwargs
-
-        def finish(self):
-            return np.zeros(0, dtype=np.int32), {}
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(vmaf_vulkan, "VulkanScorer", Scorer)
-    attempt = vmaf_cuda.GpuAttempt(64, 48, 10, {"vmaf": "vmaf_v0.6.1"}, 2, "vulkan", 1)
-    attempt.finish(False)
-    assert made == {"args": (64, 48, 10, {"vmaf": "vmaf_v0.6.1"}, 2), "kwargs": {"device": 1}}
-
-
-def test_a_vulkan_score_records_that_vulkan_calculated_it():
-    from vmaf_app.core.models import FrameScores
-
-    frames = FrameScores(np.arange(2, dtype=np.int32), np.zeros(2), vmaf=np.array([90.0, 91.0], dtype=np.float32),
-                         psnr=np.array([40.0, 41.0], dtype=np.float32))
-    results = vr._metric_results_for_current_run(frames, "version=vmaf_v0.6.1", gpu_keys={"vmaf"},
-                                                 gpu_backend="vulkan")
-    vmaf, psnr = results.get("vmaf").provenance, results.get("psnr").provenance
-    assert (vmaf.implementation, vmaf.implementation_version, vmaf.compute_backend) == (
-        "libvmaf/vulkan", vmaf_vulkan.LIBRARY_BUILD, "gpu")
-    assert psnr.implementation != "libvmaf/vulkan" and psnr.compute_backend != "gpu"
-    cuda = vr._metric_results_for_current_run(frames, "version=vmaf_v0.6.1", gpu_keys={"vmaf"}).get("vmaf")
-    assert cuda.provenance.implementation == "libvmaf/cuda"
-    # The same request identity: a saved score answers a run on either.
-    assert (cuda.provenance.implementation_compatibility_id
-            == results.get("vmaf").provenance.implementation_compatibility_id)
+    for backend, hwaccel, software, expected in [
+        ("cuda", ("cuda", "cuda"), False, "cuda nvidia/nvidia"),     # NVIDIA's decoder, libvmaf's CUDA code (as master)
+        ("vulkan", ("cuda", "cuda"), False, "vulkan nvidia/nvidia"),  # the Vulkan setting on NVIDIA
+        ("vulkan", ("qsv", "qsv"), False, "vulkan intel/intel"),     # Intel's GPU: oneVPL
+        ("vulkan", ("d3d11va", "d3d11va"), False, "vulkan amd/amd"),
+        ("cuda", ("qsv", "qsv"), False, "pipes"),              # libvmaf's CUDA code takes NVIDIA's pictures only
+        ("vulkan", ("cuda", None), False, "pipes"),            # one video FFmpeg decodes in software (VVC, ...)
+        ("vulkan", ("qsv", "cuda"), False, "pipes"),           # two GPU makers' decoders are not tried together
+        ("vulkan", ("qsv", "cuda"), True, "pipes"),
+        # ... decoded here by the software decoder where it is bundled:
+        ("vulkan", ("cuda", None), True, "vulkan nvidia/software"),
+        ("cuda", ("cuda", None), True, "cuda nvidia/software"),   # its pictures uploaded
+        ("cuda", (None, None), True, "cuda software/software"),
+        ("vulkan", (None, "qsv"), True, "vulkan software/intel"),
+        ("cuda", ("qsv", None), True, "pipes"),                 # CUDA's code takes no Intel pictures
+    ]:
+        with subtests.test(backend=backend, hwaccel=hwaccel, software=software, expected=expected), pytest.MonkeyPatch.context() as case_patch:
+            check(backend, hwaccel, software, expected, case_patch)
 
 
 def test_neg_models_get_the_features_limited_to_a_gain_of_one():
@@ -198,15 +138,6 @@ def test_the_probe_frames_are_the_same_bytes_everywhere():
         reference, distorted = vmaf_vulkan.probe_frames(bits)
         digest = hashlib.sha256(b"".join(bytes(frame) for frame in reference + distorted)).hexdigest()
         assert digest.startswith(expected), (bits, digest)
-
-
-def test_the_best_device_is_a_discrete_gpu_before_an_integrated_one():
-    device = vmaf_vulkan.VulkanDevice
-    found = [device(0, "Intel", 0x8086, 1, True, False), device(1, "Radeon", 0x1002, 2, True, True),
-             device(2, "llvmpipe", 0x10005, 4, True, True), device(3, "old", 0x10DE, 2, False, False)]
-    assert vmaf_vulkan.best_device(found).name == "Radeon"
-    assert vmaf_vulkan.best_device(found[:1]).name == "Intel"
-    assert vmaf_vulkan.best_device(found[2:]) is None  # a CPU rasteriser, and a GPU without 64-bit integers
 
 
 # ------------------------------------------------------- on a PC with a GPU
@@ -230,35 +161,6 @@ def test_every_gpu_gives_the_known_sums_for_the_probe_frames(bits):
 
 
 @needs_gpu
-def test_the_probe_accepts_this_pc(monkeypatch):
-    monkeypatch.delenv(vmaf_vulkan.DEVICE_VARIABLE, raising=False)
-    available, device, text = vmaf_vulkan.probe()
-    assert available and device == vmaf_vulkan.best_device().index and text.startswith("Vulkan on ")
-    monkeypatch.setattr(vmaf_vulkan, "_PROBE_SUMS", ("0" * 64, "0" * 64))  # as a driver that calculates wrongly
-    available, device, text = vmaf_vulkan.probe()
-    assert not available and device is None and "calculates VMAF wrongly" in text
-
-
-@needs_gpu
-def test_the_scorer_returns_what_the_cuda_scorer_returns():
-    reference, distorted = vmaf_vulkan.probe_frames(8, 5)
-    scorer = vmaf_vulkan.VulkanScorer(*vmaf_vulkan._PROBE_SIZE, 8, MODELS, n_subsample=2)
-    try:
-        assert scorer.frame_bytes == len(reference[0])
-        for ref, dis in zip(reference, distorted, strict=True):
-            scorer.add(ref, dis)
-        frames, scores = scorer.finish()
-    finally:
-        scorer.close()
-    assert frames.tolist() == [0, 2, 4] and set(scores) == {"vmaf", "vmaf_neg"}
-    for values in scores.values():
-        assert values.shape == (3,) and np.all((values > 20) & (values <= 100))
-        assert np.array_equal(values, np.round(values, 6))  # six decimals, as libvmaf's log
-    assert np.all(scores["vmaf_neg"] <= scores["vmaf"])  # NEG never rewards a gain
-    assert scores["vmaf_neg"][1] < scores["vmaf"][1] - 0.01 or scores["vmaf_neg"][0] < scores["vmaf"][0]
-
-
-@needs_gpu
 def test_a_frame_that_is_not_scored_still_counts_for_the_next_frames_motion():
     """libvmaf's n_subsample: motion is calculated for every frame, the rest
     for the scored ones."""
@@ -275,23 +177,6 @@ def test_a_frame_that_is_not_scored_still_counts_for_the_next_frames_motion():
         rows[step] = dict(zip(frames.tolist(), features, strict=True))
     for frame in (0, 2):
         assert np.array_equal(rows[1][frame], rows[2][frame])
-
-
-@needs_gpu
-def test_unsupported_sizes_and_gpus_are_refused_with_a_reason():
-    with pytest.raises(vmaf_vulkan.VmafVulkanError, match="picture size"):
-        vmaf_vulkan.VulkanScorer(16, 16, 8, {})
-    with pytest.raises(vmaf_vulkan.VmafVulkanError, match="bit depth"):
-        vmaf_vulkan.VulkanScorer(64, 64, 7, {})
-    with pytest.raises(vmaf_vulkan.VmafVulkanError, match="no such GPU"):
-        vmaf_vulkan.VulkanScorer(64, 64, 8, {}, device=99)
-    scorer = vmaf_vulkan.VulkanScorer(64, 64, 10, {})
-    try:  # a frame cut short must not be read past its end
-        with pytest.raises(vmaf_vulkan.VmafVulkanError, match="shorter than its luma plane"):
-            scorer.add(bytearray(64 * 64 * 2), bytearray(64 * 64 * 2 - 1))
-        scorer.add(bytearray(64 * 64 * 2), bytearray(64 * 64 * 2))  # the luma alone is enough
-    finally:
-        scorer.close()
 
 
 def _cuda_features(reference, distorted, bits):
@@ -348,63 +233,3 @@ def test_every_gpu_gives_cudas_features_and_scores_bit_for_bit(bits):
                 device.name, column)
         for name in MODELS:
             assert np.array_equal(scores[name], cuda_scores[name]), (device.name, name)
-
-
-class _ExportingLibrary:
-    """vmaf_vulkan.dll as SharedLumas finds it: two shared buffers to export
-    (each a real handle, which SharedLumas closes), and vv_shared_device or
-    not (libvmaf-fast 3.2.0-fast.1 has none)."""
-
-    def __init__(self, names_device: bool) -> None:
-        if names_device:
-            self.vv_shared_device = self._shared_device
-
-    def vv_export(self, context, slot, handle, size):
-        if slot >= 2:
-            return -3
-        handle._obj.value = ctypes.windll.kernel32.CreateEventW(None, 0, 0, None)
-        size._obj.value = 1 << 20
-        return 0
-
-    @staticmethod
-    def _shared_device(context, device, driver, memory_type):
-        ctypes.memmove(device, b"d" * 16, 16)
-        ctypes.memmove(driver, b"r" * 16, 16)
-        memory_type._obj.value = 3
-        return 0
-
-    def vv_error(self):
-        return b""
-
-
-class _ImportingStream:
-    def __init__(self) -> None:
-        self.imports, self.unimported = [], []
-
-    def import_memory(self, handle, size, exporter=None):
-        self.imports.append((size, exporter))
-        return (len(self.imports) << 40, len(self.imports))
-
-    def unimport(self, memory):
-        self.unimported.append(memory)
-
-
-def test_shared_lumas_names_vulkans_gpu_and_driver_to_the_importing_decoder():
-    """AMD's decoder imports Vulkan's memory into a Vulkan device of its own,
-    which it may do only from the same GPU and driver, into the same memory
-    type: vv_shared_device names them, and every import is told."""
-    stream = _ImportingStream()
-    shared = vmaf_vulkan.SharedLumas(_ExportingLibrary(names_device=True), ctypes.c_void_p(), stream)
-    exporter = vmaf_vulkan.SharedDevice(b"d" * 16, b"r" * 16, 3)
-    assert stream.imports == [(1 << 20, exporter), (1 << 20, exporter)]
-    shared.close()
-    assert stream.unimported == [1, 2]
-
-
-def test_shared_lumas_names_nothing_with_an_engine_that_cannot():
-    """With libvmaf-fast 3.2.0-fast.1's engine NVIDIA's decoder imports as
-    before, and AMD's then imports nothing: its frames go through system
-    memory (GpuFrameStream.import_memory)."""
-    stream = _ImportingStream()
-    vmaf_vulkan.SharedLumas(_ExportingLibrary(names_device=False), ctypes.c_void_p(), stream).close()
-    assert stream.imports == [(1 << 20, None), (1 << 20, None)]

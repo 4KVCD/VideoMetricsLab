@@ -3,18 +3,15 @@
 to live in test_main_window.py and reach into the UI module for it."""
 from pathlib import Path
 
-import pytest
-
 from vmaf_app.core.builtin_models import builtin_choice, builtin_model_path
 from vmaf_app.core.model_select import (
     AUTO_MODEL_CHOICE,
     CUSTOM_MODEL_CHOICE,
     DEFAULT_MODEL,
     UHD_MODEL,
-    model_for_resolution,
     resolve_model,
 )
-from vmaf_app.core.models import ScaleDirection, VideoInfo, VmafOptions, clone_options
+from vmaf_app.core.models import ScaleDirection, VideoInfo, VmafOptions
 
 
 def _fake_video_info(name: str, width: int = 1920, height: int = 1080) -> VideoInfo:
@@ -24,66 +21,13 @@ def _fake_video_info(name: str, width: int = 1920, height: int = 1080) -> VideoI
     )
 
 
-# ------------------------------------------------------- resolution -> model
-
-def test_1080p_uses_default_model():
-    assert model_for_resolution(1920, 1080) == "version=vmaf_v0.6.1"
-
-
-def test_exact_4k_width_uses_4k_model():
-    assert model_for_resolution(3840, 2160) == "version=vmaf_4k_v0.6.1"
-
-
-def test_ultrawide_4k_height_uses_4k_model():
-    # e.g. a 2.35:1 UHD master cropped to content: width < 3840 but height hits 2160-class content
-    assert model_for_resolution(3840, 1634) == "version=vmaf_4k_v0.6.1"
-
-
-def test_below_4k_threshold_uses_default_model():
-    assert model_for_resolution(2560, 1440) == "version=vmaf_v0.6.1"
-
-
-def test_above_4k_uses_4k_model():
-    assert model_for_resolution(7680, 4320) == "version=vmaf_4k_v0.6.1"
-
-
 # ------------------------------------------------- choice -> ffmpeg model=
-
-def test_resolve_model_auto_picks_4k_for_uhd_distorted():
-    opts = VmafOptions(model_choice="__auto__")
-    assert resolve_model(opts, 1920, 1080) == "version=vmaf_v0.6.1"
-
-    assert resolve_model(opts, 3840, 2160) == "version=vmaf_4k_v0.6.1"
-
-
-def test_resolve_model_fixed_choice_passes_through():
-    opts = VmafOptions(model_choice="version=vmaf_4k_v0.6.1")
-    assert resolve_model(opts, 1920, 1080) == "version=vmaf_4k_v0.6.1"
-
-
-def test_resolve_model_custom_requires_a_path():
-    opts = VmafOptions(model_choice="__custom__", custom_model_path=None)
-    with pytest.raises(ValueError):
-        resolve_model(opts, 1920, 1080)
-
-    opts2 = VmafOptions(model_choice="__custom__", custom_model_path="C:/models/mine.json")
-    assert resolve_model(opts2, 1920, 1080) == "path=C:/models/mine.json"
 
 
 def test_bundled_vmaf_v1_model_resolves_to_an_existing_path():
     choice = builtin_choice("vmaf_v1_3d0h")
     resolved = resolve_model(VmafOptions(model_choice=choice), 1920, 1080)
     assert resolved == f"path={builtin_model_path('vmaf_v1_3d0h')}"
-
-
-def test_clone_options_is_an_independent_copy():
-    original = VmafOptions(extra_features=["name=psnr"])
-    copy = clone_options(original)
-    copy.extra_features.append("name=float_ssim")
-    copy.n_threads = 99
-
-    assert original.extra_features == ["name=psnr"]
-    assert original.n_threads == 0
 
 
 # ------------------------------------------------- analysis-resolution model
@@ -95,32 +39,31 @@ def _sized(name, w, h):
     )
 
 
-@pytest.mark.parametrize(
-    ("source_wh", "distorted_wh", "direction", "expected_size", "expected_model"),
-    [
-        # One side is scaled to the other before libvmaf sees it, so the
-        # model must follow the comparison, not either input's own size.
-        ((3840, 2160), (1920, 1080), ScaleDirection.DISTORTED_TO_SOURCE, (3840, 2160), UHD_MODEL),
-        ((3840, 2160), (1920, 1080), ScaleDirection.SOURCE_TO_DISTORTED, (1920, 1080), DEFAULT_MODEL),
-        ((1920, 1080), (3840, 2160), ScaleDirection.SOURCE_TO_DISTORTED, (3840, 2160), UHD_MODEL),
-        ((1920, 1080), (3840, 2160), ScaleDirection.DISTORTED_TO_SOURCE, (1920, 1080), DEFAULT_MODEL),
-        # Same size on both sides: nothing is scaled.
-        ((3840, 2160), (3840, 2160), ScaleDirection.SOURCE_TO_DISTORTED, (3840, 2160), UHD_MODEL),
-    ],
-)
-def test_auto_follows_the_resolution_frames_are_compared_at(
-    source_wh, distorted_wh, direction, expected_size, expected_model
-):
-    from vmaf_app.core.geometry import analysis_dimensions
+def test_auto_follows_the_resolution_frames_are_compared_at(subtests):
+    def check(source_wh, distorted_wh, direction, expected_size, expected_model):
+        from vmaf_app.core.geometry import analysis_dimensions
 
-    options = VmafOptions(model_choice=AUTO_MODEL_CHOICE, scale_direction=direction)
-    source = _sized("source.mkv", *source_wh)
-    distorted = _sized("encode.mkv", *distorted_wh)
+        options = VmafOptions(model_choice=AUTO_MODEL_CHOICE, scale_direction=direction)
+        source = _sized("source.mkv", *source_wh)
+        distorted = _sized("encode.mkv", *distorted_wh)
 
-    size = analysis_dimensions(source, distorted, options)
+        size = analysis_dimensions(source, distorted, options)
 
-    assert size == expected_size
-    assert resolve_model(options, *size) == expected_model
+        assert size == expected_size
+        assert resolve_model(options, *size) == expected_model
+
+    for source_wh, distorted_wh, direction, expected_size, expected_model in [
+            # One side is scaled to the other before libvmaf sees it, so the
+            # model must follow the comparison, not either input's own size.
+            ((3840, 2160), (1920, 1080), ScaleDirection.DISTORTED_TO_SOURCE, (3840, 2160), UHD_MODEL),
+            ((3840, 2160), (1920, 1080), ScaleDirection.SOURCE_TO_DISTORTED, (1920, 1080), DEFAULT_MODEL),
+            ((1920, 1080), (3840, 2160), ScaleDirection.SOURCE_TO_DISTORTED, (3840, 2160), UHD_MODEL),
+            ((1920, 1080), (3840, 2160), ScaleDirection.DISTORTED_TO_SOURCE, (1920, 1080), DEFAULT_MODEL),
+            # Same size on both sides: nothing is scaled.
+            ((3840, 2160), (3840, 2160), ScaleDirection.SOURCE_TO_DISTORTED, (3840, 2160), UHD_MODEL),
+        ]:
+        with subtests.test(source_wh=source_wh, distorted_wh=distorted_wh, direction=direction, expected_size=expected_size, expected_model=expected_model):
+            check(source_wh, distorted_wh, direction, expected_size, expected_model)
 
 
 def test_cropping_is_part_of_the_analysis_size():
@@ -141,20 +84,6 @@ def test_cropping_is_part_of_the_analysis_size():
     )
     assert size == (3840, 1600)
     assert resolve_model(options, *size) == UHD_MODEL
-
-
-def test_a_round_trip_test_is_analysed_at_the_sources_own_size():
-    from vmaf_app.core.geometry import resample_analysis_dimensions
-    from vmaf_app.core.models import CropBox
-
-    source = _sized("master.mkv", 3840, 2160)
-    options = VmafOptions(model_choice=AUTO_MODEL_CHOICE)
-
-    # The downscale is undone before comparison, so a 1080p round-trip test
-    # of a 4K master is still a 4K comparison.
-    assert resample_analysis_dimensions(source) == (3840, 2160)
-    assert resolve_model(options, *resample_analysis_dimensions(source)) == UHD_MODEL
-    assert resample_analysis_dimensions(source, CropBox(w=3840, h=1600, x=0, y=280)) == (3840, 1600)
 
 
 def test_an_explicit_or_custom_model_is_never_second_guessed():

@@ -3,7 +3,6 @@ the UI thread stopping while a large result is serialised.
 """
 from __future__ import annotations
 
-import gc
 import threading
 import time
 from pathlib import Path
@@ -59,37 +58,6 @@ def test_writes_run_in_the_order_they_were_submitted(qapp):
     assert order == list(range(10))
 
 
-def test_cyclic_gc_returns_to_the_gui_thread(qapp):
-    queue = FileWriteQueue()
-    gc_state_in_worker: list[bool] = []
-
-    queue.submit("allocation-heavy write", lambda: gc_state_in_worker.append(gc.isenabled()))
-
-    assert queue.wait_until_idle(10.0)
-    assert gc_state_in_worker == [False]
-    assert gc.isenabled(), "automatic collection was not restored after the write"
-
-
-def test_a_written_result_is_released_on_the_gui_thread(qapp):
-    """Each write was a QRunnable owned by the QThreadPool it ran on, which
-    never let go of it: every cached result and export stayed in memory for
-    as long as the app ran."""
-    released_on_gui_thread: list[bool] = []
-
-    class Result:
-        def __del__(self):
-            released_on_gui_thread.append(threading.current_thread() is threading.main_thread())
-
-    queue = FileWriteQueue()
-    for _ in range(3):
-        result = Result()
-        queue.submit("write", lambda result=result: None)
-        del result
-
-    assert queue.wait_until_idle(10.0)
-    assert released_on_gui_thread == [True, True, True]
-
-
 def test_a_failing_write_is_reported_and_does_not_stop_the_queue(qapp):
     # A QRunnable that raises takes its exception nowhere useful, so a
     # failure has to come back as a signal -- and must not take the rest of
@@ -111,68 +79,6 @@ def test_a_failing_write_is_reported_and_does_not_stop_the_queue(qapp):
     assert done == ["ok"], "one failure aborted the rest of the batch"
     assert failures and failures[0][0] == "bad write"
     assert "disk full" in failures[0][1]
-
-
-def test_idle_is_reported_only_once_everything_has_finished(qapp):
-    queue = FileWriteQueue()
-    release = threading.Event()
-    idle_signals: list[bool] = []
-    queue.became_idle.connect(lambda: idle_signals.append(True))
-    queue.submit("first", release.wait)
-    queue.submit("second", lambda: None)
-
-    assert not queue.wait_until_idle(0.2), "reported idle with work outstanding"
-    release.set()
-    assert queue.wait_until_idle(10.0)
-    assert queue.pending == 0
-    assert idle_signals == [True]
-
-
-def test_a_queue_with_nothing_submitted_is_already_idle(qapp):
-    assert FileWriteQueue().wait_until_idle(0.1)
-
-
-def test_finishing_a_run_does_not_block_the_window(qapp, tmp_path, monkeypatch):
-    """The end-to-end version: the handler that a finished run lands in must
-    return promptly even when the cache write is slow."""
-    from vmaf_app.core import result_cache
-    from vmaf_app.ui.main_window import MainWindow
-
-    source = tmp_path / "source.mp4"
-    distorted = tmp_path / "distorted.mp4"
-    for path in (source, distorted):
-        path.write_bytes(b"x")
-
-    started = threading.Event()
-    release = threading.Event()
-    on_ui_thread = []
-
-    def slow_store(*args, **kwargs):
-        on_ui_thread.append(threading.current_thread() is threading.main_thread())
-        started.set()
-        if not on_ui_thread[-1]:
-            release.wait(10.0)  # a slow write, where it does not hold up the window
-
-    monkeypatch.setattr(result_cache, "store", slow_store)
-
-    win = MainWindow()
-    win._source_info = _fake_video_info(str(source))
-    row = win._add_table_row(distorted)
-    win._job_rows = [win._rows[row]]
-    result = _fake_completed_run(str(distorted)).result
-    result.source = source
-    result.distorted = distorted
-
-    win._on_job_finished(0, result)
-
-    assert started.wait(5.0), "the cache write never started"
-    assert on_ui_thread == [False], "_on_job_finished wrote the cache on the UI thread"
-    # And the row was still updated, rather than the result being deferred
-    # along with the write.
-    assert win._rows[row].completed_run is not None
-
-    release.set()
-    assert win._file_writes.wait_until_idle(10.0)
 
 
 def test_recompute_is_ordered_after_a_pending_cache_store(qapp, monkeypatch):

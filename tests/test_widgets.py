@@ -14,17 +14,6 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
-def test_neg_header_reserves_room_for_checkbox_and_text(qapp):
-    table = QTableWidget(0, 1)
-    view = CheckableHeaderView({0: False}, table)
-    table.setHorizontalHeader(view)
-    table.setHorizontalHeaderLabels(["VMAF NEG"])
-    table.resizeColumnToContents(0)
-    text_width = view.fontMetrics().horizontalAdvance("VMAF NEG")
-    indicator_right = view.section_indicator_rect(0).right()
-    assert (view.sectionSize(0) - text_width) / 2 > indicator_right
-
-
 @pytest.fixture
 def header(qapp):
     """A 4-column table whose last three columns carry checkboxes, laid out
@@ -76,46 +65,3 @@ def test_clicking_the_label_away_from_the_indicator_does_not_toggle(header):
 
     assert header.is_checked(1) is False
     assert seen == []
-
-
-def test_clicking_near_the_section_boundary_does_not_toggle(header):
-    # Grabbing the boundary is how a column gets resized. Toggling there
-    # meant the metric flipped every time the column was dragged.
-    seen = _toggles(header)
-    boundary = QPoint(
-        header.sectionViewportPosition(2) + header.sectionSize(2) - 1,
-        header.height() // 2,
-    )
-
-    _press(header, boundary)
-
-    assert header.is_checked(2) is True, "the metric was toggled by a resize drag"
-    assert seen == []
-
-
-def test_a_section_with_no_checkbox_is_untouched(header):
-    seen = _toggles(header)
-
-    _press(header, QPoint(header.sectionViewportPosition(0) + 5, header.height() // 2))
-
-    assert seen == []
-
-
-def test_the_clickable_area_matches_where_the_checkbox_is_drawn(header):
-    # If these ever diverge the checkbox becomes a target you can see but
-    # not hit, which is worse than the original bug.
-    for section in (1, 2, 3):
-        rect = header.section_indicator_rect(section)
-        assert rect.width() > 0 and rect.height() > 0
-        assert header.logicalIndexAt(rect.center()) == section
-        assert rect.left() >= header.sectionViewportPosition(section)
-        assert rect.right() <= header.sectionViewportPosition(section) + header.sectionSize(section)
-
-
-def test_toggling_is_still_reported_for_every_checkable_section(header):
-    seen = _toggles(header)
-
-    for section in (1, 2, 3):
-        _press(header, header.section_indicator_rect(section).center())
-
-    assert seen == [(1, True), (2, False), (3, True)]

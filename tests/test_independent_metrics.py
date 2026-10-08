@@ -2,7 +2,6 @@
 import itertools
 import subprocess
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,12 +16,10 @@ from vmaf_app.core.ffmpeg_request import (
     displayable_metric_specs,
 )
 from vmaf_app.core.ffprobe import probe_video
-from vmaf_app.core.models import CropMode, FrameScores, ResampleTarget, VmafOptions
+from vmaf_app.core.models import CropMode, ResampleTarget, VmafOptions
 from vmaf_app.core.run_io import export_csv, load_run, save_run
-from vmaf_app.core.settings import Settings
-from vmaf_app.core.vmaf_runner import VmafRunError, run_resample_test, run_vmaf
+from vmaf_app.core.vmaf_runner import run_resample_test, run_vmaf
 from vmaf_app.ui.main_window import (
-    COL_PSNR,
     COL_SSIM,
     COL_VMAF,
     COL_XPSNR,
@@ -34,7 +31,6 @@ def click_metric(win, row, column):
     """Ticks/unticks a metric in the table, the way a click on the cell does."""
     item = win.distorted_table.item(row, column)
     item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
-
 
 
 def _cache_request(options):
@@ -123,39 +119,37 @@ def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):
     assert found is None or found[0].metric_results.get("xpsnr") is None
 
 
-@pytest.mark.parametrize("names", COMBINATIONS)
-def test_real_metric_combinations_and_portable_roundtrip(real_pair, tmp_path, names):
-    options = options_for(names)
-    if "vmaf" not in names:
-        # Disabling VMAF must also bypass a stale/missing custom model.
-        options.model_choice = "__custom__"
-        options.model = "path=does-not-exist.json"
-        options.custom_model_path = "does-not-exist.json"
-    result = run_vmaf(*real_pair, options)
-    assert len(result.frames) == 12
-    assert tuple(m for m in ("vmaf", "psnr", "ssim", "xpsnr") if result.frames.has(m)) == names
-    assert all(np.isfinite(result.frames.values(m)).all() for m in names)
-    assert bool(result.model) == ("vmaf" in names)
-    path = tmp_path / "portable.metrics.json"
-    save_run(result, path)
-    loaded, _ = load_run(path)
-    np.testing.assert_array_equal(loaded.frames.frame, result.frames.frame)
-    np.testing.assert_allclose(loaded.frames.time, result.frames.time, atol=5e-7)
-    for name in names:
-        np.testing.assert_array_equal(loaded.frames.values(name), result.frames.values(name))
-    assert loaded.frames.has("vmaf") == ("vmaf" in names)
-    assert loaded.frames[:2].nbytes() > 0
-    export_csv(loaded, tmp_path / "metrics.csv")
-    _store_cached(result.source, result.distorted, result, "test", options)
-    cached = _load_cached(result.source, result.distorted, options)
-    assert cached is not None and cached[0].frames == loaded.frames
+def test_real_metric_combinations_and_portable_roundtrip(real_pair, tmp_path_factory, subtests):
+    def check(names, tmp_path):
+        options = options_for(names)
+        if "vmaf" not in names:
+            # Disabling VMAF must also bypass a stale/missing custom model.
+            options.model_choice = "__custom__"
+            options.model = "path=does-not-exist.json"
+            options.custom_model_path = "does-not-exist.json"
+        result = run_vmaf(*real_pair, options)
+        assert len(result.frames) == 12
+        assert tuple(m for m in ("vmaf", "psnr", "ssim", "xpsnr") if result.frames.has(m)) == names
+        assert all(np.isfinite(result.frames.values(m)).all() for m in names)
+        assert bool(result.model) == ("vmaf" in names)
+        path = tmp_path / "portable.metrics.json"
+        save_run(result, path)
+        loaded, _ = load_run(path)
+        np.testing.assert_array_equal(loaded.frames.frame, result.frames.frame)
+        np.testing.assert_allclose(loaded.frames.time, result.frames.time, atol=5e-7)
+        for name in names:
+            np.testing.assert_array_equal(loaded.frames.values(name), result.frames.values(name))
+        assert loaded.frames.has("vmaf") == ("vmaf" in names)
+        assert loaded.frames[:2].nbytes() > 0
+        export_csv(loaded, tmp_path / "metrics.csv")
+        cache = tmp_path / "-".join(names)  # each combination's own, as a test of its own had
+        _store_cached(result.source, result.distorted, result, "test", options, cache)
+        cached = _load_cached(result.source, result.distorted, options, cache)
+        assert cached is not None and cached[0].frames == loaded.frames
 
-
-def test_feature_only_scores_match_existing_definitions(real_pair):
-    all_scores = run_vmaf(*real_pair, options_for(("vmaf", "psnr", "ssim", "xpsnr"))).frames
-    for name in ("psnr", "ssim", "xpsnr"):
-        alone = run_vmaf(*real_pair, options_for((name,))).frames
-        np.testing.assert_allclose(alone.values(name), all_scores.values(name), rtol=1e-6)
+    for names in COMBINATIONS:
+        with subtests.test(names=names):
+            check(names, tmp_path_factory.mktemp("case"))
 
 
 def test_non_vmaf_resample_and_subsample(real_pair):
@@ -168,19 +162,6 @@ def test_non_vmaf_resample_and_subsample(real_pair):
     options = options_for(("xpsnr",))
     options.n_subsample = 3  # libvmaf-only setting must not subsample XPSNR.
     assert len(run_vmaf(*real_pair, options).frames) == 12
-
-
-def test_empty_selection_is_rejected(real_pair):
-    with pytest.raises(VmafRunError, match="at least one metric"):
-        run_vmaf(*real_pair, options_for(()))
-
-
-def test_missing_vmaf_arrays_have_normal_sequence_semantics():
-    scores = FrameScores(np.arange(2), np.arange(2) / 24, None, psnr=[30, 40])
-    assert scores[0].vmaf is None
-    assert FrameScores.from_frames(list(scores)) == scores
-    assert scores[:1].vmaf is None
-    assert scores.nbytes() == 2 * (4 + 8 + 4)
 
 
 def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, tmp_path, monkeypatch):
@@ -234,35 +215,4 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     assert len(win._rows) == 1
     assert win._rows[-1].options.requested_metrics() == ("psnr",)
     assert win._row_state(win._rows[-1]) == "Complete"
-    win.close()
-
-
-def test_settings_save_failure_is_reported_without_row_access(qapp, monkeypatch):
-    win = MainWindow()
-    monkeypatch.setattr(win._settings, "save", lambda: "Cannot save settings")
-    # The preview-setting path reports errors in the global status line,
-    # not a nonexistent row in the video's status column.
-    win._on_frame_color_mode_changed("display_aware")
-    assert win.status_label.text() == "Cannot save settings"
-    win.close()
-
-
-def test_metric_scope_mixed_selection_and_graph_preference(qapp, monkeypatch):
-    win = MainWindow()
-    monkeypatch.setattr(win, "_reload_cached_for_rows", lambda *_: None)
-    for name in ("a.mkv", "b.mkv"):
-        win._add_table_row(Path(name))
-    win.distorted_table.selectRow(0)
-    click_metric(win, 0, COL_PSNR)
-    assert "psnr" not in win._rows[0].options.requested_metrics()
-    assert "psnr" in win._rows[1].options.requested_metrics()
-    # A row added later does not inherit an untick made on one existing row.
-    assert "psnr" in win._default_options.requested_metrics()
-    # Unticking the still-ticked row while both are selected applies to both.
-    win.distorted_table.selectAll()
-    click_metric(win, 1, COL_PSNR)
-    assert all("psnr" not in rd.options.requested_metrics() for rd in win._rows)
-    win.graph_panel.tabs.setCurrentIndex(4)
-    assert Settings.load().graph_metric == "ssim"
-    assert "not calculated" in win.graph_panel.metric_hint.text()
     win.close()

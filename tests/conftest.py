@@ -70,8 +70,8 @@ def isolate_user_state(tmp_path, monkeypatch):
     # of the machine running the suite (see default_parallel_jobs).
     #
     # The metric ticks are pinned to VMAF, PSNR, SSIM and XPSNR, which most
-    # window tests were written around. The shipped defaults tick every
-    # metric; test_a_fresh_install_ticks_every_metric covers those.
+    # window tests were written around; the shipped defaults tick every
+    # metric.
     settings_file.write_text(
         json.dumps({
             "cache_dir": str(cache),

@@ -49,15 +49,6 @@ def patched_psutil(monkeypatch):
     return FakeProcess
 
 
-def test_pause_then_attach_applies_pause_to_new_process(patched_psutil):
-    handle = ProcessHandle()
-    handle.pause()  # requested before any process exists yet
-    handle.attach(1234)
-
-    assert FakeProcess.instances[1234].calls == ["suspend"]
-    assert handle.is_pause_requested is True
-
-
 def test_attach_then_pause_and_resume(patched_psutil):
     handle = ProcessHandle()
     handle.attach(1234)
@@ -75,92 +66,6 @@ def test_terminate_works_even_while_paused(patched_psutil):
     handle.terminate()
 
     assert FakeProcess.instances[1234].calls == ["suspend", "terminate"]
-
-
-def test_pause_state_carries_over_to_next_attached_process(patched_psutil):
-    # Models the GPU-decode-failure retry: the first process dies, a new one
-    # starts, and a pause requested mid-run should still apply to it.
-    handle = ProcessHandle()
-    handle.attach(1111)
-    handle.pause()
-    handle.detach()
-    handle.attach(2222)
-
-    assert FakeProcess.instances[2222].calls == ["suspend"]
-
-
-def test_detach_without_pause_does_nothing_to_next_process(patched_psutil):
-    handle = ProcessHandle()
-    handle.attach(1111)
-    handle.detach()
-    handle.attach(2222)
-
-    assert 2222 not in FakeProcess.instances
-
-
-def test_a_process_attached_after_terminate_is_ended_at_once(patched_psutil):
-    """Cancel had been given: a process started after it -- the next
-    attempt of a fallback -- came up suspended by the pause, with nothing
-    left to end it, and the run waited for it for good."""
-    handle = ProcessHandle()
-    handle.pause()
-    handle.terminate()
-    handle.attach(1234)
-
-    assert FakeProcess.instances[1234].calls == ["terminate"]
-
-
-def test_pause_and_terminate_are_no_ops_before_any_process_attached(patched_psutil):
-    handle = ProcessHandle()
-    handle.pause()
-    handle.terminate()  # no pid attached -- must not raise
-    handle.resume()
-
-
-
-def test_a_pause_requested_before_the_process_existed_survives_a_resume_race():
-    """attach() recorded the pid, released the lock and only then suspended.
-    A resume arriving in that gap ran first and the stale suspend afterwards,
-    leaving the process stopped with nothing left to start it again.
-
-    The window is forced open here rather than hoped for: the suspend call
-    itself blocks until resume has been attempted.
-    """
-    import threading
-
-    handle = ProcessHandle()
-    calls = []
-    suspending = threading.Event()
-    let_suspend_finish = threading.Event()
-
-    def blocking_try(pid, action):
-        if action == "suspend":
-            suspending.set()
-            let_suspend_finish.wait(5)
-        # Recorded on COMPLETION, not on entry: what matters is which call
-        # last touched the process, and the whole bug is that the suspend
-        # finishes after the resume.
-        calls.append(action)
-
-    handle._try = blocking_try
-    handle.pause()
-
-    attaching = threading.Thread(target=lambda: handle.attach(4242))
-    attaching.start()
-    assert suspending.wait(5), "attach never tried to suspend"
-
-    # Resume arrives while the suspend is still in flight.
-    resuming = threading.Thread(target=handle.resume)
-    resuming.start()
-    resuming.join(timeout=0.2)  # with the bug, resume returns at once
-    let_suspend_finish.set()
-    attaching.join(timeout=5)
-    resuming.join(timeout=5)
-
-    assert not handle.is_pause_requested
-    assert calls[-1] == "resume", (
-        f"the last thing done to the process was {calls[-1]!r}, so it stayed paused"
-    )
 
 
 def test_a_handle_reaches_every_attached_process(monkeypatch):

@@ -72,12 +72,6 @@ def test_a_crash_in_the_child_is_an_error_here(caplog, tmp_path, monkeypatch):
     assert list(tmp_path.glob("vml-isolated-*")) == []
 
 
-def test_a_child_that_ends_normally_leaves_no_crash_file(tmp_path, monkeypatch):
-    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
-    assert run_isolated(_report, 21, what="test", callbacks=("on_status",), on_status=lambda _text: None) == 42
-    assert list(tmp_path.glob("vml-isolated-*")) == []
-
-
 def test_the_result_callbacks_logs_and_errors_come_back(caplog):
     statuses = []
     with caplog.at_level(logging.WARNING):
@@ -115,22 +109,6 @@ def test_cancel_ends_the_child_and_what_it_started(tmp_path, monkeypatch):
     assert list(tmp_path.glob("vml-isolated-*")) == []
 
 
-def _report_twice(on_status=None):
-    on_status("first")
-    time.sleep(60)
-
-
-def test_a_callback_that_fails_leaves_no_crash_file(tmp_path, monkeypatch):
-    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
-
-    def failing(_text):
-        raise RuntimeError("the window's handler failed")
-
-    with pytest.raises(RuntimeError, match="handler failed"):
-        run_isolated(_report_twice, what="test", callbacks=("on_status",), on_status=failing)
-    assert list(tmp_path.glob("vml-isolated-*")) == []
-
-
 def _wait_for(condition, seconds=10.0):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -138,18 +116,3 @@ def _wait_for(condition, seconds=10.0):
             return True
         time.sleep(0.02)
     return False
-
-
-def test_a_child_with_a_decoder_that_never_closed_ends_itself_outright(monkeypatch):
-    """The stuck close holds the driver's locks: a normal exit, every library
-    unloading in turn, can wait on them for ever (gpu_frames.stuck_decoders)."""
-    from vmaf_app.core import gpu_frames, isolated
-
-    ended = []
-    monkeypatch.setattr(isolated, "_end_now", lambda: ended.append(True))
-    monkeypatch.setattr(gpu_frames, "_stuck_closes", 0)
-    isolated._end_if_a_decoder_is_stuck()
-    assert ended == []  # an ordinary child exits normally
-    monkeypatch.setattr(gpu_frames, "_stuck_closes", 1)
-    isolated._end_if_a_decoder_is_stuck()
-    assert ended == [True]

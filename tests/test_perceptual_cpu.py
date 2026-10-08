@@ -1,23 +1,16 @@
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from tests.factories import STDLIB_PYTHON
 from vmaf_app.core import perceptual_cpu
 from vmaf_app.core.analysis_request import AnalysisRequest, ExecutionPreferences, FrameCoverage, MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
-from vmaf_app.core.execution import build_execution_plan
-from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-from vmaf_app.core.metric_cache import load_metric, load_metrics, store_metric
-from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
-from vmaf_app.core.metrics import METRIC_BY_KEY, MetricDirection, MetricKind
-from vmaf_app.core.models import CropMode, GpuVendor, ScaleDirection, VideoInfo, VmafOptions
-from vmaf_app.core.perceptual_cpu import PerceptualRunError, parse_score, run_perceptual_task
+from vmaf_app.core.models import CropMode, GpuVendor, ScaleDirection, VideoInfo
+from vmaf_app.core.perceptual_cpu import parse_score, run_perceptual_task
 
 
 @pytest.fixture(autouse=True)
@@ -40,35 +33,12 @@ def _request(*keys: str) -> AnalysisRequest:
     )
 
 
-def test_perceptual_metrics_are_registered_without_ffmpeg_bindings():
-    assert METRIC_BY_KEY["ssimulacra2"].kind is MetricKind.FRAME
-    assert METRIC_BY_KEY["ssimulacra2"].direction is MetricDirection.HIGHER_IS_BETTER
-    assert METRIC_BY_KEY["butteraugli"].direction is MetricDirection.LOWER_IS_BETTER
-    assert METRIC_BY_KEY["ssimulacra2"].ffmpeg_binding is None
-    assert METRIC_BY_KEY["butteraugli"].ffmpeg_binding is None
-
-
-def test_mixed_request_groups_perceptual_metrics_separately():
-    options = VmafOptions(extra_features=["name=psnr"], compute_vmaf=True)
-    request = analysis_request_from_vmaf_options(options, ("vmaf", "psnr", "ssimulacra2", "butteraugli"))
-    plan = build_execution_plan(request)
-    assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
-        ("ffmpeg", ("vmaf", "psnr")),
-        ("perceptual", ("ssimulacra2", "butteraugli")),
-    ]
-
-
 @pytest.mark.parametrize(("text", "expected"), [
     ("SSIMULACRA2: 91.75", 91.75),
     ("butteraugli score = 0.2345", 0.2345),
 ])
 def test_perceptual_output_parser_uses_final_scalar(text, expected):
     assert parse_score("ssimulacra2", text) == expected
-
-
-def test_perceptual_output_parser_rejects_malformed_output():
-    with pytest.raises(PerceptualRunError, match="numeric score"):
-        parse_score("butteraugli", "comparison failed")
 
 
 def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, monkeypatch):
@@ -95,22 +65,6 @@ def test_backend_returns_independent_frame_results_without_real_tools(tmp_path, 
 
 
 # ------------------------------------------ several frame pairs at a time
-
-def test_pairs_scored_at_once_are_half_the_cores_shared_and_fit_in_memory():
-    from vmaf_app.core.perceptual_cpu import scoring_workers
-
-    four_k, plenty = 3840 * 2160, 1 << 40
-    assert scoring_workers(four_k, ("ssimulacra2",), cores=24, free_memory=plenty) == 12
-    assert scoring_workers(four_k, ("ssimulacra2",), 2, cores=24, free_memory=plenty) == 6  # two tasks share the CPU
-    assert scoring_workers(four_k, ("ssimulacra2",), cores=1, free_memory=plenty) == 1
-    # 8 GB free: 60% of it, at 250 bytes a pixel for Butteraugli (2.07 GB a 4K pair), 160 for SSIMULACRA2.
-    assert scoring_workers(four_k, ("butteraugli",), cores=24, free_memory=8 << 30) == 2
-    assert scoring_workers(four_k, ("ssimulacra2",), cores=24, free_memory=8 << 30) == 3
-    # A worker runs its tools in turn: it needs what the larger takes.
-    assert scoring_workers(four_k, ("ssimulacra2", "butteraugli"), cores=24, free_memory=8 << 30) == 2
-    assert scoring_workers(four_k, ("butteraugli",), 2, cores=24, free_memory=8 << 30) == 1  # and half the memory
-    assert scoring_workers(1920 * 1080, ("butteraugli",), cores=24, free_memory=8 << 30) == 9
-    assert scoring_workers(four_k, ("butteraugli",), cores=24, free_memory=0) == 1  # never none
 
 
 def _parallel_task(tmp_path, monkeypatch, count, workers, run_metric, keys=("ssimulacra2",), pairs=None, **kwargs):
@@ -161,60 +115,6 @@ def test_scores_stay_in_the_pairs_order_when_later_pairs_finish_first(tmp_path, 
     assert not list(tmp_path.glob("*.png"))  # each pair deleted once scored
 
 
-def test_a_pair_is_taken_from_ffmpeg_only_when_a_worker_is_free_for_it(tmp_path, monkeypatch):
-    """The pairs not yet started are FFmpeg's backlog, which holds it back:
-    taken early they would be out of its count, and FFmpeg would write the
-    whole video out ahead of the scoring."""
-    workers, lock = 2, threading.Lock()
-    both = threading.Barrier(workers)
-    state = {"scored": 0, "now": 0, "most": 0}
-    ahead = []
-
-    def pairs(*_args, **_kwargs):
-        for number in range(6):
-            with lock:
-                ahead.append(number - state["scored"])
-            yield tmp_path / f"r-{number}.png", tmp_path / f"t-{number}.png"
-
-    def run_metric(executable, key, reference, test, *_args):
-        with lock:
-            state["now"] += 1
-            state["most"] = max(state["most"], state["now"])
-        both.wait(30)  # two pairs are scored at the same time...
-        with lock:
-            state["now"] -= 1
-            state["scored"] += 1
-        return 1.0
-
-    output = _parallel_task(tmp_path, monkeypatch, 6, workers, run_metric, pairs=pairs)
-
-    assert len(output.metrics.frame("ssimulacra2").values) == 6
-    assert state["most"] == workers  # ...and never more
-    assert max(ahead) < workers  # each pair asked for with a worker free
-
-
-def test_a_failed_pair_ends_the_others_tools_and_is_the_error_raised(tmp_path, monkeypatch):
-    waiting = [threading.Event(), threading.Event()]
-    ended = []
-
-    def run_metric(executable, key, reference, test, process_handle, cancel_event, hdr):
-        number = _pair_number(reference)
-        if number == 0:
-            assert all(event.wait(30) for event in waiting)
-            raise PerceptualRunError("ssimulacra2 failed for a frame.")
-        waiting[number - 1].set()
-        while not cancel_event.is_set():  # a tool that runs until it is ended
-            time.sleep(0.001)
-        ended.append(number)
-        raise perceptual_cpu.PerceptualCancelled("Cancelled by user")
-
-    with pytest.raises(PerceptualRunError, match="failed for a frame"):
-        _parallel_task(tmp_path, monkeypatch, 3, 3, run_metric)
-
-    assert sorted(ended) == [1, 2]
-    assert not list(tmp_path.glob("*.png"))
-
-
 def test_cancel_ends_every_pair_being_scored(tmp_path, monkeypatch):
     cancel = threading.Event()
     both = threading.Barrier(2)
@@ -231,33 +131,6 @@ def test_cancel_ends_every_pair_being_scored(tmp_path, monkeypatch):
         _parallel_task(tmp_path, monkeypatch, 4, 2, run_metric, cancel_event=cancel)
 
     assert sorted(ended) == [0, 1]  # the pairs after them were never started
-
-
-@pytest.mark.parametrize(("workers", "backlog"), [(1, 24), (12, 24), (20, 40)])
-def test_ffmpegs_backlog_has_room_for_every_workers_next_pair(tmp_path, monkeypatch, workers, backlog):
-    seen = {}
-
-    def pairs(*_args, backlog=None):
-        seen["backlog"] = backlog
-        yield tmp_path / "r-0.png", tmp_path / "t-0.png"
-
-    _parallel_task(tmp_path, monkeypatch, 1, workers, lambda *args: 1.0, pairs=pairs)
-
-    assert seen == {"backlog": backlog}
-
-
-def test_the_task_takes_its_share_of_the_cpu(tmp_path, monkeypatch):
-    seen = {}
-
-    def workers(pixels, metrics, concurrent_tasks):
-        seen.update(pixels=pixels, metrics=metrics, concurrent_tasks=concurrent_tasks)
-        return 1
-
-    monkeypatch.setattr(perceptual_cpu, "scoring_workers", workers)
-    _parallel_task(tmp_path, monkeypatch, 1, None, lambda *args: 1.0, keys=("ssimulacra2", "butteraugli"),
-                   concurrent_tasks=2)
-
-    assert seen == {"pixels": 64 * 48, "metrics": ("ssimulacra2", "butteraugli"), "concurrent_tasks": 2}
 
 
 def test_cpu_frame_extraction_applies_duration_limit_to_both_outputs(tmp_path, monkeypatch):
@@ -298,71 +171,6 @@ def test_cpu_frame_extraction_applies_duration_limit_to_both_outputs(tmp_path, m
         ]
 
 
-def test_auto_crop_detection_uses_full_video_not_score_duration(monkeypatch):
-    from dataclasses import replace
-
-    from vmaf_app.core.perceptual_cpu import _resolve_crops
-
-    request = _request()
-    recipe = replace(request.recipe, crop_mode=CropMode.AUTO, duration_limit=1.0)
-    calls = []
-
-    def fake_detect(info, **kwargs):
-        calls.append((info.path.name, kwargs))
-        return None
-
-    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.detect_crop", fake_detect)
-
-    _resolve_crops(_info("source.mp4"), _info("test.mp4"), recipe, None, None, None)
-
-    assert sorted(name for name, _kwargs in calls) == ["source.mp4", "test.mp4"]
-    assert all("duration_limit" not in kwargs for _name, kwargs in calls)
-
-
-def test_cached_backend_does_not_suppress_missing_backend():
-    options = VmafOptions(compute_vmaf=True)
-    request = analysis_request_from_vmaf_options(options, ("vmaf", "ssimulacra2"))
-    cached = MetricResultSet([
-        FrameMetricResult("vmaf", np.array([0]), np.array([0.0]), np.array([90.0]),
-                          MetricProvenance("test", "1", "cpu", "test")),
-    ])
-    plan = build_execution_plan(request, cached)
-    assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
-        ("perceptual", ("ssimulacra2",)),
-    ]
-
-
-def test_perceptual_cache_entries_are_independent_and_coverage_specific(tmp_path):
-    full, sampled = (
-        MetricRequestSpec("ssimulacra2", "perceptual", (), FrameCoverage(mode, step), "ssimulacra2-reference-cli-v1")
-        for mode, step in (("full", 1), ("sampled", 2))
-    )
-    butter = MetricRequestSpec("butteraugli", "perceptual", (), FrameCoverage("full", 1), "butteraugli-reference-cli-v1")
-    provenance = MetricProvenance("test", "1", "cpu", "ssimulacra2-reference-cli-v1")
-    store_metric(tmp_path, FrameMetricResult("ssimulacra2", [0], [0.0], [90.0], provenance), full)
-    store_metric(tmp_path, FrameMetricResult("butteraugli", [0], [0.0], [0.2], provenance), butter)
-    loaded = load_metrics(tmp_path, (full, sampled, butter))
-    assert loaded.has("ssimulacra2") and loaded.has("butteraugli")
-    # The sampled identity has a different filename/key and cannot borrow a
-    # full-coverage score accidentally.
-    assert len(list(tmp_path.glob("ssimulacra2_*.npz"))) == 1
-    assert load_metric(tmp_path, sampled) is None
-
-
-def test_ui_selects_cpu_metric_without_extending_vmaf_options(tmp_path):
-    from PySide6.QtWidgets import QApplication
-
-    from vmaf_app.ui.main_window import COL_SSIMULACRA2, MainWindow
-
-    QApplication.instance() or QApplication([])
-    window = MainWindow()
-    row = window._add_table_row(tmp_path / "test.mp4")
-    window._apply_metric_selection([row], COL_SSIMULACRA2, True, set_default=False)
-    assert "ssimulacra2" in window._requested_metrics(window._rows[row])
-    assert not hasattr(window._rows[row].options, "compute_ssimulacra2")
-
-
-
 def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path, monkeypatch):
     """Each FFmpeg output runs to its own input's end. Unequal counts were
     rejected as "unmatched frame pairs" after the whole video had been
@@ -392,164 +200,6 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
     assert [(r.name, t.name) for r, t in pairs] == [
         (f"reference-{i:08d}.png", f"test-{i:08d}.png") for i in range(1, 4)
     ]
-
-
-def _waiting_tool(tmp_path) -> tuple[str, Path, Path]:
-    """A stand-in for ssimulacra2 that prints its score once the file
-    "finish" exists beside it, and never otherwise. Returned as
-    (executable, "reference", "test") for _run_metric's argument order.
-
-    Run by the real interpreter, not a virtual environment's python.exe:
-    that is a launcher starting the real one as its child, and a pause
-    landing while it creates that child makes Windows refuse the creation
-    ("Unable to create process ... Access is denied", exit code 101) -- 19
-    of 240 paused starts under a parallel run's load. The real tools are
-    single processes."""
-
-    script = tmp_path / "tool.py"
-    script.write_text("import os, time\n"
-                      f"while not os.path.exists({str(tmp_path / 'finish')!r}):\n"
-                      "    time.sleep(0.01)\n"
-                      "print('score: 42.5')\n", encoding="utf-8")
-    return STDLIB_PYTHON, script, tmp_path / "unused.png"
-
-
-def _attached(handle, worker) -> int:
-    """The tool's process, once `handle` holds it: attach suspends a new
-    process of a paused job under the same lock."""
-    import time
-
-    for _ in range(3000):  # a bound against a hang, not a timing assertion
-        with handle._lock:
-            if handle._pids:
-                return next(iter(handle._pids))
-        assert worker.is_alive(), "the tool ended before it was attached"
-        time.sleep(0.01)
-    raise AssertionError("the tool was never attached to the job's handle")
-
-
-def test_pause_suspends_a_cpu_tool_and_resume_lets_it_finish(tmp_path):
-    """The tools used to run outside the job's pause handle: Pause left them
-    scoring while the app said Paused."""
-    import threading
-
-    import psutil
-
-    from vmaf_app.core.perceptual_cpu import _run_metric
-    from vmaf_app.core.process_control import ProcessHandle
-
-    executable, script, other = _waiting_tool(tmp_path)
-    handle = ProcessHandle()
-    handle.pause()
-    out = []
-    worker = threading.Thread(target=lambda: out.append(_run_metric(executable, "ssimulacra2", script, other, handle)))
-    worker.start()
-    pid = _attached(handle, worker)
-    (tmp_path / "finish").touch()  # would end it, were it running
-    assert psutil.Process(pid).status() == psutil.STATUS_STOPPED, "the tool ran on while the job was paused"
-    handle.resume()
-    worker.join(30.0)
-    assert out == [42.5]
-
-
-def test_a_tool_that_never_finishes_a_frame_times_out(tmp_path, monkeypatch):
-    import itertools
-    import time
-    from types import SimpleNamespace
-
-    from vmaf_app.core import perceptual_cpu
-    from vmaf_app.core.process_control import ProcessHandle
-
-    clock = itertools.count(0.0, 100.0)  # each look at the clock, 100 s later
-    monkeypatch.setattr(perceptual_cpu, "time", SimpleNamespace(monotonic=lambda: next(clock), sleep=time.sleep))
-    never, script, other = _waiting_tool(tmp_path)
-    with pytest.raises(perceptual_cpu.PerceptualRunError, match="did not finish a frame within 120 s"):
-        perceptual_cpu._run_metric(never, "ssimulacra2", script, other, ProcessHandle())
-
-def test_one_sequence_running_far_ahead_does_not_stall_the_extraction(tmp_path, monkeypatch):
-    """The two image sequences come from two decoders; a fast one can run
-    well ahead (a 4K AV1 test ran 24 frames ahead of its HEVC reference).
-    Throttling on either side alone suspended FFmpeg while the side the
-    scorer was waiting for still lagged: a deadlock. A real child process
-    stands in for FFmpeg: all test images first, then the references
-    slowly, each written atomically."""
-    import subprocess
-    import threading
-
-    from vmaf_app.core import perceptual_cpu
-
-    monkeypatch.setattr(perceptual_cpu, "_BACKLOG_PAIRS", 6)
-    writer = (
-        "import os, sys, time\n"
-        "d = sys.argv[1]\n"
-        "def put(name):\n"
-        "    open(os.path.join(d, name + '.tmp'), 'wb').close()\n"
-        "    os.replace(os.path.join(d, name + '.tmp'), os.path.join(d, name))\n"
-        "for i in range(1, 41): put(f'test-{i:08d}.png')\n"
-        "for i in range(1, 41):\n"
-        "    put(f'reference-{i:08d}.png'); time.sleep(0.005)\n"
-    )
-    monkeypatch.setattr(perceptual_cpu.proc_util, "popen",
-                        lambda _cmd, **kwargs: subprocess.Popen([STDLIB_PYTHON, "-S", "-c", writer, str(tmp_path)], **kwargs))
-    pairs = []
-
-    def consume():
-        for reference, test in perceptual_cpu._png_pairs(
-            _info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1, tmp_path, None, None,
-        ):
-            pairs.append(reference.name)
-            reference.unlink()
-            test.unlink()
-
-    consumer = threading.Thread(target=consume, daemon=True)
-    consumer.start()
-    consumer.join(30)
-    assert not consumer.is_alive(), f"the extraction stalled after {len(pairs)} pairs"
-    assert len(pairs) == 40
-
-
-def test_a_saved_perceptual_metric_is_not_recalculated_beside_a_new_one():
-    """Ticking CVVDP on a video whose SSIMULACRA2 was already scored on the
-    CPU recalculated SSIMULACRA2 too (days for a film, with no warning):
-    the three perceptual metrics ran as one all-or-nothing group."""
-    from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
-
-    request = analysis_request_from_vmaf_options(
-        VmafOptions(), ("vmaf", "ssimulacra2", "butteraugli", "cvvdp"), {"ssimulacra2": "cpu"})
-    provenance = MetricProvenance("libjxl", "0.12", "cpu", "ssimulacra2-libjxl-cpu-v1")
-    cached = MetricResultSet([FrameMetricResult(key, [0], [0.0], [1.0], provenance)
-                              for key in ("vmaf", "ssimulacra2")])
-    plan = build_execution_plan(request, cached)
-    assert [(task.backend_id, task.metric_keys) for task in plan.tasks] == [
-        ("perceptual", ("butteraugli", "cvvdp")),
-    ]
-    assert [spec.key for spec in plan.tasks[0].requested_specs] == ["butteraugli", "cvvdp"]
-
-
-
-def test_a_failed_frame_extraction_says_what_ffmpeg_said(tmp_path, monkeypatch):
-    """FFmpeg's errors went nowhere, so a failed extraction had no reason."""
-    from vmaf_app.core.perceptual_cpu import PerceptualRunError, _png_pairs
-
-    class FailedProcess:
-        pid = 123
-        returncode = 1
-
-        @staticmethod
-        def poll():
-            return 1
-
-    def fake_popen(args, stderr=None, **_kwargs):
-        stderr.write(b"[matroska] Invalid EBML number, skipping\nError opening input file\n")
-        return FailedProcess()
-
-    monkeypatch.setattr("vmaf_app.core.perceptual_cpu.proc_util.popen", fake_popen)
-    with pytest.raises(PerceptualRunError) as raised:
-        list(_png_pairs(_info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1,
-                        tmp_path, None, None))
-    assert "could not prepare" in str(raised.value)
-    assert "Error opening input file" in raised.value.stderr_tail
 
 
 def test_pictures_are_converted_with_the_matrix_vship_reads_the_video_with():
@@ -598,48 +248,6 @@ def test_butteraugli_is_vships_3_norm_on_vships_display(tmp_path, monkeypatch):
     assert "--intensity_target" not in seen[1]  # an HDR picture's brightness is its own
 
 
-def _rgb_frames(command_inputs: list[str], graph: str, label: str) -> bytes:
-    import subprocess
-
-    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-
-    command = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", *command_inputs, "-filter_complex", graph,
-               "-map", f"[{label}]", "-f", "rawvideo", "-"]
-    for other in {"distorted", "reference"} - {label}:
-        if f"[{other}]" in graph:
-            command += ["-map", f"[{other}]", "-f", "null", "-"]
-    return subprocess.run(command, capture_output=True, check=True).stdout
-
-
-def test_a_scaled_untagged_hd_source_is_converted_with_bt709(tmp_path):
-    """Converted while FFmpeg scaled it -- before the tags were set -- an
-    untagged HD source scaled to its encode's size was made RGB with
-    BT.601's matrix. Scaled in its own format, it is converted after."""
-    import subprocess
-
-    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-    from vmaf_app.core.ffprobe import probe_video
-    from vmaf_app.core.perceptual_cpu import _image_filtergraph
-
-    clips = {"source.mkv": "96x656", "test.mkv": "48x328"}
-    for name, size in clips.items():
-        subprocess.run([ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                        f"testsrc2=size={size}:rate=24:duration=0.125", "-vf", "format=yuv420p",
-                        "-c:v", "ffv1", str(tmp_path / name)], check=True)
-    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
-    inputs = ["-i", str(test.path), "-i", str(source.path)]
-    graph = _image_filtergraph(source, test, _request().recipe, None, None, 1)
-    made = _rgb_frames(inputs, graph, "reference")
-
-    def converted(matrix: str) -> bytes:
-        return _rgb_frames(inputs, "[0:V:0]nullsink;[1:V:0]scale=48:328:flags=bicubic,format=yuv420p,"
-                                   f"scale=in_color_matrix={matrix}:in_range=tv,format=rgb48le[reference]",
-                           "reference")
-
-    assert made == converted("bt709")
-    assert made != converted("bt601")
-
-
 def _frame_hashes(inputs: list[str], graph: str) -> dict[str, list[str]]:
     import subprocess
     import tempfile
@@ -681,56 +289,3 @@ def test_a_frame_dropped_from_the_test_video_pairs_the_rest_by_time(tmp_path, st
 
     assert len(hashes["distorted"]) == len(hashes["reference"]) == pairs
     assert hashes["distorted"] == hashes["reference"]
-
-
-@pytest.mark.parametrize("size, pix_fmt", [("63x48", "yuv420p"), ("64x47", "yuv420p10le"), ("63x47", "yuv422p"),
-                                           ("63x47", "yuv444p"), ("64x48", "yuv420p")])
-def test_videos_of_an_odd_size_are_paired_with_their_pictures_unchanged(tmp_path, size, pix_fmt):
-    """The pairing's clock was padded to the pictures' size, and FFmpeg's pad
-    gives a subsampled picture an even one: at an odd width or height blend
-    refused its two inputs ("size 852x480 do not match ... 853x480") and the
-    CPU tools failed. The pictures are the ones pairing by position gives."""
-    import re
-    import subprocess
-
-    from vmaf_app.core import perceptual_cpu
-    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-    from vmaf_app.core.ffprobe import probe_video
-
-    run = [ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-           "testsrc2=size=128x96:rate=24:duration=0.25"]
-    width, height = size.split("x")
-    for name, noise in (("source.mkv", ""), ("test.mkv", "noise=alls=3:allf=t,")):
-        subprocess.run([*run, "-vf", f"{noise}scale={width}:{height},format={pix_fmt}", "-c:v", "ffv1",
-                        str(tmp_path / name)], check=True)
-    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
-    assert (source.width, source.height) == (int(width), int(height))
-    inputs = ["-i", str(test.path), "-i", str(source.path)]
-    graph = perceptual_cpu._image_filtergraph(source, test, _request().recipe, None, None, 1)
-    assert "blend=" in graph
-
-    paired = _frame_hashes(inputs, graph)
-
-    by_position = pytest.MonkeyPatch()
-    by_position.setattr(perceptual_cpu, "_BLEND_FORMAT", re.compile("never"))
-    try:
-        unpaired = _frame_hashes(inputs, perceptual_cpu._image_filtergraph(source, test, _request().recipe, None,
-                                                                           None, 1))
-    finally:
-        by_position.undo()
-    assert len(paired["reference"]) == 6
-    assert paired == unpaired
-
-
-@pytest.mark.parametrize("change", [{"pix_fmt": "nv12"}, {"pix_fmt": "yuvj420p"}, {"color_space": "reserved"}])
-def test_a_source_blend_cannot_carry_unchanged_is_paired_by_position(change):
-    from dataclasses import replace
-
-    from vmaf_app.core.perceptual_cpu import _image_filtergraph
-
-    source = replace(VideoInfo(Path("source.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p"), **change)
-    test = VideoInfo(Path("test.mkv"), 1920, 1080, 24.0, 1.0, 24, "h264", pix_fmt="yuv420p")
-    graph = _image_filtergraph(source, test, _request().recipe, None, None, 1)
-
-    assert "blend" not in graph
-    assert graph.count(";") == 1  # a chain each

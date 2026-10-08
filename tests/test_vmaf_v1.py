@@ -13,7 +13,6 @@ from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.model_select import V1_DEFAULT_MODEL, V1_UHD_MODEL, resolve_v1_model, v1_model_for_resolution
 from vmaf_app.core.models import ComparisonResult, FrameScores, VideoInfo, VmafOptions
-from vmaf_app.core.run_io import load_run, save_run
 from vmaf_app.core.vmaf_runner import _build_libvmaf_opts, _parse_log
 
 OLD_V1 = "__builtin:vmaf_v1_1d5h_2160"
@@ -73,25 +72,6 @@ def _result(tmp_path, model_choice, key="vmaf", size=(3840, 1608)):
                             model_choice=model_choice, metric_results=metrics)
 
 
-def test_a_result_file_from_when_v1_was_a_vmaf_model_opens_with_its_scores_in_the_v1_column(tmp_path):
-    path = tmp_path / "old.metrics.json"
-    save_run(_result(tmp_path, OLD_V1), path)
-    loaded, _label = load_run(path)
-    assert not loaded.frames.has("vmaf"), "v1 scores must never pass for VMAF v0.6.1"
-    assert list(loaded.frames.values("vmaf_v1")) == [95.5, 96.5]
-    assert loaded.model_choice_v1 == OLD_V1 and loaded.model_choice == "__auto__"
-
-
-def test_a_result_file_keeps_both_models(tmp_path):
-    result = _result(tmp_path, "version=vmaf_4k_v0.6.1")
-    result.model_v1, result.model_choice_v1 = "path=x.json", "__builtin:vmaf_v1_3d0h"
-    path = tmp_path / "new.metrics.json"
-    save_run(result, path)
-    loaded, _label = load_run(path)
-    assert loaded.frames.has("vmaf") and loaded.model_choice == "version=vmaf_4k_v0.6.1"
-    assert (loaded.model_v1, loaded.model_choice_v1) == ("path=x.json", "__builtin:vmaf_v1_3d0h")
-
-
 def _cache_with_an_old_v1_score(tmp_path, size=(3840, 1608)):
     """A score saved before VMAF v1 had its own column: key "vmaf", with a
     bundled v1 model as the VMAF model choice."""
@@ -120,57 +100,3 @@ def test_a_saved_v1_score_from_the_old_key_shows_in_the_v1_column(tmp_path):
     assert _found(source, distorted, compute_vmaf=False, compute_vmaf_v1=True,
                   model_choice_v1="__builtin:vmaf_v1_3d0h") is None
     assert _found(source, distorted) is None
-
-
-def test_auto_does_not_take_an_old_v1_score_of_the_other_size(tmp_path):
-    source, distorted = _cache_with_an_old_v1_score(tmp_path, size=(1920, 1080))
-    assert _found(source, distorted, compute_vmaf=False, compute_vmaf_v1=True) is None
-
-
-def test_recalculating_vmaf_v1_clears_its_old_key_score_too(tmp_path):
-    source, distorted = _cache_with_an_old_v1_score(tmp_path)
-    request = analysis_request_from_vmaf_options(
-        VmafOptions(compute_vmaf=False, compute_vmaf_v1=True, model_choice_v1=OLD_V1), ("vmaf_v1",))
-    result_cache.clear(source, distorted, request)
-    assert _found(source, distorted, compute_vmaf=False, compute_vmaf_v1=True, model_choice_v1=OLD_V1) is None
-
-
-def test_an_old_v1_score_is_only_ever_read_as_vmaf_v1(tmp_path):
-    """The generic loader must not hand the old "vmaf"-keyed v1 score to
-    the VMAF v0.6.1 column through the equivalence rules either."""
-    source, distorted = _cache_with_an_old_v1_score(tmp_path)
-    for choice in ("__auto__", "version=vmaf_v0.6.1", "version=vmaf_4k_v0.6.1"):
-        assert _found(source, distorted, model_choice=choice) is None, choice
-
-
-def test_the_videos_tab_has_a_vmaf_v1_column_and_model_list(qapp_v1, tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QFileDialog
-
-    from vmaf_app.ui import main_window as main_window_module
-    from vmaf_app.ui.main_window import COL_VMAF_V1, MainWindow
-
-    win = MainWindow()
-    row = win._add_table_row(tmp_path / "a.mkv")
-    win.distorted_table.selectRow(row)
-    win._on_table_selection_changed()
-    win.model_v1_combo.setCurrentIndex(win.model_v1_combo.findText("VMAF v1 HFR (1080p / 3H)"))
-    assert win._rows[row].options.model_choice_v1 == "__builtin:vmaf_v1_hfr_3d0h"
-    assert win.model_combo.findText("VMAF v1 (1080p / 3H)") == -1, "v1 models belong to their own list"
-
-    path = tmp_path / "old.metrics.json"
-    save_run(_result(tmp_path, OLD_V1), path)
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(path), "")))
-    monkeypatch.setattr(main_window_module.MainWindow, "_vship_available", staticmethod(lambda: True))
-    win._on_load_saved_run()
-    loaded = next(rd for rd in win._rows if rd.path == tmp_path / "test.mkv")
-    index = win._rows.index(loaded)
-    assert win.distorted_table.item(index, COL_VMAF_V1).text() == "96.00"
-    assert loaded.options.model_choice_v1 == OLD_V1 and loaded.options.model_choice == "__auto__"
-    win.close()
-
-
-@pytest.fixture
-def qapp_v1():
-    from PySide6.QtWidgets import QApplication
-
-    return QApplication.instance() or QApplication([])

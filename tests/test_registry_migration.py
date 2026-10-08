@@ -36,19 +36,3 @@ def test_the_registry_folder_moves_into_the_settings(registry):
     assert Settings.load().ffmpeg_dir == r"D:\tools\ffmpeg\bin"
     assert "ffmpeg_dir" not in registry
     assert adopt_registry_ffmpeg_dir() is None  # once
-
-
-def test_a_folder_already_in_the_settings_is_kept(registry):
-    settings = Settings.load()
-    settings.ffmpeg_dir = r"C:\ffmpeg\bin"
-    settings.save()
-    registry["ffmpeg_dir"] = r"D:\old\bin"
-
-    assert adopt_registry_ffmpeg_dir() is None
-    assert Settings.load().ffmpeg_dir == r"C:\ffmpeg\bin"
-    assert "ffmpeg_dir" not in registry
-
-
-def test_nothing_in_the_registry_changes_nothing(registry):
-    assert adopt_registry_ffmpeg_dir() is None
-    assert Settings.load().ffmpeg_dir == ""

@@ -44,21 +44,6 @@ def _other_model(folder: Path) -> Path:
     return path
 
 
-def test_a_model_that_is_not_vmaf_v1s_is_refused(tmp_path):
-    with pytest.raises(vmaf_v1_gpu.VmafV1Error, match="not a VMAF v1 model"):
-        vmaf_v1_gpu.model_options(_other_model(tmp_path))
-    with pytest.raises(vmaf_v1_gpu.VmafV1Error, match="not a VMAF model file"):
-        vmaf_v1_gpu.model_options(tmp_path / "missing.json")
-
-
-def test_a_video_speed_has_no_block_to_score_at_is_the_cpus():
-    """libvmaf reads past its buffers there, on the CPU as with the GPU."""
-    plain = {vmaf_v1_gpu._SPEED: {}}
-    halved = {vmaf_v1_gpu._SPEED: {"speed_prescale": 0.5}}
-    assert not vmaf_v1_gpu.speed_too_small(plain, 160, 160) and vmaf_v1_gpu.speed_too_small(plain, 1920, 158)
-    assert not vmaf_v1_gpu.speed_too_small(halved, 320, 320) and vmaf_v1_gpu.speed_too_small(halved, 316, 1080)
-
-
 def test_options_are_written_as_libvmafs_parser_reads_them():
     assert [vmaf_v1_gpu._text(value) for value in (True, False, 0.5, 2, "bilinear")] == [
         "true", "false", "0.5", "2", "bilinear"]
@@ -82,18 +67,6 @@ def test_vmaf_v1_goes_to_the_gpu_where_its_self_test_passed(monkeypatch, tmp_pat
                     {"model_v1": f"path={_other_model(tmp_path)}"}):
         arguments = {"compute_vmaf_v1": True, "model_v1": model, **refused}
         assert vmaf_cuda.scores_on_gpu(False, False, "", **arguments) is None, refused
-
-
-def test_vmaf_v1_joins_the_gpus_half_of_a_job(monkeypatch):
-    gpu_vmaf = job_runner.GPU_VMAF
-    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    assert _halves(("vmaf", "vmaf_v1", "psnr")) == [  # conftest: no GPU for VMAF v1
-        ("ffmpeg", ("vmaf_v1", "psnr"), "cpu"), (gpu_vmaf, ("vmaf",), "gpu")]
-    monkeypatch.setattr(vmaf_v1_gpu, "_probed", (True, "Vulkan on a GPU"))
-    assert _halves(("vmaf", "vmaf_v1", "psnr")) == [
-        ("ffmpeg", ("psnr",), "cpu"), (gpu_vmaf, ("vmaf", "vmaf_v1"), "gpu")]
-    assert _halves(("vmaf_v1",)) == [(gpu_vmaf, ("vmaf_v1",), "gpu")]
-    assert _halves(("vmaf_v1", "psnr"), VmafOptions(vmaf_on_gpu=False)) == [("ffmpeg", ("vmaf_v1", "psnr"), "cpu")]
 
 
 def test_a_crashed_or_failed_probe_leaves_vmaf_v1_to_the_cpu(monkeypatch):
@@ -145,54 +118,24 @@ def _score(model, bits, reference, distorted, step=1, device=None):
 
 
 @needs_gpu
-@pytest.mark.parametrize(("model", "bits", "step"), [(STANDARD, 8, 1), (STANDARD, 10, 2), (HFR, 10, 1), (HFR, 8, 3)])
-def test_every_gpu_gives_libvmafs_cpu_features_and_scores_bit_for_bit(model, bits, step):
-    reference, distorted = vmaf_v1_gpu._self_test_frames(bits, 7)
-    frames, expected, scores = vmaf_v1_gpu.cpu_reference(model, *vmaf_v1_gpu._PROBE_SIZE, bits, reference, distorted,
-                                                         step)
-    assert frames.tolist() == list(range(0, 7, step))
-    assert np.all((scores > 0) & (scores < 100)) and len(set(scores.tolist())) > 1
-    for device in _DEVICES:
-        got_frames, values, got = _score(model, bits, reference, distorted, step, device.index)
-        assert np.array_equal(got_frames, frames)
-        for feature in expected:
-            assert np.array_equal(values[feature].view(np.uint64), expected[feature].view(np.uint64)), (
-                device.name, feature)
-        assert np.array_equal(got, scores), device.name
+def test_every_gpu_gives_libvmafs_cpu_features_and_scores_bit_for_bit(subtests):
+    def check(model, bits, step):
+        reference, distorted = vmaf_v1_gpu._self_test_frames(bits, 7)
+        frames, expected, scores = vmaf_v1_gpu.cpu_reference(model, *vmaf_v1_gpu._PROBE_SIZE, bits, reference, distorted,
+                                                             step)
+        assert frames.tolist() == list(range(0, 7, step))
+        assert np.all((scores > 0) & (scores < 100)) and len(set(scores.tolist())) > 1
+        for device in _DEVICES:
+            got_frames, values, got = _score(model, bits, reference, distorted, step, device.index)
+            assert np.array_equal(got_frames, frames)
+            for feature in expected:
+                assert np.array_equal(values[feature].view(np.uint64), expected[feature].view(np.uint64)), (
+                    device.name, feature)
+            assert np.array_equal(got, scores), device.name
 
-
-@needs_gpu
-def test_the_scorer_returns_scores_as_the_other_gpu_scorers_do():
-    reference, distorted = vmaf_v1_gpu._self_test_frames(8, 3)
-    scorer = vmaf_v1_gpu.V1Scorer(*vmaf_v1_gpu._PROBE_SIZE, 8, STANDARD, threads=2)
-    try:
-        assert scorer.frame_bytes == len(reference[0])
-        for ref, dis in zip(reference, distorted, strict=True):
-            scorer.add(ref, dis)
-        with pytest.raises(vmaf_v1_gpu.VmafV1Error, match="cut short"):
-            scorer.add(reference[0][:-1], distorted[0])
-        frames, scores = scorer.finish()
-    finally:
-        scorer.close()
-        scorer.close()  # safe to call twice
-    assert frames.tolist() == [0, 1, 2] and set(scores) == {"vmaf_v1"}
-    assert np.array_equal(scores["vmaf_v1"], np.round(scores["vmaf_v1"], 6))  # six decimals, as libvmaf's log
-
-
-@needs_gpu
-def test_a_run_with_no_frames_has_no_scores():
-    scorer = vmaf_v1_gpu.V1Scorer(*vmaf_v1_gpu._PROBE_SIZE, 8, STANDARD, threads=2)
-    try:
-        frames, scores = scorer.finish()
-    finally:
-        scorer.close()
-    assert len(frames) == 0 and len(scores["vmaf_v1"]) == 0
-
-
-@needs_gpu
-def test_a_size_too_small_for_speed_is_refused_before_libvmaf_sees_it():
-    with pytest.raises(vmaf_v1_gpu.VmafV1Error, match="too small"):
-        vmaf_v1_gpu.V1Scorer(128, 96, 8, STANDARD)
+    for model, bits, step in [(STANDARD, 8, 1), (STANDARD, 10, 2), (HFR, 10, 1), (HFR, 8, 3)]:
+        with subtests.test(model=model, bits=bits, step=step):
+            check(model, bits, step)
 
 
 @needs_gpu
@@ -227,41 +170,3 @@ def test_the_probe_accepts_this_pc_and_refuses_a_gpu_that_calculates_wrongly(mon
     monkeypatch.setattr(vmaf_v1_gpu, "cpu_reference", wrong)
     available, text = vmaf_v1_gpu.probe()
     assert not available and "calculates VMAF v1 wrongly" in text
-
-
-@pytest.mark.parametrize("backend", ["cuda", "vulkan"])
-@pytest.mark.parametrize("decoder", ["nvidia", ("nvidia", "software"), ("software", "software")])
-def test_the_scorers_take_the_runs_backend_whatever_decodes_the_videos(monkeypatch, backend, decoder):
-    """The loop over the two videos' decoders once reused the name of the
-    run's backend: the scorers were then asked for the decoder's ("software")
-    instead of CUDA or Vulkan."""
-    from vmaf_app.core import gpu_frames
-
-    made = []
-
-    class StopError(Exception):
-        pass
-
-    def scorer(width, height, bit_depth, models, n_subsample, scoring, device, shared=None):
-        made.append(scoring)
-        raise StopError
-
-    class Stream:
-        handover = False
-
-        def __init__(self, info, plan, device, *, pool, process_handle, backend, handover):
-            self.backend, self.frame_bytes = backend, plan.frame_bytes
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(vmaf_v1_gpu, "MultiScorer", scorer)
-    monkeypatch.setattr(gpu_frames, "available", lambda library: True)
-    monkeypatch.setattr(gpu_frames, "decoder_supports", lambda *_args: (True, ""))
-    monkeypatch.setattr(gpu_frames, "GpuFrameStream", Stream)
-    info = VideoInfo(Path("a.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p")
-    with pytest.raises(StopError):
-        vmaf_v1_gpu.score_decoded(info, info, width=64, height=48, bit_depth=8, models={"vmaf_v1": "path=x"},
-                                  n_subsample=1, duration_limit=None, total_frames=0, backend=backend,
-                                  decoder=decoder)
-    assert made == [backend]

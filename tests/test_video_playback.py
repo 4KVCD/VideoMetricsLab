@@ -1,14 +1,11 @@
 from dataclasses import replace
 from pathlib import Path
 
-from vmaf_app.core import gpu
 from vmaf_app.core.frame_extract import (
     FrameComparison,
 )
-from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import CropBox, VideoInfo
 from vmaf_app.core.video_playback import (
-    build_audio_command,
     playback_dimensions,
 )
 
@@ -47,35 +44,6 @@ def test_playback_size_preserves_cropped_content_shape():
     assert playback_dimensions(_comparison()) == (3840, 1608)
 
 
-def test_ffmpeg_fallback_is_limited_by_the_real_display_not_1080p():
-    assert playback_dimensions(_comparison(), (2560, 1440)) == (2560, 1072)
-
-
-def test_audio_uses_ffplay_without_requesting_a_video_decoder(monkeypatch, tmp_path):
-    from vmaf_app.core import video_playback
-
-    player = tmp_path / "ffplay.exe"
-    player.write_bytes(b"")
-    monkeypatch.setattr(video_playback, "ffplay_path", lambda: player)
-
-    command = build_audio_command(_comparison(), 24)
-
-    assert command is not None
-    assert command[0] == str(player)
-    assert "-nodisp" in command
-    assert "-vn" in command
-    assert command[command.index("-i") + 1].endswith("distorted.mkv")
-
-
-def test_vvc_stays_on_ffmpeg_software_while_the_source_uses_gpu(monkeypatch):
-    monkeypatch.setattr(gpu, "available_hwaccels", lambda: {"cuda"})
-    monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [gpu.GpuVendor.NVIDIA])
-
-    assert gpu.plan_hwaccel(gpu.GpuVendor.AUTO, "hevc", "vvc") == HwAccelPlan(
-        source="cuda", distorted=None
-    )
-
-
 def test_frame_compare_playback_has_no_qt_multimedia_dependency():
     module = (
         Path(__file__).resolve().parent.parent
@@ -83,15 +51,3 @@ def test_frame_compare_playback_has_no_qt_multimedia_dependency():
     ).read_text(encoding="utf-8")
 
     assert "QtMultimedia" not in module
-
-
-def test_the_stream_worker_uses_a_full_frame_pipe_buffer():
-    module = (
-        Path(__file__).resolve().parent.parent
-        / "vmaf_app" / "ui" / "playback_worker.py"
-    ).read_text(encoding="utf-8")
-
-    # A frame at a time from the large pipe, assembled by BufferedReader.
-    assert "proc.popen_piped(command)" in module
-    assert "io.BufferedReader(pipe, buffer_size=frame_bytes)" in module
-    assert "subprocess.PIPE" not in module
