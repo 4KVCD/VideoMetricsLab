@@ -39,13 +39,21 @@ class ProcessHandle:
     def attach(self, pid: int) -> None:
         """Called when a new ffmpeg process starts; re-applies a pause
         request made before this process existed (e.g. right at a job
-        boundary, or during the GPU-decode-failure CPU retry)."""
+        boundary, or during the GPU-decode-failure CPU retry). One that
+        starts after terminate() is ended at once: Cancel has been given,
+        and a process started after it -- the next attempt of a fallback --
+        came up paused, with nothing left to end it, and the run waited for
+        it for good."""
         # Suspended under the lock, not after releasing it: a resume landing
         # in that gap would run first and this stale suspend afterwards,
         # leaving the process paused for good with nothing left to resume it.
+        # terminate() sets its flag under the lock too, so a process is
+        # either among those it ends or ended here.
         with self._lock:
             self._pids.add(pid)
-            if self._want_paused:
+            if self._terminated:
+                self._try(pid, "terminate")
+            elif self._want_paused:
                 self._try(pid, "suspend")
 
     def detach(self, pid: int | None = None) -> None:

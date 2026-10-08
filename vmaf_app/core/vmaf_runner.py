@@ -663,6 +663,16 @@ def _build_ffmpeg_output_args(
     return [*args, "-f", "null", "-"]
 
 
+def _cancelled(cancel_event: threading.Event | None, process_handle: ProcessHandle | None) -> bool:
+    """Whether the run was cancelled: its event set, or its processes ended
+    by Cancel (ProcessHandle.terminate). XPSNR's FFmpeg beside the app's
+    metrics waits on an event of its own, set only once the app's scorer
+    has stopped: an FFmpeg Cancel had ended was taken for a failure there,
+    and the fallback started its next attempt."""
+    return ((cancel_event is not None and cancel_event.is_set())
+            or (process_handle is not None and process_handle.was_terminated))
+
+
 def _run_ffmpeg(
     cmd: list[str], total_frames: int,
     on_progress: ProgressCallback | None, cancel_event: threading.Event | None,
@@ -671,7 +681,7 @@ def _run_ffmpeg(
     # Checked before spawning, not only inside the read loop: cancelling
     # during crop detection or between the fallback attempts would otherwise
     # start one more ffmpeg that then had to be hunted down and killed.
-    if cancel_event is not None and cancel_event.is_set():
+    if _cancelled(cancel_event, process_handle):
         raise Cancelled("Cancelled by user")
     # UTF-8, not the Windows code page: ffmpeg's stderr starts with the
     # inputs' paths and tags, and a curly quote (”) in either is a byte cp1252
@@ -722,7 +732,7 @@ def _run_ffmpeg(
         # paused process produces no more output for the loop to see -- it's
         # only killed via ProcessHandle.terminate() from outside, which ends
         # the loop through EOF rather than the in-loop check ever firing.
-        if cancel_event is not None and cancel_event.is_set():
+        if _cancelled(cancel_event, process_handle):
             raise Cancelled("Cancelled by user")
         return subprocess.CompletedProcess(cmd, proc.returncode, "", "".join(stderr_lines))
     finally:

@@ -1,5 +1,6 @@
 import os
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from vmaf_app.core.models import (
 )
 from vmaf_app.core.vmaf_runner import (
     _GRAPH_SEPARATOR,
+    Cancelled,
     VmafRunError,
     _bit_depth,
     _build_ffmpeg_cmd,
@@ -832,6 +834,29 @@ def test_the_process_handle_is_detached_even_when_the_callback_raises(monkeypatc
         )
 
     assert handle._pids == set(), "a detached handle must not still address a dead pid"
+
+
+def test_an_ffmpeg_cancel_ended_is_a_cancel_and_none_starts_after_it(monkeypatch, tmp_path):
+    """XPSNR's FFmpeg beside the app's metrics waits on an event of its own,
+    set only once the app's scorer has stopped. Cancel ended the FFmpeg, its
+    exit was taken for a failure, and the fallback started its next attempt:
+    paused, it was held suspended for good and the run never ended."""
+    from vmaf_app.core import process_control, vmaf_runner
+    from vmaf_app.core.process_control import ProcessHandle
+
+    signalled = []
+    monkeypatch.setattr(process_control, "signal_tree", lambda pid, action: signalled.append((pid, action)))
+    handle = ProcessHandle()
+    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: _FakeProcess(["frame=1\n"]))
+    with pytest.raises(Cancelled):
+        vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=lambda *a: handle.terminate(),
+                                cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
+    assert signalled == [(4242, "terminate")]
+
+    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: pytest.fail("an FFmpeg started after Cancel"))
+    with pytest.raises(Cancelled):
+        vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=None,
+                                cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
 
 
 def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_path):

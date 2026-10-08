@@ -98,6 +98,18 @@ def test_detach_without_pause_does_nothing_to_next_process(patched_psutil):
     assert 2222 not in FakeProcess.instances
 
 
+def test_a_process_attached_after_terminate_is_ended_at_once(patched_psutil):
+    """Cancel had been given: a process started after it -- the next
+    attempt of a fallback -- came up suspended by the pause, with nothing
+    left to end it, and the run waited for it for good."""
+    handle = ProcessHandle()
+    handle.pause()
+    handle.terminate()
+    handle.attach(1234)
+
+    assert FakeProcess.instances[1234].calls == ["terminate"]
+
+
 def test_pause_and_terminate_are_no_ops_before_any_process_attached(patched_psutil):
     handle = ProcessHandle()
     handle.pause()
