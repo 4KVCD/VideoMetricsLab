@@ -9,8 +9,12 @@ is misbehaving.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import subprocess
+import threading
+
+_log = logging.getLogger(__name__)
 
 # CREATE_NO_WINDOW. Defined here rather than imported from subprocess so the
 # module still imports cleanly off Windows, where the flag does not exist.
@@ -30,8 +34,89 @@ def run(cmd, **kwargs):
 
 
 def popen(cmd, **kwargs):
-    """subprocess.Popen with the console window suppressed on Windows."""
-    return subprocess.Popen(cmd, **{**hidden_kwargs(), **kwargs})
+    """subprocess.Popen with the console window suppressed on Windows, and
+    the process ended with the app's (end_with_app)."""
+    process = subprocess.Popen(cmd, **{**hidden_kwargs(), **kwargs})
+    end_with_app(process.pid)
+    return process
+
+
+# A Windows job object that ends every process in it when the app's process
+# ends, however it ends: the handle is the app's alone, and Windows closes
+# it then (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE). The app's FFmpeg and its
+# isolated scorers used to run on after a crash or End task -- a whole
+# film's CPU fallback, hours of it. Only what the app starts for its work
+# is put in it (popen, isolated.run_isolated), and what those start goes
+# with them; what it opens for the user (a link, a folder) is not, so
+# closing the app never closes those.
+_JOB_LOCK = threading.Lock()
+_job: int | None = None
+_job_failed = False
+
+
+def _kill_on_close_job() -> int | None:
+    global _job, _job_failed
+    with _JOB_LOCK:
+        if _job is not None or _job_failed:
+            return _job
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+
+        class _Basic(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD)]
+
+        class _Extended(ctypes.Structure):
+            _fields_ = [("BasicLimitInformation", _Basic), ("IoInfo", ctypes.c_ulonglong * 6),
+                        ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                        ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        job = kernel32.CreateJobObjectW(None, None)
+        limits = _Extended()
+        limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not job or not kernel32.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+            _log.info("Child processes are not ended with the app here (job object: error %d)",
+                      ctypes.get_last_error())
+            _job_failed = True
+            return None
+        _job = job
+        return _job
+
+
+def end_with_app(pid: int) -> None:
+    """Has process `pid` -- just started by the app, before it starts any of
+    its own -- ended when the app's process ends (_kill_on_close_job)."""
+    if os.name != "nt":
+        return
+    job = _kill_on_close_job()
+    if job is None:
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(0x0100 | 0x0001, False, pid)  # PROCESS_SET_QUOTA | PROCESS_TERMINATE
+    if not handle:
+        return  # already gone
+    try:
+        # Fails where the process is in a job that cannot nest (Windows 7);
+        # it then outlives a crashed app, as before.
+        if not kernel32.AssignProcessToJobObject(job, handle):
+            _log.debug("Process %d is not ended with the app (error %d)", pid, ctypes.get_last_error())
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 #: The pipe a program's raw video frames come through. subprocess.PIPE is
