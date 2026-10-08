@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "Vorheriges Testvideo (Pfeil links)",
   "Next test video (Right arrow)": "Nächstes Testvideo (Pfeil rechts)",
   "Fit to window": "An Fenster anpassen",
+  "Zoom:": "Zoom:",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "An Fenster anpassen oder ein Zoom, den Sie wählen oder eingeben: Bei 100 % ist ein Pixel des Videos ein Pixel des Bildschirms. Ein vergrößertes Bild verschieben Sie durch Ziehen.",
   "Test video:": "Testvideo:",
   "Display-aware (recommended)": "Anzeigeabhängig (empfohlen)",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR (100 Nit; PQ annehmen, wenn nicht markiert)",

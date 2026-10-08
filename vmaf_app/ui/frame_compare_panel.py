@@ -8,8 +8,8 @@ from dataclasses import dataclass, replace
 from html import escape
 
 import numpy as np
-from PySide6.QtCore import QEvent, Qt, QTimer, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QScrollArea,
     QSlider,
     QSpinBox,
     QStackedWidget,
@@ -44,6 +43,7 @@ from vmaf_app.ui import theme
 from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.video_compare_view import VideoCompareView
+from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom, parse_percent, percent_text
 
 
 @dataclass(frozen=True)
@@ -94,65 +94,76 @@ _NOTHING_TO_COMPARE = (
 )
 
 
-class FrameView(QScrollArea):
-    """Fit-to-window or pixel-for-pixel image view with retained scroll."""
+class FrameView(DragsZoomedFrame, QWidget):
+    """A still frame, fitted to the view or zoomed (zoom.Zoom, the one
+    playback uses too), dragged with the mouse when larger than the view."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, zoom: Zoom | None = None, parent=None) -> None:
         super().__init__(parent)
-        self.setAlignment(Qt.AlignCenter)
+        self.zoom = zoom if zoom is not None else Zoom()
         self.setFocusPolicy(Qt.StrongFocus)
-        self.setStyleSheet("QScrollArea { background: #171717; border: 1px solid #444; }")
-        self._label = QLabel(tr(_NOTHING_TO_COMPARE))
+        self._label = QLabel(tr(_NOTHING_TO_COMPARE), self)
         self._label.setAlignment(Qt.AlignCenter)
-        self._label.setStyleSheet("color: #ddd; background: #171717;")
+        self._label.setWordWrap(True)
+        self._label.setStyleSheet("color: #ddd; background: transparent;")
+        self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self._image: QImage | None = None
-        self._fit = True
-        self.setWidget(self._label)
-        self.setWidgetResizable(True)
+        # The frame scaled down smoothly, at the size last drawn: a drag
+        # paints often, and scaling a 4K frame each time is slow.
+        self._scaled: QPixmap | None = None
 
     def mousePressEvent(self, event) -> None:
         self.setFocus(Qt.MouseFocusReason)
         super().mousePressEvent(event)
 
-    def set_fit(self, fit: bool) -> None:
-        self._fit = fit
-        self.setWidgetResizable(fit)
-        self._refresh()
-
     def set_message(self, message: str) -> None:
-        self._image = None
-        self._label.setPixmap(QPixmap())
+        self._image = self._scaled = None
         self._label.setText(message)
-        self._label.setAlignment(Qt.AlignCenter)
-        self.setWidgetResizable(True)
+        self._label.show()
+        self.zoom_changed()
 
     def set_image(self, image: QImage) -> None:
-        self._image = image
-        self._label.setText("")
-        self.setWidgetResizable(self._fit)
-        self._refresh()
+        self._image, self._scaled = image, None
+        self._label.hide()
+        self.zoom_changed()
+
+    def zoom_changed(self) -> None:
+        self.refresh_cursor()
+        self.update()
 
     def resizeEvent(self, event) -> None:
+        self._label.setGeometry(self.rect())
         super().resizeEvent(event)
-        if self._fit:
-            self._refresh()
+        self.refresh_cursor()
 
-    def _refresh(self) -> None:
-        if self._image is None:
-            return
-        if self._fit:
-            available = self.viewport().size()
-            pixmap = QPixmap.fromImage(self._image).scaled(
-                available,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-            self._label.setPixmap(pixmap)
-            self._label.resize(available)
-        else:
-            pixmap = QPixmap.fromImage(self._image)
-            self._label.setPixmap(pixmap)
-            self._label.resize(pixmap.size())
+    def _zoom_context(self):
+        if self._image is None or self._image.isNull():
+            return None
+        return (self.zoom, (self.width(), self.height()), (self._image.width(), self._image.height()),
+                self.devicePixelRatioF())
+
+    def _zoom_dragged(self) -> None:
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#171717"))
+        context = self._zoom_context()
+        if context is not None:
+            place, ratio = self.zoom.placement(*context[1:]), context[3]
+            size = (round(place.width * ratio), round(place.height * ratio))
+            if size[0] < self._image.width():
+                # Smaller than its own pixels, as when fitted: scaled smoothly.
+                if self._scaled is None or (self._scaled.width(), self._scaled.height()) != size:
+                    self._scaled = QPixmap.fromImage(
+                        self._image.scaled(*size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
+                    self._scaled.setDevicePixelRatio(ratio)
+                painter.drawPixmap(QPointF(place.x, place.y), self._scaled)
+            else:
+                # Its own size or larger: each pixel a sharp square, to look at.
+                painter.drawImage(QRectF(place.x, place.y, place.width, place.height), self._image)
+        painter.setPen(QColor("#444"))
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
 
 class FrameComparePanel(QWidget):
@@ -203,14 +214,28 @@ class FrameComparePanel(QWidget):
         self.next_video_btn = QPushButton("→")
         self.next_video_btn.setToolTip(tr("Next test video (Right arrow)"))
         self.next_video_btn.clicked.connect(lambda: self.cycle_distorted(1))
-        self.fit_checkbox = QCheckBox(tr("Fit to window"))
-        self.fit_checkbox.setChecked(True)
+        # One zoom for the still frames and playback alike: switching between
+        # them, or between the source and an encode, keeps the same view.
+        self.zoom = Zoom()
+        self.zoom_combo = QComboBox()
+        self.zoom_combo.setEditable(True)
+        self.zoom_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.zoom_combo.addItem(tr("Fit to window"), None)
+        for factor in (0.5, 1.0, 2.0, 4.0):
+            self.zoom_combo.addItem(percent_text(factor), factor)
+        self.zoom_combo.setToolTip(
+            tr("Fit to window, or a zoom you choose or type in: at 100% one pixel of the video "
+            "is one pixel of the screen. Drag a zoomed frame to move it.")
+        )
+        self.zoom_combo.activated.connect(self._on_zoom_chosen)
+        self.zoom_combo.lineEdit().editingFinished.connect(self._on_zoom_typed)
         top.addWidget(QLabel(tr("Test video:")))
         top.addWidget(self.previous_video_btn)
         top.addWidget(self.video_combo, stretch=1)
         top.addWidget(self.next_video_btn)
         top.addSpacing(12)
-        top.addWidget(self.fit_checkbox)
+        top.addWidget(QLabel(tr("Zoom:")))
+        top.addWidget(self.zoom_combo)
         root.addLayout(top)
 
         color_row = QHBoxLayout()
@@ -274,8 +299,7 @@ class FrameComparePanel(QWidget):
         self.showing_label.setAlignment(Qt.AlignCenter)
         root.addWidget(self.showing_label)
 
-        self.viewer = FrameView()
-        self.fit_checkbox.toggled.connect(self.viewer.set_fit)
+        self.viewer = FrameView(self.zoom)
         self.content_stack = QStackedWidget()
         self.content_stack.addWidget(self.viewer)
         self._video_placeholder = QWidget()
@@ -552,6 +576,7 @@ class FrameComparePanel(QWidget):
         if self.video_view is not None:
             return self.video_view
         view = VideoCompareView(self)
+        view.set_zoom(self.zoom)
         view.set_decoded_videos(self._decoded_videos)
         view.position_changed.connect(self._on_video_position_changed)
         view.playing_changed.connect(self._on_video_playing_changed)
@@ -664,6 +689,38 @@ class FrameComparePanel(QWidget):
         else:
             self._show_or_request()
 
+    def _on_zoom_chosen(self, index: int) -> None:
+        self._apply_zoom(self.zoom_combo.itemData(index))
+
+    def _on_zoom_typed(self) -> None:
+        text = self.zoom_combo.currentText()
+        if text.strip() == tr("Fit to window"):
+            self._apply_zoom(None)
+            return
+        factor = parse_percent(text)
+        if factor is None:
+            self._show_zoom()  # not a zoom: the one in force again
+        else:
+            self._apply_zoom(factor)
+
+    def _apply_zoom(self, factor: float | None) -> None:
+        """Fitted (None) or at `factor`, around the middle of the view."""
+        changed = factor != self.zoom.factor
+        self.zoom.factor = factor
+        self._show_zoom()
+        if changed:
+            self.viewer.zoom_changed()
+            if self.video_view is not None:
+                self.video_view.zoom_changed()
+
+    def _show_zoom(self) -> None:
+        factor = self.zoom.factor
+        index = self.zoom_combo.findData(factor) if factor is None else next(
+            (i for i in range(1, self.zoom_combo.count()) if self.zoom_combo.itemData(i) == factor), -1)
+        if index >= 0:
+            self.zoom_combo.setCurrentIndex(index)
+        self.zoom_combo.setEditText(tr("Fit to window") if factor is None else percent_text(factor))
+
     def _on_slider_changed(self, value: int) -> None:
         self.set_frame(value)
 
@@ -735,8 +792,6 @@ class FrameComparePanel(QWidget):
             playable = VideoCompareView.can_play(self.current_entry.comparison)[0]
         self.play_btn.setEnabled(available and playable)
         self.audio_checkbox.setEnabled(available and self.is_video_mode and playable)
-        self.fit_checkbox.setEnabled(not self.is_video_mode)
-        self.fit_checkbox.setVisible(not self.is_video_mode)
         self.source_resolution_combo.setEnabled(self.is_video_mode)
         self.color_mode_combo.setEnabled(available)
 

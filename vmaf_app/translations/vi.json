@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "Video thử trước (mũi tên trái)",
   "Next test video (Right arrow)": "Video thử tiếp theo (mũi tên phải)",
   "Fit to window": "Vừa cửa sổ",
+  "Zoom:": "Thu phóng:",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "Vừa cửa sổ, hoặc mức thu phóng bạn chọn hoặc nhập: ở 100%, một điểm ảnh của video là một điểm ảnh của màn hình. Kéo khung hình đã phóng to để di chuyển nó.",
   "Test video:": "Video thử:",
   "Display-aware (recommended)": "Theo màn hình (khuyến nghị)",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR (100 nit; không có thẻ thì coi là PQ)",

@@ -94,6 +94,8 @@ optional. Use still mode for frame inspection or playback mode for motion.
 - Hold **S** to show the source; release it to return to the selected encode.
 - Left/right switches encodes; Space toggles playback.
 - Use the frame/timestamp controls to select a position.
+- **Zoom** shows the frame fitted to the window, or at a size you choose or type in:
+  100% is the video's own pixels. Drag a zoomed frame to move it.
 - Review HDR preview and source-resolution options for your comparison.
 
 This is an A/B switching view, not two permanently side-by-side players.

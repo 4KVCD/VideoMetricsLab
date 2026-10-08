@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "上一个测试视频（左方向键）",
   "Next test video (Right arrow)": "下一个测试视频（右方向键）",
   "Fit to window": "适应窗口",
+  "Zoom:": "缩放：",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "适应窗口，或选择或输入的缩放比例：100% 时视频的一个像素就是屏幕上的一个像素。拖动放大的画面可移动它。",
   "Test video:": "测试视频：",
   "Display-aware (recommended)": "按显示器（推荐）",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR（100 尼特；未标记时按 PQ 处理）",

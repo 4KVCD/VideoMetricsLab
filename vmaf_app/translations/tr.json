@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "Önceki test videosu (Sol ok)",
   "Next test video (Right arrow)": "Sonraki test videosu (Sağ ok)",
   "Fit to window": "Pencereye sığdır",
+  "Zoom:": "Yakınlaştırma:",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "Pencereye sığdır ya da seçtiğiniz veya yazdığınız bir yakınlaştırma: %100'de videonun bir pikseli ekranın bir pikselidir. Yakınlaştırılmış kareyi taşımak için sürükleyin.",
   "Test video:": "Test videosu:",
   "Display-aware (recommended)": "Ekrana göre (önerilir)",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR (100 nit; etiket yoksa PQ varsay)",

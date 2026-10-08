@@ -18,11 +18,16 @@ import time
 from dataclasses import replace
 
 from PySide6.QtCore import QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QRegion
 from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core import proc as proc_util
-from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings, frame_input_path
+from vmaf_app.core.frame_extract import (
+    FrameComparison,
+    PreviewColorSettings,
+    comparison_dimensions,
+    frame_input_path,
+)
 from vmaf_app.core.gpu import GpuVendor, plan_hwaccel
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.video_playback import (
@@ -33,11 +38,13 @@ from vmaf_app.core.video_playback import (
     source_playback_comparison,
 )
 from vmaf_app.ui.playback_worker import StreamDecodeWorker
+from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom
 
 
-class _PairedFrameWidget(QWidget):
+class _PairedFrameWidget(DragsZoomedFrame, QWidget):
     """A native window a GPU swapchain presents into (LockedNativePool),
-    painted dark by Qt while no native playback owns it."""
+    painted dark by Qt while no native playback owns it. A zoomed frame is
+    dragged on it (the view's zoom)."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -52,10 +59,23 @@ class _PairedFrameWidget(QWidget):
 
     def paintEvent(self, _event) -> None:
         # The swapchain owns this child HWND while native playback is active.
-        # Painting it from Qt would erase or flash over it.
+        # Painting it from Qt would erase or flash over it -- but for the
+        # margins beside a zoomed frame, which the sink, drawing in its
+        # rectangle alone, leaves to the window: the default grey there.
         if self._native_playback:
+            area = self.parentWidget().native_area()
+            if area is not None:
+                painter = QPainter(self)
+                painter.setClipRegion(QRegion(self.rect()).subtracted(QRegion(area)))
+                painter.fillRect(self.rect(), QColor("#171717"))
             return
         QPainter(self).fillRect(self.rect(), QColor("#171717"))
+
+    def _zoom_context(self):
+        return self.parentWidget().zoom_context()
+
+    def _zoom_dragged(self) -> None:
+        self.parentWidget().zoom_changed()
 
 
 class _StreamSurface(_PairedFrameWidget):
@@ -86,9 +106,13 @@ class _StreamSurface(_PairedFrameWidget):
         painter.fillRect(self.rect(), QColor("#171717"))
         if self._image.isNull():
             return
-        scale = min(self.width() / self._side_width, self.height() / self._height)
-        w, h = self._side_width * scale, self._height * scale
-        painter.drawImage(QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h), self._image)
+        place = self.parentWidget().zoom_placement((self._side_width, self._height))
+        if place is None:
+            scale = min(self.width() / self._side_width, self.height() / self._height)
+            w, h = self._side_width * scale, self._height * scale
+            painter.drawImage(QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h), self._image)
+            return
+        painter.drawImage(QRectF(place.x, place.y, place.width, place.height), self._image)
 
 
 class VideoCompareView(QWidget):
@@ -138,12 +162,16 @@ class VideoCompareView(QWidget):
         self._pool_active = False
         self._pool_reason = ""
         self._pool_maximum = None
+        self._pool_screen = None  # the screen size FFmpeg's decoders started for
         self._native_pool = None
         self._last_status = ""
         self._decoded_videos = DEFAULT_COMPARE_DECODED_VIDEOS
         self._pool_timer = QTimer(self)
         self._pool_timer.setInterval(10)
         self._pool_timer.timeout.connect(self._tick)
+        self._zoom = Zoom()
+        #: Where the GPU frame last presented zoomed is drawn (device pixels).
+        self._native_drawn = None
         self._source_surface = _StreamSurface(self)
         self._distorted_surface = _StreamSurface(self)
         self._source_surface.hide()
@@ -152,9 +180,108 @@ class VideoCompareView(QWidget):
     def resizeEvent(self, event):
         for surface in (self._source_surface, self._distorted_surface):
             surface.setGeometry(self.rect())
+            surface.refresh_cursor()
         if self._native_pool is not None:
             self._native_pool.resize()
         super().resizeEvent(event)
+
+    # ------------------------------------------------------------------ zoom
+    def set_zoom(self, zoom: Zoom) -> None:
+        """The zoom to show frames at: the panel's, which its still frames
+        use too."""
+        self._zoom = zoom
+
+    def zoom_context(self, frame=None):
+        """(zoom, view size, frame size, ratio) for a `frame`-pixel picture
+        of the pair -- the comparison's own size, as its metrics see it,
+        when not given -- at the comparison's scale: a source decoded at its
+        native size beside a smaller encode is drawn at the encode's size,
+        and one of another shape (its black bars kept) keeps its shape.
+        None when nothing is loaded."""
+        if self._comparison is None:
+            return None
+        reference = comparison_dimensions(self._comparison)
+        if reference[0] <= 0 or reference[1] <= 0:
+            return None
+        frame = frame or reference
+        return (self._zoom, (self.width(), self.height()), frame,
+                self.devicePixelRatioF() * frame[0] / reference[0])
+
+    def zoom_placement(self, frame):
+        """Where a `frame`-pixel picture of the pair is drawn in the view."""
+        context = self.zoom_context(frame)
+        return None if context is None else self._zoom.placement(*context[1:])
+
+    def native_area(self):
+        """Where the GPU frame last presented zoomed is drawn, in the view's
+        own pixels (a QRect), for the surface to paint around; None when
+        fitted."""
+        if self._zoom.factor is None or self._native_drawn is None:
+            return None
+        ratio = self.devicePixelRatioF()
+        x, y, width, height = (value / ratio for value in self._native_drawn)
+        return QRectF(x, y, width, height).toAlignedRect()
+
+    def native_view(self, sample):
+        """For LockedPresentation, a GPU frame zoomed: the part of it in
+        view (x, y, width, height in its pixels) and where that goes in the
+        window (device pixels). None when it fits the window."""
+        if self._zoom.factor is None:
+            self._native_drawn = None
+            return None
+        structure = sample.get_caps().get_structure(0)
+        size = (structure.get_value("width"), structure.get_value("height"))
+        context = self.zoom_context(size)
+        if context is None:
+            return None
+        (left, top, right, bottom), drawn = self._zoom.visible(*context[1:])
+        ratio = self.devicePixelRatioF()
+        rectangle = (round(drawn.x * ratio), round(drawn.y * ratio),
+                     max(1, round(drawn.width * ratio)), max(1, round(drawn.height * ratio)))
+        # Sized from the part in view, then placed: rounding each edge apart
+        # (round() takes halves to even) gave 4 rows where 5 were in view.
+        width = max(1, min(size[0], round((right - left) * size[0])))
+        height = max(1, min(size[1], round((bottom - top) * size[1])))
+        crop = (min(round(left * size[0]), size[0] - width), min(round(top * size[1]), size[1] - height),
+                width, height)
+        self._native_drawn = rectangle
+        return crop, rectangle
+
+    def zoom_changed(self) -> None:
+        """The zoom, or the part of the frame in view, changed: shown again.
+        Zoomed, FFmpeg's frames are decoded at the comparison's full size,
+        not the screen's (_wanted_maximum)."""
+        if self._native_pool is not None:
+            try:
+                self._native_pool.place()
+            except Exception as exc:
+                self._native_pool.stop()
+                self._native_pool = None
+                self._start_ffmpeg(self._wanted_playing, str(exc))
+        elif self._pool_active and (wanted := self._wanted_maximum()) != self._pool_maximum:
+            if self._decode_size_changes(wanted):
+                self._restart_decoder(realtime=self._wanted_playing)
+            else:
+                self._pool_maximum = wanted  # the same frames: they go on decoding
+        for surface in (self._source_surface, self._distorted_surface):
+            surface.refresh_cursor()
+            surface.update()
+
+    def _wanted_maximum(self):
+        """The size FFmpeg's frames are decoded at most: the screen's when
+        fitted; zoomed, the comparison's own (None)."""
+        return None if self._zoom.factor is not None else self._display_pixel_size()
+
+    def _decode_size_changes(self, maximum) -> bool:
+        """Whether decoding with `maximum` would give any of the pool's
+        videos other frame sizes: the source, the selected encode, and the
+        encodes decoded beside it, whose workers are kept for a switch."""
+        if self._comparison is None or maximum == self._pool_maximum:
+            return False
+        decoded = [comparison for comparison, _side in self._desired.values()] or [
+            self._comparison, self._source_recipe()]
+        return any(playback_dimensions(comparison, maximum) != playback_dimensions(comparison, self._pool_maximum)
+                   for comparison in decoded)
 
     def closeEvent(self, event):
         self.clear()
@@ -354,7 +481,8 @@ class VideoCompareView(QWidget):
 
     def _start_ffmpeg(self, realtime, reason=""):
         self._pool_reason = reason
-        self._pool_maximum = self._display_pixel_size()
+        self._pool_screen = self._display_pixel_size()
+        self._pool_maximum = self._wanted_maximum()
         self._pool_active = True
         self._wanted_playing = bool(realtime)
         self._is_playing = bool(realtime)
@@ -489,7 +617,7 @@ class VideoCompareView(QWidget):
             return
         if not self._pool_active:
             return
-        if self._display_pixel_size() != self._pool_maximum:
+        if self._display_pixel_size() != self._pool_screen:
             self._restart_decoder(realtime=self._wanted_playing)
             return
         self._launch_missing()

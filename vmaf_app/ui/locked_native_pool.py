@@ -131,13 +131,27 @@ class LockedNativePool:
         self.frame, self.position = frame, round(frame * 1000 / self.fps)
         self.pair, self.pair_index = (source[frame], distorted[frame]), self.selected
         if changed:
-            self.output.present(self.pair[0 if self.showing_source else 1])
+            self._present(self.pair[0 if self.showing_source else 1])
         return True
+
+    def _present(self, sample):
+        view = self.view.native_view(sample)
+        if view is None:
+            self.output.present(sample)  # fitted to the window, as always
+        else:
+            self.output.present(sample, view)
+
+    def place(self):
+        """The zoom, or the part of the frame in view, changed."""
+        self.surface.refresh_cursor()
+        self.surface.update()  # the margins beside a zoomed frame
+        if self.pair is not None and self.pair_index == self.selected:
+            self._present(self.pair[0 if self.showing_source else 1])
 
     def show_source(self, showing):
         self.showing_source = bool(showing)
         if self.pair is not None and self.pair_index == self.selected:
-            self.output.present(self.pair[0 if showing else 1])
+            self._present(self.pair[0 if showing else 1])
 
     def set_audio_enabled(self, enabled):
         self.audio.set_enabled(enabled)
@@ -256,6 +270,7 @@ class LockedNativePool:
 
     def resize(self):
         self.surface.setGeometry(self.view.rect())
+        self.place()
 
     def stop(self):
         if self.closed:

@@ -407,6 +407,59 @@ def test_a_scored_entry_never_claims_a_pending_crop(qapp):
     panel.close()
 
 
+def test_zoom_fits_by_default_and_takes_a_chosen_or_typed_percentage(qapp):
+    """A user: "a comparison tool needs zoom". Fit to window as before, or
+    a zoom chosen or typed in, which playback shares with the still frames."""
+    panel = FrameComparePanel()
+    assert panel.zoom.factor is None and panel.zoom_combo.currentText() == "Fit to window"
+    index = panel.zoom_combo.findData(1.0)
+    panel.zoom_combo.setCurrentIndex(index)
+    panel.zoom_combo.activated.emit(index)
+    assert panel.zoom.factor == 1.0 and panel.zoom_combo.currentText() == "100%"
+
+    def typed(text):
+        panel.zoom_combo.setEditText(text)
+        panel.zoom_combo.lineEdit().editingFinished.emit()
+
+    typed("150 %")
+    assert panel.zoom.factor == 1.5 and panel.zoom_combo.currentText() == "150%"
+    typed("not a zoom")
+    assert panel.zoom.factor == 1.5 and panel.zoom_combo.currentText() == "150%"
+    typed("Fit to window")
+    assert panel.zoom.factor is None
+    assert panel._ensure_video_view()._zoom is panel.zoom
+    panel.close()
+
+
+def test_a_zoomed_still_frame_is_dragged_and_a_fitted_one_is_not(qapp):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage
+
+    from vmaf_app.ui.frame_compare_panel import FrameView
+
+    viewer = FrameView()
+    viewer.resize(400, 200)
+    viewer.show()
+    image = QImage(800, 400, QImage.Format_RGB32)
+    image.fill(0)
+    viewer.set_image(image)
+    ratio = viewer.devicePixelRatioF()
+
+    def drag(start, end):
+        QTest.mousePress(viewer, Qt.LeftButton, Qt.NoModifier, QPoint(*start))
+        QTest.mouseMove(viewer, QPoint(*end))
+        QTest.mouseRelease(viewer, Qt.LeftButton, Qt.NoModifier, QPoint(*end))
+
+    drag((200, 100), (150, 100))
+    assert viewer.zoom.centre == (0.5, 0.5)  # fitted: nothing to move
+    viewer.zoom.factor = 1.0
+    viewer.zoom_changed()
+    assert viewer.cursor().shape() == Qt.OpenHandCursor
+    drag((200, 100), (150, 100))
+    assert viewer.zoom.centre[0] == pytest.approx(0.5 + 50 * ratio / 800)
+    viewer.close()
+
+
 def test_the_empty_message_does_not_demand_a_vmaf_run(qapp):
     panel = FrameComparePanel()
     panel.set_runs([])

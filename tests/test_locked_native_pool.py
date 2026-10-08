@@ -16,7 +16,23 @@ def pool():
                        ("distorted", 0): {10: "d10"}}
     output = []
     instance.output = SimpleNamespace(present=output.append)
+    instance.view = SimpleNamespace(native_view=lambda sample: None)  # fitted to the window
     return instance, output
+
+
+def test_a_zoomed_frame_is_presented_with_the_part_in_view():
+    """Zoomed, the view says which part of the frame to show and where
+    (VideoCompareView.native_view); fitted, frames go as they always did."""
+    instance, _output = pool()
+    presented = []
+    instance.output = SimpleNamespace(present=lambda *args: presented.append(args))
+    instance.view = SimpleNamespace(native_view=lambda sample: ((1, 2, 3, 4), (0, 0, 9, 9)))
+    instance.surface = SimpleNamespace(refresh_cursor=lambda: None, update=lambda: None)
+    assert instance._choose_pair(12)
+    assert presented == [("d10", ((1, 2, 3, 4), (0, 0, 9, 9)))]
+    instance.view = SimpleNamespace(native_view=lambda sample: None)
+    instance.place()  # the zoom changed: the same frame again
+    assert presented[-1] == ("d10",)
 
 
 def test_fast_source_never_advances_past_matching_distorted_frame():

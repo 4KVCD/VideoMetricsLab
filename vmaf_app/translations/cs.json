@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "Předchozí testovací video (šipka vlevo)",
   "Next test video (Right arrow)": "Další testovací video (šipka vpravo)",
   "Fit to window": "Přizpůsobit oknu",
+  "Zoom:": "Přiblížení:",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "Přizpůsobit oknu, nebo přiblížení, které vyberete či napíšete: při 100 % je jeden pixel videa jeden pixel obrazovky. Přiblížený snímek posunete přetažením.",
   "Test video:": "Testovací video:",
   "Display-aware (recommended)": "Podle displeje (doporučeno)",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR (100 nitů; bez značek se předpokládá PQ)",

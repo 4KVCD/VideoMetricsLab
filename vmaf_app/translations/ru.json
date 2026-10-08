@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "Предыдущее тестовое видео (стрелка влево)",
   "Next test video (Right arrow)": "Следующее тестовое видео (стрелка вправо)",
   "Fit to window": "По размеру окна",
+  "Zoom:": "Масштаб:",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "По размеру окна или выбранный либо введённый масштаб: при 100% один пиксель видео — один пиксель экрана. Увеличенный кадр можно перетаскивать мышью.",
   "Test video:": "Тестовое видео:",
   "Display-aware (recommended)": "По дисплею (рекомендуется)",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR (100 нит; без метки считать PQ)",

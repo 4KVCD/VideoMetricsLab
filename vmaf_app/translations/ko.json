@@ -414,6 +414,8 @@
   "Previous test video (Left arrow)": "이전 테스트 영상(왼쪽 화살표)",
   "Next test video (Right arrow)": "다음 테스트 영상(오른쪽 화살표)",
   "Fit to window": "창에 맞추기",
+  "Zoom:": "확대/축소:",
+  "Fit to window, or a zoom you choose or type in: at 100% one pixel of the video is one pixel of the screen. Drag a zoomed frame to move it.": "창에 맞추기 또는 선택하거나 입력한 배율: 100%에서는 영상의 1픽셀이 화면의 1픽셀입니다. 확대된 프레임은 드래그하여 옮길 수 있습니다.",
   "Test video:": "테스트 영상:",
   "Display-aware (recommended)": "디스플레이에 맞춤(권장)",
   "HDR → SDR (100 nit; assume PQ if untagged)": "HDR → SDR(100니트, 태그가 없으면 PQ로 간주)",
