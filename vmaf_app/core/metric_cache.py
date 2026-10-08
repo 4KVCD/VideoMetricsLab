@@ -34,7 +34,15 @@ from vmaf_app.core.model_select import (
     model_for_resolution,
     v1_model_for_resolution,
 )
-from vmaf_app.core.models import ComparisonResult, CropBox, ResampleTarget, ScaleDirection, VideoInfo
+from vmaf_app.core.models import (
+    ComparisonResult,
+    ResampleTarget,
+    ScaleDirection,
+    crop_from_dict,
+    crop_to_dict,
+    video_info_from_dict,
+    video_info_to_dict,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -132,40 +140,6 @@ def _merge_legacy(legacy: Path, directory: Path) -> None:
 
 def metric_path(directory: Path, spec: MetricRequestSpec) -> Path:
     return directory / f"{spec.key}_{metric_identity_hash(spec)}.npz"
-
-
-def _crop_to_dict(crop: CropBox | None) -> dict | None:
-    return None if crop is None else {"w": crop.w, "h": crop.h, "x": crop.x, "y": crop.y}
-
-
-def _crop_from_dict(data: dict | None) -> CropBox | None:
-    return None if data is None else CropBox(**data)
-
-
-def _info_to_dict(info: VideoInfo) -> dict:
-    return {
-        "path": str(info.path), "width": info.width, "height": info.height,
-        "fps": info.fps, "duration": info.duration, "nb_frames": info.nb_frames,
-        "codec_name": info.codec_name, "sar": info.sar, "pix_fmt": info.pix_fmt,
-        "bit_rate": info.bit_rate, "bit_rate_whole_file": info.bit_rate_whole_file,
-        "nominal_fps": info.nominal_fps, "average_fps": info.average_fps,
-        "color_range": info.color_range, "color_space": info.color_space,
-        "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
-        "chroma_location": info.chroma_location,
-    }
-
-
-def _info_from_dict(data: dict) -> VideoInfo:
-    return VideoInfo(path=Path(data["path"]), width=data["width"], height=data["height"],
-                     fps=data["fps"], duration=data["duration"], nb_frames=data["nb_frames"],
-                     codec_name=data["codec_name"], sar=data.get("sar", "1:1"),
-                     pix_fmt=data.get("pix_fmt", ""), bit_rate=data.get("bit_rate", 0),
-                     bit_rate_whole_file=bool(data.get("bit_rate_whole_file", False)),
-                     nominal_fps=data.get("nominal_fps", 0.0), average_fps=data.get("average_fps", 0.0),
-                     color_range=data.get("color_range", ""),
-                     color_space=data.get("color_space", ""), color_transfer=data.get("color_transfer", ""),
-                     color_primaries=data.get("color_primaries", ""),
-                     chroma_location=data.get("chroma_location", ""))
 
 
 #: Every Vship GPU score records the color-tag mapping it was made with, as
@@ -467,14 +441,14 @@ def _compared_size(directory: Path) -> tuple[int, int] | None:
 
     try:
         context = json.loads((directory / "context.json").read_text(encoding="utf-8"))
-        source = _info_from_dict(context["source_info"])
-        distorted = _info_from_dict(context["distorted_info"])
-        source_crop = _crop_from_dict(context.get("source_crop"))
+        source = video_info_from_dict(context["source_info"])
+        distorted = video_info_from_dict(context["distorted_info"])
+        source_crop = crop_from_dict(context.get("source_crop"))
         if context.get("resample_target"):
             return resample_analysis_dimensions(source, source_crop)
         return compared_dimensions(
             source, distorted, ScaleDirection(context["scale_direction"]),
-            source_crop, _crop_from_dict(context.get("distorted_crop")))
+            source_crop, crop_from_dict(context.get("distorted_crop")))
     except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
         return None
 
@@ -645,8 +619,8 @@ def _context_from_result(result: ComparisonResult, label: str, recipe: Compariso
     return {
         "format_version": METRIC_CACHE_FORMAT_VERSION, "label": label,
         "source": str(result.source), "distorted": str(result.distorted), "fps": result.fps,
-        "source_crop": _crop_to_dict(result.source_crop), "distorted_crop": _crop_to_dict(result.distorted_crop),
-        "source_info": _info_to_dict(result.source_info), "distorted_info": _info_to_dict(result.distorted_info),
+        "source_crop": crop_to_dict(result.source_crop), "distorted_crop": crop_to_dict(result.distorted_crop),
+        "source_info": video_info_to_dict(result.source_info), "distorted_info": video_info_to_dict(result.distorted_info),
         "scale_direction": result.scale_direction.value, "scale_algorithm": result.scale_algorithm,
         "resample_target": None if result.resample_target is None else {
             "width": result.resample_target.width, "label": result.resample_target.label,
@@ -732,8 +706,8 @@ def load_result(
         result = ComparisonResult(
             source=Path(context["source"]), distorted=Path(context["distorted"]),
             frames=frame_view, fps=context["fps"], model=context.get("model", ""),
-            source_crop=_crop_from_dict(context.get("source_crop")), distorted_crop=_crop_from_dict(context.get("distorted_crop")),
-            source_info=_info_from_dict(context["source_info"]), distorted_info=_info_from_dict(context["distorted_info"]),
+            source_crop=crop_from_dict(context.get("source_crop")), distorted_crop=crop_from_dict(context.get("distorted_crop")),
+            source_info=video_info_from_dict(context["source_info"]), distorted_info=video_info_from_dict(context["distorted_info"]),
             scale_direction=ScaleDirection(context.get("scale_direction", recipe.scale_direction.value)),
             scale_algorithm=context.get("scale_algorithm") or recipe.scale_algorithm,
             resample_target=ResampleTarget(**target) if target else recipe.resample_test,

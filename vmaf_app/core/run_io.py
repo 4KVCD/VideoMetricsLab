@@ -21,11 +21,13 @@ from vmaf_app.core.metrics import FRAME_METRICS
 from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, is_v1_choice
 from vmaf_app.core.models import (
     ComparisonResult,
-    CropBox,
     FrameScores,
     ResampleTarget,
     ScaleDirection,
-    VideoInfo,
+    crop_from_dict,
+    crop_to_dict,
+    video_info_from_dict,
+    video_info_to_dict,
 )
 
 FORMAT_VERSION = 2
@@ -65,45 +67,6 @@ def unique_output_path(
         counter += 1
     reserved.add(candidate)
     return candidate
-
-
-def _crop_to_dict(c: CropBox | None) -> dict | None:
-    return None if c is None else {"w": c.w, "h": c.h, "x": c.x, "y": c.y}
-
-
-def _crop_from_dict(d: dict | None) -> CropBox | None:
-    return None if d is None else CropBox(**d)
-
-
-def _info_to_dict(v: VideoInfo) -> dict:
-    return {
-        "path": str(v.path), "width": v.width, "height": v.height, "fps": v.fps,
-        "duration": v.duration, "nb_frames": v.nb_frames, "codec_name": v.codec_name,
-        "sar": v.sar, "pix_fmt": v.pix_fmt, "bit_rate": v.bit_rate,
-        "bit_rate_whole_file": v.bit_rate_whole_file,
-        "nominal_fps": v.nominal_fps,
-        "average_fps": v.average_fps,
-        "color_range": v.color_range, "color_space": v.color_space,
-        "color_transfer": v.color_transfer,
-        "color_primaries": v.color_primaries,
-        "chroma_location": v.chroma_location,
-    }
-
-
-def _info_from_dict(d: dict) -> VideoInfo:
-    return VideoInfo(
-        path=Path(d["path"]), width=d["width"], height=d["height"], fps=d["fps"],
-        duration=d["duration"], nb_frames=d["nb_frames"], codec_name=d["codec_name"],
-        sar=d.get("sar", "1:1"), pix_fmt=d.get("pix_fmt", ""), bit_rate=d.get("bit_rate", 0),
-        bit_rate_whole_file=bool(d.get("bit_rate_whole_file", False)),
-        nominal_fps=d.get("nominal_fps", 0.0),
-        average_fps=d.get("average_fps", 0.0),
-        color_range=d.get("color_range", ""),
-        color_space=d.get("color_space", ""),
-        color_transfer=d.get("color_transfer", ""),
-        color_primaries=d.get("color_primaries", ""),
-        chroma_location=d.get("chroma_location", ""),
-    )
 
 
 def _json_float(value: float) -> float | str | None:
@@ -219,10 +182,10 @@ def save_run(result: ComparisonResult, path: Path, label: str | None = None) -> 
         "model_choice": result.model_choice,
         "model_v1": result.model_v1,
         "model_choice_v1": result.model_choice_v1,
-        "source_crop": _crop_to_dict(result.source_crop),
-        "distorted_crop": _crop_to_dict(result.distorted_crop),
-        "source_info": _info_to_dict(result.source_info),
-        "distorted_info": _info_to_dict(result.distorted_info),
+        "source_crop": crop_to_dict(result.source_crop),
+        "distorted_crop": crop_to_dict(result.distorted_crop),
+        "source_info": video_info_to_dict(result.source_info),
+        "distorted_info": video_info_to_dict(result.distorted_info),
         "scale_direction": result.scale_direction.value,
         "scale_algorithm": result.scale_algorithm,
         "resample_target": (
@@ -257,10 +220,10 @@ def load_run(path: Path) -> tuple[ComparisonResult, str]:
         frames=FrameScores.empty(),
         fps=data["fps"],
         model=data["model"],
-        source_crop=_crop_from_dict(data.get("source_crop")),
-        distorted_crop=_crop_from_dict(data.get("distorted_crop")),
-        source_info=_info_from_dict(data["source_info"]),
-        distorted_info=_info_from_dict(data["distorted_info"]),
+        source_crop=crop_from_dict(data.get("source_crop")),
+        distorted_crop=crop_from_dict(data.get("distorted_crop")),
+        source_info=video_info_from_dict(data["source_info"]),
+        distorted_info=video_info_from_dict(data["distorted_info"]),
         scale_direction=ScaleDirection(data["scale_direction"]),
         scale_algorithm=data["scale_algorithm"],
         resample_target=(

@@ -56,6 +56,15 @@ class CropBox:
         return self.w == frame_w and self.h == frame_h and self.x == 0 and self.y == 0
 
 
+def crop_to_dict(crop: CropBox | None) -> dict | None:
+    """A crop as run files and the metric cache's context.json save it."""
+    return None if crop is None else {"w": crop.w, "h": crop.h, "x": crop.x, "y": crop.y}
+
+
+def crop_from_dict(data: Mapping | None) -> CropBox | None:
+    return None if data is None else CropBox(**data)
+
+
 #: FFmpeg's demuxers of bare elementary streams, which carry no timestamps.
 RAW_STREAM_FORMATS = frozenset({
     "h264", "hevc", "vvc", "evc", "av1", "obu", "mpegvideo", "m4v", "h263", "vc1", "dirac",
@@ -114,6 +123,37 @@ class VideoInfo:
         if self.nominal_fps <= 0 or self.fps <= 0:
             return False
         return abs(self.nominal_fps - self.fps) > max(0.01, self.fps * 0.001)
+
+
+def video_info_to_dict(info: VideoInfo) -> dict:
+    """A video's info as run files (run_io) and the metric cache's
+    context.json save it: one form, so a field added to VideoInfo is saved
+    by both or by neither (format_name is not saved)."""
+    return {
+        "path": str(info.path), "width": info.width, "height": info.height,
+        "fps": info.fps, "duration": info.duration, "nb_frames": info.nb_frames,
+        "codec_name": info.codec_name, "sar": info.sar, "pix_fmt": info.pix_fmt,
+        "bit_rate": info.bit_rate, "bit_rate_whole_file": info.bit_rate_whole_file,
+        "nominal_fps": info.nominal_fps, "average_fps": info.average_fps,
+        "color_range": info.color_range, "color_space": info.color_space,
+        "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
+        "chroma_location": info.chroma_location,
+    }
+
+
+def video_info_from_dict(data: Mapping) -> VideoInfo:
+    """video_info_to_dict's form back. A field saved before it existed
+    loads as its default."""
+    return VideoInfo(path=Path(data["path"]), width=data["width"], height=data["height"],
+                     fps=data["fps"], duration=data["duration"], nb_frames=data["nb_frames"],
+                     codec_name=data["codec_name"], sar=data.get("sar", "1:1"),
+                     pix_fmt=data.get("pix_fmt", ""), bit_rate=data.get("bit_rate", 0),
+                     bit_rate_whole_file=bool(data.get("bit_rate_whole_file", False)),
+                     nominal_fps=data.get("nominal_fps", 0.0), average_fps=data.get("average_fps", 0.0),
+                     color_range=data.get("color_range", ""), color_space=data.get("color_space", ""),
+                     color_transfer=data.get("color_transfer", ""),
+                     color_primaries=data.get("color_primaries", ""),
+                     chroma_location=data.get("chroma_location", ""))
 
 
 @dataclass

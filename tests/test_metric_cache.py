@@ -719,14 +719,36 @@ def test_a_context_saved_without_the_algorithm_takes_the_recipes(tmp_path):
     assert found.scale_algorithm == "spline"
 
 
-@pytest.mark.parametrize("module", ["metric_cache", "run_io"])
-def test_the_probed_average_rate_is_kept_and_an_older_entry_has_none(module):
-    from vmaf_app.core import run_io
-    from vmaf_app.core.models import VideoInfo
+def test_the_probed_average_rate_is_kept_and_an_older_entry_has_none():
+    from vmaf_app.core.models import VideoInfo, video_info_from_dict, video_info_to_dict
 
-    store = {"metric_cache": metric_cache, "run_io": run_io}[module]
     info = VideoInfo(Path("v.mkv"), 1920, 1080, 23.976, 10.0, 240, "hevc", nominal_fps=23.976, average_fps=23.976)
-    saved = store._info_to_dict(info)
-    assert store._info_from_dict(saved).average_fps == 23.976
+    saved = video_info_to_dict(info)
+    assert video_info_from_dict(saved).average_fps == 23.976
     del saved["average_fps"]
-    assert store._info_from_dict(saved).average_fps == 0.0
+    assert video_info_from_dict(saved).average_fps == 0.0
+
+
+def test_run_files_and_the_cache_save_a_video_in_one_form():
+    """Each had a copy of the conversion: a field added to VideoInfo had to
+    be added to both. Every field but format_name is saved and read back."""
+    from dataclasses import fields
+
+    from vmaf_app.core.models import (
+        CropBox,
+        VideoInfo,
+        crop_from_dict,
+        crop_to_dict,
+        video_info_from_dict,
+        video_info_to_dict,
+    )
+
+    info = VideoInfo(Path("v.mkv"), 3840, 2160, 23.976, 10.0, 240, "hevc", sar="4:3", pix_fmt="yuv420p10le",
+                     bit_rate=8_000_000, bit_rate_whole_file=True, nominal_fps=24.0, average_fps=23.976,
+                     color_range="tv", color_space="bt2020nc", color_transfer="smpte2084",
+                     color_primaries="bt2020", chroma_location="topleft", format_name="matroska,webm")
+    saved = json.loads(json.dumps(video_info_to_dict(info)))
+    assert set(saved) == {field.name for field in fields(VideoInfo)} - {"format_name"}
+    assert video_info_from_dict(saved) == replace(info, format_name="")
+    assert crop_from_dict(json.loads(json.dumps(crop_to_dict(CropBox(3840, 1600, 0, 280))))) == CropBox(3840, 1600, 0, 280)
+    assert crop_to_dict(None) is None and crop_from_dict(None) is None
