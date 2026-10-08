@@ -374,6 +374,19 @@ _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
 #: unchanged. Butteraugli and CVVDP always agreed. AMD's Vulkan is
 #: unmeasured.
 SCORED_WRONGLY: frozenset[tuple[str, GpuVendor, str]] = frozenset()
+#: (build, GPU maker, metric) -> the largest frame it is given, in pixels,
+#: and the GPUs and sizes that is, for the reason the video shows: above it
+#: the metric is not calculated. Vship 5.1.2's Vulkan CVVDP hangs Intel's
+#: GPU above 1080p. On a Core Ultra 9 285K's (driver 32.0.101.8860), 4K
+#: HEVC stopped after 3 to 6
+#: frames, with one handler or two: Windows reset the GPU (LiveKernelEvent
+#: 141; the screen goes black for a moment) and the pass failed with "Failed
+#: to Submit commandBuffer to queue". At 1920x1080 all 240 frames were
+#: scored, 13 a second. Sizes in between are untested, so they are refused
+#: too. Not reported to Vship yet.
+GPU_PIXEL_LIMITS: dict[tuple[str, GpuVendor, str], tuple[int, str]] = {
+    ("vulkan", GpuVendor.INTEL, "cvvdp"): (1920 * 1080, "Intel GPUs above 1920x1080"),
+}
 _backend = DEFAULT_VSHIP_BACKEND
 
 # The probe's result and when it was made. One probe serves the whole
@@ -411,6 +424,16 @@ def scores_correctly(device: VshipDevice, key: str) -> bool:
     (SCORED_WRONGLY); a GPU of unknown make is assumed to be affected."""
     return not any(device.backend == backend and key == metric and device.vendor in (vendor, None)
                    for backend, vendor, metric in SCORED_WRONGLY)
+
+
+def size_refusal(device: VshipDevice, key: str, size: tuple[int, int]) -> str | None:
+    """Why `device` does not calculate `key` on frames of `size`
+    (GPU_PIXEL_LIMITS), or None where it does."""
+    limit = GPU_PIXEL_LIMITS.get((device.backend, device.vendor, key))
+    if limit is None or size[0] * size[1] <= limit[0]:
+        return None
+    return (f"on {limit[1]} it is not calculated, as Vship's Vulkan build hangs the GPU "
+            f"(this comparison is {size[0]}x{size[1]})")
 
 
 def gpu_can_score(key: str) -> bool:
@@ -1819,7 +1842,25 @@ def run_vship_task(
     A metric whose pass fails is reported in the output's `failures` while
     the others still run; only when every pass fails is the first error
     raised (and the caller may retry on the CPU).
+
+    A metric this GPU does not calculate at this size (GPU_PIXEL_LIMITS) is
+    not started: it is a failure with the reason, before any GPU work.
     """
+    refused = {}
+    if any((device.backend, device.vendor, spec.key) in GPU_PIXEL_LIMITS for spec in specs):
+        size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)[0]
+        refused = {spec.key: reason for spec in specs if (reason := size_refusal(device, spec.key, size))}
+    if refused:
+        for key, reason in refused.items():
+            _log.warning("%s not started: %s", metric_definition(key).label, reason)
+        specs = tuple(spec for spec in specs if spec.key not in refused)
+        if not specs:
+            raise VshipPassesFailedError(next(iter(refused.values())), refused)
+        output = run_vship_task(
+            source, distorted, request, specs, device, source_crop, distorted_crop,
+            on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+            process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass)
+        return replace(output, failures={**output.failures, **refused})
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
             on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
