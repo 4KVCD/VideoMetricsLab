@@ -274,6 +274,15 @@ def test_a_pattern_is_every_file_it_finds_but_the_reference(videos):
     assert videos.calls == [("ffmpeg", "a.mkv"), ("ffmpeg", "b.mkv")]
 
 
+def test_patterns_that_find_only_the_reference_are_a_wrong_command(videos):
+    """Nothing to compare: the run printed the reference alone and exited
+    0, which a script takes for every video compared."""
+    code, out, err = _run(videos.reference, videos.folder / "reference*.mkv")
+    assert code == cli.EXIT_USAGE
+    assert "No test videos" in err and out == ""
+    assert videos.calls == []
+
+
 def test_cpu_puts_every_metric_with_a_choice_on_the_cpu_unless_one_says_otherwise(videos):
     parse = cli.build_parser().parse_args
     settings = Settings.load()

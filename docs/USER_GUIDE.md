@@ -172,8 +172,10 @@ GPU is calculated on the CPU where no GPU can.
 
 Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. The exit code is 0 when every video got every metric
-asked for, 1 when a video failed or lost a metric, 2 for a wrong command or
-when FFmpeg cannot be used, and 130 after Ctrl+C. Ctrl+C stops the run as
+asked for that it can have (one it cannot, such as CVVDP with `--subsample`,
+is left out with a note, as in the app), 1 when a video failed or lost a
+metric, 2 for a wrong command, when FFmpeg cannot be used or when there is no
+test video, and 130 after Ctrl+C. Ctrl+C stops the run as
 **Cancel** does; scores that had finished are saved.
 
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
