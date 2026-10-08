@@ -16,4 +16,4 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 APP_NAME = "VideoMetricsLab"
-__version__ = "1.4"
+__version__ = "2.0"

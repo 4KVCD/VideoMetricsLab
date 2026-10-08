@@ -1,7 +1,7 @@
 # Rules for Claude Code sessions on VideoMetricsLab
 
 Repository: github.com/4KVCD/VideoMetricsLab. Work on the current release
-branch (`release/v1.5` at the time of writing) unless told otherwise, and pull
+branch (`release/v2.0` at the time of writing) unless told otherwise, and pull
 before you start. Follow these rules for all work.
 
 ## Setup

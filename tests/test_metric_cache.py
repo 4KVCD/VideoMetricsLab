@@ -115,7 +115,7 @@ def test_a_score_answers_a_request_only_from_a_compatible_implementation_and_not
     options = VmafOptions(compute_xpsnr=True)
     specs = {spec.key: spec for spec in metric_request_specs(
         options, ("vmaf", "xpsnr", "ssimulacra2", "cvvdp"))}
-    # XPSNR weighted by the encode (v1.4) answers no request of v1.5's.
+    # XPSNR weighted by the encode (v1.4) answers no request of v2.0's.
     assert specs["xpsnr"].implementation_compatibility_id == "ffmpeg-xpsnr-v2"
     assert metric_cache.answers(specs["xpsnr"], _xpsnr("ffmpeg-xpsnr-v2"))
     assert not metric_cache.answers(specs["xpsnr"], _xpsnr("ffmpeg-xpsnr-v1"))
