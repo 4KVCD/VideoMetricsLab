@@ -44,6 +44,8 @@ from pathlib import Path
 
 import psutil
 
+from vmaf_app.core import proc
+
 _log = logging.getLogger(__name__)
 
 #: How often the parent looks at the cancel event while the child is quiet.
@@ -106,6 +108,7 @@ def run_isolated(
         name=f"isolated-{what}", daemon=True,
     )
     child.start()
+    proc.end_with_app(child.pid)
     sender.close()
     attached: set[int] = set()
     outcome: tuple[str, object] | None = None
