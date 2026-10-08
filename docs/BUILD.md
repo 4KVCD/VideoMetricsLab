@@ -70,10 +70,12 @@ case anyone overrides that.
   user's. AV1 is decoded by the bundled GStreamer's `dav1d.dll`, as FFmpeg's
   libdav1d decoder decodes it (`KEEP_LIBRARIES` in
   `scripts/gstreamer_bundle.py`).
-- **`nvdec_frames.dll`, `vpl_frames.dll` and `amf_frames.dll`**, the
-  NVIDIA, Intel and AMD decoders the GPU metrics read their frames from
-  (`vmaf_app/core/gpu_frames.py`), built from `native/nvdec_frames.cpp`,
-  `native/vpl_frames.cpp` and `native/amf_frames.cpp` by
+- **`nvdec_frames.dll`, `vpl_frames.dll`, `amf_frames.dll` and
+  `mf_frames.dll`**, the NVIDIA, Intel and AMD decoders the GPU metrics read
+  their frames from (`vmaf_app/core/gpu_frames.py`; on AMD's GPUs Windows' own
+  Media Foundation decoders first, AMF's where they cannot), built from
+  `native/nvdec_frames.cpp`, `native/vpl_frames.cpp`, `native/amf_frames.cpp`
+  and `native/mf_frames.cpp` by
   `scripts/build_gpu_frames.ps1` (MinGW-w64 g++, as for the tone mapper) as
   part of the build, about 0.3 MB each. They link nothing of the GPU makers':
   each loads its maker's decoder library from the graphics driver at run time

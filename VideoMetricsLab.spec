@@ -58,6 +58,7 @@ else:
 for name, notices in (("nvdec_frames", ("ffnvcodec/LICENSE.nv-codec-headers.txt",)),
                       ("vpl_frames", ("onevpl/LICENSE.onevpl.txt",)),
                       ("amf_frames", ("amf/LICENSE.amf.txt", "vulkan/LICENSE.vulkan-headers.txt")),
+                      ("mf_frames", ("vulkan/LICENSE.vulkan-headers.txt",)),
                       ("software_frames", ())):
     dll = PROJECT / "vmaf_app" / "native" / f"{name}.dll"
     if dll.is_file():
