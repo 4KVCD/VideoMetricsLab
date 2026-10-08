@@ -1391,6 +1391,12 @@ def _decoded_in_app(source_info: VideoInfo, distorted_info: VideoInfo, source_cr
         return False
 
 
+def cpu_metrics_in_app() -> bool:
+    """Whether the app scores PSNR, SSIM and XPSNR itself at all: the bundled
+    libvmaf is there and VML_CPU_METRICS does not send them to FFmpeg."""
+    return os.environ.get(CPU_METRICS_VARIABLE, "").casefold() != "ffmpeg" and vmaf_cuda.LIBRARY_PATH.is_file()
+
+
 def _cpu_metrics_plan(options: VmafOptions, dimensions: tuple[int, int], source_info: VideoInfo,
                       distorted_info: VideoInfo, hwaccel: HwAccelPlan, source_crop: CropBox | None = None,
                       distorted_crop: CropBox | None = None) -> _GpuPlan | None:
@@ -1401,13 +1407,11 @@ def _cpu_metrics_plan(options: VmafOptions, dimensions: tuple[int, int], source_
     as for VMAF on the GPU. XPSNR stays FFmpeg's where libvmaf-fast's would
     not be its score to the bit (_xpsnr_frame_rate, _xpsnr_in_app), beside
     PSNR and SSIM in the app. None: FFmpeg's filters, as before."""
-    if os.environ.get(CPU_METRICS_VARIABLE, "").casefold() == "ffmpeg":
+    if not cpu_metrics_in_app():
         return None
     if _uses_vmaf_model(options) or options.resample_test is not None:
         return None
     if any(feature not in _CPU_METRIC_OF_FEATURE for feature in options.extra_features):
-        return None
-    if not vmaf_cuda.LIBRARY_PATH.is_file():
         return None
     width, height = dimensions
     bit_depth = analysis_bit_depth(source_info, distorted_info)

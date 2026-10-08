@@ -348,7 +348,11 @@ def test_devices_says_what_calculates_each_metric(videos, monkeypatch, capsys):
     assert "SSIMULACRA2: CPU (libjxl)" in out
     assert "VMAF v0.6.1, VMAF NEG: CPU (no GPU in the tests)" in out
     assert "VMAF v1: CPU (no GPU in the tests)" in out
-    assert "PSNR, SSIM, XPSNR: CPU (FFmpeg)" in out
+    assert "PSNR, SSIM, XPSNR: CPU (FFmpeg)" in out  # the suite sends them to FFmpeg (conftest)
+    monkeypatch.delenv("VML_CPU_METRICS")  # as the app runs
+    assert cli.main(["devices"]) == cli.EXIT_OK
+    assert (f"PSNR, SSIM, XPSNR: CPU (libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} in the app;"
+            in capsys.readouterr().out)
 
 
 def test_the_command_line_needs_no_qt():

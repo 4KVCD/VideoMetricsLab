@@ -754,11 +754,15 @@ def devices(_args: argparse.Namespace, *, out=None, err=None) -> int:
                      + ("libvmaf CUDA" if backend == "cuda" else f"Vulkan, GPU {gpu}") + ")")
     else:
         lines.append(f"VMAF v0.6.1, VMAF NEG: CPU ({why})")
-    from vmaf_app.core import vmaf_v1_gpu
+    from vmaf_app.core import vmaf_runner, vmaf_v1_gpu
 
     with_gpu, what = vmaf_v1_gpu.available()
     lines.append(f"VMAF v1: {'GPU (' + what + ')' if with_gpu else 'CPU (' + what + ')'}")
-    lines.append("PSNR, SSIM, XPSNR: CPU (FFmpeg)")
+    if vmaf_runner.cpu_metrics_in_app():
+        lines.append(f"PSNR, SSIM, XPSNR: CPU (libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} in the app; "
+                     "FFmpeg beside VMAF on the CPU)")
+    else:
+        lines.append("PSNR, SSIM, XPSNR: CPU (FFmpeg)")
     print("\n".join(lines), file=out)
     return EXIT_OK if status.ok else EXIT_USAGE
 
