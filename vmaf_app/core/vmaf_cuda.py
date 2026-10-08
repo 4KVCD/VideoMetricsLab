@@ -8,9 +8,10 @@ GPU metrics > GPU backend is Vulkan: the port of those extractors to Vulkan
 (vmaf_vulkan), which gives the same scores. What is said below of libvmaf's
 scores holds for both.
 
-Only those two scores: VMAF v1, PSNR, SSIM and XPSNR have no GPU code, and
-stay in FFmpeg's libvmaf and xpsnr filters, so they are scored exactly as
-before. A run that scores VMAF on the GPU still decodes each video once:
+Only those two scores: VMAF v1 on the GPU is vmaf_v1_gpu's, and PSNR, SSIM
+and XPSNR, which have no GPU code, are scored on the CPU by this library's
+extractors (CpuScorer) or by FFmpeg's filters (vmaf_runner._cpu_metrics_plan).
+A run that scores VMAF on the GPU still decodes each video once:
 an FFmpeg for each video writes its frames, as they would reach libvmaf's
 filter, to a named pipe and their timestamps to another (_StreamReader), and
 this module pairs them as that filter would (frame_sync) and feeds libvmaf

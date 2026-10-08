@@ -121,8 +121,9 @@ case anyone overrides that.
   process, FFmpeg only copying its compressed stream out of the container;
   other videos FFmpeg decodes. Vship and metric notices are packaged beside
   the libraries.
-- **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`), for VMAF and
-  VMAF NEG on NVIDIA GPUs only: from
+- **libvmaf with CUDA** (`vmaf_app/tools/libvmaf/libvmaf.dll`): VMAF and
+  VMAF NEG on NVIDIA GPUs, the libvmaf that turns every GPU scorer's features
+  into its score, and the app's PSNR, SSIM and XPSNR on the CPU: from
   [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast), this project's fork
   of libvmaf with the open pull requests that let it build with MSVC and fix
   its CUDA code merged. The DLLs are committed, so building the app does not
@@ -141,8 +142,8 @@ case anyone overrides that.
   process, the user's FFmpeg only copying their compressed streams out of
   the containers -- and a video FFmpeg would decode in software is decoded
   there by `software_frames.dll`, its pictures uploaded; otherwise FFmpeg
-  decodes them. VMAF on any other GPU or the CPU, VMAF v1,
-  PSNR, SSIM and XPSNR still come from the user's FFmpeg. It adds about 3.3 MB installed,
+  decodes them. VMAF on the CPU still comes from the user's FFmpeg, with
+  PSNR, SSIM and XPSNR in the same run. It adds about 3.3 MB installed,
   1 MB compressed. libvmaf and Vship each run in a process of their own
   (`vmaf_app/core/isolated.py`), so a crash in either, or in the GPU driver,
   falls back to the CPU instead of closing the app.

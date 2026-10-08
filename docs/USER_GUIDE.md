@@ -41,22 +41,20 @@ CPU: choose CPU there. Like
 SSIMULACRA2's and Butteraugli's, the last choice is what newly added videos
 start with. The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a
 thousandth of a point on every frame, so unlike those two, a saved VMAF score is
-reused whichever is chosen. PSNR, SSIM and XPSNR have no GPU code and
-are still calculated by FFmpeg on the CPU, in a run of their own beside the
-GPU's, so they do not slow VMAF down.
+reused whichever is chosen. PSNR, SSIM and XPSNR have no GPU code: the app
+calculates them on the CPU with the bundled libvmaf-fast, beside the GPU's run,
+so they do not slow VMAF down. With VMAF on the CPU, FFmpeg calculates them in
+the same run.
 
-VMAF v1 follows the same choice, with any GPU that has a Vulkan driver. Two of
-its four features, detail loss (ADM) and motion, are calculated on the GPU with
-Vulkan -- on an NVIDIA GPU too, whatever the GPU backend setting -- and give
-libvmaf's CPU values to the last bit. The other two, banding (CAMBI) and colour
-(SpEED), are calculated by the bundled libvmaf on the CPU, and libvmaf's own
-model turns the four into the score, so VMAF v1 with the GPU is the score
-FFmpeg's libvmaf gives. Because half of it stays on the CPU it gains less than
-VMAF v0.6.1 does: about 5 times the CPU's speed on 4K video with a fast NVIDIA
-GPU that also decodes both videos -- their pictures then stay on the GPU, and
-the planes the CPU's half reads are written into its memory by the GPU itself
--- and about twice where a video is decoded by the CPU (VVC, for one), or with
-another maker's GPU. A video too small for SpEED
+VMAF v1 follows the same choice, with any GPU that has a Vulkan driver. Its
+four features, detail loss (ADM), motion, banding (CAMBI) and colour (SpEED),
+are calculated on the GPU with Vulkan -- on an NVIDIA GPU too, whatever the GPU
+backend setting -- and give libvmaf's CPU values to the last bit, and libvmaf's
+own model turns them into the score, so VMAF v1 with the GPU is the score
+FFmpeg's libvmaf gives. It is about 17 times the CPU's speed on 4K video with
+an RTX 5090 that also decodes both videos, 2.5 times with a VVC test video
+(decoded by the CPU, which then sets the pace), and 1.4 to 1.7 times on an
+Intel integrated GPU. A video too small for SpEED
 (under about 160 pixels a side, more with the models that scale it down) is
 calculated on the CPU. A video's VMAF on the GPU waits for the
 GPU like its other GPU metrics, one video at a time, and goes before them. If the GPU calculation fails, or crashes, that
