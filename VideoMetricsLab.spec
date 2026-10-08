@@ -55,7 +55,8 @@ else:
 # headers compiled into them. Without one, FFmpeg decodes those videos, as before.
 for name, notices in (("nvdec_frames", ("ffnvcodec/LICENSE.nv-codec-headers.txt",)),
                       ("vpl_frames", ("onevpl/LICENSE.onevpl.txt",)),
-                      ("amf_frames", ("amf/LICENSE.amf.txt", "vulkan/LICENSE.vulkan-headers.txt"))):
+                      ("amf_frames", ("amf/LICENSE.amf.txt", "vulkan/LICENSE.vulkan-headers.txt")),
+                      ("mf_frames", ("vulkan/LICENSE.vulkan-headers.txt",))):
     dll = PROJECT / "vmaf_app" / "native" / f"{name}.dll"
     if dll.is_file():
         datas.append((str(dll), "vmaf_app/native"))

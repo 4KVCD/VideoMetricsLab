@@ -122,7 +122,8 @@ try {
 
     # The native libraries and the notices of the headers built into them.
     $native = Join-Path $output '_internal/vmaf_app/native'
-    foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll')) {
+    foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll',
+            'mf_frames.dll')) {
         if (-not (Test-Path (Join-Path $native $library))) {
             throw "Bundled native library is missing: $library"
         }
