@@ -234,6 +234,13 @@ class _ForwardedHandle:
     def is_pause_requested(self) -> bool:
         return False
 
+    @property
+    def was_terminated(self) -> bool:
+        """Never, here: Cancel reaches this process through its cancel
+        event, and the parent's handle ends a process attached after it
+        (ProcessHandle.attach). Read by vmaf_runner._cancelled."""
+        return False
+
 
 class _LogForwarder(logging.Handler):
     def __init__(self, sender: _Sender) -> None:

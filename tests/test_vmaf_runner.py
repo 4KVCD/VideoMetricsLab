@@ -2,6 +2,7 @@ import os
 import subprocess
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -857,6 +858,22 @@ def test_an_ffmpeg_cancel_ended_is_a_cancel_and_none_starts_after_it(monkeypatch
     with pytest.raises(Cancelled):
         vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=None,
                                 cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
+
+
+def test_an_ffmpeg_in_the_isolated_scorer_runs_with_the_parents_handle(monkeypatch, tmp_path):
+    """In the scoring process the handle is the parent's, forwarded
+    (isolated._ForwardedHandle). It had no was_terminated, which
+    _run_ffmpeg reads since c21eebf: every FFmpeg there failed, and VMAF on
+    the GPU from FFmpeg's pipes was calculated again on the CPU."""
+    from vmaf_app.core import isolated, vmaf_runner
+
+    sent = []
+    handle = isolated._ForwardedHandle(SimpleNamespace(send=sent.append))
+    monkeypatch.setattr(vmaf_runner.proc_util, "popen", lambda *a, **k: _FakeProcess(["frame=1\n"]))
+    result = vmaf_runner._run_ffmpeg(["ffmpeg"], total_frames=100, on_progress=None,
+                                     cancel_event=threading.Event(), cwd=tmp_path, process_handle=handle)
+    assert result.returncode == 0
+    assert sent == [("attach", 4242), ("detach", 4242)]
 
 
 def test_a_normal_run_still_returns_its_stderr_and_exit_code(monkeypatch, tmp_path):
