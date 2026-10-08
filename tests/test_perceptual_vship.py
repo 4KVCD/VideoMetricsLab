@@ -2011,6 +2011,49 @@ def test_cvvdp_above_1080p_is_not_started_on_an_intel_gpu(monkeypatch):
     assert passes == [("ssimulacra2",)]
 
 
+def test_cvvdp_scaled_to_the_display_is_judged_at_the_size_vship_computes_it(monkeypatch):
+    """With "Scale the video to fill the display" Vship computes CVVDP at
+    the display's size: a 1080p comparison on the default 4K display was
+    let through on Intel's GPU, at the size that hung it."""
+    from vmaf_app.core.cvvdp import CvvdpDisplay, CvvdpSettings
+
+    def request(*keys, display=None):
+        return analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), keys, None,
+                                                  CvvdpSettings(display or CvvdpDisplay(), resize_to_display=True))
+
+    intel = vship.VshipDevice("vulkan", "Intel(R) Graphics", 0, "5.1.2", None, GpuVendor.INTEL)
+    passes = []
+    monkeypatch.setattr(vship, "_run_vship_pass", lambda _s, _t, _r, specs, *_a, **_k: passes.append(
+        specs[0].key) or _single_metric_output(specs[0].key, 9.0, "gpu"))
+    both = request("ssimulacra2", "cvvdp")
+    output = vship.run_vship_task(_sized(1920, 1080), _sized(1920, 1080), both, both.metrics, intel, None, None)
+    assert passes == ["ssimulacra2"]
+    assert output.failures["cvvdp"].endswith("(this comparison is 1920x1080, scaled to the display: 3840x2160)")
+    small = request("cvvdp", display=CvvdpDisplay(width=1920, height=1080))  # a 1080p display: 1080p
+    vship.run_vship_task(_sized(1920, 1080), _sized(1920, 1080), small, small.metrics, intel, None, None)
+    assert passes == ["ssimulacra2", "cvvdp"]
+    # Larger than the display: judged at its own size, whether or not Vship shrinks it.
+    assert vship.cvvdp_computed_size((3840, 2160), CvvdpSettings(CvvdpDisplay(width=1920, height=1080),
+                                                                 resize_to_display=True)) == (3840, 2160)
+    assert vship.cvvdp_computed_size((1920, 1080), CvvdpSettings()) == (1920, 1080)  # not scaled
+
+
+def test_a_refused_cvvdp_keeps_its_reason_when_the_other_metric_fails_too(monkeypatch):
+    """The caller reports each metric with the reason in the error's
+    `failures`: CVVDP was given SSIMULACRA2's error instead of its own."""
+    request = _cvvdp_request("ssimulacra2", "cvvdp")
+    intel = vship.VshipDevice("vulkan", "Intel(R) Graphics", 0, "5.1.2", None, GpuVendor.INTEL)
+
+    def out_of_memory(*_a, **_k):
+        raise RuntimeError("out of GPU memory")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", out_of_memory)
+    with pytest.raises(vship.VshipPassesFailedError) as raised:
+        vship.run_vship_task(_sized(3840, 2160), _sized(3840, 2160), request, request.metrics, intel, None, None)
+    assert raised.value.failures["ssimulacra2"] == "out of GPU memory"
+    assert "hangs the GPU" in raised.value.failures["cvvdp"]
+
+
 def test_cvvdp_runs_at_1080p_on_intel_and_at_4k_elsewhere(monkeypatch):
     """The size compared at decides (a 4K source against a 1080p encode is
     compared at 1080p), and only on Intel's GPU with the Vulkan build."""

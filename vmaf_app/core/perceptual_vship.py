@@ -426,14 +426,31 @@ def scores_correctly(device: VshipDevice, key: str) -> bool:
                    for backend, vendor, metric in SCORED_WRONGLY)
 
 
-def size_refusal(device: VshipDevice, key: str, size: tuple[int, int]) -> str | None:
-    """Why `device` does not calculate `key` on frames of `size`
+def size_refusal(device: VshipDevice, key: str, size: tuple[int, int],
+                 computed: tuple[int, int] | None = None) -> str | None:
+    """Why `device` does not calculate `key` on frames of `size` -- computed
+    at `computed` where that differs (CVVDP scaled to the display) --
     (GPU_PIXEL_LIMITS), or None where it does."""
     limit = GPU_PIXEL_LIMITS.get((device.backend, device.vendor, key))
-    if limit is None or size[0] * size[1] <= limit[0]:
+    at = computed or size
+    if limit is None or at[0] * at[1] <= limit[0]:
         return None
-    return (f"on {limit[1]} it is not calculated, as Vship's Vulkan build hangs the GPU "
-            f"(this comparison is {size[0]}x{size[1]})")
+    detail = (f"this comparison is {size[0]}x{size[1]}" if at == size else
+              f"this comparison is {size[0]}x{size[1]}, scaled to the display: {at[0]}x{at[1]}")
+    return f"on {limit[1]} it is not calculated, as Vship's Vulkan build hangs the GPU ({detail})"
+
+
+def cvvdp_computed_size(size: tuple[int, int], settings: CvvdpSettings) -> tuple[int, int]:
+    """The size Vship computes CVVDP at for frames of `size`: theirs, or
+    with resize_to_display, theirs fitted to the display (aspect kept) --
+    the larger of the two, as whether Vship shrinks a frame larger than
+    the display is not known, and the size decides whether Intel's GPU
+    hangs (GPU_PIXEL_LIMITS)."""
+    if not settings.resize_to_display:
+        return size
+    scale = min(settings.display.width / size[0], settings.display.height / size[1])
+    fitted = (round(size[0] * scale), round(size[1] * scale))
+    return fitted if fitted[0] * fitted[1] > size[0] * size[1] else size
 
 
 def gpu_can_score(key: str) -> bool:
@@ -1849,17 +1866,35 @@ def run_vship_task(
     refused = {}
     if any((device.backend, device.vendor, spec.key) in GPU_PIXEL_LIMITS for spec in specs):
         size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)[0]
-        refused = {spec.key: reason for spec in specs if (reason := size_refusal(device, spec.key, size))}
+
+        def computed(spec: MetricRequestSpec) -> tuple[int, int]:
+            # CVVDP set to fill the display is computed at the display's
+            # size: a 1080p comparison on the default 4K display was let
+            # through, at the size that hung Intel's GPU.
+            if spec.key != "cvvdp":
+                return size
+            return cvvdp_computed_size(size, CvvdpSettings.from_spec_parameters(spec.parameters))
+
+        refused = {spec.key: reason for spec in specs
+                   if (reason := size_refusal(device, spec.key, size, computed(spec)))}
     if refused:
         for key, reason in refused.items():
             _log.warning("%s not started: %s", metric_definition(key).label, reason)
         specs = tuple(spec for spec in specs if spec.key not in refused)
         if not specs:
             raise VshipPassesFailedError(next(iter(refused.values())), refused)
-        output = run_vship_task(
-            source, distorted, request, specs, device, source_crop, distorted_crop,
-            on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
-            process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass)
+        try:
+            output = run_vship_task(
+                source, distorted, request, specs, device, source_crop, distorted_crop,
+                on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+                process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass)
+        except (PerceptualCancelled, ComparisonCutShortError):
+            raise
+        except Exception as error:
+            # The others failed too: each keeps its own reason (the caller
+            # reads `failures`), not CVVDP given theirs.
+            reasons = getattr(error, "failures", None) or {spec.key: str(error) for spec in specs}
+            raise VshipPassesFailedError(str(error), {**reasons, **refused}) from error
         return replace(output, failures={**output.failures, **refused})
     if not _gpu_pass.acquire(blocking=False):
         if on_status:
