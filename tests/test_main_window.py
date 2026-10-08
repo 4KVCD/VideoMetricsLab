@@ -16,7 +16,7 @@ from tests.factories import (
 from tests.factories import (
     fake_video_info as _fake_video_info,
 )
-from vmaf_app.core import result_cache
+from vmaf_app.core import metric_cache, result_cache
 from vmaf_app.core.ffmpeg_request import (
     analysis_request_from_vmaf_options,
     displayable_metric_specs,
@@ -4208,6 +4208,24 @@ def _perceptual_row_with_saved_run(win, backend: str, *saved_metrics):
     return row
 
 
+def test_a_run_files_xpsnr_from_v1_4_is_not_kept_beside_new_metrics(qapp):
+    """A run saved by v1.4 has XPSNR weighted by the encode. Opened and
+    given another metric, the run kept it (only VMAF and the new metric were
+    calculated) and saved it as current: it must be calculated again."""
+    from vmaf_app.core.metric_results import XPSNR_COMPATIBILITY_ID, FrameMetricResult, MetricProvenance
+
+    win = MainWindow()
+    for compatibility, kept in (("ffmpeg-xpsnr-v1", False), (XPSNR_COMPATIBILITY_ID, True)):
+        xpsnr = FrameMetricResult("xpsnr", [0, 1, 2, 3], [i / 24 for i in range(4)], [40.0] * 4,
+                                  MetricProvenance("ffmpeg/xpsnr", "ffmpeg 9.0", "cpu", compatibility))
+        rd = win._rows[_perceptual_row_with_saved_run(win, "gpu", xpsnr)]
+        rd.options.set_metric_enabled("xpsnr", True)
+        reusable = win._reusable_results(rd)
+        assert reusable.has("xpsnr") is kept, compatibility
+        assert reusable.has("vmaf")
+    win.close()
+
+
 def test_a_run_hands_the_worker_what_the_row_already_has(qapp, monkeypatch):
     win = MainWindow()
     row = _perceptual_row_with_saved_run(win, "gpu")
@@ -4342,7 +4360,8 @@ def test_a_gpu_row_shows_and_redoes_a_cpu_score_only_when_a_gpu_exists(qapp, mon
     monkeypatch.setattr(main_window_module.perceptual_vship, "detect_vship_device",
                         lambda: ((_CUDA_GPU, "") if gpu_present else (None, "no GPU")))
     cpu = FrameMetricResult("ssimulacra2", [0], [0.0], [46.89],
-                            MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1"))
+                            MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1",
+                                             {"color_tags": metric_cache.CPU_COLOR_TAGS}))
     win = MainWindow()
     row = _perceptual_row_with_saved_run(win, "gpu", cpu)
     rd = win._rows[row]

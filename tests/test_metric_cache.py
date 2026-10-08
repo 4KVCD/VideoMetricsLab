@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,7 @@ from vmaf_app.core.metric_cache import (
     store_metric,
 )
 from vmaf_app.core.metric_results import (
+    UNSPECIFIED_PROVENANCE,
     FrameMetricResult,
     MetricProvenance,
     MetricResultSet,
@@ -108,6 +110,49 @@ def test_frame_and_sequence_metric_round_trip_with_special_values(tmp_path):
     assert frame.provenance == cached_provenance
     assert isinstance(sequence, SequenceMetricResult) and np.isneginf(sequence.score)
     assert sequence.provenance == cached_provenance
+
+
+def _xpsnr(compatibility: str) -> FrameMetricResult:
+    return FrameMetricResult("xpsnr", [0, 1, 2], [0.0, 1 / 24, 2 / 24], [40.0, 41.0, 42.0],
+                             MetricProvenance("ffmpeg/xpsnr", "ffmpeg 9.0", "cpu", compatibility))
+
+
+def test_a_score_answers_a_request_only_from_a_compatible_implementation_and_not_stale():
+    options = VmafOptions(compute_xpsnr=True)
+    specs = {spec.key: spec for spec in metric_request_specs(
+        options, ("vmaf", "xpsnr", "ssimulacra2", "cvvdp"))}
+    # XPSNR weighted by the encode (v1.4) answers no request of v1.5's.
+    assert specs["xpsnr"].implementation_compatibility_id == "ffmpeg-xpsnr-v2"
+    assert metric_cache.answers(specs["xpsnr"], _xpsnr("ffmpeg-xpsnr-v2"))
+    assert not metric_cache.answers(specs["xpsnr"], _xpsnr("ffmpeg-xpsnr-v1"))
+    # Saved before scores had provenance: libvmaf's, unchanged since, answer; XPSNR's do not.
+    unversioned = FrameMetricResult("vmaf", [0], [0.0], [90.0], UNSPECIFIED_PROVENANCE)
+    assert metric_cache.answers(specs["vmaf"], unversioned)
+    assert not metric_cache.answers(specs["xpsnr"], _xpsnr("unversioned"))
+    # A CPU SSIMULACRA2 from before the CPU tools read colours as Vship does.
+    cpu = MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1")
+    assert not metric_cache.answers(specs["ssimulacra2"], FrameMetricResult("ssimulacra2", [0], [0.0], [50.0], cpu))
+    current = replace(cpu, parameters={"color_tags": metric_cache.CPU_COLOR_TAGS})
+    assert metric_cache.answers(specs["ssimulacra2"], FrameMetricResult("ssimulacra2", [0], [0.0], [50.0], current))
+    vship = MetricProvenance("Vship/cvvdp", "Vship 5.1.2", "gpu", "cvvdp-vship-gpu-v1",
+                             {"color_tags": VSHIP_COLOR_TAGS})
+    assert metric_cache.answers(specs["cvvdp"], SequenceMetricResult("cvvdp", 9.1, vship))
+
+
+def test_a_score_from_another_implementation_is_not_saved_under_this_request(tmp_path):
+    """A run kept v1.4's XPSNR from an opened run file beside new metrics,
+    and saving it under the request's identity made it answer from then on
+    -- the identity is what loading checks."""
+    source, test = _paths(tmp_path)
+    options = VmafOptions(compute_xpsnr=True)
+    for compatibility, kept in (("ffmpeg-xpsnr-v1", False), ("ffmpeg-xpsnr-v2", True)):
+        run = _run(source, test)
+        run.merge_metric_results(MetricResultSet([_xpsnr(compatibility)]))
+        cache = tmp_path / compatibility
+        _store_cached(source, test, run, "t", options, cache)
+        loaded = _load_cached(source, test, options, cache)[0]
+        assert loaded.has_metric("xpsnr") is kept, compatibility
+        assert loaded.has_metric("vmaf")
 
 
 def test_cache_omits_library_versions_except_for_vmaf(tmp_path):
