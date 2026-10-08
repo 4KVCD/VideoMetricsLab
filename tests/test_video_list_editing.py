@@ -86,15 +86,37 @@ def test_a_result_still_reaches_its_row_after_the_rows_moved(win):
 # ------------------------------------------------------------------ files dropped on the table
 
 
-def test_files_dropped_on_the_table_are_added_in_order_once(win, tmp_path):
-    files = [tmp_path / name for name in ("x.mkv", "y.mkv")]
-    for path in files:
+def test_files_dropped_are_added_once_and_each_list_opens_its_own_last_folder(win, tmp_path, monkeypatch):
+    """The reference's dialog and the test videos' each open where such a
+    video last came from: the two are often in different folders, and one
+    folder for both sent each dialog to the other's (issue #4)."""
+    encodes, sources = tmp_path / "encodes", tmp_path / "sources"
+    encodes.mkdir()
+    sources.mkdir()
+    files = [encodes / name for name in ("x.mkv", "y.mkv")]
+    reference = sources / "film.mkv"
+    for path in [*files, reference]:
         path.write_bytes(b"")
-    _drop(win.distorted_table, [*files, files[0], tmp_path])  # again, and a folder
+    _drop(win.distorted_table, [*files, files[0], encodes])  # again, and a folder
     assert _names(win) == ["x.mkv", "y.mkv"]
-    assert win._settings.last_video_dir == str(tmp_path)
     _drop(win.distorted_table, files)
     assert _names(win) == ["x.mkv", "y.mkv"]  # already there
+    _drop(win.source_edit, [reference], target=lambda event: win.eventFilter(win.source_edit, event))
+    assert win.probed_sources == [reference]
+
+    asked = []
+    monkeypatch.setattr(main_window_module.QFileDialog, "getOpenFileName",
+                        lambda parent, title, folder="": asked.append(("reference", folder)) or ("", ""))
+    monkeypatch.setattr(main_window_module.QFileDialog, "getOpenFileNames",
+                        lambda parent, title, folder="": asked.append(("tests", folder)) or ([], ""))
+    win._on_browse_source()
+    win._on_add_distorted()
+    assert asked == [("reference", str(sources)), ("tests", str(encodes))]
+    saved = Settings.load()  # kept for the next start
+    assert (saved.last_reference_dir, saved.last_test_dir) == (str(sources), str(encodes))
+    win._settings.last_test_dir = str(tmp_path / "gone")  # a folder since moved: the other list's
+    win._on_add_distorted()
+    assert asked[-1] == ("tests", str(sources))
 
 
 # ------------------------------------------------------------------ sorting

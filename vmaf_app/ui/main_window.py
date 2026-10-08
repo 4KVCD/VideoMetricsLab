@@ -2106,10 +2106,10 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ source selection
     def _on_browse_source(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, tr("Select reference video"), self._video_dialog_dir())
+        path, _ = QFileDialog.getOpenFileName(self, tr("Select reference video"), self._video_dialog_dir("reference"))
         if not path:
             return
-        self._remember_video_dir(Path(path))
+        self._remember_video_dir("reference", Path(path))
         self._choose_source(Path(path))
 
     def _choose_source(self, path: Path) -> None:
@@ -2166,22 +2166,31 @@ class MainWindow(QMainWindow):
             event.setDropAction(Qt.CopyAction)
             event.accept()
             if event.type() == QEvent.Drop:
-                self._remember_video_dir(Path(files[0]))
+                self._remember_video_dir("reference", Path(files[0]))
                 self._choose_source(Path(files[0]))
             return True
         return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------ file dialogs' folder
-    def _video_dialog_dir(self) -> str:
-        """Where the video file dialogs open: the folder a video last came
-        from, while it still exists; else the dialog's default."""
-        folder = self._settings.last_video_dir
-        return folder if folder and Path(folder).is_dir() else ""
+    #: Each list's own folder (Settings): "reference" and "test".
+    _DIALOG_FOLDERS = {"reference": "last_reference_dir", "test": "last_test_dir"}
 
-    def _remember_video_dir(self, path: Path) -> None:
-        folder = str(path.parent)
-        if folder != self._settings.last_video_dir:
-            self._settings.last_video_dir = folder
+    def _video_dialog_dir(self, kind: str) -> str:
+        """Where the reference's ("reference") or the test videos' ("test")
+        file dialog opens: the folder such a video last came from, while it
+        still exists; else the other's; else the dialog's default."""
+        other = "test" if kind == "reference" else "reference"
+        for name in (self._DIALOG_FOLDERS[kind], self._DIALOG_FOLDERS[other]):
+            folder = getattr(self._settings, name)
+            if folder and Path(folder).is_dir():
+                return folder
+        return ""
+
+    def _remember_video_dir(self, kind: str, path: Path) -> None:
+        """`path`'s folder as the one `kind`'s dialog opens in next."""
+        name, folder = self._DIALOG_FOLDERS[kind], str(path.parent)
+        if folder != getattr(self._settings, name):
+            setattr(self._settings, name, folder)
             if error := self._settings.save():
                 _log.warning("%s", error)
 
@@ -2892,16 +2901,16 @@ class MainWindow(QMainWindow):
         self._try_load_cached_result(row)
 
     def _on_add_distorted(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, tr("Select test videos"), self._video_dialog_dir())
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Select test videos"), self._video_dialog_dir("test"))
         if not paths:
             return
-        self._remember_video_dir(Path(paths[0]))
+        self._remember_video_dir("test", Path(paths[0]))
         self._add_test_videos([Path(p) for p in paths])
 
     def _on_files_dropped_on_table(self, paths: list[str]) -> None:
         if self._run_active or not paths:
             return
-        self._remember_video_dir(Path(paths[0]))
+        self._remember_video_dir("test", Path(paths[0]))
         self._add_test_videos([Path(p) for p in paths])
 
     def _add_test_videos(self, paths: list[Path]) -> None:

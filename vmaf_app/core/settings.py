@@ -125,9 +125,12 @@ class Settings:
     window_width: int = 1280
     window_height: int = 800
 
-    # The folder the video file dialogs open in: the one a video was last
-    # chosen or dropped from. Empty: the dialogs' own default.
-    last_video_dir: str = ""
+    # The folders the reference's and the test videos' file dialogs open in:
+    # the one a reference, and a test video, was last chosen or dropped from,
+    # each kept apart -- the two are often in different places (issue #4).
+    # Empty: the other's, else the dialogs' own default.
+    last_reference_dir: str = ""
+    last_test_dir: str = ""
     # Reopen, at startup, the reference and test videos that were in the
     # window when it was closed, those still there. Off by default (Brian,
     # issue #4): a new session starts empty unless asked otherwise. The
