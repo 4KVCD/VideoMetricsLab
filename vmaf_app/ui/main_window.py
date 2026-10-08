@@ -3912,57 +3912,19 @@ class MainWindow(QMainWindow):
         self._apply_metric_selection(list(range(len(self._rows))), column, checked)
 
     def _reusable_results(self, row_data: RowData) -> MetricResultSet:
-        """The requested metrics the row already has and a run can keep.
-
-        A metric counts when it has at least one score, produced the way
-        the row asks for. SSIMULACRA2/Butteraugli on the GPU (Vship) and on
-        the CPU (libjxl) differ on the same frames -- by little on SDR (55.13
-        against 55.24 SSIMULACRA2, 1.810 against 1.851 Butteraugli, on a
-        1080p film), by far more on HDR (35.1 against 47.3 SSIMULACRA2 on a
-        PQ film: libjxl's tool scores PQ its own way) -- so a comparison
-        mixing them ranks encodes on different scales:
-        - set to CPU, only a CPU score counts;
-        - set to GPU, a CPU score -- left by a fallback, or by the CPU
-          choice earlier -- counts only when no supported GPU is present,
-          where the CPU is the only way it can be calculated. With a GPU,
-          the next run recalculates it there.
-
-        And it must answer the row's request as a saved score must to be
-        loaded (metric_cache.answers): a run file from v1.4 has an XPSNR
-        weighted by the encode, which was kept and then saved as current.
-        """
-        reusable = MetricResultSet()
+        """The requested metrics the row already has and a run can keep
+        (metric_cache.reusable, the command line's rule too)."""
         if row_data.completed_run is None:
-            return reusable
-        result = row_data.completed_run.result
-        specs = {spec.key: spec for spec in self._analysis_request(row_data).metrics}
-        infos = metric_cache.video_infos(self._source_info, row_data.video_info)
-        for key in self._requested_metrics(row_data):
-            sequence = result.sequence_metric(key)
-            if sequence is not None:
-                # One score for the video. It is always the row's own:
-                # changing the CVVDP display drops it (_drop_cvvdp_result).
-                if np.isfinite(sequence.score) and metric_cache.answers(specs[key], sequence, infos):
-                    reusable.add(sequence)
-                continue
-            metric = result.frame_metric(key)
-            if metric is None or not np.any(~np.isnan(metric.values)):
-                continue
-            if not self._backend_matches(row_data, key, metric) or not metric_cache.answers(specs[key], metric, infos):
-                continue
-            reusable.add(metric)
-        return reusable
+            return MetricResultSet()
+        return metric_cache.reusable(
+            row_data.completed_run.result, self._analysis_request(row_data).metrics, row_data.metric_backends,
+            self._gpu_can_score, metric_cache.video_infos(self._source_info, row_data.video_info))
 
     def _backend_matches(self, row_data: RowData, key: str, metric) -> bool:
         """Whether `metric`'s score was produced the way the row asks for it
-        (see _reusable_results). Metrics without a GPU/CPU choice always do."""
-        choice = row_data.metric_backends.get(key)
-        produced = metric.provenance.compute_backend
-        if choice == "cpu":
-            return produced == "cpu"
-        if choice == "gpu" and produced == "cpu":
-            return not self._gpu_can_score(key)
-        return True
+        (metric_cache.made_as_chosen). Metrics without a GPU/CPU choice always do."""
+        return metric_cache.made_as_chosen(key, row_data.metric_backends.get(key), metric.provenance.compute_backend,
+                                           self._gpu_can_score)
 
     def _backend_note(self, row_data: RowData, key: str, metric) -> str:
         """Tooltip text for a SSIMULACRA2/Butteraugli score produced the

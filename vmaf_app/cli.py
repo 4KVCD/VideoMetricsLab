@@ -39,8 +39,6 @@ import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-import numpy as np
-
 from vmaf_app import APP_NAME, __version__
 from vmaf_app.core import metric_cache, perceptual_vship, result_cache, vmaf_cuda
 from vmaf_app.core.cvvdp import default_settings
@@ -270,34 +268,6 @@ def _backends(args: argparse.Namespace, settings: Settings) -> dict[str, str]:
     return chosen
 
 
-def _reusable(video: Video, saved: ComparisonResult, backends: dict[str, str],
-              source: VideoInfo | None = None) -> MetricResultSet:
-    """The saved scores a run keeps: MainWindow._reusable_results' rule. A
-    SSIMULACRA2 or Butteraugli score counts only when it was made where it
-    is asked for now -- the GPU's and the CPU's differ -- but a CPU score
-    answers a GPU choice on a PC whose GPU cannot calculate it; and each
-    must answer the request (metric_cache.answers)."""
-    reusable = MetricResultSet()
-    specs = {spec.key: spec for spec in video.request.metrics}
-    infos = metric_cache.video_infos(source, video.info)
-    for key in video.metrics:
-        sequence = saved.sequence_metric(key)
-        if sequence is not None:
-            if np.isfinite(sequence.score) and metric_cache.answers(specs[key], sequence, infos):
-                reusable.add(sequence)
-            continue
-        metric = saved.frame_metric(key)
-        if metric is None or not np.any(~np.isnan(metric.values)) or not metric_cache.answers(specs[key], metric, infos):
-            continue
-        choice, produced = backends.get(key), metric.provenance.compute_backend
-        if choice == "cpu" and produced != "cpu":
-            continue
-        if choice == "gpu" and produced == "cpu" and perceptual_vship.gpu_can_score(key):
-            continue
-        reusable.add(metric)
-    return reusable
-
-
 def prepare(args: argparse.Namespace, settings: Settings, source: VideoInfo) -> tuple[list[Video], list[VmafJob]]:
     """Every test video, and the jobs for the ones that can be compared."""
     asked = args.metrics or _default_metrics(settings)
@@ -341,7 +311,10 @@ def prepare(args: argparse.Namespace, settings: Settings, source: VideoInfo) -> 
         if not args.recalculate and settings.use_cache:
             found = result_cache.load_cached(source.path, path, video.request)
             saved = found[0] if found else None
-        reusable = _reusable(video, saved, backends, source) if saved is not None else MetricResultSet()
+        # The saved scores the run keeps, by the window's rule.
+        reusable = (metric_cache.reusable(saved, video.request.metrics, backends, perceptual_vship.gpu_can_score,
+                                          metric_cache.video_infos(source, video.info))
+                    if saved is not None else MetricResultSet())
         if all(reusable.has(key) for key in video.metrics):
             # Everything asked for is saved: nothing to run, as the window
             # runs nothing for a row that has its scores.

@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -220,6 +220,57 @@ def video_infos(*infos) -> tuple[dict, ...]:
     """What _stale_vship_score reads of each VideoInfo, as context.json has it."""
     return tuple({"pix_fmt": info.pix_fmt, "color_transfer": info.color_transfer}
                  for info in infos if info is not None)
+
+
+def made_as_chosen(key: str, choice: str | None, produced: str, gpu_can_score: Callable[[str], bool]) -> bool:
+    """Whether a score of `key` made on `produced` ("gpu" or "cpu") stands
+    for the metric set to `choice` ("gpu" or "cpu"; None for a metric with no
+    such choice, which any score does).
+
+    SSIMULACRA2/Butteraugli on the GPU (Vship) and on the CPU (libjxl)
+    differ on the same frames -- by little on SDR (55.13 against 55.24
+    SSIMULACRA2, 1.810 against 1.851 Butteraugli, on a 1080p film), by far
+    more on HDR (35.1 against 47.3 SSIMULACRA2 on a PQ film: libjxl's tool
+    scores PQ its own way) -- so a comparison mixing them ranks encodes on
+    different scales:
+    - set to CPU, only a CPU score counts;
+    - set to GPU, a CPU score -- left by a fallback, or by the CPU choice
+      earlier -- counts only where the GPU cannot calculate it
+      (`gpu_can_score`: perceptual_vship.gpu_can_score), the CPU then being
+      the only way. With a GPU, the next run recalculates it there."""
+    if choice == "cpu":
+        return produced == "cpu"
+    if choice == "gpu" and produced == "cpu":
+        return not gpu_can_score(key)
+    return True
+
+
+def reusable(result: ComparisonResult, specs: Iterable[MetricRequestSpec], backends: Mapping[str, str],
+             gpu_can_score: Callable[[str], bool], infos: tuple[object, ...] = ()) -> MetricResultSet:
+    """The scores of `result` -- a row's run, an opened run file, the
+    cache's -- that a run asking for `specs` keeps rather than calculates
+    again: the rule of the window's Run button and of the command line.
+
+    A metric counts when it has a score (finite, for a video's one score;
+    at least one, for a frame metric), made where the metric is set to be
+    calculated (`backends`: made_as_chosen), that answers its request as a
+    saved score must to be loaded (answers). `infos`: video_infos of the
+    two videos."""
+    kept = MetricResultSet()
+    for spec in specs:
+        sequence = result.sequence_metric(spec.key)
+        if sequence is not None:
+            # One score for the video (CVVDP). A row's is always its own:
+            # changing the CVVDP display drops it (MainWindow._drop_cvvdp_result).
+            if np.isfinite(sequence.score) and answers(spec, sequence, infos):
+                kept.add(sequence)
+            continue
+        metric = result.frame_metric(spec.key)
+        if (metric is not None and np.any(~np.isnan(metric.values))
+                and made_as_chosen(spec.key, backends.get(spec.key), metric.provenance.compute_backend, gpu_can_score)
+                and answers(spec, metric, infos)):
+            kept.add(metric)
+    return kept
 
 
 def _context_infos(directory: Path) -> tuple[object, ...]:

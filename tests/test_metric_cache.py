@@ -139,6 +139,38 @@ def test_a_score_answers_a_request_only_from_a_compatible_implementation_and_not
     assert metric_cache.answers(specs["cvvdp"], SequenceMetricResult("cvvdp", 9.1, vship))
 
 
+def test_a_score_is_kept_when_it_has_a_value_made_where_its_metric_is_set_and_answering_its_request():
+    """metric_cache.reusable: the window's Run button and the command line
+    keep a score by this one rule."""
+    specs = metric_request_specs(VmafOptions(compute_xpsnr=True), ("vmaf", "xpsnr", "ssimulacra2", "cvvdp"))
+    gpu = MetricProvenance("Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
+                           {"color_tags": VSHIP_COLOR_TAGS})
+    cpu = MetricProvenance("ssimulacra2", "", "cpu", "ssimulacra2-libjxl-cpu-v1",
+                           {"color_tags": metric_cache.CPU_COLOR_TAGS})
+    cvvdp = MetricProvenance("Vship/cvvdp", "Vship 5.1.2", "gpu", "cvvdp-vship-gpu-v1", {"color_tags": VSHIP_COLOR_TAGS})
+
+    def kept(*metrics, backends=None, gpu_can_score=lambda key: True):
+        result = _run(Path("s.mkv"), Path("t.mkv"))
+        result.merge_metric_results(MetricResultSet(metrics))
+        return set(metric_cache.reusable(result, specs, backends or {}, gpu_can_score).keys())
+
+    assert kept() == {"vmaf"}  # _run's VMAF; nothing else saved
+    assert kept(_xpsnr("ffmpeg-xpsnr-v2")) == {"vmaf", "xpsnr"}
+    assert kept(_xpsnr("ffmpeg-xpsnr-v1")) == {"vmaf"}  # another implementation's
+    nan = FrameMetricResult("ssimulacra2", [0, 1], [0.0, 1 / 24], [np.nan, np.nan], gpu)
+    assert "ssimulacra2" not in kept(nan)  # no score at all
+    assert "cvvdp" not in kept(SequenceMetricResult("cvvdp", float("nan"), cvvdp))
+    assert "cvvdp" in kept(SequenceMetricResult("cvvdp", 9.1, cvvdp))
+    on_gpu = FrameMetricResult("ssimulacra2", [0], [0.0], [80.0], gpu)
+    on_cpu = FrameMetricResult("ssimulacra2", [0], [0.0], [80.0], cpu)
+    assert "ssimulacra2" not in kept(on_gpu, backends={"ssimulacra2": "cpu"})
+    assert "ssimulacra2" in kept(on_cpu, backends={"ssimulacra2": "cpu"})
+    assert "ssimulacra2" in kept(on_gpu, backends={"ssimulacra2": "gpu"})
+    # A CPU score for a GPU choice: only where the GPU cannot calculate it.
+    assert "ssimulacra2" not in kept(on_cpu, backends={"ssimulacra2": "gpu"})
+    assert "ssimulacra2" in kept(on_cpu, backends={"ssimulacra2": "gpu"}, gpu_can_score=lambda key: False)
+
+
 def test_a_score_from_another_implementation_is_not_saved_under_this_request(tmp_path):
     """A run kept v1.4's XPSNR from an opened run file beside new metrics,
     and saving it under the request's identity made it answer from then on

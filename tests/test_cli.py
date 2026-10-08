@@ -195,28 +195,32 @@ def test_only_the_metrics_not_saved_are_calculated(videos):
 
 
 def test_a_score_made_on_the_gpu_does_not_answer_a_cpu_choice(videos):
-    """The GPU's and the CPU's SSIMULACRA2 differ: MainWindow._reusable_results."""
+    """The GPU's and the CPU's SSIMULACRA2 differ: metric_cache.made_as_chosen."""
     _run(videos.reference, videos.a, "--metrics", "ssimulacra2")
     videos.calls.clear()
     _run(videos.reference, videos.a, "--metrics", "ssimulacra2", "--ssimulacra2-on", "cpu")
     assert videos.calls == [("vship", "a.mkv")]
 
 
-def test_a_saved_xpsnr_from_v1_4_is_calculated_again():
+def test_a_saved_xpsnr_from_v1_4_is_calculated_again(videos, monkeypatch):
     """v1.4's XPSNR was weighted by the encode, v1.5's by the reference: a
-    saved v1.4 score answers no request now (metric_cache.answers, as in the
-    window's _reusable_results)."""
-    reference, test = _info(Path("reference.mkv")), _info(Path("a.mkv"))
-    options = VmafOptions(compute_vmaf=True, compute_xpsnr=True)
-    video = cli.Video(test.path, info=test, options=options, metrics=("vmaf", "xpsnr"))
-    video.request = analysis_request_from_vmaf_options(options, video.metrics)
+    saved v1.4 score answers no request now (metric_cache.reusable, the
+    window's rule too)."""
     for compatibility, kept in (("ffmpeg-xpsnr-v1", False), ("ffmpeg-xpsnr-v2", True)):
-        saved = _result(reference, test, options)
-        saved.merge_metric_results(MetricResultSet([FrameMetricResult(
-            "xpsnr", [0], [0.0], [35.0], MetricProvenance("ffmpeg/xpsnr", "ffmpeg 8.0", "cpu", compatibility))]))
-        reusable = cli._reusable(video, saved, {}, reference)
-        assert reusable.has("xpsnr") is kept, compatibility
-        assert reusable.has("vmaf")
+        def load_cached(source, distorted, request, *args, compatibility=compatibility, **kwargs):
+            saved = _result(_info(source), _info(distorted), VmafOptions(compute_vmaf=True, compute_xpsnr=True))
+            saved.merge_metric_results(MetricResultSet([FrameMetricResult(
+                "xpsnr", [0], [0.0], [35.0], MetricProvenance("ffmpeg/xpsnr", "ffmpeg 8.0", "cpu", compatibility))]))
+            return saved, "saved"
+
+        monkeypatch.setattr(cli.result_cache, "load_cached", load_cached)
+        args = cli.build_parser().parse_args(["compare", str(videos.reference), str(videos.a), "-m", "vmaf,xpsnr"])
+        (video,), jobs = cli.prepare(args, Settings.load(), _info(videos.reference))
+        if kept:
+            assert video.from_cache and not jobs, compatibility
+        else:
+            (job,) = jobs
+            assert job.cached_metrics.keys() == ("vmaf",) and "xpsnr" in job.metric_keys
 
 
 def test_json_has_every_videos_status_and_statistics(videos):
