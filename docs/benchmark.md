@@ -1,116 +1,79 @@
-# Release benchmark
+# Benchmark
 
-The speed numbers for the README and the release notes: libvmaf-fast's new
-build against its last release (3.2.0-fast.1) and against official libvmaf,
-on each computer. The main PC (RTX 5090, Core Ultra 9 285K and its iGPU) runs
-it, and so does the AMD laptop (Radeon 780M, Ryzen 7 8845HS), with the same
-script on the same frames. This page is the laptop's instructions as much as
-a record of the plan. Brian approved the plan on 2026-10-07.
+The speed numbers for the release notes: the app's previous release against
+this one, in whole runs as the Run button makes them (decoding and scoring),
+on each computer, with `scripts/bench_app.py`. libvmaf-fast's own benchmark
+(the libraries alone, against official libvmaf) is in its repository:
+`fast/BENCHMARK.md`.
 
 ## What it measures
 
-Scoring speed only: each video pair is decoded once into memory, and every
-implementation scores the same frames. Decoding is not timed.
+Only what changed since v1.4, each cell one optimization, at 4K and 1080p:
 
-| Metric | Baselines | Ours (new build) |
-|---|---|---|
-| VMAF + NEG on the GPU | libvmaf-fast 3.2.0-fast.1 (CUDA, Vulkan); official libvmaf CUDA | CUDA (NVIDIA), Vulkan (every GPU) |
-| VMAF + NEG on the CPU | official libvmaf | new |
-| PSNR, SSIM (CPU) | official libvmaf; 3.2.0-fast.1 | new |
-| XPSNR (CPU) | FFmpeg's `xpsnr` filter (official libvmaf has no XPSNR) | new |
-| VMAF v1 | official libvmaf on the CPU; 3.2.0-fast.1 (GPU + CPU) | new, all on the GPU |
-| GPU memory | official CUDA, 4K VMAF + NEG | new (NVIDIA only) |
+| Cell | Metrics | Test video | What changed |
+|---|---|---|---|
+| nvidia | VMAF + NEG (CUDA) | VVC | VVC decoded in the scoring process, not piped from FFmpeg |
+| nvidia | VMAF v1 | HEVC | on the GPU, not FFmpeg's libvmaf on the CPU |
+| gpu | VMAF + NEG | HEVC | with Vulkan on the PC's other GPU, not on the CPU |
+| gpu | VMAF v1 | HEVC | the same |
+| cpu | PSNR + SSIM + XPSNR | HEVC | libvmaf-fast in the app, not FFmpeg's filters |
+| cpu | SSIMULACRA2 + Butteraugli on the CPU | HEVC | frame pairs scored in parallel |
+| idle | the window, 10 s after it opens | | one thread for numpy's OpenBLAS, not one a CPU thread |
 
-- **Official libvmaf**: Netflix's master at acdd9376 (2026-10-05), built with
-  libvmaf-fast's own build script and compiler, from a build folder inside
-  `libvmaf\` (upstream's CUDA code needs that). Release 3.2.1 does not build
-  with Visual Studio; libvmaf-fast is built on that master.
-- **3.2.0-fast.1**: the app as it was before the VMAF v1 merge (bfc00d4), with
-  the DLLs it bundled. Its VMAF v1 left CAMBI and SpEED to the CPU.
-- **New**: this branch's app with its `vmaf_vulkan.dll` (libvmaf-fast
-  a31318b9) and libvmaf-fast's `fast` libvmaf (a1af96ff, the same code).
-- **Frames**: `VideoQ_HDR10_UHD_120fps_4m00s.mp4` (HEVC Main 10, HDR10, 120
-  fps), frames 1200-1247 at 4K against `VideoQ HDR10 4K H.265 CRF 22
-  medium.mkv`, frames 1200-1295 scaled to 1080p (lanczos) against `VideoQ
-  HDR10 1080p H.265 CRF 22 medium.mkv`. 10-bit. VMAF v1 with the app's
-  models: `vmaf_v1.0.16_3d0h` at 1080p, `vmaf_v1.0.16_1d5h_2160` at 4K.
-- **Method**: every implementation is run once as a warm-up (not counted),
-  then 5 more times. The implementations take turns, and each run is a process
-  of its own. Each run scores the frames once (untimed; these scores are
-  checked), then again and again for at least 10 s, timed from the end of
-  one pass over the frames to the end of another: a scorer takes a frame
-  pair only when it has room for it, so its queue is as full at both ends.
-  The result is the median of the 5 runs. Each run waits
-  until no other benchmark runs, no other process uses an NVIDIA GPU, and the
-  CPU is under 15% busy.
-- **Score checks**: each implementation's per-frame scores against its
-  baseline's. Expected: libvmaf-fast's CPU, PSNR and SSIM identical to
-  official libvmaf; Vulkan VMAF + NEG identical to libvmaf's CUDA; VMAF v1 on
-  the GPU identical to official libvmaf's CPU; XPSNR identical to FFmpeg's
-  (4 decimals). GPU VMAF + NEG differs from the CPU's by up to about 1e-4 (the
-  CUDA code's motion, libvmaf issue 1562); official CUDA may differ more (the
-  CUDA fixes libvmaf-fast carries). Anything else is a bug: report it, and do
-  not publish the numbers.
+- **gpu** is the PC's GPU other than NVIDIA's (Intel's, AMD's). Where the PC
+  has an NVIDIA GPU as well, it is hidden from those runs
+  (`CUDA_VISIBLE_DEVICES=-1`, `VK_LOADER_DRIVERS_DISABLE=*nv-vk64*`): the app
+  then runs as on a PC with only that GPU.
+- **Left out**, as nothing changed for them (the run of 2026-10-08: 0.98x
+  to 1.01x): Vship's metrics on the GPU, and VMAF on CUDA from HEVC. Also
+  the default run of every metric, which mixes the cells above; the CPU
+  metrics again with another GPU decoding; and VVC beside the GPU metrics,
+  where VVC's decoding sets the pace.
 
-## Running it on the AMD laptop
+## Method
 
-Brian brings these by hand (not in git), all from the main PC's
-`E:\Video encodings`:
+- **Videos**: `VideoQ_HDR10_UHD_120fps_4m00s.mp4` (HEVC Main 10, HDR10, 120
+  fps) against `VideoQ HDR10 4K H.265 CRF 22 medium.mkv`, `VideoQ HDR10
+  1080p H.265 CRF 22 medium.mkv`, `VideoQ HDR10 4K VVC QP 32 faster.mkv` and
+  `VideoQ HDR10 1080p VVC QP 32 faster.mkv`, from the start.
+- **A run** is a process of its own with a temporary profile (no saved
+  scores, default settings) that starts as the app does, its GPU probes
+  first. Its speed is the steady state: the frames from 10% to 90% of the
+  run, so start-up is left out. Its CPU use is over the same frames, as Task
+  Manager shows it (the share of the PC's logical processors).
+- **Length**: a run is sized to about 12 s of steady state at the rate the
+  RTX 5090 PC measured; one that comes out under 6 s is made again at its
+  own rate. One round; the versions take turns.
+- **Scores**: both versions score the same first frames, and the report
+  compares them. They are identical except where a change was intended: at
+  1080p, VMAF, NEG and VMAF v1, as the source has been scaled where it is
+  decoded since v2.0, not by FFmpeg's scale filter (up to 0.16 apart);
+  XPSNR, weighted by the source since v2.0; and at 4K, VMAF and NEG on a GPU
+  where v1.4 used the CPU (up to about 1e-4).
+- **A quiet PC**: each run waits until the CPU is under 15% busy and no other
+  process uses more than 15% of a GPU engine or half a CPU thread, and is
+  made again once if one did while it ran (another project here encodes AV1
+  on the GPU). Runs get the environment the benchmark started with: the app,
+  imported to find the GPUs, sets OPENBLAS_NUM_THREADS, which would give the
+  older version this release's memory saving.
 
-| File | Bytes |
-|---|---|
-| `VideoQ_HDR10_UHD_120fps_4m00s.mp4` | 1,055,015,060 |
-| `VideoQ HDR10 4K H.265 CRF 22 medium.mkv` | 425,144,502 |
-| `VideoQ HDR10 1080p H.265 CRF 22 medium.mkv` | 162,407,007 |
-| `bench_kit\official\libvmaf.dll` (official libvmaf acdd9376) | SHA-256 `f257c34d...79b39bff` |
-| `bench_kit\new\libvmaf.dll` (libvmaf-fast a1af96ff) | SHA-256 `7b57f8b5...9aad525b` |
+## Running it
 
-`bench_kit\SHA256SUMS` has the two DLLs' full SHA-256. The VVC encodes are
-not used here.
+1. The previous release beside this checkout:
 
-1. Pull `release/v1.5` (this commit or later). Nothing needs building: the
-   app's bundled `vmaf_vulkan.dll` is the new engine, and nothing is decoded on
-   the GPU.
-2. Make a worktree of the app before the VMAF v1 merge, for the 3.2.0-fast.1
-   rows:
+       git worktree add ..\VideoMetricsLab-v1.4 v1.4
 
-       git worktree add ..\VideoMetricsLab-bench-old bfc00d4
+2. The five videos in one folder.
+3. Close what you can. Do not change Windows' power or display settings.
+4. Run it (by the 2026-10-08 run's rates, about 20 minutes on the RTX 5090
+   PC):
 
-3. Decode the frames (about 4 GB in `%TEMP%\vml-bench`):
+       .venv\Scripts\python.exe scripts\bench_app.py bench --old ..\VideoMetricsLab-v1.4 ^
+           --videos "E:\Video encodings" --out %TEMP%\vml-bench-app
 
-       .venv\Scripts\python.exe scripts\bench_release.py prepare ^
-           --reference "D:\path\VideoQ_HDR10_UHD_120fps_4m00s.mp4" ^
-           --distorted-2160 "D:\path\VideoQ HDR10 4K H.265 CRF 22 medium.mkv" ^
-           --distorted-1080 "D:\path\VideoQ HDR10 1080p H.265 CRF 22 medium.mkv"
-
-   It prints the SHA-256 of the frames. They must be these, the main PC's;
-   otherwise the computers did not score the same frames:
-
-   | Frames | SHA-256 |
-   |---|---|
-   | 4K reference | `cf8353818597f3f0706a5a6c055423e2d17c3d9c3ba8ed728567b19efe391d0d` |
-   | 4K distorted | `45cdcdf7e1f88e8c912ed477fd4dc4dbd5975792684838c0d8b01d2aee80b085` |
-   | 1080p reference | `323c9efb220e1f4e07ac9643237aae0d814b9e58c409004c9239791c2c175c92` |
-   | 1080p distorted | `e7ca5ff4452752c2352b82b0d11a97cf1825ec8d53b106bc9e247b5427d8369d` |
-
-4. Plug the charger in and close what you can. Do not change Windows' power
-   or display settings: the script only records the active power plan and
-   whether it ran on battery.
-5. Run it (about 2 hours; a line for each run, results written after each
-   one):
-
-       .venv\Scripts\python.exe scripts\bench_release.py run --kit "D:\path\bench_kit" ^
-           --old-app ..\VideoMetricsLab-bench-old --cooldown 15
-
-   `--cooldown 15` rests 15 s after each run, so the laptop starts each one
-   at a similar temperature. There is no CUDA on the laptop: those rows are
-   left out on their own.
-6. Check `%TEMP%\vml-bench\results\<computer>.md`: no "Failed" section, no
-   runs that started before the PC was quiet, and the Scores column as
-   expected above.
-7. Send back `<computer>.json` and `<computer>.md`: give them to Brian, or,
-   if he says so, commit them as `docs/benchmark-results/<computer>.*` on a
-   branch of their own and push that.
-
-`scripts\bench_release.py report A.json B.json --out all.md` puts several
-computers' results in one file.
+   `--only` takes groups (`nvidia`, `gpu`, `cpu`, `idle`) or cells
+   (`--only "gpu/VMAF v1/hevc-4k"`). The idle measurement opens each
+   version's window for 10 s.
+5. `report.md` in the output folder: frames a second (old → new), CPU, peak
+   memory and the score check per cell; `bench.log` has every run. Runs
+   another process disturbed twice are marked.
