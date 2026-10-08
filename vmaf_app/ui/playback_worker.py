@@ -40,7 +40,10 @@ class StreamDecodeWorker(QThread):
         with self._condition:
             self._cancelled = True
             self._condition.notify_all()
-        self._handle.terminate()
+        # Ended from a thread of its own: finding FFmpeg's process tree
+        # (proc.process_tree) took 20-60 ms on the window's thread, for each
+        # decoder a seek stopped -- four, when three test videos decode.
+        threading.Thread(target=self._handle.terminate, name="decoder-stop", daemon=True).start()
 
     def drain_through(self, frame):
         """Transfer ownership of due frames; leave future frames queued."""
@@ -48,7 +51,10 @@ class StreamDecodeWorker(QThread):
             result = []
             while self._frames and self._frames[0][0] <= frame:
                 result.append(self._frames.popleft())
-            self._condition.notify_all()
+            if result:
+                # Room for the decoder only now. Woken at every look (100 a
+                # second), a paused one woke for nothing.
+                self._condition.notify_all()
             return result
 
     def latest_frame_number(self):

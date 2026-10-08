@@ -9,6 +9,7 @@ is misbehaving.
 from __future__ import annotations
 
 import contextlib
+import functools
 import logging
 import os
 import subprocess
@@ -158,12 +159,19 @@ def process_tree(pid: int) -> list:
     FFmpeg running: Pause did not pause, Cancel did not stop it, and the
     CPU perceptual-metric extraction ran ahead of scoring unchecked (364
     images waiting on disk on the GitHub runner, where the limit is 52).
+
+    On Windows the PC's processes are listed by Windows' own snapshot
+    (_parent_pids), which lets go of Python's lock while it is taken:
+    psutil's children() held the lock all along, 14-22 ms a call here, and
+    the window's thread waited behind it -- for each decoder a seek in
+    Video Compare stopped.
     """
     import psutil
 
     try:
         root = psutil.Process(pid)
-        children = root.children(recursive=True)
+        parents = _parent_pids() if os.name == "nt" else None
+        children = root.children(recursive=True) if parents is None else _descendants(root, parents)
     except psutil.Error:
         return []
     # Not the console host Windows gives each console program: it does no
@@ -174,6 +182,84 @@ def process_tree(pid: int) -> list:
             if child.name().lower() != "conhost.exe":
                 tree.append(child)
     return tree
+
+
+def _descendants(root, parents: dict[int, int]) -> list:
+    """root.children(recursive=True) from `parents` ({pid: parent pid}):
+    what root started, and what those started, none older than root (a
+    process whose pid Windows has since given to another)."""
+    import psutil
+
+    started_by: dict[int, list[int]] = {}
+    for pid, parent in parents.items():
+        if pid != parent:  # the System Idle Process is its own parent
+            started_by.setdefault(parent, []).append(pid)
+    found, seen, waiting = [], set(), [root.pid]
+    while waiting:
+        pid = waiting.pop()
+        if pid in seen:
+            continue
+        seen.add(pid)
+        for child_pid in started_by.get(pid, ()):
+            with contextlib.suppress(psutil.Error):
+                child = psutil.Process(child_pid)
+                if root.create_time() <= child.create_time():
+                    found.append(child)
+                    waiting.append(child_pid)
+    return found
+
+
+@functools.cache
+def _toolhelp():
+    """(kernel32 letting go of Python's lock, kernel32 keeping it, and
+    PROCESSENTRY32W) for _parent_pids."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", wintypes.WCHAR * 260)]
+
+    releasing = ctypes.WinDLL("kernel32", use_last_error=True)
+    releasing.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    releasing.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    holding = ctypes.PyDLL("kernel32")
+    holding.CloseHandle.argtypes = [wintypes.HANDLE]
+    for walk in (holding.Process32FirstW, holding.Process32NextW):
+        walk.restype = wintypes.BOOL
+        walk.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+    return releasing, holding, Entry
+
+
+def _parent_pids() -> dict[int, int] | None:
+    """{pid: parent pid} for every process on the PC (Windows), or None
+    when Windows would not list them.
+
+    Windows takes the snapshot (8-10 ms) with Python's lock let go; the
+    walk through it (2 ms) and closing it keep the lock. Letting it go for each of the
+    PC's ~460 processes as well, the walk waited up to Python's switch
+    interval (5 ms) to have it back, each time, whenever another thread
+    was busy: 1.5-2.5 s, the window frozen."""
+    import ctypes
+
+    releasing, holding, entry_type = _toolhelp()
+    snapshot = releasing.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snapshot or snapshot == ctypes.c_void_p(-1).value:
+        return None
+    entry = entry_type()
+    entry.dwSize = ctypes.sizeof(entry)
+    parents = {}
+    try:
+        found = holding.Process32FirstW(snapshot, ctypes.byref(entry))
+        while found:
+            parents[entry.th32ProcessID] = entry.th32ParentProcessID
+            found = holding.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        holding.CloseHandle(snapshot)
+    return parents
 
 
 def process_root(pid: int) -> list:

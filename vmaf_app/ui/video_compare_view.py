@@ -40,6 +40,12 @@ from vmaf_app.core.video_playback import (
 from vmaf_app.ui.playback_worker import StreamDecodeWorker
 from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom
 
+#: How often playback is looked after while frames are due (playing, a seek,
+#: another test video, decoders starting), and once paused on the frame
+#: wanted. At 10 ms throughout, a paused view cost 2-4% of a core.
+_BUSY_TICK_MS = 10
+_SETTLED_TICK_MS = 100
+
 
 class _PairedFrameWidget(DragsZoomedFrame, QWidget):
     """A native window a GPU swapchain presents into (LockedNativePool),
@@ -167,8 +173,9 @@ class VideoCompareView(QWidget):
         self._last_status = ""
         self._decoded_videos = DEFAULT_COMPARE_DECODED_VIDEOS
         self._pool_timer = QTimer(self)
-        self._pool_timer.setInterval(10)
+        self._pool_timer.setInterval(_BUSY_TICK_MS)
         self._pool_timer.timeout.connect(self._tick)
+        self._on_screen = False  # between showEvent and hideEvent
         self._zoom = Zoom()
         #: Where the GPU frame last presented zoomed is drawn (device pixels).
         self._native_drawn = None
@@ -184,6 +191,40 @@ class VideoCompareView(QWidget):
         if self._native_pool is not None:
             self._native_pool.resize()
         super().resizeEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._on_screen = True
+        if self._native_pool is not None or self._pool_active:
+            self._wake()
+
+    def hideEvent(self, event):
+        # Off screen -- another tab, the window minimized -- nothing is
+        # drawn, and the decoders wait with their queues full. Ticking on,
+        # the view cost 2-4% of a core for the rest of the session once
+        # Video Compare had been opened.
+        self._on_screen = False
+        self._pool_timer.stop()
+        super().hideEvent(event)
+
+    def _wake(self) -> None:
+        """Playback looked after every 10 ms again, from now: something is
+        due. Only on screen (showEvent wakes it there). Not isVisible(): a
+        minimized window's widgets stay visible to Qt, and minimizing hides
+        the panel after the view -- the panel then pauses it, which woke it
+        again. (Leaving the tab hides the panel first, then the view.)"""
+        if self._on_screen and not (self._pool_timer.isActive()
+                                    and self._pool_timer.interval() == _BUSY_TICK_MS):
+            # Not restarted when already ticking that fast: a slider dragged
+            # seeks more often than every 10 ms, and each restart would put
+            # the next tick off again.
+            self._pool_timer.start(_BUSY_TICK_MS)
+
+    def _pace(self, settled: bool) -> None:
+        """Ticks slowed once paused on the frame wanted, every 10 ms otherwise."""
+        interval = _SETTLED_TICK_MS if settled else _BUSY_TICK_MS
+        if self._pool_timer.interval() != interval:
+            self._pool_timer.setInterval(interval)
 
     # ------------------------------------------------------------------ zoom
     def set_zoom(self, zoom: Zoom) -> None:
@@ -355,6 +396,7 @@ class VideoCompareView(QWidget):
                     self._sync_pool()
                     self._presented = -1
                     self._tick()
+                    self._wake()
                 if bool(playing) != self._wanted_playing:
                     self.set_playing(playing)
                 return True
@@ -384,6 +426,7 @@ class VideoCompareView(QWidget):
         if self._native_pool is not None:
             self._native_pool.seek(position_ms)
             self._frame = self._native_pool.frame
+            self._wake()
             return
         comparison = self._comparison
         if comparison is None or comparison.fps <= 0:
@@ -396,6 +439,7 @@ class VideoCompareView(QWidget):
         if self._native_pool is not None:
             self._native_pool.set_playing(playing)
             self._wanted_playing = self._is_playing = playing
+            self._wake()
             self.playing_changed.emit(playing)
             return
         if not self._pool_active:
@@ -417,6 +461,7 @@ class VideoCompareView(QWidget):
             self._stop_audio()
         elif not self._buffering:
             self._start_audio(self._frame)
+        self._wake()
         self.playing_changed.emit(playing)
 
     def show_source(self, showing: bool) -> None:
@@ -461,7 +506,7 @@ class VideoCompareView(QWidget):
                                                      source_native=self._source_native)
                 self._is_playing = self._wanted_playing = bool(realtime)
                 self._native_pool.show_source(self._showing_source)
-                self._pool_timer.start()
+                self._wake()
                 self.playing_changed.emit(realtime)
                 return
             except Exception as exc:
@@ -498,7 +543,7 @@ class VideoCompareView(QWidget):
         self._status("Preparing source/current/adjacent videos · GPU tone mapping and RGB"
                      + (f" · native fallback: {reason}" if reason else ""))
         self._sync_pool()
-        self._pool_timer.start()
+        self._wake()
         self.playing_changed.emit(realtime)
 
     def _status(self, text):
@@ -611,17 +656,18 @@ class VideoCompareView(QWidget):
         return self._clock_frame + int((time.monotonic() - self._clock_started) * self._series[0].fps)
 
     def _tick(self):
-        if self._native_pool is not None:
+        if (pool := self._native_pool) is not None:
             try:
-                position = self._native_pool.poll()
+                position = pool.poll()
                 frame = round(position / 1000 * self._comparison.fps)
                 if frame != self._frame:
                     self._frame = frame
                     self.position_changed.emit(position)
-                if self._native_pool.ended and self._wanted_playing:
+                if pool.ended and self._wanted_playing:
                     self.set_playing(False)
-                self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(self._native_pool.entries)}/{self.decoder_limit} streams · {self._native_pool.description}")
+                self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(pool.entries)}/{self.decoder_limit} streams · {pool.description}")
                 self._check_end()
+                self._pace(not self._wanted_playing and pool.pair is not None and pool.pair_index == pool.selected)
             except Exception as exc:
                 self._native_pool.stop()
                 self._native_pool = None
@@ -665,6 +711,7 @@ class VideoCompareView(QWidget):
             error = self._failures.get(source_key) or self._failures.get(distorted_key)
             self._status(f"Selected video failed: {error}" if error else
                          "Buffering selected comparison; adjacent videos are preparing in the background")
+            self._pace(bool(error))
             return
         frame = max(common)
         if frame == self._presented:
@@ -673,6 +720,7 @@ class VideoCompareView(QWidget):
                 # starvation. Resume it from the next displayed frame.
                 self._stop_audio()
                 self._buffering = True
+            self._pace(not self._wanted_playing and frame >= target)
             return
         self._presented = frame
         fps = self._series[0].fps
@@ -695,6 +743,7 @@ class VideoCompareView(QWidget):
         self.position_changed.emit(round(frame / fps * 1000))
         self._pool_status()
         self._check_end()
+        self._pace(False)  # the next tick starts the encodes decoded beside it
 
     def _pool_status(self) -> None:
         """The status while FFmpeg's frames are shown."""
