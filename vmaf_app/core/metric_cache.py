@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -18,6 +19,7 @@ import numpy as np
 from vmaf_app.core.analysis_request import MetricRequestSpec
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.metric_results import (
+    UNSPECIFIED_PROVENANCE,
     FrameMetricResult,
     MetricResultSet,
     SequenceMetricResult,
@@ -33,6 +35,8 @@ from vmaf_app.core.model_select import (
     v1_model_for_resolution,
 )
 from vmaf_app.core.models import ComparisonResult, CropBox, ResampleTarget, ScaleDirection, VideoInfo
+
+_log = logging.getLogger(__name__)
 
 METRIC_CACHE_FORMAT_VERSION = 2
 _V2_DIR = "v2"
@@ -210,6 +214,38 @@ def _stale_vship_score(provenance, infos: tuple[object, ...]) -> bool:
         and str(info.get("color_transfer") or "").strip().casefold() in _UNTAGGED
         for info in infos
     )
+
+
+def _compatible(spec: MetricRequestSpec, provenance) -> bool:
+    """Whether a score with `provenance` was made by an implementation that
+    answers `spec` (its compatibility id). One saved before scores carried
+    their provenance (UNSPECIFIED_PROVENANCE's "unversioned") answers only
+    libvmaf's metrics, whose id has never changed; XPSNR's has (its
+    weighting, XPSNR_COMPATIBILITY_ID), and the perceptual tools'."""
+    compatibility = provenance.implementation_compatibility_id
+    if _is_auto_perceptual_spec(spec):
+        return _auto_perceptual_compatibility(spec, compatibility)
+    if compatibility == UNSPECIFIED_PROVENANCE.implementation_compatibility_id:
+        return spec.implementation_compatibility_id == "ffmpeg-libvmaf-v1"
+    return compatibility == spec.implementation_compatibility_id
+
+
+def answers(spec: MetricRequestSpec, result, infos: tuple[object, ...] = ()) -> bool:
+    """Whether a score made earlier -- on a row, in an opened run file --
+    answers `spec` now, as a saved one must to be loaded: made by a
+    compatible implementation (_compatible) and not known to be wrong
+    (_stale_vship_score). `infos`: the two videos as context.json has them,
+    or dicts with their pix_fmt and color_transfer.
+
+    A row's scores were kept as they were: an XPSNR from v1.4, weighted by
+    the encode, was kept beside new metrics and then saved as current."""
+    return _compatible(spec, result.provenance) and not _stale_vship_score(result.provenance, infos)
+
+
+def video_infos(*infos) -> tuple[dict, ...]:
+    """What _stale_vship_score reads of each VideoInfo, as context.json has it."""
+    return tuple({"pix_fmt": info.pix_fmt, "color_transfer": info.color_transfer}
+                 for info in infos if info is not None)
 
 
 def _context_infos(directory: Path) -> tuple[object, ...]:
@@ -630,8 +666,15 @@ def store_result(
     _atomic_json(directory / "context.json", _context_from_result(result, label, recipe))
     for spec in specs:
         metric = result.metric(spec.key)
-        if metric is not None:
-            store_metric(directory, metric, spec)
+        if metric is None:
+            continue
+        if not _compatible(spec, metric.provenance):
+            # Saved under this request's identity it would answer it from
+            # then on (_load_metric_file reads the identity, not the score's).
+            _log.warning("%s not saved: its score is %s's, the request asks for %s's", spec.key,
+                         metric.provenance.implementation_compatibility_id, spec.implementation_compatibility_id)
+            continue
+        store_metric(directory, metric, spec)
     return directory
 
 

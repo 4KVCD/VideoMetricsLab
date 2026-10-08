@@ -18,8 +18,15 @@ from vmaf_app import __version__, cli
 from vmaf_app.core import job_runner, perceptual_vship, result_cache
 from vmaf_app.core.cvvdp import default_settings
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
-from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
-from vmaf_app.core.models import ComparisonResult, FrameScore, VideoInfo, VmafOptions
+from vmaf_app.core.metric_cache import CPU_COLOR_TAGS
+from vmaf_app.core.metric_results import (
+    FrameMetricResult,
+    MetricProvenance,
+    MetricResultSet,
+    current_ffmpeg_provenance,
+    results_from_frame_scores,
+)
+from vmaf_app.core.models import ComparisonResult, FrameScore, FrameScores, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualRunError, PerceptualTaskOutput
 from vmaf_app.core.settings import Settings
 from vmaf_app.core.vmaf_runner import Cancelled, VmafRunError
@@ -31,17 +38,22 @@ def _info(path: Path, fps: float = 30.0) -> VideoInfo:
 
 
 def _result(source: VideoInfo, distorted: VideoInfo, options: VmafOptions, vmaf: float = 90.0) -> ComparisonResult:
-    frames = [FrameScore(frame=i, time=i / 30.0, vmaf=vmaf + i if options.compute_vmaf else None,
-                         psnr=40.0 + i, ssim=0.99, xpsnr=35.0) for i in range(10)]
+    """A run's result as the runner makes it, each score with its provenance."""
+    frames = FrameScores.from_frames([FrameScore(frame=i, time=i / 30.0, vmaf=vmaf + i if options.compute_vmaf else None,
+                                                 psnr=40.0 + i, ssim=0.99, xpsnr=35.0) for i in range(10)])
     return ComparisonResult(
         source=source.path, distorted=distorted.path, frames=frames, fps=30.0, model=options.model,
         source_crop=None, distorted_crop=None, source_info=source, distorted_info=distorted,
         compared_frame_count=10,
+        metric_results=results_from_frame_scores(
+            frames, {key: current_ffmpeg_provenance(key, "9.0") for key in frames.metric_keys}),
     )
 
 
 def _perceptual(key: str = "ssimulacra2", backend: str = "gpu") -> PerceptualTaskOutput:
-    metric = FrameMetricResult(key, [0, 1], [0.0, 1 / 30], [87.0, 85.0], MetricProvenance("test", "1", backend, "t-v1"))
+    provenance = (MetricProvenance(f"Vship/{key}", "5.1.2", "gpu", f"{key}-vship-gpu-v1") if backend == "gpu" else
+                  MetricProvenance(key, "", "cpu", f"{key}-libjxl-cpu-v1", {"color_tags": CPU_COLOR_TAGS}))
+    metric = FrameMetricResult(key, [0, 1], [0.0, 1 / 30], [87.0, 85.0], provenance)
     return PerceptualTaskOutput(MetricResultSet([metric]), None, None, 2)
 
 
@@ -86,8 +98,7 @@ def _run(*arguments) -> tuple[int, str, str]:
 
 
 def _row(table: str, label: str) -> list[str]:
-    """A metric's cells in the first video's table (the fake results name
-    no CPU or GPU: UNKNOWN)."""
+    """A metric's cells in the first video's table."""
     line = next(line for line in table.splitlines() if line.strip().startswith(label + "  "))
     return line.strip()[len(label):].split()
 
@@ -146,8 +157,8 @@ def test_a_run_prints_each_videos_scores_and_exits_0(videos):
     assert code == cli.EXIT_OK
     assert videos.calls == [("ffmpeg", "a.mkv"), ("ffmpeg", "b.mkv")]
     assert "Reference: reference.mkv (1920x1080, 30.000 fps, h264, yuv420p, 0:00:05)" in out
-    assert _row(out, "VMAF v0.6.1") == ["94.50", "94.50", "90.00", "99.00", "90.09", "(low)", "UNKNOWN"]
-    assert _row(out, "SSIM") == ["0.9900", "0.9900", "0.9900", "0.9900", "0.9900", "(low)", "UNKNOWN"]
+    assert _row(out, "VMAF v0.6.1") == ["94.50", "94.50", "90.00", "99.00", "90.09", "(low)", "CPU"]
+    assert _row(out, "SSIM") == ["0.9900", "0.9900", "0.9900", "0.9900", "0.9900", "(low)", "CPU"]
     assert "10 frames compared" in out
     assert "a.mkv: started" in err and "b.mkv: done" in err
 
@@ -191,6 +202,23 @@ def test_a_score_made_on_the_gpu_does_not_answer_a_cpu_choice(videos):
     assert videos.calls == [("vship", "a.mkv")]
 
 
+def test_a_saved_xpsnr_from_v1_4_is_calculated_again():
+    """v1.4's XPSNR was weighted by the encode, v1.5's by the reference: a
+    saved v1.4 score answers no request now (metric_cache.answers, as in the
+    window's _reusable_results)."""
+    reference, test = _info(Path("reference.mkv")), _info(Path("a.mkv"))
+    options = VmafOptions(compute_vmaf=True, compute_xpsnr=True)
+    video = cli.Video(test.path, info=test, options=options, metrics=("vmaf", "xpsnr"))
+    video.request = analysis_request_from_vmaf_options(options, video.metrics)
+    for compatibility, kept in (("ffmpeg-xpsnr-v1", False), ("ffmpeg-xpsnr-v2", True)):
+        saved = _result(reference, test, options)
+        saved.merge_metric_results(MetricResultSet([FrameMetricResult(
+            "xpsnr", [0], [0.0], [35.0], MetricProvenance("ffmpeg/xpsnr", "ffmpeg 8.0", "cpu", compatibility))]))
+        reusable = cli._reusable(video, saved, {}, reference)
+        assert reusable.has("xpsnr") is kept, compatibility
+        assert reusable.has("vmaf")
+
+
 def test_json_has_every_videos_status_and_statistics(videos):
     target = videos.folder / "out" / "results.json"
     code, out, _err = _run(videos.reference, videos.a, "--json", target)
@@ -207,9 +235,7 @@ def test_json_has_every_videos_status_and_statistics(videos):
         "score": 94.5, "frames": 10, "median": 94.5, "stdev": pytest.approx(2.8723, abs=1e-4), "min": 90.0,
         "max": 99.0, "worst_is": "low", "worst_10_percent": pytest.approx(90.9), "worst_5_percent": pytest.approx(90.45),
         "worst_1_percent": pytest.approx(90.09), "worst_0.1_percent": pytest.approx(90.009),
-        "computed_on": video["metrics"]["vmaf"]["computed_on"],  # the fake result names none
-        "implementation": video["metrics"]["vmaf"]["implementation"],
-        "version": video["metrics"]["vmaf"]["version"],
+        "computed_on": "cpu", "implementation": "ffmpeg/libvmaf", "version": "ffmpeg 9.0",
     }
 
     code, out, _err = _run(videos.reference, videos.a, "--json", "-")
