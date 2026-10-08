@@ -322,6 +322,29 @@ def test_a_crash_in_vship_ends_its_own_process_and_the_cpu_takes_over(monkeypatc
     assert "Vship crashed" in caplog.text
 
 
+@pytest.mark.parametrize("keys", [("ssimulacra2",), ("ssimulacra2", "butteraugli")])
+def test_a_video_cut_short_is_not_started_again_on_the_cpu(monkeypatch, keys):
+    """An encode whose pictures end at a quarter of its stated length: the
+    GPU pass is cut short, and the CPU used to be given the whole video
+    again -- 2.5 hours at 4K, to be cut short at the same frame. It fails
+    at once with the reason, as VMAF does."""
+    device = vship.VshipDevice("cuda", "test GPU", 0, "5.1.1", None)
+    monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
+    monkeypatch.setattr(perceptual_cpu, "_resolve_crops", lambda *_args: (None, None))
+    passes = []
+
+    def cut_short(_s, _t, _r, specs, *_a, **_k):
+        passes.append(tuple(spec.key for spec in specs))
+        raise perceptual_cpu.ComparisonCutShortError("Only 7270 of the 28800 frames expected could be compared")
+
+    monkeypatch.setattr(vship, "_run_vship_pass", cut_short)
+    monkeypatch.setattr(perceptual_cpu, "run_perceptual_task", lambda *a, **k: pytest.fail("started on the CPU"))
+    request = analysis_request_from_vmaf_options(VmafOptions(crop_mode=CropMode.NONE), keys)
+    with pytest.raises(perceptual_cpu.ComparisonCutShortError, match="7270 of the 28800"):
+        vship.apply_vship_cpu_fallback(_info("a.mkv"), _info("b.mkv"), request, request.metrics)
+    assert passes == [keys[:1]]  # the other passes are not made either
+
+
 def test_cancellation_does_not_start_cpu_fallback(monkeypatch):
     source, test = _info("source.mkv"), _info("test.mkv")
     request = _request()

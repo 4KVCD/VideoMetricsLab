@@ -1869,7 +1869,9 @@ def run_vship_task(
                         on_progress=progress, on_status=on_status,
                         cancel_event=cancel_event, process_handle=process_handle,
                     )
-                except PerceptualCancelled:
+                except (PerceptualCancelled, ComparisonCutShortError):
+                    # A video that ends early is cut short for every metric:
+                    # the file's fault, the same in each pass and on the CPU.
                     raise
                 except Exception as error:
                     if cancel_event is not None and cancel_event.is_set():
@@ -2482,7 +2484,10 @@ def apply_vship_cpu_fallback(
             on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
             process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass,
         )
-    except PerceptualCancelled:
+    except (PerceptualCancelled, ComparisonCutShortError):
+        # Cut short (a video that ends early): the CPU would stop as short,
+        # after hours instead of the GPU's minutes. It used to be retried
+        # there as if the GPU had failed.
         raise
     except Exception as error:
         if cancel_event is not None and cancel_event.is_set():
