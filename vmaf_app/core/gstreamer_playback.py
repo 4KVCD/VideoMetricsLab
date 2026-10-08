@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from itertools import pairwise
@@ -40,6 +41,9 @@ class PlaybackUpdate:
 
 _GST: tuple[Any, Any] | None = None
 _GST_ERROR: str | None = None
+_GST_LOCK = threading.Lock()
+_D3D11_DEVICE: Any = None
+_D3D11_LOCK = threading.Lock()
 
 #: Elements the pipelines create by name. Without any of these the GStreamer
 #: path cannot be built at all, so _load_gstreamer refuses and playback uses
@@ -121,8 +125,60 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
     return changed
 
 
+def start_loading() -> None:
+    """What Video Compare's first native opening loads, loaded in the
+    background at the window's startup: GStreamer, the plugin of the video
+    sink and the D3D11 device. Loaded by that opening instead, they held the
+    window for 0.4 s then. The window's only: metric-only use (the command
+    line, the scoring processes) does not pay their start or their memory."""
+    if os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen":
+        threading.Thread(target=_warm_up, name="gstreamer-load", daemon=True).start()
+
+
+def _warm_up() -> None:
+    if not gstreamer_available()[0]:
+        return
+    try:
+        gst, _video = _load_gstreamer()
+        sink = gst.ElementFactory.find("d3d11videosink")
+        if sink is not None:
+            sink.load()
+        d3d11_device()
+    except Exception:
+        pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg
+
+
+def d3d11_device() -> Any:
+    """The D3D11 device native playback draws on: one for the session,
+    shared by each comparison's pipelines, and made again only once lost (a
+    GPU reset). Each comparison made its own before: a process's first took
+    about 0.14 s, the driver loading, and so did one made while no other was
+    left."""
+    global _D3D11_DEVICE
+    with _D3D11_LOCK:
+        device = _D3D11_DEVICE
+        if device is None or device.get_property("device-removed-reason"):
+            _load_gstreamer()  # first: it repairs the environment gi reads
+            import gi
+
+            gi.require_version("GstD3D11", "1.0")
+            from gi.repository import GstD3D11
+
+            device = GstD3D11.D3D11Device.new(0, 0)
+            if device is None:
+                raise GStreamerPlaybackError("D3D11 device unavailable")
+            _D3D11_DEVICE = device
+        return device
+
+
 def _load_gstreamer() -> tuple[Any, Any]:
-    """Import lazily so metric-only use does not pay GStreamer's start cost."""
+    """Import lazily so metric-only use does not pay GStreamer's start cost.
+    Once: start_loading's thread and the window's first use may meet."""
+    with _GST_LOCK:
+        return _load_gstreamer_once()
+
+
+def _load_gstreamer_once() -> tuple[Any, Any]:
     global _GST, _GST_ERROR
     if _GST is not None:
         return _GST

@@ -5265,16 +5265,15 @@ class MainWindow(QMainWindow):
     def _sync_graph(self) -> None:
         """Makes the graph show every completed row.
 
-        add_run replaces a series with the same distorted path rather than
-        stacking a duplicate, so this is safe to call as often as it likes --
-        on every tab switch, and whenever a row gains a result.
+        add_runs replaces a series with the same identity rather than
+        stacking a duplicate, leaves one already showing its result alone,
+        and brings the table up to date once: safe to call as often as it
+        likes -- on every tab switch, and whenever a row gains a result.
         """
-        for row in self._rows:
-            if row.completed_run is not None:
-                self.graph_panel.add_run(
-                    row.completed_run.result, row.completed_run.label,
-                    identity=row.completed_run.graph_identity, restore=False,
-                )
+        self.graph_panel.add_runs(
+            (row.completed_run.result, row.completed_run.label, row.completed_run.graph_identity, False)
+            for row in self._rows if row.completed_run is not None
+        )
 
     def _sync_frame_compare(self) -> None:
         """Makes Frame Compare mirror every Videos-table row it can render.
@@ -5346,9 +5345,6 @@ class MainWindow(QMainWindow):
 
     def _open_or_update_graph(self, runs: list[CompletedRun], show: bool = True) -> None:
         """Adds runs to the graph tab and, with `show`, brings it to the front."""
-        for run in runs:
-            self.graph_panel.add_run(
-                run.result, run.label, identity=run.graph_identity
-            )
+        self.graph_panel.add_runs((run.result, run.label, run.graph_identity, True) for run in runs)
         if show:
             self.tabs.setCurrentIndex(TAB_GRAPH)

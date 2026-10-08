@@ -325,6 +325,12 @@ def main() -> int:
     vmaf_v1_gpu.start_probe()
     window = MainWindow()
     window.show()
+    # Video Compare's first opening, made ready in the background now:
+    # GStreamer and its D3D11 output loaded, FFmpeg's hardware decoders listed.
+    from vmaf_app.core import gpu, gstreamer_playback
+
+    gstreamer_playback.start_loading()
+    gpu.start_hwaccel_probe()
     window.check_for_updates()  # once, now, and at no other time
     return app.exec()
 

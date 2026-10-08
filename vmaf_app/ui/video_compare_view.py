@@ -558,8 +558,17 @@ class VideoCompareView(QWidget):
         # Retiring workers count too: rapid navigation may not transiently
         # spawn one video decoder more than allowed while the old process is exiting.
         occupied = sum(w.isRunning() for w in self._retired_workers) + len(self._pool)
+        # The pair on screen first: the encodes decoded beside it start once
+        # it has shown a frame (_tick calls this again). Started with it, two
+        # of them slowed its first frame at the tab's first opening from
+        # 1.1-1.3 s to 1.5-1.6.
+        on_screen = None if self._presented >= 0 else (
+            {key for key in self._desired if key[0] == "source"} | {("distorted", self._selected)})
+        launched = False
         for key, (comparison, side) in self._desired.items():
             if key in self._pool or occupied >= self.decoder_limit:
+                continue
+            if on_screen is not None and key not in on_screen:
                 continue
             source_info, distorted_info = comparison.source_info, comparison.distorted_info
             plan = plan_hwaccel(GpuVendor.AUTO, source_info.codec_name, distorted_info.codec_name,
@@ -575,6 +584,9 @@ class VideoCompareView(QWidget):
             self._history[key] = {}
             worker.start()
             occupied += 1
+            launched = True
+        if launched and self._presented >= 0:
+            self._pool_status()  # its count of streams
 
     def _stream_ready(self, key, worker, detail):
         if self._pool.get(key) is worker:
@@ -681,11 +693,15 @@ class VideoCompareView(QWidget):
             self._start_audio(self._frame)
         self._buffering = False
         self.position_changed.emit(round(frame / fps * 1000))
-        detail = self._details.get(distorted_key, "GPU processing starting")
+        self._pool_status()
+        self._check_end()
+
+    def _pool_status(self) -> None:
+        """The status while FFmpeg's frames are shown."""
+        detail = self._details.get(("distorted", self._selected), "GPU processing starting")
         if self._pool_reason:
             detail += " · SDR preview (native playback unavailable)"
         self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · {len(self._pool)}/{self.decoder_limit} streams · {detail}")
-        self._check_end()
 
     def _check_end(self):
         counts = [item.frame_count / item.fps for item in self._series if item.frame_count > 0 and item.fps > 0]

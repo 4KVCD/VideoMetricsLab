@@ -12,6 +12,7 @@ This is a QWidget, not a window: it is one page of the main window's tabs.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -141,14 +142,22 @@ class SeriesEntry:
     #: them may not exist yet, and building them just to read a mean would
     #: undo that.
     means: dict[str, float | None] = field(default_factory=dict)
+    #: Frames scoring +inf, by metric key, where there are any: counted once
+    #: per result (_identical_frame_counts), not at each table refresh.
+    identical: dict[str, int] = field(default_factory=dict)
 
 
-def _identical_frame_count(result: ComparisonResult, key: str) -> int:
-    """Frames scoring +inf -- mathematically identical to the reference."""
-    metric = result.frame_metric(key)
-    if metric is None or len(metric.values) == 0:
-        return 0
-    return int(np.isposinf(np.asarray(metric.values, dtype=np.float64)).sum())
+def _identical_frame_counts(result: ComparisonResult) -> dict[str, int]:
+    """Each metric's frames scoring +inf -- mathematically identical to the
+    reference -- where it has any."""
+    counts = {}
+    for spec in METRICS:
+        metric = result.frame_metric(spec.key)
+        if metric is not None and len(metric.values):
+            count = int(np.isposinf(np.asarray(metric.values)).sum())
+            if count:
+                counts[spec.key] = count
+    return counts
 
 
 def _metric_means(result: ComparisonResult) -> dict[str, float | None]:
@@ -1145,13 +1154,32 @@ class GraphPanel(QWidget):
         self, result: ComparisonResult, label: str | None = None, *,
         identity: object | None = None, restore: bool = True,
     ) -> None:
+        if self._add_series(result, label, identity, restore):
+            self._series_changed()
+
+    def add_runs(self, runs: Iterable[tuple[ComparisonResult, str | None, object | None, bool]]) -> None:
+        """add_run for each (result, label, identity, restore), with the
+        table and the frame range brought up to date once, at the end."""
+        changed = False
+        for result, label, identity, restore in runs:
+            changed |= self._add_series(result, label, identity, restore)
+        if changed:
+            self._series_changed()
+
+    def _add_series(self, result: ComparisonResult, label: str | None, identity: object | None,
+                    restore: bool) -> bool:
+        """Adds or updates a series; whether anything changed. A series
+        already showing this very result under this label is left alone:
+        the window replaces a result to change it, never edits it, and every
+        visit to the tab used to redraw each curve and the table again --
+        0.7 s with six two-hour videos."""
         # Callers with real rows provide that row/run's stable identity, so
         # two separately loaded runs of the same distorted path can coexist.
         # Direct users retain the historical "one series per path" behavior.
         identity = identity if identity is not None else ("path", str(Path(result.distorted).resolve()))
         if identity in self._suppressed_identities:
             if not restore:
-                return
+                return False
             self._suppressed_identities.discard(identity)
         label = label or Path(result.distorted).stem
         times = result.frames.time
@@ -1159,17 +1187,17 @@ class GraphPanel(QWidget):
 
         for sid, existing in self._entries.items():
             if existing.identity == identity:
+                if existing.result is result and existing.label == label:
+                    return False
                 existing.result = result
                 existing.label = label
                 existing.times = times
                 existing.step = step
                 existing.means = _metric_means(result)
+                existing.identical = _identical_frame_counts(result)
                 for page in self._pages.values():
                     page.set_curve(sid, existing, existing.color)
-                self._select_available_metric()
-                self._refresh_stats_table()
-                self._refresh_frame_range()
-                return
+                return True
 
         color = _PALETTE[self._next_id % len(_PALETTE)]
         sid = self._next_id
@@ -1178,12 +1206,15 @@ class GraphPanel(QWidget):
         entry = SeriesEntry(
             result=result, label=label, color=color, times=times, step=step,
             visible=True, identity=identity, means=_metric_means(result),
+            identical=_identical_frame_counts(result),
         )
         self._entries[sid] = entry
 
         for page in self._pages.values():
             page.set_curve(sid, entry, color)
+        return True
 
+    def _series_changed(self) -> None:
         self._select_available_metric()
         self._refresh_stats_table()
         self._refresh_frame_range()
@@ -1475,7 +1506,7 @@ class GraphPanel(QWidget):
                     item = self._number_item(
                         "\u2014" if mean is None else spec.format_value(mean)
                     )
-                    identical = _identical_frame_count(entry.result, spec.key)
+                    identical = entry.identical.get(spec.key, 0)
                     if identical:
                         item.setToolTip(
                             tr("{identical} frames identical to the reference are included in the XPSNR sequence average: zero "

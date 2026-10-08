@@ -45,6 +45,13 @@ _VENDOR_PREFERRED_HWACCEL = {
 }
 
 
+def start_hwaccel_probe() -> None:
+    """FFmpeg's -hwaccels asked in the background, at the window's startup:
+    asked on Video Compare's first opening instead, FFmpeg's start held the
+    window for 40 ms then."""
+    threading.Thread(target=available_hwaccels, name="hwaccel-probe", daemon=True).start()
+
+
 def available_hwaccels() -> set[str]:
     """The -hwaccel methods the FFmpeg in use was built with. Asked once
     per FFmpeg: the answer was kept for the session whatever FFmpeg it came
