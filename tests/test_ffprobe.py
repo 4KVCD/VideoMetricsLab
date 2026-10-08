@@ -179,6 +179,18 @@ def test_a_stale_duration_tag_longer_than_the_file_is_not_used(monkeypatch):
     assert info.duration == 600.0
 
 
+@pytest.mark.parametrize(("format_name", "raw"), [("hevc", True), ("h264", True), ("obu", True),
+                                                  ("matroska,webm", False), ("mov,mp4,m4a,3gp,3g2,mj2", False)])
+def test_a_raw_stream_is_told_from_a_container(monkeypatch, format_name, raw):
+    """A bare .hevc or .264 stream: ffprobe gives FFmpeg's 25 fps default as
+    its average and the parser's time base or the stream's own rate as its
+    nominal, and no duration."""
+    video = {**_VIDEO, "avg_frame_rate": "25/1", "r_frame_rate": "1200000/1"}
+    info = _probe_payload(monkeypatch, [video], {"format_name": format_name})
+    assert info.format_name == format_name
+    assert info.is_raw_stream is raw
+
+
 def test_an_unknown_frame_rate_is_zero_not_an_exception(monkeypatch):
     video = {**_VIDEO, "avg_frame_rate": "N/A", "r_frame_rate": "N/A", "duration": "1.0"}
     info = _probe_payload(monkeypatch, [video], {"duration": "1.0"})

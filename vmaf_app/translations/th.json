@@ -562,6 +562,7 @@
   "Vship does not support the {primaries} color primaries.": "Vship ไม่รองรับแม่สี {primaries}",
   "Vship does not support the {range} range tag.": "Vship ไม่รองรับแท็กช่วง {range}",
   "Vship does not support {siting} chroma siting.": "Vship ไม่รองรับตำแหน่งโครมา {siting}",
+  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} เป็นสตรีม {codec} ดิบที่ไม่มีการประทับเวลา จึงไม่ทราบอัตราเฟรม ให้ใส่ลงในคอนเทนเนอร์พร้อมอัตราเฟรมก่อน เช่น mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix) โดยใช้อัตราเฟรมจริงของวิดีโอ",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "ยังไม่รองรับวิดีโออัตราเฟรมแปรผันอย่างปลอดภัย แปลงวิดีโอทั้งสองเป็นอัตราเฟรมคงที่เดียวกันก่อนเปรียบเทียบ",
   "Frame rates do not match ({source} vs {test} fps).": "อัตราเฟรมไม่ตรงกัน ({source} กับ {test} fps)",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "ความยาวไม่ตรงกัน ({source} กับ {test} วินาที) ตั้งค่าจำกัดความยาวให้อยู่ในทั้งสองไฟล์ หากเปรียบเทียบเฉพาะช่วงต้นที่ตรงกัน",

@@ -77,9 +77,31 @@ def display_aspect_ratio(info: VideoInfo, crop: CropBox | None = None) -> float:
     return (width * num) / (height * den)
 
 
+_CODEC_LABELS = {"h264": "H.264", "mpeg2video": "MPEG-2", "mpeg4": "MPEG-4", "mjpeg": "MJPEG"}
+
+
 def pair_problem(source_info: VideoInfo, distorted_info: VideoInfo, duration_limit: float) -> str | None:
     """Why two videos cannot be compared -- timelines that are ambiguous --
     or None. Each runner raises it as its own error."""
+    problem = _timeline_problem(source_info, distorted_info, duration_limit)
+    raw = next((info for info in (source_info, distorted_info) if info.is_raw_stream), None)
+    if problem is None or raw is None:
+        return problem
+    # A raw stream's rates and length are FFmpeg's guesses (its average is
+    # FFmpeg's 25 fps default, its nominal the stream's own or the parser's
+    # time base): it was refused as variable-frame-rate video, which sent
+    # people converting frame rates. What is refused is unchanged.
+    # mkvmerge, not FFmpeg: FFmpeg cannot stream-copy a raw stream with
+    # B-frames into Matroska ("unknown timestamp"), and into MP4 its made-up
+    # timestamps put the frames out of order (a CRF 22 encode scored VMAF 57
+    # instead of 94). mkvmerge's file scores as the encode does.
+    return (f"{raw.path.name} is a raw {_CODEC_LABELS.get(raw.codec_name, raw.codec_name.upper())} "
+            "stream with no timestamps, so its frame rate is unknown. Put it in a container with its "
+            "frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), "
+            "with the video's own frame rate.")
+
+
+def _timeline_problem(source_info: VideoInfo, distorted_info: VideoInfo, duration_limit: float) -> str | None:
     if source_info.is_variable_frame_rate or distorted_info.is_variable_frame_rate:
         return ("Variable-frame-rate video is not supported safely yet. Convert both videos "
                 "to the same constant frame rate before comparing them.")

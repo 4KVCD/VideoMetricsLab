@@ -562,6 +562,7 @@
   "Vship does not support the {primaries} color primaries.": "Vship không hỗ trợ màu cơ bản {primaries}.",
   "Vship does not support the {range} range tag.": "Vship không hỗ trợ thẻ dải {range}.",
   "Vship does not support {siting} chroma siting.": "Vship không hỗ trợ vị trí chroma {siting}.",
+  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} là luồng {codec} thô không có dấu thời gian, nên không biết tốc độ khung hình. Hãy đưa nó vào một container kèm tốc độ khung hình trước, ví dụ mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), với tốc độ khung hình thật của video.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video có tốc độ khung hình thay đổi chưa được hỗ trợ an toàn. Hãy chuyển cả hai video sang cùng một tốc độ khung hình cố định trước khi so sánh.",
   "Frame rates do not match ({source} vs {test} fps).": "Tốc độ khung hình không khớp ({source} so với {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Thời lượng không khớp ({source} so với {test} giây). Đặt giới hạn thời lượng nằm trong cả hai tệp nếu bạn chỉ so sánh phần đầu chung.",

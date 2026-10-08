@@ -562,6 +562,7 @@
   "Vship does not support the {primaries} color primaries.": "Vship nie obsługuje barw podstawowych {primaries}.",
   "Vship does not support the {range} range tag.": "Vship nie obsługuje znacznika zakresu {range}.",
   "Vship does not support {siting} chroma siting.": "Vship nie obsługuje położenia chrominancji {siting}.",
+  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} to surowy strumień {codec} bez znaczników czasu, więc jego liczba klatek na sekundę jest nieznana. Najpierw umieść go w kontenerze z jego liczbą klatek, np. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), z liczbą klatek samego wideo.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Wideo o zmiennej liczbie klatek na sekundę nie jest jeszcze bezpiecznie obsługiwane. Przed porównaniem przekonwertuj oba wideo do tej samej stałej liczby klatek.",
   "Frame rates do not match ({source} vs {test} fps).": "Liczby klatek na sekundę się różnią ({source} wobec {test} kl./s).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Czasy trwania się różnią ({source} wobec {test} s). Ustaw limit czasu mieszczący się w obu plikach, jeśli porównujesz tylko ich wspólny początek.",
