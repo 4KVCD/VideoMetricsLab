@@ -984,6 +984,61 @@ def test_vmaf_on_the_gpu_is_one_pass_in_the_gpus_queue(qapp, monkeypatch):
         ("perceptual", "gpu", (("ssimulacra2",),))]
 
 
+def _as_run_vmaf_records(source, distorted, options, *a, **k) -> ComparisonResult:
+    """A result with the models run_vmaf records for the metrics `options`
+    enables: "" for a VMAF v0.6.1 it did not calculate, and no VMAF v1
+    choice without VMAF v1."""
+    from vmaf_app.core.model_select import AUTO_MODEL_CHOICE
+
+    provenance = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1")
+    metrics = MetricResultSet(FrameMetricResult(key, [0, 1], [0.0, 1 / 30], [90.0, 91.0], provenance)
+                              for key in options.requested_metrics())
+    model = ("" if not options.compute_vmaf else
+             "version=vmaf_v0.6.1" if options.model_choice == AUTO_MODEL_CHOICE else options.model)
+    return ComparisonResult(
+        source=source.path, distorted=distorted.path, frames=[], fps=30.0, model=model,
+        source_crop=None, distorted_crop=None, source_info=source, distorted_info=distorted,
+        model_choice=options.model_choice,
+        model_v1="path=vmaf_v1.json" if options.compute_vmaf_v1 else options.model_v1,
+        model_choice_v1=options.model_choice_v1 if options.compute_vmaf_v1 else None,
+        metric_results=metrics,
+    )
+
+
+def test_a_split_run_keeps_each_models_from_the_half_that_calculated_it(qapp, monkeypatch):
+    """VMAF v1 on the GPU beside FFmpeg's metrics: the result had no VMAF
+    v1 model, as FFmpeg's half, its base, calculated none. And a custom VMAF
+    model, which FFmpeg's half calculates, was overwritten with the GPU
+    half's "" -- both saved so in run files and the cache, where a reopened
+    run lost its custom model and VMAF v1 choice."""
+    from vmaf_app.core import vmaf_cuda, vmaf_v1_gpu
+    from vmaf_app.core.model_select import CUSTOM_MODEL_CHOICE, V1_UHD_MODEL
+
+    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    monkeypatch.setattr(vmaf_v1_gpu, "scores", lambda *a, **k: True)
+    monkeypatch.setattr(job_runner, "run_vmaf", _as_run_vmaf_records)
+    custom = VmafOptions(model_choice=CUSTOM_MODEL_CHOICE, custom_model_path="m.json", model="path=m.json",
+                         model_choice_v1=V1_UHD_MODEL)
+    for options, keys, model, halves in (
+            (VmafOptions(model_choice_v1=V1_UHD_MODEL), ("vmaf", "vmaf_v1", "psnr"), "version=vmaf_v0.6.1",
+             [("ffmpeg", "cpu", (("psnr",),)), (job_runner.GPU_VMAF, "gpu", (("vmaf", "vmaf_v1"),))]),
+            (custom, ("vmaf", "vmaf_v1"), "path=m.json",
+             [("ffmpeg", "cpu", (("vmaf",),)), (job_runner.GPU_VMAF, "gpu", (("vmaf_v1",),))])):
+        for key in keys:  # as the window and the command line set them
+            options.set_metric_enabled(key, True)
+        job = VmafJob(_info("s.mp4"), _info("d.mp4"), options, label="d", metric_keys=keys)
+        assert _halves(job) == halves
+        worker = VmafWorker([job])
+        finished = []
+        worker.job_finished.connect(lambda _index, result, done=finished: done.append(result))
+        worker.run()
+        _drain(qapp)
+        [result] = finished
+        assert sorted(result.metric_results.keys()) == sorted(keys)
+        assert result.model == model
+        assert (result.model_v1, result.model_choice_v1) == ("path=vmaf_v1.json", V1_UHD_MODEL)
+
+
 def test_the_ffmpeg_halfs_status_reaches_its_snapshot_as_its_step(qapp, monkeypatch):
     def ffmpeg(s, d, *a, on_status=None, on_progress=None, **k):
         on_status("Detecting black bars in source...")

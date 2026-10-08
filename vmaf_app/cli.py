@@ -17,8 +17,10 @@ calculated, and one made there is not calculated again here.
 Progress goes to stderr, results to stdout: each video's table and, for
 several, a summary side by side; --json FILE adds the same as JSON, and
 --json - prints only that. Exit code 0
-when every video got every metric asked for, 1 when one failed or lost a
-metric, 2 for a wrong command or a missing FFmpeg, 130 when cancelled with
+when every video got every metric asked for that it can have (one it
+cannot, such as CVVDP with --subsample above 1, is left out with a note, as
+the window leaves it out), 1 when one failed or lost a metric, 2 for a
+wrong command, a missing FFmpeg or no test video, 130 when cancelled with
 Ctrl+C. The text is English whatever the window's language: scripts read it.
 """
 from __future__ import annotations
@@ -697,6 +699,9 @@ def compare(args: argparse.Namespace, *, out=None, err=None) -> int:
         print(f"The reference could not be read: {error}", file=err)
         return EXIT_USAGE
     videos, jobs = prepare(args, settings, source)
+    if not videos:
+        print("No test videos: the patterns find only the reference.", file=err)
+        return EXIT_USAGE
     progress = Progress(videos, quiet=args.quiet, stream=err)
     for video in videos:
         if video.error:

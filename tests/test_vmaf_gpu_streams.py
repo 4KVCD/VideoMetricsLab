@@ -270,3 +270,31 @@ def test_the_two_ffmpegs_run_side_by_side_and_one_that_fails_ends_the_other(monk
     monkeypatch.setattr(vr, "_run_ffmpeg", fake({"test": "waits", "source": "waits"}))
     with pytest.raises(Cancelled):
         vr._run_ffmpeg_pair([["test"], ["source"]], 10, None, cancel, tmp_path)
+
+
+def test_the_wait_for_the_second_ffmpeg_does_not_spin(monkeypatch, tmp_path):
+    """The wait joined the first FFmpeg's thread only: once it had ended,
+    each join returned at once and the loop spun until the second ended --
+    69,957 times in the 34 ms the source's FFmpeg outlived the test video's,
+    on a 4K pair."""
+    release = threading.Event()
+    finished_joins = []
+
+    class Thread(threading.Thread):
+        def join(self, timeout=None):
+            if self.name == "ffmpeg-1" or len(finished_joins) >= 100:
+                release.set()  # the second ends once it is waited for (or the wait has spun)
+            if not self.is_alive():
+                finished_joins.append(self.name)
+            super().join(timeout)
+
+    def run(cmd, total_frames, on_progress, cancel_event, cwd, process_handle=None):
+        if cmd == ["source"]:
+            release.wait(30)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(vr, "_run_ffmpeg", run)
+    monkeypatch.setattr(threading, "Thread", Thread)
+    result = vr._run_ffmpeg_pair([["test"], ["source"]], 10, None, threading.Event(), tmp_path)
+    assert result.returncode == 0 and result.args == ["test"]
+    assert len(finished_joins) < 100

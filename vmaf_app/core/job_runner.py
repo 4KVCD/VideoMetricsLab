@@ -45,8 +45,8 @@ from vmaf_app.core.vmaf_runner import (
 
 _log = logging.getLogger(__name__)
 
-#: The backend of VMAF and NEG calculated on the GPU, a half of their own
-#: (JobRun._by_place): run_vmaf with those two alone.
+#: The backend of VMAF, NEG and VMAF v1 calculated on the GPU, a half of
+#: their own (JobRun._by_place): run_vmaf with those alone.
 GPU_VMAF = "vmaf_gpu"
 _GPU_VMAF_KEYS = ("vmaf", "vmaf_neg", "vmaf_v1")
 #: The backend of SSIMULACRA2 and Butteraugli chosen for the CPU, apart from
@@ -535,7 +535,7 @@ class JobRun:
 
         The planner groups metrics by the program that calculates them:
         FFmpeg's, and Vship's SSIMULACRA2/Butteraugli/CVVDP. With VMAF on the
-        GPU, VMAF and NEG are a half of their own (GPU_VMAF) in the GPU's
+        GPU, VMAF, NEG and VMAF v1 are a half of their own (GPU_VMAF) in the GPU's
         queue, ahead of Vship's metrics, and FFmpeg's half keeps the metrics
         calculated on the CPU. In one FFmpeg run with VMAF v1, PSNR, SSIM and
         XPSNR it went at their pace -- 14.6 fps for all six at 4K -- and the
@@ -791,7 +791,7 @@ class JobRun:
         def progress(cur, tot, fps):
             self.report_progress(task.backend_id, cur, tot, fps)
 
-        if task.backend_id in ("ffmpeg", GPU_VMAF):  # GPU_VMAF: run_vmaf with VMAF and NEG alone
+        if task.backend_id in ("ffmpeg", GPU_VMAF):  # GPU_VMAF: run_vmaf with VMAF, NEG and VMAF v1 alone
             task_options = replace(options)
             for key in options.requested_metrics():
                 task_options.set_metric_enabled(key, key in task.metric_keys)
@@ -970,12 +970,18 @@ class JobRun:
             result, gpu_vmaf = gpu_vmaf, None
         if result is not None:
             result = copy.copy(result)
-            if gpu_vmaf is not None:  # VMAF and NEG from their own run, beside FFmpeg's other metrics
+            if gpu_vmaf is not None:  # VMAF, NEG and VMAF v1 from their own run, beside FFmpeg's other metrics
                 combined = result.metric_results.copy()
                 for key in gpu_vmaf.metric_results:
                     combined.add(gpu_vmaf.metric_results.get(key))
                 result.merge_metric_results(combined)
-                result.model = gpu_vmaf.model  # FFmpeg's run calculated no VMAF: its model was ""
+                # Each VMAF's model from the half that calculated it. FFmpeg's
+                # half calculates VMAF with a custom model, the GPU's then VMAF
+                # v1 alone, with a model of "".
+                if gpu_vmaf.has_metric("vmaf"):
+                    result.model = gpu_vmaf.model
+                if gpu_vmaf.has_metric("vmaf_v1"):
+                    result.model_v1, result.model_choice_v1 = gpu_vmaf.model_v1, gpu_vmaf.model_choice_v1
         elif cached is not None:
             # FFmpeg's metrics are all saved: the saved run is the base, so
             # its crops, frame table and file info carry over. A shallow
