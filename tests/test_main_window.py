@@ -4208,6 +4208,58 @@ def _perceptual_row_with_saved_run(win, backend: str, *saved_metrics):
     return row
 
 
+def test_highlight_best_worst_colours_each_metrics_best_and_worst_score(qapp):
+    """A user's request, as FFMetrics colours its table: ticked, each
+    metric's best score is green and its worst red among the test videos --
+    by the metric's direction (Butteraugli's lowest is its best), only where
+    two or more have one, and not a score marked as the other
+    implementation's. Off by default, and kept in the settings."""
+    from tests.factories import fake_run_result
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+    from vmaf_app.ui import theme
+
+    vmaf_column, butteraugli_column = COL_VMAF, main_window_module.COL_BUTTERAUGLI
+    win = MainWindow()
+    assert not win.highlight_check.isChecked()
+    gpu = MetricProvenance("Vship/butteraugli", "Vship 5.1.2", "gpu", "butteraugli-vship-gpu-v1")
+    for name, vmaf, butteraugli in (("a.mp4", 90.0, 1.2), ("b.mp4", 95.0, 0.9), ("c.mp4", 85.0, 2.0)):
+        row = win._add_table_row(Path(name))
+        row_data = win._rows[row]
+        row_data.video_info = _fake_video_info(name)
+        result = fake_run_result(name, vmaf=vmaf)
+        result.merge_metric_results(MetricResultSet([FrameMetricResult("butteraugli", [0], [0.0], [butteraugli], gpu)]))
+        row_data.completed_run = CompletedRun(result, name)
+        row_data.metric_backends["butteraugli"] = "gpu"
+        win._set_row_metrics(row)
+
+    def marks(column):
+        names = {theme.color("best").name(): "best", theme.color("worst").name(): "worst"}
+        qapp.processEvents()  # the coalesced pass (_schedule_best_worst)
+        brushes = [win.distorted_table.item(row, column).background() for row in range(win.distorted_table.rowCount())]
+        return [names.get(brush.color().name()) if brush.color().alpha() else None for brush in brushes]
+
+    assert marks(vmaf_column) == [None, None, None]
+    win.highlight_check.setChecked(True)
+    assert Settings.load().highlight_best_worst
+    assert marks(vmaf_column) == [None, "best", "worst"]
+    assert marks(butteraugli_column) == [None, "best", "worst"]
+    # b.mp4 set to CPU: its GPU score shows "(GPU)", on another scale.
+    win._rows[1].metric_backends["butteraugli"] = "cpu"
+    win._set_row_metrics(1)
+    assert marks(butteraugli_column) == ["best", None, "worst"]
+    # The best video removed: the next is the best of the two left.
+    win.distorted_table.selectRow(1)
+    win._on_remove_distorted()
+    assert marks(vmaf_column) == ["best", "worst"]
+    # One video left: nothing to compare.
+    win.distorted_table.selectRow(1)
+    win._on_remove_distorted()
+    assert marks(vmaf_column) == [None]
+    win.highlight_check.setChecked(False)
+    assert not Settings.load().highlight_best_worst
+    win.close()
+
+
 def test_a_run_files_xpsnr_from_v1_4_is_not_kept_beside_new_metrics(qapp):
     """A run saved by v1.4 has XPSNR weighted by the encode. Opened and
     given another metric, the run kept it (only VMAF and the new metric were

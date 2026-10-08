@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Berekent de aangevinkte metrieken voor de referentie, verkleind naar een lagere resolutie en weer vergroot — geen apart testbestand nodig.",
   "Remove selected": "Selectie verwijderen",
   "Remove all": "Alles verwijderen",
+  "Highlight best/worst results": "Beste/slechtste resultaten markeren",
   "Options": "Opties",
   "Performance": "Prestaties",
   "Metric-specific settings": "Metriekinstellingen",

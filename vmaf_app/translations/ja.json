@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "参照動画を低い解像度に縮小してから元に拡大した場合の、選択した指標を計算します。別のテストファイルは不要です。",
   "Remove selected": "選択項目を削除",
   "Remove all": "すべて削除",
+  "Highlight best/worst results": "最良/最悪の結果を強調表示する",
   "Options": "オプション",
   "Performance": "パフォーマンス",
   "Metric-specific settings": "指標ごとの設定",

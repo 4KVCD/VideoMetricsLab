@@ -202,6 +202,12 @@ class MetricColumn:
 
 
 # Keep these physical indices and visual order exactly as the established UI.
+#: A metric cell's score, as compared by Highlight best/worst results
+#: (MainWindow._apply_best_worst): None where it shows none to compare.
+_SCORE_ROLE = Qt.UserRole
+#: A metric cell's background but for its best and worst scores.
+_NO_BACKGROUND = QColor(0, 0, 0, 0)
+
 _METRIC_COLUMNS = (
     # VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 after them.
     MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"), MetricColumn(COL_VMAF_V1, "vmaf_v1"),
@@ -720,6 +726,7 @@ class MainWindow(QMainWindow):
                 item = table.item(row, column)
                 if item is not None:
                     theme.recolour(item)
+        self._apply_best_worst()
         self.graph_panel.refresh_theme()
 
     def _close_when_idle(self) -> None:
@@ -1623,7 +1630,17 @@ class MainWindow(QMainWindow):
         dist_btn_row.addWidget(remove_dist_btn)
         dist_btn_row.addWidget(self.remove_all_btn)
         dist_btn_row.addStretch(1)
+        self.highlight_check = QCheckBox(tr("Highlight best/worst results"))
+        self.highlight_check.setChecked(self._settings.highlight_best_worst)
+        self.highlight_check.toggled.connect(self._on_highlight_toggled)
+        dist_btn_row.addWidget(self.highlight_check)
         files_layout.addLayout(dist_btn_row)
+        # One pass over the table for every change that lands in one go: a
+        # run's results, the cache's, rows removed.
+        self._best_worst_timer = QTimer(self)
+        self._best_worst_timer.setSingleShot(True)
+        self._best_worst_timer.timeout.connect(self._apply_best_worst)
+        self.distorted_table.model().rowsRemoved.connect(self._schedule_best_worst)
 
         # Frozen during a run, one control at a time rather than by disabling
         # the whole box: a disabled QGroupBox disables its children, and that
@@ -2334,6 +2351,9 @@ class MainWindow(QMainWindow):
             col = metric_column.column
             item = QTableWidgetItem("")
             item.setTextAlignment(Qt.AlignCenter)
+            # Coloured by _apply_best_worst alone from here on: set again with
+            # each score, a highlighted row lost its colours until the next pass.
+            item.setBackground(_NO_BACKGROUND)
             self.distorted_table.setItem(row, col, item)
 
         # New rows start with a copy of whatever the panel last showed, so
@@ -2389,7 +2409,7 @@ class MainWindow(QMainWindow):
                     item.setText("n/a")
                     item.setToolTip(unavailable)
                     item.setForeground(theme.color("faint"))
-                    item.setBackground(QColor(0, 0, 0, 0))
+                    item.setData(_SCORE_ROLE, None)
                     item.setFont(QFont())
                     continue
                 if value is None:
@@ -2407,7 +2427,7 @@ class MainWindow(QMainWindow):
                         tr("Not selected. Tick to calculate this metric.")
                     ) + (self._cvvdp_elsewhere_note(row_data) if metric_column.key == "cvvdp" else ""))
                     theme.foreground(item, theme.color("failed") if failed else None)
-                    item.setBackground(QColor(0, 0, 0, 0))
+                    item.setData(_SCORE_ROLE, None)
                     item.setFont(QFont())
                     continue
                 # Measured: the score replaces the tick box entirely. Passing
@@ -2417,12 +2437,15 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.CheckStateRole, None)
                 frame_metric = run.result.frame_metric(metric_column.key)
                 text = metric_column.metric.format_value(value)
-                if (frame_metric is not None and metric_column.key in row_data.metric_backends
-                        and not self._backend_matches(row_data, metric_column.key, frame_metric)):
+                other_scale = (frame_metric is not None and metric_column.key in row_data.metric_backends
+                               and not self._backend_matches(row_data, metric_column.key, frame_metric))
+                if other_scale:
                     # Visible without hovering: a score from the other
                     # implementation is on a different scale from the rest.
                     text += f" ({frame_metric.provenance.compute_backend.upper()})"
                 item.setText(text)
+                # Compared with the others' unless on another scale.
+                item.setData(_SCORE_ROLE, None if other_scale else float(value))
                 if metric_column.metric.kind is MetricKind.SEQUENCE:
                     item.setToolTip(self._cvvdp_note(row_data))
                 else:
@@ -2435,12 +2458,44 @@ class MainWindow(QMainWindow):
                 font.setBold(True)
                 item.setFont(font)
                 theme.foreground(item, None)
-                item.setBackground(QColor(0, 0, 0, 0))
         finally:
             self._syncing_table = False
+        self._schedule_best_worst()
         self._refresh_row_state(row)
         self._set_row_black_bars(row)
         self._set_row_scaling(row)
+
+    def _on_highlight_toggled(self, on: bool) -> None:
+        self._settings.highlight_best_worst = on
+        if error := self._settings.save():
+            self.status_label.setText(tr_message(error))
+        self._apply_best_worst()
+
+    def _schedule_best_worst(self, *_signal_arguments) -> None:
+        """_apply_best_worst when the window is next idle (_best_worst_timer)."""
+        self._best_worst_timer.start(0)
+
+    def _apply_best_worst(self) -> None:
+        """Colours each metric's best score green and its worst red, among
+        the test videos' (MetricDefinition.best_and_worst), when Highlight
+        best/worst results is ticked: only where two or more videos have a
+        score to compare. A score from the other implementation than its row
+        asks for, marked "(CPU)" or "(GPU)", is on another scale and is not
+        compared (_set_row_metrics). Unticked, no cell has a colour."""
+        table = self.distorted_table
+        on = self.highlight_check.isChecked()
+        brushes = {"best": theme.color("best"), "worst": theme.color("worst"), None: _NO_BACKGROUND}
+        syncing, self._syncing_table = self._syncing_table, True  # setData emits itemChanged, as a click's edit does
+        try:
+            for metric_column in _METRIC_COLUMNS:
+                items = [table.item(row, metric_column.column) for row in range(table.rowCount())]
+                items = [item for item in items if item is not None]
+                marks = (metric_column.metric.best_and_worst([item.data(_SCORE_ROLE) for item in items])
+                         if on else [None] * len(items))
+                for item, mark in zip(items, marks, strict=True):
+                    item.setData(Qt.BackgroundRole, brushes[mark])
+        finally:
+            self._syncing_table = syncing
 
     def _row_state(self, row_data: RowData) -> RowState:
         """How this row's analysis stands, in one phrase.

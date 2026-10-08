@@ -135,6 +135,10 @@ class Settings:
     remember_videos: bool = False
     remembered_reference: str = ""
     remembered_tests: list[str] = field(default_factory=list)
+    # Videos tab, Highlight best/worst results: each metric's best score
+    # green and its worst red, among the test videos. Off by default (Brian,
+    # from a user's request, as FFMetrics colours its table).
+    highlight_best_worst: bool = False
 
     # Frame Compare is an SDR QWidget surface. This controls how HDR frames
     # are converted for preview and is independent of the VMAF recipe.

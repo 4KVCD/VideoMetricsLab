@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "計算將參考影片縮小到較低解析度再放大回來後的所選指標——不需要另外的測試檔案。",
   "Remove selected": "移除選取項目",
   "Remove all": "全部移除",
+  "Highlight best/worst results": "醒目提示最佳/最差結果",
   "Options": "選項",
   "Performance": "效能",
   "Metric-specific settings": "指標專用設定",

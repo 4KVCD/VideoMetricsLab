@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "يحسب المقاييس المحددة عند تصغير المرجع إلى دقة أقل ثم تكبيره من جديد — دون حاجة إلى ملف اختبار منفصل.",
   "Remove selected": "إزالة المحدد",
   "Remove all": "إزالة الكل",
+  "Highlight best/worst results": "إبراز أفضل/أسوأ النتائج",
   "Options": "الخيارات",
   "Performance": "الأداء",
   "Metric-specific settings": "إعدادات المقاييس",

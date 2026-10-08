@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "A bejelölt metrikákat számolja a kisebb felbontásra kicsinyített, majd visszanagyított referenciára — külön tesztfájl nélkül.",
   "Remove selected": "Kijelöltek eltávolítása",
   "Remove all": "Összes eltávolítása",
+  "Highlight best/worst results": "Legjobb/legrosszabb eredmények kiemelése",
   "Options": "Beállítások",
   "Performance": "Teljesítmény",
   "Metric-specific settings": "Metrikák beállításai",

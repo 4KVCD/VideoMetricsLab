@@ -6,6 +6,7 @@ result adapters, and every UI surface without creating a dependency cycle.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -66,6 +67,24 @@ class MetricDefinition:
                 return "−∞"
             return "—"
         return self.value_format.format(float(value))
+
+    def best_and_worst(self, scores: Sequence[float | None]) -> list[str | None]:
+        """"best", "worst" or None for each of `scores` (one a video; None
+        where a video has none), by this metric's direction. Compared as
+        shown (format_value): scores that show the same number are equally
+        best or worst, and with fewer than two to compare, or all showing
+        the same, there is neither."""
+        shown = {index: self.format_value(score) for index, score in enumerate(scores)
+                 if score is not None and not np.isnan(score)}
+        if len(shown) < 2:
+            return [None] * len(scores)
+        order = sorted(shown, key=lambda index: scores[index])
+        best, worst = ((order[0], order[-1]) if self.direction is MetricDirection.LOWER_IS_BETTER
+                       else (order[-1], order[0]))
+        if shown[best] == shown[worst]:
+            return [None] * len(scores)
+        return ["best" if shown.get(index) == shown[best] else "worst" if shown.get(index) == shown[worst] else None
+                for index in range(len(scores))]
 
     def format_delta(self, value: float | None) -> str:
         if value is None or np.isnan(value):

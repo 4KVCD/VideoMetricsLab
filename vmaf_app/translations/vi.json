@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Tính các chỉ số đã đánh dấu cho video tham chiếu khi thu nhỏ xuống độ phân giải thấp hơn rồi phóng to lại — không cần tệp thử riêng.",
   "Remove selected": "Xóa mục đã chọn",
   "Remove all": "Xóa tất cả",
+  "Highlight best/worst results": "Làm nổi bật kết quả tốt nhất/kém nhất",
   "Options": "Tùy chọn",
   "Performance": "Hiệu năng",
   "Metric-specific settings": "Thiết lập chỉ số",

@@ -49,6 +49,10 @@ _COLOURS: dict[str, tuple[str, str]] = {
     # Behind the graph statistics' means, and the selected metric's.
     "mean_tint": ("#f4f6fa", "#262a31"),
     "mean_selected": ("#cfe0fa", "#27406a"),
+    # Behind a metric's best and worst score in the video table
+    # (Highlight best/worst results).
+    "best": ("#c8e6c9", "#1e4d2b"),
+    "worst": ("#ffcdd2", "#5c2328"),
 }
 
 

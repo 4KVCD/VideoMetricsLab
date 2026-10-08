@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Liczy wybrane metryki dla zmniejszenia referencji do niższej rozdzielczości i ponownego powiększenia — bez osobnego pliku testowego.",
   "Remove selected": "Usuń zaznaczone",
   "Remove all": "Usuń wszystkie",
+  "Highlight best/worst results": "Wyróżniaj najlepsze/najgorsze wyniki",
   "Options": "Opcje",
   "Performance": "Wydajność",
   "Metric-specific settings": "Ustawienia metryk",

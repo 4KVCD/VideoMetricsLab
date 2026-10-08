@@ -38,6 +38,22 @@ def test_registry_has_the_established_logical_order_and_metadata():
         METRIC_BY_KEY["new"] = metric_definition("vmaf")  # type: ignore[index]
 
 
+def test_a_metrics_best_and_worst_scores_go_by_its_direction_and_by_what_is_shown():
+    """Highlight best/worst results' rule."""
+    vmaf, butteraugli = metric_definition("vmaf"), metric_definition("butteraugli")
+    assert vmaf.best_and_worst([90.0, 95.0, None, 85.0]) == [None, "best", None, "worst"]
+    assert butteraugli.best_and_worst([1.2, 0.9, 2.0]) == [None, "best", "worst"]  # lower is better
+    # Scores that show the same number are alike: two bests here, and
+    # neither where every score shows the same.
+    assert vmaf.best_and_worst([95.001, 94.999, 80.0]) == ["best", "best", "worst"]
+    assert vmaf.best_and_worst([90.001, 89.999]) == [None, None]
+    # Fewer than two scores to compare: neither.
+    assert vmaf.best_and_worst([90.0, None, float("nan")]) == [None, None, None]
+    assert vmaf.best_and_worst([]) == []
+    # PSNR of a video against itself is infinite: the best.
+    assert metric_definition("psnr").best_and_worst([float("inf"), 40.0]) == ["best", "worst"]
+
+
 def test_registry_allows_metrics_without_an_ffmpeg_options_binding():
     future = MetricDefinition(
         key="future_sequence", label="Future", short_label="Future",

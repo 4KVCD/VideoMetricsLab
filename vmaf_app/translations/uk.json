@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Обчислює позначені метрики для еталона, зменшеного до нижчої роздільності й знову збільшеного — окремий тестовий файл не потрібен.",
   "Remove selected": "Прибрати вибрані",
   "Remove all": "Прибрати всі",
+  "Highlight best/worst results": "Виділяти найкращі/найгірші результати",
   "Options": "Параметри",
   "Performance": "Продуктивність",
   "Metric-specific settings": "Параметри метрик",

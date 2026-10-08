@@ -18,6 +18,9 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
    to show its detailed statistics. Export a graph PNG or CSV as needed.
 
+**Highlight best/worst results**, under the video table, colours each metric's
+best score green and its worst red among the test videos that have one.
+
 SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship. Settings
 > GPU metrics > GPU backend chooses Vship's build: Auto (the default) uses CUDA
 on NVIDIA, HIP on AMD and Vulkan on other GPUs such as Intel's; Vulkan can also

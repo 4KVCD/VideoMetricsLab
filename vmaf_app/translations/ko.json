@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "참조 영상을 낮은 해상도로 줄였다가 다시 키울 때의 선택한 지표를 계산합니다. 별도의 테스트 파일이 필요 없습니다.",
   "Remove selected": "선택 항목 제거",
   "Remove all": "모두 제거",
+  "Highlight best/worst results": "최고/최악 결과 강조 표시",
   "Options": "옵션",
   "Performance": "성능",
   "Metric-specific settings": "지표별 설정",

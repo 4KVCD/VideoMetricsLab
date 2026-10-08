@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Referansın daha düşük bir çözünürlüğe küçültülüp yeniden büyütülmesi için seçili metrikleri hesaplar; ayrı bir test dosyası gerekmez.",
   "Remove selected": "Seçilenleri kaldır",
   "Remove all": "Tümünü kaldır",
+  "Highlight best/worst results": "En iyi/en kötü sonuçları vurgula",
   "Options": "Seçenekler",
   "Performance": "Performans",
   "Metric-specific settings": "Metriğe özel ayarlar",

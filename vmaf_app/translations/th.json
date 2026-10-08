@@ -136,6 +136,7 @@
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "คำนวณเมตริกที่ทำเครื่องหมาย สำหรับวิดีโออ้างอิงที่ย่อลงเป็นความละเอียดต่ำกว่าแล้วขยายกลับ — ไม่ต้องใช้ไฟล์ทดสอบแยก",
   "Remove selected": "นำที่เลือกออก",
   "Remove all": "นำออกทั้งหมด",
+  "Highlight best/worst results": "ไฮไลต์ผลลัพธ์ที่ดีที่สุด/แย่ที่สุด",
   "Options": "ตัวเลือก",
   "Performance": "ประสิทธิภาพ",
   "Metric-specific settings": "การตั้งค่าเมตริก",
