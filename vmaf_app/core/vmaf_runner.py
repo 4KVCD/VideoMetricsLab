@@ -607,10 +607,11 @@ def _run_ffmpeg_pair(
                for index in range(len(commands))]
     for thread in threads:
         thread.start()
-    while any(thread.is_alive() for thread in threads):
-        if cancel_event is not None and cancel_event.is_set():
-            stop.set()
-        threads[0].join(timeout=0.1)
+    for thread in threads:  # each in turn: a join on one that has ended returns at once
+        while thread.is_alive():
+            if cancel_event is not None and cancel_event.is_set():
+                stop.set()
+            thread.join(timeout=0.1)
     if cancel_event is not None and cancel_event.is_set():
         raise Cancelled("Cancelled by user")
     failed = next((result for result in results if result is not None and result.returncode != 0), None)
