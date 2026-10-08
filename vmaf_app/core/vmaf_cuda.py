@@ -77,9 +77,9 @@ BUILD_RECORD = LIBRARY_PATH.with_name("libvmaf-fast.json")
 
 
 def _bundled_version(record: Path) -> str:
-    """The libvmaf-fast version `record` names -- 3.2.0-fast.1 for that
-    release, 3.2.0-fast.1-146-ga1af96ff for a local build 146 commits after
-    it -- or "unknown" without one."""
+    """The libvmaf-fast version `record` names -- v1 for release v1,
+    v1-2-g211f80e0 for a local build 2 commits after it -- or "unknown"
+    without one."""
     try:
         return str(json.loads(record.read_text(encoding="utf-8"))["version"])
     except (OSError, ValueError, KeyError, TypeError):

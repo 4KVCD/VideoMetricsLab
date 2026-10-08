@@ -14,9 +14,15 @@
 # libvmaf-fast, published first (docs/RELEASING.md); while the app is
 # developed, build_libvmaf_fast_local.ps1 builds the fork's latest commit
 # into the same place instead.
+#
+# Release v1 is the tag libvmaf-fast-v1, its archive
+# libvmaf-fast-v1-windows-x64.zip (the fork's fast/README.md). The release
+# before it was named after libvmaf: 3.2.0-fast.1, tag v3.2.0-fast.1, its
+# archive named the same way (-Version 3.2.0-fast.1 -Sha256 3ad8ab2b0fd26f0c
+# 89389d55e086f4cad1d0e059d63845ecf88e5aaed6c38f9c).
 param(
-    [string]$Version = '3.2.0-fast.1',
-    [string]$Sha256 = '3ad8ab2b0fd26f0c89389d55e086f4cad1d0e059d63845ecf88e5aaed6c38f9c',
+    [string]$Version = 'v1',
+    [string]$Sha256 = 'a57fda1ca60870c52cba31ef75722311b7a8fc1fd13070b01aeb9340c6cdfc0f',
     [string]$Archive = ''  # a copy of the release archive on disk, instead of downloading it
 )
 $ErrorActionPreference = 'Stop'
@@ -29,7 +35,8 @@ New-Item -ItemType Directory -Path $work | Out-Null
 try {
     if (-not $Archive) {
         $Archive = Join-Path $work "$name.zip"
-        $url = "https://github.com/4KVCD/libvmaf-fast/releases/download/v$Version/$name.zip"
+        $tag = if ($Version -match '^\d+\.\d+\.\d+-fast\.') { "v$Version" } else { "libvmaf-fast-$Version" }
+        $url = "https://github.com/4KVCD/libvmaf-fast/releases/download/$tag/$name.zip"
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $url -OutFile $Archive -UseBasicParsing
     }

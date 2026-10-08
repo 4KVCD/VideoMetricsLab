@@ -1,5 +1,5 @@
 {
-  "version": "3.2.0-fast.1-147-g8e6ebe58",
-  "commit": "8e6ebe58c087c5048c05c0fe613d89badf44aefb",
-  "release": false
+  "version": "v1",
+  "commit": "867efb83d99a636eed7b17d8a8b1121780cf33c1",
+  "release": true
 }

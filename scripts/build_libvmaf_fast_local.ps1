@@ -5,8 +5,8 @@
 #   libvmaf/libvmaf.dll          libvmaf with CUDA
 #   vmaf_vulkan/vmaf_vulkan.dll  VMAF's features with Vulkan
 # each with its licences, and libvmaf/libvmaf-fast.json saying what they were
-# built from (a version such as 3.2.0-fast.1-146-ga1af96ff: 146 commits after
-# that release, at a1af96ff).
+# built from (a version such as v1-2-g211f80e0: 2 commits after release v1,
+# at 211f80e0).
 #
 # This is how the app is developed: the fork's work is used here before it is
 # released. A release of the app takes a release of libvmaf-fast instead:
@@ -46,10 +46,11 @@ $commit = git -C $Fork rev-parse --verify --quiet "$revision^{commit}"
 if ($LASTEXITCODE -ne 0 -or -not $commit) { throw "$Fork has no commit $revision" }
 $commit = "$commit".Trim()
 # The release it follows and how far; --long, so that a build of the
-# release's own commit is not taken for the release.
-$described = git -C $Fork describe --tags --long --match 'v*-fast.*' $commit
+# release's own commit is not taken for the release. Release v1 is tagged
+# libvmaf-fast-v1; the release before it, 3.2.0-fast.1, v3.2.0-fast.1.
+$described = git -C $Fork describe --tags --long --match 'libvmaf-fast-v*' --match 'v*-fast.*' $commit
 if ($LASTEXITCODE -ne 0) { throw "$($commit.Substring(0, 8)) follows no libvmaf-fast release tag" }
-$version = "$described".Trim() -replace '^v', ''
+$version = "$described".Trim() -replace '^libvmaf-fast-', '' -replace '^v(?=\d+\.\d+\.\d+-fast\.)', ''
 
 $work = Join-Path $env:TEMP 'libvmaf-fast-local'
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }

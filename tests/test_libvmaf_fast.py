@@ -30,9 +30,10 @@ def test_the_bundled_build_is_the_one_scores_are_recorded_with():
     if record["release"]:
         assert record["version"] == re.search(r"\[string\]\$Version = '([^']+)'", script).group(1)
     else:
-        # git describe of the commit: the release it follows, how far, which commit.
+        # git describe of the commit: the release it follows (v1 and on, or
+        # the one before them, 3.2.0-fast.1), how far, which commit.
         follows, _, commit = re.fullmatch(r"(.+)-(\d+)-g([0-9a-f]+)", record["version"]).groups()
-        assert re.fullmatch(r"\d+\.\d+\.\d+-fast\.\d+", follows)
+        assert re.fullmatch(r"v\d+|\d+\.\d+\.\d+-fast\.\d+", follows)
         assert record["commit"].startswith(commit)
 
 
