@@ -56,6 +56,13 @@ class CropBox:
         return self.w == frame_w and self.h == frame_h and self.x == 0 and self.y == 0
 
 
+#: FFmpeg's demuxers of bare elementary streams, which carry no timestamps.
+RAW_STREAM_FORMATS = frozenset({
+    "h264", "hevc", "vvc", "evc", "av1", "obu", "mpegvideo", "m4v", "h263", "vc1", "dirac",
+    "cavsvideo", "avs2", "avs3", "mjpeg",
+})
+
+
 @dataclass(slots=True)
 class VideoInfo:
     path: Path
@@ -84,12 +91,23 @@ class VideoInfo:
     color_transfer: str = ""
     color_primaries: str = ""
     chroma_location: str = ""
+    # ffprobe's format_name: the container, or the raw stream's demuxer
+    # ("hevc", "h264"...). Not saved with results: a raw stream is refused
+    # before it has any (is_raw_stream).
+    format_name: str = ""
 
     @property
     def estimated_frame_count(self) -> int:
         if self.nb_frames > 0:
             return self.nb_frames
         return max(1, round(self.duration * self.fps))
+
+    @property
+    def is_raw_stream(self) -> bool:
+        """A bare elementary stream (a .hevc or .264 file), not a container:
+        it has no timestamps, so FFmpeg times its frames at 25 a second
+        unless told otherwise, and its frame rate cannot be known."""
+        return self.format_name in RAW_STREAM_FORMATS
 
     @property
     def is_variable_frame_rate(self) -> bool:

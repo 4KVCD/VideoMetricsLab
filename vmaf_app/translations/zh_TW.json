@@ -562,6 +562,7 @@
   "Vship does not support the {primaries} color primaries.": "Vship 不支援 {primaries} 原色。",
   "Vship does not support the {range} range tag.": "Vship 不支援 {range} 範圍標記。",
   "Vship does not support {siting} chroma siting.": "Vship 不支援 {siting} 色度位置。",
+  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} 是沒有時間戳記的原始 {codec} 串流，因此無法得知其影格率。請先依其影格率將它放入容器，例如 mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（使用影片本身的影格率）。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚無法安全地支援可變影格速率的影片。比較前請將兩部影片轉換成相同的固定影格速率。",
   "Frame rates do not match ({source} vs {test} fps).": "影格速率不一致（{source} 與 {test} fps）。",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "長度不一致（{source} 與 {test} 秒）。如果只比較兩者共同的開頭部分，請在兩個檔案的範圍內設定長度限制。",

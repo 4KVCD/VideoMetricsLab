@@ -102,6 +102,34 @@ def test_a_core_message_is_translated_by_its_shape_line_by_line(catalog):
         "Unknown words\nKeine GPU gefunden."
 
 
+def test_no_message_template_names_a_placeholder_twice():
+    """Its pattern could not be compiled -- one named group per name -- and
+    with it none of the core messages would be translated."""
+    import re
+
+    for template in i18n.MESSAGE_TEMPLATES:
+        names = re.findall(r"\{(\w+)", template)
+        assert len(names) == len(set(names)), template
+
+
+def test_a_raw_streams_message_is_translated_with_its_names(catalog):
+    """The German catalog's own text, with the file and codec put in."""
+    from pathlib import Path
+
+    from vmaf_app.core.geometry import pair_problem
+    from vmaf_app.core.models import VideoInfo
+
+    shipped = Path(i18n.__file__).parent / "translations" / "de.json"  # the fixture moved TRANSLATIONS_DIR
+    german = json.loads(shipped.read_text(encoding="utf-8"))["strings"]
+    template = next(key for key in i18n.MESSAGE_TEMPLATES if "is a raw {codec} stream" in key)
+    catalog({template: german[template]})
+    raw = VideoInfo(Path("a b.hevc"), 64, 48, 25.0, 0.0, 0, "hevc", nominal_fps=1_200_000.0, average_fps=25.0,
+                    format_name="hevc")  # as ffprobe gives a raw stream's rates
+    other = VideoInfo(Path("v.mkv"), 64, 48, 25.0, 1.0, 25, "hevc")
+    assert i18n.tr_message(pair_problem(raw, other, 0.0)).startswith(
+        "a b.hevc ist ein roher HEVC-Stream ohne Zeitstempel")
+
+
 def test_every_catalog_is_complete_and_keeps_the_placeholders():
     """Each shipped language has every text the window shows, with the same
     {placeholders} (a missing one would raise when shown) and as many

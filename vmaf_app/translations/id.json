@@ -562,6 +562,7 @@
   "Vship does not support the {primaries} color primaries.": "Vship tidak mendukung warna primer {primaries}.",
   "Vship does not support the {range} range tag.": "Vship tidak mendukung tag rentang {range}.",
   "Vship does not support {siting} chroma siting.": "Vship tidak mendukung posisi kroma {siting}.",
+  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} adalah stream {codec} mentah tanpa stempel waktu, sehingga frame rate-nya tidak diketahui. Masukkan dulu ke dalam kontainer dengan frame rate-nya, mis. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), dengan frame rate video itu sendiri.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video dengan frame rate variabel belum didukung dengan aman. Konversikan kedua video ke frame rate konstan yang sama sebelum membandingkan.",
   "Frame rates do not match ({source} vs {test} fps).": "Frame rate tidak cocok ({source} vs {test} fps).",
   "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Durasi tidak cocok ({source} vs {test} dtk). Atur batas durasi di dalam kedua file jika Anda hanya membandingkan bagian awal yang sama.",

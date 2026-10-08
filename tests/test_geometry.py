@@ -55,6 +55,32 @@ def test_two_videos_are_compared_only_on_timelines_that_agree(source, test, limi
     assert (found is None) if problem is None else found.startswith(problem)
 
 
+@pytest.mark.parametrize("nominal", [1_200_000.0, 120.0])  # no timing in the stream, or its own rate
+@pytest.mark.parametrize("side", ["source", "test"])
+def test_a_raw_stream_is_refused_for_what_it_is_not_as_variable_frame_rate(nominal, side):
+    """A raw HEVC stream, which ffprobe gives FFmpeg's 25 fps as an average,
+    was refused as variable-frame-rate video, which sent people converting
+    frame rates; it needs a container that gives it its rate."""
+    raw = VideoInfo(Path("HoneyBee.hevc"), 3840, 2160, 25.0, 0.0, 0, "hevc", nominal_fps=nominal,
+                    average_fps=25.0, format_name="hevc")
+    pair = (raw, _video()) if side == "source" else (_video(), raw)
+    assert pair_problem(*pair, 0.0) == (
+        "HoneyBee.hevc is a raw HEVC stream with no timestamps, so its frame rate is unknown. Put it in a "
+        "container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> "
+        "(MKVToolNix), with the video's own frame rate.")
+    raw.codec_name = "h264"
+    assert " raw H.264 stream " in pair_problem(*pair, 0.0)
+
+
+def test_a_raw_stream_that_was_compared_still_is():
+    """A raw stream whose rates agree (MPEG-2's are in its headers) and match
+    the other video's was compared before; only the message of a refused one
+    changed."""
+    raw = VideoInfo(Path("a.m2v"), 1920, 1080, 24.0, 0.0, 0, "mpeg2video", nominal_fps=24.0, average_fps=24.0,
+                    format_name="mpegvideo")
+    assert pair_problem(raw, _video(), 0.0) is None
+
+
 def test_the_cpu_tools_refuse_durations_that_do_not_match_as_the_window_does():
     """Their own check had no rule for it."""
     from vmaf_app.core.comparison_recipe import ComparisonRecipe

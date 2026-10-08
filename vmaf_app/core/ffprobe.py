@@ -233,4 +233,5 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         color_transfer=v.get("color_transfer", "") or "",
         color_primaries=v.get("color_primaries", "") or "",
         chroma_location=v.get("chroma_location", "") or "",
+        format_name=fmt.get("format_name", "") or "",
     )

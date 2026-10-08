@@ -252,6 +252,9 @@ MESSAGE_TEMPLATES: tuple[str, ...] = (
     "Vship does not support the {primaries} color primaries.",
     "Vship does not support the {range} range tag.",
     "Vship does not support {siting} chroma siting.",
+    "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with "
+    "its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the "
+    "video's own frame rate.",
     "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate "
     "before comparing them.",
     "Frame rates do not match ({source} vs {test} fps).",
