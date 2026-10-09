@@ -58,7 +58,7 @@ def test_the_presenters_colours_and_the_soundtracks_clock(subtests, monkeypatch,
             sink_ms[0] = 1000 + tick * 4 // 10 * 10
             frames.append(round(track.poll() * 120 / 1000))
             assert track.reading_ms == sink_ms[0]  # what falling behind is judged by: not carried
-        assert sorted(set(frames)) == list(range(120, 240))
+        assert sorted(set(frames)) == list(range(120, 241))  # to 1996 ms: frame 240 is due at 1995.8
     with subtests.test("never further than a step, and never back while playing"):
         now[0] += 1.0  # the sink's clock stopped a second
         stopped = track.poll()
@@ -73,3 +73,14 @@ def test_the_presenters_colours_and_the_soundtracks_clock(subtests, monkeypatch,
         assert track.poll() == sink_ms[0]
         now[0] += 0.004
         assert track.poll() == pytest.approx(sink_ms[0] + 4)
+    with subtests.test("polled once a frame, as the view's ticks come when a frame is due: each frame once"):
+        # Carried on from when a poll saw it step, it fell up to a poll
+        # behind, then caught up at once: a frame twice, then two at once.
+        track.set_playing(False)
+        track.set_playing(True)
+        start_s, start_ms, frames = now[0], sink_ms[0], []
+        for tick in range(120):
+            now[0] = start_s + (tick + 0.1) / 120
+            sink_ms[0] = start_ms + int((now[0] - start_s) * 1000) // 10 * 10
+            frames.append(round(track.poll() * 120 / 1000))
+        assert frames == list(range(frames[0], frames[0] + 120))

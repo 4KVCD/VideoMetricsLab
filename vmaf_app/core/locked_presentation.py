@@ -267,11 +267,12 @@ class SingleSoundtrack:
         self.failed = None
         self.seeking = False
         self.playing = False
-        #: The clock's last reading (ms) and when it changed (time.monotonic),
-        #: the smallest step it has moved in, and the last value given (poll).
-        self._clock = (None, 0.0)
+        #: The clock's last reading (ms), the smallest step it has moved in,
+        #: and the last value given while playing, with when (ms,
+        #: time.monotonic) (poll).
+        self._last_reading = None
         self._step_ms = 10.0
-        self._given_ms = None
+        self._given = None
         #: The clock's own last reading (ms, from the video's first frame),
         #: not carried on: what falling behind is judged by (LockedNativePool).
         self.reading_ms = None
@@ -294,21 +295,27 @@ class SingleSoundtrack:
             return None
         # Its sink's clock moves in steps of its buffer, 10 ms here, where a
         # frame of 120 fps video lasts 8.3 ms: one frame in five was skipped.
-        # Between steps it is carried on by the time passed, never further
-        # than a step, and never back while playing.
+        # Between steps it is carried on from the value given last by the
+        # time passed -- held between the reading and a step past it, and
+        # never back while playing. Carried on from when a poll saw it step,
+        # polled a frame apart, it fell up to a frame behind and caught up
+        # in one jump: two frames at once.
         position_ms, now = position / self.gst.MSECOND, time.monotonic()
         self.reading_ms = position_ms - self.offset_ms
-        last_ms, changed_at = self._clock
-        if position_ms != last_ms:
-            if self.playing and last_ms is not None and 5 <= position_ms - last_ms < self._step_ms:
-                self._step_ms = position_ms - last_ms
-            self._clock = (position_ms, now)
-        elif self.playing:
-            position_ms += min((now - changed_at) * 1000, self._step_ms)
-        if self.playing and self._given_ms is not None:
-            position_ms = max(position_ms, self._given_ms)
-        self._given_ms = position_ms if self.playing else None
-        return position_ms - self.offset_ms
+        last = self._last_reading
+        if self.playing and last is not None and 5 <= position_ms - last < self._step_ms:
+            self._step_ms = position_ms - last
+        self._last_reading = position_ms
+        if not self.playing:
+            self._given = None
+            return position_ms - self.offset_ms
+        given = position_ms
+        if self._given is not None:
+            given_ms, given_at = self._given
+            carried = given_ms + (now - given_at) * 1000
+            given = max(given_ms, min(max(carried, position_ms), position_ms + self._step_ms))
+        self._given = (given, now)
+        return given - self.offset_ms
 
     def set_offset(self, offset_ms, position):
         """Counts from the source video's first frame, `offset_ms` into the
@@ -322,7 +329,7 @@ class SingleSoundtrack:
         """Made by its Seeker, on a thread of its own: ready again at the
         preroll that follows (poll)."""
         self.ready, self.seeking = False, True
-        self._clock, self._given_ms = (None, 0.0), None
+        self._last_reading, self._given = None, None
 
         def refused():
             self.failed = "Could not seek the soundtrack"
@@ -331,9 +338,9 @@ class SingleSoundtrack:
     def set_playing(self, playing):
         if not self.failed:
             if bool(playing) != self.playing:
-                # Carried on from now: from its last change, before a pause,
-                # it went a whole step on at once.
-                self._clock, self._given_ms = (None, 0.0), None
+                # Carried on from now: from the value it gave before a
+                # pause, it went a whole step on at once.
+                self._last_reading, self._given = None, None
             self.playing = bool(playing)
             self.pipeline.set_state(self.gst.State.PLAYING if playing else self.gst.State.PAUSED)
 

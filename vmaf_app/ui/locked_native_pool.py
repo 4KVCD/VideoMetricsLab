@@ -1,6 +1,7 @@
 """Pair GPU samples before a single renderer; never compare independent sinks."""
 from __future__ import annotations
 
+import math
 import time
 
 from PySide6.QtCore import Qt, QThread
@@ -51,6 +52,9 @@ class LockedNativePool:
         self.buffering = True
         #: Since when the frames shown have been behind the soundtrack (time.monotonic), or None.
         self.late_since = None
+        #: The soundtrack clock's value the last poll chose by (ms), None
+        #: without one, and when it was read (time.monotonic): next_tick_ms.
+        self._clock_ms, self._clock_at = None, 0.0
         self.showing_source = False
         self.entries, self.desired, self.frames, self.eos = {}, {}, {}, set()
         #: Each video's shading (GstComparePipeline.shading), kept when its
@@ -210,10 +214,12 @@ class LockedNativePool:
         if not self.audio.ready and not self.audio.failed and time.monotonic() > self.audio_deadline:
             self.audio.failed = "Audio preroll timed out"
             self.audio.set_playing(False)
-        target = self.frame
+        target, clock_ms = self.frame, None
         if self.playing and not self.buffering:
-            target = round(audio_ms * self.fps / 1000) if self.audio_running and audio_ms is not None else (
-                self.anchor_frame + int((time.monotonic() - self.anchor) * self.fps))
+            if self.audio_running and audio_ms is not None:
+                target, clock_ms = round(audio_ms * self.fps / 1000), audio_ms
+            else:
+                target = self.anchor_frame + int((time.monotonic() - self.anchor) * self.fps)
         # The newest frame both videos shown have: the queues' floor below.
         reach = min(max(self.frames.get(key, ()), default=self.frame)
                     for key in (self.source_key, ("distorted", self.selected)))
@@ -271,7 +277,8 @@ class LockedNativePool:
         if self.playing and not self.buffering and self.audio_running and time.monotonic() - polled_at > 0.002:
             audio_ms = self.audio.poll()
             if audio_ms is not None:
-                target = round(audio_ms * self.fps / 1000)
+                target, clock_ms, polled_at = round(audio_ms * self.fps / 1000), audio_ms, time.monotonic()
+        self._clock_ms, self._clock_at = clock_ms, polled_at
         matched = self._choose_pair(target)
         # Falling behind is judged by the soundtrack clock's own reading, not
         # the value carried on between its steps, which picks the frame.
@@ -306,6 +313,21 @@ class LockedNativePool:
             self.ended = True
             self.audio.set_playing(False)
         return self.position
+
+    def next_tick_ms(self) -> int | None:
+        """The next tick while playing, in ms: 1 ms after the frame after
+        the one shown is due -- chosen half a frame before its time, as poll
+        rounds the clock. Ticked every half frame instead, most ticks found
+        nothing to do: 250 a second at 120 fps, 100 at 24. None while that
+        frame is due and not decoded yet."""
+        frame_ms = 1000 / self.fps
+        if self._clock_ms is not None:
+            wait = (self.frame + 0.5) * frame_ms - self._clock_ms - (time.monotonic() - self._clock_at) * 1000
+        else:
+            wait = (self.anchor + (self.frame + 1 - self.anchor_frame) / self.fps - time.monotonic()) * 1000
+        if wait <= 0:
+            return None
+        return min(math.ceil(wait) + 1, math.ceil(frame_ms))
 
     def _pull_sample(self, key, sink):
         return sink.emit("try-pull-sample", 0)

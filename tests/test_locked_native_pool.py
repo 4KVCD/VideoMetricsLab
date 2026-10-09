@@ -12,6 +12,7 @@ def pool():
     instance.pair = None
     instance.pair_index = None
     instance.late_since = None
+    instance._clock_ms, instance._clock_at = None, 0.0
     instance.entries = {}
     instance.shadings = {}
     instance.showing_source = False
@@ -113,9 +114,15 @@ def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume(monkeypatch
     instance.poll()  # caught up, the sound never stopped
     assert calls == [] and not instance.buffering
     assert instance.pair == ("s13", "d13")
+    # Frame 14 is chosen from 540 ms on the clock (13.5 frames of 40 ms):
+    # the next tick 1 ms past it, not every half frame.
+    assert instance.next_tick_ms() == 21
+    now[0] += 0.015
+    assert instance.next_tick_ms() == 6
     audio.position = 640  # frame 16 due; the decoders stalled at 13
     instance.poll()
     assert calls == []
+    assert instance.next_tick_ms() is None  # due, not decoded: the view's busy pace
     now[0] += 0.25
     instance.poll()
     assert calls == [("playing", False), ("seek", 520)]

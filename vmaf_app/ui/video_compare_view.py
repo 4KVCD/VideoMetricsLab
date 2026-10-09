@@ -278,7 +278,9 @@ class VideoCompareView(QWidget):
         self._last_status = ""
         self._decoded_videos = DEFAULT_COMPARE_DECODED_VIDEOS
         self._pool_timer = QTimer(self)
-        # Precise: while playing it ticks every half frame (_busy_tick_ms).
+        # Precise: while playing it ticks when each frame is due (native
+        # playback: LockedNativePool.next_tick_ms) or every half frame
+        # (_busy_tick_ms).
         self._pool_timer.setTimerType(Qt.PreciseTimer)
         self._pool_timer.setInterval(_BUSY_TICK_MS)
         self._pool_timer.timeout.connect(self._tick)
@@ -807,7 +809,14 @@ class VideoCompareView(QWidget):
                     self.set_playing(False)
                 self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(pool.entries)}/{self.decoder_limit} streams · {pool.description}")
                 self._check_end()
-                self._pace(not self._wanted_playing and pool.pair is not None and pool.pair_index == pool.selected)
+                if self._wanted_playing and not pool.buffering and not pool.ended:
+                    # The next tick when the next frame is due, if ticking:
+                    # never started here, off screen (hideEvent).
+                    if self._pool_timer.isActive():
+                        due = pool.next_tick_ms()
+                        self._pool_timer.start(due if due is not None else self._busy_tick_ms())
+                else:
+                    self._pace(not self._wanted_playing and pool.pair is not None and pool.pair_index == pool.selected)
             except Exception as exc:
                 self._native_pool.stop()
                 self._native_pool = None
