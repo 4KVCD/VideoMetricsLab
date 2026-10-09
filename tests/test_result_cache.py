@@ -80,6 +80,10 @@ def test_store_then_load_cached_round_trips(tmp_path):
     loaded_result, label = loaded
     assert label == "my-run"
     assert len(loaded_result.frames) == len(result.frames)
+    # What Settings says of it: one saved comparison, all its files' bytes.
+    files = [path for path in (tmp_path / "v2").rglob("*") if path.is_file()]
+    assert len(files) > 1
+    assert result_cache.cache_summary(tmp_path) == (1, sum(path.stat().st_size for path in files))
 
 
 def test_cache_keys_differ_between_vmaf_model_choices(tmp_path):

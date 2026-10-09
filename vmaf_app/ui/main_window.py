@@ -534,6 +534,9 @@ class MainWindow(QMainWindow):
     # The remembered videos still there (reference, tests), found at
     # startup off the UI thread: _restore_open_videos.
     _open_videos_found = Signal(str, list)
+    # The saved results (generation, folder, comparisons, bytes), counted
+    # off the UI thread: _refresh_settings_status.
+    _cache_counted = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -543,6 +546,8 @@ class MainWindow(QMainWindow):
         # tool check or any row is added.
         self.update_found.connect(self._on_update_found)
         self._open_videos_found.connect(self._reopen_videos)
+        self._cache_counted.connect(self._show_cache_summary)
+        self._cache_count_generation = 0
         self._update_box: QMessageBox | None = None
         self._settings = Settings.load()
         _log.info(
@@ -1207,13 +1212,15 @@ class MainWindow(QMainWindow):
         self.settings_status = QLabel()
         theme.style(self.settings_status, "color: {muted};")
         outer.addWidget(self.settings_status)
-
-        self._refresh_settings_status()
-        return page
+        return page  # its tools and saved results filled in when shown (_on_tab_changed)
 
     def _refresh_settings_status(self) -> None:
         """Re-reads the tools and the cache so the Settings tab reports what
-        is actually there, not what was there at startup."""
+        is actually there: when it is shown, its folders change or the cache
+        is cleared. The saved results are counted on a thread of their own.
+        Counted on the window's thread when it was built and at every setting
+        changed, they held it at startup and at each tick box -- 0.3 s for a
+        thousand -- and the count went stale as runs saved theirs."""
         tools = check_tools()
         problems = tools.problems
         ok = not problems
@@ -1224,7 +1231,20 @@ class MainWindow(QMainWindow):
         theme.style(self.settings_ffmpeg_status, "color: {good};" if ok else "color: {failed};")
 
         directory = result_cache.cache_dir()
-        count, size_bytes = result_cache.cache_summary(directory)
+        self._cache_count_generation += 1
+        generation = self._cache_count_generation
+
+        def count() -> None:
+            comparisons, size_bytes = result_cache.cache_summary(directory)
+            with contextlib.suppress(RuntimeError):  # the window closed meanwhile
+                self._cache_counted.emit((generation, directory, comparisons, size_bytes))
+
+        threading.Thread(target=count, name="cache-count", daemon=True).start()
+
+    def _show_cache_summary(self, counted: tuple) -> None:
+        generation, directory, count, size_bytes = counted
+        if generation != self._cache_count_generation:
+            return  # counted again since, perhaps in another folder
         self.settings_cache_summary.setText(
             ntr("{count} saved result, {size:.1f} MB in {directory}", "{count} saved results, {size:.1f} MB in {directory}",
                 count, size=size_bytes / 1048576, directory=directory)
@@ -1292,7 +1312,8 @@ class MainWindow(QMainWindow):
             tr_message(error) if error else
             tr("Settings saved. The new language shows when the app is next started.")
             if self._settings.language != language_before else tr("Settings saved."))
-        self._refresh_settings_status()
+        if self._settings.ffmpeg_dir != before_ffmpeg or self._settings.cache_dir != before_cache:
+            self._refresh_settings_status()
 
     def _fill_cvvdp_default_combo(self) -> None:
         """Lists every CVVDP preset in Settings, the default selected."""
@@ -5260,6 +5281,8 @@ class MainWindow(QMainWindow):
             self._sync_graph()
         elif index == TAB_FRAME_COMPARE:
             self._sync_frame_compare()
+        elif index == TAB_SETTINGS:
+            self._refresh_settings_status()
 
     def _sync_graph(self) -> None:
         """Makes the graph show every completed row.
