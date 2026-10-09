@@ -1,14 +1,17 @@
 # VideoMetricsLab
 
-Calculate VMAF and VMAF NEG on NVIDIA GPUs, and SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
+Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-Coming in v1.5: Highly optimized VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR, SSIM and XPSNR up to 6× faster with far less memory, and CLI support. 
+New in v2.0: VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR, SSIM and XPSNR up to **11x** faster with far less memory, a command line, and 120 fps 4K HDR playback in Video Compare. See the [changelog](CHANGELOG.md).
 
 ## Features
 
 - Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli, and ColorVideo VDP for multiple test videos.
 - Vship integration for GPU acceleration for ColorVideo VDP, SSIMULACRA2, and Butteraugli, on NVIDIA (CUDA), AMD (HIP) and any other GPU with a Vulkan driver
-- GPU acceleration for VMAF v0.6.1 and VMAF NEG on NVIDIA GPUs (GeForce GTX 16 and RTX 20 series or newer), with a bundled libvmaf built with CUDA
+- GPU acceleration for VMAF v0.6.1, VMAF NEG and VMAF v1 on NVIDIA, AMD and Intel GPUs, with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast) (CUDA on NVIDIA, Vulkan on the others).
+- PSNR, SSIM and XPSNR calculated in the app with libvmaf-fast, 2.7x-11x faster than FFmpeg's filters.
+- A command line, `VideoMetricsLab-cli`, for scripts.
+- Zoom in Video Compare, a dark theme, and each metric's best and worst scores highlighted.
 - libjxl integration for CPU fallback for SSIMULACRA2, and Butteraugli (no CPU support for ColorVideo VDP)
 - VMAF v0.6.1 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
 - Compare metric curves, statistics, and per-frame scores (per second for ColorVideo VDP).

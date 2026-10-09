@@ -1,5 +1,62 @@
 # Changelog
 
+## v2.0
+
+- VMAF v1 on the GPU: up to **17x** faster.
+- VMAF and VMAF NEG on AMD and Intel GPUs: **2.3x-2.7x** faster than on the
+  CPU (Intel iGPU).
+- PSNR, SSIM and XPSNR calculated in the app: **2.7x-11x** faster.
+- Videos the GPU can't decode, such as VVC, decoded in the app: VMAF
+  **1.8x-2.7x** faster.
+- SSIMULACRA2 and Butteraugli on the CPU: **7x** faster.
+- Video Compare plays 4K HDR at 120 frames a second instead of 14, with a
+  fifteenth of the CPU.
+- Much less memory: the app idles in 180 MB instead of 840 MB, and VMAF v1 at
+  4K takes 2.6 GB instead of 13.8 GB.
+- New command line: `VideoMetricsLab-cli`.
+- Video Compare plays HDR in Display P3 colours on the GPU.
+- Zoom in Video Compare.
+- Highlight best/worst results in the Videos tab.
+- Dark theme, following Windows or chosen in Settings.
+- Drop files on the video lists, paste a reference path, drag rows into order
+  and sort by any column.
+- File dialogs open where your videos last came from, and the app can reopen
+  the last session's videos.
+- Black bars found are remembered between sessions.
+- Metric Graphs, Video Compare and Settings open instantly, and the window
+  stays responsive with hundreds of videos.
+- Video Compare uses no CPU while idle.
+- XPSNR is now weighted by the reference: scores are 0.9-1.8 dB higher, and
+  XPSNR saved by v1.4 is calculated again.
+- GPU VMAF uses [libvmaf-fast v1](https://github.com/4KVCD/libvmaf-fast/releases/tag/libvmaf-fast-v1).
+
+### Bug fixes
+
+- Fixed wrong scores, or a run that never ended, for 10-bit H.264 decoded on
+  AMD GPUs.
+- CVVDP is no longer calculated on Intel GPUs above 1080p, where it hangs the
+  GPU and blacks out the screen.
+- Fixed partly green frames in Video Compare on some NVIDIA GPUs.
+- Fixed the reference showing a few frames behind the test video after a seek,
+  for some MP4 references.
+- Fixed FFmpeg running on after the app crashed or was ended in Task Manager.
+- Fixed SSIMULACRA2 and Butteraugli starting again on the CPU, for hours, for a
+  test video cut short.
+- Fixed GPU memory growing each time Video Compare moved between an HDR and an
+  SDR display.
+- Fixed Video Compare staying blank for a test video added again.
+- Fixed 10-bit H.264 on Intel and AMD GPUs failing first with FFmpeg's GPU
+  decoding.
+- A raw .hevc or .264 stream is now refused with how to fix it, not as
+  variable-frame-rate video, in Video Compare too.
+- Fixed Video Compare sometimes playing without sound, or with a test video's
+  sound instead of the reference's.
+- Fixed choppy sound and slow playback in Video Compare when decoding couldn't
+  keep up.
+- Fixed the window freezing on a seek while a video's file was slow to read.
+- Fixed a pause in Video Compare playback when black-bar detection finished.
+- Fixed Video Compare saying it was playing or buffering while paused.
+
 ## v1.4
 
 - VMAF v0.6.1 and VMAF NEG can now be calculated on NVIDIA GPUs.
