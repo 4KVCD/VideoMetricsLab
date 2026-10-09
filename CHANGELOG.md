@@ -2,6 +2,12 @@
 
 ## v2.0
 
+v2.0 is a major performance update. VMAF, VMAF NEG and VMAF v1 now run on
+any GPU, the other metrics and Video Compare are several times faster, and the
+app uses far less memory.
+
+### Metric performance
+
 - Added Vulkan support for VMAF v1, so it now runs on any GPU (NVIDIA, AMD or
   Intel), up to **17x** faster than on the CPU.
 - Added Vulkan support for VMAF v0.6.1 and VMAF NEG on AMD and Intel GPUs,
@@ -11,10 +17,20 @@
 - Added software decoding in the app for videos the GPU can't decode, such as
   VVC, making VMAF **1.8x-2.7x** faster for them.
 - SSIMULACRA2 and Butteraugli on the CPU are now **7x** faster.
+
+### System performance
+
 - Video Compare now plays 4K HDR at 120 frames a second instead of 14, using a
   fifteenth of the CPU.
 - Greatly reduced memory use: the app now idles at 180 MB instead of 840 MB,
   and VMAF v1 at 4K uses 2.6 GB instead of 13.8 GB.
+- Metric Graphs, Video Compare and Settings now open instantly, and the window
+  stays responsive with hundreds of videos.
+- Video Compare no longer uses any CPU while idle.
+- Detected black bars are now remembered between sessions.
+
+### New features
+
 - Added a command line, `VideoMetricsLab-cli`, for running comparisons from
   scripts.
 - Video Compare can now play HDR video in Display P3 colours on the GPU.
@@ -26,17 +42,17 @@
   dragging, and sorting by any column.
 - File dialogs now open in the folder your videos last came from, and the app
   can reopen your last session's videos.
-- Detected black bars are now remembered between sessions.
-- Metric Graphs, Video Compare and Settings now open instantly, and the window
-  stays responsive with hundreds of videos.
-- Video Compare no longer uses any CPU while idle.
-- XPSNR is now weighted by the reference, giving scores 0.9-1.8 dB higher;
-  XPSNR saved by v1.4 is recalculated.
+
+### Other changes
+
 - GPU VMAF now uses
   [libvmaf-fast v1](https://github.com/4KVCD/libvmaf-fast/releases/tag/libvmaf-fast-v1).
 
 ### Bug fixes
 
+- Fixed XPSNR being weighted by the test video's detail and motion instead of
+  the reference's, as XPSNR is defined: scores are 0.9-1.8 dB higher, and
+  XPSNR saved by v1.4 is recalculated.
 - Fixed wrong scores, or a run that never ended, for 10-bit H.264 decoded on
   AMD GPUs.
 - CVVDP is no longer calculated on Intel GPUs above 1080p, where it hangs the
@@ -61,6 +77,39 @@
 - Fixed the window freezing on a seek while a video's file was slow to read.
 - Fixed a pause in Video Compare playback when black-bar detection finished.
 - Fixed Video Compare saying it was playing or buffering while paused.
+
+### How GPU VMAF works
+
+v1.4 calculated VMAF and VMAF NEG on NVIDIA GPUs only, with its own build of
+libvmaf's CUDA code. v2.0 moves that work into
+[libvmaf-fast](https://github.com/4KVCD/libvmaf-fast), an open-source fork of
+Netflix's libvmaf, which adds a Vulkan engine for every GPU:
+
+- **VMAF and VMAF NEG on AMD and Intel GPUs.** libvmaf's CUDA code for VIF, ADM
+  and motion is ported to Vulkan compute shaders. GPUs round floating point
+  differently and some have no double precision, so the shaders use exact
+  integer arithmetic and tables made on the CPU instead: every feature equals
+  CUDA's bit for bit. NEG reuses everything VMAF calculates except its gain
+  limit.
+- **VMAF v1 on any GPU.** libvmaf has no GPU code for VMAF v1's features (ADM3,
+  motion3, CAMBI and SpEED), so the engine follows its CPU code, and every
+  score equals the CPU's exactly.
+- **PSNR, SSIM and XPSNR** are calculated by libvmaf-fast inside the app
+  instead of by FFmpeg's filters, with the same scores (XPSNR is FFmpeg's
+  filter, ported).
+- **NVIDIA GPUs** keep libvmaf's CUDA code for VMAF and NEG, now with 13
+  upstream pull requests merged, and the fork's own fixes: 4K VMAF + NEG in
+  35% less GPU memory.
+
+Where possible, frames from the GPU's own decoder are handed over without
+leaving the GPU. Each GPU is checked against known results before it is used,
+and one that gets them wrong (a driver bug) is left to the CPU. As in v1.4, the
+GPU code runs in a process of its own, so a crash in it or in the driver
+doesn't close the app.
+
+Checked on an RTX 5090, the Intel iGPU of a Core Ultra 9 285K and a Radeon
+8060S: VMAF and NEG on Vulkan equal CUDA's in 45 cases, and VMAF v1 on the GPU
+equals libvmaf's CPU code in 73 cases, at 8 and 10 bits, up to 8K.
 
 ## v1.4
 
