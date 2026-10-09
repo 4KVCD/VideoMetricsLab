@@ -5,7 +5,6 @@ workers never run their own playback clocks or pass image bytes through signals.
 """
 from __future__ import annotations
 
-import io
 import threading
 from collections import deque
 
@@ -14,6 +13,26 @@ from PySide6.QtCore import QThread, Signal
 from vmaf_app.core import proc
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.video_playback import build_video_series_command
+
+#: Buffers of frames the view is done with, kept to read the next frames
+#: into (StreamDecodeWorker.recycle). A worker's frames are at most three
+#: queued, three in the view's history and one being read: a few spares
+#: keep them all in use; more are dropped.
+_SPARE_FRAMES = 4
+
+
+def _read_into(pipe, buffer) -> int:
+    """Fills `buffer` from `pipe`; the bytes read, fewer at its end. Read
+    into it directly: BufferedReader.readinto passes what fits its own
+    buffer through that buffer, a second copy of every frame."""
+    view = memoryview(buffer)
+    got = 0
+    while got < len(view):
+        read = pipe.readinto(view[got:])
+        if not read:
+            break
+        got += read
+    return got
 
 
 class StreamDecodeWorker(QThread):
@@ -30,6 +49,8 @@ class StreamDecodeWorker(QThread):
         self.maximum = maximum
         self._condition = threading.Condition()
         self._frames = deque()
+        self._spare = []
+        self._frame_bytes = 0
         self._cancelled = False
         self._handle = ProcessHandle()
         self.ended = False
@@ -57,6 +78,20 @@ class StreamDecodeWorker(QThread):
                 self._condition.notify_all()
             return result
 
+    def recycle(self, payload):
+        """A frame's buffer the view no longer holds or shows, read into
+        again: a new one for each frame, a 4K frame's pages were faulted in
+        and zeroed by the reading thread, and freed by the window's."""
+        with self._condition:
+            if len(self._spare) < _SPARE_FRAMES and len(payload) == self._frame_bytes:
+                self._spare.append(payload)
+
+    def _buffer(self):
+        with self._condition:
+            if self._spare:
+                return self._spare.pop()
+        return bytearray(self._frame_bytes)
+
     def latest_frame_number(self):
         with self._condition:
             return self._frames[-1][0] if self._frames else None
@@ -74,7 +109,7 @@ class StreamDecodeWorker(QThread):
         from vmaf_app.core.video_playback import playback_dimensions
 
         width, height = playback_dimensions(self.comparison, self.maximum)
-        frame_bytes = width * height * 4
+        frame_bytes = self._frame_bytes = width * height * 4
         accel = self.plan.source if self.side == "source" else self.plan.distorted
         # The GPU's own decoder first, never FFmpeg's Vulkan decoder: see
         # build_video_series_command. NVDEC's pictures stay on the GPU where
@@ -100,8 +135,7 @@ class StreamDecodeWorker(QThread):
                 # Through the large pipe (proc.FRAME_PIPE_BYTES): with
                 # subprocess's own, of 4 KB, 4K RGBA came at 30 frames a
                 # second; with this, 72.
-                process, pipe = proc.popen_piped(command)
-                frames = io.BufferedReader(pipe, buffer_size=frame_bytes)
+                process, frames = proc.popen_piped(command)
                 self._handle.attach(process.pid)
                 if self._cancelled:
                     self._handle.terminate()
@@ -114,11 +148,11 @@ class StreamDecodeWorker(QThread):
                 reader = threading.Thread(target=drain, daemon=True)
                 reader.start()
                 while not self._cancelled:
-                    # BufferedReader assembles this in C, avoiding thousands
-                    # of tiny Python reads and their GIL overhead on Windows.
-                    payload = frames.read(frame_bytes)
-                    if len(payload) != frame_bytes:
-                        if payload:
+                    # The large pipe takes a whole frame: a read or two each.
+                    payload = self._buffer()
+                    read = _read_into(frames, payload)
+                    if read != frame_bytes:
+                        if read:
                             attempt_error = "Decoder returned a truncated frame."
                         break
                     if first:

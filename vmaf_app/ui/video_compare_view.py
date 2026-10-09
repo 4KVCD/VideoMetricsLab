@@ -111,6 +111,9 @@ class _StreamSurface(_PairedFrameWidget):
         self._image: QImage | None = QImage()
         self._side_width = 0
         self._height = 0
+        #: Where the last paint drew a fitted frame, for what view and frame
+        #: size: (key, rectangle), or None (update_frame).
+        self._drawn = None
 
     def set_frame(self, payload, size):
         """The frame it shows; the view repaints whichever surface is on
@@ -124,6 +127,24 @@ class _StreamSurface(_PairedFrameWidget):
         self._payload = None
         self._image = QImage()
         self.update()
+
+    def shows(self, payload) -> bool:
+        """Whether `payload` is the frame it shows."""
+        return payload is self._payload
+
+    def update_frame(self):
+        """Its new frame painted: where the last was drawn the same, only
+        that part. The bars beside it stay as painted -- filled again at
+        each frame, they took 0.2 ms of the window's thread, and were
+        flushed to the window with it."""
+        drawn = self._drawn
+        if drawn is not None and drawn[0] == self._drawn_key():
+            self.update(drawn[1])
+        else:
+            self.update()
+
+    def _drawn_key(self):
+        return self.width(), self.height(), self.devicePixelRatioF(), self._side_width, self._height
 
     def _frame_image(self) -> QImage:
         if self._image is None:
@@ -140,6 +161,7 @@ class _StreamSurface(_PairedFrameWidget):
         background = QColor("#171717")
         image = self._frame_image()
         view = self.parentWidget()
+        self._drawn = None
         if image.isNull() or not view.fitted:
             painter.fillRect(self.rect(), background)
             place = None if image.isNull() else view.zoom_placement((self._side_width, self._height))
@@ -159,17 +181,19 @@ class _StreamSurface(_PairedFrameWidget):
         if 0 <= w - self._side_width <= 2 and 0 <= h - self._height <= 2:
             w, h = self._side_width, self._height
         x, y = (view_w - w) // 2, (view_h - h) // 2
-        bars = []
-        if x > 0:
-            bars.append((0, 0, x + 1, view_h))
-        if x + w < view_w:
-            bars.append((x + w - 1, 0, view_w - x - w + 1, view_h))
-        if y > 0:
-            bars.append((0, 0, view_w, y + 1))
-        if y + h < view_h:
-            bars.append((0, y + h - 1, view_w, view_h - y - h + 1))
-        for left, top, width, height in bars:
-            painter.fillRect(QRectF(left / ratio, top / ratio, width / ratio, height / ratio), background)
+        self._drawn = (self._drawn_key(), QRectF(x / ratio, y / ratio, w / ratio, h / ratio).toAlignedRect())
+        if not self._drawn[1].contains(event.rect()):  # not just the frame (update_frame)
+            bars = []
+            if x > 0:
+                bars.append((0, 0, x + 1, view_h))
+            if x + w < view_w:
+                bars.append((x + w - 1, 0, view_w - x - w + 1, view_h))
+            if y > 0:
+                bars.append((0, 0, view_w, y + 1))
+            if y + h < view_h:
+                bars.append((0, y + h - 1, view_w, view_h - y - h + 1))
+            for left, top, width, height in bars:
+                painter.fillRect(QRectF(left / ratio, top / ratio, width / ratio, height / ratio), background)
         if (w, h) == (self._side_width, self._height):
             image.setDevicePixelRatio(ratio)
             painter.drawImage(QPointF(x / ratio, y / ratio), image)
@@ -813,7 +837,9 @@ class VideoCompareView(QWidget):
             # Three past frames plus the worker's three future frames bound
             # RAM regardless of movie duration or number of files in the list.
             for number in sorted(history)[:-3]:
-                del history[number]
+                payload = history.pop(number)
+                if not (self._source_surface.shows(payload) or self._distorted_surface.shows(payload)):
+                    worker.recycle(payload)
         source = self._history.get(source_key, {})
         distorted = self._history.get(distorted_key, {})
         common = source.keys() & distorted.keys()
@@ -852,7 +878,7 @@ class VideoCompareView(QWidget):
         self._frame = round(frame / fps * self._comparison.fps)
         self._source_surface.set_frame(source[frame], playback_dimensions(self._desired[source_key][0], self._pool_maximum))
         self._distorted_surface.set_frame(distorted[frame], playback_dimensions(self._comparison, self._pool_maximum))
-        (self._source_surface if self._showing_source else self._distorted_surface).update()
+        (self._source_surface if self._showing_source else self._distorted_surface).update_frame()
         if self._clock_started is None and self._wanted_playing:
             self._clock_frame = frame
             self._clock_started = time.monotonic()
