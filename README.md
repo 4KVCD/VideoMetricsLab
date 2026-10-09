@@ -6,21 +6,27 @@ New in v2.0: VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR,
 
 ## Features
 
-- Calculate VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli, and ColorVideo VDP for multiple test videos.
-- Vship integration for GPU acceleration for ColorVideo VDP, SSIMULACRA2, and Butteraugli, on NVIDIA (CUDA), AMD (HIP) and any other GPU with a Vulkan driver
-- GPU acceleration for VMAF v0.6.1, VMAF NEG and VMAF v1 on NVIDIA, AMD and Intel GPUs, with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast) (CUDA on NVIDIA, Vulkan on the others).
-- PSNR, SSIM and XPSNR calculated in the app with libvmaf-fast, 2.7x-11x faster than FFmpeg's filters.
+**Metrics**
+- VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.
+- VMAF models for standard, phone, 4K and HFR viewing.
+
+**Fast on any GPU**
+- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD and Intel GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF v1 up to **17x** faster.
+- SSIMULACRA2, Butteraugli and ColorVideo VDP on the GPU with Vship (CUDA, HIP or Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.
+- PSNR, SSIM and XPSNR **2.7x-11x** faster, calculated in the app.
+- GPU video decoding, with software decoding for formats the GPU can't handle, such as VVC.
+
+**Compare and inspect**
+- Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR.
+- Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.
+- Bitrate by frame, second or GOP.
+
+**Workflow**
+- Black bars and resolution mismatches handled automatically.
+- Results saved and reloaded automatically.
+- Drag and drop videos, sort and reorder the list, and a dark theme.
 - A command line, `VideoMetricsLab-cli`, for scripts.
-- Zoom in Video Compare, a dark theme, and each metric's best and worst scores highlighted.
-- libjxl integration for CPU fallback for SSIMULACRA2, and Butteraugli (no CPU support for ColorVideo VDP)
-- VMAF v0.6.1 and v1 models for standard, phone, 4K, and HFR viewing scenarios.
-- Compare metric curves, statistics, and per-frame scores (per second for ColorVideo VDP).
-- Switch instantly between the source and test videos during playback, hold **S** to show the source, or inspect exact frames.
-- Inspect bitrate independently by frame, second, or GOP.
-- Detect black bars and handle resolution mismatches automatically.
-- Use GPU decoding with independent software fallback per input.
-- Calculate two test videos in parallel on many-core CPUs.
-- Auto save completed results and auto load results when matching videos are loaded again.
+- Two test videos calculated in parallel on many-core CPUs.
 
 ## Videos
 
