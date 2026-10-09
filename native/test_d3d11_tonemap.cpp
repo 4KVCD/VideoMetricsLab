@@ -203,5 +203,13 @@ int main() {
         std::cout<<"P010 from a texture array's second slice, unreadable by a shader: max difference "<<apart<<std::endl;
         if (apart>1e-6) return 17;
     }
+    {   // The shaders compiled once a process (present_shaders): every
+        // presenter after the first takes the same bytecode.
+        ID3DBlob *vs1=nullptr,*ps1=nullptr,*vs2=nullptr,*ps2=nullptr;
+        if (vmaf_present_prepare()<0 || FAILED(present_shaders(&vs1,&ps1)) || FAILED(present_shaders(&vs2,&ps2)))
+            return 18;
+        std::cout<<"presenter shaders compiled once: "<<(vs1==vs2 && ps1==ps2 ? "yes" : "no")<<std::endl;
+        if (vs1!=vs2 || ps1!=ps2) return 19;
+    }
     return 0;
 }

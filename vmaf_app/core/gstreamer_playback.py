@@ -178,8 +178,8 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
 
 def start_loading() -> None:
     """What Video Compare's first native opening loads, loaded in the
-    background at the window's startup: GStreamer, its D3D11 plugin and the
-    D3D11 device. Loaded by that opening instead, they held the
+    background at the window's startup: GStreamer, its D3D11 plugin, the
+    D3D11 device and the presenter's shaders. Loaded by that opening instead, they held the
     window for 0.4 s then. The window's only: metric-only use (the command
     line, the scoring processes) does not pay their start or their memory."""
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen":
@@ -195,6 +195,9 @@ def _warm_up() -> None:
         if plugin is not None:
             plugin.load()
         d3d11_device()
+        from vmaf_app.core import d3d11_tonemap
+
+        d3d11_tonemap.prepare_presenter()
     except Exception:
         pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg
 

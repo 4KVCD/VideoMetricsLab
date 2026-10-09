@@ -50,6 +50,16 @@ def presents() -> bool:
         return False
 
 
+def prepare_presenter() -> None:
+    """The presenter's shaders compiled ahead of its first use, once a
+    process (vmaf_present_prepare): each presenter compiled them, 10 ms of
+    the window's time whenever Video Compare opened a pair."""
+    if presents():
+        prepare = getattr(ctypes.CDLL(str(library_path())), "vmaf_present_prepare", None)
+        if prepare is not None:  # a DLL built before it compiles them for its first presenter
+            prepare()
+
+
 def supports(primaries: str, *, hdr: bool = False) -> bool:
     """Whether HDR video of these primaries is shown right by the shader:
     mapped to SDR, or (`hdr`) for an HDR display, which takes PQ in BT.2020,

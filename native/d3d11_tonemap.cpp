@@ -27,6 +27,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <new>
 using Microsoft::WRL::ComPtr;
 
@@ -145,12 +146,38 @@ static HRESULT present_target(Presenter* p) {
     return hr;
 }
 
+// The presenter's shaders, compiled once a process: the bytecode serves
+// every presenter, on any device. Compiled for each presenter (10 ms here,
+// 8 of them the pixel shader), they held the window each time Video Compare
+// opened a pair; the window's startup compiles them in the background
+// (vmaf_present_prepare). Never released: at the process's exit the
+// compiler's DLL may be gone before ours.
+static std::mutex shader_lock;
+static ID3DBlob* shader_vs=nullptr;
+static ID3DBlob* shader_ps=nullptr;
+
+static HRESULT present_shaders(ID3DBlob** vs, ID3DBlob** ps) {
+    std::lock_guard<std::mutex> hold(shader_lock);
+    HRESULT hr=S_OK;
+    ComPtr<ID3DBlob> errors;
+    if (!shader_vs) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"vs","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&shader_vs,&errors);
+    if (SUCCEEDED(hr) && !shader_ps) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"ps","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&shader_ps,&errors);
+    if (FAILED(hr)) return hr;
+    *vs=shader_vs; *ps=shader_ps;
+    return S_OK;
+}
+
+// Any thread, any time: the shaders compiled ahead of the first presenter.
+extern "C" __declspec(dllexport) int vmaf_present_prepare() {
+    ID3DBlob *vs=nullptr, *ps=nullptr;
+    return present_shaders(&vs,&ps);
+}
+
 // What drawing needs but a window: its context, shaders, sampler, constants.
 static HRESULT present_resources(Presenter* p) {
-    ComPtr<ID3DBlob> vs, ps, errors;
+    ID3DBlob *vs=nullptr, *ps=nullptr;
     HRESULT hr=p->device->CreateDeferredContext(0,&p->deferred);
-    if (SUCCEEDED(hr)) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"vs","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&vs,&errors);
-    if (SUCCEEDED(hr)) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"ps","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&ps,&errors);
+    if (SUCCEEDED(hr)) hr=present_shaders(&vs,&ps);
     if (SUCCEEDED(hr)) hr=p->device->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,&p->vs);
     if (SUCCEEDED(hr)) hr=p->device->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,&p->ps);
     D3D11_SAMPLER_DESC sd={}; sd.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR;
