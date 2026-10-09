@@ -1,7 +1,7 @@
-"""Pointer-only bridge to the private D3D11 HDR preview shader.
-
-The shader receives a private converter output texture, never decoder-owned
-reference frames. This module does not map, copy or allocate CPU pixel buffers.
+"""Native playback's presenter (d3d11_tonemap.dll): the facts its shader
+works from. It shows each frame in the display's colours as it draws it --
+HDR video mapped to SDR, or converted to PQ in BT.2020 for an HDR display
+(shading()). This module does not map, copy or allocate CPU pixel buffers.
 """
 from __future__ import annotations
 
@@ -11,14 +11,16 @@ import sys
 from pathlib import Path
 
 #: CIE xy of the red, green and blue of the primaries the shader converts
-#: to BT.709 from, by FFmpeg's names; all with D65 white. Others (DCI-P3's
-#: own white, SMPTE 431) are left to FFmpeg's converter.
+#: from, by FFmpeg's names; all with D65 white. Others (DCI-P3's own white,
+#: SMPTE 431) are left to FFmpeg's converter.
 PRIMARIES = {
     "bt709": ((0.640, 0.330), (0.300, 0.600), (0.150, 0.060)),
     "bt2020": ((0.708, 0.292), (0.170, 0.797), (0.131, 0.046)),
     "smpte432": ((0.680, 0.320), (0.265, 0.690), (0.150, 0.060)),  # Display P3
 }
 _D65 = (0.3127, 0.3290)
+#: The light mapped to SDR white and HLG's display peak; SDR white (nits).
+_PEAK_NITS, _WHITE_NITS = 1000.0, 100.0
 
 
 def library_path() -> Path:
@@ -36,43 +38,33 @@ def hdr_primaries(tag: str) -> str:
 
 
 @functools.cache
-def _entry_points() -> frozenset[str]:
-    """Which of the shader's later entry points the built DLL has: one built
-    before them takes every video for BT.2020, and maps it to SDR only."""
-    if not available():
-        return frozenset()
-    try:
-        library = ctypes.CDLL(str(library_path()))
-    except OSError:
-        return frozenset()
-    return frozenset(name for name in ("vmaf_tonemap_create_primaries", "vmaf_hdr_convert_create",
-                                       "vmaf_present_create") if hasattr(library, name))
-
-
-def converts_primaries() -> bool:
-    """Whether the built shader maps HDR video of any PRIMARIES to SDR."""
-    return "vmaf_tonemap_create_primaries" in _entry_points()
-
-
-def converts_for_hdr() -> bool:
-    """Whether the built shader converts HDR video to PQ in BT.2020, HDR kept."""
-    return "vmaf_hdr_convert_create" in _entry_points()
-
-
 def presents() -> bool:
-    """Whether the built DLL has native playback's presenter
-    (locked_presentation.LockedPresentation)."""
-    return "vmaf_present_create" in _entry_points()
+    """Whether the built DLL has native playback's presenter, its shading
+    included (locked_presentation.LockedPresentation): one built before it
+    shaded HDR video in each decoder's pipeline."""
+    if not available():
+        return False
+    try:
+        return hasattr(ctypes.CDLL(str(library_path())), "vmaf_present_texture")
+    except OSError:
+        return False
 
 
 def supports(primaries: str, *, hdr: bool = False) -> bool:
     """Whether HDR video of these primaries is shown right by the shader:
     mapped to SDR, or (`hdr`) for an HDR display, which takes PQ in BT.2020,
     converted to that."""
-    primaries = hdr_primaries(primaries)
-    if hdr:
-        return primaries in PRIMARIES and converts_for_hdr()
-    return primaries == "bt2020" or (primaries in PRIMARIES and converts_primaries())
+    return hdr_primaries(primaries) in PRIMARIES and presents()
+
+
+def shading(kind: str, primaries: str, *, hdr: bool) -> tuple[float, ...]:
+    """What the presenter's shader does to HDR video of `kind` ("HDR10 /
+    PQ" or "HLG") in `primaries`, as vmaf_present_texture takes it: mapped to
+    SDR BT.709, or (`hdr`) kept HDR and converted to PQ in BT.2020. The
+    curve, fixed for every video compared: extended Reinhard, 1000 nits to
+    SDR white at 100."""
+    luma, matrix = conversion(primaries, "bt2020" if hdr else "bt709")
+    return (2.0 if hdr else 1.0, 1.0 if kind == "HDR10 / PQ" else 2.0, *luma, *matrix, _PEAK_NITS, _WHITE_NITS)
 
 
 def _to_xyz(primaries: str):
@@ -108,77 +100,3 @@ def boxed_pointer(boxed) -> int:
     if not stored or stored != hashed:
         raise RuntimeError("Could not find the GPU frame's native pointer (PyGObject changed)")
     return stored
-
-
-class D3D11ToneMapper:
-    def __init__(self, device, kind: str, primaries: str = "bt2020", *, hdr: bool = False):
-        """HDR video of `kind` and `primaries` mapped to SDR BT.709 or, with
-        `hdr`, kept HDR and converted to PQ in BT.2020 for an HDR display."""
-        self.device = device
-        self.kind = 1 if kind == "HDR10 / PQ" else 2
-        self.hdr = hdr
-        self.handle = None
-        self.lib = ctypes.CDLL(str(library_path()))
-        self.lib.vmaf_tonemap_create.argtypes = [ctypes.c_void_p, ctypes.c_int]
-        self.lib.vmaf_tonemap_create.restype = ctypes.c_void_p
-        # The entry point given the video's primaries, and its arguments past
-        # the frame and kind; a shader built before it is given BT.2020
-        # video alone, mapped to SDR (supports()).
-        self.colours = None
-        floats = ctypes.POINTER(ctypes.c_float)
-        if hdr:
-            if not hasattr(self.lib, "vmaf_hdr_convert_create"):
-                raise RuntimeError("The HDR shader was built before it converted HDR for HDR displays")
-            create = self.lib.vmaf_hdr_convert_create
-            create.argtypes = [ctypes.c_void_p, ctypes.c_int, floats, floats]
-            create.restype = ctypes.c_void_p
-            luma, to_bt2020 = conversion(primaries, "bt2020")
-            self.colours = create, ((ctypes.c_float * 3)(*luma), (ctypes.c_float * 9)(*to_bt2020))
-        elif hasattr(self.lib, "vmaf_tonemap_create_primaries"):
-            create = self.lib.vmaf_tonemap_create_primaries
-            create.argtypes = [ctypes.c_void_p, ctypes.c_int, floats, floats]
-            create.restype = ctypes.c_void_p
-            luma, to_bt709 = conversion(primaries)
-            self.colours = create, ((ctypes.c_float * 3)(*luma), (ctypes.c_float * 9)(*to_bt709))
-        elif hdr_primaries(primaries) != "bt2020":
-            raise RuntimeError("The HDR shader was built before it took a video's primaries")
-        self.lib.vmaf_tonemap_render.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        self.lib.vmaf_tonemap_render.restype = ctypes.c_int32
-        self.lib.vmaf_tonemap_destroy.argtypes = [ctypes.c_void_p]
-        self.lib.vmaf_tonemap_destroy.restype = None
-        # GStreamer's Python bundle registers its DLL directory at startup.
-        self.gst = ctypes.CDLL("gstd3d11-1.0-0.dll")
-        self.gst.gst_is_d3d11_memory.argtypes = [ctypes.c_void_p]
-        self.gst.gst_is_d3d11_memory.restype = ctypes.c_int
-        self.gst.gst_d3d11_memory_get_resource_handle.argtypes = [ctypes.c_void_p]
-        self.gst.gst_d3d11_memory_get_resource_handle.restype = ctypes.c_void_p
-
-    def render(self, buffer) -> None:
-        if buffer.n_memory() != 1:
-            raise RuntimeError("Tone mapper requires one private RGBA16 GPU texture")
-        memory = buffer.peek_memory(0)
-        # Kept alive (``memory``) until the native calls return.
-        pointer = boxed_pointer(memory)
-        if not self.gst.gst_is_d3d11_memory(pointer):
-            raise RuntimeError("Tone mapper received CPU memory instead of a D3D11 texture")
-        self.device.lock()
-        try:
-            resource = self.gst.gst_d3d11_memory_get_resource_handle(pointer)
-            if not self.handle:
-                if self.colours:
-                    create, colours = self.colours
-                    self.handle = create(resource, self.kind, *colours)
-                else:
-                    self.handle = self.lib.vmaf_tonemap_create(resource, self.kind)
-                if not self.handle:
-                    raise RuntimeError("Could not initialize the D3D11 HDR shader")
-            result = self.lib.vmaf_tonemap_render(self.handle, resource)
-            if result < 0:
-                raise RuntimeError(f"D3D11 HDR shader failed: 0x{result & 0xffffffff:08x}")
-        finally:
-            self.device.unlock()
-
-    def close(self) -> None:
-        if self.handle:
-            self.lib.vmaf_tonemap_destroy(self.handle)
-            self.handle = None

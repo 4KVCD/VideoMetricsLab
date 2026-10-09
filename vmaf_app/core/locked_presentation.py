@@ -27,8 +27,8 @@ def _presenter_api():
         ("vmaf_present_create", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]),
         ("vmaf_present_follow", None, [ctypes.c_void_p, ctypes.c_void_p]),
         ("vmaf_present_wait", ctypes.c_int, [ctypes.c_void_p, ctypes.c_uint]),
-        ("vmaf_present_frame", ctypes.c_int,
-         [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ints, ints, floats, ctypes.c_int, floats]),
+        ("vmaf_present_texture", ctypes.c_int,
+         [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ints, ints, floats, floats, ctypes.c_int, floats]),
         ("vmaf_present_destroy", None, [ctypes.c_void_p]),
     ):
         function = getattr(lib, name)
@@ -41,6 +41,23 @@ def _presenter_api():
         function = getattr(gst, name)
         function.restype, function.argtypes = restype, [ctypes.c_void_p]
     return lib, gst
+
+
+@functools.cache
+def _crop_meta_api():
+    """gst_buffer_get_meta, typed, and the GType of GstVideoCropMeta's API:
+    where a frame's picture is in its texture (LockedPresentation._draw)."""
+    get_meta = ctypes.CDLL("gstreamer-1.0-0.dll").gst_buffer_get_meta
+    get_meta.restype, get_meta.argtypes = ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_size_t]
+    api = ctypes.CDLL("gstvideo-1.0-0.dll").gst_video_crop_meta_api_get_type
+    api.restype = ctypes.c_size_t
+    return get_meta, api()
+
+
+class _CropMeta(ctypes.Structure):
+    """GstVideoCropMeta: its GstMeta, then the picture's rectangle."""
+    _fields_ = [("flags", ctypes.c_int), ("info", ctypes.c_void_p),
+                ("x", ctypes.c_uint), ("y", ctypes.c_uint), ("width", ctypes.c_uint), ("height", ctypes.c_uint)]
 
 
 def _object_pointer(instance) -> int:
@@ -89,6 +106,7 @@ class LockedPresentation:
         self._video = _load_gstreamer()[1]
         self.window, self.device = window, device
         self._lib, self._gst = _presenter_api()
+        self._crop_meta = _crop_meta_api()
         handle = self._gst.gst_d3d11_device_get_device_handle(_object_pointer(device))
         device.lock()
         try:
@@ -105,17 +123,20 @@ class LockedPresentation:
         self._stopping = False
         self._error = None
         self._colours = {}
+        self._shadings = {}
         self._clear = (ctypes.c_float * 4)(*_BACKGROUND)
         self._presenter_thread = threading.Thread(target=self._present_paced, name="native-present", daemon=True)
         self._presenter_thread.start()
 
-    def present(self, sample, view=None):
+    def present(self, sample, view=None, shading=None):
         """`sample` shown at the next refresh. `view`: None to fit it to the
         window, letterboxed; else the part of it to show and where in the
-        window, in device pixels (VideoCompareView.native_view)."""
+        window, in device pixels (VideoCompareView.native_view). `shading`:
+        what the shader does to its video's colours (d3d11_tonemap.shading),
+        None to show them as they come."""
         self._lib.vmaf_present_follow(self._presenter, self.window)
         with self._due_lock:
-            self._due.append((sample, view))
+            self._due.append((sample, view, shading))
             while len(self._due) > 2:
                 self._due.popleft()
             self._due_ready.set()
@@ -132,19 +153,19 @@ class LockedPresentation:
             if self._lib.vmaf_present_wait(self._presenter, 100) != 0:
                 continue  # not taken yet (a hidden window): asked again
             with self._due_lock:
-                sample, view = self._due.popleft()
+                sample, view, shading = self._due.popleft()
                 if not self._due:
                     self._due_ready.clear()
             if self._stopping:
                 return
             try:
-                self._draw(sample, view)
+                self._draw(sample, view, shading)
             except Exception as exc:
                 self._error = f"Native presentation failed: {exc}"
             if self._error:
                 return
 
-    def _draw(self, sample, view):
+    def _draw(self, sample, view, shading):
         buffer = sample.get_buffer()
         if buffer.n_memory() != 1:
             self._error = "Native presentation needs one GPU texture a frame"
@@ -156,18 +177,33 @@ class LockedPresentation:
             self._error = "Native presentation received CPU memory instead of a D3D11 texture"
             return
         to_rgb, space, size = self._colours_of(sample.get_caps())
+        shade = None
+        if shading is not None:
+            shade = self._shadings.get(shading)
+            if shade is None:
+                shade = self._shadings[shading] = (ctypes.c_float * 16)(*shading)
+            # Mapped to SDR, or kept HDR as PQ in BT.2020: what the swapchain is told.
+            space = _HDR10_SPACE if shading[0] == 2 else _SDR_SPACE
         crop, rectangle = view if view is not None else (None, None)
         # The frame's own size, not its texture's: a decoder's is padded
         # (1608 rows to 1616), and its padding was drawn as picture.
-        source = (ctypes.c_int * 4)(*(crop if crop is not None else (0, 0, *size)))
+        x, y, width, height = crop if crop is not None else (0, 0, *size)
+        # Cropped with nothing else to do, the converter passes the decoder's
+        # frame on whole, its letterbox in it, and a crop meta says where the
+        # picture is (GstComparePipeline).
+        get_meta, crop_api = self._crop_meta
+        if meta := get_meta(boxed_pointer(buffer), crop_api):
+            picture = _CropMeta.from_address(meta)
+            x, y = x + picture.x, y + picture.y
+        source = (ctypes.c_int * 4)(x, y, width, height)
         target = (ctypes.c_int * 4)(*rectangle) if rectangle is not None else None
         self.device.lock()
         try:
             resource = self._gst.gst_d3d11_memory_get_resource_handle(pointer)
             # The frame's slice of its texture: H.264's decoder gives arrays.
             subresource = self._gst.gst_d3d11_memory_get_subresource_index(pointer)
-            result = self._lib.vmaf_present_frame(self._presenter, resource, subresource, source, target, to_rgb,
-                                                  space, self._clear)
+            result = self._lib.vmaf_present_texture(self._presenter, resource, subresource, source, target, to_rgb,
+                                                    shade, space, self._clear)
         finally:
             self.device.unlock()
         if result < 0:

@@ -1,6 +1,25 @@
-// Native playback: private RGBA16 GPU surface processing for the GStreamer
-// branch, and the frames' presentation. No GStreamer ABI dependencies, pixel
+// Native playback's frames, presented: a waitable flip-model swapchain on the
+// decoders' D3D11 device, in a child window of the view, two frames deep. Its
+// shader turns each frame into the display's colours as it draws it at the
+// view's size: NV12/P010 into RGB, and HDR video mapped to SDR or, for an HDR
+// display, converted to PQ in BT.2020. No GStreamer ABI dependencies, pixel
 // readback, or CPU frame allocation.
+//
+// The caller waits for the swapchain (vmaf_present_wait) holding nothing, then
+// draws and presents with the device lock held (vmaf_present_texture): Present
+// then has no frame before it to wait for. GStreamer's d3d11videosink presented
+// at the display's refresh waiting for it with the device lock held, and the
+// decoders, which need that lock for each frame, stalled up to 40 ms. One frame
+// deep, the swapchain lost a refresh to each repaint of a window on the desktop
+// (the app's own position display among them, 21 a second): 120 fps video
+// showed 98 frames a second.
+//
+// The shading was a pass of its own in each decoder's pipeline, on every frame
+// of every video decoded, at full size, after a conversion to 16-bit RGBA and a
+// copy (a texture cannot be read and written in one pass): by the sizes of the
+// textures read and written, some 340 MB of GPU memory traffic a 4K frame, 120
+// GB/s for three 4K videos at 120 fps. Here it is done for the frame shown
+// only, at the size it is shown, on the YUV frames as they come.
 #include <d3d11.h>
 #include <dxgi1_4.h>
 #include <d3dcompiler.h>
@@ -11,15 +30,28 @@
 #include <new>
 using Microsoft::WRL::ComPtr;
 
-static const char shader[] = R"(
-Texture2D<float4> inputFrame : register(t0);
-cbuffer Parameters : register(b0) {
-    float kind; float peak; float white; float hdrOut;
-    float4 luma;         // the source primaries' luminance weights
-    float4 toOutput[3];  // linear source RGB -> linear BT.709 (SDR) or BT.2020 (hdrOut), by rows
+static const char present_shader[] = R"(
+Texture2D<float4> rgbFrame : register(t0);
+Texture2D<float> lumaPlane : register(t1);
+Texture2D<float2> chromaPlane : register(t2);
+SamplerState linearClamp : register(s0);
+cbuffer Draw : register(b0) {
+    float4 source;    // the part of the frame drawn: left, top, width, height in texture coordinates
+    float4 toRgb[3];  // YUV frames: rows of (Y, U, V) coefficients, the offset in w
+    float yuv;        // 1: a YUV frame (planes t1, t2); 0: RGB (t0)
+    float shade;      // 0: as it comes; 1: HDR mapped to SDR BT.709; 2: HDR kept, PQ in BT.2020
+    float kind;       // HDR: 1 PQ, 2 HLG
+    float peak;       // HDR: the light mapped to SDR white, and HLG's display peak (nits)
+    float4 luma;      // HDR: the source primaries' luminance weights; w: SDR white (nits)
+    float4 toOutput[3];  // HDR: linear source RGB -> linear BT.709 (1) or BT.2020 (2), by rows
 };
-float4 vs(uint id : SV_VertexID) : SV_Position {
-    return float4(id == 2 ? 3 : -1, id == 1 ? 3 : -1, 0, 1);
+struct Vertex { float4 position : SV_Position; float2 uv : TEXCOORD0; };
+Vertex vs(uint id : SV_VertexID) {
+    float2 corner = float2(id & 1, id >> 1);
+    Vertex v;
+    v.position = float4(corner.x * 2 - 1, 1 - corner.y * 2, 0, 1);
+    v.uv = source.xy + corner * source.zw;
+    return v;
 }
 float3 pq(float3 x) {
     float3 p = pow(max(x, 0), 1.0 / 78.84375);
@@ -45,156 +77,35 @@ float3 srgb(float3 x) {
     float3 lo=12.92*x, hi=1.055*pow(max(x,0),1.0/2.4)-.055;
     return float3(x.r<=.0031308?lo.r:hi.r, x.g<=.0031308?lo.g:hi.g, x.b<=.0031308?lo.b:hi.b);
 }
-float4 ps(float4 pos : SV_Position) : SV_Target {
-    float3 encoded = inputFrame.Load(int3(pos.xy,0)).rgb;
-    float3 light = kind < 1.5 ? pq(encoded) : hlg(encoded);
-    if (hdrOut > 0.5) {
+float4 ps(Vertex v) : SV_Target {
+    float3 rgb;
+    if (yuv < 0.5) {
+        rgb = rgbFrame.Sample(linearClamp, v.uv).rgb;
+    } else {
+        float3 c = float3(lumaPlane.Sample(linearClamp, v.uv), chromaPlane.Sample(linearClamp, v.uv));
+        rgb = saturate(float3(dot(c, toRgb[0].xyz), dot(c, toRgb[1].xyz), dot(c, toRgb[2].xyz))
+                       + float3(toRgb[0].w, toRgb[1].w, toRgb[2].w));
+    }
+    if (shade < 0.5) return float4(rgb, 1);
+    float3 light = kind < 1.5 ? pq(rgb) : hlg(rgb);
+    if (shade > 1.5) {
         // HDR kept, for an HDR display, which takes PQ in BT.2020: the light
-        // converted to BT.2020 and coded as PQ (HLG's at its 1000-nit peak).
+        // converted to BT.2020 and coded as PQ (HLG's at its display peak).
         return float4(pq_code(converted(light)), 1);
     }
     // Fixed extended-Reinhard luminance curve, shared by all comparison sides.
-    float y = max(dot(light,luma.rgb)/white,0);
-    float w = peak/white;
-    float mapped = y*(1+y/(w*w))/(1+y);
-    light = light/white * (y > 1e-8 ? mapped/y : 0);
+    float white = luma.w;
+    float y = max(dot(light, luma.rgb) / white, 0);
+    float w = peak / white;
+    float mapped = y * (1 + y / (w * w)) / (1 + y);
+    light = light / white * (y > 1e-8 ? mapped / y : 0);
     // Linear source primaries -> BT.709, then gamut clipping and sRGB encoding.
-    return float4(srgb(saturate(converted(light))),1);
+    return float4(srgb(saturate(converted(light))), 1);
 }
 )";
 
-struct Mapper {
-    ComPtr<ID3D11Device> device;
-    ComPtr<ID3D11DeviceContext> immediate, deferred;
-    ComPtr<ID3D11VertexShader> vs;
-    ComPtr<ID3D11PixelShader> ps;
-    ComPtr<ID3D11Buffer> parameters;
-    ComPtr<ID3D11Texture2D> scratch;
-    ComPtr<ID3D11ShaderResourceView> srv;
-    UINT width=0, height=0;
-};
-
-static void* create(ID3D11Resource* resource, int kind, bool hdr_out, const float* luma, const float* to_output) {
-    if (!luma || !to_output) return nullptr;
-    auto m = new(std::nothrow) Mapper;
-    if (!m || !resource) { delete m; return nullptr; }
-    resource->GetDevice(&m->device);
-    m->device->GetImmediateContext(&m->immediate);
-    ComPtr<ID3DBlob> vs, ps, errors;
-    HRESULT hr = m->device->CreateDeferredContext(0,&m->deferred);
-    if (SUCCEEDED(hr)) hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"vs","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&vs,&errors);
-    if (SUCCEEDED(hr)) hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"ps","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&ps,&errors);
-    if (SUCCEEDED(hr)) hr=m->device->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,&m->vs);
-    if (SUCCEEDED(hr)) hr=m->device->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,&m->ps);
-    const float* t = to_output;
-    float params[20]={float(kind),1000,100,hdr_out?1.f:0.f, luma[0],luma[1],luma[2],0,
-                      t[0],t[1],t[2],0, t[3],t[4],t[5],0, t[6],t[7],t[8],0};
-    D3D11_BUFFER_DESC bd={}; bd.ByteWidth=sizeof(params); bd.Usage=D3D11_USAGE_IMMUTABLE; bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
-    D3D11_SUBRESOURCE_DATA initial={}; initial.pSysMem=params;
-    if (SUCCEEDED(hr)) hr=m->device->CreateBuffer(&bd,&initial,&m->parameters);
-    if (FAILED(hr)) { delete m; return nullptr; }
-    return m;
-}
-
-// HDR to SDR. `luma`: the source primaries' luminance weights (3);
-// `to_bt709`: linear source RGB to linear BT.709, by rows (9).
-extern "C" __declspec(dllexport) void* vmaf_tonemap_create_primaries(ID3D11Resource* resource, int kind,
-                                                                     const float* luma, const float* to_bt709) {
-    return create(resource, kind, false, luma, to_bt709);
-}
-
-// HDR kept, for an HDR display, which takes PQ in BT.2020: `luma`, the source
-// primaries' luminance weights (3, for HLG's display light); `to_bt2020`,
-// linear source RGB to linear BT.2020, by rows (9). Coded as PQ.
-extern "C" __declspec(dllexport) void* vmaf_hdr_convert_create(ID3D11Resource* resource, int kind,
-                                                               const float* luma, const float* to_bt2020) {
-    return create(resource, kind, true, luma, to_bt2020);
-}
-
-// BT.2020 primaries: what the mapper took before it was given any.
-extern "C" __declspec(dllexport) void* vmaf_tonemap_create(ID3D11Resource* resource, int kind) {
-    static const float luma[3]={.2627f,.678f,.0593f};
-    static const float to_bt709[9]={1.660491f,-.587641f,-.072850f, -.124550f,1.132900f,-.008349f,
-                                    -.018151f,-.100579f,1.118730f};
-    return vmaf_tonemap_create_primaries(resource, kind, luma, to_bt709);
-}
-
-// Caller holds the owning GstD3D11Device lock throughout this operation.
-extern "C" __declspec(dllexport) int vmaf_tonemap_render(void* opaque, ID3D11Resource* resource) {
-    auto m=static_cast<Mapper*>(opaque);
-    if (!m || !resource) return E_INVALIDARG;
-    ComPtr<ID3D11Texture2D> frame;
-    HRESULT hr=resource->QueryInterface(__uuidof(ID3D11Texture2D),reinterpret_cast<void**>(frame.GetAddressOf()));
-    if (FAILED(hr)) return hr;
-    D3D11_TEXTURE2D_DESC desc; frame->GetDesc(&desc);
-    ComPtr<ID3D11Device> owner; resource->GetDevice(&owner);
-    if (owner.Get()!=m->device.Get() || desc.Format!=DXGI_FORMAT_R16G16B16A16_UNORM || desc.ArraySize!=1 || desc.SampleDesc.Count!=1 || desc.MipLevels!=1)
-        return E_INVALIDARG;
-    if (m->width!=desc.Width || m->height!=desc.Height) {
-        m->srv.Reset(); m->scratch.Reset();
-        auto sd=desc; sd.BindFlags=D3D11_BIND_SHADER_RESOURCE; sd.MiscFlags=0; sd.CPUAccessFlags=0; sd.Usage=D3D11_USAGE_DEFAULT;
-        hr=m->device->CreateTexture2D(&sd,nullptr,&m->scratch);
-        if (SUCCEEDED(hr)) hr=m->device->CreateShaderResourceView(m->scratch.Get(),nullptr,&m->srv);
-        if (FAILED(hr)) return hr;
-        m->width=desc.Width; m->height=desc.Height;
-    }
-    ComPtr<ID3D11RenderTargetView> rtv;
-    hr=m->device->CreateRenderTargetView(frame.Get(),nullptr,&rtv);
-    if (FAILED(hr)) return hr;
-    auto c=m->deferred.Get();
-    c->CopyResource(m->scratch.Get(),frame.Get());
-    c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    c->VSSetShader(m->vs.Get(),nullptr,0); c->PSSetShader(m->ps.Get(),nullptr,0);
-    c->PSSetShaderResources(0,1,m->srv.GetAddressOf()); c->PSSetConstantBuffers(0,1,m->parameters.GetAddressOf());
-    c->OMSetRenderTargets(1,rtv.GetAddressOf(),nullptr);
-    D3D11_VIEWPORT viewport={0,0,float(desc.Width),float(desc.Height),0,1}; c->RSSetViewports(1,&viewport);
-    c->Draw(3,0);
-    ComPtr<ID3D11CommandList> commands;
-    hr=c->FinishCommandList(FALSE,&commands);
-    if (SUCCEEDED(hr)) m->immediate->ExecuteCommandList(commands.Get(),TRUE);
-    return hr;
-}
-
-extern "C" __declspec(dllexport) void vmaf_tonemap_destroy(void* opaque) { delete static_cast<Mapper*>(opaque); }
-
-// ---------------------------------------------------------------- presenter
-// Native playback's own presentation: a waitable flip-model swapchain on the
-// decoders' D3D11 device, in a child window of the view, two frames deep. Its
-// caller waits for the swapchain (vmaf_present_wait) holding nothing, then
-// draws and presents with the device lock held (vmaf_present_frame): Present
-// then has no frame before it to wait for. GStreamer's d3d11videosink presented
-// at the display's refresh waiting for it with the device lock held, and the
-// decoders, which need that lock for each frame, stalled up to 40 ms. One frame
-// deep, the swapchain lost a refresh to each repaint of a window on the desktop
-// (the app's own position display among them, 21 a second): 120 fps video
-// showed 98 frames a second.
-
-static const char present_shader[] = R"(
-Texture2D<float4> rgbFrame : register(t0);
-Texture2D<float> lumaPlane : register(t1);
-Texture2D<float2> chromaPlane : register(t2);
-SamplerState linearClamp : register(s0);
-cbuffer Draw : register(b0) {
-    float4 source;    // the part of the frame drawn: left, top, width, height in texture coordinates
-    float4 toRgb[3];  // YUV frames: rows of (Y, U, V) coefficients, the offset in w
-    float yuv; float3 unused;
-};
-struct Vertex { float4 position : SV_Position; float2 uv : TEXCOORD0; };
-Vertex vs(uint id : SV_VertexID) {
-    float2 corner = float2(id & 1, id >> 1);
-    Vertex v;
-    v.position = float4(corner.x * 2 - 1, 1 - corner.y * 2, 0, 1);
-    v.uv = source.xy + corner * source.zw;
-    return v;
-}
-float4 ps(Vertex v) : SV_Target {
-    if (yuv < 0.5) return float4(rgbFrame.Sample(linearClamp, v.uv).rgb, 1);
-    float3 c = float3(lumaPlane.Sample(linearClamp, v.uv), chromaPlane.Sample(linearClamp, v.uv));
-    float3 rgb = float3(dot(c, toRgb[0].xyz), dot(c, toRgb[1].xyz), dot(c, toRgb[2].xyz))
-               + float3(toRgb[0].w, toRgb[1].w, toRgb[2].w);
-    return float4(saturate(rgb), 1);
-}
-)";
+// The shader's constants, in floats.
+constexpr int kConstants = 36;
 
 struct PresenterViews {
     ComPtr<ID3D11Texture2D> texture;
@@ -234,6 +145,23 @@ static HRESULT present_target(Presenter* p) {
     return hr;
 }
 
+// What drawing needs but a window: its context, shaders, sampler, constants.
+static HRESULT present_resources(Presenter* p) {
+    ComPtr<ID3DBlob> vs, ps, errors;
+    HRESULT hr=p->device->CreateDeferredContext(0,&p->deferred);
+    if (SUCCEEDED(hr)) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"vs","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&vs,&errors);
+    if (SUCCEEDED(hr)) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"ps","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&ps,&errors);
+    if (SUCCEEDED(hr)) hr=p->device->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,&p->vs);
+    if (SUCCEEDED(hr)) hr=p->device->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,&p->ps);
+    D3D11_SAMPLER_DESC sd={}; sd.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sd.AddressU=sd.AddressV=sd.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP; sd.MaxLOD=D3D11_FLOAT32_MAX;
+    if (SUCCEEDED(hr)) hr=p->device->CreateSamplerState(&sd,&p->sampler);
+    D3D11_BUFFER_DESC bd={}; bd.ByteWidth=kConstants*sizeof(float); bd.Usage=D3D11_USAGE_DYNAMIC;
+    bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+    if (SUCCEEDED(hr)) hr=p->device->CreateBuffer(&bd,nullptr,&p->constants);
+    return hr;
+}
+
 // On the thread the window `parent` belongs to, with the device lock held.
 // `hdr_display`: 10-bit buffers, for PQ BT.2020 frames as well as SDR ones.
 extern "C" __declspec(dllexport) void* vmaf_present_create(ID3D11Device* device, HWND parent, int hdr_display) {
@@ -270,18 +198,7 @@ extern "C" __declspec(dllexport) void* vmaf_present_create(ID3D11Device* device,
     if (SUCCEEDED(hr)) hr=swapchain.As(&p->swapchain);
     if (SUCCEEDED(hr)) hr=p->swapchain->SetMaximumFrameLatency(2);
     if (SUCCEEDED(hr)) { p->waitable=p->swapchain->GetFrameLatencyWaitableObject(); hr=present_target(p); }
-    ComPtr<ID3DBlob> vs, ps, errors;
-    if (SUCCEEDED(hr)) hr=device->CreateDeferredContext(0,&p->deferred);
-    if (SUCCEEDED(hr)) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"vs","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&vs,&errors);
-    if (SUCCEEDED(hr)) hr=D3DCompile(present_shader,strlen(present_shader),nullptr,nullptr,nullptr,"ps","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&ps,&errors);
-    if (SUCCEEDED(hr)) hr=device->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,&p->vs);
-    if (SUCCEEDED(hr)) hr=device->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,&p->ps);
-    D3D11_SAMPLER_DESC sd={}; sd.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    sd.AddressU=sd.AddressV=sd.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP; sd.MaxLOD=D3D11_FLOAT32_MAX;
-    if (SUCCEEDED(hr)) hr=device->CreateSamplerState(&sd,&p->sampler);
-    D3D11_BUFFER_DESC bd={}; bd.ByteWidth=80; bd.Usage=D3D11_USAGE_DYNAMIC;
-    bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
-    if (SUCCEEDED(hr)) hr=device->CreateBuffer(&bd,nullptr,&p->constants);
+    if (SUCCEEDED(hr)) hr=present_resources(p);
     if (FAILED(hr)) {
         if (p->waitable) CloseHandle(p->waitable);
         p->swapchain.Reset();
@@ -355,15 +272,63 @@ static ID3D11Texture2D* present_source(Presenter* p, ID3D11Texture2D* frame, UIN
     return p->copy.Get();
 }
 
+// The shader's constants (kConstants floats). `source`: the part drawn, in
+// the frame's pixels (x, y, width, height). `to_rgb`: 12 floats for a YUV
+// frame (rows of Y, U, V coefficients and an offset), null for RGB.
+// `shading`: null for the frame as it comes, or 16 floats: 1 to map HDR to
+// SDR or 2 to keep it HDR (PQ in BT.2020); the transfer, 1 PQ or 2 HLG; the
+// source primaries' luminance weights (3); linear source RGB to linear
+// BT.709 or BT.2020 by rows (9); the light mapped to SDR white and HLG's
+// display peak (nits); SDR white (nits).
+static void present_constants(float* k, const D3D11_TEXTURE2D_DESC& desc, const float* source,
+                              const float* to_rgb, const float* shading) {
+    std::fill(k,k+kConstants,0.f);
+    k[0]=source[0]/desc.Width; k[1]=source[1]/desc.Height; k[2]=source[2]/desc.Width; k[3]=source[3]/desc.Height;
+    for (int i=0;i<12;i++) k[4+i]=to_rgb?to_rgb[i]:0;
+    k[16]=to_rgb?1.f:0.f;
+    if (!shading) return;
+    k[17]=shading[0]; k[18]=shading[1]; k[19]=shading[14];
+    k[20]=shading[2]; k[21]=shading[3]; k[22]=shading[4]; k[23]=shading[15];
+    for (int row=0;row<3;row++) for (int i=0;i<3;i++) k[24+4*row+i]=shading[5+3*row+i];
+}
+
+// Records the frame's draw into `rtv`, in `viewport`, the rest cleared to
+// `clear`, and runs it on the immediate context. With the device lock held.
+static HRESULT present_draw(Presenter* p, ID3D11RenderTargetView* rtv, const D3D11_VIEWPORT& viewport,
+                            PresenterViews* views, const float* constants, const float* clear) {
+    auto c=p->deferred.Get();
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr=c->Map(p->constants.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped);
+    if (FAILED(hr)) return hr;
+    std::memcpy(mapped.pData,constants,kConstants*sizeof(float));
+    c->Unmap(p->constants.Get(),0);
+    c->ClearRenderTargetView(rtv,clear);
+    c->OMSetRenderTargets(1,&rtv,nullptr);
+    c->RSSetViewports(1,&viewport);
+    c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    c->IASetInputLayout(nullptr);
+    c->VSSetShader(p->vs.Get(),nullptr,0); c->PSSetShader(p->ps.Get(),nullptr,0);
+    c->VSSetConstantBuffers(0,1,p->constants.GetAddressOf()); c->PSSetConstantBuffers(0,1,p->constants.GetAddressOf());
+    ID3D11ShaderResourceView* srvs[3]={views->rgb.Get(),views->luma.Get(),views->chroma.Get()};
+    c->PSSetShaderResources(0,3,srvs);
+    c->PSSetSamplers(0,1,p->sampler.GetAddressOf());
+    c->Draw(4,0);
+    ComPtr<ID3D11CommandList> commands;
+    hr=c->FinishCommandList(FALSE,&commands);
+    if (FAILED(hr)) return hr;
+    p->immediate->ExecuteCommandList(commands.Get(),TRUE);
+    return S_OK;
+}
+
 // With the device lock held. `frame`: the texture, `subresource` the frame's
 // in it. `source`: the frame's part shown (x, y, width, height in its
 // pixels), or null for all of it; `target`: where in the window (device
-// pixels), or null to fit it, letterboxed. `to_rgb`: 12 floats for a YUV
-// frame (rows of Y, U, V coefficients and an offset), null for RGB.
-// `space`: the frames' DXGI colour space; `clear`: the colour beside them.
-extern "C" __declspec(dllexport) int vmaf_present_frame(void* opaque, ID3D11Resource* frame, unsigned subresource,
-                                                        const int* source, const int* target, const float* to_rgb,
-                                                        int space, const float* clear) {
+// pixels), or null to fit it, letterboxed. `to_rgb` and `shading`: as
+// present_constants takes them. `space`: the swapchain's DXGI colour space
+// for what is drawn; `clear`: the colour beside the frame.
+extern "C" __declspec(dllexport) int vmaf_present_texture(void* opaque, ID3D11Resource* frame, unsigned subresource,
+                                                          const int* source, const int* target, const float* to_rgb,
+                                                          const float* shading, int space, const float* clear) {
     auto p=static_cast<Presenter*>(opaque);
     if (!p || !frame || !clear) return E_INVALIDARG;
     RECT own={}; GetClientRect(p->window,&own);
@@ -402,30 +367,11 @@ extern "C" __declspec(dllexport) int vmaf_present_frame(void* opaque, ID3D11Reso
         t[2]=std::round(s[2]*scale); t[3]=std::round(s[3]*scale);
         t[0]=std::floor((width-t[2])/2); t[1]=std::floor((height-t[3])/2);
     }
-    auto c=p->deferred.Get();
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    hr=c->Map(p->constants.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped);
+    float constants[kConstants];
+    present_constants(constants,desc,s,to_rgb,shading);
+    D3D11_VIEWPORT viewport={t[0],t[1],t[2],t[3],0,1};
+    hr=present_draw(p,p->target.Get(),viewport,views,constants,clear);
     if (FAILED(hr)) return hr;
-    float* k=static_cast<float*>(mapped.pData);
-    k[0]=s[0]/desc.Width; k[1]=s[1]/desc.Height; k[2]=s[2]/desc.Width; k[3]=s[3]/desc.Height;
-    for (int i=0;i<12;i++) k[4+i]=to_rgb?to_rgb[i]:0;
-    k[16]=to_rgb?1.f:0.f; k[17]=k[18]=k[19]=0;
-    c->Unmap(p->constants.Get(),0);
-    c->ClearRenderTargetView(p->target.Get(),clear);
-    c->OMSetRenderTargets(1,p->target.GetAddressOf(),nullptr);
-    D3D11_VIEWPORT viewport={t[0],t[1],t[2],t[3],0,1}; c->RSSetViewports(1,&viewport);
-    c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    c->IASetInputLayout(nullptr);
-    c->VSSetShader(p->vs.Get(),nullptr,0); c->PSSetShader(p->ps.Get(),nullptr,0);
-    c->VSSetConstantBuffers(0,1,p->constants.GetAddressOf()); c->PSSetConstantBuffers(0,1,p->constants.GetAddressOf());
-    ID3D11ShaderResourceView* srvs[3]={views->rgb.Get(),views->luma.Get(),views->chroma.Get()};
-    c->PSSetShaderResources(0,3,srvs);
-    c->PSSetSamplers(0,1,p->sampler.GetAddressOf());
-    c->Draw(4,0);
-    ComPtr<ID3D11CommandList> commands;
-    hr=c->FinishCommandList(FALSE,&commands);
-    if (FAILED(hr)) return hr;
-    p->immediate->ExecuteCommandList(commands.Get(),TRUE);
     return p->swapchain->Present(1,0);
 }
 

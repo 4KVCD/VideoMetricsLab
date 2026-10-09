@@ -4,12 +4,14 @@ from enum import IntFlag
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from vmaf_app.core import gstreamer_playback
 from vmaf_app.core.frame_extract import (
     FrameComparison,
     PreviewColorSettings,
 )
-from vmaf_app.core.models import CropBox, VideoInfo
+from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo
 
 
 def _info(path: str, *, transfer: str = "smpte2084") -> VideoInfo:
@@ -40,7 +42,7 @@ def _comparison() -> FrameComparison:
     )
 
 
-def test_native_hdr_caps_keep_full_cropped_resolution_and_precision():
+def test_native_hdr_caps_keep_full_cropped_resolution_and_precision(subtests):
     caps = gstreamer_playback.output_caps_string(
         _comparison(),
         PreviewColorSettings(display_hdr_enabled=True),
@@ -57,6 +59,69 @@ def test_native_hdr_caps_keep_full_cropped_resolution_and_precision():
     twelve = replace(_comparison(), source_info=replace(_info("source.mkv"), pix_fmt="yuv420p12le"))
     assert "format=P010_10LE" in gstreamer_playback.output_caps_string(
         twelve, PreviewColorSettings(display_hdr_enabled=True), "source")
+    with subtests.test("shaded by the presenter: its colours named as GStreamer names them"):
+        # d3d11compositor, which cropped letterboxed video, wrote the name:
+        # asked for "2:6:14:7", the same colours in other words, it was
+        # refused, and letterboxed HDR video played through FFmpeg.
+        try:
+            gstreamer_playback._load_gstreamer()
+        except gstreamer_playback.GStreamerPlaybackError as error:
+            pytest.skip(str(error))
+        info = _info("source.mkv")
+        assert gstreamer_playback._hdr_colorimetry(info) == "bt2100-pq"
+        assert gstreamer_playback._hdr_colorimetry(_info("source.mkv", transfer="arib-std-b67")) == "bt2100-hlg"
+        assert gstreamer_playback._hdr_colorimetry(replace(info, color_primaries="smpte432")) == "2:6:14:11"
+    with subtests.test("cropped with nothing else to do: the appsink takes the crop meta, as videocrop asks"):
+        # Asked of the sink as it is, videocrop refused to run: d3d11convert
+        # passes such a crop's frames on whole and leaves it to the sink.
+        try:
+            gst, video = gstreamer_playback._load_gstreamer()
+        except gstreamer_playback.GStreamerPlaybackError as error:
+            pytest.skip(str(error))
+        sink = gst.ElementFactory.make("appsink", None)
+        pad = sink.get_static_pad("sink")
+        pad.add_probe(gst.PadProbeType.QUERY_DOWNSTREAM | gst.PadProbeType.PUSH, gstreamer_playback._accept_crop_meta)
+        query = gst.Query.new_allocation(gst.Caps.from_string("video/x-raw,format=NV12,width=64,height=48"), False)
+        pad.query(query)
+        for api in (video.video_crop_meta_api_get_type(), video.video_meta_api_get_type()):
+            assert query.find_allocation_meta(api)[0]
+    with subtests.test("boxed while black bars are detected, as FFmpeg fits it; stretched once they are known"):
+        # A letterboxed 16:9 source and a cropped 2.4:1 encode scaled to it:
+        # stretched before its bars were known, the encode played squashed.
+        made = {}
+
+        class Element:
+            def __init__(self, factory):
+                self.properties = made[factory] = {}
+
+            def set_property(self, name, value):
+                self.properties[name] = value
+
+            def connect(self, *_args):
+                return 0
+
+            def link(self, _other):
+                return True
+
+            def get_static_pad(self, _name):
+                return SimpleNamespace(add_probe=lambda *_args: None)
+
+        player = object.__new__(gstreamer_playback.GstComparePipeline)
+        player.Gst = SimpleNamespace(ElementFactory=SimpleNamespace(make=lambda factory, _name: Element(factory)),
+                                     Caps=SimpleNamespace(from_string=str),
+                                     PadProbeType=SimpleNamespace(QUERY_DOWNSTREAM=1, PUSH=2))
+        player._pipeline = SimpleNamespace(add=lambda _element: None)
+        player._handlers, player._decoders, player._sinks = [], {}, {}
+        sdr = dict(pix_fmt="yuv420p", color_transfer="bt709", color_primaries="bt709", color_space="bt709")
+        comparison = replace(_comparison(), source_info=replace(_info("source.mkv"), **sdr),
+                             distorted_info=replace(_comparison().distorted_info, **sdr),
+                             scale_direction=ScaleDirection.DISTORTED_TO_SOURCE)
+        pending = replace(comparison, source_crop=None, distorted_crop=None, auto_crop_pending=True)
+        for each, boxed, height in ((pending, True, 2160), (comparison, False, 1608)):
+            player._comparison = each
+            player._build_video_branch("distorted", PreviewColorSettings())
+            assert made["d3d11convert"]["add-borders"] is boxed
+            assert f"width=3840,height={height}," in made["capsfilter"]["caps"]
 
 
 def test_mixed_hdr_and_sdr_inputs_keep_independent_native_caps():
@@ -154,7 +219,6 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll(subtests):
     player._ready = False
     player._initial_seek_sent = False
     player._pending_initial_seek_ms = None
-    player._tone_error = None
     player._seek_error = None
     player._seeker = gstreamer_playback.Seeker("test-seek")
     player._seeks_asked = player._seeks_made = 0
@@ -206,7 +270,7 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll(subtests):
         assert pipeline.sought.acquire(timeout=10)
         assert player.poll().error == "GStreamer could not seek to that frame."
     with subtests.test("stopped, it seeks no more"):
-        player._tone_mappers, player._handlers, player._probes = [], [], []
+        player._handlers = []
         player.stop()
         player.seek(5000)
         assert not pipeline.sought.acquire(timeout=0.2)

@@ -17,8 +17,8 @@ everything else from it:
 
 1. **`KEEP_PLUGINS`** — the plugin DLLs, each with a note saying what the app
    uses it for: the elements the pipelines create by name (`filesrc`,
-   `decodebin3`, `videocrop`, `d3d11upload`, `d3d11convert`, `d3d11compositor`,
-   `capssetter`, `appsink`, `playbin3`), the parsers and demuxers
+   `decodebin3`, `videocrop`, `d3d11upload`, `d3d11convert`,
+   `appsink`, `playbin3`), the parsers and demuxers
    `decodebin3` needs for the files people compare, `libav` and `dav1d` for what no GPU
    decodes (VVC, 10-bit H.264, ProRes), and the soundtrack path down to
    `wasapi2sink`. Its dav1d library is the app's software frame decoder's
@@ -31,8 +31,8 @@ everything else from it:
    depends on the search order at run time.
 3. **What imports cannot reveal**: `gst-plugin-scanner.exe` (spawned, so it
    loads plugins out of process), the two `gspawn-win64-helper*.exe` GLib
-   spawns it with, `gstd3d11-1.0-0.dll` (loaded by name through ctypes for
-   the HDR tone-map), `dav1d.dll` (loaded by its path for the software frame
+   spawns it with, `gstd3d11-1.0-0.dll` (loaded by name through ctypes by
+   native playback's presenter), `dav1d.dll` (loaded by its path for the software frame
    decoder, for AV1: `vmaf_app/core/gpu_frames.py`),
    the `gi` bindings and their extension modules, and every
    typelib (3 MB; choosing among them would save nothing worth a missed one).

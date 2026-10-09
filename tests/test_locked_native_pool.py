@@ -12,6 +12,8 @@ def pool():
     instance.pair = None
     instance.pair_index = None
     instance.late_since = None
+    instance.entries = {}
+    instance.shadings = {}
     instance.showing_source = False
     instance.frames = {"source": {10: "s10", 11: "s11", 12: "s12"},
                        ("distorted", 0): {10: "d10"}}
@@ -34,6 +36,13 @@ def test_a_zoomed_frame_is_presented_with_the_part_in_view():
     instance.view = SimpleNamespace(native_view=lambda sample: None)
     instance.place()  # the zoom changed: the same frame again
     assert presented[-1] == ("d10",)
+    # Shown again after its decoder went -- the encode chosen again before
+    # it was back -- the frame is shaded as its video is: it was shown
+    # unshaded, HDR as SDR.
+    instance.shadings[("distorted", 0)] = (1.0, 1.0)
+    instance.entries = {}
+    instance.place()
+    assert presented[-1] == ("d10", None, (1.0, 1.0))
 
 
 def test_fast_source_never_advances_past_matching_distorted_frame():

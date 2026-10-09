@@ -53,6 +53,10 @@ class LockedNativePool:
         self.late_since = None
         self.showing_source = False
         self.entries, self.desired, self.frames, self.eos = {}, {}, {}, set()
+        #: Each video's shading (GstComparePipeline.shading), kept when its
+        #: decoder goes: an encode chosen again before its decoder was back
+        #: was shown unshaded, HDR as SDR.
+        self.shadings = {}
         self.pair = None
         self.pair_index = None
         self.anchor = time.monotonic()
@@ -114,6 +118,7 @@ class LockedNativePool:
                 continue
             player = GstComparePipeline(comparison, self.settings, side, device=self.device)
             self.entries[key] = [player, None, self.position, False]
+            self.shadings[key] = player.shading
             self.frames[key] = {}
             player.start(max(0, self.position - round(1000 / self.fps)), True)
             occupied += 1
@@ -132,12 +137,19 @@ class LockedNativePool:
         self.frame, self.position = frame, round(frame * 1000 / self.fps)
         self.pair, self.pair_index = (source[frame], distorted[frame]), self.selected
         if changed:
-            self._present(self.pair[0 if self.showing_source else 1])
+            self._present(self.showing_source)
         return True
 
-    def _present(self, sample):
+    def _present(self, source):
+        """The pair's source frame (`source`) or its encode's: fitted to the
+        window, or where the zoom puts it, shaded as its video is
+        (GstComparePipeline.shading)."""
+        sample = self.pair[0 if source else 1]
+        shading = self.shadings.get(self.source_key if source else ("distorted", self.pair_index))
         view = self.view.native_view(sample)
-        if view is None:
+        if shading is not None:
+            self.output.present(sample, view, shading)
+        elif view is None:
             self.output.present(sample)  # fitted to the window, as always
         else:
             self.output.present(sample, view)
@@ -146,12 +158,12 @@ class LockedNativePool:
         """The zoom, or the part of the frame in view, changed."""
         self.surface.refresh_cursor()
         if self.pair is not None and self.pair_index == self.selected:
-            self._present(self.pair[0 if self.showing_source else 1])
+            self._present(self.showing_source)
 
     def show_source(self, showing):
         self.showing_source = bool(showing)
         if self.pair is not None and self.pair_index == self.selected:
-            self._present(self.pair[0 if showing else 1])
+            self._present(self.showing_source)
 
     def set_audio_enabled(self, enabled):
         self.audio.set_enabled(enabled)

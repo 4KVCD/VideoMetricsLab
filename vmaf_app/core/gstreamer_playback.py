@@ -7,6 +7,8 @@ hardware decoder through crop/scale and into its swapchain.
 """
 from __future__ import annotations
 
+import ctypes
+import functools
 import logging
 import os
 import threading
@@ -112,7 +114,7 @@ _PIPELINE_ELEMENTS = (
 #: depends on the GPU the registry was scanned on, not on the installation.
 REQUIRED_ELEMENTS = (
     *_PIPELINE_ELEMENTS,
-    "d3d11compositor", "queue", "capsfilter", "capssetter", "appsink",
+    "queue", "capsfilter", "appsink",
     "playbin3", "uridecodebin3",  # the soundtrack: playbin3 is built on uridecodebin3
     "h264parse", "h265parse", "h266parse", "av1parse", "vp9parse", "mpegvideoparse",
     "matroskademux", "qtdemux", "tsdemux", "avidemux",
@@ -325,6 +327,75 @@ def _shading(info: VideoInfo, settings: PreviewColorSettings) -> str | None:
 
 #: GstVideoColorPrimaries of the primaries the HDR shader takes (d3d11_tonemap.PRIMARIES).
 _GST_PRIMARIES = {"bt709": 1, "bt2020": 7, "smpte432": 11}
+#: GstVideoColorMatrix by FFmpeg's names for the YUV matrix.
+_GST_MATRICES = {"bt709": 3, "bt470bg": 4, "smpte170m": 4, "smpte240m": 5, "bt2020nc": 6, "bt2020c": 6}
+
+
+def _hdr_colorimetry(info: VideoInfo) -> str:
+    """An HDR video's own colorimetry, as GStreamer writes it (range, YUV
+    matrix, transfer, primaries): stated in the caps a converter is to give,
+    it converts none of the colours, which the presenter's shader takes as
+    they come. In GStreamer's own words -- "bt2100-pq", not "2:6:14:7":
+    caps compare them as text, and an element that writes the name, as
+    d3d11compositor did, has the caps it gives refused."""
+    from vmaf_app.core.d3d11_tonemap import hdr_primaries
+
+    full = info.color_range.casefold() in {"pc", "full", "jpeg"}
+    matrix = _GST_MATRICES.get(info.color_space.casefold(), 6)
+    transfer = 14 if hdr_kind(info) == "HDR10 / PQ" else 15
+    colorimetry = _load_gstreamer()[1].VideoColorimetry()
+    numbers = f"{1 if full else 2}:{matrix}:{transfer}:{_GST_PRIMARIES[hdr_primaries(info.color_primaries)]}"
+    return (colorimetry.to_string() if colorimetry.from_string(numbers) else None) or numbers
+
+
+@functools.cache
+def _crop_meta_answer():
+    """GStreamer's functions to answer an allocation query through ctypes,
+    and the GTypes of the APIs of GstVideoCropMeta and GstVideoMeta, which
+    videocrop asks for both; None if a query's type is not where GstQuery
+    has it. Through PyGObject the query cannot be answered: its wrapper
+    holds a reference, and a query held twice is not writable."""
+    core = ctypes.CDLL("gstreamer-1.0-0.dll")
+    for name, restype, argtypes in (
+        ("gst_pad_probe_info_get_query", ctypes.c_void_p, [ctypes.c_void_p]),
+        ("gst_query_new_allocation", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_int]),
+        ("gst_query_find_allocation_meta", ctypes.c_int, [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]),
+        ("gst_query_add_allocation_meta", None, [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]),
+        ("gst_mini_object_unref", None, [ctypes.c_void_p]),
+    ):
+        function = getattr(core, name)
+        function.restype, function.argtypes = restype, argtypes
+    video = ctypes.CDLL("gstvideo-1.0-0.dll")
+    apis = []
+    for name in ("gst_video_crop_meta_api_get_type", "gst_video_meta_api_get_type"):
+        function = getattr(video, name)
+        function.restype = ctypes.c_size_t
+        apis.append(function())
+    allocation = int(_load_gstreamer()[0].QueryType.ALLOCATION)
+    offset = 64  # GST_QUERY_TYPE: after the query's GstMiniObject, 64 bytes in a 64-bit process
+    query = core.gst_query_new_allocation(None, 0)
+    try:
+        if ctypes.c_int.from_address(query + offset).value != allocation:
+            return None
+    finally:
+        core.gst_mini_object_unref(query)
+    return core, apis, allocation, offset
+
+
+def _accept_crop_meta(_pad, info):
+    """Pad probe on an appsink: its allocation queries answered as taking a
+    GstVideoCropMeta (GstComparePipeline). Holds nothing of the pipeline."""
+    from vmaf_app.core.d3d11_tonemap import boxed_pointer
+
+    answer = _crop_meta_answer()
+    if answer is not None:
+        core, apis, allocation, offset = answer
+        query = core.gst_pad_probe_info_get_query(boxed_pointer(info))
+        if query and ctypes.c_int.from_address(query + offset).value == allocation:
+            for api in apis:
+                if not core.gst_query_find_allocation_meta(query, api, None):
+                    core.gst_query_add_allocation_meta(query, api, None)
+    return _GST[0].PadProbeReturn.OK
 
 
 def needs_sdr_tonemap(settings: PreviewColorSettings) -> bool:
@@ -418,17 +489,19 @@ class GstComparePipeline:
         #: from its first preroll (_prerolled_time): frames and positions
         #: count from it, as the metrics and FFmpeg's playback count them.
         self._first_frame: int | None = None
-        self._tone_mappers = []
-        self._tone_error = None
+        #: How the presenter's shader shows this video's frames
+        #: (d3d11_tonemap.shading), None as they come; and which way, "sdr"
+        #: or "hdr" (_shading).
+        self.shading: tuple[float, ...] | None = None
+        self._shaded: str | None = None
         self._seeker = Seeker(f"{side}-seek")
         #: A seek the pipeline refused (Seeker, on its thread), for poll().
         self._seek_error: str | None = None
         #: Seeks asked for (the window's thread) and made (the Seeker's): `seeking`.
         self._seeks_asked = self._seeks_made = 0
-        #: Signal handlers and pad probes that call back into this object,
-        #: (object, id): stop() removes them (_release).
+        #: Signal handlers that call back into this object, (object, id):
+        #: stop() removes them (_release).
         self._handlers: list[tuple[Any, int]] = []
-        self._probes: list[tuple[Any, int]] = []
         self._device = device
         if device is not None or any(
             _shading(i, settings) for i in (comparison.source_info, comparison.distorted_info)
@@ -504,64 +577,37 @@ class GstComparePipeline:
         # On GPU memory videocrop cannot touch pixels; it attaches a crop
         # rectangle (GstVideoCropMeta) for the next element to honour, and
         # refuses to run unless that element says it will. d3d11convert does
-        # not, so every letterboxed comparison used to fail here and fall
-        # back to FFmpeg. d3d11compositor does: with one input stretched to
-        # the output size it is the same crop-scale-convert pass on the GPU,
-        # checked frame for frame against d3d11convert on the same source.
-        # It re-times its output to the frame grid, which d3d11convert does
-        # not, so the uncropped case keeps the element it always had.
+        # in GStreamer 1.28: a letterboxed 10-bit frame comes out as FFmpeg
+        # crops it, code for code. It did not when cropping came in, and
+        # d3d11compositor cropped instead -- through RGB and back, up to 82
+        # codes apart, and, given YUV to give, never: every letterboxed HDR
+        # comparison played through FFmpeg. Stretched to the comparison's
+        # size, as the metrics compare the frames -- but while black bars
+        # are still being detected, boxed in black, as the FFmpeg paths fit
+        # it: a letterboxed 16:9 source beside a 2.4:1 encode is squashed
+        # otherwise, a pair no run compares as it is.
         width, height = comparison_dimensions(self._comparison)
-        if any((left, top, right, bottom)):
-            convert = self._make("d3d11compositor", f"{side}-convert")
-            convert.set_property("background", 1)  # black, not the checkerboard
-            picture = convert.request_pad_simple("sink_%u")
-            if picture is None:
-                raise GStreamerPlaybackError(f"Could not request the {side} compositor input.")
-            picture.set_property("width", width)
-            picture.set_property("height", height)
-        else:
-            convert = self._make("d3d11convert", f"{side}-convert")
+        convert = self._make("d3d11convert", f"{side}-convert")
+        convert.set_property("add-borders", bool(self._comparison.auto_crop_pending))
         capsfilter = self._make("capsfilter", f"{side}-output-caps")
         caps = self.Gst.Caps.from_string(
             output_caps_string(self._comparison, settings, side)
         )
         shading = _shading(info, settings)
-        retag = None
         if shading:
-            from vmaf_app.core.d3d11_tonemap import D3D11ToneMapper, hdr_primaries
+            from vmaf_app.core import d3d11_tonemap
 
-            transfer = 14 if hdr_kind(info) == "HDR10 / PQ" else 15
-            # Force a private, high-precision converter output, not an 8-bit
-            # intermediate or the decoder's reference surface. Keep PQ/HLG
-            # encoded values until our explicit highlight mapping stage.
+            # Shaded by the presenter as it draws the frame shown, at the
+            # size shown: the converter only crops and scales, the video's
+            # own colours kept (12-bit video as 10, which the presenter
+            # reads). Shaded here, each frame of each video was converted
+            # to 16-bit RGBA, copied and shaded at full size.
             caps = self.Gst.Caps.from_string(
-                "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
-                f"width={width},height={height},pixel-aspect-ratio=1/1,"
-                # Gst colour enum tuple: full range, RGB matrix, PQ/HLG, and
-                # the video's own primaries, which the shader converts (the
-                # converter leaves them as they are: its own conversion,
-                # gamma-mode remap, turned PQ frames far darker). A YUV
-                # bt2100-pq shorthand would leave limited-range RGB values
-                # for the shader to misinterpret.
-                f"colorimetry=1:1:{transfer}:{_GST_PRIMARIES[hdr_primaries(info.color_primaries)]}"
+                f"video/x-raw(memory:D3D11Memory),format={_output_format(info)},"
+                f"width={width},height={height},pixel-aspect-ratio=1/1,colorimetry={_hdr_colorimetry(info)}"
             )
-            mapper = D3D11ToneMapper(self._device, hdr_kind(info), info.color_primaries, hdr=shading == "hdr")
-            self._tone_mappers.append(mapper)
-            # SDR: sRGB, the HDR descriptions dropped; HDR: PQ in BT.2020,
-            # the descriptions kept.
-            output = "sRGB" if shading == "sdr" else "1:1:14:7"
-            retag = self._make("capssetter", f"{side}-{shading}-caps")
-            retag.set_property("replace", True)
-            retag.set_property("caps", self.Gst.Caps.from_string(
-                "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
-                f"width={width},height={height},pixel-aspect-ratio=1/1,"
-                f"colorimetry={output}"
-            ))
-            pad = capsfilter.get_static_pad("src")
-            self._probes.append((pad, pad.add_probe(
-                self.Gst.PadProbeType.BUFFER | self.Gst.PadProbeType.EVENT_DOWNSTREAM,
-                self._tone_probe, (mapper, retag, output),
-            )))
+            self.shading = d3d11_tonemap.shading(hdr_kind(info), info.color_primaries, hdr=shading == "hdr")
+            self._shaded = shading
         capsfilter.set_property("caps", caps)
         sink = self._make("appsink", f"{side}-video-sink")
         # Retain references to GPU textures, not CPU-mapped pixel arrays.
@@ -570,11 +616,16 @@ class GstComparePipeline:
         sink.set_property("drop", False)
         sink.set_property("wait-on-eos", False)
         sink.set_property("enable-last-sample", False)
+        if any((left, top, right, bottom)):
+            # Cropped with nothing else to do -- the sizes and formats the
+            # same either side -- d3d11convert passes frames on as they come,
+            # and asks this sink whether it takes a crop meta: the presenter
+            # does (LockedPresentation._draw). Asked of the sink as it is,
+            # videocrop refused to run.
+            sink.get_static_pad("sink").add_probe(
+                self.Gst.PadProbeType.QUERY_DOWNSTREAM | self.Gst.PadProbeType.PUSH, _accept_crop_meta)
         # CPU-only decoders (including H.266) upload once, before GPU cropping.
-        chain = [queue, upload, gpu_memory, crop, convert, capsfilter]
-        if retag is not None:
-            chain.append(retag)
-        chain.append(sink)
+        chain = [queue, upload, gpu_memory, crop, convert, capsfilter, sink]
         self._add(source, decoder, *chain)
         if not source.link(decoder):
             raise GStreamerPlaybackError(f"Could not open the {side} video file for decoding.")
@@ -585,31 +636,6 @@ class GstComparePipeline:
                 )
         self._decoders[side] = decoder
         self._sinks[side] = sink
-
-    def _tone_probe(self, _pad, probe, processing):
-        mapper, retag, colorimetry = processing
-        if probe.type & self.Gst.PadProbeType.EVENT_DOWNSTREAM:
-            event = probe.get_event()
-            if event.type == self.Gst.EventType.CAPS:
-                caps = event.parse_caps().copy()
-                caps.set_value("colorimetry", colorimetry)
-                # remove_field on a GI structure wrapper edits a copy, so use
-                # writable caps via their serialized structure here (once per
-                # negotiation, never per frame).
-                structure = caps.get_structure(0).copy()
-                if not mapper.hdr:
-                    for field in ("mastering-display-info", "content-light-level"):
-                        structure.remove_field(field)
-                output = self.Gst.Caps.new_empty()
-                output.append_structure_full(structure, caps.get_features(0).copy())
-                retag.set_property("caps", output)
-            return self.Gst.PadProbeReturn.OK
-        try:
-            mapper.render(probe.get_buffer())
-        except Exception as exc:
-            self._tone_error = str(exc)
-            return self.Gst.PadProbeReturn.DROP
-        return self.Gst.PadProbeReturn.OK
 
     @staticmethod
     def _stream_caps_name(stream) -> str:
@@ -644,14 +670,12 @@ class GstComparePipeline:
     def stop(self) -> None:
         self._seeker.close()
         self._pipeline.set_state(self.Gst.State.NULL)
-        for mapper in self._tone_mappers:
-            mapper.close()
         self._release()
 
     def _release(self) -> None:
         """Removes the callbacks into this object that the pipeline's
-        elements hold. Each is a cycle -- the decoder or a pad holds a bound
-        method, which holds this object, which holds the pipeline -- that
+        elements hold. Each is a cycle -- the decoder holds a bound method,
+        which holds this object, which holds the pipeline -- that
         passes through GStreamer's C side, where Python's collector cannot
         see it: a stopped pipeline, with its decoder's D3D11 surfaces, was
         never freed. Moving the window between an HDR and an SDR display
@@ -660,10 +684,7 @@ class GstComparePipeline:
         for element, handler in self._handlers:
             if element.handler_is_connected(handler):
                 element.disconnect(handler)
-        for pad, probe in self._probes:
-            pad.remove_probe(probe)
         self._handlers.clear()
-        self._probes.clear()
 
     def set_playing(self, playing: bool) -> None:
         self._wanted_playing = bool(playing)
@@ -784,14 +805,14 @@ class GstComparePipeline:
         details = [f"{width}×{height} {fmt}", memory, self._decoder_description()]
         if color:
             details.insert(1, str(color))
-        if any(not mapper.hdr for mapper in self._tone_mappers):
+        if self._shaded == "sdr":
             details.append("GPU HDR→SDR · fixed Reinhard 1000→100 nit")
-        if any(mapper.hdr for mapper in self._tone_mappers):
+        elif self._shaded == "hdr":
             details.append("GPU colours → PQ BT.2020, HDR kept")
         return " · ".join(details)
 
     def poll(self) -> PlaybackUpdate:
-        error = self._tone_error or self._seek_error
+        error = self._seek_error
         ended = False
         while True:
             message = self._bus.pop_filtered(

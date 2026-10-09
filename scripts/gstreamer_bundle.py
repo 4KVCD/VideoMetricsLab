@@ -43,8 +43,7 @@ KEEP_PLUGINS: dict[str, str] = {
     "gstplayback": "decodebin3, parsebin, playbin3 and its uridecodebin3, playsink",
     "gstapp": "appsink: the frame-locked pool takes the GPU frames from it",
     "gstvideocrop": "videocrop: removes the detected black bars",
-    "gstdebug": "capssetter: retags tone-mapped frames as SDR",
-    "gstd3d11": "d3d11{h264,h265,av1,vp9,mpeg2}dec, d3d11upload, d3d11convert, d3d11compositor",
+    "gstd3d11": "d3d11{h264,h265,av1,vp9,mpeg2}dec, d3d11upload, d3d11convert",
     "gstvideoconvertscale": "videoconvert/videoscale for anything left in system memory",
     "gstpbtypes": "dynamic caps types (multiview flags) the parsers may reference",
     # -- elementary stream parsers (decodebin3 needs them before decoders) --
@@ -93,8 +92,8 @@ KEEP_TOOLS = (
     "gstreamer_libs/bin/gspawn-win64-helper-console.exe",
 )
 
-#: Loaded by the app itself through ctypes: the HDR tone-map's, by name
-#: (vmaf_app/core/d3d11_tonemap.py), and dav1d, by its path in the
+#: Loaded by the app itself through ctypes: GStreamer's D3D11 library, by
+#: name (vmaf_app/core/locked_presentation.py), and dav1d, by its path in the
 #: gstreamer_plugins_libs package, which the software frame decoder decodes
 #: AV1 with (vmaf_app/core/gpu_frames.py) -- also GStreamer's dav1d plugin's
 #: today, kept should that go.

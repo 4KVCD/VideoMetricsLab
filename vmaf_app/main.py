@@ -106,10 +106,10 @@ def self_test() -> SelfTestReport:
 
     from vmaf_app.core import d3d11_tonemap
 
-    if d3d11_tonemap.available():
-        report.ok(f"GPU HDR tone-map shader ({d3d11_tonemap.library_path().name})")
+    if d3d11_tonemap.presents():
+        report.ok(f"Native playback's presenter and HDR shader ({d3d11_tonemap.library_path().name})")
     else:
-        report.warn("GPU HDR tone-map shader absent; FFmpeg tone mapping is used")
+        report.warn("Native playback's presenter absent or out of date; videos play through FFmpeg")
 
     from vmaf_app.core import gpu_frames
 
