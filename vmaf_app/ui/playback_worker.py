@@ -76,7 +76,11 @@ class StreamDecodeWorker(QThread):
         width, height = playback_dimensions(self.comparison, self.maximum)
         frame_bytes = width * height * 4
         accel = self.plan.source if self.side == "source" else self.plan.distorted
-        modes = ("vulkan", "transfer", "software", "cpu") if accel else ("software", "cpu")
+        # The GPU's own decoder first, never FFmpeg's Vulkan decoder: see
+        # build_video_series_command. NVDEC's pictures stay on the GPU where
+        # FFmpeg can hand them to Vulkan there ("interop").
+        modes = ("software", "cpu") if not accel else (
+            ("interop", "transfer", "software", "cpu") if accel == "cuda" else ("transfer", "software", "cpu"))
         errors = self.attempt_errors
         next_frame = self.start_frame
         for mode in modes:
@@ -120,7 +124,7 @@ class StreamDecodeWorker(QThread):
                     if first:
                         first = False
                         detail = {
-                            "vulkan": "Vulkan GPU decode + GPU tone mapping/RGB",
+                            "interop": "GPU decode + GPU tone mapping/RGB",
                             "transfer": "hardware decode + GPU tone mapping/RGB (host transfer)",
                             "software": "software decode + GPU tone mapping/RGB",
                             "cpu": "CPU fallback (GPU processing unavailable)",

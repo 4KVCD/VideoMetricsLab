@@ -88,20 +88,25 @@ def series_layout(comparisons, maximum=None):
 
 def build_video_series_command(
     comparisons, start_frame, settings, plans, maximum=None, *, realtime,
-    processing="vulkan", side=None, paced=True,
+    processing="transfer", side=None, paced=True,
 ):
     """One clocked RGBA atlas containing every view, not just the selected pair.
 
-    Vulkan decode keeps supported streams on the processing GPU. The transfer
-    retry retains CUDA decode with an explicit host bridge; the software-decode
-    retry still uses GPU processing. CPU processing is the final safe fallback.
+    The GPU's own decoder (the plan's NVDEC, QSV or D3D11VA) feeds the Vulkan
+    processing: "interop" hands NVDEC's pictures over on the GPU, through a
+    Vulkan device made from the CUDA one; "transfer" through system memory
+    (2.4x slower for 4K HEVC: 133 fps against 318). The software-decode
+    retry still uses GPU processing; CPU processing is the final safe
+    fallback. Not FFmpeg's Vulkan decoder: on an RTX 5090 it corrupted 2-3%
+    of HEVC frames -- the lower part of the picture green -- and stalled,
+    where NVDEC decoded the same frames clean (FFmpeg 9.0.1, driver 616.92).
     """
     if not comparisons or len(plans) != len(comparisons):
         raise ValueError("a decode plan is required for every comparison")
     fps = comparisons[0].fps
     if fps <= 0 or start_frame < 0:
         raise ValueError("invalid playback frame rate or start frame")
-    if processing not in {"vulkan", "transfer", "software", "cpu"}:
+    if processing not in {"interop", "transfer", "software", "cpu"}:
         raise ValueError("unknown playback processing mode")
     recipes, _pairs = series_layout(comparisons, maximum)
     if side is not None:
@@ -113,7 +118,10 @@ def build_video_series_command(
     timestamp = max(0, (start_frame - 0.125) / fps)
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error"]
     gpu = processing != "cpu"
-    if gpu:
+    if processing == "interop":
+        cmd += ["-init_hw_device", "cuda=decode", "-init_hw_device", "vulkan=preview@decode",
+                "-filter_hw_device", "preview"]
+    elif gpu:
         cmd += ["-init_hw_device", "vulkan=preview", "-filter_hw_device", "preview"]
     # A single demuxer/decoder per file, even with different crops of its source.
     inputs, recipe_inputs = [], []
@@ -123,15 +131,13 @@ def build_video_series_command(
         if index is None:
             plan = plans[comparisons.index(comparison)]
             accel = plan.source if side == "source" else plan.distorted
-            if processing == "vulkan" and accel:
-                accel = "vulkan"
-            elif processing in {"software", "cpu"}:
+            if processing in {"software", "cpu"}:
                 accel = None
             index = len(inputs)
             inputs.append((path, accel))
             args = _input_args(path, timestamp, accel, realtime and paced)
-            if accel == "vulkan":
-                args[-2:-2] = ["-hwaccel_device", "preview"]
+            if processing == "interop" and accel == "cuda":
+                args[-2:-2] = ["-hwaccel_device", "decode"]  # the device the Vulkan one is made from
             cmd += args
         recipe_inputs.append(index)
     graph = []
@@ -161,10 +167,9 @@ def build_video_series_command(
                         params.append(f"{name}={default}")
                 if params:
                     ops.append("setparams=" + ":".join(params))
-            if accel and accel != "vulkan":
+            if accel and not (processing == "interop" and accel == "cuda"):
                 ops += ["hwdownload", f"format={hw_native_format(info.pix_fmt)}"]
-            if accel != "vulkan":
-                ops.append("hwupload")
+            ops.append("hwupload")  # from NVDEC's CUDA frames, in interop: on the GPU
             options = [f"w={size[0]}", f"h={size[1]}", "format=rgba", "colorspace=gbr", "range=pc"]
             if crop is not None:
                 options += [f"crop_x={crop.x}", f"crop_y={crop.y}", f"crop_w={crop.w}", f"crop_h={crop.h}"]
