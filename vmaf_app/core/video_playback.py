@@ -240,7 +240,10 @@ def ffplay_path() -> Path | None:
 
 
 def build_audio_command(comparison: FrameComparison, start_frame: int) -> list[str] | None:
-    """Play only the distorted audio through ffplay's native audio output."""
+    """Play the source's audio through ffplay's native audio output: the
+    comparison's one soundtrack, whichever test video is shown, as native
+    playback's (SingleSoundtrack). It was the first test video's, which
+    encodes often do not carry: FFmpeg playback was then silent."""
     player = ffplay_path()
     if player is None or comparison.fps <= 0:
         return None
@@ -248,6 +251,6 @@ def build_audio_command(comparison: FrameComparison, start_frame: int) -> list[s
     return [
         str(player), "-nodisp", "-autoexit", "-loglevel", "error",
         "-ss", f"{timestamp:.9f}",
-        "-i", str(frame_input_path(comparison, "distorted").resolve()),
+        "-i", str(frame_input_path(comparison, "source").resolve()),
         "-vn", "-sn",
     ]
