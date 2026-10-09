@@ -50,7 +50,9 @@ def test_shader_failures_unlock_the_device_and_cpu_memory_is_refused(subtests):
 
 def test_a_videos_primaries_reach_the_shader(monkeypatch, subtests):
     """Display P3 HDR (VideoQ's) plays natively, its colours converted from
-    P3: it was refused, the shader taking every video for BT.2020."""
+    P3: it was refused, the shader taking every video for BT.2020. On an
+    HDR display, which takes BT.2020, it is converted to that, HDR kept: it
+    was passed through as it came, its colours oversaturated."""
     with subtests.test("BT.2020's conversion is the shader's as it was, P3's as published"):
         luma, to_bt709 = d3d11_tonemap.conversion("bt2020")
         assert luma == pytest.approx((.2627, .678, .0593), abs=1e-5)
@@ -59,6 +61,8 @@ def test_a_videos_primaries_reach_the_shader(monkeypatch, subtests):
         assert d3d11_tonemap.conversion("smpte432")[1] == pytest.approx(
             (1.224940, -.224940, 0, -.042057, 1.042057, 0, -.019638, -.078636, 1.098274), abs=1e-6)
         assert d3d11_tonemap.conversion("") == d3d11_tonemap.conversion("bt2020")
+        assert d3d11_tonemap.conversion("smpte432", "bt2020")[1] == pytest.approx(
+            (.753833, .198597, .047570, .045744, .941777, .012479, -.001210, .017602, .983609), abs=1e-6)
 
     def comparison(primaries):
         info = VideoInfo(path=Path("p3.mkv"), width=3840, height=2160, fps=120.0, duration=10.0, nb_frames=1200,
@@ -68,9 +72,14 @@ def test_a_videos_primaries_reach_the_shader(monkeypatch, subtests):
 
     monkeypatch.setattr(gstreamer_playback, "gstreamer_available", lambda: (True, ""))
     monkeypatch.setattr(d3d11_tonemap, "available", lambda: True)
-    sdr_display = PreviewColorSettings(display_hdr_enabled=False)
-    for primaries, converts, native in (("smpte432", True, True), ("smpte432", False, False),
-                                        ("bt2020", False, True), ("smpte431", True, False)):
-        with subtests.test("native playback", primaries=primaries, shader_converts=converts):
-            monkeypatch.setattr(d3d11_tonemap, "converts_primaries", lambda converts=converts: converts)
-            assert gstreamer_playback.uses_native_gstreamer(comparison(primaries), sdr_display)[0] is native
+    for hdr_display in (False, True):
+        settings = PreviewColorSettings(display_hdr_enabled=hdr_display)
+        for primaries, converts, native in (("smpte432", True, True), ("smpte432", False, False),
+                                            ("bt2020", False, True), ("smpte431", True, False)):
+            with subtests.test("native playback", hdr_display=hdr_display, primaries=primaries,
+                               shader_converts=converts):
+                monkeypatch.setattr(d3d11_tonemap, "converts_primaries", lambda converts=converts: converts)
+                monkeypatch.setattr(d3d11_tonemap, "converts_for_hdr", lambda converts=converts: converts)
+                assert gstreamer_playback.uses_native_gstreamer(comparison(primaries), settings)[0] is native
+                expected = None if primaries == "bt2020" and hdr_display else ("hdr" if hdr_display else "sdr")
+                assert gstreamer_playback._shading(comparison(primaries).source_info, settings) == expected

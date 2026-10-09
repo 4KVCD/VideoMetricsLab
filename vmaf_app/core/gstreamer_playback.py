@@ -243,15 +243,33 @@ def uses_native_gstreamer(
         hdr_kind(info) is not None
         for info in (comparison.source_info, comparison.distorted_info)
     )
-    if inputs_are_hdr and needs_sdr_tonemap(settings):
+    if inputs_are_hdr:
         from vmaf_app.core.d3d11_tonemap import available, supports
 
-        if not available():
+        tone_map = needs_sdr_tonemap(settings)
+        if tone_map and not available():
             return False, "native HDR-to-SDR helper is not built; using FFmpeg tone mapping"
         for info in (comparison.source_info, comparison.distorted_info):
-            if hdr_kind(info) and not supports(info.color_primaries):
+            # Other primaries than BT.2020 are converted by the shader: to
+            # BT.709 for SDR, or for an HDR display, which takes BT.2020, to
+            # that (_shading).
+            if hdr_kind(info) and not supports(info.color_primaries, hdr=not tone_map):
                 return False, f"{info.color_primaries} HDR primaries use the FFmpeg color converter"
     return True, ""
+
+
+def _shading(info: VideoInfo, settings: PreviewColorSettings) -> str | None:
+    """What the D3D11 shader does to one video's frames: "sdr", HDR mapped
+    to SDR BT.709; "hdr", HDR kept for an HDR display and converted to the
+    BT.2020 it takes -- passed through as they came, Display P3 colours were
+    shown as BT.2020, oversaturated; None, nothing."""
+    if hdr_kind(info) is None:
+        return None
+    if needs_sdr_tonemap(settings):
+        return "sdr"
+    from vmaf_app.core.d3d11_tonemap import hdr_primaries
+
+    return None if hdr_primaries(info.color_primaries) == "bt2020" else "hdr"
 
 
 #: GstVideoColorPrimaries of the primaries the HDR shader takes (d3d11_tonemap.PRIMARIES).
@@ -357,9 +375,9 @@ class GstComparePipeline:
         self._handlers: list[tuple[Any, int]] = []
         self._probes: list[tuple[Any, int]] = []
         self._device = device
-        if device is not None or (needs_sdr_tonemap(settings) and any(
-            hdr_kind(i) for i in (comparison.source_info, comparison.distorted_info)
-        )):
+        if device is not None or any(
+            _shading(i, settings) for i in (comparison.source_info, comparison.distorted_info)
+        ):
             import gi
 
             gi.require_version("GstD3D11", "1.0")
@@ -452,11 +470,12 @@ class GstComparePipeline:
         caps = self.Gst.Caps.from_string(
             output_caps_string(self._comparison, settings, side)
         )
-        tone_map = hdr_kind(info) is not None and needs_sdr_tonemap(settings)
+        shading = _shading(info, settings)
         retag = None
-        if tone_map:
+        if shading:
             from vmaf_app.core.d3d11_tonemap import D3D11ToneMapper, hdr_primaries
 
+            transfer = 14 if hdr_kind(info) == "HDR10 / PQ" else 15
             # Force a private, high-precision converter output, not an 8-bit
             # intermediate or the decoder's reference surface. Keep PQ/HLG
             # encoded values until our explicit highlight mapping stage.
@@ -465,25 +484,28 @@ class GstComparePipeline:
                 f"width={width},height={height},pixel-aspect-ratio=1/1,"
                 # Gst colour enum tuple: full range, RGB matrix, PQ/HLG, and
                 # the video's own primaries, which the shader converts (the
-                # converter leaves them as they are). A YUV bt2100-pq
-                # shorthand would leave limited-range RGB values for the
-                # shader to misinterpret.
-                f"colorimetry=1:1:{14 if hdr_kind(info) == 'HDR10 / PQ' else 15}:"
-                f"{_GST_PRIMARIES[hdr_primaries(info.color_primaries)]}"
+                # converter leaves them as they are: its own conversion,
+                # gamma-mode remap, turned PQ frames far darker). A YUV
+                # bt2100-pq shorthand would leave limited-range RGB values
+                # for the shader to misinterpret.
+                f"colorimetry=1:1:{transfer}:{_GST_PRIMARIES[hdr_primaries(info.color_primaries)]}"
             )
-            mapper = D3D11ToneMapper(self._device, hdr_kind(info), info.color_primaries)
+            mapper = D3D11ToneMapper(self._device, hdr_kind(info), info.color_primaries, hdr=shading == "hdr")
             self._tone_mappers.append(mapper)
-            retag = self._make("capssetter", f"{side}-sdr-caps")
+            # SDR: sRGB, the HDR descriptions dropped; HDR: its own transfer,
+            # in BT.2020, the descriptions kept.
+            output = "sRGB" if shading == "sdr" else f"1:1:{transfer}:7"
+            retag = self._make("capssetter", f"{side}-{shading}-caps")
             retag.set_property("replace", True)
             retag.set_property("caps", self.Gst.Caps.from_string(
                 "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
                 f"width={width},height={height},pixel-aspect-ratio=1/1,"
-                "colorimetry=sRGB"
+                f"colorimetry={output}"
             ))
             pad = capsfilter.get_static_pad("src")
             self._probes.append((pad, pad.add_probe(
                 self.Gst.PadProbeType.BUFFER | self.Gst.PadProbeType.EVENT_DOWNSTREAM,
-                self._tone_probe, (mapper, retag),
+                self._tone_probe, (mapper, retag, output),
             )))
         capsfilter.set_property("caps", caps)
         sink = self._make("appsink", f"{side}-video-sink")
@@ -510,18 +532,19 @@ class GstComparePipeline:
         self._sinks[side] = sink
 
     def _tone_probe(self, _pad, probe, processing):
-        mapper, retag = processing
+        mapper, retag, colorimetry = processing
         if probe.type & self.Gst.PadProbeType.EVENT_DOWNSTREAM:
             event = probe.get_event()
             if event.type == self.Gst.EventType.CAPS:
                 caps = event.parse_caps().copy()
-                caps.set_value("colorimetry", "sRGB")
+                caps.set_value("colorimetry", colorimetry)
                 # remove_field on a GI structure wrapper edits a copy, so use
                 # writable caps via their serialized structure here (once per
                 # negotiation, never per frame).
                 structure = caps.get_structure(0).copy()
-                for field in ("mastering-display-info", "content-light-level"):
-                    structure.remove_field(field)
+                if not mapper.hdr:
+                    for field in ("mastering-display-info", "content-light-level"):
+                        structure.remove_field(field)
                 output = self.Gst.Caps.new_empty()
                 output.append_structure_full(structure, caps.get_features(0).copy())
                 retag.set_property("caps", output)
@@ -689,8 +712,10 @@ class GstComparePipeline:
         details = [f"{width}×{height} {fmt}", memory, self._decoder_description()]
         if color:
             details.insert(1, str(color))
-        if self._tone_mappers:
+        if any(not mapper.hdr for mapper in self._tone_mappers):
             details.append("GPU HDR→SDR · fixed Reinhard 1000→100 nit")
+        if any(mapper.hdr for mapper in self._tone_mappers):
+            details.append("GPU colours → BT.2020, HDR kept")
         return " · ".join(details)
 
     def poll(self) -> PlaybackUpdate:
