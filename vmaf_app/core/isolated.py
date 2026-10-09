@@ -32,6 +32,7 @@ import faulthandler
 import logging
 import multiprocessing
 import os
+import signal
 import sys
 import tempfile
 import threading
@@ -59,7 +60,14 @@ class IsolatedCrashError(RuntimeError):
     def __init__(self, what: str, exitcode: int | None):
         self.what = what
         self.exitcode = exitcode
-        super().__init__(f"{what} crashed ({describe_exit_code(exitcode)})")
+        if exitcode == -signal.SIGTERM:
+            # Process.terminate()'s code: this app ended it -- multiprocessing
+            # does so to children still running as the app exits. Said as a
+            # crash, a probe still at work when the app was closed logged
+            # "crashed (exit code 0xFFFFFFF1)".
+            super().__init__(f"{what} was stopped before it finished")
+        else:
+            super().__init__(f"{what} crashed ({describe_exit_code(exitcode)})")
 
     def __reduce__(self):
         return type(self), (self.what, self.exitcode)

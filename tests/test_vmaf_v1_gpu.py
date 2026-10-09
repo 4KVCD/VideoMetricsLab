@@ -79,6 +79,10 @@ def test_a_crashed_or_failed_probe_leaves_vmaf_v1_to_the_cpu(monkeypatch):
     monkeypatch.setattr(isolated, "run_isolated", crash)
     assert vmaf_v1_gpu.available()[1].startswith("the GPU VMAF v1 probe crashed")
     assert not vmaf_v1_gpu.scores(f"path={STANDARD}", (1920, 1080))
+    # Ended by the app itself (closed while the probe was at work), it did
+    # not crash: it said "crashed (exit code 0xFFFFFFF1)".
+    assert str(isolated.IsolatedCrashError("the GPU VMAF v1 probe", -15)) == (
+        "the GPU VMAF v1 probe was stopped before it finished")
 
 
 def test_the_self_test_frames_are_the_same_bytes_everywhere():
