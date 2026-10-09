@@ -194,6 +194,7 @@ class LockedNativePool:
         self.output.poll()
         self.launch_missing()
         audio_ms = self.audio.poll()
+        polled_at = time.monotonic()
         if not self.audio.ready and not self.audio.failed and time.monotonic() > self.audio_deadline:
             self.audio.failed = "Audio preroll timed out"
             self.audio.set_playing(False)
@@ -249,9 +250,9 @@ class LockedNativePool:
                 if frame >= self.frame:
                     queue[frame] = sample
         # Negotiation/preroll work above can take time on a newly selected
-        # decoder. Sample the audio clock again immediately before choosing
-        # the visible pair, not using its pre-negotiation value.
-        if self.playing and not self.buffering and self.audio_running:
+        # decoder: then the audio clock is sampled again before the visible
+        # pair is chosen, not its pre-negotiation value used.
+        if self.playing and not self.buffering and self.audio_running and time.monotonic() - polled_at > 0.002:
             audio_ms = self.audio.poll()
             if audio_ms is not None:
                 target = round(audio_ms * self.fps / 1000)

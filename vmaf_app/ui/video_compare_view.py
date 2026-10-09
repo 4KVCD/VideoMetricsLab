@@ -52,6 +52,27 @@ _SETTLED_TICK_MS = 100
 #: frame, decoders slower than real time restarted it at every frame: 11
 #: times a second, the window's thread saturated and the sound in pieces.
 _AUDIO_RESUME_SECONDS = 1.0
+#: How long a video file found on disk counts as there (can_play): it is
+#: asked at every frame played, 120 a second, and asked the disk as often.
+_FOUND_FOR_S = 2.0
+#: When each video file was last found on disk (time.monotonic), by path.
+_FOUND: dict = {}
+
+
+def _found_on_disk(path) -> bool:
+    """Whether `path` is a file: found less than _FOUND_FOR_S ago, or on
+    disk now. A file found missing is looked for again at once."""
+    now = time.monotonic()
+    found = _FOUND.get(path)
+    if found is not None and now - found < _FOUND_FOR_S:
+        return True
+    if not path.is_file():
+        _FOUND.pop(path, None)
+        return False
+    if len(_FOUND) > 256:
+        _FOUND.clear()
+    _FOUND[path] = now
+    return True
 
 
 
@@ -460,7 +481,7 @@ class VideoCompareView(QWidget):
             )
         source = frame_input_path(comparison, "source")
         distorted = frame_input_path(comparison, "distorted")
-        missing = next((path for path in (source, distorted) if not path.is_file()), None)
+        missing = next((path for path in (source, distorted) if not _found_on_disk(path)), None)
         if missing is not None:
             return False, f"Video file is missing: {missing}"
         problem = untimed_pair_problem(comparison.source_info, comparison.distorted_info)

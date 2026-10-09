@@ -34,7 +34,6 @@ class GStreamerPlaybackError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class PlaybackUpdate:
-    position_ms: int | None = None
     status: str | None = None
     error: str | None = None
     ended: bool = False
@@ -759,8 +758,6 @@ class GstComparePipeline:
                     if self._wanted_playing else self.Gst.State.PAUSED
                 )
                 self._pipeline.set_state(target_state)
-        ok, position = self._pipeline.query_position(self.Gst.Format.TIME)
-        position_ms = round((position - (self._first_frame or 0)) / self.Gst.MSECOND) if ok else None
         status = None
         if not self._decoder_status_reported:
             caps = [
@@ -770,4 +767,11 @@ class GstComparePipeline:
             if all(item is not None for item in caps):
                 self._decoder_status_reported = True
                 status = self._negotiated_description()
-        return PlaybackUpdate(position_ms, status, error, ended)
+        return PlaybackUpdate(status, error, ended)
+
+    def position_ms(self) -> int | None:
+        """Where the pipeline is, counted from the video's first frame (a
+        report's; poll() leaves it out: queried at each of the view's ticks,
+        it was 750 pipeline queries a second, read by nothing)."""
+        ok, position = self._pipeline.query_position(self.Gst.Format.TIME)
+        return round((position - (self._first_frame or 0)) / self.Gst.MSECOND) if ok else None

@@ -149,7 +149,7 @@ def main():
                 result["native_streams"][str(key)] = {
                     "caps": pipeline._negotiated_description(),
                     "sinks": playing_stats[str(key)],
-                    "position": pipeline.poll().position_ms,
+                    "position": pipeline.position_ms(),
                 }
             if args.snapshot_dir:
                 args.snapshot_dir.mkdir(parents=True, exist_ok=True)
