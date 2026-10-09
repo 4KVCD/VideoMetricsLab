@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -53,6 +52,7 @@ from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui import theme
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
+from vmaf_app.ui.widgets import QuietTabWidget
 
 #: Statistic cells. A monospaced family so digits share a width; the
 #: fallback is whatever Qt substitutes, which is still better aligned than a
@@ -857,7 +857,7 @@ class GraphPanel(QWidget):
         # initial fallback tab) is built eagerly, and PSNR/SSIM/XPSNR
         # the first time they're actually selected. Tabs the user never opens
         # then cost nothing.
-        self.tabs = QTabWidget()
+        self.tabs = QuietTabWidget()
         # Scope styling to the metric selector, not the application's other
         # tabs. Native themes can make the selected tab nearly indistinguishable.
         self.tabs.tabBar().setStyleSheet("""

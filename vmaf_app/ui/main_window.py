@@ -53,7 +53,6 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTableWidgetItem,
-    QTabWidget,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
@@ -121,7 +120,7 @@ from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.run_line import decoder_text, metric_line
-from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable
+from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable, QuietTabWidget
 from vmaf_app.ui.worker import VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
@@ -857,7 +856,7 @@ class MainWindow(QMainWindow):
         # produced it, its series survive switching away and back, and there
         # is no second taskbar entry to manage. Video Compare and the
         # independent Bitrate Viewer sit between Metric Graphs and Settings.
-        self.tabs = QTabWidget()
+        self.tabs = QuietTabWidget()
         root.addWidget(self.tabs, stretch=1)
 
         videos_page = QWidget()

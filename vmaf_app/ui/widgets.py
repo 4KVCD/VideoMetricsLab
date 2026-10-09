@@ -1,16 +1,24 @@
 """Reusable Qt widgets with no knowledge of this app's data or columns.
 
-Both of these exist because Qt's stock behaviour is subtly wrong for the
-distorted-files table; keeping them here rather than in main_window.py keeps
-that module about *this app's* window and these about Qt.
+Each exists because Qt's stock widget is subtly wrong for how this app uses
+it; keeping them here rather than in main_window.py keeps that module about
+*this app's* window and these about Qt.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QHeaderView, QLabel, QSizePolicy, QStyle, QStyleOptionButton, QTableWidget
+from PySide6.QtWidgets import (
+    QHeaderView,
+    QLabel,
+    QSizePolicy,
+    QStyle,
+    QStyleOptionButton,
+    QTableWidget,
+    QTabWidget,
+)
 
 _INDICATOR_MARGIN = 4
 _MIN_FILL_WIDTH = 60
@@ -317,4 +325,36 @@ class ElidedLabel(QLabel):
         super().setText(shown)
         cut = shown != self._full
         self.setToolTip(self._full + (f"\n\n{self._tooltip}" if self._tooltip else "") if cut else self._tooltip)
+
+
+class QuietTabWidget(QTabWidget):
+    """A QTabWidget that lays itself out again, and repaints, only when
+    that can change something.
+
+    Qt's lays itself out again at every LayoutRequest and repaints the whole
+    of itself with it (QTabWidget::setUpLayout ends in update()). A label
+    on one of its pages sends one up whenever its text changes: setText
+    invalidates the layouts above it, and each, once redone, passes the
+    request on whether its size hints changed or not. A frame's time on
+    Video Compare repainted every control on the tab at every frame of
+    playback, 112 times a second, and a run's once-a-second lines
+    repainted the whole Videos tab twice a second.
+
+    Its own layout depends on its size (resizeEvent lays it out anyway),
+    its tab bar's and corner widgets' sizes; what is above it, on its size
+    hints. A request that changes none of them is answered here."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._laid_out_for = None
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.LayoutRequest:
+            corners = (self.cornerWidget(Qt.TopLeftCorner), self.cornerWidget(Qt.TopRightCorner))
+            shape = (self.tabBar().sizeHint(), self.sizeHint(), self.minimumSizeHint(),
+                     *(None if corner is None else corner.sizeHint() for corner in corners))
+            if shape == self._laid_out_for:
+                return True
+            self._laid_out_for = shape
+        return super().event(event)
 

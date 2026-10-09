@@ -106,8 +106,8 @@ def test_frame_and_timestamp_stay_synchronized(qapp):
     assert panel.frame_spin.value() == 24
     assert panel.timeline.value() == 24
     assert panel.timestamp_edit.text() == "0:00:01.000"
-    assert "Frame 24" in panel.detail_label.text()
-    assert "VMAF v0.6.1 90.00" in panel.detail_label.text()
+    assert "Frame 24" in panel.detail_label.full_text()
+    assert "VMAF v0.6.1 90.00" in panel.detail_label.full_text()
 
 
 def test_switching_distortions_preserves_frame_and_wraps(qapp):
@@ -151,8 +151,8 @@ def test_an_unscored_pair_is_shown_and_says_it_has_no_score(qapp):
     assert panel.video_combo.count() == 1
     assert panel.frame_spin.isEnabled()
     assert panel.frame_spin.maximum() == 119
-    assert "No metric results loaded" in panel.detail_label.text()
-    assert "VMAF" not in panel.detail_label.text()
+    assert "No metric results loaded" in panel.detail_label.full_text()
+    assert "VMAF" not in panel.detail_label.full_text()
     panel.close()
 
 

@@ -187,8 +187,8 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     assert win._row_state(win._rows[row]) == "Complete"
     assert win._has_requested_results(win._rows[row])
     assert win.graph_panel._current_metric().key == "psnr"
-    assert "PSNR" in win.frame_compare_panel.detail_label.text()
-    assert "VMAF" not in win.frame_compare_panel.detail_label.text()
+    assert "PSNR" in win.frame_compare_panel.detail_label.full_text()
+    assert "VMAF" not in win.frame_compare_panel.detail_label.full_text()
     # Adding a requested metric preserves the measured score, not a stale blank.
     click_metric(win, row, COL_SSIM)
     assert win._row_state(win._rows[row]) == "Partially calculated"

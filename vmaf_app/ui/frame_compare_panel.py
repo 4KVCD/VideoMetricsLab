@@ -43,6 +43,7 @@ from vmaf_app.ui import theme
 from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
 from vmaf_app.ui.video_compare_view import VideoCompareView
+from vmaf_app.ui.widgets import ElidedLabel
 from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom, parse_percent, percent_text
 
 
@@ -347,8 +348,11 @@ class FrameComparePanel(QWidget):
         self.timeline.valueChanged.connect(self._on_slider_changed)
         root.addWidget(self.timeline)
 
-        self.detail_label = QLabel(tr("No frame selected."))
+        # Its text changes at every frame of playback: elided, so that the
+        # text's width is not the page's (see QuietTabWidget).
+        self.detail_label = ElidedLabel()
         self.detail_label.setAlignment(Qt.AlignCenter)
+        self.detail_label.set_text(tr("No frame selected."))
         root.addWidget(self.detail_label)
         self.guide_label = QLabel(
             tr("Hold S: show source   ·   ←/→: switch test video   ·   "
@@ -799,7 +803,7 @@ class FrameComparePanel(QWidget):
         entry = self.current_entry
         if entry is None:
             self.showing_label.setText(tr("No videos to compare"))
-            self.detail_label.setText(tr("No frame selected."))
+            self.detail_label.set_text(tr("No frame selected."))
             self.color_status_label.setText(tr("No video selected."))
             return
         comparison = entry.comparison
@@ -819,7 +823,7 @@ class FrameComparePanel(QWidget):
                 parts.append(tr("detecting black bars…"))
             else:
                 parts.append(tr("black bars not detected yet — shown uncropped"))
-        self.detail_label.setText("   ·   ".join(parts))
+        self.detail_label.set_text("   ·   ".join(parts))
         self._update_color_status()
 
     def _show_advanced_info(self) -> None:
