@@ -8,7 +8,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from vmaf_app.core.frame_extract import FrameComparison
-from vmaf_app.core.models import ComparisonResult, FrameScores, VideoInfo
+from vmaf_app.core.models import ComparisonResult, FrameScores, ScaleDirection, VideoInfo
 from vmaf_app.ui.frame_compare_panel import (
     FrameComparePanel,
     FrameComparisonEntry,
@@ -156,7 +156,7 @@ def test_an_unscored_pair_is_shown_and_says_it_has_no_score(qapp):
     panel.close()
 
 
-def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, monkeypatch):
+def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, monkeypatch, subtests):
     from dataclasses import replace as dc_replace
 
     from vmaf_app.core.models import CropBox
@@ -195,6 +195,41 @@ def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, m
         tmp_path / "source.mkv", tmp_path / "first.mkv", tmp_path / "second.mkv"
     }
     panel.close()
+
+    # Bars found while playing reload the pair only if its pictures change:
+    # every pair's playback was restarted when detection finished, bars or
+    # not -- 0.7-1.3 s of "Buffering locked pair" mid-playback on a Radeon
+    # 8060S (4K HDR10 120 fps), for pictures that came back the same.
+    for name, distorted_size, scale_direction, crops, reloads in [
+        # No bars found, the 720p encode already the source's shape: the pictures playing are the cropped ones.
+        ("no bars", (1280, 720), ScaleDirection.SOURCE_TO_DISTORTED, ((1920, 1080, 0, 0), (1280, 720, 0, 0)), 0),
+        # Bars found: the pictures change, so the pair is loaded again with them.
+        ("bars", (1280, 720), ScaleDirection.SOURCE_TO_DISTORTED, ((1920, 816, 0, 132), (1280, 544, 0, 88)), 1),
+        # No bars, but a 2.35:1 encode was boxed while they were looked for, and is now stretched to the source's size.
+        ("no bars, boxed while detecting", (1920, 816), ScaleDirection.DISTORTED_TO_SOURCE,
+         ((1920, 1080, 0, 0), (1920, 816, 0, 0)), 1),
+    ]:
+        with subtests.test(name):
+            entry = _physical_entry(tmp_path)
+            width, height = distorted_size
+            entry = replace(entry, comparison=replace(
+                entry.comparison, auto_crop_pending=True, scale_direction=scale_direction,
+                distorted_info=replace(entry.comparison.distorted_info, width=width, height=height)))
+            panel = FrameComparePanel()
+            loads = []
+            monkeypatch.setattr(panel, "_load_current_video", lambda playing=None, loads=loads: loads.append(playing))
+            panel.set_runs([entry])
+            assert panel.is_video_mode
+            loads.clear()
+
+            source_crop, distorted_crop = (CropBox(*crop) for crop in crops)
+            panel._on_auto_crop_ready(entry.identity, None, source_crop, distorted_crop)
+
+            assert len(loads) == reloads
+            shown = panel.current_entry.comparison
+            assert not shown.auto_crop_pending  # the crops are known either way
+            assert (shown.source_crop, shown.distorted_crop) == (source_crop, distorted_crop)
+            panel.close()
 
 
 def test_zoom_fits_by_default_and_takes_a_chosen_or_typed_percentage(qapp):

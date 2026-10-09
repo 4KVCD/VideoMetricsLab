@@ -32,6 +32,8 @@ from vmaf_app.core.frame_extract import (
     FrameComparison,
     PreviewColorMode,
     PreviewColorSettings,
+    _would_distort,
+    comparison_dimensions,
     frame_video_info,
     hdr_kind,
 )
@@ -1087,6 +1089,26 @@ class FrameComparePanel(QWidget):
             ),
         )
 
+    @staticmethod
+    def _crops_change_nothing(pending: FrameComparison, cropped: FrameComparison) -> bool:
+        """Whether the black bars found for `pending` leave its pictures as
+        they are: none on either side (each crop the whole frame), the size
+        compared at unchanged, and neither side boxed while they were looked
+        for (each already the shape it is shown at). Then the frames playing
+        are the ones the crops give, and loading the pair again restarted
+        every decoder for nothing: 0.7-1.3 s of "Buffering locked pair" in
+        the middle of playback, wherever detection happened to finish."""
+        size = comparison_dimensions(pending)
+        if size != comparison_dimensions(cropped):
+            return False
+        for info, crop in ((cropped.source_info, cropped.source_crop),
+                           (cropped.distorted_info, cropped.distorted_crop)):
+            if crop is not None and not crop.is_noop(info.width, info.height):
+                return False
+            if _would_distort(pending, info, None, *size):
+                return False
+        return True
+
     def _ensure_auto_crop(self, entry: FrameComparisonEntry | None) -> None:
         if entry is None or not entry.comparison.auto_crop_pending:
             return
@@ -1142,8 +1164,10 @@ class FrameComparePanel(QWidget):
         if entry is not None:
             self._auto_crop_files[self._crop_file_key(entry.comparison.source_info.path)] = source_crop
             self._auto_crop_files[self._crop_file_key(entry.comparison.distorted_info.path)] = distorted_crop
+        previous = None
         for index, entry in enumerate(self._entries):
             if entry.identity is identity:
+                previous = entry
                 self._entries[index] = self._apply_auto_crop(entry)
                 break
         if self.current_entry is not None and self.current_entry.identity is identity:
@@ -1154,6 +1178,9 @@ class FrameComparePanel(QWidget):
             self._generation += 1
             self._update_labels()
             if self.is_video_mode:
+                if (previous is not None and previous.comparison.auto_crop_pending
+                        and self._crops_change_nothing(previous.comparison, self.current_entry.comparison)):
+                    return  # the pair playing already shows what the crops give
                 self._load_current_video(playing=playing)
             else:
                 self._show_or_request()
