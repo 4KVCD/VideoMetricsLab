@@ -244,15 +244,18 @@ def uses_native_gstreamer(
         for info in (comparison.source_info, comparison.distorted_info)
     )
     if inputs_are_hdr and needs_sdr_tonemap(settings):
-        from vmaf_app.core.d3d11_tonemap import available
+        from vmaf_app.core.d3d11_tonemap import available, supports
 
         if not available():
             return False, "native HDR-to-SDR helper is not built; using FFmpeg tone mapping"
-        if any(hdr_kind(info) and info.color_primaries.casefold() not in {
-            "bt2020", "bt.2020", "", "unknown", "unspecified"
-        } for info in (comparison.source_info, comparison.distorted_info)):
-            return False, "non-BT.2020 HDR primaries use the FFmpeg color converter"
+        for info in (comparison.source_info, comparison.distorted_info):
+            if hdr_kind(info) and not supports(info.color_primaries):
+                return False, f"{info.color_primaries} HDR primaries use the FFmpeg color converter"
     return True, ""
+
+
+#: GstVideoColorPrimaries of the primaries the HDR shader takes (d3d11_tonemap.PRIMARIES).
+_GST_PRIMARIES = {"bt709": 1, "bt2020": 7, "smpte432": 11}
 
 
 def needs_sdr_tonemap(settings: PreviewColorSettings) -> bool:
@@ -452,7 +455,7 @@ class GstComparePipeline:
         tone_map = hdr_kind(info) is not None and needs_sdr_tonemap(settings)
         retag = None
         if tone_map:
-            from vmaf_app.core.d3d11_tonemap import D3D11ToneMapper
+            from vmaf_app.core.d3d11_tonemap import D3D11ToneMapper, hdr_primaries
 
             # Force a private, high-precision converter output, not an 8-bit
             # intermediate or the decoder's reference surface. Keep PQ/HLG
@@ -460,12 +463,15 @@ class GstComparePipeline:
             caps = self.Gst.Caps.from_string(
                 "video/x-raw(memory:D3D11Memory),format=RGBA64_LE,"
                 f"width={width},height={height},pixel-aspect-ratio=1/1,"
-                # Gst colour enum tuple: full range, RGB matrix, PQ/HLG,
-                # BT.2020 primaries. A YUV bt2100-pq shorthand would leave
-                # limited-range RGB values for the shader to misinterpret.
-                f"colorimetry=1:1:{14 if hdr_kind(info) == 'HDR10 / PQ' else 15}:7"
+                # Gst colour enum tuple: full range, RGB matrix, PQ/HLG, and
+                # the video's own primaries, which the shader converts (the
+                # converter leaves them as they are). A YUV bt2100-pq
+                # shorthand would leave limited-range RGB values for the
+                # shader to misinterpret.
+                f"colorimetry=1:1:{14 if hdr_kind(info) == 'HDR10 / PQ' else 15}:"
+                f"{_GST_PRIMARIES[hdr_primaries(info.color_primaries)]}"
             )
-            mapper = D3D11ToneMapper(self._device, hdr_kind(info))
+            mapper = D3D11ToneMapper(self._device, hdr_kind(info), info.color_primaries)
             self._tone_mappers.append(mapper)
             retag = self._make("capssetter", f"{side}-sdr-caps")
             retag.set_property("replace", True)

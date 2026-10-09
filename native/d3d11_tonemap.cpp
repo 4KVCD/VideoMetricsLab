@@ -9,7 +9,11 @@ using Microsoft::WRL::ComPtr;
 
 static const char shader[] = R"(
 Texture2D<float4> inputFrame : register(t0);
-cbuffer Parameters : register(b0) { float kind; float peak; float white; float unused; };
+cbuffer Parameters : register(b0) {
+    float kind; float peak; float white; float unused;
+    float4 luma;        // the source primaries' luminance weights
+    float4 toBt709[3];  // linear source RGB -> linear BT.709, by rows
+};
 float4 vs(uint id : SV_VertexID) : SV_Position {
     return float4(id == 2 ? 3 : -1, id == 1 ? 3 : -1, 0, 1);
 }
@@ -21,7 +25,7 @@ float3 hlg(float3 x) {
     float3 lo = x*x/3;
     float3 hi = (exp((x-0.55991073)/0.17883277)+0.28466892)/12;
     float3 scene = float3(x.r<=0.5?lo.r:hi.r, x.g<=0.5?lo.g:hi.g, x.b<=0.5?lo.b:hi.b);
-    return scene * pow(max(dot(scene, float3(.2627,.678,.0593)), 1e-8), .2) * peak;
+    return scene * pow(max(dot(scene, luma.rgb), 1e-8), .2) * peak;
 }
 float3 srgb(float3 x) {
     float3 lo=12.92*x, hi=1.055*pow(max(x,0),1.0/2.4)-.055;
@@ -31,14 +35,12 @@ float4 ps(float4 pos : SV_Position) : SV_Target {
     float3 encoded = inputFrame.Load(int3(pos.xy,0)).rgb;
     float3 light = kind < 1.5 ? pq(encoded) : hlg(encoded);
     // Fixed extended-Reinhard luminance curve, shared by all comparison sides.
-    float y = max(dot(light,float3(.2627,.678,.0593))/white,0);
+    float y = max(dot(light,luma.rgb)/white,0);
     float w = peak/white;
     float mapped = y*(1+y/(w*w))/(1+y);
     light = light/white * (y > 1e-8 ? mapped/y : 0);
-    // Linear BT.2020 -> BT.709, then gamut clipping and sRGB encoding.
-    float3 rgb = float3(dot(light,float3(1.660491,-.587641,-.072850)),
-                        dot(light,float3(-.124550,1.132900,-.008349)),
-                        dot(light,float3(-.018151,-.100579,1.118730)));
+    // Linear source primaries -> BT.709, then gamut clipping and sRGB encoding.
+    float3 rgb = float3(dot(light,toBt709[0].rgb), dot(light,toBt709[1].rgb), dot(light,toBt709[2].rgb));
     return float4(srgb(saturate(rgb)),1);
 }
 )";
@@ -54,7 +56,11 @@ struct Mapper {
     UINT width=0, height=0;
 };
 
-extern "C" __declspec(dllexport) void* vmaf_tonemap_create(ID3D11Resource* resource, int kind) {
+// `luma`: the source primaries' luminance weights (3); `to_bt709`: linear
+// source RGB to linear BT.709, by rows (9).
+extern "C" __declspec(dllexport) void* vmaf_tonemap_create_primaries(ID3D11Resource* resource, int kind,
+                                                                     const float* luma, const float* to_bt709) {
+    if (!luma || !to_bt709) return nullptr;
     auto m = new(std::nothrow) Mapper;
     if (!m || !resource) { delete m; return nullptr; }
     resource->GetDevice(&m->device);
@@ -65,12 +71,22 @@ extern "C" __declspec(dllexport) void* vmaf_tonemap_create(ID3D11Resource* resou
     if (SUCCEEDED(hr)) hr=D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"ps","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&ps,&errors);
     if (SUCCEEDED(hr)) hr=m->device->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,&m->vs);
     if (SUCCEEDED(hr)) hr=m->device->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,&m->ps);
-    float params[4]={float(kind),1000,100,0};
+    const float* t = to_bt709;
+    float params[20]={float(kind),1000,100,0, luma[0],luma[1],luma[2],0,
+                      t[0],t[1],t[2],0, t[3],t[4],t[5],0, t[6],t[7],t[8],0};
     D3D11_BUFFER_DESC bd={}; bd.ByteWidth=sizeof(params); bd.Usage=D3D11_USAGE_IMMUTABLE; bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
     D3D11_SUBRESOURCE_DATA initial={}; initial.pSysMem=params;
     if (SUCCEEDED(hr)) hr=m->device->CreateBuffer(&bd,&initial,&m->parameters);
     if (FAILED(hr)) { delete m; return nullptr; }
     return m;
+}
+
+// BT.2020 primaries: what the mapper took before it was given any.
+extern "C" __declspec(dllexport) void* vmaf_tonemap_create(ID3D11Resource* resource, int kind) {
+    static const float luma[3]={.2627f,.678f,.0593f};
+    static const float to_bt709[9]={1.660491f,-.587641f,-.072850f, -.124550f,1.132900f,-.008349f,
+                                    -.018151f,-.100579f,1.118730f};
+    return vmaf_tonemap_create_primaries(resource, kind, luma, to_bt709);
 }
 
 // Caller holds the owning GstD3D11Device lock throughout this operation.
