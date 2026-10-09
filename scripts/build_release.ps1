@@ -208,7 +208,22 @@ try {
     Write-Host '==> Packaging' -ForegroundColor Cyan
     $zip = Join-Path $OutputRoot 'VideoMetricsLab-windows.zip'
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    Compress-Archive -Path $output -DestinationPath $zip -CompressionLevel Optimal
+    # Each entry named with forward slashes, as the zip format has them.
+    # Compress-Archive (Windows PowerShell 5.1) wrote backslashes: Windows
+    # extracts those, but other unzip tools took them for part of one long
+    # file name.
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $base = Split-Path $output -Parent
+        foreach ($file in Get-ChildItem $output -Recurse -File) {
+            $name = $file.FullName.Substring($base.Length + 1) -replace '\\', '/'
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $file.FullName, $name, [System.IO.Compression.CompressionLevel]::Optimal)
+        }
+    } finally {
+        $archive.Dispose()
+    }
 
     $folderSize = (Get-ChildItem $output -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB
     $zipSize = (Get-Item $zip).Length / 1MB
