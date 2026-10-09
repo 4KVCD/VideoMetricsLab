@@ -29,6 +29,7 @@ from vmaf_app.core.frame_extract import (
     comparison_dimensions,
     frame_input_path,
 )
+from vmaf_app.core.geometry import untimed_pair_problem
 from vmaf_app.core.gpu import GpuVendor, plan_hwaccel
 from vmaf_app.core.process_control import ProcessHandle
 from vmaf_app.core.video_playback import (
@@ -365,6 +366,9 @@ class VideoCompareView(QWidget):
         missing = next((path for path in (source, distorted) if not path.is_file()), None)
         if missing is not None:
             return False, f"Video file is missing: {missing}"
+        problem = untimed_pair_problem(comparison.source_info, comparison.distorted_info)
+        if problem is not None:
+            return False, problem
         return True, ""
 
     @property

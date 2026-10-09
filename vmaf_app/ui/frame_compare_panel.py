@@ -35,6 +35,7 @@ from vmaf_app.core.frame_extract import (
     frame_video_info,
     hdr_kind,
 )
+from vmaf_app.core.geometry import untimed_pair_problem
 from vmaf_app.core.models import FrameScores
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
@@ -992,10 +993,17 @@ class FrameComparePanel(QWidget):
                 self.video_view.set_color_settings(self._color_settings())
                 self.video_view.show_source(self._showing_source)
             return
-        self._ensure_auto_crop(self.current_entry)
         if self.video_view is not None:
             self.video_view.set_playing(False)
         self.content_stack.setCurrentWidget(self.viewer)
+        entry = self.current_entry
+        problem = None if entry is None else untimed_pair_problem(entry.comparison.source_info,
+                                                                  entry.comparison.distorted_info)
+        if problem is not None:
+            # Not frames placed by a guessed frame rate: what runs say instead.
+            self.viewer.set_message(tr_message(problem))
+            return
+        self._ensure_auto_crop(entry)
         image = self._current_image()
         if image is not None:
             self.viewer.set_image(image)
@@ -1015,6 +1023,9 @@ class FrameComparePanel(QWidget):
     def _request_current_frames(self) -> None:
         entry = self.current_entry
         if entry is None or not self.isVisible() or self.is_video_mode:
+            return
+        if untimed_pair_problem(entry.comparison.source_info, entry.comparison.distorted_info) is not None:
+            self._show_or_request()  # its explanation, and no frames to extract
             return
         self._refresh_display_hdr()
         generation = self._generation

@@ -101,6 +101,17 @@ def pair_problem(source_info: VideoInfo, distorted_info: VideoInfo, duration_lim
             "with the video's own frame rate.")
 
 
+def untimed_pair_problem(source_info: VideoInfo, distorted_info: VideoInfo) -> str | None:
+    """pair_problem's refusal of a raw stream whose frame rate, FFmpeg's
+    guess, disagrees with the other video's, or None. Video Compare's
+    check: pairs that merely differ are shown there all the same, but a
+    raw stream's frames are placed by that guess -- the frame shown was
+    another, and playback ended in "Decoder produced no frames"."""
+    if not (source_info.is_raw_stream or distorted_info.is_raw_stream):
+        return None
+    return pair_problem(source_info, distorted_info, 0.0)
+
+
 def _timeline_problem(source_info: VideoInfo, distorted_info: VideoInfo, duration_limit: float) -> str | None:
     if source_info.is_variable_frame_rate or distorted_info.is_variable_frame_rate:
         return ("Variable-frame-rate video is not supported safely yet. Convert both videos "

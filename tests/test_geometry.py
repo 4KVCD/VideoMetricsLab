@@ -10,6 +10,7 @@ from vmaf_app.core.geometry import (
     content_size,
     display_aspect_ratio,
     pair_problem,
+    untimed_pair_problem,
 )
 from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo
 
@@ -57,3 +58,9 @@ def test_two_videos_are_compared_only_on_timelines_that_agree(subtests):
     ]:
         with subtests.test(source=source, test=test, limit=limit, problem=problem):
             check(source, test, limit, problem)
+    # Video Compare shows pairs that merely differ, but not a raw stream
+    # whose frame rate, FFmpeg's guess, disagrees: its frames would be others.
+    raw = _video(fps=25.0, duration=0.0, format_name="hevc")
+    assert untimed_pair_problem(raw, _video(fps=120.0)).startswith("v.mkv is a raw HEVC stream")
+    assert untimed_pair_problem(raw, _video(fps=25.0)) is None
+    assert untimed_pair_problem(_video(), _video(fps=25.0)) is None
