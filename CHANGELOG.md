@@ -2,33 +2,38 @@
 
 ## v2.0
 
-- VMAF v1 on the GPU: up to **17x** faster.
-- VMAF and VMAF NEG on AMD and Intel GPUs: **2.3x-2.7x** faster than on the
-  CPU (Intel iGPU).
-- PSNR, SSIM and XPSNR calculated in the app: **2.7x-11x** faster.
-- Videos the GPU can't decode, such as VVC, decoded in the app: VMAF
-  **1.8x-2.7x** faster.
-- SSIMULACRA2 and Butteraugli on the CPU: **7x** faster.
-- Video Compare plays 4K HDR at 120 frames a second instead of 14, with a
+- Added Vulkan support for VMAF v1, so it now runs on any GPU (NVIDIA, AMD or
+  Intel), up to **17x** faster than on the CPU.
+- Added Vulkan support for VMAF v0.6.1 and VMAF NEG on AMD and Intel GPUs,
+  **2.3x-2.7x** faster than on the CPU.
+- PSNR, SSIM and XPSNR are now calculated in the app with libvmaf-fast,
+  **2.7x-11x** faster than with FFmpeg.
+- Added software decoding in the app for videos the GPU can't decode, such as
+  VVC, making VMAF **1.8x-2.7x** faster for them.
+- SSIMULACRA2 and Butteraugli on the CPU are now **7x** faster.
+- Video Compare now plays 4K HDR at 120 frames a second instead of 14, using a
   fifteenth of the CPU.
-- Much less memory: the app idles in 180 MB instead of 840 MB, and VMAF v1 at
-  4K takes 2.6 GB instead of 13.8 GB.
-- New command line: `VideoMetricsLab-cli`.
-- Video Compare plays HDR in Display P3 colours on the GPU.
-- Zoom in Video Compare.
-- Highlight best/worst results in the Videos tab.
-- Dark theme, following Windows or chosen in Settings.
-- Drop files on the video lists, paste a reference path, drag rows into order
-  and sort by any column.
-- File dialogs open where your videos last came from, and the app can reopen
-  the last session's videos.
-- Black bars found are remembered between sessions.
-- Metric Graphs, Video Compare and Settings open instantly, and the window
+- Greatly reduced memory use: the app now idles at 180 MB instead of 840 MB,
+  and VMAF v1 at 4K uses 2.6 GB instead of 13.8 GB.
+- Added a command line, `VideoMetricsLab-cli`, for running comparisons from
+  scripts.
+- Video Compare can now play HDR video in Display P3 colours on the GPU.
+- Added the ability to zoom in Video Compare.
+- Added an option to highlight each metric's best and worst results in the
+  Videos tab.
+- Added a dark theme, which follows Windows or can be chosen in Settings.
+- Added drag and drop for videos, pasting a reference path, reordering rows by
+  dragging, and sorting by any column.
+- File dialogs now open in the folder your videos last came from, and the app
+  can reopen your last session's videos.
+- Detected black bars are now remembered between sessions.
+- Metric Graphs, Video Compare and Settings now open instantly, and the window
   stays responsive with hundreds of videos.
-- Video Compare uses no CPU while idle.
-- XPSNR is now weighted by the reference: scores are 0.9-1.8 dB higher, and
-  XPSNR saved by v1.4 is calculated again.
-- GPU VMAF uses [libvmaf-fast v1](https://github.com/4KVCD/libvmaf-fast/releases/tag/libvmaf-fast-v1).
+- Video Compare no longer uses any CPU while idle.
+- XPSNR is now weighted by the reference, giving scores 0.9-1.8 dB higher;
+  XPSNR saved by v1.4 is recalculated.
+- GPU VMAF now uses
+  [libvmaf-fast v1](https://github.com/4KVCD/libvmaf-fast/releases/tag/libvmaf-fast-v1).
 
 ### Bug fixes
 
