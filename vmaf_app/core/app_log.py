@@ -177,13 +177,31 @@ def environment_lines() -> list[str]:
 
     lines = [
         f"{APP_NAME} {__version__} ({'packaged build' if getattr(sys, 'frozen', False) else 'from source'})",
-        f"Python {sys.version.split()[0]} on {platform.platform()}",
-        f"CPU: {platform.processor() or 'unknown'}, {os.cpu_count()} logical processors",
+        f"Python {sys.version.split()[0]} on {_system()}",
+        f"CPU: {_processor() or 'unknown'}, {os.cpu_count()} logical processors",
     ]
     memory = _physical_memory_gb()
     if memory:
         lines.append(f"Memory: {memory:.0f} GB")
     return lines
+
+
+def _system() -> str:
+    """platform.platform()'s text, without the WMI query it makes on
+    Windows: 50 ms of each start."""
+    if sys.platform != "win32":
+        return platform.platform()
+    version = sys.getwindowsversion()
+    release = "11" if version.major == 10 and version.build >= 22000 else str(version.major)
+    return f"Windows-{release}-{version.major}.{version.minor}.{version.build}-SP{version.service_pack_major}"
+
+
+def _processor() -> str:
+    """platform.processor()'s text: on Windows, what it reads from the
+    environment once its WMI query (_system) has run."""
+    if sys.platform == "win32":
+        return os.environ.get("PROCESSOR_IDENTIFIER", "")
+    return platform.processor()
 
 
 def _physical_memory_gb() -> float | None:

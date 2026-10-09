@@ -35,7 +35,7 @@ def test_gpu_makers_come_from_directx_in_the_order_auto_tries_them(monkeypatch):
     """Intel's integrated GPU first in DirectX's list, a software adapter
     (Microsoft's, 0x1414) last: NVIDIA's decoder is still tried first."""
     gpu.detected_gpu_vendors.cache_clear()
-    monkeypatch.setattr(gpu.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(gpu.sys, "platform", "win32")
     monkeypatch.setattr(gpu, "_dxgi_vendor_ids", lambda: [0x8086, 0x10DE, 0x1414])
     try:
         assert gpu.detected_gpu_vendors() == [GpuVendor.NVIDIA, GpuVendor.INTEL]

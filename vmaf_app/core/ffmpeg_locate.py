@@ -8,8 +8,9 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import threading
 from dataclasses import dataclass
-from functools import cache, lru_cache
+from functools import cache
 from pathlib import Path
 
 from vmaf_app.core import proc as proc_util
@@ -59,8 +60,10 @@ def _configured_dir() -> str | None:
 def ffmpeg_dir_changed() -> None:
     """After the folder in Settings changed (and was saved): finds the tools
     again, and checks them again."""
+    global _tools
     find_binary.cache_clear()
-    check_tools.cache_clear()
+    with _tools_lock:
+        _tools = None
 
 
 def exe_name(name: str) -> str:
@@ -171,8 +174,23 @@ class ToolsStatus:
         return not self.problems
 
 
-@lru_cache(maxsize=1)
+_tools_lock = threading.Lock()
+_tools: ToolsStatus | None = None
+
+
 def check_tools() -> ToolsStatus:
     """Cached: each call shells out twice, and this is consulted on every
-    window construction. ffmpeg_dir_changed() clears it."""
-    return ToolsStatus(ffmpeg=check_tool("ffmpeg"), ffprobe=check_tool("ffprobe"))
+    window construction. A check already running (start_tool_check) is
+    waited for, not run again. ffmpeg_dir_changed() clears it."""
+    global _tools
+    with _tools_lock:
+        if _tools is None:
+            _tools = ToolsStatus(ffmpeg=check_tool("ffmpeg"), ffprobe=check_tool("ffprobe"))
+        return _tools
+
+
+def start_tool_check() -> None:
+    """check_tools() in the background from the start, the folder in
+    Settings known: the window, built meanwhile, finds it done. Run while
+    the window was built, its two processes held the window's thread 80 ms."""
+    threading.Thread(target=check_tools, name="ffmpeg-check", daemon=True).start()

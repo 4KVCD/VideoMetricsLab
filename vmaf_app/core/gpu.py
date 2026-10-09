@@ -13,8 +13,8 @@ unsupported.
 from __future__ import annotations
 
 import ctypes
-import platform
 import re
+import sys
 import threading
 from dataclasses import dataclass
 from functools import lru_cache
@@ -93,7 +93,7 @@ def detected_gpu_vendors() -> list[GpuVendor]:
     Asked of DXGI in-process, in milliseconds. It was a PowerShell query
     (Get-CimInstance Win32_VideoController): 0.3 to 0.4 s warm, seconds
     cold, on the UI thread while the window was being built."""
-    if platform.system() != "Windows":
+    if sys.platform != "win32":  # not platform.system(): a 50 ms WMI query on Windows
         return []
     try:
         found = {PCI_VENDORS.get(vendor_id) for vendor_id in _dxgi_vendor_ids()}

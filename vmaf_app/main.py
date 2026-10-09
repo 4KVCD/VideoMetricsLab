@@ -230,9 +230,17 @@ def start_session_log() -> None:
     from PySide6.QtCore import qInstallMessageHandler, qVersion
 
     log.info("Qt %s", qVersion())
+    qInstallMessageHandler(_log_qt_message)
+
+
+def log_tools() -> None:
+    """FFmpeg and the GPUs, in this session's log: once the window is up,
+    when the tools' check started first thing (start_tool_check) is done.
+    Waited for while the log was started, it held the start 80 ms."""
     from vmaf_app.core.ffmpeg_locate import check_tools, format_version
     from vmaf_app.core.gpu import detected_gpu_vendors
 
+    log = logging.getLogger("vmaf_app.main")
     tools = check_tools()
     if tools.ok:
         log.info("FFmpeg %s: %s", format_version(tools.ffmpeg.version), tools.ffmpeg.path)
@@ -240,7 +248,6 @@ def start_session_log() -> None:
         for problem in tools.problems:
             log.warning("FFmpeg: %s", problem)
     log.info("GPUs: %s", ", ".join(vendor.name for vendor in detected_gpu_vendors()) or "none detected")
-    qInstallMessageHandler(_log_qt_message)
 
 
 def apply_language(app: QApplication, chosen: str) -> str:
@@ -269,14 +276,18 @@ def apply_language(app: QApplication, chosen: str) -> str:
 
 
 def main() -> int:
+    # Before anything looks for ffmpeg, the self-test included; the tools'
+    # check then runs while the window's modules load.
+    adopted = adopt_registry_ffmpeg_dir()
+    from vmaf_app.core.ffmpeg_locate import start_tool_check
+
+    start_tool_check()
     from PySide6.QtWidgets import QApplication
 
     from vmaf_app.ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    # Before anything looks for ffmpeg, the self-test included.
-    adopted = adopt_registry_ffmpeg_dir()
 
     if "--self-test" in sys.argv:
         report = self_test()
@@ -325,6 +336,7 @@ def main() -> int:
     vmaf_v1_gpu.start_probe()
     window = MainWindow()
     window.show()
+    log_tools()
     # Video Compare's first opening, made ready in the background now:
     # GStreamer and its D3D11 output loaded, FFmpeg's hardware decoders listed.
     from vmaf_app.core import gpu, gstreamer_playback
