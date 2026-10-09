@@ -50,6 +50,10 @@ class LockedNativePool:
         self.frame = round(position_ms * self.fps / 1000)
         self.playing, self.ended, self.closed = playing, False, False
         self.buffering = True
+        #: Whether the pair wanted is the one on screen (poll, seek). Paused on
+        #: it nothing is buffering, though `buffering` stays set after a
+        #: seek made while paused: playing again waits for the sound's.
+        self.shown = False
         #: Since when the frames shown have been behind the soundtrack (time.monotonic), or None.
         self.late_since = None
         #: The soundtrack clock's value the last poll chose by (ms), None
@@ -196,7 +200,8 @@ class LockedNativePool:
                 # Start one frame early: rounding a fractional frame time to
                 # milliseconds must not seek just beyond the requested frame.
                 entry[0].seek(max(0, self.position - round(1000 / self.fps)))
-        self.buffering = not self._choose_pair(target)
+        self.shown = self._choose_pair(target)
+        self.buffering = not self.shown
 
     def set_playing(self, playing):
         self.playing = bool(playing)
@@ -279,7 +284,7 @@ class LockedNativePool:
             if audio_ms is not None:
                 target, clock_ms, polled_at = round(audio_ms * self.fps / 1000), audio_ms, time.monotonic()
         self._clock_ms, self._clock_at = clock_ms, polled_at
-        matched = self._choose_pair(target)
+        matched = self.shown = self._choose_pair(target)
         # Falling behind is judged by the soundtrack clock's own reading, not
         # the value carried on between its steps, which picks the frame.
         reading = self.audio.reading_ms if self.audio_running else None
@@ -334,7 +339,9 @@ class LockedNativePool:
 
     @property
     def description(self):
-        state = "Buffering locked pair" if self.buffering else "Frame-locked GPU pair"
+        # Paused on the pair on screen, "Buffering" was said over a still frame.
+        state = ("Buffering locked pair" if not self.shown or (self.buffering and self.playing)
+                 else "Frame-locked GPU pair")
         audio = "source soundtrack" if not self.audio.failed else "audio unavailable"
         details = [self.status_details.get(key, "") for key in
                    (self.source_key, ("distorted", self.selected))]

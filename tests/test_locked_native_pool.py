@@ -147,6 +147,15 @@ def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume(monkeypatch
     audio.position = 720  # frame 18 due
     instance.poll()
     assert 14 in instance.frames[("distorted", 0)]
+    # Paused on the pair on screen it is locked, not buffering -- though
+    # still set to wait for the sound's seek, as after one made while paused.
+    instance.set_playing(False)
+    instance.buffering = True
+    instance.poll()
+    assert instance.description.startswith("Frame-locked GPU pair")
+    instance.frame = 15  # sought to a frame not decoded yet
+    instance.poll()
+    assert instance.description.startswith("Buffering locked pair")
     # A video whose seek is still to be made gives the pool no frames: its
     # sink can still hold frames from before the seek, which a seek back
     # took for frames to come.
