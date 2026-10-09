@@ -2,7 +2,10 @@
 
 ## Calculate metrics
 
-1. In **Videos**, select a reference and add encoded/distorted files.
+1. In **Videos**, select a reference and add encoded/distorted files: drop
+   them on the test list (a file dropped on the reference box replaces the
+   reference), paste a reference path, or use Browse. Drag rows to reorder
+   them; click a column heading to sort by it, and again to reverse.
 2. Select the metric checkboxes in each row. Cell edits apply to selected rows;
    header checkboxes apply across rows. VMAF, PSNR, SSIM and XPSNR are enabled
    by default; VMAF NEG, SSIMULACRA2 and Butteraugli can be selected separately.
@@ -20,6 +23,10 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.
+
+**Settings > Window** chooses the theme (Same as Windows, Light or Dark) and
+whether the app reopens the videos it had open when it was last closed (off by
+default).
 
 SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship. Settings
 > GPU metrics > GPU backend chooses Vship's build: Auto (the default) uses CUDA
