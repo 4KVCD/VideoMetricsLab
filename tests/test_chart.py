@@ -100,6 +100,32 @@ def test_a_narrow_dip_survives_downsampling(qapp):
     )
     assert row_has_ink
 
+    # Resized again and again -- the window dragged by an edge -- it is
+    # drawn once, at the size it settles on: drawn at every size, a dozen
+    # two-hour series took 54 ms a step.
+    drawn = []
+    rebuild = chart._rebuild_cache
+    chart._rebuild_cache = lambda: (drawn.append(chart.size()), rebuild())[1]
+    chart.show()  # hidden, each grab() sent it a resize event again
+    chart.grab()
+    assert len(drawn) == 1
+    for width in range(810, 850, 10):
+        chart.resize(width, 400)
+        chart.grab()
+    assert len(drawn) == 1  # shown stretched meanwhile
+    chart._resize_settle.stop()  # settled: the timer fires, stopped first as single-shot ones are
+    chart._resize_settle.timeout.emit()
+    chart.grab()
+    assert len(drawn) == 2 and drawn[-1].width() == 840
+    # Resized hidden -- the window, on another tab -- it is drawn afresh when
+    # shown, not stretched from the old size for 100 ms.
+    chart.hide()
+    chart.resize(900, 400)
+    chart.show()
+    chart.grab()
+    chart.close()
+    assert len(drawn) == 3 and drawn[-1].width() == 900
+
 
 # ------------------------------------------------------------------ zoom / pan
 

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from math import ceil
 
 import numpy as np
-from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRect, Qt, Signal
+from PySide6.QtCore import QEvent, QLineF, QPoint, QPointF, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QWidget
 
@@ -105,6 +105,14 @@ class ChartWidget(QWidget):
         self.setMinimumSize(240, 140)
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WA_OpaquePaintEvent)  # we paint every pixel; skip Qt's pre-clear
+        # While the size keeps changing -- the window dragged by an edge --
+        # the last drawing is shown stretched, and the chart drawn again
+        # once the size has settled. Drawn at every size, a dozen two-hour
+        # series took 54 ms a step: 18 steps a second, 4 on a slower PC.
+        self._resize_settle = QTimer(self)
+        self._resize_settle.setSingleShot(True)
+        self._resize_settle.setInterval(100)
+        self._resize_settle.timeout.connect(self.update)
 
     # ------------------------------------------------------------------ data
     def set_series(self, key: int, series: ChartSeries) -> None:
@@ -248,7 +256,13 @@ class ChartWidget(QWidget):
         self.update()
 
     def resizeEvent(self, event) -> None:
-        self._cache = None
+        if self._cache is not None:
+            if self.isVisible():
+                self._resize_settle.start()  # drawn again at the size it settles on (paintEvent)
+            else:
+                # Resized hidden -- the window, on another tab -- it comes as
+                # it is shown: drawn afresh, not stretched for 100 ms.
+                self._cache = None
         super().resizeEvent(event)
 
     def changeEvent(self, event) -> None:
@@ -260,6 +274,11 @@ class ChartWidget(QWidget):
 
     def paintEvent(self, event) -> None:
         if not self._cache_matches_display():
+            if self._cache is not None and self._resize_settle.isActive():
+                painter = QPainter(self)
+                painter.drawPixmap(self.rect(), self._cache)  # stretched, still being resized
+                painter.end()
+                return
             self._rebuild_cache()
         painter = QPainter(self)
         # Only the damaged rect is blitted -- moving the crosshair repaints a
