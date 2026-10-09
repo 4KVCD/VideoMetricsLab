@@ -14,6 +14,7 @@ the base's own decoding could no longer be reached.
 from __future__ import annotations
 
 import subprocess
+import threading
 import time
 from dataclasses import replace
 
@@ -45,7 +46,21 @@ from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom
 #: wanted. At 10 ms throughout, a paused view cost 2-4% of a core.
 _BUSY_TICK_MS = 10
 _SETTLED_TICK_MS = 100
+#: How long FFmpeg's playback has to keep up before its soundtrack, stopped
+#: when the frames fell behind, starts again. Started again at the next
+#: frame, decoders slower than real time restarted it at every frame: 11
+#: times a second, the window's thread saturated and the sound in pieces.
+_AUDIO_RESUME_SECONDS = 1.0
 
+
+
+def _end_audio(process: subprocess.Popen, handle: ProcessHandle | None) -> None:
+    """Ends a soundtrack's FFmpeg and anything it started."""
+    if handle is not None:
+        handle.terminate()
+        handle.detach()
+    if process.poll() is None:
+        proc_util.terminate(process)
 
 class _PairedFrameWidget(DragsZoomedFrame, QWidget):
     """A native window a GPU swapchain presents into (LockedNativePool),
@@ -153,6 +168,11 @@ class VideoCompareView(QWidget):
         self._audio_enabled = True
         self._audio_process: subprocess.Popen | None = None
         self._audio_handle: ProcessHandle | None = None
+        #: The soundtrack is to start (again) with the frames, not before
+        #: _audio_resume_at: playback fell behind until then. A start (Play,
+        #: a seek, another test video) is not falling behind: it clears that.
+        self._audio_due = False
+        self._audio_resume_at = 0.0
         self._series: list[FrameComparison] = []
         self._selected = 0
         self._source_native = True
@@ -395,6 +415,7 @@ class VideoCompareView(QWidget):
                     self._distorted_surface.clear_frame()
                     self._sync_pool()
                     self._presented = -1
+                    self._audio_resume_at = 0.0  # a start: the soundtrack with the first frame
                     self._tick()
                     self._wake()
                 if bool(playing) != self._wanted_playing:
@@ -456,6 +477,8 @@ class VideoCompareView(QWidget):
             return
         self._clock_frame = self._presented if not playing and self._presented >= 0 else self._target_frame()
         self._wanted_playing = self._is_playing = playing
+        self._audio_due = False
+        self._audio_resume_at = 0.0
         self._clock_started = time.monotonic() if playing and not self._buffering else None
         if not playing:
             self._stop_audio()
@@ -534,6 +557,8 @@ class VideoCompareView(QWidget):
         self._clock_frame = round(self.position / 1000 * self._series[0].fps)
         self._clock_started = None
         self._buffering = True
+        self._audio_due = False
+        self._audio_resume_at = 0.0
         self._presented = -1
         for surface in (self._source_surface, self._distorted_surface):
             surface.clear_frame()
@@ -707,7 +732,12 @@ class VideoCompareView(QWidget):
         if not common:
             self._buffering = True
             if self._wanted_playing and target - max(0, self._presented) > 2:
-                self._stop_audio()
+                # Starting (a seek, another test video) is not falling behind:
+                # the soundtrack starts with the first frame, as it always did.
+                if self._presented >= 0 and self._clock_started is not None:
+                    self._fell_behind()
+                else:
+                    self._stop_audio()
             error = self._failures.get(source_key) or self._failures.get(distorted_key)
             self._status(f"Selected video failed: {error}" if error else
                          "Buffering selected comparison; adjacent videos are preparing in the background")
@@ -717,8 +747,8 @@ class VideoCompareView(QWidget):
         if frame == self._presented:
             if self._wanted_playing and target - frame > 2:
                 # Don't let audio run arbitrarily ahead during sustained
-                # starvation. Resume it from the next displayed frame.
-                self._stop_audio()
+                # starvation. Resume it with the frames, once they keep up.
+                self._fell_behind()
                 self._buffering = True
             self._pace(not self._wanted_playing and frame >= target)
             return
@@ -729,7 +759,7 @@ class VideoCompareView(QWidget):
             # ever-growing queue or let the comparison drift away from audio.
             self._clock_frame = frame
             self._clock_started = time.monotonic()
-            self._stop_audio()
+            self._fell_behind()
             self._buffering = True
         self._frame = round(frame / fps * self._comparison.fps)
         self._source_surface.set_frame(source[frame], playback_dimensions(self._desired[source_key][0], self._pool_maximum))
@@ -738,8 +768,11 @@ class VideoCompareView(QWidget):
             self._clock_frame = frame
             self._clock_started = time.monotonic()
         if self._buffering and self._wanted_playing:
-            self._start_audio(self._frame)
+            self._audio_due = True
         self._buffering = False
+        if self._audio_due and self._wanted_playing and time.monotonic() >= self._audio_resume_at:
+            self._audio_due = False
+            self._start_audio(self._frame)
         self.position_changed.emit(round(frame / fps * 1000))
         self._pool_status()
         self._check_end()
@@ -783,16 +816,21 @@ class VideoCompareView(QWidget):
         self._audio_process = process
         self._audio_handle = handle
 
+    def _fell_behind(self) -> None:
+        """The frames fell behind the clock: the soundtrack stops, and
+        starts again only once they have kept up for a while."""
+        self._stop_audio()
+        self._audio_resume_at = time.monotonic() + _AUDIO_RESUME_SECONDS
+
     def _stop_audio(self) -> None:
         process = self._audio_process
         handle = self._audio_handle
         self._audio_process = None
         self._audio_handle = None
-        if handle is not None:
-            handle.terminate()
-            handle.detach()
-        if process is not None and process.poll() is None:
-            proc_util.terminate(process)
+        if process is not None:
+            # Ended from a thread of its own: listing its process tree,
+            # twice, held the window for 28 ms -- at each pause.
+            threading.Thread(target=_end_audio, args=(process, handle), name="audio-stop", daemon=True).start()
 
     def _stop_decoder(self):
         if self._native_pool is not None:
