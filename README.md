@@ -1,6 +1,8 @@
 # VideoMetricsLab
 
-Calculate VMAF and VMAF NEG on NVIDIA GPUs, and SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly.
+Calculate VMAF and VMAF NEG on NVIDIA GPUs, and SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
+
+Coming in v1.5: Highly optimized VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR, SSIM and XPSNR up to 6× faster with far less memory, and CLI support. 
 
 ## Features
 
@@ -108,6 +110,14 @@ Build the distributable with `./scripts/build_release.ps1`. See the
 Licensed under the [MIT License](LICENSE). Copyright (c) 2026 **4KVCD**.
 Third-party components retain their own licenses; see
 [Third-Party Notices](docs/THIRD_PARTY.md).
+
+### ❤️ Enjoying VideoMetricsLab?
+
+If VideoMetricsLab has been useful to you, I'd love to hear from you!
+
+[💬 Leave a comment / say thanks](https://github.com/4KVCD/VideoMetricsLab/discussions)
+
+You can also ⭐ star the repository — it helps me know people are finding the project useful.
 
 ## Changelog
 
