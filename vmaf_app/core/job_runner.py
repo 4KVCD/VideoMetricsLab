@@ -134,6 +134,13 @@ MAX_VIDEOS_IN_FLIGHT = MAX_PARALLEL_JOBS + 1
 
 _CPU, _GPU = "cpu", "gpu"
 
+#: A half's frame figures are sent on at most this often (JobRun.report_progress),
+#: unless they change what its line says. Each scorer reports every few
+#: frames: for three halves of a 120 fps 1080p video, some 290 reports a
+#: second, two signals each, queued to the window's thread -- 3% of a core
+#: of it for a line drawn again once a second.
+_PROGRESS_INTERVAL_S = 0.1
+
 
 def _ignore(*_args) -> None:
     pass
@@ -529,6 +536,7 @@ class JobRun:
         # runs on (see perceptual_so_far).
         self.pass_outputs: list[PerceptualTaskOutput] = []
         self._finished_tasks = 0
+        self._progress_sent = float("-inf")  # time.monotonic() of the last figures sent on
 
     def _by_place(self, plan: ExecutionPlan) -> ExecutionPlan:
         """Each half's metrics calculated in one place, the CPU or the GPU.
@@ -741,9 +749,20 @@ class JobRun:
         self.task_phases.pop(backend, None)
         self.task_progress.pop(backend, None)
 
-    def report_progress(self, backend: str, cur: int, total: int, fps: float) -> None:
+    def report_progress(self, backend: str, cur: int, total: int, fps: float, *, force: bool = False) -> None:
+        """A half's frame figures, sent on at most every _PROGRESS_INTERVAL_S
+        -- kept meanwhile, for the next -- unless they change what its line
+        says: its first, a half no longer waiting, its last frame, or `force`
+        (the half has finished)."""
         with self.emit_lock:
             events, index, tasks = self.scheduler.events, self.index, self.plan.tasks
+            now = time.monotonic()
+            with self.lock:
+                if not (force or backend not in self.task_progress or backend in self.task_waiting
+                        or (total > 0 and cur >= total) or now - self._progress_sent >= _PROGRESS_INTERVAL_S):
+                    self.task_progress[backend] = (cur, total, fps)
+                    return
+                self._progress_sent = now
             if len(tasks) == 1:
                 with self.lock:
                     self.task_progress[backend] = (cur, total, fps)
@@ -877,7 +896,7 @@ class JobRun:
                 self.task_results[task.backend_id] = output
                 last_progress = self.task_progress.get(task.backend_id, (1, 1, 0.0))
             if len(self.plan.tasks) > 1:
-                self.report_progress(task.backend_id, *last_progress)
+                self.report_progress(task.backend_id, *last_progress, force=True)
         with self.lock:
             self._finished_tasks += 1
             last = self._finished_tasks == len(self.plan.tasks)

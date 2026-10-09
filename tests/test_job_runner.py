@@ -4,6 +4,7 @@ The scheduling itself -- lanes, pausing, cancelling, halves -- is tested
 through the window's VmafWorker in test_worker.py; these make sure the core
 runs on its own, as a script or another front end would use it."""
 from pathlib import Path
+from types import SimpleNamespace
 
 from vmaf_app.core import job_runner
 from vmaf_app.core.job_runner import JobScheduler, RunEvents, VmafJob
@@ -43,6 +44,24 @@ def test_a_run_reports_each_video_through_plain_callables(monkeypatch):
     assert seen[-1] == ("all finished",)
     assert sorted(seen[:-1]) == [("finished", 0, "d0.mp4"), ("finished", 1, "d1.mp4"),
                                  ("started", 0, "d0.mp4"), ("started", 1, "d1.mp4")]
+
+    # Frame figures reported at every frame are sent on at most every 0.1 s:
+    # the first, then as the time comes, and the last. Each was sent, two
+    # signals queued to the window's thread some 290 times a second.
+    now = [100.0]
+    monkeypatch.setattr(job_runner, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+    def scored(_source, distorted, *_args, on_progress, **_kwargs):
+        for frame in range(1, 151):
+            now[0] += 0.03  # a frame every 30 ms: sent every fourth
+            on_progress(frame, 150, 33.3)
+        return _result(distorted.path.name)
+
+    monkeypatch.setattr(job_runner, "run_vmaf", scored)
+    sent = []
+    JobScheduler([_job("d0.mp4")], parallel_jobs=1,
+                 events=RunEvents(progress=lambda _index, cur, _total, _fps: sent.append(cur))).run()
+    assert sent == [*range(1, 150, 4), 150]
 
 
 def test_a_cancelled_run_says_so_once_however_many_videos_stopped(monkeypatch):
