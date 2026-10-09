@@ -40,6 +40,7 @@ def test_xpsnr_infinity_is_capped_for_plot_only(qapp, all_infinite):
         panel.add_run(result, "test")
         panel.tabs.setCurrentIndex(5)
         page = panel._pages["xpsnr"]
+        assert page.devicePixelRatio() > 0  # no attribute of the page's hides QWidget.metric()
         plotted = next(iter(page.chart._series.values())).values
         assert (plotted[2:] == _XPSNR_INFINITY_PLOT_DB).all()
         assert np.isposinf(result.frames.xpsnr[2:]).all()

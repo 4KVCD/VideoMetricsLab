@@ -244,7 +244,7 @@ class _MetricPage(QWidget):
 
     def __init__(self, metric: MetricDefinition, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.metric = metric
+        self.definition = metric
         # Hover snaps to the worst nearby frame: a dip for VMAF, a spike for
         # Butteraugli. The search works on sign * value, so "lowest" in it
         # always means "worst".
@@ -315,19 +315,19 @@ class _MetricPage(QWidget):
         """(Re)builds this series' curve on this page from its current data,
         or removes it if the run has no data for this metric."""
         self.remove_curve(series_id)
-        if self.metric.kind is MetricKind.SEQUENCE:
+        if self.definition.kind is MetricKind.SEQUENCE:
             self._set_timeline_curve(series_id, entry, color)
             return
         # PSNR/SSIM/XPSNR are computed for a whole run or not at all -- it's
         # a per-run option, never a per-frame one -- so the array is either
         # present or None, and lines up index-for-index with entry.times.
-        result = entry.result.frame_metric(self.metric.key)
+        result = entry.result.frame_metric(self.definition.key)
         if result is None or len(result.values) == 0:
             self._update_no_data_label()
             return
         values = result.values
         plot_values = values
-        if self.metric.key == "xpsnr" and np.isposinf(values).any():
+        if self.definition.key == "xpsnr" and np.isposinf(values).any():
             # Display-only substitution: never mutate the result arrays used
             # for aggregation, hover readouts or portable exports.
             plot_values = np.where(
@@ -338,13 +338,13 @@ class _MetricPage(QWidget):
         ))
         others = []
         for metric in FRAME_METRICS:
-            other = entry.result.frame_metric(metric.key) if metric.key != self.metric.key else None
+            other = entry.result.frame_metric(metric.key) if metric.key != self.definition.key else None
             if other is not None and len(other.values) and not np.isnan(other.values).all():
                 same_axis = other.frame is result.frame or (
                     len(other.frame) == len(result.frame) and np.array_equal(other.frame, result.frame))
                 others.append((metric, other.frame, other.values, same_axis))
         self._curves[series_id] = _MetricCurve(
-            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation, self.metric.direction),
+            stats=compute_stats(values, self.definition.thresholds, self.definition.aggregation, self.definition.direction),
             values=values,
             frames=result.frame,
             times=result.time,
@@ -363,7 +363,7 @@ class _MetricPage(QWidget):
         in picked the next second). The statistics are of the seconds; the
         whole video's score is the stats table's CVVDP column.
         """
-        result = entry.result.sequence_metric(self.metric.key)
+        result = entry.result.sequence_metric(self.definition.key)
         if result is None or not result.has_timeline:
             self._update_no_data_label()
             return
@@ -376,7 +376,7 @@ class _MetricPage(QWidget):
             times=middles, values=values, color=color, visible=entry.visible,
         ))
         self._curves[series_id] = _MetricCurve(
-            stats=compute_stats(values, self.metric.thresholds, self.metric.aggregation, self.metric.direction),
+            stats=compute_stats(values, self.definition.thresholds, self.definition.aggregation, self.definition.direction),
             values=values, frames=np.asarray(result.frame), times=middles,
             label=entry.label, visible=entry.visible, starts=starts,
         )
@@ -471,7 +471,7 @@ class _MetricPage(QWidget):
         """Format the aligned, shared fields preceding a per-frame value.
         On a per-second curve, `frame`/`time` are where the second starts."""
         series = f"[{label}]"
-        if self.metric.kind is MetricKind.SEQUENCE:
+        if self.definition.kind is MetricKind.SEQUENCE:
             return (
                 tr("{series}  second from frame {frame:>6}   t={time}   ", series=f"{series:<{self._series_width}}",
                    frame=frame, time=format_hms(time, decimals=2))
@@ -510,7 +510,7 @@ class _MetricPage(QWidget):
         worked out then -- here, from _fit_hover_label -- and each mouse move
         just fills them in."""
         self._series_width = self._series_readout_column_width()
-        self._main_width = max(self._field_width(self.metric), len(f"no {self.metric.label}"))
+        self._main_width = max(self._field_width(self.definition), len(f"no {self.definition.label}"))
         self._columns = [(metric, self._field_width(metric)) for metric in self._extra_columns()]
 
     def _readout_row(self, prefix: str, value: float | None, others: dict[str, float | None]) -> str:
@@ -523,8 +523,8 @@ class _MetricPage(QWidget):
         the metric not calculated for it, or not for this frame -- leaves
         that column blank instead of shifting the rest along.
         """
-        main = (f"no {self.metric.label}" if value is None
-                else f"{self.metric.label}={self.metric.format_value(value)}")
+        main = (f"no {self.definition.label}" if value is None
+                else f"{self.definition.label}={self.definition.format_value(value)}")
         if not self._columns:
             return prefix + main
         fields = []
@@ -675,7 +675,7 @@ class _MetricPage(QWidget):
         lines = [tr("Time: {time}", time=format_hms(x, decimals=2))]
         found: list[tuple[str, float]] = []
 
-        if self.metric.kind is MetricKind.SEQUENCE:
+        if self.definition.kind is MetricKind.SEQUENCE:
             # A per-second curve: the second under the cursor. The dip snap
             # searches five points either side, which is five frames on the
             # other tabs but five whole seconds here -- it reported a dip at
@@ -711,7 +711,7 @@ class _MetricPage(QWidget):
             (label_a, val_a), (label_b, val_b) = found
             delta = val_a - val_b
             if not np.isnan(delta):
-                lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(delta)}")
+                lines.append(f"Δ ({label_a} − {label_b}) = {self.definition.format_delta(delta)}")
 
         self.chart.set_cursor_time(float(picks[0][1].times[picks[0][2]]))
         self._set_hover_text("\n".join(lines))
@@ -768,7 +768,7 @@ class _MetricPage(QWidget):
             (label_a, val_a), (label_b, val_b) = found
             delta = val_a - val_b
             if not np.isnan(delta):
-                lines.append(f"Δ ({label_a} − {label_b}) = {self.metric.format_delta(delta)}")
+                lines.append(f"Δ ({label_a} − {label_b}) = {self.definition.format_delta(delta)}")
 
         if cursor_time is not None:
             self.chart.set_cursor_time(cursor_time)
