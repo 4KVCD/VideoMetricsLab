@@ -663,7 +663,10 @@ class FrameComparePanel(QWidget):
         try:
             self._frame = bounded
             self._sync_seek_widgets()
-            self._update_labels()
+            # The frame line alone: what is shown and its colour handling are
+            # the same at every frame, and _update_color_status checked on
+            # disk that both files still exist, at each one.
+            self._update_frame_line()
         finally:
             self._syncing_video_position = False
 
@@ -811,6 +814,15 @@ class FrameComparePanel(QWidget):
         name = comparison.source_info.path.name if self._showing_source else entry.label
         suffix = "" if self._showing_source else f" {self._current_index + 1} of {len(self._entries)}"
         self.showing_label.setText(f"{side}{suffix} — {name}")
+        self._update_frame_line()
+        self._update_color_status()
+
+    def _update_frame_line(self) -> None:
+        """The frame, its time and scores, and how playback goes."""
+        entry = self.current_entry
+        if entry is None:
+            return
+        comparison = entry.comparison
         seconds = self._frame / comparison.fps if comparison.fps > 0 else 0
         parts = [tr("Frame {frame:,}", frame=self._frame), format_hms(seconds, decimals=3), self._score_text(entry)]
         if self.is_video_mode:
@@ -824,7 +836,6 @@ class FrameComparePanel(QWidget):
             else:
                 parts.append(tr("black bars not detected yet — shown uncropped"))
         self.detail_label.set_text("   ·   ".join(parts))
-        self._update_color_status()
 
     def _show_advanced_info(self) -> None:
         button = self.advanced_info_btn
