@@ -1169,10 +1169,9 @@ class FrameComparePanel(QWidget):
             if worker.isRunning():
                 worker.cancel()
 
-    def _on_frame_ready(self, generation: int, side: str, png: bytes) -> None:
+    def _on_frame_ready(self, generation: int, side: str, image: QImage) -> None:
         if generation != self._generation:
             return
-        image = QImage.fromData(png, "PNG")
         if image.isNull():
             self._on_frame_failed(generation, side, tr("ffmpeg returned an unreadable image."))
             return

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QImage
 
 from vmaf_app.core.frame_extract import (
     FrameComparison,
@@ -13,8 +14,9 @@ from vmaf_app.core.process_control import ProcessHandle
 
 
 class FrameExtractWorker(QThread):
-    # generation, side, encoded PNG
-    frame_ready = Signal(int, str, bytes)
+    # generation, side, the frame decoded here (a QImage, null if
+    # unreadable): decoded by the window's thread, a 4K frame held it 64-104 ms
+    frame_ready = Signal(int, str, object)
     # generation, side, readable error
     frame_failed = Signal(int, str, str)
 
@@ -57,4 +59,4 @@ class FrameExtractWorker(QThread):
                     self.frame_failed.emit(self.generation, side, str(exc))
                 continue
             if not self._cancelled:
-                self.frame_ready.emit(self.generation, side, png)
+                self.frame_ready.emit(self.generation, side, QImage.fromData(png, "PNG"))

@@ -111,7 +111,9 @@ def test_command_seeks_just_before_the_requested_frame_timestamp():
     late = replace(result, source_info=replace(result.source_info, start_offset=0.032))
     seek = build_frame_command(late, "source", 24)[command.index("-ss") + 1]
     assert float(seek) == pytest.approx(0.032 + (24 - 0.125) / 24.0)
-    assert command[-4:] == ["-f", "image2pipe", "-c:v", "png", "pipe:1"][-4:]
+    # One PNG, stored rather than compressed (the same pixels, written and
+    # read far sooner), on the pipe.
+    assert command[-9:] == ["-f", "image2pipe", "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"]
     assert any("setsar=1,format=rgb24" in argument for argument in command)
 
 
