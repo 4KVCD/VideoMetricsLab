@@ -368,6 +368,14 @@ class FrameComparePanel(QWidget):
         self._seek_timer.setSingleShot(True)
         self._seek_timer.setInterval(120)
         self._seek_timer.timeout.connect(self._request_current_frames)
+        # While a video plays, its frame shows in the slider, the frame and
+        # time boxes and the frame line at most 30 times a second: at each
+        # of 120 frames a second they took 0.6 ms of the window's thread,
+        # and their repaints more, for numbers no one reads at that rate.
+        self._position_timer = QTimer(self)
+        self._position_timer.setSingleShot(True)
+        self._position_timer.setInterval(33)
+        self._position_timer.timeout.connect(self._show_video_position)
         self._display_timer = QTimer(self)
         self._display_timer.setSingleShot(True)
         self._display_timer.setInterval(200)
@@ -660,18 +668,29 @@ class FrameComparePanel(QWidget):
         bounded = max(0, min(frame, self.frame_spin.maximum()))
         if bounded == self._frame:
             return
+        self._frame = bounded
+        if self.video_view is not None and self.video_view.is_playing:
+            if not self._position_timer.isActive():
+                self._position_timer.start()
+            return
+        self._show_video_position()
+
+    def _show_video_position(self) -> None:
+        """The frame shown in the seek widgets and the frame line -- that
+        line alone: what is shown and its colour handling are the same at
+        every frame, and _update_color_status checked on disk that both
+        files still exist, at each one."""
+        self._position_timer.stop()
         self._syncing_video_position = True
         try:
-            self._frame = bounded
             self._sync_seek_widgets()
-            # The frame line alone: what is shown and its colour handling are
-            # the same at every frame, and _update_color_status checked on
-            # disk that both files still exist, at each one.
             self._update_frame_line()
         finally:
             self._syncing_video_position = False
 
     def _on_video_playing_changed(self, playing: bool) -> None:
+        if not playing and self._position_timer.isActive():
+            self._show_video_position()  # the frame it stopped on, now
         self.play_btn.setText(tr("❚❚ Pause") if playing else tr("▶ Play"))
         self._video_status = "Playing" if playing else "Paused"
         if self.is_video_mode:

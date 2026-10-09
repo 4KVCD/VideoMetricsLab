@@ -18,8 +18,8 @@ import threading
 import time
 from dataclasses import replace
 
-from PySide6.QtCore import QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QRegion
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QRegion
 from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core import proc as proc_util
@@ -105,36 +105,77 @@ class _StreamSurface(_PairedFrameWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        # It paints all of itself: nothing behind it is painted first.
+        self.setAttribute(Qt.WA_OpaquePaintEvent)
         self._payload: bytes | None = None
-        self._image = QImage()
+        self._image: QImage | None = QImage()
         self._side_width = 0
         self._height = 0
 
     def set_frame(self, payload, size):
+        """The frame it shows; the view repaints whichever surface is on
+        top (the other is covered, and was repainted at every frame too).
+        Its QImage is made when it is painted: the covered one's is not."""
         self._payload = payload
         self._side_width, self._height = size
-        self._image = QImage(payload, *size, size[0] * 4, QImage.Format_RGBA8888)
-        self.update()
+        self._image = None
 
     def clear_frame(self):
         self._payload = None
         self._image = QImage()
         self.update()
 
+    def _frame_image(self) -> QImage:
+        if self._image is None:
+            # RGBX, not RGBA: FFmpeg's alpha is always opaque, and a frame
+            # that may be translucent is blended into the window, not copied.
+            self._image = QImage(self._payload, self._side_width, self._height, self._side_width * 4,
+                                 QImage.Format_RGBX8888)
+        return self._image
+
     def paintEvent(self, event):
         if self._native_playback:
             return
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#171717"))
-        if self._image.isNull():
+        background = QColor("#171717")
+        image = self._frame_image()
+        view = self.parentWidget()
+        if image.isNull() or not view.fitted:
+            painter.fillRect(self.rect(), background)
+            place = None if image.isNull() else view.zoom_placement((self._side_width, self._height))
+            if place is not None:
+                image.setDevicePixelRatio(1.0)
+                painter.drawImage(QRectF(place.x, place.y, place.width, place.height), image)
             return
-        place = self.parentWidget().zoom_placement((self._side_width, self._height))
-        if place is None:
-            scale = min(self.width() / self._side_width, self.height() / self._height)
-            w, h = self._side_width * scale, self._height * scale
-            painter.drawImage(QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h), self._image)
-            return
-        painter.drawImage(QRectF(place.x, place.y, place.width, place.height), self._image)
+        # Fitted, on whole device pixels: a frame decoded at the view's size
+        # (VideoCompareView._wanted_maximum) is copied as it is, not scaled
+        # by the pixel or two its even size leaves, and only the bars beside
+        # it are filled: each a pixel into it, which the frame then covers,
+        # so that rounding leaves no gap.
+        ratio = self.devicePixelRatioF()
+        view_w, view_h = round(self.width() * ratio), round(self.height() * ratio)
+        scale = min(view_w / self._side_width, view_h / self._height)
+        w, h = round(self._side_width * scale), round(self._height * scale)
+        if 0 <= w - self._side_width <= 2 and 0 <= h - self._height <= 2:
+            w, h = self._side_width, self._height
+        x, y = (view_w - w) // 2, (view_h - h) // 2
+        bars = []
+        if x > 0:
+            bars.append((0, 0, x + 1, view_h))
+        if x + w < view_w:
+            bars.append((x + w - 1, 0, view_w - x - w + 1, view_h))
+        if y > 0:
+            bars.append((0, 0, view_w, y + 1))
+        if y + h < view_h:
+            bars.append((0, y + h - 1, view_w, view_h - y - h + 1))
+        for left, top, width, height in bars:
+            painter.fillRect(QRectF(left / ratio, top / ratio, width / ratio, height / ratio), background)
+        if (w, h) == (self._side_width, self._height):
+            image.setDevicePixelRatio(ratio)
+            painter.drawImage(QPointF(x / ratio, y / ratio), image)
+        else:  # decoded for another size, until the view's settles (_follow_decode_size)
+            image.setDevicePixelRatio(1.0)
+            painter.drawImage(QRectF(x / ratio, y / ratio, w / ratio, h / ratio), image)
 
 
 class VideoCompareView(QWidget):
@@ -189,11 +230,18 @@ class VideoCompareView(QWidget):
         self._pool_active = False
         self._pool_reason = ""
         self._pool_maximum = None
-        self._pool_screen = None  # the screen size FFmpeg's decoders started for
+        #: The view's size settling after a resize: FFmpeg's frames are then
+        #: decoded at it (_follow_decode_size).
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(300)
+        self._resize_timer.timeout.connect(self._follow_decode_size)
         self._native_pool = None
         self._last_status = ""
         self._decoded_videos = DEFAULT_COMPARE_DECODED_VIDEOS
         self._pool_timer = QTimer(self)
+        # Precise: while playing it ticks every half frame (_busy_tick_ms).
+        self._pool_timer.setTimerType(Qt.PreciseTimer)
         self._pool_timer.setInterval(_BUSY_TICK_MS)
         self._pool_timer.timeout.connect(self._tick)
         self._on_screen = False  # between showEvent and hideEvent
@@ -211,7 +259,15 @@ class VideoCompareView(QWidget):
             surface.refresh_cursor()
         if self._native_pool is not None:
             self._native_pool.resize()
+        if self._pool_active:
+            self._resize_timer.start()
         super().resizeEvent(event)
+
+    def event(self, event):
+        # Moved to a screen of another scaling: other device pixels, as a resize.
+        if event.type() == QEvent.DevicePixelRatioChange and self._pool_active:
+            self._resize_timer.start()
+        return super().event(event)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -234,24 +290,36 @@ class VideoCompareView(QWidget):
         minimized window's widgets stay visible to Qt, and minimizing hides
         the panel after the view -- the panel then pauses it, which woke it
         again. (Leaving the tab hides the panel first, then the view.)"""
-        if self._on_screen and not (self._pool_timer.isActive()
-                                    and self._pool_timer.interval() == _BUSY_TICK_MS):
+        busy = self._busy_tick_ms()
+        if self._on_screen and not (self._pool_timer.isActive() and self._pool_timer.interval() == busy):
             # Not restarted when already ticking that fast: a slider dragged
-            # seeks more often than every 10 ms, and each restart would put
-            # the next tick off again.
-            self._pool_timer.start(_BUSY_TICK_MS)
+            # seeks more often than it ticks, and each restart would put the
+            # next tick off again.
+            self._pool_timer.start(busy)
 
     def _pace(self, settled: bool) -> None:
-        """Ticks slowed once paused on the frame wanted, every 10 ms otherwise."""
-        interval = _SETTLED_TICK_MS if settled else _BUSY_TICK_MS
+        """Ticks slowed once paused on the frame wanted, busy otherwise."""
+        interval = _SETTLED_TICK_MS if settled else self._busy_tick_ms()
         if self._pool_timer.interval() != interval:
             self._pool_timer.setInterval(interval)
+
+    def _busy_tick_ms(self) -> int:
+        """Half a frame's time while playing (4 ms at 120 fps): at every
+        10 ms, a 120 fps video played natively showed 83 frames a second.
+        10 ms otherwise."""
+        fps = self._series[0].fps if self._wanted_playing and self._series else 0
+        return max(2, min(_BUSY_TICK_MS, int(500 / fps))) if fps > 0 else _BUSY_TICK_MS
 
     # ------------------------------------------------------------------ zoom
     def set_zoom(self, zoom: Zoom) -> None:
         """The zoom to show frames at: the panel's, which its still frames
         use too."""
         self._zoom = zoom
+
+    @property
+    def fitted(self) -> bool:
+        """Whether frames are fitted to the view, not zoomed."""
+        return self._zoom.factor is None
 
     def zoom_context(self, frame=None):
         """(zoom, view size, frame size, ratio) for a `frame`-pixel picture
@@ -312,7 +380,7 @@ class VideoCompareView(QWidget):
     def zoom_changed(self) -> None:
         """The zoom, or the part of the frame in view, changed: shown again.
         Zoomed, FFmpeg's frames are decoded at the comparison's full size,
-        not the screen's (_wanted_maximum)."""
+        not the view's (_wanted_maximum)."""
         if self._native_pool is not None:
             try:
                 self._native_pool.place()
@@ -320,19 +388,45 @@ class VideoCompareView(QWidget):
                 self._native_pool.stop()
                 self._native_pool = None
                 self._start_ffmpeg(self._wanted_playing, str(exc))
-        elif self._pool_active and (wanted := self._wanted_maximum()) != self._pool_maximum:
-            if self._decode_size_changes(wanted):
-                self._restart_decoder(realtime=self._wanted_playing)
-            else:
-                self._pool_maximum = wanted  # the same frames: they go on decoding
+        else:
+            self._follow_decode_size()
         for surface in (self._source_surface, self._distorted_surface):
             surface.refresh_cursor()
             surface.update()
 
     def _wanted_maximum(self):
-        """The size FFmpeg's frames are decoded at most: the screen's when
-        fitted; zoomed, the comparison's own (None)."""
-        return None if self._zoom.factor is not None else self._display_pixel_size()
+        """The size FFmpeg's frames are decoded at most, in device pixels:
+        fitted, the view's -- no more of a frame is ever shown, and FFmpeg
+        scales it better than painting does; zoomed, the comparison's own
+        (None). It was the screen's: 4K HDR played at 22-26 frames a second,
+        each 3840x2160 (33 MB) for a view of 2166x959 device pixels."""
+        if self._zoom.factor is not None:
+            return None
+        ratio = self.devicePixelRatioF()
+        return max(2, round(self.width() * ratio)), max(2, round(self.height() * ratio))
+
+    def _follow_decode_size(self) -> None:
+        """FFmpeg's frames decoded again when the size wanted gives any of
+        them another: fitted, the view's, once a resize settled (copied to
+        it as they are, not scaled by the painting); zoomed, their own."""
+        if not self._pool_active:
+            return
+        wanted = self._wanted_maximum()
+        if wanted == self._pool_maximum:
+            return
+        if self._decode_size_changes(wanted):
+            self._decode_at_new_size()
+        else:
+            self._pool_maximum = wanted  # the same frames: they go on decoding
+
+    def _decode_at_new_size(self) -> None:
+        """FFmpeg's decoders started again for frames of another size: the
+        frame on screen stays until theirs come -- 1.4-2 s on an RTX 5090,
+        for a Vulkan device and the seek -- where cleared, the view would be
+        dark for that time."""
+        self._stop_decoder(keep_frame=True)
+        self._stop_audio()
+        self._start_ffmpeg(self._wanted_playing, self._pool_reason, keep_frame=True)
 
     def _decode_size_changes(self, maximum) -> bool:
         """Whether decoding with `maximum` would give any of the pool's
@@ -496,7 +590,9 @@ class VideoCompareView(QWidget):
         if self._native_pool is not None:
             self._native_pool.show_source(showing)
         if self._pool_active:
-            (self._source_surface if showing else self._distorted_surface).raise_()
+            surface = self._source_surface if showing else self._distorted_surface
+            surface.raise_()
+            surface.update()  # its frame is current; covered, it was not repainted
 
     def set_audio_enabled(self, enabled: bool) -> None:
         self._audio_enabled = bool(enabled)
@@ -542,18 +638,8 @@ class VideoCompareView(QWidget):
         self._stop_audio()
         self._start_ffmpeg(realtime, reason)
 
-    def _display_pixel_size(self) -> tuple[int, int] | None:
-        handle = self.window().windowHandle()
-        screen = handle.screen() if handle is not None else QGuiApplication.primaryScreen()
-        if screen is None:
-            return None
-        geometry = screen.geometry()
-        ratio = screen.devicePixelRatio()
-        return round(geometry.width() * ratio), round(geometry.height() * ratio)
-
-    def _start_ffmpeg(self, realtime, reason=""):
+    def _start_ffmpeg(self, realtime, reason="", *, keep_frame=False):
         self._pool_reason = reason
-        self._pool_screen = self._display_pixel_size()
         self._pool_maximum = self._wanted_maximum()
         self._pool_active = True
         self._wanted_playing = bool(realtime)
@@ -565,7 +651,8 @@ class VideoCompareView(QWidget):
         self._audio_resume_at = 0.0
         self._presented = -1
         for surface in (self._source_surface, self._distorted_surface):
-            surface.clear_frame()
+            if not keep_frame:
+                surface.clear_frame()
             surface.setGeometry(self.rect())
             surface.show()
         self.show_source(self._showing_source)
@@ -704,9 +791,6 @@ class VideoCompareView(QWidget):
             return
         if not self._pool_active:
             return
-        if self._display_pixel_size() != self._pool_screen:
-            self._restart_decoder(realtime=self._wanted_playing)
-            return
         self._launch_missing()
         target = self._target_frame()
         source_key = next((key for key in self._desired if key[0] == "source"), None)
@@ -768,6 +852,7 @@ class VideoCompareView(QWidget):
         self._frame = round(frame / fps * self._comparison.fps)
         self._source_surface.set_frame(source[frame], playback_dimensions(self._desired[source_key][0], self._pool_maximum))
         self._distorted_surface.set_frame(distorted[frame], playback_dimensions(self._comparison, self._pool_maximum))
+        (self._source_surface if self._showing_source else self._distorted_surface).update()
         if self._clock_started is None and self._wanted_playing:
             self._clock_frame = frame
             self._clock_started = time.monotonic()
@@ -836,7 +921,7 @@ class VideoCompareView(QWidget):
             # twice, held the window for 28 ms -- at each pause.
             threading.Thread(target=_end_audio, args=(process, handle), name="audio-stop", daemon=True).start()
 
-    def _stop_decoder(self):
+    def _stop_decoder(self, *, keep_frame=False):
         if self._native_pool is not None:
             self._native_pool.stop()
             self._native_pool = None
@@ -853,6 +938,8 @@ class VideoCompareView(QWidget):
         self._desired.clear()
         self._details.clear()
         self._failures.clear()
+        if keep_frame:
+            return
         self._source_surface.clear_frame()
         self._distorted_surface.clear_frame()
         self._source_surface.hide()
