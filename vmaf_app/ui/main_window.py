@@ -462,6 +462,11 @@ class CompletedRun:
         self.graph_identity = object()
         # A video's result so far, during its run (MainWindow._on_result_updated).
         self.partial = False
+        #: The table's figure for each metric column and the frames in it
+        #: scoring infinity, worked out once (MainWindow._metric_mean,
+        #: _identical_frames_note): a result is replaced, never edited.
+        self.means: dict[int, float | None] = {}
+        self.identical: dict[int, tuple[int, int]] = {}  # (frames scoring infinity, frames)
 
 
 @dataclass
@@ -2578,16 +2583,26 @@ class MainWindow(QMainWindow):
         Without it the number silently describes fewer frames than the run
         measured, which is worse than the "inf" it replaced.
         """
-        metric = _METRIC_COLUMN_BY_INDEX[column].metric
-        values = run.result.frames.values(metric.key)
-        if values is None:
-            return ""
-        identical = int(np.isposinf(np.asarray(values, dtype=np.float64)).sum())
+        counted = run.identical.get(column)
+        if counted is None:
+            # Counted once a run, and in the values' own precision: as
+            # 64-bit copies, at each refresh of the row, they took 80% of
+            # it -- 0.5 ms a metric for a two-hour video.
+            values = run.result.frames.values(_METRIC_COLUMN_BY_INDEX[column].metric.key)
+            if values is None:
+                counted = (0, 0)
+            else:
+                values = np.asarray(values)
+                if values.dtype.kind != "f":
+                    values = values.astype(np.float64)
+                counted = (int(np.isposinf(values).sum()), len(values))
+            run.identical[column] = counted
+        identical, count = counted
         if not identical:
             return ""
         return (
             tr("\n\n{identical} of {count} frames were identical to the reference and scored infinity; they "
-                "contribute zero distortion and are included in the frame count for the XPSNR sequence average.", identical=identical, count=len(values))
+                "contribute zero distortion and are included in the frame count for the XPSNR sequence average.", identical=identical, count=count)
         )
 
     def _cvvdp_elsewhere_note(self, row_data: RowData) -> str:
@@ -2624,15 +2639,21 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _metric_mean(run: CompletedRun, column: int) -> float | None:
+        """Once a run: worked out each time, a two-hour video's took 0.6 ms
+        a metric, at each of the five refreshes of its row as it opened, and
+        at every sort."""
+        if column in run.means:
+            return run.means[column]
         metric = _METRIC_COLUMN_BY_INDEX[column].metric
         sequence = run.result.sequence_metric(metric.key)
         if sequence is not None:
-            return sequence.score  # one score for the video, not a mean
-        result = run.result.frame_metric(metric.key)
-        values = result.values if result is not None else run.result.frames.values(metric.key)
-        if values is None or len(values) == 0:
-            return None
-        return aggregate_scores(values, metric.aggregation)
+            value = sequence.score  # one score for the video, not a mean
+        else:
+            result = run.result.frame_metric(metric.key)
+            values = result.values if result is not None else run.result.frames.values(metric.key)
+            value = None if values is None or len(values) == 0 else aggregate_scores(values, metric.aggregation)
+        run.means[column] = value
+        return value
 
     @staticmethod
     def _crop_detail(label: str, info: VideoInfo, crop: CropBox | None) -> str:

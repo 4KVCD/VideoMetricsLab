@@ -784,6 +784,17 @@ def test_metric_columns_show_each_metrics_own_mean(qapp):
     assert win.distorted_table.item(row, COL_PSNR).text() == "42.00"
     assert win.distorted_table.item(row, COL_SSIM).text() == "0.9500"  # SSIM needs more decimals to be useful
     assert win.distorted_table.item(row, COL_XPSNR).text() == "38.00"
+    # Frames scoring infinity, counted once a run: said again at the row's
+    # next refresh from that count.
+    frames = [FrameScore(frame=i, time=i / 30.0, vmaf=90.0, xpsnr=float("inf") if i < 2 else 38.0) for i in range(4)]
+    result = ComparisonResult(
+        source=Path("source.mp4"), distorted=Path("a.mp4"), frames=frames, fps=30.0,
+        model="m", source_crop=None, distorted_crop=None, source_info=info, distorted_info=info,
+    )
+    win._rows[row].completed_run = CompletedRun(result, "a")
+    for _ in range(2):
+        win._set_row_metrics(row)
+        assert "2 of 4 frames were identical to the reference" in win.distorted_table.item(row, COL_XPSNR).toolTip()
 
 
 def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypatch):
