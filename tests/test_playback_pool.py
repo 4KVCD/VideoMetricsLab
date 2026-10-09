@@ -118,8 +118,13 @@ def test_pair_presents_only_matching_frame_numbers(qapp, monkeypatch, tmp_path):
 def test_seek_replaces_all_streams_and_pause_does_not(qapp, monkeypatch, tmp_path):
     view, _ = make_view(monkeypatch, tmp_path, 2)
     old = dict(view._pool)
+    view.set_playing(True)
+    assert view._last_status.startswith("Playing")
     view.set_playing(False)
     assert view._pool == old
+    # Said at once, not at the next frame shown: paused by minimizing the
+    # window, it went on saying "Playing".
+    assert view._last_status.startswith("Paused")
     view.set_position(2000)
     assert all(w.cancelled for w in old.values())
     for worker in old.values():

@@ -601,6 +601,9 @@ class VideoCompareView(QWidget):
             return
         self._clock_frame = self._presented if not playing and self._presented >= 0 else self._target_frame()
         self._wanted_playing = self._is_playing = playing
+        # Said at once: said only as a frame was shown, it went on saying
+        # "Playing" when paused -- by minimizing the window, say.
+        self._pool_status()
         self._audio_due = False
         self._audio_resume_at = 0.0
         self._clock_started = time.monotonic() if playing and not self._buffering else None
