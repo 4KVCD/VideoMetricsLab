@@ -343,6 +343,10 @@ class GstComparePipeline:
         self._ready = False
         self._pending_initial_seek_ms: int | None = None
         self._initial_seek_sent = False
+        #: Where the video's first frame is on the pipeline's timeline (ns),
+        #: from its first preroll (_prerolled_time): frames and positions
+        #: count from it, as the metrics and FFmpeg's playback count them.
+        self._first_frame: int | None = None
         self._tone_mappers = []
         self._tone_error = None
         #: Signal handlers and pad probes that call back into this object,
@@ -588,10 +592,41 @@ class GstComparePipeline:
             self._pending_initial_seek_ms = max(0, int(position_ms))
             return
         flags = self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.ACCURATE
-        if not self._pipeline.seek_simple(
-            self.Gst.Format.TIME, flags, max(0, int(position_ms)) * self.Gst.MSECOND
-        ):
+        if not self._pipeline.seek_simple(self.Gst.Format.TIME, flags, self._stream_time(position_ms)):
             raise GStreamerPlaybackError("GStreamer could not seek to that frame.")
+
+    def _stream_time(self, position_ms: int) -> int:
+        """Where `position_ms`, counted from the video's first frame, is on
+        the pipeline's timeline (ns)."""
+        return max(0, int(position_ms)) * self.Gst.MSECOND + (self._first_frame or 0)
+
+    def _prerolled_time(self) -> int:
+        """The timeline's time of the frame prerolled (ns): at the first
+        preroll, from the file's start, the video's first frame. GStreamer
+        does not count from that frame for every file: VideoQ's MP4 source
+        starts its timeline 32 ms before it, as FFmpeg does, where its
+        Matroska encodes start theirs at it. Counted from the timeline's
+        start, the two were paired 4 frames apart and never started
+        playing from the beginning: no source frame had the number 0."""
+        sample = next(iter(self._sinks.values())).emit("try-pull-preroll", 0)
+        if sample is None:
+            return 0
+        time = sample.get_segment().to_stream_time(self.Gst.Format.TIME, sample.get_buffer().pts)
+        return 0 if time == self.Gst.CLOCK_TIME_NONE else time
+
+    def frame_time(self, sample) -> int | None:
+        """A sample's time from the video's first frame (ns); None where it
+        has no usable timestamp."""
+        time = sample.get_segment().to_stream_time(self.Gst.Format.TIME, sample.get_buffer().pts)
+        if time == self.Gst.CLOCK_TIME_NONE:
+            return None
+        return time - (self._first_frame or 0)
+
+    @property
+    def first_frame_ms(self) -> int | None:
+        """Where the video's first frame is on the file's timeline (ms), once
+        known (the first preroll)."""
+        return None if self._first_frame is None else round(self._first_frame / self.Gst.MSECOND)
 
     def _decoder_factories(self, decoder) -> list[str]:
         factories: list[str] = []
@@ -672,12 +707,14 @@ class GstComparePipeline:
             elif message.type == self.Gst.MessageType.EOS:
                 ended = True
             elif message.type == self.Gst.MessageType.ASYNC_DONE and not self._ready:
+                if self._first_frame is None:
+                    self._first_frame = self._prerolled_time()
                 target = self._pending_initial_seek_ms or 0
                 self._pending_initial_seek_ms = None
                 if target > 0 and not self._initial_seek_sent:
                     flags = self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.ACCURATE
                     if not self._pipeline.seek_simple(
-                        self.Gst.Format.TIME, flags, target * self.Gst.MSECOND
+                        self.Gst.Format.TIME, flags, self._stream_time(target)
                     ):
                         error = "GStreamer could not seek to the requested start frame."
                     else:
@@ -690,7 +727,7 @@ class GstComparePipeline:
                 )
                 self._pipeline.set_state(target_state)
         ok, position = self._pipeline.query_position(self.Gst.Format.TIME)
-        position_ms = round(position / self.Gst.MSECOND) if ok else None
+        position_ms = round((position - (self._first_frame or 0)) / self.Gst.MSECOND) if ok else None
         status = None
         if not self._decoder_status_reported:
             caps = [

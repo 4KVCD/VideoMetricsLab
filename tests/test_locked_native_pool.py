@@ -61,7 +61,7 @@ def test_switch_uses_same_frame_from_new_encode():
 def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume():
     instance, _output = pool()
     calls = []
-    audio = SimpleNamespace(ready=True, failed=None, position=520)
+    audio = SimpleNamespace(ready=True, failed=None, position=520, offset_ms=0)
     audio.poll = lambda: audio.position
     audio.set_playing = lambda playing: calls.append(("playing", playing))
 
@@ -81,7 +81,7 @@ def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume():
     instance.anchor, instance.anchor_frame = time.monotonic(), 10
     instance.entries = {key: [SimpleNamespace(
         poll=lambda: SimpleNamespace(error=None, status=None, ended=False),
-        _sinks={"video": object()})] for key in instance.frames}
+        first_frame_ms=None, _sinks={"video": object()})] for key in instance.frames}
     instance.poll()
     assert calls == [("playing", False), ("seek", 400)]
     assert instance.buffering and not instance.audio_running

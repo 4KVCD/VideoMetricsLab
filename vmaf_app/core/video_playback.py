@@ -13,6 +13,7 @@ from vmaf_app.core.frame_extract import (
     frame_input_path,
     frame_video_info,
     hdr_kind,
+    seek_seconds,
 )
 from vmaf_app.core.gpu import hw_native_format, hwaccel_args
 from vmaf_app.core.models import ScaleDirection
@@ -115,7 +116,6 @@ def build_video_series_command(
         recipes = [(comparisons[0], side, playback_dimensions(comparisons[0], maximum))]
     tile_w = max(size[0] for _, _, size in recipes)
     tile_h = max(size[1] for _, _, size in recipes)
-    timestamp = max(0, (start_frame - 0.125) / fps)
     cmd = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error"]
     gpu = processing != "cpu"
     if processing == "interop":
@@ -135,6 +135,7 @@ def build_video_series_command(
                 accel = None
             index = len(inputs)
             inputs.append((path, accel))
+            timestamp = seek_seconds(frame_video_info(comparison, side), start_frame, fps)
             args = _input_args(path, timestamp, accel, realtime and paced)
             if processing == "interop" and accel == "cuda":
                 args[-2:-2] = ["-hwaccel_device", "decode"]  # the device the Vulkan one is made from
@@ -252,7 +253,8 @@ def build_audio_command(comparison: FrameComparison, start_frame: int) -> list[s
     player = ffplay_path()
     if player is None or comparison.fps <= 0:
         return None
-    timestamp = max(0.0, start_frame / comparison.fps)
+    # From the file's start, as the video's frames (seek_seconds).
+    timestamp = comparison.source_info.start_offset + start_frame / comparison.fps
     return [
         str(player), "-nodisp", "-autoexit", "-loglevel", "error",
         "-ss", f"{timestamp:.9f}",

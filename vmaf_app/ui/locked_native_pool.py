@@ -196,6 +196,12 @@ class LockedNativePool:
             update = player.poll()
             if update.error:
                 raise RuntimeError(update.error)
+            first_ms = player.first_frame_ms if key == self.source_key else None
+            if first_ms is not None and first_ms != self.audio.offset_ms and not self.audio_running:
+                # The soundtrack's clock counts from the source's first
+                # frame too, known from its first preroll, before the sound
+                # starts.
+                self.audio.set_offset(first_ms, self.position)
             if update.status:
                 self.status_details[key] = update.status
             if update.ended:
@@ -212,11 +218,10 @@ class LockedNativePool:
                 sample = self._pull_sample(key, sink)
                 if sample is None:
                     break
-                buffer = sample.get_buffer()
-                pts = sample.get_segment().to_stream_time(self.gst.Format.TIME, buffer.pts)
-                if pts == self.gst.CLOCK_TIME_NONE:
+                time_ns = player.frame_time(sample)
+                if time_ns is None:
                     raise RuntimeError("Video frame has no usable presentation timestamp")
-                frame = round(pts / self.gst.SECOND * self.fps)
+                frame = round(time_ns / self.gst.SECOND * self.fps)
                 if frame >= self.frame:
                     queue[frame] = sample
         # Negotiation/preroll work above can take time on a newly selected

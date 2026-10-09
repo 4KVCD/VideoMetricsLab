@@ -1,6 +1,8 @@
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from vmaf_app.core import video_playback
 from vmaf_app.core.frame_extract import (
     FrameComparison,
@@ -57,6 +59,16 @@ def test_ffmpeg_playback_commands(monkeypatch, tmp_path, subtests):
         command = build_audio_command(_comparison(), 48)
         assert command[command.index("-i") + 1] == str(Path("source.mkv").resolve())
         assert float(command[command.index("-ss") + 1]) == 48 / (24000 / 1001)
+    with subtests.test("each file seeks from its own video's first frame"):
+        # A source whose video starts 32 ms into its file was shown frames
+        # behind its encode after a seek; the soundtrack follows it.
+        late = replace(_comparison(), source_info=replace(_comparison().source_info, start_offset=0.032))
+        command = build_video_series_command([late], 48, PreviewColorSettings(), [HwAccelPlan()],
+                                             realtime=True, processing="cpu")
+        seeks = [float(command[i + 1]) for i, a in enumerate(command) if a == "-ss"]
+        assert seeks == pytest.approx([0.032 + 47.875 * 1001 / 24000, 47.875 * 1001 / 24000])
+        command = build_audio_command(late, 48)
+        assert float(command[command.index("-ss") + 1]) == pytest.approx(0.032 + 48 * 1001 / 24000)
     # The GPU's own decoder, never FFmpeg's Vulkan one: on an RTX 5090 that
     # turned the lower part of some HEVC frames green. NVDEC's pictures are
     # handed to Vulkan on the GPU ("interop"), others through system memory.

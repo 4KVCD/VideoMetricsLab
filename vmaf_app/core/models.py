@@ -104,6 +104,12 @@ class VideoInfo:
     # ("hevc", "h264"...). Not saved with results: a raw stream is refused
     # before it has any (is_raw_stream).
     format_name: str = ""
+    # How long after the file's start -- its earliest stream's, which
+    # FFmpeg's -ss counts from -- the video's first frame comes, in seconds.
+    # An MP4 whose soundtrack starts at 0 can have its video start frames
+    # later (frame_extract.seek_seconds). Not saved with results: read again
+    # with the file, and no part of what the video is.
+    start_offset: float = field(default=0.0, compare=False)
 
     @property
     def estimated_frame_count(self) -> int:
@@ -128,7 +134,7 @@ class VideoInfo:
 def video_info_to_dict(info: VideoInfo) -> dict:
     """A video's info as run files (run_io) and the metric cache's
     context.json save it: one form, so a field added to VideoInfo is saved
-    by both or by neither (format_name is not saved)."""
+    by both or by neither (format_name and start_offset are not saved)."""
     return {
         "path": str(info.path), "width": info.width, "height": info.height,
         "fps": info.fps, "duration": info.duration, "nb_frames": info.nb_frames,

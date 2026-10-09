@@ -112,6 +112,10 @@ class _FakeBus:
 
 
 def test_initial_seek_waits_for_both_native_sinks_to_preroll():
+    """And counts from the video's first frame, which the first preroll,
+    from the file's start, gives: VideoQ's MP4 source has it 32 ms into its
+    timeline, where its encodes have it at 0 -- frames counted from the
+    timeline's start were paired 4 apart and never played from frame 0."""
     player = object.__new__(gstreamer_playback.GstComparePipeline)
     player.Gst = SimpleNamespace(
         State=SimpleNamespace(PAUSED="paused", PLAYING="playing"),
@@ -120,6 +124,7 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll():
         SeekFlags=SimpleNamespace(FLUSH=1, ACCURATE=2),
         MessageType=_MessageType,
         MSECOND=1_000_000,
+        CLOCK_TIME_NONE=2**64 - 1,
     )
     player._pipeline = _FakePipeline()
     player._bus = _FakeBus()
@@ -128,6 +133,13 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll():
     player._initial_seek_sent = False
     player._pending_initial_seek_ms = None
     player._tone_error = None
+    player._first_frame = None
+
+    def sample(pts):
+        return SimpleNamespace(get_segment=lambda: SimpleNamespace(to_stream_time=lambda _format, time: time),
+                               get_buffer=lambda: SimpleNamespace(pts=pts))
+
+    player._sinks = {"source": SimpleNamespace(emit=lambda _signal, _timeout: sample(32_031_000))}
 
     player.start(2500, True)
 
@@ -138,7 +150,9 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll():
     player.poll()
 
     assert player._ready is False
-    assert player._pipeline.seeks[-1][-1] == 2_500_000_000
+    assert player._pipeline.seeks[-1][-1] == 2_500_000_000 + 32_031_000
+    assert player.first_frame_ms == 32
+    assert player.frame_time(sample(5_032_031_000)) == 5_000_000_000
 
     player._bus.messages.append(SimpleNamespace(type=_MessageType.ASYNC_DONE))
     player.poll()

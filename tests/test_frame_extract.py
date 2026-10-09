@@ -106,6 +106,11 @@ def test_command_seeks_just_before_the_requested_frame_timestamp():
     seek = command[command.index("-ss") + 1]
     assert float(seek) == pytest.approx((24 - 0.125) / 24.0)
     assert command[command.index("-i") + 1].endswith("distorted.mkv")
+    # Counted from the video's first frame, which can come after the file's
+    # start: the source was shown frames behind its encode.
+    late = replace(result, source_info=replace(result.source_info, start_offset=0.032))
+    seek = build_frame_command(late, "source", 24)[command.index("-ss") + 1]
+    assert float(seek) == pytest.approx(0.032 + (24 - 0.125) / 24.0)
     assert command[-4:] == ["-f", "image2pipe", "-c:v", "png", "pipe:1"][-4:]
     assert any("setsar=1,format=rgb24" in argument for argument in command)
 

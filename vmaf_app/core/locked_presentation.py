@@ -127,7 +127,14 @@ class LockedPresentation:
 
 
 class SingleSoundtrack:
-    """Audio-only source soundtrack. Never changes when selecting an encode."""
+    """Audio-only source soundtrack. Never changes when selecting an encode.
+
+    Its positions count from the source video's first frame, `offset_ms`
+    into the file's timeline (GstComparePipeline.first_frame_ms), as the
+    video's frames do: its clock times them."""
+
+    offset_ms = 0
+
     def __init__(self, path, start_ms, enabled):
         self.gst, _ = _load_gstreamer()
         self.pipeline = self.gst.ElementFactory.make("playbin3", "comparison-audio")
@@ -153,13 +160,21 @@ class SingleSoundtrack:
             else:
                 self.ready, self.seeking = True, False
         ok, position = self.pipeline.query_position(self.gst.Format.TIME)
-        return round(position / self.gst.MSECOND) if ok else None
+        return round(position / self.gst.MSECOND) - self.offset_ms if ok else None
+
+    def set_offset(self, offset_ms, position):
+        """Counts from the source video's first frame, `offset_ms` into the
+        file's timeline, from now on: at `position` again, unless its first
+        seek, which waits for the preroll, has still to come and takes it."""
+        self.offset_ms = offset_ms
+        if self.pending is None and not self.failed:
+            self.seek(position)
 
     def seek(self, position):
         self.ready, self.seeking = False, True
         if not self.pipeline.seek_simple(self.gst.Format.TIME,
                 self.gst.SeekFlags.FLUSH | self.gst.SeekFlags.ACCURATE,
-                max(0, int(position)) * self.gst.MSECOND):
+                max(0, int(position) + self.offset_ms) * self.gst.MSECOND):
             self.failed = "Could not seek the soundtrack"
 
     def set_playing(self, playing):

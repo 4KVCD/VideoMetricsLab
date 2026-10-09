@@ -234,4 +234,14 @@ def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> Vide
         color_primaries=v.get("color_primaries", "") or "",
         chroma_location=v.get("chroma_location", "") or "",
         format_name=fmt.get("format_name", "") or "",
+        start_offset=_start_offset(v, fmt),
     )
+
+
+def _start_offset(stream: dict, fmt: dict) -> float:
+    """How long after the file's start the video's first frame comes, in
+    seconds (VideoInfo.start_offset); 0 where either is not known."""
+    try:
+        return max(0.0, float(stream["start_time"]) - float(fmt["start_time"]))
+    except (KeyError, TypeError, ValueError):
+        return 0.0

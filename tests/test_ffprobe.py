@@ -84,10 +84,16 @@ _VIDEO = {"codec_type": "video", "codec_name": "hevc", "width": 3840, "height": 
           "avg_frame_rate": "24000/1001", "r_frame_rate": "24000/1001"}
 
 
-def test_a_matroska_videos_length_is_its_own_not_the_soundtracks(monkeypatch):
+def test_a_videos_length_and_start_are_its_own_not_the_soundtracks(monkeypatch):
     """Matroska gives no stream duration; the container's is the longest
     track's. An audio track running on after the picture made "Durations do
     not match" -- or a whole video read as cut short."""
     video = {**_VIDEO, "tags": {"DURATION": "01:45:36.289000000"}}
     info = _probe_payload(monkeypatch, [video], {"duration": "6340.0"})
     assert info.duration == pytest.approx(6336.289)
+    # An MP4 whose soundtrack starts at 0 and video 32 ms later: seeking
+    # counts from the file's start (frame_extract.seek_seconds).
+    video = {**_VIDEO, "start_time": "0.032031"}
+    assert _probe_payload(monkeypatch, [video], {"duration": "10", "start_time": "0.000000"}).start_offset == \
+        pytest.approx(0.032031)
+    assert _probe_payload(monkeypatch, [_VIDEO], {"duration": "10"}).start_offset == 0

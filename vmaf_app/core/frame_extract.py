@@ -138,6 +138,19 @@ def frame_video_info(comparison: FrameComparison, side: FrameSide) -> VideoInfo:
     return comparison.distorted_info
 
 
+def seek_seconds(info: VideoInfo, frame: int, fps: float) -> float:
+    """FFmpeg's input -ss for `frame`, counted from the video's first frame
+    as the metrics count it. -ss counts from the file's start, which that
+    frame can come after (VideoInfo.start_offset): an MP4 source whose video
+    starts 32 ms in was shown 3 frames behind its encode, at 120 fps.
+
+    Accurate input seeking returns the first frame at or after the target.
+    Aim one eighth of a frame early: an exact or rounded-up boundary can
+    otherwise advance to the next frame, while this remains far beyond the
+    previous frame's time even at fractional frame rates."""
+    return max(0.0, info.start_offset + (frame - 0.125) / fps)
+
+
 def hdr_kind(info: VideoInfo) -> str | None:
     """Return the declared HDR transfer family, without guessing from depth."""
     transfer = info.color_transfer.strip().casefold()
@@ -295,11 +308,7 @@ def build_frame_command(
     if comparison.fps <= 0:
         raise FrameExtractError("This video has no usable frame rate.")
 
-    # Accurate input seeking returns the first frame at or after the target.
-    # Aim one eighth of a frame before the desired PTS: an exact/rounded-up
-    # boundary can otherwise advance to the next frame, while this remains
-    # far beyond the previous frame's PTS even at fractional frame rates.
-    timestamp = max(0.0, (frame - 0.125) / comparison.fps)
+    timestamp = seek_seconds(frame_video_info(comparison, side), frame, comparison.fps)
     return [
         ffmpeg_path(),
         "-nostdin",
