@@ -19,7 +19,7 @@ import time
 from dataclasses import replace
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QRegion
+from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
 from vmaf_app.core import proc as proc_util
@@ -64,9 +64,9 @@ def _end_audio(process: subprocess.Popen, handle: ProcessHandle | None) -> None:
         proc_util.terminate(process)
 
 class _PairedFrameWidget(DragsZoomedFrame, QWidget):
-    """A native window a GPU swapchain presents into (LockedNativePool),
-    painted dark by Qt while no native playback owns it. A zoomed frame is
-    dragged on it (the view's zoom)."""
+    """A native window the native presenter's window sits in
+    (LockedNativePool), painted dark by Qt while no native playback owns it.
+    A zoomed frame is dragged on it (the view's zoom)."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -80,16 +80,9 @@ class _PairedFrameWidget(DragsZoomedFrame, QWidget):
         self.update()
 
     def paintEvent(self, _event) -> None:
-        # The swapchain owns this child HWND while native playback is active.
-        # Painting it from Qt would erase or flash over it -- but for the
-        # margins beside a zoomed frame, which the sink, drawing in its
-        # rectangle alone, leaves to the window: the default grey there.
+        # While native playback owns it, the presenter's window covers all
+        # of it, the bars beside a zoomed frame included.
         if self._native_playback:
-            area = self.parentWidget().native_area()
-            if area is not None:
-                painter = QPainter(self)
-                painter.setClipRegion(QRegion(self.rect()).subtracted(QRegion(area)))
-                painter.fillRect(self.rect(), QColor("#171717"))
             return
         QPainter(self).fillRect(self.rect(), QColor("#171717"))
 
@@ -270,8 +263,6 @@ class VideoCompareView(QWidget):
         self._pool_timer.timeout.connect(self._tick)
         self._on_screen = False  # between showEvent and hideEvent
         self._zoom = Zoom()
-        #: Where the GPU frame last presented zoomed is drawn (device pixels).
-        self._native_drawn = None
         self._source_surface = _StreamSurface(self)
         self._distorted_surface = _StreamSurface(self)
         self._source_surface.hide()
@@ -366,22 +357,11 @@ class VideoCompareView(QWidget):
         context = self.zoom_context(frame)
         return None if context is None else self._zoom.placement(*context[1:])
 
-    def native_area(self):
-        """Where the GPU frame last presented zoomed is drawn, in the view's
-        own pixels (a QRect), for the surface to paint around; None when
-        fitted."""
-        if self._zoom.factor is None or self._native_drawn is None:
-            return None
-        ratio = self.devicePixelRatioF()
-        x, y, width, height = (value / ratio for value in self._native_drawn)
-        return QRectF(x, y, width, height).toAlignedRect()
-
     def native_view(self, sample):
         """For LockedPresentation, a GPU frame zoomed: the part of it in
         view (x, y, width, height in its pixels) and where that goes in the
         window (device pixels). None when it fits the window."""
         if self._zoom.factor is None:
-            self._native_drawn = None
             return None
         structure = sample.get_caps().get_structure(0)
         size = (structure.get_value("width"), structure.get_value("height"))
@@ -398,7 +378,6 @@ class VideoCompareView(QWidget):
         height = max(1, min(size[1], round((bottom - top) * size[1])))
         crop = (min(round(left * size[0]), size[0] - width), min(round(top * size[1]), size[1] - height),
                 width, height)
-        self._native_drawn = rectangle
         return crop, rectangle
 
     def zoom_changed(self) -> None:

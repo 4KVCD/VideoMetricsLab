@@ -45,8 +45,8 @@ def _entry_points() -> frozenset[str]:
         library = ctypes.CDLL(str(library_path()))
     except OSError:
         return frozenset()
-    return frozenset(name for name in ("vmaf_tonemap_create_primaries", "vmaf_hdr_convert_create")
-                     if hasattr(library, name))
+    return frozenset(name for name in ("vmaf_tonemap_create_primaries", "vmaf_hdr_convert_create",
+                                       "vmaf_present_create") if hasattr(library, name))
 
 
 def converts_primaries() -> bool:
@@ -55,18 +55,24 @@ def converts_primaries() -> bool:
 
 
 def converts_for_hdr() -> bool:
-    """Whether the built shader converts HDR video to BT.2020, HDR kept."""
+    """Whether the built shader converts HDR video to PQ in BT.2020, HDR kept."""
     return "vmaf_hdr_convert_create" in _entry_points()
 
 
+def presents() -> bool:
+    """Whether the built DLL has native playback's presenter
+    (locked_presentation.LockedPresentation)."""
+    return "vmaf_present_create" in _entry_points()
+
+
 def supports(primaries: str, *, hdr: bool = False) -> bool:
-    """Whether HDR video of these primaries is shown right: mapped to SDR
-    by the shader, or (`hdr`) on an HDR display, which takes BT.2020 --
-    other primaries converted to it by the shader."""
+    """Whether HDR video of these primaries is shown right by the shader:
+    mapped to SDR, or (`hdr`) for an HDR display, which takes PQ in BT.2020,
+    converted to that."""
     primaries = hdr_primaries(primaries)
-    if primaries == "bt2020":
-        return True
-    return primaries in PRIMARIES and (converts_for_hdr() if hdr else converts_primaries())
+    if hdr:
+        return primaries in PRIMARIES and converts_for_hdr()
+    return primaries == "bt2020" or (primaries in PRIMARIES and converts_primaries())
 
 
 def _to_xyz(primaries: str):
@@ -107,7 +113,7 @@ def boxed_pointer(boxed) -> int:
 class D3D11ToneMapper:
     def __init__(self, device, kind: str, primaries: str = "bt2020", *, hdr: bool = False):
         """HDR video of `kind` and `primaries` mapped to SDR BT.709 or, with
-        `hdr`, kept HDR and converted to BT.2020 for an HDR display."""
+        `hdr`, kept HDR and converted to PQ in BT.2020 for an HDR display."""
         self.device = device
         self.kind = 1 if kind == "HDR10 / PQ" else 2
         self.hdr = hdr
@@ -124,9 +130,10 @@ class D3D11ToneMapper:
             if not hasattr(self.lib, "vmaf_hdr_convert_create"):
                 raise RuntimeError("The HDR shader was built before it converted HDR for HDR displays")
             create = self.lib.vmaf_hdr_convert_create
-            create.argtypes = [ctypes.c_void_p, ctypes.c_int, floats]
+            create.argtypes = [ctypes.c_void_p, ctypes.c_int, floats, floats]
             create.restype = ctypes.c_void_p
-            self.colours = create, ((ctypes.c_float * 9)(*conversion(primaries, "bt2020")[1]),)
+            luma, to_bt2020 = conversion(primaries, "bt2020")
+            self.colours = create, ((ctypes.c_float * 3)(*luma), (ctypes.c_float * 9)(*to_bt2020))
         elif hasattr(self.lib, "vmaf_tonemap_create_primaries"):
             create = self.lib.vmaf_tonemap_create_primaries
             create.argtypes = [ctypes.c_void_p, ctypes.c_int, floats, floats]

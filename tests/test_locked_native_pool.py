@@ -1,6 +1,6 @@
-import time
 from types import SimpleNamespace
 
+from vmaf_app.ui import locked_native_pool
 from vmaf_app.ui.locked_native_pool import LockedNativePool
 
 
@@ -11,6 +11,7 @@ def pool():
     instance.frame, instance.fps, instance.position = 10, 25, 400
     instance.pair = None
     instance.pair_index = None
+    instance.late_since = None
     instance.showing_source = False
     instance.frames = {"source": {10: "s10", 11: "s11", 12: "s12"},
                        ("distorted", 0): {10: "d10"}}
@@ -58,11 +59,23 @@ def test_switch_uses_same_frame_from_new_encode():
     assert output == ["d10", "new10", "s10"]
 
 
-def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume():
+def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume(monkeypatch):
+    """Behind its soundtrack for a moment -- the window's thread held up, the
+    decoders waiting with their queues full -- playback catches up with the
+    sound playing on: stopped and sought again each time, it broke off every
+    15 s. Behind for longer, it stops the sound, waits for the decoders and
+    seeks the sound to the frame shown."""
+    now = [100.0]
+    monkeypatch.setattr(locked_native_pool, "time", SimpleNamespace(monotonic=lambda: now[0]))
     instance, _output = pool()
     calls = []
-    audio = SimpleNamespace(ready=True, failed=None, position=520, offset_ms=0)
-    audio.poll = lambda: audio.position
+    audio = SimpleNamespace(ready=True, failed=None, position=520, offset_ms=0, reading_ms=None)
+
+    def poll():
+        audio.reading_ms = audio.position  # its clock's own reading: no carrying on here
+        return audio.position
+
+    audio.poll = poll
     audio.set_playing = lambda playing: calls.append(("playing", playing))
 
     def seek(position):
@@ -72,27 +85,49 @@ def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume():
 
     audio.seek = seek
     instance.audio = audio
-    instance.audio_deadline = time.monotonic() + 15
+    instance.audio_deadline = now[0] + 15
     instance.output.poll = lambda: None
     instance.launch_missing = lambda: None
     instance._pull_sample = lambda key, sink: None
     instance.playing, instance.buffering, instance.audio_running = True, False, True
     instance.status_details, instance.eos = {}, set()
-    instance.anchor, instance.anchor_frame = time.monotonic(), 10
+    instance.anchor, instance.anchor_frame = now[0], 10
     instance.entries = {key: [SimpleNamespace(
         poll=lambda: SimpleNamespace(error=None, status=None, ended=False),
         first_frame_ms=None, _sinks={"video": object()})] for key in instance.frames}
-    instance.poll()
-    assert calls == [("playing", False), ("seek", 400)]
-    assert instance.buffering and not instance.audio_running
+    instance.poll()  # frame 13 due, 10 the newest pair
+    assert calls == [] and not instance.buffering
     assert instance.pair == ("s10", "d10")
+    now[0] += 0.1
+    instance.frames["source"][13] = "s13"
+    instance.frames[("distorted", 0)].update({11: "d11", 12: "d12", 13: "d13"})
+    instance.poll()  # caught up, the sound never stopped
+    assert calls == [] and not instance.buffering
+    assert instance.pair == ("s13", "d13")
+    audio.position = 640  # frame 16 due; the decoders stalled at 13
+    instance.poll()
+    assert calls == []
+    now[0] += 0.25
+    instance.poll()
+    assert calls == [("playing", False), ("seek", 520)]
+    assert instance.buffering and not instance.audio_running
+    assert instance.pair == ("s13", "d13")
     instance.poll()
     assert len(calls) == 2  # asynchronous audio seek still pending
     audio.ready = True
     instance.poll()
     assert calls[-1] == ("playing", True)
     assert instance.audio_running and not instance.buffering
-    instance.frames[("distorted", 0)][11] = "d11"
-    audio.position = 440
+    instance.frames["source"][14] = "s14"
+    instance.frames[("distorted", 0)][14] = "d14"
+    audio.position = 560
     instance.poll()
-    assert instance.pair == ("s11", "d11")
+    assert instance.pair == ("s14", "d14")
+    # The encode decoded ahead of its source, the clock ahead of both: the
+    # encode's queue keeps the frames the source has yet to reach. Trimmed
+    # from the clock, it dropped them, and the pair waited for never came.
+    instance.frames["source"] = {13: "s13", 14: "s14"}
+    instance.frames[("distorted", 0)] = {frame: f"d{frame}" for frame in range(14, 19)}
+    audio.position = 720  # frame 18 due
+    instance.poll()
+    assert 14 in instance.frames[("distorted", 0)]

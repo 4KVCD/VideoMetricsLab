@@ -17,8 +17,8 @@ everything else from it:
 
 1. **`KEEP_PLUGINS`** — the plugin DLLs, each with a note saying what the app
    uses it for: the elements the pipelines create by name (`filesrc`,
-   `decodebin3`, `videocrop`, `d3d11upload`, `d3d11convert`, `d3d11videosink`,
-   `capssetter`, `appsink`, `appsrc`, `playbin3`), the parsers and demuxers
+   `decodebin3`, `videocrop`, `d3d11upload`, `d3d11convert`, `d3d11compositor`,
+   `capssetter`, `appsink`, `playbin3`), the parsers and demuxers
    `decodebin3` needs for the files people compare, `libav` and `dav1d` for what no GPU
    decodes (VVC, 10-bit H.264, ProRes), and the soundtrack path down to
    `wasapi2sink`. Its dav1d library is the app's software frame decoder's

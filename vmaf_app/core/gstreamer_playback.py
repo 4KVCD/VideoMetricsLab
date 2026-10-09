@@ -1,8 +1,9 @@
 """GStreamer/D3D11 playback for synchronized source/distorted comparison.
 
 The UI deliberately never receives decoded pixels.  GStreamer owns demuxing,
-decoding, clocks and presentation, while D3D11 textures remain on the GPU from
-a hardware decoder through crop/scale and into the swapchain.
+decoding and the soundtrack's clock, and the app's own presenter
+(locked_presentation) shows the frames: D3D11 textures remain on the GPU from a
+hardware decoder through crop/scale and into its swapchain.
 """
 from __future__ import annotations
 
@@ -63,7 +64,7 @@ _PIPELINE_ELEMENTS = (
 #: depends on the GPU the registry was scanned on, not on the installation.
 REQUIRED_ELEMENTS = (
     *_PIPELINE_ELEMENTS,
-    "d3d11compositor", "queue", "capsfilter", "capssetter", "appsink", "appsrc",
+    "d3d11compositor", "queue", "capsfilter", "capssetter", "appsink",
     "playbin3", "uridecodebin3",  # the soundtrack: playbin3 is built on uridecodebin3
     "h264parse", "h265parse", "h266parse", "av1parse", "vp9parse", "mpegvideoparse",
     "matroskademux", "qtdemux", "tsdemux", "avidemux",
@@ -127,8 +128,8 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
 
 def start_loading() -> None:
     """What Video Compare's first native opening loads, loaded in the
-    background at the window's startup: GStreamer, the plugin of the video
-    sink and the D3D11 device. Loaded by that opening instead, they held the
+    background at the window's startup: GStreamer, its D3D11 plugin and the
+    D3D11 device. Loaded by that opening instead, they held the
     window for 0.4 s then. The window's only: metric-only use (the command
     line, the scoring processes) does not pay their start or their memory."""
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen":
@@ -140,9 +141,9 @@ def _warm_up() -> None:
         return
     try:
         gst, _video = _load_gstreamer()
-        sink = gst.ElementFactory.find("d3d11videosink")
-        if sink is not None:
-            sink.load()
+        plugin = gst.ElementFactory.find("d3d11convert")
+        if plugin is not None:
+            plugin.load()
         d3d11_device()
     except Exception:
         pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg
@@ -213,7 +214,7 @@ def _load_gstreamer_once() -> tuple[Any, Any]:
 
 def gstreamer_available() -> tuple[bool, str]:
     """Whether the D3D11 pipeline can be built in this process."""
-    # Offscreen Qt tests have no real HWND for GstVideoOverlay.  Keeping this
+    # Offscreen Qt tests have no real HWND for the presenter.  Keeping this
     # explicit also prevents native graphics drivers from being initialized by
     # otherwise headless unit tests.
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() == "offscreen":
@@ -232,8 +233,12 @@ def uses_native_gstreamer(
     available, reason = gstreamer_available()
     if not available:
         return False, reason
+    from vmaf_app.core import d3d11_tonemap
+
+    if not d3d11_tonemap.presents():
+        return False, "the native video presenter is not built (d3d11_tonemap.dll)"
     if settings.mode == PreviewColorMode.UNMANAGED:
-        return False, "unmanaged preview uses FFmpeg to bypass automatic sink color handling"
+        return False, "unmanaged preview uses FFmpeg to bypass native playback's automatic color handling"
     if settings.mode == PreviewColorMode.HDR_TO_SDR and any(
         not info.color_transfer or info.color_transfer in {"unknown", "unspecified"}
         for info in (comparison.source_info, comparison.distorted_info)
@@ -244,16 +249,11 @@ def uses_native_gstreamer(
         for info in (comparison.source_info, comparison.distorted_info)
     )
     if inputs_are_hdr:
-        from vmaf_app.core.d3d11_tonemap import available, supports
-
-        tone_map = needs_sdr_tonemap(settings)
-        if tone_map and not available():
-            return False, "native HDR-to-SDR helper is not built; using FFmpeg tone mapping"
         for info in (comparison.source_info, comparison.distorted_info):
-            # Other primaries than BT.2020 are converted by the shader: to
-            # BT.709 for SDR, or for an HDR display, which takes BT.2020, to
-            # that (_shading).
-            if hdr_kind(info) and not supports(info.color_primaries, hdr=not tone_map):
+            # The shader maps HDR to SDR, or converts it to PQ in BT.2020 for
+            # an HDR display (_shading); BT.2020 PQ is presented as it comes.
+            shading = _shading(info, settings)
+            if shading and not d3d11_tonemap.supports(info.color_primaries, hdr=shading == "hdr"):
                 return False, f"{info.color_primaries} HDR primaries use the FFmpeg color converter"
     return True, ""
 
@@ -261,15 +261,18 @@ def uses_native_gstreamer(
 def _shading(info: VideoInfo, settings: PreviewColorSettings) -> str | None:
     """What the D3D11 shader does to one video's frames: "sdr", HDR mapped
     to SDR BT.709; "hdr", HDR kept for an HDR display and converted to the
-    BT.2020 it takes -- passed through as they came, Display P3 colours were
-    shown as BT.2020, oversaturated; None, nothing."""
+    PQ in BT.2020 it takes -- passed through as they came, Display P3 colours
+    were shown as BT.2020, oversaturated, and HLG has no swapchain colour
+    space of its own; None, nothing."""
     if hdr_kind(info) is None:
         return None
     if needs_sdr_tonemap(settings):
         return "sdr"
     from vmaf_app.core.d3d11_tonemap import hdr_primaries
 
-    return None if hdr_primaries(info.color_primaries) == "bt2020" else "hdr"
+    if hdr_kind(info) == "HDR10 / PQ" and hdr_primaries(info.color_primaries) == "bt2020":
+        return None
+    return "hdr"
 
 
 #: GstVideoColorPrimaries of the primaries the HDR shader takes (d3d11_tonemap.PRIMARIES).
@@ -295,12 +298,11 @@ def _crop_edges(info: VideoInfo, crop: CropBox | None) -> tuple[int, int, int, i
 
 
 def _output_format(info: VideoInfo) -> str:
+    """NV12, or P010 for deeper video -- 12-bit as 10: what the presenter
+    reads (locked_presentation). Given as P012, 12-bit frames came in two
+    textures, which it cannot draw, and played through FFmpeg."""
     fmt = analysis_pix_fmt(info.pix_fmt, info.pix_fmt)
-    if "12" in fmt:
-        return "P012_LE"
-    if "10" in fmt:
-        return "P010_10LE"
-    return "NV12"
+    return "P010_10LE" if "10" in fmt or "12" in fmt else "NV12"
 
 
 def _native_colorimetry(info: VideoInfo) -> str | None:
@@ -492,9 +494,9 @@ class GstComparePipeline:
             )
             mapper = D3D11ToneMapper(self._device, hdr_kind(info), info.color_primaries, hdr=shading == "hdr")
             self._tone_mappers.append(mapper)
-            # SDR: sRGB, the HDR descriptions dropped; HDR: its own transfer,
-            # in BT.2020, the descriptions kept.
-            output = "sRGB" if shading == "sdr" else f"1:1:{transfer}:7"
+            # SDR: sRGB, the HDR descriptions dropped; HDR: PQ in BT.2020,
+            # the descriptions kept.
+            output = "sRGB" if shading == "sdr" else "1:1:14:7"
             retag = self._make("capssetter", f"{side}-{shading}-caps")
             retag.set_property("replace", True)
             retag.set_property("caps", self.Gst.Caps.from_string(
@@ -715,7 +717,7 @@ class GstComparePipeline:
         if any(not mapper.hdr for mapper in self._tone_mappers):
             details.append("GPU HDR→SDR · fixed Reinhard 1000→100 nit")
         if any(mapper.hdr for mapper in self._tone_mappers):
-            details.append("GPU colours → BT.2020, HDR kept")
+            details.append("GPU colours → PQ BT.2020, HDR kept")
         return " · ".join(details)
 
     def poll(self) -> PlaybackUpdate:

@@ -1,28 +1,75 @@
-"""LockedPresentation: GStreamer's GPU frames presented, zoomed by cropping."""
+"""LockedPresentation: native playback's frames, presented by the app's own
+presenter; SingleSoundtrack: the clock they are chosen by."""
+from types import SimpleNamespace
+
 import pytest
 
+from vmaf_app.core import locked_presentation
+from vmaf_app.core.locked_presentation import SingleSoundtrack, yuv_to_rgb
 
-def test_a_cropped_frame_carries_its_crop_and_the_original_stays_whole():
-    """A zoomed GPU frame is shown by a GstVideoCropMeta on a copy of its
-    buffer, put there through GStreamer's C API (the Python one has no way):
-    the meta must hold the rectangle, and the frame kept for showing again
-    must not get it."""
-    pytest.importorskip("gi")
-    from vmaf_app.core.gstreamer_playback import GStreamerPlaybackError, _load_gstreamer
-    from vmaf_app.core.locked_presentation import _CropMeta, cropped
 
-    try:
-        gst, video = _load_gstreamer()
-    except GStreamerPlaybackError:
-        pytest.skip("GStreamer is not installed")
-    caps = gst.Caps.from_string("video/x-raw,format=RGBA,width=8,height=6")
-    sample = gst.Sample.new(gst.Buffer.new_allocate(None, 8 * 6 * 4, None), caps, None, None)
-    shown = cropped(sample, (1, 2, 4, 3))
-    api = video.VideoCropMeta.get_info().api
-    meta = shown.get_buffer().get_meta(api)
-    assert meta is not None and sample.get_buffer().get_meta(api) is None
-    from vmaf_app.core.d3d11_tonemap import boxed_pointer
+def test_the_presenters_colours_and_the_soundtracks_clock(subtests, monkeypatch, tmp_path):
+    """The presenter's shader samples NV12's 8-bit codes over 255 and P010's
+    10-bit codes in the top of 16 bits over 65535; its rows turn them into
+    RGB. The soundtrack's clock, which picks the frames, moves in steps of
+    10 ms, where a frame of 120 fps video lasts 8.3 ms: one frame in five was
+    skipped until it was carried on between its steps."""
 
-    crop = _CropMeta.from_address(boxed_pointer(meta))
-    assert (crop.x, crop.y, crop.width, crop.height) == (1, 2, 4, 3)
-    assert shown.get_caps().is_equal(caps)
+    def rgb(rows, y, u, v):
+        return tuple(rows[4 * i] * y + rows[4 * i + 1] * u + rows[4 * i + 2] * v + rows[4 * i + 3] for i in range(3))
+
+    for matrix, red in (("bt709", (63, 102, 240)), ("bt601", (81, 90, 240)), ("bt2020", (74, 97, 240))):
+        with subtests.test("8-bit limited range", matrix=matrix):
+            rows = yuv_to_rgb(matrix, full_range=False, ten_bit=False)
+            assert rgb(rows, 235 / 255, 128 / 255, 128 / 255) == pytest.approx((1, 1, 1), abs=1e-9)
+            assert rgb(rows, 16 / 255, 128 / 255, 128 / 255) == pytest.approx((0, 0, 0), abs=1e-9)
+            # Pure red's codes, as each matrix gives them (Y, Cb, Cr).
+            assert rgb(rows, *(code / 255 for code in red)) == pytest.approx((1, 0, 0), abs=0.01)
+    with subtests.test("P010, BT.2020 limited range: its white and black"):
+        rows = yuv_to_rgb("bt2020", full_range=False, ten_bit=True)
+        assert rgb(rows, (940 << 6) / 65535, (512 << 6) / 65535, (512 << 6) / 65535) == pytest.approx((1, 1, 1), abs=1e-9)
+        assert rgb(rows, (64 << 6) / 65535, (512 << 6) / 65535, (512 << 6) / 65535) == pytest.approx((0, 0, 0), abs=1e-9)
+    with subtests.test("8-bit full range"):
+        rows = yuv_to_rgb("bt709", full_range=True, ten_bit=False)
+        assert rgb(rows, 1.0, 128 / 255, 128 / 255) == pytest.approx((1, 1, 1), abs=1e-9)
+        assert rgb(rows, 0.0, 128 / 255, 128 / 255) == pytest.approx((0, 0, 0), abs=1e-9)
+
+    # The soundtrack on a fake playbin3, its sink's clock at `sink_ms`, timed
+    # by a fake monotonic clock (`now`, seconds).
+    now, sink_ms = [100.0], [1000]
+    pipeline = SimpleNamespace(
+        set_property=lambda *_: None, set_state=lambda _state: None,
+        get_bus=lambda: SimpleNamespace(pop_filtered=lambda _mask: None),
+        query_position=lambda _format: (True, sink_ms[0] * 1_000_000))
+    gst = SimpleNamespace(
+        ElementFactory=SimpleNamespace(make=lambda *_: pipeline),
+        State=SimpleNamespace(PAUSED="paused", PLAYING="playing", NULL="null"),
+        MessageType=SimpleNamespace(ERROR=1, ASYNC_DONE=2), Format=SimpleNamespace(TIME="time"),
+        MSECOND=1_000_000)
+    monkeypatch.setattr(locked_presentation, "_load_gstreamer", lambda: (gst, None))
+    monkeypatch.setattr(locked_presentation, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    track = SingleSoundtrack(tmp_path / "source.mkv", 0, True)
+    track.pending, track.ready = None, True
+    track.set_playing(True)
+    with subtests.test("carried on between its 10 ms steps: 120 fps video, no frame skipped"):
+        frames = []
+        for tick in range(250):  # a second of the view's 4 ms ticks
+            now[0] = 100 + tick * 0.004
+            sink_ms[0] = 1000 + tick * 4 // 10 * 10
+            frames.append(round(track.poll() * 120 / 1000))
+            assert track.reading_ms == sink_ms[0]  # what falling behind is judged by: not carried
+        assert sorted(set(frames)) == list(range(120, 240))
+    with subtests.test("never further than a step, and never back while playing"):
+        now[0] += 1.0  # the sink's clock stopped a second
+        stopped = track.poll()
+        assert stopped == sink_ms[0] + 10
+        sink_ms[0] -= 5
+        assert track.poll() == stopped
+    with subtests.test("paused, then playing again a second later: no step at once"):
+        track.set_playing(False)
+        assert track.poll() == sink_ms[0]
+        now[0] += 1.0
+        track.set_playing(True)
+        assert track.poll() == sink_ms[0]
+        now[0] += 0.004
+        assert track.poll() == pytest.approx(sink_ms[0] + 4)

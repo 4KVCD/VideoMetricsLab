@@ -94,5 +94,4 @@ def test_required_elements_cover_everything_the_pipelines_create_by_name():
     assert made, "the scan found nothing; has the pipeline code changed shape?"
     assert made <= set(REQUIRED_ELEMENTS), sorted(made - set(REQUIRED_ELEMENTS))
     assert set(_PIPELINE_ELEMENTS) <= set(REQUIRED_ELEMENTS)
-    for name in ("appsrc", "playbin3"):  # locked_presentation.py, by parse_launch and make
-        assert name in REQUIRED_ELEMENTS
+    assert "playbin3" in REQUIRED_ELEMENTS  # locked_presentation.py's soundtrack, by make

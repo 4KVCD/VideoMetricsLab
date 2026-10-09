@@ -51,6 +51,11 @@ def test_native_hdr_caps_keep_full_cropped_resolution_and_precision():
     assert "width=3840" in caps
     assert "height=1608" in caps
     assert "colorimetry=bt2100-pq" in caps
+    # 12-bit video as 10, which the presenter reads: given as P012, 12-bit
+    # frames came in two textures, which it cannot draw.
+    twelve = replace(_comparison(), source_info=replace(_info("source.mkv"), pix_fmt="yuv420p12le"))
+    assert "format=P010_10LE" in gstreamer_playback.output_caps_string(
+        twelve, PreviewColorSettings(display_hdr_enabled=True), "source")
 
 
 def test_mixed_hdr_and_sdr_inputs_keep_independent_native_caps():

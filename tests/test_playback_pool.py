@@ -171,5 +171,4 @@ def test_playback_places_both_videos_by_the_shared_zoom(qapp, monkeypatch, tmp_p
     crop, rectangle = view.native_view(SimpleNamespace(get_caps=lambda: caps))
     if ratio == 1:
         assert crop == (3, 4, 10, 5) and rectangle == (0, 0, 20, 10)
-        assert view.native_area().getRect() == (0, 0, 20, 10)
     cleanup(view)

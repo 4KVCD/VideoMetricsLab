@@ -96,8 +96,9 @@ int main() {
         if(largest>.0005)return 15;
     }
     // HDR kept (vmaf_hdr_convert_create): Display P3 colours converted to
-    // BT.2020 and coded again, PQ as absolute light, HLG as scene light.
+    // BT.2020 and coded as PQ -- HLG's display light at its 1000-nit peak.
     const float p3_to_bt2020[9]={.753833f,.198597f,.047570f, .045744f,.941777f,.012479f, -.001210f,.017602f,.983609f};
+    const float p3_luma[3]={.228975f,.691739f,.079287f};
     for (int kind=1;kind<=2;++kind) {
         std::vector<unsigned short> pixels(width*4);
         for (int i=0;i<width;i++) {
@@ -109,7 +110,7 @@ int main() {
         D3D11_SUBRESOURCE_DATA initial={}; initial.pSysMem=pixels.data(); initial.SysMemPitch=width*8;
         ComPtr<ID3D11Texture2D> texture;
         if(FAILED(device->CreateTexture2D(&desc,&initial,&texture)))return 16;
-        void* mapper=vmaf_hdr_convert_create(texture.Get(),kind,p3_to_bt2020);
+        void* mapper=vmaf_hdr_convert_create(texture.Get(),kind,p3_luma,p3_to_bt2020);
         if(!mapper)return 17;
         int hr=vmaf_tonemap_render(mapper,texture.Get());
         vmaf_tonemap_destroy(mapper);
@@ -128,20 +129,50 @@ int main() {
                 if(kind==1) { double p=std::pow(x,1/78.84375); light[c]=10000*std::pow(std::max(p-.8359375,0.0)/(18.8515625-18.6875*p),1/.1593017578125); }
                 else light[c]=x<=.5?x*x/3:(std::exp((x-.55991073)/.17883277)+.28466892)/12;
             }
+            if(kind==2) {  // HLG's display light: the system gamma (1.2) at a 1000-nit peak
+                double y=std::max(p3_luma[0]*light[0]+p3_luma[1]*light[1]+p3_luma[2]*light[2],1e-8);
+                for(int c=0;c<3;c++) light[c]*=std::pow(y,.2)*1000;
+            }
             for(int c=0;c<3;c++) {
                 double out=0;
                 for(int k=0;k<3;k++) out+=p3_to_bt2020[3*c+k]*light[k];
-                double expected;
-                if(kind==1) { double y=std::pow(std::min(std::max(out/10000,0.0),1.0),.1593017578125);
-                              expected=std::pow((.8359375+18.8515625*y)/(1+18.6875*y),78.84375); }
-                else { double e=std::min(std::max(out,0.0),1.0);
-                       expected=e<=1.0/12?std::sqrt(3*e):.17883277*std::log(std::max(12*e-.28466892,1e-6))+.55991073; }
+                double y=std::pow(std::min(std::max(out/10000,0.0),1.0),.1593017578125);
+                double expected=std::pow((.8359375+18.8515625*y)/(1+18.6875*y),78.84375);
                 largest=std::max(largest,std::abs(double(values[i*4+c])/65535-expected));
             }
         }
         context->Unmap(readback.Get(),0);
-        std::cout<<(kind==1?"PQ":"HLG")<<" Display P3 to BT.2020, HDR kept: max normalized error: "<<largest<<std::endl;
+        std::cout<<(kind==1?"PQ":"HLG")<<" Display P3 to BT.2020 PQ, HDR kept: max normalized error: "<<largest<<std::endl;
         if(largest>.0005)return 21;
+    }
+    {   // A frame a shader cannot read -- the second slice of a texture array
+        // bound for decoding only, as d3d11h264dec gives them -- is drawn from
+        // the presenter's copy of it (present_source): its pixels, readable.
+        constexpr int w=64, h=32;
+        Presenter presenter; presenter.device=device; presenter.immediate=context;
+        std::vector<unsigned char> first(w*h*3/2,16), second(w*h*3/2);
+        for (size_t i=0;i<second.size();i++) second[i]=static_cast<unsigned char>(i*7+3);
+        D3D11_TEXTURE2D_DESC desc={}; desc.Width=w; desc.Height=h; desc.MipLevels=1; desc.ArraySize=2;
+        desc.Format=DXGI_FORMAT_NV12; desc.SampleDesc.Count=1; desc.Usage=D3D11_USAGE_DEFAULT; desc.BindFlags=0;
+        D3D11_SUBRESOURCE_DATA slices[2]={{first.data(),UINT(w),0},{second.data(),UINT(w),0}};
+        ComPtr<ID3D11Texture2D> array;
+        if(FAILED(device->CreateTexture2D(&desc,slices,&array)))return 22;
+        D3D11_TEXTURE2D_DESC own;
+        ID3D11Texture2D* drawn=present_source(&presenter,array.Get(),1,own);
+        if(!drawn||own.ArraySize!=1||!(own.BindFlags&D3D11_BIND_SHADER_RESOURCE))return 23;
+        if(!present_views(&presenter,drawn,own))return 24;
+        own.Usage=D3D11_USAGE_STAGING; own.BindFlags=0; own.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+        ComPtr<ID3D11Texture2D> readback;
+        if(FAILED(device->CreateTexture2D(&own,nullptr,&readback)))return 25;
+        context->CopyResource(readback.Get(),drawn); D3D11_MAPPED_SUBRESOURCE mapped;
+        if(FAILED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)))return 26;
+        int wrong=0;
+        for (int row=0;row<h*3/2;row++)  // the luma rows, the chroma rows after them
+            for (int x=0;x<w;x++)
+                wrong+=static_cast<unsigned char*>(mapped.pData)[row*mapped.RowPitch+x]!=second[row*w+x];
+        context->Unmap(readback.Get(),0);
+        std::cout<<"NV12 from a texture array's second slice, unreadable by a shader: "<<wrong<<" bytes wrong"<<std::endl;
+        if(wrong)return 27;
     }
     return 0;
 }

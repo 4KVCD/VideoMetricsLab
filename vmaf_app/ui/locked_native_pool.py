@@ -11,6 +11,13 @@ from vmaf_app.core.locked_presentation import LockedPresentation, SingleSoundtra
 from vmaf_app.core.video_playback import neighbour_indices, source_playback_comparison
 from vmaf_app.ui.video_compare_view import _PairedFrameWidget
 
+#: How long playback may run behind its soundtrack, catching up with the
+#: sound playing on, before it stops the sound to wait for the decoders
+#: (LockedNativePool.poll). The window's thread, held up 55-60 ms every 15 s
+#: on the test PC, left the decoders waiting with their queues full; stopped
+#: and sought again each time, the sound broke off.
+_CATCH_UP_S = 0.2
+
 
 class _StopNative(QThread):
     def __init__(self, pipeline, parent):
@@ -42,6 +49,8 @@ class LockedNativePool:
         self.frame = round(position_ms * self.fps / 1000)
         self.playing, self.ended, self.closed = playing, False, False
         self.buffering = True
+        #: Since when the frames shown have been behind the soundtrack (time.monotonic), or None.
+        self.late_since = None
         self.showing_source = False
         self.entries, self.desired, self.frames, self.eos = {}, {}, {}, set()
         self.pair = None
@@ -136,7 +145,6 @@ class LockedNativePool:
     def place(self):
         """The zoom, or the part of the frame in view, changed."""
         self.surface.refresh_cursor()
-        self.surface.update()  # the margins beside a zoomed frame
         if self.pair is not None and self.pair_index == self.selected:
             self._present(self.pair[0 if self.showing_source else 1])
 
@@ -161,6 +169,7 @@ class LockedNativePool:
         self.frame = target
         self.position = round(target * 1000 / self.fps)
         self.anchor, self.anchor_frame = time.monotonic(), target
+        self.late_since = None
         self.pair = None
         self.pair_index = None
         for key, entry in self.entries.items():
@@ -176,6 +185,7 @@ class LockedNativePool:
     def set_playing(self, playing):
         self.playing = bool(playing)
         self.anchor, self.anchor_frame = time.monotonic(), self.frame
+        self.late_since = None
         if not playing:
             self.audio.set_playing(False)
             self.audio_running = False
@@ -191,6 +201,9 @@ class LockedNativePool:
         if self.playing and not self.buffering:
             target = round(audio_ms * self.fps / 1000) if self.audio_running and audio_ms is not None else (
                 self.anchor_frame + int((time.monotonic() - self.anchor) * self.fps))
+        # The newest frame both videos shown have: the queues' floor below.
+        reach = min(max(self.frames.get(key, ()), default=self.frame)
+                    for key in (self.source_key, ("distorted", self.selected)))
         for key, entry in self.entries.items():
             player = entry[0]
             update = player.poll()
@@ -207,9 +220,20 @@ class LockedNativePool:
             if update.ended:
                 self.eos.add(key)
             queue = self.frames[key]
-            # Keep the currently displayed frame for immediate S/arrow swaps.
+            # Two frames before the one shown -- or, playing, before the one
+            # about to be, as far as this queue and both videos shown have
+            # come -- kept for immediate S/arrow swaps (the pair shown holds
+            # its own). Counted from the frame shown while playing, the queue
+            # was still full of the past when the clock moved two frames on,
+            # and the frame due waited in the sink: one in five skipped at 120
+            # fps. Counted as far as this queue alone had come, a video
+            # decoded ahead of the other -- an encode decoded by the GPU, its
+            # 4K 10-bit H.264 source by the CPU -- dropped the frames the other
+            # had yet to reach: the pair waited for could never come, both
+            # queues full, and playback stalled for good.
+            floor = min(max(self.frame, target), max(queue, default=self.frame), reach) - 2
             for old in list(queue):
-                if old < self.frame - 2:
+                if old < floor:
                     del queue[old]
             sink = next(iter(player._sinks.values()))
             # Two previous frames plus the current and two upcoming frames.
@@ -232,8 +256,20 @@ class LockedNativePool:
             if audio_ms is not None:
                 target = round(audio_ms * self.fps / 1000)
         matched = self._choose_pair(target)
-        behind_audio = self.audio_running and audio_ms is not None and audio_ms - self.position > 1000 / self.fps
-        if not matched or target - self.frame > 1 or behind_audio:
+        # Falling behind is judged by the soundtrack clock's own reading, not
+        # the value carried on between its steps, which picks the frame.
+        reading = self.audio.reading_ms if self.audio_running else None
+        due = round(reading * self.fps / 1000) if reading is not None else target
+        behind = due - self.frame > 1 or (reading is not None and reading - self.position > 1000 / self.fps)
+        if not behind:
+            self.late_since = None
+        elif matched and not self.buffering:  # a moment to catch up in, the sound playing on
+            now = time.monotonic()
+            if self.late_since is None:
+                self.late_since = now
+            behind = now - self.late_since > _CATCH_UP_S
+        if not matched or behind:
+            self.late_since = None
             if not self.buffering:
                 self.audio.set_playing(False)
                 self.audio_running = False

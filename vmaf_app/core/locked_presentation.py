@@ -1,129 +1,212 @@
-"""One native presentation surface and one audio-only playback pipeline."""
+"""Native playback's presentation -- the app's own, on the decoders' D3D11
+device -- and one audio-only playback pipeline."""
 from __future__ import annotations
 
 import ctypes
 import functools
-from ctypes import wintypes
+import threading
+import time
+from collections import deque
 
-from vmaf_app.core.d3d11_tonemap import boxed_pointer
+from vmaf_app.core.d3d11_tonemap import boxed_pointer, library_path
 from vmaf_app.core.gstreamer_playback import _load_gstreamer
 
-
-class _CropMeta(ctypes.Structure):
-    """GstVideoCropMeta: its GstMeta (flags, info), then the rectangle."""
-
-    _fields_ = [("flags", ctypes.c_uint), ("info", ctypes.c_void_p), ("x", ctypes.c_uint),
-                ("y", ctypes.c_uint), ("width", ctypes.c_uint), ("height", ctypes.c_uint)]
+#: The colour beside a frame: the views' background (VideoCompareView).
+_BACKGROUND = (0x17 / 255,) * 3 + (1.0,)
+#: DXGI colour spaces: SDR (sRGB-coded BT.709) and HDR10 (PQ in BT.2020).
+_SDR_SPACE, _HDR10_SPACE = 0, 12
 
 
 @functools.cache
-def _crop_api():
-    """GstVideoCropMeta's info and gst_buffer_add_meta, from GStreamer's C
-    API: gst_buffer_add_video_crop_meta is a C macro, which Python cannot
-    call."""
-    info = ctypes.CDLL("gstvideo-1.0-0.dll").gst_video_crop_meta_get_info
-    info.restype, info.argtypes = ctypes.c_void_p, []
-    add = ctypes.CDLL("gstreamer-1.0-0.dll").gst_buffer_add_meta
-    add.restype, add.argtypes = ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-    return info(), add
+def _presenter_api():
+    """The native presenter's entry points (d3d11_tonemap.dll), and the ones
+    of GStreamer's D3D11 library it needs, typed."""
+    lib = ctypes.CDLL(str(library_path()))
+    ints, floats = ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_float)
+    for name, restype, argtypes in (
+        ("vmaf_present_create", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]),
+        ("vmaf_present_follow", None, [ctypes.c_void_p, ctypes.c_void_p]),
+        ("vmaf_present_wait", ctypes.c_int, [ctypes.c_void_p, ctypes.c_uint]),
+        ("vmaf_present_frame", ctypes.c_int,
+         [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ints, ints, floats, ctypes.c_int, floats]),
+        ("vmaf_present_destroy", None, [ctypes.c_void_p]),
+    ):
+        function = getattr(lib, name)
+        function.restype, function.argtypes = restype, argtypes
+    gst = ctypes.CDLL("gstd3d11-1.0-0.dll")
+    for name, restype in (("gst_is_d3d11_memory", ctypes.c_int),
+                          ("gst_d3d11_memory_get_resource_handle", ctypes.c_void_p),
+                          ("gst_d3d11_memory_get_subresource_index", ctypes.c_uint),
+                          ("gst_d3d11_device_get_device_handle", ctypes.c_void_p)):
+        function = getattr(gst, name)
+        function.restype, function.argtypes = restype, [ctypes.c_void_p]
+    return lib, gst
 
 
-def cropped(sample, crop: tuple[int, int, int, int]):
-    """`sample` showing only `crop` (x, y, width, height, in its pixels): a
-    new buffer on the same GPU memory, with a GstVideoCropMeta, which
-    d3d11videosink draws from. The sample itself is left as it was: the
-    pair keeps it to show again. Not Buffer.copy(): in PyGObject that is
-    the same buffer again (a second reference), and the crop would have
-    gone onto the kept one -- GStreamer refused it, as not writable."""
-    gst, _video = _load_gstreamer()
-    info, add = _crop_api()
-    original, copy = sample.get_buffer(), gst.BufferCopyFlags
-    buffer = original.copy_region(copy.FLAGS | copy.TIMESTAMPS | copy.META | copy.MEMORY, 0, original.get_size())
-    address = add(boxed_pointer(buffer), info, None)
-    if not address:
-        raise RuntimeError("the frame could not be cropped")
-    meta = _CropMeta.from_address(address)
-    meta.x, meta.y, meta.width, meta.height = crop
-    return gst.Sample.new(buffer, sample.get_caps(), sample.get_segment(), sample.get_info())
+def _object_pointer(instance) -> int:
+    """The GObject a PyGObject wrapper stands for."""
+    capsule = ctypes.pythonapi.PyCapsule_GetPointer
+    capsule.restype, capsule.argtypes = ctypes.c_void_p, [ctypes.py_object, ctypes.c_char_p]
+    return capsule(instance.__gpointer__, None)
 
 
-@functools.cache
-def _user32():
-    """user32 with these functions' types: an instance of its own, not
-    ctypes.windll.user32, which the whole process shares."""
-    user32 = ctypes.WinDLL("user32")
-    user32.GetWindow.restype = ctypes.c_void_p
-    user32.GetWindow.argtypes = [ctypes.c_void_p, ctypes.c_uint]
-    user32.IsWindowEnabled.argtypes = [ctypes.c_void_p]
-    user32.EnableWindow.argtypes = [ctypes.c_void_p, ctypes.c_bool]
-    user32.GetClientRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.RECT)]
-    return user32
-
-
-def pass_mouse_through(window: int) -> None:
-    """Mouse input over the video goes to `window`, not to the window
-    d3d11videosink makes inside it, so that dragging a zoomed frame is the
-    app's: Windows' hit testing (WindowFromPoint) skips a disabled child."""
-    user32 = _user32()
-    child = user32.GetWindow(window, 5)  # GW_CHILD
-    while child:
-        if user32.IsWindowEnabled(child):
-            user32.EnableWindow(child, False)
-        child = user32.GetWindow(child, 2)  # GW_HWNDNEXT
+def yuv_to_rgb(matrix: str, full_range: bool, ten_bit: bool) -> tuple[float, ...]:
+    """The presenter's rows of Y, U, V coefficients and an offset, for a
+    frame's planes as its shader samples them: NV12's 8-bit codes over 255,
+    P010's 10-bit codes in the top of 16 bits over 65535. `matrix`: GStreamer's
+    name for the YUV matrix (bt709, bt601, bt2020...)."""
+    kr, kb = {"bt601": (0.299, 0.114), "bt2020": (0.2627, 0.0593), "smpte240m": (0.212, 0.087),
+              "fcc": (0.30, 0.11)}.get(matrix, (0.2126, 0.0722))
+    kg = 1 - kr - kb
+    bits = 10 if ten_bit else 8
+    code = 65535 / 64 if ten_bit else 255.0  # codes in a sampled value of 1
+    step = 1 << (bits - 8)
+    if full_range:
+        y0, y_range, c0, c_range = 0, (1 << bits) - 1, 1 << (bits - 1), (1 << bits) - 1
+    else:
+        y0, y_range, c0, c_range = 16 * step, 219 * step, 128 * step, 224 * step
+    ay, by = code / y_range, -y0 / y_range
+    ac, bc = code / c_range, -c0 / c_range
+    gu, gv = -2 * kb * (1 - kb) / kg, -2 * kr * (1 - kr) / kg
+    return (ay, 0.0, 2 * (1 - kr) * ac, by + 2 * (1 - kr) * bc,
+            ay, gu * ac, gv * ac, by + (gu + gv) * bc,
+            ay, 2 * (1 - kb) * ac, 0.0, by + 2 * (1 - kb) * bc)
 
 
 class LockedPresentation:
-    def __init__(self, window, device, settings):
-        from gi.repository import GstD3D11
+    """Native playback's frames, drawn and presented by the app's own
+    presenter (d3d11_tonemap.dll's vmaf_present_*): a waitable flip-model
+    swapchain in a window of its own over `window`, on the decoders' D3D11
+    device. A thread waits until the swapchain takes a frame, holding no
+    lock, then draws the one due and presents it holding the device's: the
+    present has nothing to wait for. GStreamer's d3d11videosink, which this
+    replaced, waited for the display's refresh holding that lock whenever it
+    presented at the display's own rate, and the decoders, which need it for
+    each frame, stalled up to 40 ms: 120 fps video showed some 100 frames a
+    second, and its sound stopped now and then to wait for them."""
 
-        self.gst, video = _load_gstreamer()
-        self.video, self.window = video, window
-        self.pipeline = self.gst.parse_launch(
-            "appsrc name=input is-live=true format=time block=false max-buffers=1 "
-            "leaky-type=downstream ! d3d11videosink name=output sync=false "
-            "enable-last-sample=false force-aspect-ratio=true"
-        )
-        self.pipeline.set_context(GstD3D11.d3d11_context_new(device))
-        self.source = self.pipeline.get_by_name("input")
-        self.sink = self.pipeline.get_by_name("output")
-        self.sink.set_property("display-format", 24 if settings.display_hdr_enabled else 28)
-        video.VideoOverlay.set_window_handle(self.sink, window)
-        # Where in the window the sink draws, once a zoom has placed it.
-        self._rectangle = None
-        self.pipeline.set_state(self.gst.State.PLAYING)
+    def __init__(self, window, device, settings):
+        self._video = _load_gstreamer()[1]
+        self.window, self.device = window, device
+        self._lib, self._gst = _presenter_api()
+        handle = self._gst.gst_d3d11_device_get_device_handle(_object_pointer(device))
+        device.lock()
+        try:
+            self._presenter = self._lib.vmaf_present_create(handle, window, int(settings.display_hdr_enabled is True))
+        finally:
+            device.unlock()
+        if not self._presenter:
+            raise RuntimeError("Could not set up the native video presentation")
+        # The frames to draw, one each time the swapchain takes one, in order:
+        # two at most, the oldest dropped past that (_present_paced).
+        self._due = deque()
+        self._due_lock = threading.Lock()
+        self._due_ready = threading.Event()
+        self._stopping = False
+        self._error = None
+        self._colours = {}
+        self._clear = (ctypes.c_float * 4)(*_BACKGROUND)
+        self._presenter_thread = threading.Thread(target=self._present_paced, name="native-present", daemon=True)
+        self._presenter_thread.start()
 
     def present(self, sample, view=None):
-        """`view`: None to fit the frame to the window; else the part of it
-        to show and where in the window (VideoCompareView.native_view). The
-        sink smooths a zoomed frame's pixels: its sampling-method, set while
-        it runs, is not taken up."""
+        """`sample` shown at the next refresh. `view`: None to fit it to the
+        window, letterboxed; else the part of it to show and where in the
+        window, in device pixels (VideoCompareView.native_view)."""
+        self._lib.vmaf_present_follow(self._presenter, self.window)
+        with self._due_lock:
+            self._due.append((sample, view))
+            while len(self._due) > 2:
+                self._due.popleft()
+            self._due_ready.set()
+
+    def _present_paced(self):
+        """The frames due, one each time the swapchain takes one -- once per
+        refresh -- in order: chosen 4 ms apart at times, two within one
+        refresh would otherwise lose one. A frame it cannot draw ends it,
+        the error left for poll(): the picture would stop with no word."""
+        while True:
+            self._due_ready.wait()
+            if self._stopping:
+                return
+            if self._lib.vmaf_present_wait(self._presenter, 100) != 0:
+                continue  # not taken yet (a hidden window): asked again
+            with self._due_lock:
+                sample, view = self._due.popleft()
+                if not self._due:
+                    self._due_ready.clear()
+            if self._stopping:
+                return
+            try:
+                self._draw(sample, view)
+            except Exception as exc:
+                self._error = f"Native presentation failed: {exc}"
+            if self._error:
+                return
+
+    def _draw(self, sample, view):
+        buffer = sample.get_buffer()
+        if buffer.n_memory() != 1:
+            self._error = "Native presentation needs one GPU texture a frame"
+            return
+        memory = buffer.peek_memory(0)
+        # Kept alive (``memory``) until the native calls return.
+        pointer = boxed_pointer(memory)
+        if not self._gst.gst_is_d3d11_memory(pointer):
+            self._error = "Native presentation received CPU memory instead of a D3D11 texture"
+            return
+        to_rgb, space, size = self._colours_of(sample.get_caps())
         crop, rectangle = view if view is not None else (None, None)
-        if rectangle is None and self._rectangle is not None:
-            # Fitted again after a zoom: the whole window. The sink's own
-            # reset, a rectangle of -1s, left its window off the middle.
-            client = wintypes.RECT()
-            _user32().GetClientRect(self.window, ctypes.byref(client))
-            rectangle = (0, 0, max(1, client.right), max(1, client.bottom))
-        if rectangle != self._rectangle:
-            self.video.VideoOverlay.set_render_rectangle(self.sink, *rectangle)
-            self._rectangle = rectangle
-        if crop is not None:
-            sample = cropped(sample, crop)
-        # push-sample refs the existing GPU buffer and updates caps as needed.
-        # No map(), extraction of pixels, or QImage conversion occurs here.
-        result = self.source.emit("push-sample", sample)
-        if result != self.gst.FlowReturn.OK:
-            raise RuntimeError(f"Native presentation rejected a frame: {result}")
+        # The frame's own size, not its texture's: a decoder's is padded
+        # (1608 rows to 1616), and its padding was drawn as picture.
+        source = (ctypes.c_int * 4)(*(crop if crop is not None else (0, 0, *size)))
+        target = (ctypes.c_int * 4)(*rectangle) if rectangle is not None else None
+        self.device.lock()
+        try:
+            resource = self._gst.gst_d3d11_memory_get_resource_handle(pointer)
+            # The frame's slice of its texture: H.264's decoder gives arrays.
+            subresource = self._gst.gst_d3d11_memory_get_subresource_index(pointer)
+            result = self._lib.vmaf_present_frame(self._presenter, resource, subresource, source, target, to_rgb,
+                                                  space, self._clear)
+        finally:
+            self.device.unlock()
+        if result < 0:
+            self._error = f"Native presentation failed: 0x{result & 0xffffffff:08x}"
+
+    def _colours_of(self, caps):
+        """(YUV-to-RGB rows or None, DXGI colour space, (width, height)) for
+        frames of `caps`, worked out once."""
+        key = caps.to_string()
+        colours = self._colours.get(key)
+        if colours is None:
+            info = self._video.VideoInfo.new_from_caps(caps)
+            name, colorimetry = info.finfo.format.value_nick, info.colorimetry
+            rows = None
+            if name in ("nv12", "p010-10le"):
+                rows = (ctypes.c_float * 12)(*yuv_to_rgb(colorimetry.matrix.value_nick,
+                                                         colorimetry.range.value_nick == "0-255",
+                                                         name == "p010-10le"))
+            space = _HDR10_SPACE if colorimetry.transfer.value_nick == "smpte2084" else _SDR_SPACE
+            colours = self._colours[key] = (rows, space, (info.width, info.height))
+        return colours
 
     def poll(self):
-        message = self.pipeline.get_bus().pop_filtered(self.gst.MessageType.ERROR)
-        if message:
-            raise RuntimeError(message.parse_error()[0].message)
-        # The sink makes its window when it first draws, after a frame.
-        pass_mouse_through(self.window)
+        if self._error:
+            raise RuntimeError(self._error)
 
     def stop(self):
-        self.pipeline.set_state(self.gst.State.NULL)
+        """On any thread: the window goes with the view's (its owner's).
+        Left, not freed, if its thread were still drawing a second on."""
+        self._stopping = True
+        self._due_ready.set()
+        self._presenter_thread.join(timeout=1)
+        if self._presenter and not self._presenter_thread.is_alive():
+            self.device.lock()
+            try:
+                self._lib.vmaf_present_destroy(self._presenter)
+            finally:
+                self.device.unlock()
+            self._presenter = None
 
 
 class SingleSoundtrack:
@@ -146,6 +229,15 @@ class SingleSoundtrack:
         self.ready = False
         self.failed = None
         self.seeking = False
+        self.playing = False
+        #: The clock's last reading (ms) and when it changed (time.monotonic),
+        #: the smallest step it has moved in, and the last value given (poll).
+        self._clock = (None, 0.0)
+        self._step_ms = 10.0
+        self._given_ms = None
+        #: The clock's own last reading (ms, from the video's first frame),
+        #: not carried on: what falling behind is judged by (LockedNativePool).
+        self.reading_ms = None
         self.pipeline.set_state(self.gst.State.PAUSED)
 
     def poll(self):
@@ -160,7 +252,26 @@ class SingleSoundtrack:
             else:
                 self.ready, self.seeking = True, False
         ok, position = self.pipeline.query_position(self.gst.Format.TIME)
-        return round(position / self.gst.MSECOND) - self.offset_ms if ok else None
+        if not ok:
+            self.reading_ms = None
+            return None
+        # Its sink's clock moves in steps of its buffer, 10 ms here, where a
+        # frame of 120 fps video lasts 8.3 ms: one frame in five was skipped.
+        # Between steps it is carried on by the time passed, never further
+        # than a step, and never back while playing.
+        position_ms, now = position / self.gst.MSECOND, time.monotonic()
+        self.reading_ms = position_ms - self.offset_ms
+        last_ms, changed_at = self._clock
+        if position_ms != last_ms:
+            if self.playing and last_ms is not None and 5 <= position_ms - last_ms < self._step_ms:
+                self._step_ms = position_ms - last_ms
+            self._clock = (position_ms, now)
+        elif self.playing:
+            position_ms += min((now - changed_at) * 1000, self._step_ms)
+        if self.playing and self._given_ms is not None:
+            position_ms = max(position_ms, self._given_ms)
+        self._given_ms = position_ms if self.playing else None
+        return position_ms - self.offset_ms
 
     def set_offset(self, offset_ms, position):
         """Counts from the source video's first frame, `offset_ms` into the
@@ -172,6 +283,7 @@ class SingleSoundtrack:
 
     def seek(self, position):
         self.ready, self.seeking = False, True
+        self._clock, self._given_ms = (None, 0.0), None
         if not self.pipeline.seek_simple(self.gst.Format.TIME,
                 self.gst.SeekFlags.FLUSH | self.gst.SeekFlags.ACCURATE,
                 max(0, int(position) + self.offset_ms) * self.gst.MSECOND):
@@ -179,6 +291,11 @@ class SingleSoundtrack:
 
     def set_playing(self, playing):
         if not self.failed:
+            if bool(playing) != self.playing:
+                # Carried on from now: from its last change, before a pause,
+                # it went a whole step on at once.
+                self._clock, self._given_ms = (None, 0.0), None
+            self.playing = bool(playing)
             self.pipeline.set_state(self.gst.State.PLAYING if playing else self.gst.State.PAUSED)
 
     def set_enabled(self, enabled):
