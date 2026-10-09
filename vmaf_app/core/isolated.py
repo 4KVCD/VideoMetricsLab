@@ -60,7 +60,7 @@ class IsolatedCrashError(RuntimeError):
     def __init__(self, what: str, exitcode: int | None):
         self.what = what
         self.exitcode = exitcode
-        if exitcode == -signal.SIGTERM:
+        if self.stopped:
             # Process.terminate()'s code: this app ended it -- multiprocessing
             # does so to children still running as the app exits. Said as a
             # crash, a probe still at work when the app was closed logged
@@ -68,6 +68,11 @@ class IsolatedCrashError(RuntimeError):
             super().__init__(f"{what} was stopped before it finished")
         else:
             super().__init__(f"{what} crashed ({describe_exit_code(exitcode)})")
+
+    @property
+    def stopped(self) -> bool:
+        """Ended by this app, not crashed (see __init__)."""
+        return self.exitcode == -signal.SIGTERM
 
     def __reduce__(self):
         return type(self), (self.what, self.exitcode)

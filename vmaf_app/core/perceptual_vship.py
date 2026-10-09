@@ -467,12 +467,15 @@ def detect_vship_device() -> tuple[VshipDevice | None, str]:
     global _probed
     with _PROBE_LOCK:
         if _probed is None:
-            _probed = (_probe_isolated(), time.monotonic())
+            stopped = []
+            _probed = (_probe_isolated(stopped), time.monotonic())
             device, reason = _probed[0]
             if device is not None:
                 _log.info("Vship %s (%s) GPU: %s", device.version, backend_label(device.backend), device.name)
             else:
-                _log.warning("Vship GPU unavailable: %s", reason)
+                # Stopped as the app closed, it is no warning: the other
+                # probes say so at INFO, and this one said it as a warning.
+                _log.log(logging.INFO if stopped else logging.WARNING, "Vship GPU unavailable: %s", reason)
         return _probed[0]
 
 
@@ -642,14 +645,18 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
     return None, "; ".join(failures) or "No GPU that Vship can use was found."
 
 
-def _probe_isolated() -> tuple[VshipDevice | None, str]:
+def _probe_isolated(stopped: list | None = None) -> tuple[VshipDevice | None, str]:
     """_probe_vship_device in a process of its own. Loading Vship starts the
     GPU driver, and a crash there took the app down: Vship 5.1.1's Vulkan
     build on a PC whose only GPU is Intel's crashed it as it closed. Now it
-    ends that process, and the GPU metrics are calculated on the CPU."""
+    ends that process, and the GPU metrics are calculated on the CPU.
+    `stopped`, if given, gets True appended when the app ended the probe
+    (closing) rather than it failing."""
     try:
         return run_isolated(_probe_in_own_process, _backend, what="Vship's GPU probe")
     except IsolatedCrashError as error:
+        if error.stopped and stopped is not None:
+            stopped.append(True)
         return None, str(error)
 
 

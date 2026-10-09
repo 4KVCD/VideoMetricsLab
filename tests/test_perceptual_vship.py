@@ -225,6 +225,23 @@ def _crashing_pass(*_args, **_kwargs):
 def test_a_crash_in_vship_ends_its_own_process_and_the_cpu_takes_over(monkeypatch, caplog):
     """A crash in Vship, or in the GPU driver under it, ended the app with
     every video's progress, with no message."""
+    # The probe ended by the app as it closed is said at INFO, as the other
+    # probes say it -- it was a warning; one that finds no GPU still warns.
+    from vmaf_app.core import isolated
+
+    real_run_isolated = vship.run_isolated
+    for exitcode, level in ((-15, logging.INFO), (0xC0000005, logging.WARNING)):
+        def ended(*_args, exitcode=exitcode, **_kwargs):
+            raise isolated.IsolatedCrashError("Vship's GPU probe", exitcode)
+        monkeypatch.setattr(vship, "run_isolated", ended)
+        monkeypatch.setattr(vship, "_probed", None)
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            assert vship.detect_vship_device()[0] is None
+        assert [r.levelno for r in caplog.records if "Vship GPU unavailable" in r.getMessage()] == [level]
+    monkeypatch.setattr(vship, "run_isolated", real_run_isolated)
+    monkeypatch.setattr(vship, "_probed", None)
+
     device = vship.VshipDevice("vulkan", "GPU", 0, "5.1.2", None, GpuVendor.NVIDIA)  # no library: isolated
     monkeypatch.setattr(vship, "detect_vship_device", lambda: (device, ""))
     monkeypatch.setattr(vship, "forget_failed_vship_probe", lambda: None)
