@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from vmaf_app.core import crop_detect
+from vmaf_app.core import crop_detect, result_cache
 from vmaf_app.core.crop_detect import _SAMPLE_WINDOW_SECONDS, CropDetectError, _sample_offsets
 from vmaf_app.core.models import CropBox, VideoInfo
 
@@ -57,6 +57,19 @@ def test_a_files_bars_are_detected_once_per_process(monkeypatch, tmp_path):
     assert first == second
     assert launched == 5
     assert len(calls) == launched, "the second call ran detection again"
+    # Kept between sessions with the results: a new session -- this
+    # process's memory gone -- had every film's bars detected again.
+    crop_detect.clear_cache()
+    assert crop_detect.detect_crop(info) == first
+    assert len(calls) == launched
+    # Cleared with the results; and kept by a version of the detection.
+    result_cache.clear_all()
+    assert crop_detect.detect_crop(info) == first
+    assert len(calls) == 2 * launched
+    monkeypatch.setattr(crop_detect, "_STORE_VERSION", crop_detect._STORE_VERSION + 1)
+    crop_detect.clear_cache()
+    crop_detect.detect_crop(info)
+    assert len(calls) == 3 * launched
 
 
 def test_a_replaced_file_is_detected_afresh(monkeypatch, tmp_path):

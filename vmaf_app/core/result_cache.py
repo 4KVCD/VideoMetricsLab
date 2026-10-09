@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from vmaf_app.core import metric_cache
+from vmaf_app.core import crop_detect, metric_cache
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.cvvdp import CvvdpSettings
@@ -34,6 +34,11 @@ def cache_dir() -> Path:
 
 def _cache_dir() -> Path:
     return cache_dir()
+
+
+#: Black bars detected are kept here between sessions, with the results.
+BLACK_BARS_FILE = "black_bars.json"
+crop_detect.set_store(lambda: cache_dir() / BLACK_BARS_FILE)
 
 
 def cache_key(source: Path, distorted: Path, request: AnalysisRequest) -> str:
@@ -133,6 +138,11 @@ def clear(
 
 
 def clear_all(directory: Path | None = None) -> int:
-    """Remove the active metric cache and return the number of comparisons."""
+    """Remove the active metric cache and return the number of comparisons.
+    The black bars kept with it go too: cleared, it starts afresh."""
     base = directory if directory is not None else _cache_dir()
+    if directory is None or Path(directory) == cache_dir():
+        crop_detect.forget_store()
+    else:
+        (Path(directory) / BLACK_BARS_FILE).unlink(missing_ok=True)
     return metric_cache.clear_all(base)

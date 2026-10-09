@@ -17,8 +17,10 @@ one film used to detect the source's bars six times over.
 """
 from __future__ import annotations
 
+import json
 import logging
 import math
+import os
 import re
 import subprocess
 import threading
@@ -238,11 +240,82 @@ def _cache_key(path: Path, scored_duration: float, limit: float) -> tuple | None
             round(scored_duration, 3), round(limit, 6))
 
 
+#: Where answers are kept between sessions: a JSON file in the results
+#: cache's folder (result_cache registers it), read once per file. Every
+#: new session detected each film's bars again -- 4-6 s of decoding a 4K
+#: pair before a run or Video Compare had them, the preview shown uncropped
+#: and its playback rebuilt once they came. Bump _STORE_VERSION when the
+#: detection itself changes what it finds: older answers are then ignored.
+_STORE_VERSION = 1
+_store_of: Callable[[], Path] | None = None
+#: The store file whose answers are in the cache already.
+_store_read: Path | None = None
+
+
+def set_store(path_of: Callable[[], Path] | None) -> None:
+    """Keeps answers between sessions in the file `path_of` returns when
+    asked (the results cache's folder can move), or, None, not at all."""
+    global _store_of, _store_read
+    with _cache_lock:
+        _store_of, _store_read = path_of, None
+
+
+def _store_path() -> Path | None:
+    if _store_of is None:
+        return None
+    try:
+        return Path(_store_of())
+    except OSError:
+        return None
+
+
+def _read_store() -> None:
+    """With _cache_lock held: the store's answers into the cache, once per
+    store file."""
+    global _store_read
+    path = _store_path()
+    if path is None or path == _store_read:
+        return
+    _store_read = path
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict) or data.get("version") != _STORE_VERSION:
+        return
+    for item in data.get("boxes", ()):
+        try:
+            key, (w, h, x, y) = tuple(item[0]), item[1]
+            _cache.setdefault(key, CropBox(w=int(w), h=int(h), x=int(x), y=int(y)))
+        except (TypeError, ValueError, IndexError):
+            continue
+    while len(_cache) > _CACHE_LIMIT:
+        _cache.popitem(last=False)
+
+
+def _write_store() -> None:
+    """With _cache_lock held: the cache's answers into the store, replaced
+    whole. Two processes writing at once lose one's newest answer at worst:
+    it is detected again."""
+    path = _store_path()
+    if path is None:
+        return
+    data = {"version": _STORE_VERSION,
+            "boxes": [[list(key), [box.w, box.h, box.x, box.y]] for key, box in _cache.items()]}
+    partial = path.with_name(path.name + ".partial")
+    try:
+        partial.write_text(json.dumps(data), encoding="utf-8")
+        os.replace(partial, path)
+    except OSError as error:
+        _log.warning("Could not keep black-bar answers in %s: %s", path, error)
+
+
 def _claim(key: tuple, cancel_event: threading.Event | None) -> CropBox | None:
     """The cached box, or None once this caller has been given the job of
     computing it. Waits, cancellably, while another caller is on it."""
     while True:
         with _cache_lock:
+            _read_store()
             box = _cache.get(key)
             if box is not None:
                 _cache.move_to_end(key)
@@ -265,16 +338,37 @@ def _settle(key: tuple, box: CropBox | None) -> None:
             _cache.move_to_end(key)
             while len(_cache) > _CACHE_LIMIT:
                 _cache.popitem(last=False)
+            _write_store()
         waiting = _in_flight.pop(key, None)
     if waiting is not None:
         waiting.set()
 
 
 def clear_cache() -> None:
-    """Forgets every remembered box. For tests, and for anyone who has
-    replaced a file in place with the same size and mtime."""
+    """Forgets every remembered box in this process -- the store is read
+    again when next asked. For tests, and for anyone who has replaced a file
+    in place with the same size and mtime (with forget_store)."""
+    global _store_read
     with _cache_lock:
         _cache.clear()
+        _store_read = None
+
+
+def forget_store() -> None:
+    """Deletes the kept answers and forgets them here: Settings' clearing of
+    the results cache starts afresh."""
+    global _store_read
+    with _cache_lock:
+        _cache.clear()
+        path = _store_path()
+        _store_read = None
+        if path is not None:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                _log.warning("Could not delete %s: %s", path, error)
 
 
 #: Two pictures are the same shape when their sizes differ by one factor,
