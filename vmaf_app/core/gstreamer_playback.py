@@ -779,8 +779,11 @@ class GstComparePipeline:
             if not factories:
                 descriptions.append(f"{side} decoder starting")
                 continue
+            # GPU decoders: Direct3D's, NVIDIA's (nvcodec) and Intel's (Quick
+            # Sync). nvh265dec, which decodes 12-bit HEVC where the full
+            # GStreamer is installed, was called software: "CPU decode".
             hardware = [
-                name for name in factories if name.startswith(("d3d11", "d3d12"))
+                name for name in factories if name.startswith(("d3d11", "d3d12", "nv", "qsv"))
             ]
             mode = "GPU" if hardware else "software"
             selected = hardware or factories

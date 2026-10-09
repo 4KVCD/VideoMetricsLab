@@ -85,6 +85,14 @@ def test_native_hdr_caps_keep_full_cropped_resolution_and_precision(subtests):
         pad.query(query)
         for api in (video.video_crop_meta_api_get_type(), video.video_meta_api_get_type()):
             assert query.find_allocation_meta(api)[0]
+    with subtests.test("the status calls NVIDIA's and Intel's decoders GPU ones, as Direct3D's"):
+        # nvh265dec was called software, and the frame line said "CPU decode".
+        player = object.__new__(gstreamer_playback.GstComparePipeline)
+        player._decoder_factories = lambda decoder: [decoder]
+        for name, mode in (("d3d11h265dec", "GPU"), ("nvh265dec", "GPU"), ("qsvh264dec", "GPU"),
+                           ("avdec_h265", "software")):
+            player._decoders = {"source": name}
+            assert player._decoder_description() == f"source {mode}: {name}"
     with subtests.test("boxed while black bars are detected, as FFmpeg fits it; stretched once they are known"):
         # A letterboxed 16:9 source and a cropped 2.4:1 encode scaled to it:
         # stretched before its bars were known, the encode played squashed.
