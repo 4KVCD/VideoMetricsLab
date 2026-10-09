@@ -247,7 +247,7 @@ def test_black_bars_column_answers_yes_or_no_about_the_test_video(qapp):
     assert "Test video: no black bars. Compared in full at 1920x804." in item.toolTip()
 
     win._rows[row].options.crop_mode = CropMode.NONE
-    win._invalidate_completed_result(row)
+    win._invalidate_completed_results([row])
     assert win.distorted_table.item(row, COL_BLACK_BARS).text() == "Off"
 
 
@@ -887,10 +887,16 @@ def test_remove_all_clears_the_table_and_the_graph(qapp, monkeypatch):
     win.tabs.setCurrentIndex(TAB_GRAPH)
     assert len(win.graph_panel._entries) == 3
 
+    # The graph's table built again once, not once a video with every
+    # series left: 300 videos took 12 s.
+    rebuilds = []
+    rebuild = win.graph_panel._refresh_stats_table
+    monkeypatch.setattr(win.graph_panel, "_refresh_stats_table", lambda: (rebuilds.append(1), rebuild())[1])
     win._on_remove_all_distorted()
     assert win._rows == []
     assert win.distorted_table.rowCount() == 0
     assert len(win.graph_panel._entries) == 0
+    assert len(rebuilds) == 1
 
 
 # ------------------------------- queued cache operations pin their directory

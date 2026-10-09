@@ -119,8 +119,10 @@ class ChartWidget(QWidget):
         self._series[key] = series
         self._invalidate(refit=True)
 
-    def remove_series(self, key: int) -> None:
-        if self._series.pop(key, None) is not None:
+    def remove_series(self, *keys: int) -> None:
+        """The axes fitted again once, however many go."""
+        removed = [key for key in keys if self._series.pop(key, None) is not None]
+        if removed:
             self._invalidate(refit=True)
 
     def set_series_visible(self, key: int, visible: bool) -> None:

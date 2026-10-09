@@ -185,7 +185,7 @@ def test_frame_compare_tracks_completed_removed_and_invalidated_rows(qapp):
     assert_frame_compare_matches_rows(win)
     assert len(win.frame_compare_panel._entries) == 1
 
-    win._invalidate_completed_result(0)
+    win._invalidate_completed_results([0])
     assert_frame_compare_matches_rows(win)
     # Losing a score does not make the frames incomparable: the row stays,
     # now identified by itself and carrying no scores.

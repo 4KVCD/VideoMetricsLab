@@ -22,6 +22,7 @@ import os
 import re
 import threading
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -2275,23 +2276,20 @@ class MainWindow(QMainWindow):
 
         if self._rows:
             # Scores belong to a (source, distorted) pair, so a new source
-            # invalidates every one of them until the cache says otherwise.
-            for row in range(len(self._rows)):
-                completed = self._rows[row].completed_run
-                if completed is not None and self._same_source(
-                    completed.result.source, path
-                ):
-                    # This result was measured against exactly the reference
-                    # just selected, so selecting it CONFIRMS the result
-                    # rather than invalidating it. Discarding it here is what
-                    # made loading a saved run and then picking its own
-                    # source wipe the run.
-                    continue
-                # A curve is the visual form of the same (source,
-                # distorted) result. Clearing only the table value left the
-                # old source's curve on screen under the newly selected
-                # source, which is a dangerously plausible comparison.
-                self._invalidate_completed_result(row)
+            # invalidates every one of them until the cache says otherwise --
+            # but those measured against exactly the reference just selected:
+            # selecting it CONFIRMS them rather than invalidating them.
+            # Discarding them here is what made loading a saved run and then
+            # picking its own source wipe the run.
+            # A curve is the visual form of the same (source, distorted)
+            # result. Clearing only the table value left the old source's
+            # curve on screen under the newly selected source, which is a
+            # dangerously plausible comparison.
+            self._invalidate_completed_results([
+                row for row, row_data in enumerate(self._rows)
+                if row_data.completed_run is None
+                or not self._same_source(row_data.completed_run.result.source, path)
+            ])
             self._reload_cached_for_all_rows()
 
         if dropped:
@@ -2321,15 +2319,17 @@ class MainWindow(QMainWindow):
         is worse than saying it is gone.
         """
         removed: list[str] = []
+        curves = []
         for row in range(len(self._rows) - 1, -1, -1):
             row_data = self._rows[row]
             if row_data.options.resample_test is None:
                 continue
             if row_data.completed_run is not None:
-                self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
+                curves.append(row_data.completed_run.graph_identity)
             self.distorted_table.removeRow(row)
             del self._rows[row]
             removed.append(row_data.path.name)
+        self.graph_panel.remove_by_identities(curves)
         if removed:
             self._on_table_selection_changed()
             self._sync_frame_compare()
@@ -3310,12 +3310,11 @@ class MainWindow(QMainWindow):
 
     def _on_remove_distorted(self) -> None:
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()}, reverse=True)
+        # The graph goes with them: a curve whose row is gone can no longer
+        # be removed from anywhere.
+        self.graph_panel.remove_by_identities(
+            self._rows[row].completed_run.graph_identity for row in rows if self._rows[row].completed_run is not None)
         for row in rows:
-            # The graph goes with it: a curve whose row is gone can no longer
-            # be removed from anywhere.
-            completed = self._rows[row].completed_run
-            if completed is not None:
-                self.graph_panel.remove_by_identity(completed.graph_identity)
             self.distorted_table.removeRow(row)
             del self._rows[row]
         self._on_table_selection_changed()
@@ -3338,9 +3337,8 @@ class MainWindow(QMainWindow):
         )
         if answer != QMessageBox.Yes:
             return
-        for row_data in self._rows:
-            if row_data.completed_run is not None:
-                self.graph_panel.remove_by_identity(row_data.completed_run.graph_identity)
+        self.graph_panel.remove_by_identities(
+            row_data.completed_run.graph_identity for row_data in self._rows if row_data.completed_run is not None)
         self.distorted_table.setRowCount(0)
         self._rows.clear()
         self._on_table_selection_changed()
@@ -4048,26 +4046,30 @@ class MainWindow(QMainWindow):
         requested = self._requested_metrics(row_data)
         return bool(requested) and set(self._reusable_results(row_data).keys()) == set(requested)
 
-    def _invalidate_completed_result(self, row: int) -> None:
-        """Marks a row stale after an option that affects its run changes.
+    def _invalidate_completed_results(self, rows: Iterable[int]) -> None:
+        """Marks rows stale after an option that affects their runs changes:
+        their scores, their curves and Video Compare's comparisons go, the
+        graph and Video Compare brought up to date once. A row at a time,
+        each took them apart and built them again with every row left: a
+        hundred rows 1.3 s, three hundred 12 s.
 
-        Its detail goes with its state, before the row is drawn again: the
-        tooltip said "Not calculated" over the old result's "240 scored
+        Each row's detail goes with its state, before the row is drawn again:
+        the tooltip said "Not calculated" over the old result's "240 scored
         frames; metrics: ...", or over a failure's reason."""
-        row_data = self._rows[row]
-        row_data.analysis_status = None
-        row_data.status_detail = ""
-        if row_data.completed_run is None:
+        curves, paths = [], []
+        for row in rows:
+            row_data = self._rows[row]
+            row_data.analysis_status = None
+            row_data.status_detail = ""
+            if row_data.completed_run is not None:
+                # The path for a series added by it, before rows had identities.
+                curves.append(row_data.completed_run.graph_identity)
+                paths.append(row_data.path)
+                row_data.completed_run = None
             self._set_row_metrics(row)
-            return
-        graph_identity = row_data.completed_run.graph_identity
-        row_data.completed_run = None
-        if not self.graph_panel.remove_by_identity(graph_identity):
-            # Backward-compatible fallback for a series added directly by
-            # path before row-scoped graph identities existed.
-            self.graph_panel.remove_by_path(row_data.path)
-        self._set_row_metrics(row)
-        self._sync_frame_compare()
+        if curves:
+            self.graph_panel.remove_by_identities(curves, paths)
+            self._sync_frame_compare()
 
     def _on_panel_field_edited(self, field_name: str) -> None:
         """Applies one edited control to the selected rows. Only that field:
@@ -4103,13 +4105,11 @@ class MainWindow(QMainWindow):
         # comparison is made, not what it is (ComparisonRecipe.identity_dict):
         # its scores stay.
         execution_only = field_name in {"gpu", "n_threads", "vmaf_on_gpu", "scale_algorithm"}
-        changed_rows = []
-        for row in self._panel_target_rows:
-            if apply(self._rows[row].options):
-                if not execution_only:
-                    self._invalidate_completed_result(row)
-                    changed_rows.append(row)
-                self._set_row_black_bars(row)
+        applied = [row for row in self._panel_target_rows if apply(self._rows[row].options)]
+        changed_rows = [] if execution_only else applied
+        self._invalidate_completed_results(changed_rows)
+        for row in applied:
+            self._set_row_black_bars(row)
         self._reload_cached_for_rows(changed_rows)
 
     def _on_metric_backend_changed(self, metric_key: str) -> None:
@@ -5234,8 +5234,7 @@ class MainWindow(QMainWindow):
             return False
         self._adopt_source_from_run(result)
         # Every other row was scored against the previous reference.
-        for row in range(len(self._rows)):
-            self._invalidate_completed_result(row)
+        self._invalidate_completed_results(range(len(self._rows)))
         return True
 
     def _on_save_selected(self) -> None:
