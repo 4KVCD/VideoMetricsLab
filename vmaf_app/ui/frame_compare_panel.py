@@ -369,12 +369,13 @@ class FrameComparePanel(QWidget):
         self._seek_timer.setInterval(120)
         self._seek_timer.timeout.connect(self._request_current_frames)
         # While a video plays, its frame shows in the slider, the frame and
-        # time boxes and the frame line at most 30 times a second: at each
-        # of 120 frames a second they took 0.6 ms of the window's thread,
-        # and their repaints more, for numbers no one reads at that rate.
+        # time boxes and the frame line 10 times a second: at each of 120
+        # frames a second they took 0.6 ms of the window's thread, and
+        # their repaints more, for numbers no one reads at that rate; 21
+        # times a second, 3.6% of a core, 1.7% now.
         self._position_timer = QTimer(self)
         self._position_timer.setSingleShot(True)
-        self._position_timer.setInterval(33)
+        self._position_timer.setInterval(100)
         self._position_timer.timeout.connect(self._show_video_position)
         self._display_timer = QTimer(self)
         self._display_timer.setSingleShot(True)
