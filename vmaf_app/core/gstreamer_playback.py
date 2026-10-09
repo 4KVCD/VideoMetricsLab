@@ -32,6 +32,55 @@ class GStreamerPlaybackError(RuntimeError):
     """The native GStreamer playback pipeline could not be used."""
 
 
+class Seeker:
+    """A pipeline's flushing seeks, made on a thread of its own, the latest
+    only. A flushing seek waits for the pipeline's streaming threads: made
+    on the window's thread, it held the window as long as one of them was
+    held up (a seek into a file on a USB hard disk froze it 16 s once).
+    `refused`, given with each seek, is called on that thread if the
+    pipeline refuses it; `done`, if given, once it has been made."""
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+        self._wanted = None
+        self._condition = threading.Condition()
+        self._closed = False
+        self._thread: threading.Thread | None = None
+
+    def seek(self, pipeline, gst, time_ns: int, refused, done=None) -> None:
+        with self._condition:
+            if self._closed:
+                return
+            self._wanted = (pipeline, gst, time_ns, refused, done)
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, name=self._name, daemon=True)
+                self._thread.start()
+            self._condition.notify()
+
+    def close(self) -> None:
+        """No more seeks; one under way finishes (stopping the pipeline
+        ends it)."""
+        with self._condition:
+            self._closed = True
+            self._wanted = None
+            self._condition.notify()
+
+    def _run(self) -> None:
+        while True:
+            with self._condition:
+                while self._wanted is None and not self._closed:
+                    self._condition.wait()
+                if self._closed:
+                    return
+                pipeline, gst, time_ns, refused, done = self._wanted
+                self._wanted = None
+            if not pipeline.seek_simple(gst.Format.TIME, gst.SeekFlags.FLUSH | gst.SeekFlags.ACCURATE, time_ns):
+                refused()
+            if done is not None:
+                done()
+            del pipeline, refused, done  # not kept alive while waiting for the next
+
+
 @dataclass(frozen=True, slots=True)
 class PlaybackUpdate:
     status: str | None = None
@@ -371,6 +420,11 @@ class GstComparePipeline:
         self._first_frame: int | None = None
         self._tone_mappers = []
         self._tone_error = None
+        self._seeker = Seeker(f"{side}-seek")
+        #: A seek the pipeline refused (Seeker, on its thread), for poll().
+        self._seek_error: str | None = None
+        #: Seeks asked for (the window's thread) and made (the Seeker's): `seeking`.
+        self._seeks_asked = self._seeks_made = 0
         #: Signal handlers and pad probes that call back into this object,
         #: (object, id): stop() removes them (_release).
         self._handlers: list[tuple[Any, int]] = []
@@ -588,6 +642,7 @@ class GstComparePipeline:
             raise GStreamerPlaybackError("GStreamer could not open the comparison.")
 
     def stop(self) -> None:
+        self._seeker.close()
         self._pipeline.set_state(self.Gst.State.NULL)
         for mapper in self._tone_mappers:
             mapper.close()
@@ -621,9 +676,25 @@ class GstComparePipeline:
         if not self._ready:
             self._pending_initial_seek_ms = max(0, int(position_ms))
             return
-        flags = self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.ACCURATE
-        if not self._pipeline.seek_simple(self.Gst.Format.TIME, flags, self._stream_time(position_ms)):
-            raise GStreamerPlaybackError("GStreamer could not seek to that frame.")
+        self._seek_to(position_ms, "GStreamer could not seek to that frame.")
+
+    def _seek_to(self, position_ms: int, refused: str) -> None:
+        """A seek made by the Seeker; refused, poll() reports `refused`."""
+        def report() -> None:
+            self._seek_error = refused
+
+        self._seeks_asked += 1
+        asked = self._seeks_asked
+
+        def made() -> None:
+            self._seeks_made = max(self._seeks_made, asked)
+        self._seeker.seek(self._pipeline, self.Gst, self._stream_time(position_ms), report, made)
+
+    @property
+    def seeking(self) -> bool:
+        """Whether the seek asked for last is still to be made: until it is,
+        the sink can still give frames from before it (LockedNativePool)."""
+        return self._seeks_made < self._seeks_asked
 
     def _stream_time(self, position_ms: int) -> int:
         """Where `position_ms`, counted from the video's first frame, is on
@@ -720,7 +791,7 @@ class GstComparePipeline:
         return " · ".join(details)
 
     def poll(self) -> PlaybackUpdate:
-        error = self._tone_error
+        error = self._tone_error or self._seek_error
         ended = False
         while True:
             message = self._bus.pop_filtered(
@@ -744,13 +815,8 @@ class GstComparePipeline:
                 target = self._pending_initial_seek_ms or 0
                 self._pending_initial_seek_ms = None
                 if target > 0 and not self._initial_seek_sent:
-                    flags = self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.ACCURATE
-                    if not self._pipeline.seek_simple(
-                        self.Gst.Format.TIME, flags, self._stream_time(target)
-                    ):
-                        error = "GStreamer could not seek to the requested start frame."
-                    else:
-                        self._initial_seek_sent = True
+                    self._seek_to(target, "GStreamer could not seek to the requested start frame.")
+                    self._initial_seek_sent = True
                     continue
                 self._ready = True
                 target_state = (

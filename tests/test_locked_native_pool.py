@@ -94,7 +94,7 @@ def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume(monkeypatch
     instance.anchor, instance.anchor_frame = now[0], 10
     instance.entries = {key: [SimpleNamespace(
         poll=lambda: SimpleNamespace(error=None, status=None, ended=False),
-        first_frame_ms=None, _sinks={"video": object()})] for key in instance.frames}
+        first_frame_ms=None, _sinks={"video": object()}, seeking=False)] for key in instance.frames}
     instance.poll()  # frame 13 due, 10 the newest pair
     assert calls == [] and not instance.buffering
     assert instance.pair == ("s10", "d10")
@@ -131,3 +131,12 @@ def test_decoder_stall_pauses_audio_and_waits_for_seek_before_resume(monkeypatch
     audio.position = 720  # frame 18 due
     instance.poll()
     assert 14 in instance.frames[("distorted", 0)]
+    # A video whose seek is still to be made gives the pool no frames: its
+    # sink can still hold frames from before the seek, which a seek back
+    # took for frames to come.
+    pulled = []
+    instance._pull_sample = lambda key, sink: pulled.append(key)
+    for entry in instance.entries.values():
+        entry[0].seeking = True
+    instance.poll()
+    assert pulled == []

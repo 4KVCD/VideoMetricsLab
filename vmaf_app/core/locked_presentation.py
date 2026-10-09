@@ -9,7 +9,7 @@ import time
 from collections import deque
 
 from vmaf_app.core.d3d11_tonemap import boxed_pointer, library_path
-from vmaf_app.core.gstreamer_playback import _load_gstreamer
+from vmaf_app.core.gstreamer_playback import Seeker, _load_gstreamer
 
 #: The colour beside a frame: the views' background (VideoCompareView).
 _BACKGROUND = (0x17 / 255,) * 3 + (1.0,)
@@ -221,6 +221,7 @@ class SingleSoundtrack:
     def __init__(self, path, start_ms, enabled):
         self.gst, _ = _load_gstreamer()
         self.pipeline = self.gst.ElementFactory.make("playbin3", "comparison-audio")
+        self._seeker = Seeker("soundtrack-seek")
         self.pipeline.set_property("uri", path.resolve().as_uri())
         # GstPlayFlags: AUDIO | SOFT_VOLUME; no video/text/visualizations.
         self.pipeline.set_property("flags", 2 | 16)
@@ -282,12 +283,14 @@ class SingleSoundtrack:
             self.seek(position)
 
     def seek(self, position):
+        """Made by its Seeker, on a thread of its own: ready again at the
+        preroll that follows (poll)."""
         self.ready, self.seeking = False, True
         self._clock, self._given_ms = (None, 0.0), None
-        if not self.pipeline.seek_simple(self.gst.Format.TIME,
-                self.gst.SeekFlags.FLUSH | self.gst.SeekFlags.ACCURATE,
-                max(0, int(position) + self.offset_ms) * self.gst.MSECOND):
+
+        def refused():
             self.failed = "Could not seek the soundtrack"
+        self._seeker.seek(self.pipeline, self.gst, max(0, int(position) + self.offset_ms) * self.gst.MSECOND, refused)
 
     def set_playing(self, playing):
         if not self.failed:
@@ -302,4 +305,5 @@ class SingleSoundtrack:
         self.pipeline.set_property("mute", not enabled)
 
     def stop(self):
+        self._seeker.close()
         self.pipeline.set_state(self.gst.State.NULL)

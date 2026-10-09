@@ -239,7 +239,11 @@ class LockedNativePool:
             sink = next(iter(player._sinks.values()))
             # Two previous frames plus the current and two upcoming frames.
             # Bound retained GPU surfaces while making +/- frame reversible.
-            while len(queue) < 5:
+            # None while its seek is still to be made, on the Seeker's thread:
+            # its sink can still give frames from before it, which a seek
+            # back took for frames to come -- three of five places, a frame
+            # behind the sound until playback reached them again.
+            while len(queue) < 5 and not player.seeking:
                 sample = self._pull_sample(key, sink)
                 if sample is None:
                     break
