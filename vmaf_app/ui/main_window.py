@@ -1,16 +1,16 @@
-"""Main window: pick a reference video and one or more distorted videos,
-configure VMAF options per video, run, and browse/compare completed results.
+"""The main window. The user picks a reference video and one or more test
+videos, sets the options for each, runs the metrics, and browses and compares
+the results.
 
-The distorted-file list is a table (path / media info / VMAF score) so each
-file's score -- or live "Frame N" progress while it's running -- is visible
-at a glance in the row itself, the way FFMetrics shows it.
+The test videos are a table: each row shows the file, its media information
+and its scores. While a video runs, its row shows its progress instead, so
+every video's state can be seen at a glance, as in FFMetrics.
 
-Each row carries its own VmafOptions (crop handling, model, GPU decode,
-etc.) instead of one shared global setting. The Options panel acts as an
-inspector for whichever row(s) are selected in the table: selecting a row
-loads its settings into the panel, and editing the panel writes back to
-every currently-selected row (so you can batch-edit several at once, or
-give a single video its own crop/model/etc. independent of the rest).
+Each row has its own VmafOptions (crop handling, model, GPU decoding and so
+on), not one setting shared by all. The Options panel shows the options of
+the rows selected in the table. Editing the panel changes every selected
+row, so several rows can be changed at once, or one video can be given
+options of its own.
 """
 from __future__ import annotations
 
@@ -133,7 +133,7 @@ from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTabl
 from vmaf_app.ui.worker import VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
-# own (_V1_MODEL_CHOICES); its models used to be choices in this one list.
+# own (_V1_MODEL_CHOICES).
 _MODEL_CHOICES = [
     (N_("Auto (analysis resolution)"), AUTO_MODEL_CHOICE),
     (N_("VMAF v0.6.1 (standard viewing)"), "version=vmaf_v0.6.1"),
@@ -176,11 +176,9 @@ _GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
     COL_VMAF_V1,  # added last so every older column keeps its index; shown after VMAF NEG
 ) = range(15)
 
-#: Row states worth colouring the file name for. Everything else the old
-#: Status column reported is now visible in the metric columns themselves --
-#: an unticked box is "not selected", a ticked empty one is "not calculated
-#: yet", a score is "done" -- so only these two, which nothing else shows,
-#: need a mark of their own.
+#: The row states that colour the file name. The metric columns show every
+#: other state: an unticked box is not selected, a ticked empty one is not
+#: calculated yet, and a score is done. Nothing else shows these two.
 _STATE_COLOURS = {"failed": "failed", "stale": "stale"}  # theme.py's names
 
 # Metric Graphs displays results; Video Compare and Bitrate Viewer also work
@@ -206,16 +204,17 @@ class MetricColumn:
 
     @property
     def metric(self) -> MetricDefinition:
+        """The metric shown in this column."""
         return metric_definition(self.key)
 
 
-# Keep these physical indices and visual order exactly as the established UI.
 #: A metric cell's score, as compared by Highlight best/worst results
 #: (MainWindow._apply_best_worst): None where it shows none to compare.
 _SCORE_ROLE = Qt.UserRole
 #: A metric cell's background but for its best and worst scores.
 _NO_BACKGROUND = QColor(0, 0, 0, 0)
 
+# The metric columns, in the order the table shows them.
 _METRIC_COLUMNS = (
     # VMAF NEG beside VMAF v0.6.1, whose variant it is; VMAF v1 after them.
     MetricColumn(COL_VMAF, "vmaf"), MetricColumn(COL_VMAF_NEG, "vmaf_neg"), MetricColumn(COL_VMAF_V1, "vmaf_v1"),
@@ -232,6 +231,7 @@ class _StayOpenMenu(QMenu):
     several metrics can be switched in one visit."""
 
     def mouseReleaseEvent(self, event) -> None:
+        """Ticks or unticks the box under the mouse, leaving the menu open."""
         action = self.actionAt(event.position().toPoint())
         if action is not None and action.isCheckable() and action.isEnabled():
             action.trigger()
@@ -285,6 +285,7 @@ class CvvdpDisplayDialog(QDialog):
         form.addRow(tr("Preset name:"), self.name_edit)
 
         def spin(low, high, value, decimals, suffix, step, tip):
+            """A number box with these limits, steps and tooltip."""
             box = QDoubleSpinBox()
             box.setRange(low, high)
             box.setDecimals(decimals)
@@ -297,10 +298,10 @@ class CvvdpDisplayDialog(QDialog):
         self.width_spin, self.height_spin = QSpinBox(), QSpinBox()
         for box, value in ((self.width_spin, display.width), (self.height_spin, display.height)):
             # Up to 8K. With "Scale the video to fill the display", Vship
-            # works at the display's resolution: an 8K display took CVVDP
-            # alone (CUDA build) to +7.3 GB of VRAM on a 4K video, a 16384x16384 one to
-            # +15.9 GB -- a display that does not exist, costing more than
-            # most GPUs have.
+            # works at the display's resolution. On a 4K video, an 8K display
+            # took CVVDP alone (CUDA build) to 7.3 GB more VRAM, and a
+            # 16384x16384 one to 15.9 GB more. No such display exists, and
+            # that is more memory than most GPUs have.
             box.setRange(16, _CVVDP_MAX_DISPLAY_PIXELS)
             box.setValue(value)
             box.setToolTip(tr("The display's own resolution in pixels (not the video's)."))
@@ -379,6 +380,7 @@ class CvvdpDisplayDialog(QDialog):
         original = self._original
 
         def value(box, before: float, scale: float = 1.0) -> float:
+            """The value in `box`, or `before` while the box still shows `before` rounded."""
             shown = round(before * scale, box.decimals())
             return before if abs(box.value() - shown) < 10 ** -(box.decimals() + 2) else box.value() / scale
 
@@ -395,9 +397,11 @@ class CvvdpDisplayDialog(QDialog):
         )
 
     def _update_distance_note(self, *_args) -> None:
+        """Shows the viewing distance in screen heights."""
         self.distance_note.setText(tr("= {distance_in_heights:.2f} x screen height", distance_in_heights=self.display().distance_in_heights))
 
     def preset_name(self) -> str:
+        """The preset name typed, without surrounding spaces."""
         return self.name_edit.text().strip()
 
     def _name_problem(self, action: str) -> str | None:
@@ -413,6 +417,7 @@ class CvvdpDisplayDialog(QDialog):
         return None
 
     def _finish(self, action: str) -> None:
+        """Closes the dialog with `action`, or says why the name or display cannot be used."""
         problem = self._name_problem(action)
         if problem is None:
             try:
@@ -436,7 +441,7 @@ _EXTRA_METRIC_KEYS = (*_PERCEPTUAL_METRIC_KEYS, "cvvdp")
 _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
 #: CPU tool seconds per megapixel of a compared frame pair, measured with the
 #: bundled libjxl 0.12.0 tools on a 3840x1608 (6.17 MP) Beekeeper pair:
-#: SSIMULACRA2 1.1 s, Butteraugli 2.0 s. A rough guide -- CPUs differ.
+#: SSIMULACRA2 1.1 s, Butteraugli 2.0 s. It is a rough guide, as CPUs differ.
 _CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL = {"ssimulacra2": 1.1 / 6.17, "butteraugli": 2.0 / 6.17}
 
 
@@ -480,68 +485,72 @@ class CompletedRun:
 
 @dataclass
 class RowData:
+    """One row of the test-video table: the video, its options and its results."""
+
     path: Path
-    # The file actually decoded, when `path` is a synthetic stand-in.
+    # The file actually decoded, when `path` is a made-up stand-in.
     #
-    # A "Test both directions" companion row and a resolution test both carry
-    # a well-formed but NON-EXISTENT path, so they read as separate rows and
-    # separate graph series. That path is useless for cache identity: it has
-    # no size and no modification time, so replacing the real video leaves
-    # the key unchanged and a stale score loads for the new content. Cache
-    # lookups therefore key on this instead -- the row still keeps its own
-    # options, and scale_direction/resample_test already tell the two
-    # variants of one file apart.
+    # A "Test both directions" companion row and a resolution test both have
+    # a path that does not exist, so that they show as rows and graph series
+    # of their own. Don't key the cache on that path: it has no size and no
+    # modification time, so a replaced video would keep its key and load the
+    # old video's score. Cache lookups use this file instead. The row still
+    # keeps its own options, and scale_direction and resample_test tell the
+    # two variants of one file apart.
     media_path: Path | None = None
     video_info: VideoInfo | None = None
     completed_run: CompletedRun | None = None
     options: VmafOptions = field(default_factory=VmafOptions)
-    # Non-FFmpeg metrics deliberately live outside VmafOptions. The row keeps
-    # one generic selection alongside the existing FFmpeg adapter settings.
+    # The metrics not run by FFmpeg that the row has ticked. They are kept
+    # here, not in VmafOptions, which holds FFmpeg's settings.
     extra_metric_keys: set[str] = field(default_factory=set)
-    # Compute preference is execution-only and must not invalidate scores or
-    # cache entries. GPU is the default; Vship falls back to CPU if unavailable.
+    # Whether each Vship metric runs on the GPU or the CPU. This only says
+    # where it runs, so it must not change a score or its cache entry. GPU is
+    # the default, and Vship falls back to the CPU without a GPU.
     metric_backends: dict[str, str] = field(default_factory=lambda: {
         "ssimulacra2": "gpu", "butteraugli": "gpu",
     })
-    # The display CVVDP models for this row. Part of what a CVVDP score
-    # means, so part of its cache identity; no other metric depends on it.
+    # The display that CVVDP models for this row. It is part of what a CVVDP
+    # score means, so it is part of the score's cache key. No other metric
+    # depends on it.
     cvvdp: CvvdpSettings = field(default_factory=CvvdpSettings)
-    # The CVVDP preset the row was given, if any: only to tell apart presets
-    # with the same display (see matching_preset), never part of a score.
+    # The CVVDP preset the row was given, if any. It only tells apart presets
+    # with the same display (see matching_preset), and is never part of a
+    # score.
     cvvdp_preset: str = ""
-    # CVVDP scores saved for this comparison with other displays, as
-    # [(CvvdpSettings, JOD)]: named in the tooltip of an empty CVVDP cell,
-    # never shown as the row's score.
+    # CVVDP scores saved for this comparison with other displays, as a list
+    # of (CvvdpSettings, JOD). They are named in the tooltip of an empty
+    # CVVDP cell, and never shown as the row's score.
     cvvdp_elsewhere: list = field(default_factory=list)
     analysis_status: RowState | None = None
-    # What the old Status column's tooltip carried: an ffmpeg error, or how
-    # many frames a loaded result holds. Now shown on the file name, which
-    # is the only cell that is always present and always about the row as a
-    # whole.
+    # An FFmpeg error, or how many frames a loaded result holds. It is shown
+    # on the file name, the one cell that is always there and is about the
+    # whole row.
     status_detail: str = ""
     # Why each metric failed on the last run, by key, for its red cell.
     metric_failures: dict[str, str] = field(default_factory=dict)
     # True only for a "Test both" companion row (see
-    # _add_opposite_scale_direction_rows), where options.scale_direction is
-    # set explicitly and unambiguously to whichever direction this row
-    # exists to represent -- unlike a normal row, where it's just whatever
-    # the panel's default happened to be when the row was added, and a
-    # cached/loaded result's own recorded direction is more trustworthy.
+    # _add_opposite_scale_direction_rows). Its options.scale_direction was
+    # set on purpose to the direction the row stands for. On a normal row it
+    # is only the panel's default when the row was added, so the direction
+    # recorded in a cached or loaded result is more trustworthy.
     scale_direction_pinned: bool = False
-    # A stable, hashable token for this row in the Frame Compare tab, used
-    # before it has a result to be identified by. RowData itself cannot
-    # serve: it is a mutable dataclass, so it is unhashable, and the frame
-    # cache keys on this.
+    # A token that names this row in the Video Compare tab before the row has
+    # a result to be named by. The frame cache keys on it. RowData itself
+    # cannot be a key: a mutable dataclass cannot be hashed.
     frame_identity: object = field(default_factory=object)
 
     @property
     def identity_path(self) -> Path:
-        """The path cache identity is taken from -- the real file when this
-        row's own path is a synthetic stand-in."""
+        """The file the cache key is taken from: the real file when the row's
+        own path is a made-up stand-in."""
         return self.media_path if self.media_path is not None else self.path
 
 
 class MainWindow(QMainWindow):
+    """The main window: the Videos, Metric Graphs, Video Compare, Bitrate
+    Viewer and Settings tabs."""
+
     # A newer release than this one (update_check.Release), found by the
     # startup check off the UI thread.
     update_found = Signal(object)
@@ -593,12 +602,10 @@ class MainWindow(QMainWindow):
         self._source_info: VideoInfo | None = None
         self._rows: list[RowData] = []
         self._worker: VmafWorker | None = None
-        # Media probing and cache lookups are separate lanes on purpose.
-        # They used to share one worker slot and one generation counter, so
-        # starting a cache lookup cancelled whatever media probe was running
-        # AND invalidated its results -- while the replacement never probed,
-        # because a cache lookup does not read media info. Rows were left
-        # permanently on "Reading..." with nothing outstanding to fill them.
+        # Don't share one worker and one generation counter between media
+        # probes and cache lookups. A cache lookup then cancels a running
+        # probe and discards its results, and since a lookup reads no media
+        # information, its rows stay on "Reading..." for good.
         self._cache_worker: ProbeWorker | None = None
         self._cache_lookup_paths: list[Path] = []  # the rows the running lookup was asked about
         self._cache_generation = 0
@@ -608,28 +615,27 @@ class MainWindow(QMainWindow):
         self._reference_drop: list[str] = []  # the files a drag over the reference box carries
         self._probe_workers: list[ProbeWorker] = []
         self._source_probe_generation = 0
-        # These track the active run by RowData *identity*, not by table row
-        # index: removing a row mid-run shifts every later index down, which
-        # used to make a finishing job write its result to the wrong row --
-        # or crash with IndexError when the shifted index ran off the end.
+        # These hold the run's RowData objects themselves. Don't hold table
+        # row numbers: removing a row during a run shifts every later row up,
+        # so a finishing job writes its result to the wrong row, or raises
+        # IndexError past the end.
         self._job_rows: list[RowData] = []  # job index -> the row that job belongs to
         self._job_cache_options: list[VmafOptions] = []
         self._job_cvvdp: list[CvvdpSettings] = []
         self._checked_rows_for_run: list[RowData] = []  # rows checked when Run was clicked, incl. already-scored ones
-        # Live per-job figures, keyed by job index. With several videos in
-        # flight the bar can no longer track "the" running job -- there is
-        # more than one -- so it tracks the whole queue instead, which is
-        # also the number a user actually wants while waiting.
+        # Live figures for each job, by job index. Several videos can run at
+        # once, so the progress bar shows the whole queue rather than one
+        # job. That is also the number a user wants while waiting.
         self._job_frames_done: dict[int, int] = {}
         self._job_fps: dict[int, float] = {}
         self._job_decode_status: dict[int, str] = {}
         # The status line's "Reading..." message while it is showing, which
-        # "Ready." replaces (_show_ready): compared as a whole, since in
-        # another language it need not start with any given word.
+        # "Ready." replaces (_show_ready). It is compared as a whole, because
+        # in another language it need not start with any given word.
         self._reading_text = ""
-        # Backend-aware task progress.  This is deliberately separate from
-        # the legacy combined progress value: CPU and perceptual work have
-        # different clocks, and GPU perceptual metrics may be serialized.
+        # The progress of each task of a job, kept apart from the job's
+        # combined progress. CPU metrics and perceptual metrics advance at
+        # different rates, and GPU perceptual metrics may run one at a time.
         self._job_task_progress: dict[int, list[dict[str, object]]] = {}
         self._running_jobs: list[int] = []
         self._finished_jobs: set[int] = set()
@@ -654,32 +660,32 @@ class MainWindow(QMainWindow):
         # been calculating, and a paused run is not.
         self._paused_total = 0.0
         self._paused_since: float | None = None
-        # Progress arrives with every frame a GPU pass scores -- 40 to 60
-        # times a second -- and redrawing the per-video lines on each made
-        # their numbers flicker. Numbers now wait for the
-        # once-a-second tick that also moves "Elapsed"; a line whose content
-        # changes (a video starting, a half waiting, starting, finishing, the
-        # next GPU metric pass) is still redrawn at once.
+        # Progress arrives with every frame a GPU pass scores, 40 to 60 times
+        # a second. Don't redraw the per-video lines on each: their numbers
+        # flicker. Numbers wait for the once-a-second tick that also moves
+        # "Elapsed". A line whose content changes (a video or half waiting,
+        # starting or finishing, or the next GPU metric pass) is redrawn at
+        # once.
         self._job_lines_due: set[int] = set()
-        # The total each video's figures are out of, as reported with them:
-        # not the video's frame count, which a GPU half's passes exceed.
+        # The total each video's figures are out of, as reported with them.
+        # It is not the video's frame count, which a GPU half's passes exceed.
         self._job_progress_total: dict[int, int] = {}
-        # Each half's (run seconds, frames done) lately, by (video, half,
-        # pass): see _pause_free_rates.
+        # Each half's recent (run seconds, frames done), by (video, half,
+        # pass). See _pause_free_rates.
         self._half_samples: dict[tuple, collections.deque] = {}
         self._job_line_shape: dict[int, tuple] = {}
         # A state the run's status line must keep saying while it lasts:
         # "Paused", "Cancelling...", or the closing message. The line is
-        # rebuilt every second (the elapsed time) and on every progress
-        # update, which replaced "Paused." within a second.
+        # rebuilt every second (for the elapsed time) and on every progress
+        # update, which would otherwise replace "Paused." within a second.
         self._run_hold = ""
         self._cache_clear_result: list[int] | None = None
-        # Set once the user has asked to close: background work has been
-        # told to stop and the window closes itself when it actually has.
+        # Set once the user has asked to close. Background work has been told
+        # to stop, and the window closes itself once it has.
         self._closing = False
 
-        # Per-video settings machinery: the Options panel is an inspector for
-        # whichever rows are selected, not one global setting.
+        # Each video's own settings. The Options panel shows and edits the
+        # selected rows' settings; there is no one global setting.
         self._default_options = self._options_from_settings()  # what a newly-added row starts with
         self._default_extra_metric_keys = self._extra_metrics_from_settings()
         self._default_metric_backends = {
@@ -706,17 +712,18 @@ class MainWindow(QMainWindow):
         self._on_table_selection_changed()
 
     def changeEvent(self, event) -> None:
-        # The palette replaced, which comes after the colour scheme's signal:
-        # coloured again then too, as the style sheets resolve palette() from
-        # it and the scheme's signal may have come before it was in place.
+        """Colours the window again when its palette is replaced."""
+        # The palette change comes after the colour scheme's signal. The
+        # style sheets resolve palette() from the palette, and the scheme's
+        # signal may have come before the new palette was in place.
         if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange):
             self._theme_changed()
         super().changeEvent(event)
 
     def _theme_changed(self, *_args) -> None:
-        """What the window colours itself is coloured again, once for each
-        burst of these signals and events. (Not while the window is being
-        built: it sets the flag when done.)"""
+        """Colours again what the window colours itself, once for each burst
+        of these signals and events. Not while the window is being built,
+        which sets the flag when it is done."""
         if not getattr(self, "_theme_refresh_due", True):
             self._theme_refresh_due = True
             QTimer.singleShot(0, self, self._apply_theme_colours)  # not after the window is gone
@@ -763,12 +770,11 @@ class MainWindow(QMainWindow):
         return workers
 
     def closeEvent(self, event) -> None:
-        # Shutdown is asynchronous rather than a blocking wait. A run owns a
-        # live ffmpeg, and a probe owns a live ffprobe that can take many
-        # seconds on a large file; the old code waited a flat five seconds
-        # per worker on the GUI thread and then closed anyway -- destroying
-        # widgets those threads were still posting into, which is a crash and
-        # an orphaned subprocess rather than a slow exit.
+        """Stops the background work, and closes once it has stopped."""
+        # Don't wait on the window's thread and then close anyway. A run owns
+        # a live FFmpeg, and a probe a live ffprobe that can take many seconds
+        # on a large file. Closing while their threads still write into the
+        # widgets crashes the app and leaves the process running.
         if not self._closing:
             self._closing = True
             self.frame_compare_panel.cancel()
@@ -777,9 +783,9 @@ class MainWindow(QMainWindow):
                 worker.cancel()
 
         pending = self._live_workers()
-        # Closing mid-write would lose a cached/saved result or truncate a
-        # graph CSV export. The graph owns a separate serial queue, so both
-        # must drain too.
+        # Closing during a write would lose a cached or saved result, or cut
+        # a graph's CSV export short. The graph has a write queue of its own,
+        # so both queues must finish.
         writes_finished = self._file_writes.wait_until_idle(0.5)
         graph_writes_finished = self.graph_panel.wait_until_file_writes_idle(0.5)
         if pending or not writes_finished or not graph_writes_finished:
@@ -826,6 +832,7 @@ class MainWindow(QMainWindow):
             return
 
         def look() -> None:
+            """Finds which of the videos still exist, off the window's thread."""
             present_reference = reference if reference and Path(reference).is_file() else ""
             present = [path for path in tests if Path(path).is_file()]
             with contextlib.suppress(RuntimeError):  # the window closed meanwhile
@@ -850,14 +857,12 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ UI construction
     def _build_ui(self) -> None:
+        """Builds the window: the FFmpeg warning and the tabs."""
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
 
-        # Banner + its action button live in one row that is actually added
-        # to the layout -- the button used to be built into a throwaway
-        # layout that was never attached, so it never appeared and the
-        # warning was unactionable.
+        # The FFmpeg warning and its button, in one row of the layout.
         banner_row = QHBoxLayout()
         self._ffmpeg_banner = QLabel()
         theme.style(self._ffmpeg_banner, "background: {banner_background}; color: {banner_text}; padding: 6px; "
@@ -871,10 +876,10 @@ class MainWindow(QMainWindow):
         banner_row.addWidget(self._locate_ffmpeg_btn)
         root.addLayout(banner_row)
 
-        # Tabs, not separate windows: the graph lives beside the run that
-        # produced it, its series survive switching away and back, and there
-        # is no second taskbar entry to manage. Video Compare and the
-        # independent Bitrate Viewer sit between Metric Graphs and Settings.
+        # Tabs, not separate windows. The graph stays beside the run that
+        # made it, its series survive switching away and back, and there is
+        # no second taskbar entry. Video Compare and the separate Bitrate
+        # Viewer sit between Metric Graphs and Settings.
         self.tabs = QuietTabWidget()
         root.addWidget(self.tabs, stretch=1)
 
@@ -883,9 +888,9 @@ class MainWindow(QMainWindow):
         videos_layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Vertical)
         videos_layout.addWidget(splitter, stretch=1)
-        # Videos on top, options underneath it (not beside it), so the file
-        # table gets the full window width -- it's the part that grows with
-        # the number of encodes being compared.
+        # The videos on top and the options below them, not beside them, so
+        # the video table gets the window's full width. It is the part that
+        # grows with the number of encodes compared.
         splitter.addWidget(self._build_files_panel())
         splitter.addWidget(self._build_options_panel())
         splitter.addWidget(self._build_run_panel())
@@ -896,9 +901,7 @@ class MainWindow(QMainWindow):
         self.graph_panel.set_preferred_metric(self._settings.graph_metric)
         self.graph_panel.metric_changed.connect(self._on_graph_metric_changed)
         self.tabs.addTab(self.graph_panel, tr("Metric Graphs"))
-        # Opening the tab is enough; pressing a button to populate it was
-        # a leftover from when it was a separate window that had to be
-        # opened explicitly.
+        # Opening the tab fills it; there is no button to press.
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self.frame_compare_panel = FrameComparePanel(
@@ -937,14 +940,15 @@ class MainWindow(QMainWindow):
         }
 
     def _cvvdp_from_settings(self) -> CvvdpSettings:
-        """The CVVDP display a newly added video starts with: the preset
-        chosen in Settings -- the user's own, once they have saved one --
-        or the built-in default. The same for every video, whatever its
+        """The CVVDP display a newly added video starts with. It is the preset
+        chosen in Settings (the user's own, once they have saved one), or else
+        the built-in default. It is the same for every video, whatever its
         format."""
         return default_settings(self._settings.cvvdp_presets, self._settings.cvvdp_default_preset)
 
 
     def _build_settings_panel(self) -> QWidget:
+        """Builds the Settings tab."""
         page = QWidget()
         outer = QVBoxLayout(page)
 
@@ -1086,8 +1090,8 @@ class MainWindow(QMainWindow):
         gpu_box = QGroupBox(tr("GPU metrics"))
         gpu_layout = QVBoxLayout(gpu_box)
         # Which Vship build: Auto unless the user has a reason to pick one.
-        # Vulkan runs on any GPU; CUDA is offered with an NVIDIA GPU and HIP
-        # with an AMD one -- or when already chosen, so a GPU that detection
+        # Vulkan runs on any GPU. CUDA is offered with an NVIDIA GPU and HIP
+        # with an AMD one, or when already chosen, so that a GPU detection
         # missed does not lose the choice.
         self.settings_gpu_backend = QComboBox()
         vendors = getattr(self, "_detected_gpu_vendors", [])
@@ -1154,9 +1158,9 @@ class MainWindow(QMainWindow):
             "immediately, even during playback.")
         )
         self.settings_decoded_videos.currentIndexChanged.connect(self._on_settings_edited)
-        # Dropdown first, at the left edge, with its label beside it -- the
-        # way the check boxes above sit -- rather than a form row that puts
-        # the field wherever the label column ends.
+        # The dropdown first, at the left edge, with its label beside it, as
+        # the check boxes above sit. A form row would put the field wherever
+        # the label column ends.
         decoded_row = QHBoxLayout()
         decoded_row.addWidget(self.settings_decoded_videos)
         decoded_row.addWidget(
@@ -1229,12 +1233,13 @@ class MainWindow(QMainWindow):
         return page  # its tools and saved results filled in when shown (_on_tab_changed)
 
     def _refresh_settings_status(self) -> None:
-        """Re-reads the tools and the cache so the Settings tab reports what
-        is actually there: when it is shown, its folders change or the cache
-        is cleared. The saved results are counted on a thread of their own.
-        Counted on the window's thread when it was built and at every setting
-        changed, they held it at startup and at each tick box -- 0.3 s for a
-        thousand -- and the count went stale as runs saved theirs."""
+        """Reads the tools and the cache again, so that the Settings tab shows
+        what is there. Called when the tab is shown, when its folders change
+        and when the cache is cleared.
+
+        The saved results are counted on a thread of their own. Don't count
+        them on the window's thread: a thousand take 0.3 s, which held the
+        window at startup and at each tick box."""
         tools = check_tools()
         problems = tools.problems
         ok = not problems
@@ -1249,6 +1254,7 @@ class MainWindow(QMainWindow):
         generation = self._cache_count_generation
 
         def count() -> None:
+            """Counts the saved results, off the window's thread."""
             comparisons, size_bytes = result_cache.cache_summary(directory)
             with contextlib.suppress(RuntimeError):  # the window closed meanwhile
                 self._cache_counted.emit((generation, directory, comparisons, size_bytes))
@@ -1256,6 +1262,7 @@ class MainWindow(QMainWindow):
         threading.Thread(target=count, name="cache-count", daemon=True).start()
 
     def _show_cache_summary(self, counted: tuple) -> None:
+        """Shows how many results are saved and their size, unless a newer count was asked for."""
         generation, directory, count, size_bytes = counted
         if generation != self._cache_count_generation:
             return  # counted again since, perhaps in another folder
@@ -1265,6 +1272,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_settings_edited(self, *_args) -> None:
+        """Saves the Settings tab, and acts on a changed FFmpeg or cache folder."""
         before_ffmpeg = self._settings.ffmpeg_dir
         before_cache = self._settings.cache_dir
         self._settings.ffmpeg_dir = self.settings_ffmpeg_edit.text()
@@ -1343,24 +1351,29 @@ class MainWindow(QMainWindow):
             combo.blockSignals(False)
 
     def _on_frame_color_mode_changed(self, mode: str) -> None:
+        """Remembers the colour mode chosen in Video Compare."""
         self._settings.frame_preview_color_mode = mode
         error = self._settings.save()
         if error:
             self.status_label.setText(tr_message(error))
 
     def _pick_directory(self, title: str, edit: QLineEdit) -> None:
+        """Lets the user pick a folder for `edit`, and saves it."""
         directory = QFileDialog.getExistingDirectory(self, title, edit.text())
         if directory:
             edit.setText(directory)
             self._on_settings_edited()
 
     def _on_pick_ffmpeg_dir(self) -> None:
+        """Lets the user pick the folder of ffmpeg.exe."""
         self._pick_directory(tr("Select the folder containing ffmpeg.exe"), self.settings_ffmpeg_edit)
 
     def _on_pick_cache_dir(self) -> None:
+        """Lets the user pick the folder for saved results."""
         self._pick_directory(tr("Where should saved results be kept?"), self.settings_cache_edit)
 
     def _on_pick_export_dir(self) -> None:
+        """Lets the user pick the folder for exports."""
         self._pick_directory(tr("Where should exports be written?"), self.settings_export_edit)
 
     def _on_copy_log(self) -> None:
@@ -1383,13 +1396,14 @@ class MainWindow(QMainWindow):
             ntr("Copied the log to the clipboard ({count} line).", "Copied the log to the clipboard ({count} lines).", lines))
 
     def check_for_updates(self) -> None:
-        """Asks GitHub for the latest release, off the UI thread. Called
-        once, when the app starts (vmaf_app.main) -- never by the window
-        itself, so building one never touches the network."""
+        """Asks GitHub for the latest release, off the window's thread. Called
+        once, when the app starts (vmaf_app.main). The window never calls it
+        itself, so building a window never uses the network."""
         if self._settings.check_for_updates:
             threading.Thread(target=self._ask_for_updates, name="update-check", daemon=True).start()
 
     def _ask_for_updates(self) -> None:
+        """Asks GitHub for the latest release, and offers it when it is newer and not skipped."""
         try:
             release = update_check.latest_release()
         except update_check.UpdateCheckError as error:
@@ -1422,6 +1436,7 @@ class MainWindow(QMainWindow):
         box.setDefaultButton(download)
 
         def answered(_result) -> None:
+            """Acts on the button chosen in the update message."""
             if box.clickedButton() is download:
                 QDesktopServices.openUrl(QUrl(release.page_url))
             elif box.clickedButton() is skip:
@@ -1451,14 +1466,17 @@ class MainWindow(QMainWindow):
         self.settings_status.setText(tr("Log exported to {path}", path=path))
 
     def _on_open_log_dir(self) -> None:
+        """Opens the log folder in the file manager."""
         directory = app_log.log_dir()
         directory.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory)))
 
     def _on_open_cache_dir(self) -> None:
+        """Opens the saved-results folder in the file manager."""
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(result_cache.cache_dir())))
 
     def _on_clear_cache(self) -> None:
+        """Deletes the saved results, after asking."""
         directory = result_cache.cache_dir()
         count, _size_bytes = result_cache.cache_summary(directory)
         if count == 0 and self._file_writes.pending == 0:
@@ -1477,11 +1495,10 @@ class MainWindow(QMainWindow):
         # just finished, its pending store therefore lands before clear_all
         # rather than recreating an entry after the user cleared everything.
         self._cache_clear_result = []
-        # `directory` is the folder the confirmation dialog just named.
-        # Resolving it inside the queued task instead would delete whatever
-        # folder is configured by the time it runs -- so changing the cache
-        # setting between confirming and the queue draining would wipe a
-        # folder the user was never asked about.
+        # `directory` is the folder the confirmation dialog just named. Don't
+        # look the folder up inside the queued task: if the cache setting
+        # changes before the task runs, it deletes a folder the user was never
+        # asked about.
         self._file_writes.submit(
             "clear saved results",
             lambda: self._cache_clear_result.append(
@@ -1491,6 +1508,7 @@ class MainWindow(QMainWindow):
         self.settings_status.setText(tr("Clearing saved results..."))
 
     def _build_files_panel(self) -> QWidget:
+        """Builds the Videos box: the reference, the test-video table and its buttons."""
         files_box = QGroupBox(tr("Videos"))
         self.files_box = files_box
         files_layout = QVBoxLayout(files_box)
@@ -1593,10 +1611,11 @@ class MainWindow(QMainWindow):
         self.distorted_table.itemChanged.connect(self._on_table_item_changed)
         self.distorted_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.distorted_table.customContextMenuRequested.connect(self._on_table_context_menu)
-        # Files dropped from a file manager are added; rows dragged within it
-        # are reordered (FillColumnTable takes both drops and draws where a
-        # dragged row will land). A click on a heading -- not on a metric's
-        # tick box -- sorts by that column; another click reverses it.
+        # Files dropped from a file manager are added, and rows dragged within
+        # the table are reordered. FillColumnTable takes both drops and draws
+        # where a dragged row will land. A click on a heading (not on a
+        # metric's tick box) sorts by that column, and another click reverses
+        # the order.
         self.distorted_table.setDragEnabled(True)
         self.distorted_table.setDragDropMode(QAbstractItemView.DragDrop)
         self.distorted_table.setDropIndicatorShown(False)
@@ -1605,14 +1624,12 @@ class MainWindow(QMainWindow):
         self._sort_column: int | None = None
         self._sort_order = Qt.AscendingOrder
         self.metric_header.sectionClicked.connect(self._on_header_clicked)
-        # All columns are Interactive (drag-resizable), including PATH --
-        # FillColumnTable makes PATH additionally auto-fill whatever space is
-        # left over (see its docstring) instead of sitting at a fixed width
-        # with wasted space beside it. INFO/BITRATE/VMAF are also kept snug to
-        # their actual content automatically (see _set_row_info/
-        # _set_row_vmaf_text) the way ResizeToContents used to look. A
-        # horizontal scrollbar still appears if the columns don't all fit,
-        # rather than squeezing everything down to fit the window.
+        # Every column can be resized by dragging, including PATH.
+        # FillColumnTable also makes PATH fill whatever space is left over
+        # (see its docstring). The INFO, BITRATE and VMAF columns are kept as
+        # wide as their content (see _set_row_info and _set_row_vmaf_text).
+        # When the columns do not all fit, a horizontal scroll bar appears;
+        # the columns are not squeezed to fit the window.
         header = self.distorted_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         # File name and Media info grow with the window, so their headers are
@@ -1624,12 +1641,11 @@ class MainWindow(QMainWindow):
                 head_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         header.setStretchLastSection(False)
         self.distorted_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        # Never narrower than the heading itself needs. "Video bitrate" was
-        # set to 65px and rendered as "'ideo bitrat" -- the widths here are
-        # picked for the values, which are shorter than several of the
-        # headings, and nothing widened the column until a row arrived with
-        # content to measure. An empty table showed a clipped heading, and a
-        # renamed one could clip again silently.
+        # Never narrower than the heading needs. The widths here are chosen
+        # for the values, which are shorter than several headings, and
+        # nothing widens a column until a row brings content to measure.
+        # Without this, an empty table clips its headings: "Video bitrate"
+        # at 65 px showed as "'ideo bitrat".
         starting_widths = {
             COL_CHECK: 28,
             COL_INFO: 150,
@@ -1676,11 +1692,10 @@ class MainWindow(QMainWindow):
         self._best_worst_timer.timeout.connect(self._apply_best_worst)
         self.distorted_table.model().rowsRemoved.connect(self._schedule_best_worst)
 
-        # Frozen during a run, one control at a time rather than by disabling
-        # the whole box: a disabled QGroupBox disables its children, and that
-        # took the video table's scrollbar with it -- so a queue longer than
-        # the window could not be scrolled precisely while it was running,
-        # which is exactly when someone wants to watch it.
+        # Frozen during a run one control at a time. Don't disable the whole
+        # box: a disabled QGroupBox disables its children, the video table's
+        # scroll bar among them, so a long queue cannot be scrolled while it
+        # runs, which is when someone wants to watch it.
         self._file_action_widgets = [
             self.source_browse_btn, add_dist_btn, add_resample_btn,
             remove_dist_btn, self.remove_all_btn,
@@ -1691,6 +1706,7 @@ class MainWindow(QMainWindow):
         return files_box
 
     def _build_options_panel(self) -> QWidget:
+        """Builds the Options panel, which edits the selected rows."""
         # --- per-video options inspector (below the file table) ---
         options_box = QGroupBox(tr("Options"))
         options_layout = QVBoxLayout(options_box)
@@ -1701,11 +1717,10 @@ class MainWindow(QMainWindow):
         self.panel_target_label.setWordWrap(True)
         options_layout.addWidget(self.panel_target_label)
 
-        # No "Metrics to calculate" box here any more: each metric is now
-        # ticked in its own column of the table, on the row it applies to.
-        # A separate panel meant the choice was made in one place and read
-        # back in another, and it could only ever describe the current
-        # selection -- so seeing what four rows were set to took four clicks.
+        # The metrics are ticked in their own columns of the table, on the
+        # row they apply to, not in a box here. A box could only show the
+        # selected rows, so seeing what four rows were set to took four
+        # clicks.
 
         form = QFormLayout()
         performance_box = QGroupBox(tr("Performance"))
@@ -1957,11 +1972,12 @@ class MainWindow(QMainWindow):
         columns.addWidget(performance_box, stretch=1)
         options_layout.addStretch(1)
 
-        # Room for longer words than English's. A field that no longer fits
+        # Room for longer words than English's. A field that does not fit
         # beside its label goes under it, and a dropdown can be narrower than
-        # its longest entry (which it shows in full when opened): in German
-        # the panel needed 1,590 px, more than the window's default 1,280,
-        # and was cut off at the right. In English nothing moves.
+        # its longest entry, which it shows in full when opened. Without
+        # this, the German panel needs 1,590 px, more than the window's
+        # default 1,280, and is cut off at the right. In English nothing
+        # moves.
         for layout in (form, performance_form, metric_options_form):
             layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
         for combo in options_box.findChildren(QComboBox):
@@ -1971,6 +1987,7 @@ class MainWindow(QMainWindow):
         return options_box
 
     def _build_run_panel(self) -> QWidget:
+        """Builds the run buttons, the status line and the per-video progress lines."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
@@ -1992,9 +2009,9 @@ class MainWindow(QMainWindow):
         # CPU is half idle, and the Settings tab is locked during a run.
         cores = os.cpu_count() or 1
         run_row.addSpacing(16)
-        # A checkbox rather than a number: the choice is only ever one or
-        # two (see MAX_PARALLEL_JOBS), and a bare "2" said nothing about
-        # what it was counting.
+        # A check box rather than a number. The choice is only one or two
+        # (see MAX_PARALLEL_JOBS), and a bare "2" does not say what it
+        # counts.
         self.parallel_jobs_check = QCheckBox(
             tr("Calculate CPU metrics for 2 videos in parallel")
         )
@@ -2016,11 +2033,9 @@ class MainWindow(QMainWindow):
         load_btn.clicked.connect(self._on_load_saved_run)
         self.save_btn = save_btn = QPushButton(tr("Save selected results..."))
         save_btn.clicked.connect(self._on_save_selected)
-        # One button, not two. "Plot selected results" claimed to plot a
-        # subset, but opening the tab syncs every completed row into it
-        # (see _sync_graph), so both buttons left exactly the same graph on
-        # screen -- the selection one merely refused to open when nothing
-        # selected had a result.
+        # One button. Opening the tab puts every completed row into the graph
+        # (see _sync_graph), so a button for the selected rows only would
+        # show the same graph.
         self.show_graph_btn = QPushButton(tr("Open metric graphs"))
         self.show_graph_btn.setToolTip(tr("Opens Metric Graphs with the current results and graph settings."))
         self.show_graph_btn.clicked.connect(self._on_show_graph_clicked)
@@ -2048,11 +2063,9 @@ class MainWindow(QMainWindow):
             layout.addWidget(line)
             self.job_progress_labels.append(line)
 
-        # No overall bar: each running video already has one, and a third
-        # bar summarising them was just more to read. The last line is the
-        # one thing those bars cannot say -- when the whole queue ends.
-        # No separate queue line: the ETA rides on the status line above,
-        # which otherwise only said how many videos were running.
+        # No overall bar: each running video has one, and a bar summing them
+        # up is only more to read. The status line above counts the videos
+        # done and in progress (see _update_run_status).
         layout.addStretch(1)
 
         return panel
@@ -2073,8 +2086,8 @@ class MainWindow(QMainWindow):
         self._ffmpeg_banner.setVisible(True)
         self._locate_ffmpeg_btn.setVisible(True)
 
-        # A headless run (tests -- see tests/conftest.py) has nobody to answer
-        # a modal dialog, so it would block forever rather than prompt.
+        # A run with no screen (the tests, see tests/conftest.py) has nobody
+        # to answer a modal dialog, which would wait forever.
         if prompt and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
             answer = QMessageBox.warning(
                 self, tr("ffmpeg not usable"),
@@ -2089,9 +2102,9 @@ class MainWindow(QMainWindow):
         return False
 
     def _on_locate_ffmpeg(self) -> bool:
-        """Asks for ffmpeg.exe itself (not its folder -- a file picker is far
-        less ambiguous), then expects ffprobe alongside it, asking separately
-        only if it isn't there."""
+        """Asks for ffmpeg.exe itself, not its folder, which a file picker
+        makes clearer. Then looks for ffprobe beside it, and asks for it
+        separately only when it is not there."""
         ffmpeg_exe = exe_name("ffmpeg")
         ffprobe_exe = exe_name("ffprobe")
         chosen, _ = QFileDialog.getOpenFileName(
@@ -2140,6 +2153,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ source selection
     def _on_browse_source(self) -> None:
+        """Lets the user pick the reference video."""
         path, _ = QFileDialog.getOpenFileName(self, tr("Select reference video"), self._video_dialog_dir("reference"))
         if not path:
             return
@@ -2176,8 +2190,8 @@ class MainWindow(QMainWindow):
             return  # already being read: editingFinished comes for Enter and again for leaving the box
         path = Path(text)
         if not path.is_file():
-            # Said on Enter only. Leaving the box -- for another program, to
-            # copy the rest of the path, say -- keeps what was typed.
+            # Applied on Enter only. Leaving the box, say for another program
+            # to copy the rest of the path, keeps what was typed.
             if self.source_edit.hasFocus():
                 self.source_edit.setText(self._shown_source_path())
                 QMessageBox.warning(self, tr("No such video"), tr("There is no file at {path}.", path=text))
@@ -2185,6 +2199,7 @@ class MainWindow(QMainWindow):
         self._choose_source(path)
 
     def eventFilter(self, watched, event) -> bool:
+        """Takes a file dropped on the reference box as the new reference."""
         # A file dropped on the reference box replaces the reference; the
         # line edit's own drop would only paste the file's URL in as text.
         if watched is getattr(self, "source_edit", None) and event.type() in (
@@ -2249,6 +2264,8 @@ class MainWindow(QMainWindow):
     def _on_source_probed_if_current(
         self, generation: int, path: Path, info, error: str
     ) -> None:
+        """Uses the reference just read, unless a newer one was chosen; says
+        why when it could not be read."""
         if generation != self._source_probe_generation:
             return
         self._source_reading = None
@@ -2267,19 +2284,18 @@ class MainWindow(QMainWindow):
         self._apply_source_info(path, info)
 
     def _apply_source_info(self, path: Path, info: VideoInfo) -> None:
+        """Makes `path` the reference, and checks every row against it again."""
         self._source_info = info
         self.source_edit.setText(str(path))
         self.source_info_label.setText(
             f"{media_info_string(info)}, {bitrate_string(info)}  ({format_hms(info.duration, decimals=1)})"
         )
-        # A different/newly-picked source might match a previously cached
-        # (source, distorted) pair for rows that are already in the table.
-        # Each of those is a multi-MB JSON parse, so with a few long videos
-        # loaded this froze the window for seconds; it goes to the worker,
-        # which already knows how to load a cached result and report it.
-        # A resolution test is derived from the reference, unlike a distorted
-        # file, which merely gets compared against it -- so it cannot survive
-        # the reference changing underneath it.
+        # A new reference may have cached results with the test videos
+        # already in the table. Each is a JSON file of several MB, so reading
+        # them here holds the window for seconds with a few long videos. The
+        # worker reads them instead. A resolution test is made from the
+        # reference, while a test video is only compared with it, so a
+        # resolution test cannot outlive a change of reference.
         dropped = self._remove_rows_owned_by_the_previous_source()
 
         if self._rows:
@@ -2312,19 +2328,18 @@ class MainWindow(QMainWindow):
     def _remove_rows_owned_by_the_previous_source(self) -> list[str]:
         """Drops resolution-test rows and returns what was removed.
 
-        Such a row has no distorted file of its own: it downscales and
-        re-upscales THE SOURCE, so its synthetic path, its media info, its
-        description and its identity all come from the reference that was
-        selected when it was added. Leaving it in place after the reference
-        changed left a row describing one video while the job would have run
-        against another -- and a target width chosen as a downscale of a
-        3840-wide master is an UPSCALE of a 1280-wide one, which the test was
-        never meant to measure.
+        Such a row has no test video of its own: it scales the reference down
+        and up again. Its made-up path, media information, description and
+        identity all come from the reference selected when it was added. Left
+        in place after the reference changes, the row would describe one
+        video while its job ran on another. A width chosen as a downscale of
+        a 3840-wide master is also an upscale of a 1280-wide one, which the
+        test is not meant to measure.
 
-        Removing them is deliberate rather than migrating them: the target
-        list depends on the new source's width, two migrated rows can
-        collapse onto the same test, and silently rewriting what a row means
-        is worse than saying it is gone.
+        The rows are removed rather than moved to the new reference. The
+        list of widths depends on the new reference's width, two moved rows
+        could become the same test, and quietly changing what a row means is
+        worse than saying it is gone.
         """
         removed: list[str] = []
         curves = []
@@ -2344,19 +2359,22 @@ class MainWindow(QMainWindow):
         return list(reversed(removed))
 
     def _show_reading(self, text: str) -> None:
+        """Shows a "Reading..." message on the status line."""
         self._reading_text = text
         self.status_label.setText(text)
 
     def _show_ready(self) -> None:
-        """Says "Ready." once reading videos or saved results is done -- in
-        place of the "Reading..." message only. Anything else on the status
-        line is a message for the user (a preset saved, results cleared),
-        and a lookup finishing a moment later used to overwrite it."""
+        """Says "Ready." once the videos and saved results have been read,
+        but only in place of the "Reading..." message. Anything else on the
+        status line is a message for the user (a preset saved, results
+        cleared), which a lookup finishing a moment later must not
+        overwrite."""
         text = self.status_label.text()
         if not text or text == self._reading_text:
             self.status_label.setText(tr("Ready."))
 
     def _on_source_probe_finished(self, generation: int, worker: ProbeWorker) -> None:
+        """Lets the reference reader go once it has ended."""
         if worker in self._probe_workers:
             self._probe_workers.remove(worker)
         worker.deleteLater()
@@ -2369,8 +2387,9 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ distorted-file table
     def _add_table_row(self, path: Path) -> int:
-        # Added at the end, so the table is no longer in the order a
-        # heading's sort arrow says.
+        """Adds an empty row for `path` at the end of the table; returns its row number."""
+        # Rows are added at the end, so the table is not in the order a
+        # heading's sort arrow says any more.
         self._clear_sort_indicator()
         row = self.distorted_table.rowCount()
         self.distorted_table.insertRow(row)
@@ -2398,10 +2417,9 @@ class MainWindow(QMainWindow):
             item.setBackground(_NO_BACKGROUND)
             self.distorted_table.setItem(row, col, item)
 
-        # New rows start with a copy of whatever the panel last showed, so
-        # adding several similar files in a row doesn't mean reconfiguring
-        # each one from scratch -- but it's still an independent copy from
-        # this point on, so editing one row never affects another.
+        # New rows start with a copy of what the panel last showed, so that
+        # several similar files need not each be set up from scratch. Each
+        # row has its own copy, so editing one row never changes another.
         self._rows.append(RowData(
             path=path, options=clone_options(self._default_options),
             extra_metric_keys=set(self._default_extra_metric_keys),
@@ -2417,15 +2435,14 @@ class MainWindow(QMainWindow):
     def _set_row_metrics(self, row: int) -> None:
         """Each metric cell shows its score, or a tick box for calculating it.
 
-        A metric that has been measured shows only the number: there is no
-        decision left to make about it, and a tick box beside a finished
-        score invited un-ticking it as though that would undo the
-        measurement. A metric without a score shows a check box instead, in
-        the very column its result will land in, so choosing what to
-        calculate is one click on the row it applies to.
+        A metric that has been measured shows only the number. There is no
+        choice left to make about it, and a tick box beside a score invites
+        unticking it as though that would undo the measurement. A metric
+        without a score shows a tick box in the column its result will go
+        in, so choosing what to calculate is one click on the row.
 
-        Previously calculated metrics survive selection edits -- ticking
-        another metric changes what is requested, not what was measured.
+        Scores already calculated stay when the ticks change: ticking another
+        metric changes what is asked for, not what was measured.
         """
         row_data = self._rows[row]
         run = row_data.completed_run
@@ -2510,6 +2527,7 @@ class MainWindow(QMainWindow):
         self._set_row_scaling(row)
 
     def _on_highlight_toggled(self, on: bool) -> None:
+        """Turns the highlighting of best and worst scores on or off."""
         self._settings.highlight_best_worst = on
         if error := self._settings.save():
             self.status_label.setText(tr_message(error))
@@ -2578,8 +2596,8 @@ class MainWindow(QMainWindow):
         if state is RowState.FAILED:
             colour = _STATE_COLOURS["failed"]
         elif state.finished_not_shown:
-            # Done, cached, and deliberately not displayed -- see
-            # _on_job_finished. Without a mark the row would look untouched.
+            # Done and cached, but on purpose not shown (see
+            # _on_job_finished). Without a mark the row would look untouched.
             colour = _STATE_COLOURS["stale"]
         else:
             theme.foreground(item, None)
@@ -2595,9 +2613,9 @@ class MainWindow(QMainWindow):
         """
         counted = run.identical.get(column)
         if counted is None:
-            # Counted once a run, and in the values' own precision: as
-            # 64-bit copies, at each refresh of the row, they took 80% of
-            # it -- 0.5 ms a metric for a two-hour video.
+            # Counted once a run, in the values' own precision. Don't count
+            # 64-bit copies at each refresh of the row: that took 80% of the
+            # refresh, 0.5 ms a metric for a two-hour video.
             values = run.result.frames.values(_METRIC_COLUMN_BY_INDEX[column].metric.key)
             if values is None:
                 counted = (0, 0)
@@ -2616,11 +2634,10 @@ class MainWindow(QMainWindow):
         )
 
     def _cvvdp_elsewhere_note(self, row_data: RowData) -> str:
-        """For an empty CVVDP cell: the scores saved for other displays. A
-        CVVDP score is only valid for the display it was made for, so a
-        video whose display differs from its earlier run showed no score at
-        all, with no hint that one existed or which display to choose to
-        see it again."""
+        """For an empty CVVDP cell, the scores saved for other displays. A
+        CVVDP score is only valid for the display it was made for, so a video
+        whose display differs from its earlier run shows no score. This tells
+        the user that one exists, and which display shows it again."""
         others = [(settings, score) for settings, score in row_data.cvvdp_elsewhere
                   if not settings.same_as(row_data.cvvdp)]
         if not others:
@@ -2689,25 +2706,23 @@ class MainWindow(QMainWindow):
         return None if crop is None else not crop.is_noop(info.width, info.height)
 
     def _set_row_black_bars(self, row: int, *, probe_failed: bool = False) -> None:
-        """Whether the test video has black bars -- and nothing more.
+        """Whether the test video has black bars, and nothing more.
 
-        The cell used to read like "S TB276 . D none": a per-side pixel
-        breakdown of both videos, in a column barely wide enough for the
-        heading. The question actually being asked of it has two answers,
-        so the cell gives one of those and the pixel counts (and what was
-        cropped off the reference) wait on hover for when the answer is
-        surprising.
+        The question the cell answers has two answers, so the cell shows one
+        of them. The pixel counts, and what was cropped off the reference,
+        are in the tooltip, for when the answer is surprising.
 
-        Auto crop is resolved during a run rather than media probing, and can
-        differ between rows because duration limits are per-row. The table
-        therefore shows a pending state until a result (including a cached or
-        loaded result) supplies the crop boxes that were actually used.
+        Auto crop is worked out during a run, not when the media is read, and
+        can differ between rows because each row has its own duration limits.
+        So the table shows a pending state until a result (a new, cached or
+        loaded one) gives the crops actually used.
         """
         item = self.distorted_table.item(row, COL_BLACK_BARS)
         if item is None:
             return
 
         def show(text: str, tooltip: str, *, muted: bool = False) -> None:
+            """Shows `text` in the cell, with its tooltip."""
             item.setText(text)
             item.setToolTip(tooltip)
             theme.foreground(item, theme.color("dimmed") if muted else None)
@@ -2743,31 +2758,27 @@ class MainWindow(QMainWindow):
             show(tr("Yes") if has_bars else tr("No"), tooltip)
 
     def _resize_mismatch(self, row: int) -> tuple[str, str]:
-        """(short tag, full explanation) for which of the two videos gets
-        resized to match the other, when they differ -- important now that a
-        row can exist for either direction (see "Test both"), so it's not
-        ambiguous which one a given row/result represents.
+        """(short tag, full explanation) saying which of the two videos is
+        resized to match the other, when their sizes differ. A row can stand
+        for either direction (see "Test both"), so this says which one it is.
 
-        Compares the two videos *after* black bars come off, because that is
-        what the run itself compares. A 1920x1080 letterboxed reference and a
-        1920x804 encode of the same film are not a resize at all: they are
-        the same picture, one of them still carrying its bars. Reading the
-        stored heights literally, this column used to announce a downscale
-        that never happens.
+        Compares the two videos after their black bars come off, because
+        that is what the run compares. A 1920x1080 letterboxed reference and
+        a 1920x804 encode of the same film are not a resize at all: they are
+        the same picture, one still with its bars. Don't compare the stored
+        heights: they announce a downscale that never happens.
 
         The short tag goes in its own narrow Scaling column and the full
-        sentence is the tooltip: spelled out inline it made Media info far
-        too wide to scan.
+        sentence in the tooltip. Spelled out in Media info, it made that
+        column far too wide to scan.
 
-        Uses the *actual* crops and direction a completed run used (what
-        really produced its scores, and still right even if the row's
-        settings were edited afterward), falling back to the row's current
-        setting before it's been run -- UNLESS the row is a "Test both"
-        companion, whose direction is fixed and known for certain by
-        construction (see RowData.scale_direction_pinned): a result cached
-        before that field existed loads as SOURCE_TO_TEST regardless of what
-        actually produced it, which is simply wrong for a row that exists
-        only to represent DISTORTED_TO_SOURCE.
+        Uses the crops and direction a completed run actually used, which
+        stay right even if the row's settings are edited afterwards. Before
+        a run, it uses the row's current setting. A "Test both" companion
+        row always uses its own direction, which is fixed when the row is
+        made (see RowData.scale_direction_pinned). Don't trust a cached
+        result's direction for it: a result cached before results recorded
+        the direction loads as SOURCE_TO_TEST, whatever produced it.
         """
         row_data = self._rows[row]
         run = row_data.completed_run
@@ -2826,18 +2837,20 @@ class MainWindow(QMainWindow):
 
     def _fit_columns(self, *columns: int) -> None:
         """Fits `columns` to their contents, once, when the window is next
-        idle. Fitting a column measures every row's cell; done for each row
-        as it was drawn, 300 rows took 90,000 measurements per column."""
+        idle. Fitting a column measures every row's cell. Don't fit for each
+        row as it is drawn: 300 rows then take 90,000 measurements a column."""
         if not self._columns_to_fit:
             QTimer.singleShot(0, self, self._fit_pending_columns)
         self._columns_to_fit.update(columns)
 
     def _fit_pending_columns(self) -> None:
+        """Fits the columns waiting to be fitted to their contents."""
         columns, self._columns_to_fit = self._columns_to_fit, set()
         for column in sorted(columns):
             self.distorted_table.resizeColumnToContents(column)
 
     def _set_row_scaling(self, row: int) -> None:
+        """Shows in a row's Scaling cell which video is resized."""
         item = self.distorted_table.item(row, COL_SCALING)
         if item is None:
             return
@@ -2847,6 +2860,7 @@ class MainWindow(QMainWindow):
         self._fit_columns(COL_SCALING)
 
     def _set_row_info(self, row: int, info: VideoInfo | None, error: str | None = None) -> None:
+        """Shows a row's media information, or why it could not be read."""
         item = self.distorted_table.item(row, COL_INFO)
         scaling_item = self.distorted_table.item(row, COL_SCALING)
         if error:
@@ -2878,6 +2892,7 @@ class MainWindow(QMainWindow):
         self._fit_columns(COL_INFO, COL_BITRATE, COL_SCALING)
 
     def _set_row_vmaf_text(self, row: int, text: str, *, bold: bool = False, color=None) -> None:
+        """Shows `text` in a row's VMAF cell in place of its tick box."""
         item = self.distorted_table.item(row, COL_VMAF)
         # Text in this cell replaces the tick box, the same way a score does:
         # a check indicator beside "Frame 900/1200" reads as something to
@@ -2893,6 +2908,7 @@ class MainWindow(QMainWindow):
         self._fit_columns(COL_VMAF)
 
     def _set_resample_row_info(self, row: int, target: ResampleTarget) -> None:
+        """Shows what a resolution-test row scales the reference to and back."""
         info = self._source_info
         assert info is not None
         down_h = max(2, round(target.width * info.height / info.width / 2) * 2)
@@ -2905,6 +2921,7 @@ class MainWindow(QMainWindow):
         self._fit_columns(COL_INFO, COL_BITRATE)
 
     def _on_add_resample_test(self) -> None:
+        """Adds resolution-test rows for the widths the user picks."""
         if self._source_info is None:
             QMessageBox.warning(self, tr("No reference"), tr("Please select a reference video first."))
             return
@@ -2952,6 +2969,7 @@ class MainWindow(QMainWindow):
         self._try_load_cached_result(row)
 
     def _on_add_distorted(self) -> None:
+        """Lets the user pick test videos to add."""
         paths, _ = QFileDialog.getOpenFileNames(self, tr("Select test videos"), self._video_dialog_dir("test"))
         if not paths:
             return
@@ -2959,6 +2977,7 @@ class MainWindow(QMainWindow):
         self._add_test_videos([Path(p) for p in paths])
 
     def _on_files_dropped_on_table(self, paths: list[str]) -> None:
+        """Adds the files dropped on the table as test videos."""
         if self._run_active or not paths:
             return
         self._remember_video_dir("test", Path(paths[0]))
@@ -2971,10 +2990,9 @@ class MainWindow(QMainWindow):
         if not new_paths:
             return
 
-        # The rows appear immediately; probing each file and loading its
-        # cached result happen on a worker, because together they are a
-        # couple of seconds for a handful of long videos and used to freeze
-        # the window for the whole time.
+        # The rows appear at once. Reading each file and loading its cached
+        # result happen on a worker: for a handful of long videos they take a
+        # couple of seconds, which would hold the window.
         for path in new_paths:
             row = self._add_table_row(path)
             self._set_row_status(row, RowState.READING)
@@ -2984,9 +3002,9 @@ class MainWindow(QMainWindow):
     def _reload_cached_for_all_rows(self) -> None:
         """Re-checks every row against the current source, in the background.
 
-        Called when the reference changes: which cached result applies depends
-        on the (source, distorted) pair, so every row's score may now be
-        different -- or gone.
+        Called when the reference changes. Which cached result applies depends
+        on the pair of reference and test video, so every row's score may now
+        be different, or gone.
         """
         for row in range(len(self._rows)):
             self._set_row_metrics(row)
@@ -3007,6 +3025,7 @@ class MainWindow(QMainWindow):
             self._start_cache_lookup(paths)
 
     def _set_row_status(self, row: int, state: RowState, detail: str = "") -> None:
+        """Sets a row's state and its detail, and shows them."""
         self._rows[row].analysis_status = state
         self._rows[row].status_detail = detail
         self._refresh_row_state(row)
@@ -3014,19 +3033,19 @@ class MainWindow(QMainWindow):
     def _start_media_probe(self, paths: list[Path]) -> None:
         """Reads media info for `paths` in the background.
 
-        Deliberately cancels nothing. A probe answers a question about one
-        file -- its resolution, frame rate, codec -- and that answer stays
-        true whatever the user does next, so there is never a reason to throw
-        one away. Cancelling media probes to start some other piece of
-        background work is what stranded rows on "Reading..." forever.
+        Cancels nothing, on purpose. A probe answers a question about one
+        file (its resolution, frame rate and codec), and the answer stays
+        true whatever the user does next, so there is no reason to throw it
+        away. Don't cancel probes to start other background work: their rows
+        stay on "Reading..." for good.
         """
         if not paths:
             return
         worker = ProbeWorker(paths, None, False, {}, probe_media=True)
         self._probe_workers.append(worker)
-        # No generation guard: the result describes the file, not the state
-        # of the window when it was asked for. _on_probed drops it only if
-        # the row has since been removed.
+        # No generation check: the result describes the file, not the state
+        # of the window when it was asked for. _on_probed drops it only when
+        # the row has been removed since.
         worker.probed.connect(self._on_probed)
         worker.finished_all.connect(lambda w=worker: self._on_probe_finished(worker=w))
         self._show_reading(ntr("Reading {count} video...", "Reading {count} videos...", len(paths)))
@@ -3043,10 +3062,10 @@ class MainWindow(QMainWindow):
         if not paths or self._source_info is None or not self._settings.use_cache:
             return
         # The lookup being replaced may not have answered for all its rows
-        # yet, and its answers are about to be ignored: those rows are asked
-        # again here. Only the changed rows used to be, so editing one row
-        # while saved results were loading left the others empty, to be
-        # recalculated in full by the next run.
+        # yet, and its answers are about to be ignored, so those rows are
+        # asked about again here. Don't ask only about the changed rows:
+        # editing one row while saved results load would leave the others
+        # empty, and the next run would calculate them again in full.
         paths = list(dict.fromkeys([*self._cancel_cache_lookup(), *paths]))
         self._cache_generation += 1
         generation = self._cache_generation
@@ -3084,6 +3103,7 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def _on_other_cvvdp_found(self, generation: int, path: Path, others: list, parameters) -> None:
+        """Keeps the CVVDP scores saved for other displays, for the CVVDP cell's tooltip."""
         if generation != self._cache_generation:
             return
         row = self._row_index_of_path(path)
@@ -3096,12 +3116,12 @@ class MainWindow(QMainWindow):
         """Stops the running cache lookup, if any; returns the rows it was
         asked about, whose answers will now be ignored.
 
-        "Running" lasts until its finished_all signal has been handled
-        (_on_cache_lookup_finished clears _cache_worker), not until its
-        thread exits: answers it already sent can still be queued for this
-        thread, and bumping the generation discards them. Checking only
-        isRunning() lost those rows' saved scores when a row was edited in
-        that window."""
+        A lookup counts as running until its finished_all signal has been
+        handled (_on_cache_lookup_finished clears _cache_worker), not until
+        its thread ends. Answers it already sent can still be queued for this
+        thread, and raising the generation discards them. Don't check only
+        isRunning(): editing a row at that moment loses the saved scores of
+        the rows the lookup was asked about."""
         if self._cache_worker is None:
             return []
         # The thread stays referenced in _probe_workers until it exits;
@@ -3112,6 +3132,7 @@ class MainWindow(QMainWindow):
         return interrupted
 
     def _on_cache_lookup_finished(self, generation: int, worker: ProbeWorker) -> None:
+        """Lets a cache lookup go once it has ended."""
         if worker is self._cache_worker:
             self._cache_worker = None
         self._on_probe_finished(worker=worker)
@@ -3119,6 +3140,7 @@ class MainWindow(QMainWindow):
     def _on_cached_if_current(
         self, generation: int, path: Path, result, label: str, key: str
     ) -> None:
+        """Uses a cached result if it still matches the row and the reference."""
         if generation != self._cache_generation or self._source_info is None:
             return
         row = self._row_index_of_path(path)
@@ -3132,6 +3154,7 @@ class MainWindow(QMainWindow):
             self._on_cached_found(path, result, label)
 
     def _on_probed(self, path: Path, info, error: str) -> None:
+        """Shows the media information read for a row."""
         row = self._row_index_of_path(path)
         if row is None:
             return  # removed while the probe was in flight
@@ -3141,28 +3164,27 @@ class MainWindow(QMainWindow):
             self._set_row_info(row, info)
 
     def _on_cached_found(self, path: Path, result, label: str) -> None:
+        """Shows a cached result on its row."""
         row = self._row_index_of_path(path)
         if row is None:
             return
         row_data = self._rows[row]
         if row_data.completed_run is not None:
             # The cached answer replaces what the row shows when it has
-            # everything the row already shows and more -- ticked or not,
-            # since saved scores show whatever is ticked. It used to have to
-            # hold every requested metric, so one never calculated (CVVDP
-            # ticked beside cached SSIMULACRA2) threw away the rest of it:
-            # the row kept showing VMAF only and SSIMULACRA2/Butteraugli
-            # never appeared.
+            # everything the row shows, and more, ticked or not, since saved
+            # scores are shown whatever is ticked. Don't require every ticked
+            # metric: one never calculated (CVVDP ticked beside a cached
+            # SSIMULACRA2) would throw the rest of the answer away.
             existing = row_data.completed_run.result
             shown = set(existing.metric_results.keys())
             cached = set(result.metric_results.keys())
             if not cached - shown:
                 return
             # Scores the row shows that the answer lacks are kept beside it.
-            # It used to have to hold them all, and a row showing a GPU
-            # SSIMULACRA2 score, then set to CPU, is never given that score
-            # back by the cache: every later answer was thrown away, such as
-            # the saved CVVDP score of a display switched to.
+            # Don't require the answer to hold them all: a row showing a GPU
+            # SSIMULACRA2 score, then set to CPU, never gets that score back
+            # from the cache, so every later answer would be thrown away,
+            # such as the saved CVVDP score of a display switched to.
             if missing := shown - cached:
                 result = copy.copy(result)
                 result.metric_results = MetricResultSet([
@@ -3195,6 +3217,7 @@ class MainWindow(QMainWindow):
     def _on_probe_finished(
         self, generation: int | None = None, worker: ProbeWorker | None = None
     ) -> None:
+        """Lets a reader go, and says "Ready." once none is left."""
         if worker is not None:
             if worker in self._probe_workers:
                 self._probe_workers.remove(worker)
@@ -3202,8 +3225,8 @@ class MainWindow(QMainWindow):
         if any(w.isRunning() for w in self._probe_workers):
             return  # another lane is still reading, so this is not done yet
         if not self._run_active:
-            # A run owns the status line while it lasts; overwriting it with
-            # "Ready." made a live job look finished.
+            # A run owns the status line while it lasts. "Ready." there would
+            # make a running job look finished.
             self._show_ready()
         self._on_table_selection_changed()
 
@@ -3306,22 +3329,24 @@ class MainWindow(QMainWindow):
         self._apply_row_order(present + missing)
 
     def _clear_sort_indicator(self) -> None:
-        """The table is no longer in the order of the heading's arrow."""
+        """Clears the heading's sort arrow, as the table is out of its order."""
         if self._sort_column is None:
             return
         self._sort_column = None
         self.distorted_table.horizontalHeader().setSortIndicatorShown(False)
 
     def _row_index_of_path(self, path: Path) -> int | None:
+        """The table row of `path`, or None."""
         for i, row in enumerate(self._rows):
             if row.path == path:
                 return i
         return None
 
     def _on_remove_distorted(self) -> None:
+        """Removes the selected rows, and their curves from the graph."""
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()}, reverse=True)
-        # The graph goes with them: a curve whose row is gone can no longer
-        # be removed from anywhere.
+        # Their curves leave the graph too: once its row is gone, nothing
+        # else could remove a curve.
         self.graph_panel.remove_by_identities(
             self._rows[row].completed_run.graph_identity for row in rows if self._rows[row].completed_run is not None)
         for row in rows:
@@ -3332,6 +3357,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ persistent result cache
     def _on_remove_all_distorted(self) -> None:
+        """Removes every row, after asking."""
         if not self._rows:
             return
         # Confirmed, because it can discard a lot of completed work from the
@@ -3390,6 +3416,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_table_context_menu(self, pos) -> None:
+        """Shows the table's right-click menu."""
         if self._run_active:
             # Its only entry throws away cached results and re-queues rows,
             # which would fight the run currently using them.
@@ -3404,12 +3431,13 @@ class MainWindow(QMainWindow):
             self._recompute_rows(rows)
 
     def _recompute_rows(self, rows: list[int]) -> None:
-        # Captured now, not when each queued deletion runs -- see
-        # result_cache.store's note on why the folder cannot be resolved late.
+        """Forgets the saved results of `rows`, so the next run calculates them again."""
+        # Taken now, not when each queued deletion runs. See the note in
+        # result_cache.store on why the folder must not be looked up late.
         cache_directory = result_cache.cache_dir()
-        # A cache read already in flight must not put back the exact result
-        # the user just asked to ignore -- but the other rows it was loading
-        # are asked about again below.
+        # A cache read already under way must not put back the result the
+        # user just asked to ignore. The other rows it was loading are asked
+        # about again below.
         interrupted = self._cancel_cache_lookup()
         self._cache_generation += 1
         recomputed = {self._rows[row].path for row in rows}
@@ -3435,10 +3463,9 @@ class MainWindow(QMainWindow):
                         cache_directory,
                     ),
                 )
-            # Refreshes the resize-mismatch note (Info column) back to the
-            # row's *current* settings -- without this it kept showing
-            # whatever the just-cleared run had actually used until the next
-            # run finished, which is stale/misleading in between.
+            # Shows the resize note (Info column) for the row's current
+            # settings again. Without this it would show what the cleared
+            # run used until the next run finishes.
             if row_data.video_info is not None and row_data.options.resample_test is None:
                 self._set_row_info(row, row_data.video_info)
         self.status_label.setText(
@@ -3468,14 +3495,14 @@ class MainWindow(QMainWindow):
             if row_data.options.resample_test is not None:
                 continue  # scale direction doesn't apply to a resolution round-trip test row
             if row_data.scale_direction_pinned:
-                # Already a companion row -- the row it was created from is
-                # its opposite direction, so the pair is complete. Without
-                # this, "Test both" on a companion produced a redundant
-                # third row named "x [upscale-...] [downscale-...]".
+                # Already a companion row: the row it was made from is the
+                # other direction, so the pair is complete. Without this,
+                # "Test both" on a companion adds a needless third row named
+                # "x [upscale-...] [downscale-...]".
                 continue
             info = row_data.video_info
             if info is None or (info.width, info.height) == (self._source_info.width, self._source_info.height):
-                continue  # no probed info yet, or resolutions already match -- both directions are equivalent
+                continue  # no media info yet, or the same resolution, so both directions are alike
 
             opposite = (
                 ScaleDirection.DISTORTED_TO_SOURCE
@@ -3491,10 +3518,10 @@ class MainWindow(QMainWindow):
             new_row_data.options = clone_options(row_data.options)
             new_row_data.options.scale_direction = opposite
             # The same comparison in the other direction: the same metric
-            # ticks, GPU/CPU choices and CVVDP display. It used to take the
-            # defaults for the ticks and choices, so a video set to CPU
-            # SSIMULACRA2 with CVVDP ticked got a companion without CVVDP
-            # and with SSIMULACRA2 on the GPU.
+            # ticks, GPU/CPU choices and CVVDP display. Don't take the
+            # defaults: a video set to CPU SSIMULACRA2 with CVVDP ticked
+            # would get a companion without CVVDP and with SSIMULACRA2 on
+            # the GPU.
             new_row_data.extra_metric_keys = set(row_data.extra_metric_keys)
             new_row_data.metric_backends = dict(row_data.metric_backends)
             new_row_data.cvvdp = row_data.cvvdp
@@ -3529,6 +3556,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ per-video settings panel
     def _on_table_selection_changed(self) -> None:
+        """Shows the selected rows' options in the Options panel."""
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
         self._panel_target_rows = rows
 
@@ -3550,11 +3578,10 @@ class MainWindow(QMainWindow):
                 self._syncing_panel = False
             return
 
-        # A run owns these settings until it finishes. This is reached from
-        # background completions as well as from the user clicking a row --
-        # a probe finishing mid-run used to re-enable the whole panel, and
-        # anything changed there was then attached to a result computed with
-        # the previous settings.
+        # A run owns these settings until it finishes. This is reached when
+        # background work finishes as well as when the user clicks a row.
+        # Don't enable the panel during a run: a change made there would be
+        # attached to a result calculated with the previous settings.
         self.options_box.setEnabled(not self._run_active)
         if len(rows) == 1:
             self.panel_target_label.setText(tr("Editing settings for: {name}", name=self._rows[rows[0]].path.name))
@@ -3687,6 +3714,7 @@ class MainWindow(QMainWindow):
         self.vmaf_backend_combo.setCurrentIndex(0 if on_gpu and self._vmaf_gpu_possible else 1)
 
     def _read_panel_options(self) -> VmafOptions:
+        """The options the panel shows, as VmafOptions."""
         extra_features = [
             metric.ffmpeg_binding.libvmaf_feature
             for metric in FRAME_METRICS
@@ -3737,21 +3765,23 @@ class MainWindow(QMainWindow):
         )
 
     def _default_metric_ticked(self, column: int) -> bool:
-        """Whether new rows start with this metric ticked -- the header's
-        tick when no row is selected. SSIMULACRA2, Butteraugli and CVVDP
-        live outside VmafOptions, so reading only the options showed their
-        header unticked even with the metric on by default, and the first
-        header click did nothing visible."""
+        """Whether new rows start with this metric ticked, which is the
+        heading's tick when no row is selected. SSIMULACRA2, Butteraugli and
+        CVVDP are not in VmafOptions. Don't read only the options: their
+        headings then show unticked even when the metric is on by default,
+        and the first click on the heading does nothing visible."""
         key = _METRIC_COLUMN_BY_INDEX[column].key
         return self._metric_enabled(self._default_options, column) or key in self._default_extra_metric_keys
 
     @staticmethod
     def _metric_enabled(options: VmafOptions, column: int) -> bool:
+        """Whether `options` ticks the FFmpeg metric in `column`."""
         metric = _METRIC_COLUMN_BY_INDEX[column].key
         return metric_definition(metric).ffmpeg_binding is not None and options.metric_enabled(metric)
 
     @staticmethod
     def _set_metric_option(options: VmafOptions, column: int, checked: bool) -> None:
+        """Ticks or unticks the FFmpeg metric in `column` in `options`."""
         metric = _METRIC_COLUMN_BY_INDEX[column].key
         if metric_definition(metric).ffmpeg_binding is None:
             raise ValueError(f"{metric} is not an FFmpeg option")
@@ -3760,12 +3790,12 @@ class MainWindow(QMainWindow):
     def _confirm_long_cpu_perceptual(self, job_rows: list[RowData]) -> bool:
         """Asks before CPU SSIMULACRA2/Butteraugli on videos over ten minutes.
 
-        The CPU tools score one still-image pair at a time, 1-2 s per tool
-        for a 4K pair: days for a film. Only metrics this run will actually
-        calculate count -- one already cached is not rerun.
+        The CPU tools score one pair of still images at a time, 1-2 s per
+        tool for a 4K pair, which is days for a film. Only metrics this run
+        will calculate count; one already cached is not run again.
 
-        A metric set to GPU counts too when no supported GPU was found: it
-        will run on the CPU just the same, and used to do so without a word.
+        A metric set to GPU counts too when no supported GPU was found,
+        because it runs on the CPU just the same.
         """
         lines = []
         gpu_missing: bool | None = None  # probed once, and only if needed
@@ -3830,9 +3860,9 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _gpu_can_score(key: str) -> bool:
-        """Whether SSIMULACRA2/Butteraugli set to GPU is calculated on the GPU
-        here -- not where the build scores it wrongly
-        (perceptual_vship.SCORED_WRONGLY), which calculates it on the CPU."""
+        """Whether SSIMULACRA2 or Butteraugli set to GPU is calculated on the
+        GPU here. Where the Vship build scores it wrongly
+        (perceptual_vship.SCORED_WRONGLY), it is calculated on the CPU."""
         return perceptual_vship.gpu_can_score(key)
 
     @staticmethod
@@ -3863,15 +3893,14 @@ class MainWindow(QMainWindow):
     def _metric_unavailable_reason(row_data: RowData, key: str) -> str | None:
         """Why this row cannot produce `key`, for its "n/a" cell; None if it can.
 
-        The app feeds neither perceptual path (Vship on the GPU, the libjxl
-        tools on the CPU) a resolution round-trip test, which derives both
-        sides from the source at run time. Requesting SSIMULACRA2/Butteraugli on such a row failed
-        the whole job -- VMAF included -- with "do not support resolution
-        round-trip tests yet".
+        Neither perceptual route (Vship on the GPU, the libjxl tools on the
+        CPU) takes a resolution round-trip test, which makes both of its
+        videos from the reference during the run. Asked for SSIMULACRA2 or
+        Butteraugli, such a row fails the whole job, VMAF included.
 
-        CVVDP also needs every frame (it judges each one together with the
-        frames before it) and a supported GPU (it has no CPU implementation
-        here).
+        CVVDP also needs every frame, as it judges each one together with
+        the frames before it, and a supported GPU, as the app has no CPU
+        version of it.
         """
         label = metric_definition(key).label
         if row_data.options.resample_test is not None and metric_definition(key).backend_id == "perceptual":
@@ -3888,15 +3917,18 @@ class MainWindow(QMainWindow):
 
     @classmethod
     def _row_metric_enabled(cls, row_data: RowData, column: int) -> bool:
+        """Whether a run of the row calculates the metric in `column`."""
         key = _METRIC_COLUMN_BY_INDEX[column].key
         return key in cls._selected_metrics(row_data)
 
     # ------------------------------------------------------ metrics picker
     def _apply_metric_visibility(self) -> None:
+        """Hides the hidden metrics' columns and shows the rest."""
         for item in _METRIC_COLUMNS:
             self.distorted_table.setColumnHidden(item.column, item.key in self._hidden_metrics)
 
     def _show_metrics_menu(self, position) -> None:
+        """Shows the menu that hides and shows metric columns."""
         if self._run_active:
             return
         menu = _StayOpenMenu(self)
@@ -3917,6 +3949,7 @@ class MainWindow(QMainWindow):
         menu.exec(position)
 
     def _on_metric_visibility_toggled(self, key: str, shown: bool, menu: QMenu | None = None) -> None:
+        """Hides or shows a metric's column, keeping at least one shown, and saves the choice."""
         if shown:
             self._hidden_metrics.discard(key)
         else:
@@ -3990,10 +4023,10 @@ class MainWindow(QMainWindow):
     def _on_table_item_changed(self, item) -> None:
         """A metric tick box in the table was clicked.
 
-        Applies to every selected row when the clicked row is one of them,
-        so ticking PSNR across a selection is still a single click -- and to
-        that row alone otherwise, which is what clicking a row you had not
-        selected plainly means.
+        Applies to every selected row when the clicked row is one of them, so
+        ticking PSNR across a selection is one click. Otherwise it applies to
+        the clicked row alone, which is what clicking a row that is not
+        selected means.
         """
         if self._syncing_table:
             return
@@ -4040,9 +4073,9 @@ class MainWindow(QMainWindow):
                                            self._gpu_can_score)
 
     def _backend_note(self, row_data: RowData, key: str, metric) -> str:
-        """Tooltip text for a SSIMULACRA2/Butteraugli score produced the
-        other way from the row's GPU/CPU choice -- the rare case marked
-        "(CPU)"/"(GPU)" in the cell. A score produced the chosen way needs
+        """Tooltip text for a SSIMULACRA2 or Butteraugli score calculated on
+        the other device than the row's GPU/CPU choice, the rare case marked
+        "(CPU)" or "(GPU)" in the cell. A score calculated where chosen needs
         no note: nearly all of them are GPU scores on GPU rows."""
         choice = row_data.metric_backends.get(key)
         if choice is None or metric is None or self._backend_matches(row_data, key, metric):
@@ -4053,6 +4086,7 @@ class MainWindow(QMainWindow):
             "the next run recalculates it on the {wanted}.", produced=produced, wanted=wanted))
 
     def _has_requested_results(self, row_data: RowData) -> bool:
+        """Whether the row already has a result for every metric it asks for."""
         requested = self._requested_metrics(row_data)
         return bool(requested) and set(self._reusable_results(row_data).keys()) == set(requested)
 
@@ -4095,6 +4129,7 @@ class MainWindow(QMainWindow):
         }.get(field_name, (field_name,))
 
         def apply(target: VmafOptions) -> bool:
+            """Copies the panel's fields into `target`; returns whether any changed."""
             changed = False
             for name in fields:
                 value = getattr(panel, name)
@@ -4206,21 +4241,24 @@ class MainWindow(QMainWindow):
         self._sync_frame_compare()
 
     def _on_cvvdp_preset_chosen(self, index: int) -> None:
+        """Gives the selected rows the display of the CVVDP preset chosen."""
         if self._syncing_panel:
             return
         name = self.cvvdp_preset_combo.itemData(index)
         preset = preset_named(name, self._settings.cvvdp_presets) if name else None
         if preset is not None:
-            # The display only: "Scale the video to fill the display" is
-            # the video's own setting, and choosing a built-in preset used to
-            # switch it off without a word.
+            # The display only. "Scale the video to fill the display" is the
+            # video's own setting, which choosing a built-in preset must not
+            # switch off.
             self._apply_cvvdp(lambda old: replace(old, display=preset.settings.display),
                               preset_name=preset.name)
 
     def _on_cvvdp_resize_toggled(self, checked: bool) -> None:
+        """Sets "Scale the video to fill the display" on the selected rows."""
         self._apply_cvvdp(lambda old: replace(old, resize_to_display=checked))
 
     def _cvvdp_preset_names(self) -> frozenset[str]:
+        """The names of every CVVDP preset, built-in and saved."""
         return frozenset(preset.name for preset in cvvdp_presets(self._settings.cvvdp_presets))
 
     def _on_cvvdp_add_preset(self) -> None:
@@ -4258,22 +4296,22 @@ class MainWindow(QMainWindow):
 
     def _save_cvvdp_preset(self, dialog: CvvdpDisplayDialog, settings: CvvdpSettings,
                            replacing: str | None, apply_to_rows: bool = True) -> None:
-        """Saves the dialog's display as a user preset -- replacing (and so
-        renaming) the preset `replacing` if given -- and, from the display
-        editor, gives it to the selected rows. A new preset becomes the
-        default for new videos; a renamed default stays the default under
+        """Saves the dialog's display as a user preset, and from the display
+        editor gives it to the selected rows. When `replacing` is given, the
+        new preset replaces it, and so renames it. A new preset becomes the
+        default for new videos, and a renamed default stays the default under
         its new name.
 
-        "Add preset..." does not touch the rows (apply_to_rows=False):
-        making a preset is not choosing it, and applying it there dropped
-        the selected video's CVVDP score.
+        "Add preset..." does not change the rows (apply_to_rows=False).
+        Making a preset is not choosing it, and applying it would drop the
+        selected video's CVVDP score.
         """
         name = dialog.preset_name()
         saved = CvvdpSettings(dialog.display())  # a preset is a display, not the resize choice
         presets = self._settings.cvvdp_presets
         # The other videos using the preset being replaced, found before it
-        # changes. Only the selected ones used to be updated: the rest were
-        # left with the old values and shown as "Custom", unasked.
+        # changes. Don't update only the selected ones: the rest would keep
+        # the old values and show as "Custom", unasked.
         others = [] if replacing is None or not apply_to_rows else [
             row for row, row_data in enumerate(self._rows)
             if row not in self._panel_target_rows
@@ -4325,6 +4363,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText(tr_message(error) if error else done)
 
     def _on_cvvdp_delete_preset(self) -> None:
+        """Deletes the user's chosen CVVDP preset, after asking."""
         name = self.cvvdp_preset_combo.currentData()
         preset = preset_named(name, self._settings.cvvdp_presets) if name else None
         if preset is None or preset.builtin:
@@ -4346,13 +4385,14 @@ class MainWindow(QMainWindow):
         self.status_label.setText(tr_message(error) if error else tr('Deleted the CVVDP preset "{name}".', name=name))
 
     def _on_scale_direction_combo_changed(self, index: int) -> None:
+        """Sets which video the selected rows resize, or adds the other direction for "Test both"."""
         if self._syncing_panel:
             return
         if index == 2:
-            # "Test both" isn't a real per-row value (ScaleDirection only has
-            # the two actual states) -- it's a one-shot action that adds a
-            # sibling row for the other direction, leaving this row's own
-            # direction untouched. Revert the combo to reflect that.
+            # "Test both" is not a value a row can have (ScaleDirection has
+            # only the two directions). It is an action that adds a row for
+            # the other direction and leaves this row's direction as it is,
+            # so the dropdown goes back to that direction.
             self._add_opposite_scale_direction_rows(self._panel_target_rows)
             if self._panel_target_rows:
                 self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
@@ -4360,6 +4400,7 @@ class MainWindow(QMainWindow):
         self._on_panel_field_edited("scale_direction")
 
     def _on_model_changed(self, index: int) -> None:
+        """Sets the selected rows' VMAF model, asking for the file of a custom one."""
         if self._syncing_panel:
             return
         if _MODEL_CHOICES[index][1] == CUSTOM_MODEL_CHOICE:
@@ -4373,6 +4414,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ run
     def _checked_rows(self) -> list[int]:
+        """The numbers of the ticked rows."""
         rows = []
         for row in range(self.distorted_table.rowCount()):
             if self.distorted_table.item(row, COL_CHECK).checkState() == Qt.Checked:
@@ -4380,6 +4422,7 @@ class MainWindow(QMainWindow):
         return rows
 
     def _on_run_clicked(self) -> None:
+        """Starts a run of the ticked rows."""
         if self._worker is not None and self._worker.isRunning():
             return
         if self._source_probe_worker is not None and self._source_probe_worker.isRunning():
@@ -4399,10 +4442,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("No metrics selected"), tr("Select at least one metric for every checked video, or uncheck videos you do not want to calculate."))
             return
 
-        # Checking a row you already have a score for (e.g. it was checked
-        # before you added more files) shouldn't silently recompute it --
-        # skip rows with every requested metric. Right-click to explicitly
-        # recalculate; merely rechecking a row never forces a redo.
+        # A ticked row that already has a score (say it was ticked before
+        # more files were added) is not calculated again: rows with every
+        # requested metric are skipped. Recalculating is on the right-click
+        # menu; ticking a row again never forces it.
         already_scored_rows = [r for r in checked_rows if self._has_requested_results(self._rows[r])]
         rows_to_run = [r for r in checked_rows if not self._has_requested_results(self._rows[r])]
 
@@ -4433,10 +4476,10 @@ class MainWindow(QMainWindow):
             try:
                 if row_data.options.resample_test is None:
                     validate_video_pair(self._source_info, dist_info, row_data.options)
-                # Sized by what the run will actually compare, not by the
-                # distorted file's own resolution -- one side is scaled to
-                # the other before libvmaf sees it. The runner re-resolves
-                # this after auto-crop, which it cannot know here.
+                # Sized by what the run will compare, not by the test video's
+                # own resolution, because one side is scaled to the other
+                # before libvmaf sees it. The runner works this out again
+                # after auto crop, which cannot be known here.
                 if row_data.options.resample_test is not None:
                     analysis_size = resample_analysis_dimensions(self._source_info, None)
                 else:
@@ -4518,14 +4561,13 @@ class MainWindow(QMainWindow):
         self._worker.start()
 
     def _confirm_skipping(self, skipped: list[tuple[RowData, str]], others: bool) -> bool:
-        """Names every checked video that cannot be compared with the
-        reference and why, at once, and asks whether to calculate the rest;
-        each is marked failed with its reason.
+        """Names, all at once, every ticked video that cannot be compared with
+        the reference and why, and asks whether to calculate the rest. Each
+        such video is marked failed with its reason.
 
-        The first such video used to stop the whole run with "Invalid
-        options" and its reason alone: the videos that could be compared
-        were not calculated, and the next problem showed only on the next
-        try."""
+        Don't stop the whole run at the first such video: the videos that
+        can be compared are then not calculated, and the next problem shows
+        only on the next try."""
         for row_data, why in skipped:
             row = self._row_index_of(row_data)
             if row is not None:
@@ -4572,6 +4614,7 @@ class MainWindow(QMainWindow):
         return MAX_PARALLEL_JOBS if self.parallel_jobs_check.isChecked() else 1
 
     def _on_graph_metric_changed(self, metric: str) -> None:
+        """Remembers the metric chosen in the graph."""
         self._settings.graph_metric = metric
         self._settings.save()
 
@@ -4589,6 +4632,7 @@ class MainWindow(QMainWindow):
             self._worker.set_parallel_jobs(count)
 
     def _on_cancel_clicked(self) -> None:
+        """Cancels the run."""
         if self._worker is not None:
             self._worker.cancel()
             if not self._closing:
@@ -4596,6 +4640,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(tr("Cancelling..."))
 
     def _on_pause_clicked(self) -> None:
+        """Pauses or resumes the run."""
         if self._worker is None:
             return
         if self.pause_btn.isChecked():
@@ -4617,6 +4662,7 @@ class MainWindow(QMainWindow):
             self._update_run_status()
 
     def _on_job_started(self, index: int, label: str) -> None:
+        """Marks a starting job's row, and gives the job a progress line."""
         row = self._row_index_of(self._job_rows[index])
         if row is not None:
             self._set_row_status(row, RowState.CALCULATING)
@@ -4651,9 +4697,9 @@ class MainWindow(QMainWindow):
     def _arrange_job_lines(self) -> None:
         """The videos in progress, one line each, in list order.
 
-        A video used to take the first free line, so a later video could
-        sit above an earlier one and the lines changed places as videos
-        finished; and a reused line kept the previous video's tooltip."""
+        Don't give a video the first free line: a later video can then sit
+        above an earlier one, the lines change places as videos finish, and
+        a reused line keeps the previous video's tooltip."""
         order = sorted(self._job_line_text)[:len(self.job_progress_labels)]
         self._job_line_slot = {index: slot for slot, index in enumerate(order)}
         for slot, line in enumerate(self.job_progress_labels):
@@ -4678,6 +4724,7 @@ class MainWindow(QMainWindow):
         self._update_run_status()
 
     def _job_label(self, index: int) -> str:
+        """The name a job is shown with: its file name without the extension."""
         if 0 <= index < len(self._job_rows):
             return self._job_rows[index].path.stem
         return tr("video {number}", number=index + 1)
@@ -4685,16 +4732,16 @@ class MainWindow(QMainWindow):
     def _update_run_status(self) -> None:
         """How much is running, and for how long.
 
-        There is no queue ETA: it was never right for long. The videos'
-        metrics run at very different speeds, in a CPU queue and a GPU queue
-        that overlap, and a video not started has no speed of its own, so
-        it swung by minutes and could not be made accurate. Each video's own
-        time remaining, on its line, is measured.
+        There is no time left for the whole queue, because it cannot be made
+        accurate. The videos' metrics run at very different speeds, in a CPU
+        queue and a GPU queue that overlap, and a video not started has no
+        speed of its own, so such an estimate swings by minutes. Each video's
+        own time left, on its line, is measured.
 
-        Deliberately nameless: every running video has its own line directly
-        below carrying its name, percentage, rate and time left, so listing
-        the names here said the same thing twice -- and with two long file
-        names it was the longest line on screen for no information.
+        Names no videos, on purpose. Every running video has its own line
+        just below with its name, percentage, rate and time left. Names here
+        would say the same thing twice, and with two long file names this
+        would be the longest line on screen.
         """
         if self._run_hold and self._run_hold != _PAUSED:
             self.status_label.setText(self._run_hold)
@@ -4723,9 +4770,8 @@ class MainWindow(QMainWindow):
     def _run_end_message(self) -> str:
         """How the run ended and how long it took, e.g. "Finished in
         2:29:51: 1 video failed, 1 with some metrics failed (hover over
-        their names for why)." It used to be "Done." -- the time gone with
-        the elapsed figure -- or "Finished with N failed video(s).", which
-        counted a video with one failed metric among scored ones as failed."""
+        their names for why)." A video with some metrics failed and the rest
+        scored is counted apart from a failed video."""
         elapsed = self._run_elapsed()
         took = format_hms(elapsed) if elapsed is not None else None
         if self._run_was_cancelled:
@@ -4746,12 +4792,10 @@ class MainWindow(QMainWindow):
     def _run_summary(self, running: list[int], total: int) -> str:
         """The queue in counts, e.g. "3 videos: 1 done, 2 in progress".
 
-        It used to be "Running 3 of 3" for one video in progress -- its
-        position in the queue -- but "Running 2 of 3 together" for two, a
-        count; and "in progress" is what a video waiting for the GPU while
-        its CPU metrics are done is, not "running". Videos skipped because
-        they were already scored are counted here too: the message saying
-        so at the start was replaced within a second.
+        "In progress", not "running": a video whose CPU metrics are done
+        while it waits for the GPU is in progress. Videos skipped because
+        they were already scored are counted here too, because the message
+        saying so at the start is replaced within a second.
         """
         done = len(self._finished_jobs)
         queued = max(0, total - done - len(running))
@@ -4770,15 +4814,16 @@ class MainWindow(QMainWindow):
         return summary
 
     def _pause_free_rates(self, index: int, snapshots: list[dict[str, object]]) -> None:
-        """Each running half's rate as frames done over the run's own clock,
-        which leaves pauses out (_run_elapsed), lately: the last
-        _RATE_WINDOW_SECONDS of it, once there are _RATE_MIN_SECONDS.
+        """Each running half's recent rate: frames done over the run's own
+        clock, which leaves pauses out (_run_elapsed). It covers the last
+        _RATE_WINDOW_SECONDS, once there are _RATE_MIN_SECONDS.
 
-        The halves report an average from their start -- FFmpeg its own fps,
-        Vship's passes theirs -- and a pause counted in it: after a 4-second
-        pause "19.5 fps, 0:00:09 remaining" became "9.6 fps, 0:00:16
-        remaining" and took most of the half to come back. A pass of a GPU
-        half, or a retry that starts its count over, is measured afresh."""
+        Don't use the rate the halves report. It is an average from their
+        start (FFmpeg's own fps, and Vship's passes' own) that counts pauses:
+        after a 4-second pause, "19.5 fps, 0:00:09 remaining" became "9.6
+        fps, 0:00:16 remaining" and took most of the half to recover. A pass
+        of a GPU half, or a retry that starts its count over, is measured
+        afresh."""
         now = self._run_elapsed()
         if now is None:
             return
@@ -4821,6 +4866,7 @@ class MainWindow(QMainWindow):
         self._update_run_status()
 
     def _render_job_progress(self, index: int) -> None:
+        """Draws a job's progress line from its latest figures."""
         if index not in self._job_line_text:
             return
         snapshots = self._job_task_progress.get(index, ())
@@ -4846,9 +4892,10 @@ class MainWindow(QMainWindow):
         self._set_job_line(index, f"{self._job_label(index)} — " + "   ·   ".join(parts), tooltip)
 
     def _on_job_progress(self, index: int, current: int, total: int, fps: float) -> None:
-        # Live progress (queued/starting/frame N of M/paused) belongs on the
-        # video's line above -- its rate and time remaining -- not the VMAF
-        # column, which is for the final score.
+        """Takes a job's progress report, to show at the next tick."""
+        # Live progress (queued, starting, frame N of M, paused) goes on the
+        # video's line above, with its rate and time left. The VMAF column
+        # is for the final score.
         self._job_frames_done[index] = current
         self._job_fps[index] = fps
         self._job_progress_total[index] = total
@@ -4862,11 +4909,10 @@ class MainWindow(QMainWindow):
     def _on_job_status(self, index: int, message: str) -> None:  # message: often a core.status.Status
         """Phase messages belong to the video they came from.
 
-        Putting them all in the one status line meant that with two videos
-        running, whichever lane spoke last owned the label -- so "Detecting
-        black bars..." or a GPU-decode fallback notice appeared with no way
-        to tell which file it was about, and it erased the line naming what
-        was running.
+        Don't put them all on the one status line. With two videos running,
+        whichever spoke last would own it, so "Detecting black bars..." or a
+        GPU decoding fallback notice would not say which file it was about,
+        and would erase the line saying what was running.
         """
         if index in self._job_line_text:
             # The runner sends the active plan on each attempt, including
@@ -4882,7 +4928,7 @@ class MainWindow(QMainWindow):
             else:
                 self._set_job_line(
                     index, f"{self._job_label(index)} — {tr_message(message.replace('distorted', 'test video'))}")
-                # The line no longer shows figures: the next ones show at once.
+                # The line shows no figures now, so the next ones show at once.
                 self._job_line_shape.pop(index, None)
         self._update_run_status()
 
@@ -4892,10 +4938,10 @@ class MainWindow(QMainWindow):
         return decoder_text(plans, source_only=row is not None and row.options.resample_test is not None)
 
     def _row_index_of(self, row_data: RowData) -> int | None:
-        """The table row this RowData currently sits at, or None if it was
-        removed while the run was in flight. Compared by identity, not `==`:
-        two different rows can be field-equal (e.g. the same file added
-        twice before probing), and list.index() would find the wrong one."""
+        """The table row this RowData is at now, or None if it was removed
+        during the run. Compared by identity, not `==`: two different rows
+        can have equal fields (the same file added twice before it was read),
+        and list.index() would find the wrong one."""
         for i, rd in enumerate(self._rows):
             if rd is row_data:
                 return i
@@ -4903,9 +4949,8 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _failed_metric_tooltip(row_data: RowData, key: str) -> str:
-        """What a metric's red Failed cell says: why it failed. Every failed
-        cell said only "This metric failed on the last run" -- the reason
-        was on the file name's tooltip, one text for all the row's metrics."""
+        """What a metric's red Failed cell says, which is why that metric
+        failed."""
         reason = row_data.metric_failures.get(key)
         if reason is None and row_data.analysis_status is RowState.FAILED:
             reason = row_data.status_detail.split("\n\n", 1)[0]  # the whole video failed: its reason
@@ -4915,20 +4960,21 @@ class MainWindow(QMainWindow):
                 "\nThe full details are in the log (Settings > Storage > Log files)."))
 
     def _on_result_updated(self, index: int, result) -> None:
-        """A video's result so far -- one of its halves, or one GPU metric,
-        done while the rest runs on: saved, and shown in the table, the
-        graph and Video Compare now. Until now nothing of a video was kept
-        before all of it was done: a Butteraugli score waited hours for the
-        video's VMAF, and closing the app or a crash in between lost it."""
+        """Saves a video's result so far, and shows it now in the table, the
+        graph and Video Compare. It is one of the video's halves, or one GPU
+        metric, done while the rest runs on. Don't keep a video's results
+        only once all of it is done: a Butteraugli score would wait hours for
+        the video's VMAF, and closing the app or a crash in between would
+        lose it."""
         if index in self._finished_jobs:
             return  # the video's own result has arrived: it is the one to show
         self._on_job_finished(index, result, final=False)
 
     def _on_job_finished(self, index: int, result, final: bool = True) -> int | None:
-        """Shows and caches a finished job -- or, with final=False, a job's
-        result so far (see _on_result_updated). Returns the row it was shown
-        on, or None when it was not shown (row removed, source or settings
-        changed since the job started)."""
+        """Shows and caches a finished job, or with final=False a job's result
+        so far (see _on_result_updated). Returns the row it was shown on, or
+        None when it was not shown: the row was removed, or the reference or
+        settings changed since the job started."""
         row_data = self._job_rows[index]
         if final:
             self._mark_job_over(index)
@@ -4937,17 +4983,16 @@ class MainWindow(QMainWindow):
         if row is None:
             return None  # the row was removed mid-run; nothing to write the result to
         label = row_data.path.stem
-        # The job owns the reference/distorted identities it was launched with.
-        # Never key a result from an old in-flight job using whatever source
-        # happens to be selected by the time it finishes.
+        # The result is keyed on the reference and test video the job started
+        # with. Never key it on the reference selected when the job ends.
         cache_options = (
             self._job_cache_options[index]
             if index < len(self._job_cache_options) else row_data.options
         )
         cache_cvvdp = self._job_cvvdp[index] if index < len(self._job_cvvdp) else row_data.cvvdp
-        # Off the UI thread: this is the ~9MB JSON write that used to
-        # stall the window every time a run finished. Every argument is
-        # plain data, so nothing the worker touches is a widget.
+        # Off the window's thread: this JSON file of about 9 MB would hold
+        # the window each time a run finishes. Every argument is plain data,
+        # so the worker touches no widget.
         self._file_writes.submit(
             f"cache {label}",
             partial(
@@ -4975,11 +5020,11 @@ class MainWindow(QMainWindow):
                 self._set_row_status(row, RowState.FOR_PREVIOUS_SOURCE)
             return None
         if cache_options != row_data.options or not cache_cvvdp.same_as(row_data.cvvdp):
-            # The row's settings changed after this job was launched, so the
-            # result does not describe what the row now says. It is still
-            # cached above under the options it really used -- returning to
-            # them brings it straight back -- but showing it here would
-            # label it with settings it was never computed with.
+            # The row's settings changed after this job started, so the result
+            # does not match what the row says now. It is still cached above
+            # under the options it really used, so going back to them brings
+            # it straight back. Shown here, it would be labelled with
+            # settings it was not calculated with.
             if final:
                 self._set_row_status(
                     row,
@@ -4991,9 +5036,9 @@ class MainWindow(QMainWindow):
         continuing = previous is not None and previous.partial
         if previous is not None:
             # Saved scores the row was showing for metrics this run did not
-            # calculate (unticked ones) stay on show; the run's result held
-            # only what it calculated, so they used to vanish. Merged into a
-            # copy: the cache write queued above holds this result object.
+            # calculate (unticked ones) stay shown, as the run's result holds
+            # only what it calculated. They are merged into a copy, because
+            # the cache write queued above holds this result object.
             carried = MetricResultSet(
                 value for key in previous.result.metric_results
                 if not result.has_metric(key) and key not in self._requested_metrics(row_data)
@@ -5046,6 +5091,7 @@ class MainWindow(QMainWindow):
         self._set_row_metrics(row)
 
     def _on_job_failed(self, index: int, message: str, stderr_tail: str) -> None:
+        """Marks a failed job's row, with the reason."""
         self._run_failed_count += 1  # first: _mark_job_over redraws the counts
         self._mark_job_over(index)
         row = self._row_index_of(self._job_rows[index])
@@ -5058,6 +5104,7 @@ class MainWindow(QMainWindow):
         self._set_row_metrics(row)
 
     def _on_run_cancelled(self) -> None:
+        """Notes that the run was cancelled."""
         self._run_was_cancelled = True
 
     def _on_run_thread_finished(self, worker: VmafWorker) -> None:
@@ -5069,6 +5116,7 @@ class MainWindow(QMainWindow):
         worker.deleteLater()
 
     def _on_all_finished(self) -> None:
+        """Ends the run: settles the rows it did not finish, and says how it ended."""
         for rd in self._job_rows:
             row = self._row_index_of(rd)
             if row is not None and rd.analysis_status in (RowState.CALCULATING, RowState.QUEUED):
@@ -5095,12 +5143,13 @@ class MainWindow(QMainWindow):
         ]
         if finished_runs:
             # A cancelled run stays on the Videos tab, where Cancel was
-            # pressed and the unfinished rows are; what it did finish is
-            # still added to the graph. It used to jump to Metric Graphs.
+            # pressed and the unfinished rows are. What it did finish is
+            # still added to the graph.
             self._open_or_update_graph(finished_runs, show=not self._run_was_cancelled)
 
     # ------------------------------------------------------------------ results actions
     def _selected_runs(self) -> list[CompletedRun]:
+        """The results of the selected rows that have one."""
         rows = sorted({idx.row() for idx in self.distorted_table.selectedIndexes()})
         return [self._rows[r].completed_run for r in rows if self._rows[r].completed_run]
 
@@ -5108,10 +5157,10 @@ class MainWindow(QMainWindow):
     def _same_source(a: Path | None, b: Path | None) -> bool:
         """Whether two paths name the same reference video.
 
-        Normalised, because a saved run records whatever path was used when
-        it ran -- relative or absolute, either slash, any case on Windows --
-        and a textual comparison would call the same file two different
-        sources.
+        Normalised, because a saved run records the path as it was given
+        (relative or absolute, either slash, any case on Windows), and a
+        comparison of the text would call one file two different
+        references.
         """
         if a is None or b is None:
             return False
@@ -5121,6 +5170,7 @@ class MainWindow(QMainWindow):
             return Path(a) == Path(b)
 
     def _on_load_saved_run(self) -> None:
+        """Loads a saved result file into the table."""
         path, _ = QFileDialog.getOpenFileName(self, tr("Load analysis results"), "", RESULT_FILE_FILTER)
         if not path:
             return
@@ -5129,12 +5179,12 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, tr("Failed to load run"), tr_message(str(e)))
             return
-        # A result belongs to a (source, distorted) PAIR. Dropping it into
-        # the table under whatever source happens to be selected presents a
-        # comparison that was never made -- the row showed one video's score
-        # underneath a different reference.
-        # One row per video: two rows with one path, and every lookup by path
-        # (cached scores, probes, a run's result) found only the first.
+        # A result belongs to a pair of reference and test video. Don't put
+        # it in the table under whichever reference is selected: the row
+        # would show a comparison never made, a score under the wrong
+        # reference.
+        # One row per video. With two rows for one path, every lookup by path
+        # (cached scores, media reads, a run's result) finds only the first.
         existing = self._row_index_of_path(result.distorted)
         if existing is not None and QMessageBox.question(
                 self, tr("Already added"),
@@ -5199,8 +5249,8 @@ class MainWindow(QMainWindow):
         row_data.options.scale_direction = result.scale_direction
         row_data.options.scale_algorithm = result.scale_algorithm
         row_data.options.resample_test = result.resample_target
-        # A CVVDP score is only meaningful with the display it was made for;
-        # the row takes that display, so the score and the row agree.
+        # A CVVDP score only means something with the display it was made
+        # for. The row takes that display, so the score and the row agree.
         cvvdp_result = result.sequence_metric("cvvdp")
         if cvvdp_result is not None:
             row_data.extra_metric_keys.add("cvvdp")
@@ -5248,6 +5298,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_save_selected(self) -> None:
+        """Saves the selected rows' results to files."""
         runs = self._selected_runs()
         if not runs:
             QMessageBox.information(self, tr("Nothing selected"), tr("Select one or more completed rows to save."))
@@ -5272,6 +5323,7 @@ class MainWindow(QMainWindow):
             )
 
     def _submit_save(self, result, path: Path, label: str) -> None:
+        """Saves a result in the background."""
         # Only the action doing the writing is disabled, so the rest of the
         # window stays usable while a long save runs.
         self.save_btn.setEnabled(False)
@@ -5280,6 +5332,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_file_writes_idle(self) -> None:
+        """Enables saving again once the background writes are done."""
         self.save_btn.setEnabled(True)
         if self._cache_clear_result is not None:
             removed = sum(self._cache_clear_result)
@@ -5288,16 +5341,17 @@ class MainWindow(QMainWindow):
             self._refresh_settings_status()
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
+        """Says on the status line that a background write failed."""
         # Reported in the status line rather than a modal: these finish in
         # the background, and a dialog stealing focus minutes later is worse
         # than the failure it announces.
         self.status_label.setText(tr("Could not {description}: {error}", description=description, error=error))
 
     def _on_show_graph_clicked(self) -> None:
-        # Syncs in every currently-completed row every time -- not just
-        # whatever was completed the first time this was clicked -- so
-        # checking back mid-run (e.g. 4 of 8 done) shows all 4, not just
-        # however many were done the first time it was opened.
+        """Opens the Metric Graphs tab with every completed row."""
+        # Adds every completed row each time, not only those completed the
+        # first time, so looking again during a run (say 4 of 8 done) shows
+        # all 4.
         all_runs = [r.completed_run for r in self._rows if r.completed_run]
         if not all_runs and not self.graph_panel._entries:
             QMessageBox.information(
@@ -5307,6 +5361,7 @@ class MainWindow(QMainWindow):
         self._open_or_update_graph(all_runs)
 
     def _on_tab_changed(self, index: int) -> None:
+        """Brings the tab just opened up to date."""
         if index == TAB_GRAPH:
             self._sync_graph()
         elif index == TAB_FRAME_COMPARE:
@@ -5317,10 +5372,10 @@ class MainWindow(QMainWindow):
     def _sync_graph(self) -> None:
         """Makes the graph show every completed row.
 
-        add_runs replaces a series with the same identity rather than
-        stacking a duplicate, leaves one already showing its result alone,
-        and brings the table up to date once: safe to call as often as it
-        likes -- on every tab switch, and whenever a row gains a result.
+        add_runs replaces a series with the same identity rather than adding
+        a duplicate, leaves one already showing its result alone, and brings
+        the table up to date once. So it is safe to call as often as needed:
+        on every tab switch, and whenever a row gains a result.
         """
         self.graph_panel.add_runs(
             (row.completed_run.result, row.completed_run.label, row.completed_run.graph_identity, False)
@@ -5328,14 +5383,13 @@ class MainWindow(QMainWindow):
         )
 
     def _sync_frame_compare(self) -> None:
-        """Makes Frame Compare mirror every Videos-table row it can render.
+        """Makes Video Compare list every row of the Videos table it can show.
 
-        Deliberately not limited to scored rows. Looking at a source and an
-        encode side by side is useful in its own right -- to check framing,
-        to find a scene worth measuring, to see whether an encode is even
-        the same content -- and requiring a finished run first made the tab
-        unavailable exactly when it is most useful: before committing to a
-        feature-length calculation.
+        Not only scored rows, on purpose. Seeing a source and an encode side
+        by side is useful in itself: to check framing, to find a scene worth
+        measuring, or to see whether an encode is the same content at all.
+        Requiring a finished run first would hide the tab when it is most
+        useful, before starting a feature-length calculation.
         """
         entries = []
         for row in self._rows:
