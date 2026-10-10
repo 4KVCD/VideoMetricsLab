@@ -1,6 +1,6 @@
 // amf_frames.cpp's picture hand-over (Params.handover), straight from AMF's
 // own picture (amf_handover.h's Slots::direct_plane): one plane of the crop
-// -- Y, U or V -- read from AMF's texture, which Vulkan imported (a view of
+// (Y, U or V) read from AMF's texture, which Vulkan imported (a view of
 // its luma plane, and of its chroma plane with U and V interleaved), into a
 // buffer as nvdec_frames' pool holds a picture: planar, rows `pitch` samples
 // apart. 16-bit samples (BITS 16, P010's) are shifted right by `shift` (6: to

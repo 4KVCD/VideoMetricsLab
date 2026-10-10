@@ -17,8 +17,8 @@
 //     wrong in Vulkan (its chroma plane on an RTX 5090 with driver 616.92; the
 //     whole frame at 4K on a Core Ultra 9 285K's iGPU). Shared textures of one
 //     plane read back right on both, at every size tried (64x48 to 8K).
-//   - So a small Direct3D 11 compute shader copies each frame's two planes --
-//     the part of them the drawing samples -- into two such textures (R8 and
+//   - So a small Direct3D 11 compute shader copies each frame's two planes
+//     (the part of them the drawing samples) into two such textures (R8 and
 //     R8G8, or R16 and R16G16 for P010), which Vulkan imports once and
 //     samples. There are two sets of them, used in turn, so that Direct3D 11
 //     can copy a frame while Vulkan may still be drawing the one before.
@@ -162,7 +162,7 @@ static bool has_extension(const std::vector<VkExtensionProperties>& extensions, 
 
 // The file name of each GPU maker's Vulkan driver manifest, by PCI vendor ID.
 // The loader is told to load only the driver of the GPU the video is decoded
-// on: with every driver loaded -- Intel's beside NVIDIA's, on a PC with both --
+// on. With every driver loaded (Intel's beside NVIDIA's, on a PC with both),
 // the window's process took some 200 MB more memory.
 static const wchar_t* driver_manifest(UINT vendor) {
     switch (vendor) {
@@ -1260,10 +1260,10 @@ static SourceViews* source_views(Presenter* p, ID3D11Texture2D* texture, DXGI_FO
 }
 
 // The texture a shader can read `frame`'s `subresource` from, and its
-// description: the frame's own, or -- a slice of a decoder's texture array, or
-// a texture bound for decoding only, as d3d11h264dec's are -- a copy in a
-// texture of the presenter's, as d3d11_tonemap.cpp's present_source makes.
-// Null if the copy could not be made.
+// description. It is the frame's own texture, or a copy in a texture of the
+// presenter's for a slice of a decoder's texture array or a texture bound for
+// decoding only, as d3d11h264dec's are (as d3d11_tonemap.cpp's
+// present_source makes). Null if the copy could not be made.
 static ID3D11Texture2D* readable_source(Presenter* p, ID3D11Texture2D* frame, UINT subresource,
                                         D3D11_TEXTURE2D_DESC& desc) {
     frame->GetDesc(&desc);
@@ -1289,11 +1289,11 @@ static ID3D11Texture2D* readable_source(Presenter* p, ID3D11Texture2D* frame, UI
     return p->source_copy.Get();
 }
 
-// Direct3D 11's part of drawing a frame: its planes copied into the next
-// hand-over slot -- only the part that drawing `source` samples (x, y, width,
-// height in the frame's pixels; all of it if null) -- and the copied fence
+// Direct3D 11's part of drawing a frame. Its planes are copied into the next
+// hand-over slot, only the part that drawing `source` samples (x, y, width,
+// height in the frame's pixels; all of it if null), and the copied fence is
 // signalled with the frame's number. Gives the slot's index, and the
-// description of the texture the frame was read from (`desc`). With
+// description of the texture the frame was read from (`desc`). Called with
 // GStreamer's device lock held.
 static HRESULT hand_over(Presenter* p, ID3D11Resource* frame, UINT subresource, const int* source,
                          D3D11_TEXTURE2D_DESC& desc, int* handed) {
@@ -1947,8 +1947,9 @@ extern "C" __declspec(dllexport) int vmaf_present_wait(void* opaque, unsigned ti
 // After vmaf_present_texture, holding no lock: the frame it handed over drawn
 // into the image acquired, and presented. Vulkan's part of a frame needs no
 // Direct3D 11, so the decoders, which need the device lock for each frame, do
-// not wait for it -- nor for the swapchain to be made again in another colour
-// space, which takes some 4-5 ms. 0, or an error (vmaf_present_problem says why).
+// not wait for it, nor for the swapchain to be made again in another colour
+// space, which takes some 4-5 ms. Returns 0, or an error (vmaf_present_problem
+// says why).
 extern "C" __declspec(dllexport) int vmaf_present_flip(void* opaque) {
     auto p = static_cast<Presenter*>(opaque);
     if (!p)

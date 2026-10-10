@@ -14,9 +14,9 @@
 // Otherwise each picture's crop is copied
 // by Direct3D 11 into a texture shared with a Vulkan device made here on the
 // same GPU (one for the whole process, so that every decoder in it writes
-// into the same memory), and by Vulkan out of it into a slot buffer -- the
+// into the same memory), and by Vulkan out of it into a slot buffer (the
 // luma, then the chroma through a scratch buffer and amf_handover.slang,
-// planar as nvdec_frames' pool holds it -- and from
+// planar as nvdec_frames' pool holds it), and from
 // there by the GPU into the buffers Vulkan VMAF exports (nvf_import_vulkan:
 // an opaque Win32 handle from the same GPU and driver) and libvmaf's
 // pictures in system memory, made known to the GPU (nvf_pin,
@@ -36,12 +36,13 @@
 // was 3-9% slower than through system memory either way there: the copies
 // are the GPU's work, which the system memory way leaves to the CPU.
 //
-// AMF's own decoder on Vulkan, which would need no Direct3D 11 copy, is not
-// used: on a Radeon 780M (driver 32.0.31041.1004) it decodes HEVC's last
-// B-pictures before a closed GOP's IDR wrong -- on a Vulkan device AMF makes
-// itself too, the pictures it reads back itself included (a UHD Blu-ray's,
-// and x265's with keyint=12:no-open-gop=1) -- where its Direct3D 11 decoder,
-// and FFmpeg's Vulkan and D3D11VA decoding on the same driver, are right.
+// Don't use AMF's own decoder on Vulkan, though it would need no Direct3D 11
+// copy. On a Radeon 780M (driver 32.0.31041.1004) it decodes HEVC's last
+// B-pictures before a closed GOP's IDR wrong (a UHD Blu-ray's, and x265's
+// with keyint=12:no-open-gop=1). It does so on a Vulkan device AMF makes
+// itself too, the pictures it reads back itself included. Its Direct3D 11
+// decoder, and FFmpeg's Vulkan and D3D11VA decoding on the same driver, are
+// right.
 //
 // Vulkan is loaded at run time (vulkan-1.dll, with the graphics driver).
 
@@ -99,8 +100,9 @@ struct Device {
     VkQueue queue = VK_NULL_HANDLE;
     // The copies into other memory (nvf_copy_luma, nvf_download_planes): on
     // a transfer-only queue (the GPU's copy engine) where there is one, which
-    // works beside the compute queues -- on the compute queue they waited
-    // behind Vulkan VMAF's frame, as long as it took (10 ms a 4K copy).
+    // works beside the compute queues. Don't put them on the compute queue:
+    // they wait there behind Vulkan VMAF's frame, as long as it takes (10 ms
+    // a 4K copy).
     uint32_t copy_family = 0;
     VkQueue copy_queue = VK_NULL_HANDLE;
     bool copy_compute = true;  // whether the copy queue also computes (the stages it may wait on)
@@ -254,7 +256,7 @@ inline bool timeline_reached(uint64_t value) {
 }
 
 // The device, made on first use on the GPU whose LUID (DXGI's adapter LUID)
-// is `luid` -- the Direct3D 11 device AMF decodes on -- or null with
+// is `luid` (the GPU of the Direct3D 11 device AMF decodes on), or null with
 // g_device.error saying why.
 inline Device *shared(const uint8_t *luid) {
     Device &g = g_device;
@@ -627,12 +629,12 @@ struct Commands {
 
 // ------------------------------------------------------- imports and pins
 
-// Another Vulkan device's export -- Vulkan VMAF's (vv_export): an opaque
-// Win32 handle of a dedicated allocation of `bytes`, from memory type
-// `memory_type` of a device whose deviceUUID and driverUUID are these
-// (vv_shared_device) -- as a buffer the decoders copy into; *address is what
-// nvf_copy_luma is given. 0, or a negative error: -4 when the exporter is
-// another GPU or driver, which Vulkan does not import from.
+// Imports another Vulkan device's export, Vulkan VMAF's (vv_export), as a
+// buffer the decoders copy into. The export is an opaque Win32 handle of a
+// dedicated allocation of `bytes`, from memory type `memory_type` of a device
+// whose deviceUUID and driverUUID are these (vv_shared_device). *address is
+// what nvf_copy_luma is given. Returns 0, or a negative error: -4 when the
+// exporter is another GPU or driver, which Vulkan does not import from.
 inline int import_memory(void *handle, unsigned long long bytes, uint32_t memory_type, const uint8_t *device_uuid,
                          const uint8_t *driver_uuid, unsigned long long *address, void **memory) {
     Device &g = g_device;
@@ -815,8 +817,9 @@ struct Slots {
         uint64_t copied = 0;  // the timeline's value once its last copy not waited for is done (0: none)
     };
     // Added to by the decoding thread (source_of) while the copies read the
-    // ones before (direct_copy): in place, never moved -- a vector's growing
-    // moved them under a copy reading one, which then read freed memory.
+    // ones before (direct_copy), so they stay in place, never moved. Don't
+    // use a vector: growing moves them under a copy reading one, which then
+    // reads freed memory.
     static constexpr uint32_t kMaxSources = 64, kMaxOutputs = 64;
     std::array<Source, kMaxSources> sources{};
     std::atomic<size_t> source_count{0};
@@ -832,9 +835,9 @@ struct Slots {
     Commands *active = &direct;
     std::vector<Buffer> slots;  // the pictures, planar (frame_bytes each): those not held (amf_frames.cpp's copies)
     Buffer chroma;              // the crop's U and V, interleaved, on their way into a slot
-    // The descriptor pool `direct_descriptors`'s sets are made under this: by
-    // the decoding thread (source_of) and the copies (output_set) -- Vulkan
-    // has a pool's allocations made one at a time.
+    // The descriptor pool `direct_descriptors`'s sets are made under this, by
+    // the decoding thread (source_of) and the copies (output_set). Vulkan
+    // requires a pool's allocations to be made one at a time.
     std::mutex descriptor_lock;
     Buffer staging;             // host-visible, for destinations that are not pinned (made when first needed)
     // The decoding thread's: two, so that Direct3D 11 copies a picture into
@@ -930,9 +933,10 @@ struct Slots {
     // of the crop, in `format`) imported.
     // `textures`: amf_frames.cpp's, which the crop is copied into by Direct3D
     // 11 where a picture is not held, imported, with a buffer for each slot
-    // that picture goes on into; null: every picture is held (mf_frames.cpp's),
-    // no slot buffers -- at 4K, 6 x 25 MB of GPU memory a decoder: a held
-    // picture is copied from its texture straight where it goes (direct_copy).
+    // that picture goes on into. When null, every picture is held
+    // (mf_frames.cpp's) and there are no slot buffers, which saves 6 x 25 MB
+    // of GPU memory a decoder at 4K: a held picture is copied from its texture
+    // straight where it goes (direct_copy).
     bool make(const Params &p, const HANDLE textures[2], VkFormat format, std::string &why) {
         Device &g = g_device;
         params = p;

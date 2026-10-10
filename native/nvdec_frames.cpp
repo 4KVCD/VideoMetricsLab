@@ -21,8 +21,8 @@
 // space. nvcuda.dll and nvcuvid.dll come with the NVIDIA driver and are
 // loaded at run time; this library links neither. The kernels are PTX for
 // sm_30 at PTX ISA 6.0, which every driver since CUDA 9 compiles for whatever
-// GPU it runs on (the CUDA toolkit's compiler no longer targets GPUs older
-// than Turing; NVDEC goes back much further).
+// GPU it runs on. The CUDA toolkit's compiler targets only Turing and newer
+// GPUs, while NVDEC goes back much further.
 //
 // Threads: nvf_push (and nvf_finish) from one thread, which also runs the
 // parser's callbacks and so the conversions; nvf_pop / nvf_download /
@@ -916,10 +916,10 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     };
     CUresult result = cu.cuDeviceGet(&d->device, p.device);
     if (result != CUDA_SUCCESS) return give_up("no CUDA device " + std::to_string(p.device) + ": " + cuda_error(result));
-    // Waits for the GPU then sleep instead of spinning a CPU core -- also the
-    // driver's own, inside the decoder calls. Refused once the context is
-    // running with other flags (Vship may have started it): the events
-    // below are blocking-sync either way.
+    // Waits for the GPU then sleep instead of spinning a CPU core, the
+    // driver's own waits inside the decoder calls too. This is refused once
+    // the context is running with other flags (Vship may have started it),
+    // but the events below are blocking-sync either way.
     cu.cuDevicePrimaryCtxSetFlags(d->device, CU_CTX_SCHED_BLOCKING_SYNC);
     result = cu.cuDevicePrimaryCtxRetain(&d->context, d->device);
     if (result != CUDA_SUCCESS) return give_up("CUDA could not start on the GPU: " + cuda_error(result));
@@ -1146,9 +1146,9 @@ NVF_API int nvf_copy_planes(void *handle, int slot, const unsigned long long *ad
     return ok ? 0 : NVF_ERROR;
 }
 
-// Copies a slot's planes (Y, U, V) each into its own pitched host plane --
-// a libvmaf picture's -- returning once they are there. A null plane is not
-// copied. 0 or NVF_ERROR.
+// Copies a slot's planes (Y, U, V) each into its own pitched host plane (a
+// libvmaf picture's), returning once they are there. A null plane is not
+// copied. Returns 0 or NVF_ERROR.
 NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, const long long *pitches) {
     Decoder *d = static_cast<Decoder *>(handle);
     const Driver &cu = g_driver;
@@ -1180,11 +1180,11 @@ NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, con
     return ok ? 0 : NVF_ERROR;
 }
 
-// GPU memory another API allocated on this GPU -- Vulkan's, by the Win32
-// handle it exports (`dedicated`: an allocation of one buffer) -- as memory
-// nvf_copy_luma copies pictures into: *device is its address here, *memory
-// what nvf_unimport takes. 0, or the CUDA error (another GPU's memory, or a
-// driver that cannot share it).
+// GPU memory another API allocated on this GPU (Vulkan's, by the Win32
+// handle it exports; `dedicated` for an allocation of one buffer), as memory
+// nvf_copy_luma copies pictures into. *device is its address here, and
+// *memory what nvf_unimport takes. Returns 0, or the CUDA error (another
+// GPU's memory, or a driver that cannot share it).
 NVF_API int nvf_import(void *handle, void *win32_handle, unsigned long long bytes, int dedicated,
                        unsigned long long *device, void **memory) {
     Decoder *d = static_cast<Decoder *>(handle);

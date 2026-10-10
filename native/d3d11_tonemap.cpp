@@ -276,11 +276,12 @@ static PresenterViews* present_views(Presenter* p, ID3D11Texture2D* texture, con
 }
 
 // The texture a shader reads `frame`'s `subresource` from, and its
-// description (`desc`): the frame's own, or -- a slice of a decoder's texture
-// array, or a texture bound for decoding only, as d3d11h264dec's are -- a
-// copy in a texture of the presenter's. Drawn from the decoder's own, such
-// frames failed (E_FAIL) and playback fell back to FFmpeg. With the device
-// lock held; null if the copy could not be made.
+// description (`desc`). It is the frame's own texture, or a copy in a
+// texture of the presenter's for a slice of a decoder's texture array or a
+// texture bound for decoding only, as d3d11h264dec's are. Don't draw such
+// frames from the decoder's own texture: that fails (E_FAIL), and playback
+// falls back to FFmpeg. Called with the device lock held; null if the copy
+// could not be made.
 static ID3D11Texture2D* present_source(Presenter* p, ID3D11Texture2D* frame, UINT subresource,
                                        D3D11_TEXTURE2D_DESC& desc) {
     frame->GetDesc(&desc);

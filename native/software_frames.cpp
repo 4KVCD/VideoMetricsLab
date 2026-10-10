@@ -1,18 +1,17 @@
 // software_frames: decodes a video on the CPU in the scoring process and
-// hands back its pictures cropped and laid out as the GPU metrics read them
-// -- for the videos FFmpeg would decode in software, the counterpart of
+// hands back its pictures cropped and laid out as the GPU metrics read them.
+// It is for the videos FFmpeg would decode in software, the counterpart of
 // nvdec_frames.cpp, vpl_frames.cpp and amf_frames.cpp, with the same C API
 // (gpu_frames.h).
 //
-// Those videos used to reach the scoring process through pipes: FFmpeg
-// decoded them and wrote every picture out raw -- at 4K, 25 MB a frame,
-// which a Windows pipe carries at 60-80 frames a second whatever decodes
-// faster -- and the scoring process read them back. Here they are decoded
-// in this process by FFmpeg's own decoders -- FFmpeg 9.0.2's libavcodec and
+// Don't pipe these videos to the scoring process from FFmpeg: every picture
+// goes through raw, 25 MB a frame at 4K, and a Windows pipe carries 60-80
+// such frames a second however fast the decoding is. Here they are decoded
+// in this process by FFmpeg's own decoders: FFmpeg 9.0.2's libavcodec and
 // libavutil, built for the app with only the decoders below (LGPL;
-// vmaf_app/tools/ffmpeg, from scripts/build_ffmpeg_decoders.ps1) -- and AV1
-// by dav1d, the bundled GStreamer's (BSD; this FFmpeg has no dav1d wrapper,
-// and FFmpeg's own AV1 decoder only drives a GPU's). The app loads them
+// vmaf_app/tools/ffmpeg, from scripts/build_ffmpeg_decoders.ps1). AV1 is
+// decoded by dav1d, the bundled GStreamer's (BSD), because this FFmpeg has
+// no dav1d wrapper and FFmpeg's own AV1 decoder only drives a GPU's. The app loads them
 // (vmaf_app/core/gpu_frames.py) and hands them over with nvf_set_libraries;
 // this library links neither. It is compiled against FFmpeg's headers
 // (native/ffmpeg) and refuses libraries of another major version; of dav1d
@@ -20,21 +19,22 @@
 // The app feeds the packets FFmpeg copies out of the container with their
 // timestamps, as for the GPU decoders.
 //
-// Their pictures are FFmpeg's decode's sample for sample -- film grain an
-// H.264, HEVC or VVC stream asks for (H.274's, or AOM's AFGS1) added as
-// FFmpeg 9 adds it, AV1's by dav1d as FFmpeg's libdav1d decoder has it.
-// They are held as the decoder made them, by reference, until the caller
-// downloads them: nvf_download makes the one CPU pass a picture costs -- the
-// crop's planes copied, 10-bit samples aligned as asked, 8-bit ones widened
-// as FFmpeg widens them, or the crop scaled with the GPU decoders' filters
-// (scale_filter.h) -- straight into the caller's buffer. The app does not ask
+// Their pictures are the same as FFmpeg's decode, sample for sample. The
+// film grain an H.264, HEVC or VVC stream asks for (H.274's, or AOM's AFGS1)
+// is added as FFmpeg 9 adds it, and AV1's by dav1d as FFmpeg's libdav1d
+// decoder adds it. Pictures are held as the decoder made them, by reference,
+// until the caller downloads them. nvf_download makes the one CPU pass a
+// picture costs, straight into the caller's buffer: it copies the crop's
+// planes, aligns 10-bit samples as asked and widens 8-bit ones as FFmpeg
+// widens them, or scales the crop with the GPU decoders' filters
+// (scale_filter.h). The app does not ask
 // it to scale (gpu_frames.decoder_supports): on the caller's one thread that
 // is slower than FFmpeg scaling in threads before its pipe.
 //
-// A damaged stream is left to FFmpeg: its decoders conceal damage, and one
-// FFmpeg's concealment is not another's (on a stream with a few garbled
-// packets, FFmpeg 9 lost 200 frames where 7.1 gave every one) -- the
-// FFmpeg the app runs is the user's, of whatever version. libavcodec reports
+// A damaged stream is left to FFmpeg. Its decoders conceal damage, and one
+// FFmpeg's concealment is not another's: on a stream with a few garbled
+// packets, FFmpeg 9 lost 200 frames where 7.1 gave every one. The FFmpeg the
+// app runs is the user's, of whatever version. libavcodec reports
 // what it finds at its error level, which this library counts (the log goes
 // nowhere else: ffmpeg.exe's is read by the app, but this one would print to
 // the scoring process's console), and dav1d fails decoding: either stops
@@ -188,9 +188,9 @@ std::string av_error(int code) {
 
 // --------------------------------------------------------- planar pictures
 
-// Copies the crop of a decoded planar 4:2:0 picture -- 8-bit, or 10-bit
-// samples in the low bits of 16 (yuv420p10le, as FFmpeg's decoders and
-// dav1d give them) -- into `dst`, planes packed, as convert_frame does for
+// Copies the crop of a decoded planar 4:2:0 picture (8-bit, or 10-bit
+// samples in the low bits of 16: yuv420p10le, as FFmpeg's decoders and
+// dav1d give them) into `dst`, planes packed, as convert_frame does for
 // the GPU decoders' NV12/P010: samples moved, never computed, but for 8-bit
 // pictures widened to 10 (Params::widen), made as FFmpeg makes them: v << 2,
 // the luma's top two bits repeated below when the video is full range.

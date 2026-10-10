@@ -1,13 +1,13 @@
 // vpl_frames: decodes a video on an Intel GPU with Intel's Video Processing
 // Library (oneVPL) and hands back its pictures cropped and laid out as the
-// GPU metrics read them -- the Intel counterpart of nvdec_frames.cpp, with
-// the same C API (gpu_frames.h).
+// GPU metrics read them. It is the Intel counterpart of nvdec_frames.cpp,
+// with the same C API (gpu_frames.h).
 //
 // oneVPL parses the stream itself, as NVIDIA's decoder does: the app feeds
 // it the packets FFmpeg copies out of the container (vmaf_app/core/
 // nvdec_frames.py) with their timestamps, and gets the pictures back in
-// display order, in system memory -- on Intel's integrated GPUs the GPU's
-// own memory, filled by the GPU. nvf_download then makes the one CPU pass a
+// display order, in system memory. On Intel's integrated GPUs that is the
+// GPU's own memory, filled by the GPU. nvf_download then makes the one CPU pass a
 // picture costs: the crop's luma copied, U and V split out of their
 // interleaved plane, 10-bit samples aligned as asked (convert_frame), straight
 // into the caller's buffer (Vship's). The samples are moved, never computed:
@@ -132,11 +132,11 @@ bool set_filter(mfxLoader loader, const char *name, mfxVariantType type, mfxU32 
 }
 
 // Intel's GPU decoders, found once for the process. Loading the library and
-// asking what it has takes about 0.6 s, and a comparison used to do it four
-// times before its first picture: for each video, once to ask whether it is
-// decoded and once to open its decoder. The loader is kept (sessions for any
-// number of decoders are made from one) and so is what each implementation
-// decodes.
+// asking what it has takes about 0.6 s. Don't do it for each question: a
+// comparison then does it four times before its first picture (for each
+// video, once to ask whether it is decoded and once to open its decoder).
+// The loader is kept, as sessions for any number of decoders are made from
+// one, and so is what each implementation decodes.
 struct Decodes {
     mfxU32 codec, format, max_width, max_height;
 };
@@ -743,7 +743,7 @@ NVF_API int nvf_scale_test(int vendor, const Params *params, const unsigned char
 }
 
 // Whether Intel's GPU decoder decodes `codec` 4:2:0 at `bit_depth` and this
-// size: from the decoder's published capabilities -- a profile of the codec
+// size, from the decoder's published capabilities: a profile of the codec
 // with an output format for the depth (NV12, P010) at this size. A depth no
 // profile offers (10-bit H.264) is refused here, before a pass starts.
 NVF_API int nvf_supports(int, int codec, int bit_depth, int width, int height, char *error, int error_size) {

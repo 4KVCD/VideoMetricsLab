@@ -109,13 +109,13 @@ inline bool shift_row(const uint16_t *src, uint16_t *dst, size_t w, int down, in
     return stream;
 }
 
-// Copies the crop of a decoded NV12/P010 picture -- the luma plane at `y`,
-// U and V interleaved at `uv`, rows `pitch` bytes apart -- into `dst`, planes
+// Copies the crop of a decoded NV12/P010 picture (the luma plane at `y`, U
+// and V interleaved at `uv`, rows `pitch` bytes apart) into `dst`, planes
 // packed. 10-bit samples sit in the top bits of 16 when `msb`, else in the
 // low ones; they are handed back in the top bits (shift 0, P016's layout,
 // which Vship reads as 16-bit) or the low ones (shift 6, yuv420p10le). The
-// samples are moved, never computed -- but for 8-bit pictures widened to 10
-// (Params::widen), which are made as FFmpeg makes them and NVIDIA's decoder
+// samples are moved, never computed, except for 8-bit pictures widened to
+// 10 (Params::widen), which are made as FFmpeg makes them and NVIDIA's decoder
 // here does (its widen8 kernel): v << 2, in the low bits of 16, the luma's
 // top two bits repeated below when the video is full range.
 inline void convert_frame(const Params &p, const uint8_t *y, const uint8_t *uv, size_t pitch, bool msb,

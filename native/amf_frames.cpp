@@ -1,6 +1,6 @@
 // amf_frames: decodes a video on an AMD GPU with AMD's Advanced Media
 // Framework (AMF) and hands back its pictures cropped and laid out as the GPU
-// metrics read them -- the AMD counterpart of nvdec_frames.cpp and
+// metrics read them. It is the AMD counterpart of nvdec_frames.cpp and
 // vpl_frames.cpp, with the same C API (gpu_frames.h).
 //
 // AMF's decoder parses the stream itself: the app feeds it the packets FFmpeg
@@ -25,9 +25,9 @@
 //
 // With Params.handover the pictures never come to system memory: AMF's own
 // texture of each (which Direct3D 11 shares) is imported by Vulkan and read
-// where it is -- into Vulkan VMAF's memory by nvf_copy_luma and
-// nvf_copy_planes, and into a slot buffer for the other copies, from which
-// nvf_download_planes copies it into libvmaf's pictures -- the slot holding
+// where it is. nvf_copy_luma and nvf_copy_planes copy it into Vulkan VMAF's
+// memory. For the other copies it goes into a slot buffer, from which
+// nvf_download_planes copies it into libvmaf's pictures. The slot holds
 // AMF's surface until it is given back (deliver_on_gpu, amf_handover.h).
 // Where Vulkan cannot import AMF's texture, each picture is copied on the
 // GPU into a texture Vulkan shares, and from there by Vulkan into a slot
@@ -37,16 +37,16 @@
 // nvf_finish: it submits packets, collects pictures, brings them to system
 // memory (or into a slot buffer), and gives back the pictures the caller has
 // released. nvf_pop / nvf_download / nvf_release come from another thread
-// and touch only host memory and the queues -- and, handing over, the slot
-// buffers, by GPU copies of their own (amf_handover.h's Slots::copying).
+// and touch only host memory and the queues, and when handing over, the
+// slot buffers, by GPU copies of their own (amf_handover.h's Slots::copying).
 //
 // Handing over, the pictures are collected by a thread of the decoder's own
-// (collect_thread) instead: a picture's copy waits for its decoding to end,
-// and the thread that submits the packets waiting with it left the decoder
-// idle in between (the two 4K streams of a VMAF run decoded at 72 pictures a
-// second each on a Radeon 780M, where the GPU decodes about 123). nvf_push
-// then only submits (SubmitInput and QueryOutput from two threads, as AMF
-// allows).
+// (collect_thread) instead. A picture's copy waits for its decoding to end.
+// Don't make the thread that submits the packets wait with it: the decoder
+// is idle in between, and the two 4K streams of a VMAF run decoded at 72
+// pictures a second each on a Radeon 780M, where the GPU decodes about 123.
+// nvf_push then only submits (SubmitInput and QueryOutput from two threads,
+// as AMF allows).
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -1166,10 +1166,10 @@ NVF_API int nvf_timeline(void *handle, void **win32) {
     return 0;
 }
 
-// The hand-over's: libvmaf's picture memory made known to the GPU, which then
-// writes the planes into it itself (nvf_download_planes) -- for every decoder
-// of the process handing over. 0, or negative: it is then copied into by the
-// CPU.
+// For the hand-over: libvmaf's picture memory made known to the GPU, which
+// then writes the planes into it itself (nvf_download_planes), for every
+// decoder of the process that hands over. At 0 or below, the CPU copies into
+// it instead.
 NVF_API int nvf_pin(void *handle, void *host, unsigned long long bytes) {
     Decoder *d = static_cast<Decoder *>(handle);
     return d->handing_over ? handover::pin(host, bytes) : -1;

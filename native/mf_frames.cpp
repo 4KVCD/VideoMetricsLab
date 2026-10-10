@@ -137,13 +137,14 @@ struct Decoder {
         UINT64 fence;
     };
     std::deque<Unconfirmed> unconfirmed;
-    // The samples of slots given back while a copy out of them not waited
-    // for may still be reading them: given back to the decoder once the
-    // timeline passes `copied`, by `sweeper` -- not the decoding thread,
-    // which may be the one waiting for them: the decoder's ProcessOutput
-    // waits for a free picture of its pool, and holding ten of its 4K HEVC
-    // pictures it never returned (a Radeon 780M; asking for a larger pool,
-    // MF_SA_MINIMUM_OUTPUT_SAMPLE_COUNT, did not change that).
+    // The samples of slots given back while a copy out of them, not waited
+    // for, may still be reading them. `sweeper` gives them back to the
+    // decoder once the timeline passes `copied`. Don't leave that to the
+    // decoding thread, which may be the one waiting for them: the decoder's
+    // ProcessOutput waits for a free picture of its pool, and while ten of
+    // its 4K HEVC pictures were held it never returned (a Radeon 780M;
+    // asking for a larger pool, MF_SA_MINIMUM_OUTPUT_SAMPLE_COUNT, did not
+    // change that).
     struct Deferred {
         IMFSample *sample;
         uint64_t copied;
@@ -393,9 +394,10 @@ bool deliver(Decoder *d, IMFSample *sample) {
     std::string why;
     const VkFormat format = d->params.bit_depth > 8 ? VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16
                                                     : VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
-    // Its slot first: the samples kept counted once one is free (counted
-    // before, a picture that waited for a slot was copied though a slot's
-    // sample had gone back meanwhile -- at 4K, every slot's own texture made).
+    // Its slot first, and the samples kept counted once a slot is free.
+    // Don't count them before: a picture that waited for a slot is then
+    // copied though a slot's sample went back meanwhile, which at 4K made
+    // every slot a texture of its own.
     bool full;
     {
         std::lock_guard<std::mutex> guard(d->mutex);

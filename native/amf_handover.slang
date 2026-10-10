@@ -1,7 +1,7 @@
 // amf_frames.cpp's picture hand-over (Params.handover, amf_handover.h): one
-// decoded picture, already copied out of its shared texture by the GPU -- the
+// decoded picture, already copied out of its shared texture by the GPU (the
 // crop's luma into the slot buffer's start, its interleaved U and V into
-// `chroma` -- laid out as nvdec_frames' pool holds a picture: Y, then U, then
+// `chroma`), laid out as nvdec_frames' pool holds a picture: Y, then U, then
 // V, planar, samples moved, never computed. 16-bit samples (BITS 16, P010's)
 // are shifted right by `shift` (6: to the low bits, as yuv420p10le has them;
 // 0: kept at the top). Compiled to SPIR-V by scripts/build_amf_shader.py into

@@ -1,5 +1,5 @@
-// The filters the GPU frame decoders scale pictures with -- the same for every
-// GPU maker: NVIDIA's applies them on the GPU (nvdec_frames.cpp), and so do
+// The filters the GPU frame decoders scale pictures with, the same for every
+// GPU maker. NVIDIA's applies them on the GPU (nvdec_frames.cpp), and so do
 // Intel's and AMD's (d3d11_scale.h, a shader that gives scale_plane's picture
 // below, which they check it against and fall back to).
 //
@@ -124,7 +124,7 @@ struct ScaleScratch {
 };
 
 // Each output row of `rows` (`height` rows of `width` floats) is the
-// weighted sum of the input rows `f` names, whole rows at a time -- a loop
+// weighted sum of the input rows `f` names, whole rows at a time, in a loop
 // the compiler vectorises.
 inline void vertical(const float *rows, int width, int height, const Filter &f, int out_rows, float *out) {
     for (int y = 0; y < out_rows; y++) {
@@ -168,7 +168,7 @@ inline void horizontal(const float *rows, int width, int height, const Filter &f
 // Scales one plane on the CPU: `in` samples (8-bit, or 16-bit shifted right
 // by `in_shift`), `step` bytes apart in rows `pitch` bytes apart, `w` x `h`,
 // to `out` (`ow` x `oh`, packed), each value times `gain`, rounded, clamped
-// to `max`, then shifted left by `out_shift` -- 8- or 16-bit as `out_wide`.
+// to `max`, then shifted left by `out_shift`; 8- or 16-bit as `out_wide`.
 // The plane is made floats once; the vertical pass, which runs a whole row
 // at a time, goes first where it shrinks the picture, so the horizontal
 // pass, one sample at a time, has the fewer rows (about 15 ms for a 4K
