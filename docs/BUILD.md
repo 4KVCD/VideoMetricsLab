@@ -47,6 +47,14 @@ case anyone overrides that.
   style and image formats that actually loaded.
 - **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
   `native/d3d11_tonemap.cpp` as part of the build.
+- **`d3d11_film_grain.dll`**, Video Compare's film grain for VVC videos:
+  GStreamer's VVC decoder applies none, so this draws each frame's H.274
+  film grain on the GPU, as FFmpeg synthesizes it for 8-bit video (the same
+  pixels, but for the 8x8 blocks that a picture's edge cuts off) and as
+  JVET's VTM does for 10- and 12-bit. Built from
+  `native/d3d11_film_grain.cpp` by `scripts/build_d3d11_film_grain.ps1`;
+  its SMPTE RDD 5 tables come from VTM (`native/h274`, BSD licence, shipped
+  in `licenses`).
 - **`software_frames.dll`**, the decoder for the videos FFmpeg would decode
   in software -- no GPU decoder takes them (VVC, AV1 on an older GPU, 10-bit
   H.264) or GPU decoding is off -- so that their frames reach the GPU metrics

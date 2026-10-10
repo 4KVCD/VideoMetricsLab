@@ -111,6 +111,14 @@ def self_test() -> SelfTestReport:
     else:
         report.warn("Native playback's presenter absent or out of date; videos play through FFmpeg")
 
+    from vmaf_app.core import d3d11_film_grain
+
+    problem = d3d11_film_grain.check()
+    if problem is None:
+        report.ok(f"Film grain for VVC videos in Video Compare ({d3d11_film_grain.library_path().name})")
+    else:
+        report.warn(f"Film grain for VVC videos unavailable ({problem}); they play without it")
+
     from vmaf_app.core import gpu_frames
 
     for backend, maker in (("nvidia", "NVIDIA"), ("intel", "Intel"), ("amd", "AMD")):

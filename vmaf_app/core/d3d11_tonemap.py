@@ -94,6 +94,13 @@ def conversion(primaries: str, target: str = "bt709") -> tuple[tuple[float, ...]
     return tuple(to_xyz[1].tolist()), tuple((np.linalg.inv(_to_xyz(target)) @ to_xyz).ravel().tolist())
 
 
+def object_pointer(instance) -> int:
+    """The GObject a PyGObject wrapper stands for (a GstD3D11Device, say)."""
+    capsule = ctypes.pythonapi.PyCapsule_GetPointer
+    capsule.restype, capsule.argtypes = ctypes.c_void_p, [ctypes.py_object, ctypes.c_char_p]
+    return capsule(instance.__gpointer__, None)
+
+
 def boxed_pointer(boxed) -> int:
     """The native pointer a PyGObject boxed wrapper (a Gst.Memory) holds.
 

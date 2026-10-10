@@ -51,6 +51,8 @@ try {
     }
     Write-Host '==> Building d3d11_tonemap.dll' -ForegroundColor Cyan
     & (Join-Path $PSScriptRoot 'build_d3d11_tonemap.ps1')
+    Write-Host '==> Building d3d11_film_grain.dll' -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'build_d3d11_film_grain.ps1')
     Write-Host '==> Building the GPU frame decoders' -ForegroundColor Cyan
     & (Join-Path $PSScriptRoot 'build_gpu_frames.ps1')
 
@@ -135,14 +137,14 @@ try {
 
     # The native libraries and the notices of the headers built into them.
     $native = Join-Path $output '_internal/vmaf_app/native'
-    foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll',
+    foreach ($library in @('d3d11_tonemap.dll', 'd3d11_film_grain.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll',
             'mf_frames.dll', 'software_frames.dll')) {
         if (-not (Test-Path (Join-Path $native $library))) {
             throw "Bundled native library is missing: $library"
         }
     }
     foreach ($notice in @('LICENSE.nv-codec-headers.txt', 'LICENSE.onevpl.txt', 'LICENSE.amf.txt',
-            'LICENSE.vulkan-headers.txt')) {
+            'LICENSE.vulkan-headers.txt', 'LICENSE.vtm.txt')) {
         if (-not (Test-Path (Join-Path $native "licenses/$notice"))) {
             throw "Bundled native library license notice is missing: $notice"
         }

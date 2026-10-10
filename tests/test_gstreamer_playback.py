@@ -120,6 +120,7 @@ def test_native_hdr_caps_keep_full_cropped_resolution_and_precision(subtests):
                                      PadProbeType=SimpleNamespace(QUERY_DOWNSTREAM=1, PUSH=2))
         player._pipeline = SimpleNamespace(add=lambda _element: None)
         player._handlers, player._decoders, player._sinks = [], {}, {}
+        player._probes, player._film_grain, player._gst_video, player._device = [], None, None, None
         sdr = dict(pix_fmt="yuv420p", color_transfer="bt709", color_primaries="bt709", color_space="bt709")
         comparison = replace(_comparison(), source_info=replace(_info("source.mkv"), **sdr),
                              distorted_info=replace(_comparison().distorted_info, **sdr),
@@ -224,6 +225,7 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll(subtests):
     player._pipeline = _FakePipeline()
     player._bus = _FakeBus()
     player._decoder_status_reported = True
+    player._film_grain, player._reported_grain_status = None, None
     player._ready = False
     player._initial_seek_sent = False
     player._pending_initial_seek_ms = None
@@ -278,7 +280,7 @@ def test_initial_seek_waits_for_both_native_sinks_to_preroll(subtests):
         assert pipeline.sought.acquire(timeout=10)
         assert player.poll().error == "GStreamer could not seek to that frame."
     with subtests.test("stopped, it seeks no more"):
-        player._handlers = []
+        player._handlers, player._probes, player._film_grain = [], [], None
         player.stop()
         player.seek(5000)
         assert not pipeline.sought.acquire(timeout=0.2)

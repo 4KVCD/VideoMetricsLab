@@ -179,9 +179,10 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
 def start_loading() -> None:
     """What Video Compare's first native opening loads, loaded in the
     background at the window's startup: GStreamer, its D3D11 plugin, the
-    D3D11 device and the presenter's shaders. Loaded by that opening instead, they held the
-    window for 0.4 s then. The window's only: metric-only use (the command
-    line, the scoring processes) does not pay their start or their memory."""
+    D3D11 device, the presenter's shaders and the film grain synthesis.
+    Loaded by that opening instead, they held the window for 0.4 s then. The
+    window's only: metric-only use (the command line, the scoring processes)
+    does not pay their start or their memory."""
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen":
         threading.Thread(target=_warm_up, name="gstreamer-load", daemon=True).start()
 
@@ -195,9 +196,10 @@ def _warm_up() -> None:
         if plugin is not None:
             plugin.load()
         d3d11_device()
-        from vmaf_app.core import d3d11_tonemap
+        from vmaf_app.core import d3d11_film_grain, d3d11_tonemap
 
         d3d11_tonemap.prepare_presenter()
+        d3d11_film_grain.prepare()
     except Exception:
         pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg
 
@@ -457,6 +459,164 @@ def output_caps_string(
     return ",".join(fields)
 
 
+class _FilmGrain:
+    """Draws a VVC video's film grain on its frames, for GstComparePipeline.
+
+    GStreamer's VVC decoder never applies film grain, so this does it
+    instead. It reads the film grain messages from the access units that
+    GStreamer's VVC parser hands to the decoder, and draws each frame's
+    grain on the GPU as the decoded frame leaves d3d11upload. That is before
+    the frame is cropped, scaled or shown, so the grain lands where a
+    decoder would have put it.
+    """
+
+    def __init__(self, gst, gst_video, device) -> None:
+        from vmaf_app.core.d3d11_film_grain import GrainDrawer
+        from vmaf_app.core.film_grain import FilmGrainTracker
+
+        self._gst, self._gst_video = gst, gst_video
+        self.tracker = FilmGrainTracker()
+        self._drawer = GrainDrawer(device)
+        self._read_decoder_config = False
+        # The tag each access unit leaves the parser with: its number
+        # (FilmGrainTracker.add_access_unit). The decoder copies it onto the
+        # frame it decodes from that access unit, as GstVideoDecoder copies
+        # every meta without tags; a GstReferenceTimestampMeta has none.
+        self._access_unit_tag = gst.Caps.from_string("timestamp/x-videometricslab-access-unit")
+        # The probe on the parser's output: (pad, probe id), once there is one.
+        self._parser_probe: tuple | None = None
+        # The frames' layout, worked out once for their caps:
+        # (caps, bit depth, plane sizes, chroma subsampling).
+        self._layout: tuple | None = None
+        # Whether grain has been drawn on any frame yet: for the status line.
+        self.drawn = False
+        # Why drawing the grain failed, if it did. It is not tried again.
+        self.failure: str | None = None
+
+    def element_added(self, _bin, _sub_bin, element) -> None:
+        """Handles decodebin3's deep-element-added signal: watches the access
+        units that its VVC parser hands on, once the parser is created."""
+        factory = element.get_factory()
+        if factory is not None and factory.get_name() == "h266parse":
+            kinds = self._gst.PadProbeType.BUFFER | self._gst.PadProbeType.EVENT_FLUSH
+            pad = element.get_static_pad("src")
+            self._parser_probe = (pad, pad.add_probe(kinds, self._on_parser_output))
+
+    def status(self) -> str | None:
+        """What the status line says about the grain: that it is drawn, or
+        was turned off by an error; None while no frame has had grain drawn."""
+        if self.failure is not None:
+            return "film grain off (error)"
+        return "film grain synthesized" if self.drawn else None
+
+    def _on_parser_output(self, pad, info):
+        """Reads an access unit from the parser (they come in decoding
+        order), or a seek's flush, after which decoding starts again."""
+        if self.failure is None:
+            try:
+                self._read_parser_output(pad, info)
+            except Exception as error:  # on GStreamer's thread: playback goes on without the grain
+                self._turn_off(f"could not read the grain messages: {error!r}")
+        return self._gst.PadProbeReturn.OK
+
+    def _read_parser_output(self, pad, info) -> None:
+        gst = self._gst
+        if info.type & gst.PadProbeType.EVENT_FLUSH:
+            if info.get_event().type == gst.EventType.FLUSH_STOP:
+                self.tracker.flush()
+            return
+        if not self._read_decoder_config:
+            # Matroska and MP4 can keep the stream's parameter sets in the caps.
+            self._read_decoder_config = True
+            caps = pad.get_current_caps()
+            codec_data = caps.get_structure(0).get_value("codec_data") if caps is not None else None
+            if codec_data is not None:
+                ok, mapped = codec_data.map(gst.MapFlags.READ)
+                if ok:
+                    self.tracker.read_decoder_config(bytes(mapped.data))
+                    codec_data.unmap(mapped)
+        # Writable, to be tagged; given back to the probe as the context ends.
+        with info.writable_object() as buffer:
+            ok, mapped = buffer.map(gst.MapFlags.READ)
+            if not ok:
+                return
+            pts = None if buffer.pts == gst.CLOCK_TIME_NONE else buffer.pts
+            try:
+                number = self.tracker.add_access_unit(mapped.data, pts)
+            finally:
+                buffer.unmap(mapped)
+            buffer.add_reference_timestamp_meta(self._access_unit_tag, number, gst.CLOCK_TIME_NONE)
+
+    def on_frame_uploaded(self, pad, info):
+        """Draws a decoded frame's grain on it, just after it was uploaded to the GPU."""
+        if self.failure is None:
+            try:
+                self._draw_grain(pad, info)
+            except Exception as error:  # on GStreamer's thread: playback goes on without the grain
+                self._turn_off(repr(error))
+        return self._gst.PadProbeReturn.OK
+
+    def _draw_grain(self, pad, info) -> None:
+        from vmaf_app.core.d3d11_film_grain import native_params
+        from vmaf_app.core.d3d11_tonemap import boxed_pointer
+
+        buffer = info.get_buffer()
+        tag = buffer.get_reference_timestamp_meta(self._access_unit_tag)
+        frame = self.tracker.take_frame_grain(None if tag is None else tag.timestamp,
+                                              None if buffer.pts == self._gst.CLOCK_TIME_NONE else buffer.pts)
+        if frame is None:
+            return
+        _caps, depth, sizes, chroma_shift = self._frame_layout(pad.get_current_caps())
+        params = native_params(frame, depth, sizes, chroma_shift)
+        if params is not None:
+            error = self._drawer.draw(boxed_pointer(buffer), params)
+            if error:
+                self._turn_off(error)
+            else:
+                self.drawn = True
+
+    def _turn_off(self, reason: str) -> None:
+        """Stops drawing the grain for this video, and says why in the log."""
+        self.failure = reason
+        logging.getLogger(__name__).warning("Film grain could not be drawn, and is left off: %s", reason)
+
+    def _frame_layout(self, caps) -> tuple:
+        if self._layout is None or self._layout[0] != caps.to_string():
+            from vmaf_app.core.d3d11_film_grain import plane_sizes
+
+            info = self._gst_video.VideoInfo.new_from_caps(caps)
+            planes = info.finfo.n_planes
+            chroma_shift = (info.finfo.w_sub[1], info.finfo.h_sub[1]) if planes > 1 else (0, 0)
+            sizes = plane_sizes(info.width, info.height, chroma_shift, planes)
+            self._layout = (caps.to_string(), info.finfo.depth[0], sizes, chroma_shift)
+        return self._layout
+
+    def remove_probe(self) -> None:
+        """Removes the probe on the parser's output. Called once the pipeline has stopped."""
+        if self._parser_probe is not None:
+            pad, probe = self._parser_probe
+            pad.remove_probe(probe)
+            self._parser_probe = None
+
+    def close(self) -> None:
+        """Frees the grain's GPU resources. Called once the pipeline has stopped."""
+        self._drawer.close()
+
+
+def _start_film_grain(gst, gst_video, device, info: VideoInfo) -> _FilmGrain | None:
+    """Sets up film grain drawing for a VVC video. Returns None for other
+    codecs, or if the synthesis is not built or cannot start on the device."""
+    from vmaf_app.core import d3d11_film_grain
+
+    if info.codec_name != "vvc" or device is None or not d3d11_film_grain.available():
+        return None
+    try:
+        return _FilmGrain(gst, gst_video, device)
+    except RuntimeError as error:
+        logging.getLogger(__name__).warning("Film grain is off for %s: %s", info.path.name, error)
+        return None
+
+
 class GstComparePipeline:
     """One video of a comparison -- its `side`, "source" or "distorted" --
     decoded, cropped, scaled and converted on the GPU into an appsink, as
@@ -476,14 +636,18 @@ class GstComparePipeline:
     ) -> None:
         if side not in ("source", "distorted"):
             raise ValueError("invalid video side")
-        gst, _gst_video = _load_gstreamer()
+        gst, gst_video = _load_gstreamer()
         self.Gst = gst
+        self._gst_video = gst_video
         self._comparison = comparison
         self._pipeline = gst.Pipeline.new("comparison")
         if self._pipeline is None:
             raise GStreamerPlaybackError("Could not create the GStreamer pipeline.")
         self._video_linked = {"source": False, "distorted": False}
         self._decoder_status_reported = False
+        #: What the status line last said about the film grain
+        #: (_FilmGrain.status): the line is given again when that changes.
+        self._reported_grain_status: str | None = None
         self._wanted_playing = False
         self._ready = False
         self._pending_initial_seek_ms: int | None = None
@@ -505,6 +669,12 @@ class GstComparePipeline:
         #: Signal handlers that call back into this object, (object, id):
         #: stop() removes them (_release).
         self._handlers: list[tuple[Any, int]] = []
+        #: Pad probes that call back into this object's parts, (pad, id):
+        #: stop() removes them (_release).
+        self._probes: list[tuple[Any, int]] = []
+        #: The VVC video's film grain, drawn on its frames (_FilmGrain); None
+        #: for other videos.
+        self._film_grain: _FilmGrain | None = None
         self._device = device
         if device is not None or any(
             _shading(i, settings) for i in (comparison.source_info, comparison.distorted_info)
@@ -564,6 +734,9 @@ class GstComparePipeline:
         decoder = self._make("decodebin3", f"{side}-decoder")
         self._handlers.append((decoder, decoder.connect("select-stream", self._select_stream, side)))
         self._handlers.append((decoder, decoder.connect("pad-added", self._pad_added, side)))
+        self._film_grain = _start_film_grain(self.Gst, self._gst_video, self._device, info)
+        if self._film_grain is not None:
+            self._handlers.append((decoder, decoder.connect("deep-element-added", self._film_grain.element_added)))
         queue = self._make("queue", f"{side}-video-queue")
         queue.set_property("max-size-buffers", 2)
         queue.set_property("max-size-bytes", 0)
@@ -577,6 +750,10 @@ class GstComparePipeline:
         upload = self._make("d3d11upload", f"{side}-upload")
         gpu_memory = self._make("capsfilter", f"{side}-gpu-memory")
         gpu_memory.set_property("caps", self.Gst.Caps.from_string("video/x-raw(memory:D3D11Memory)"))
+        if self._film_grain is not None:
+            # The whole decoded frame, on the GPU: its grain is drawn here.
+            pad = gpu_memory.get_static_pad("src")
+            self._probes.append((pad, pad.add_probe(self.Gst.PadProbeType.BUFFER, self._film_grain.on_frame_uploaded)))
         # On GPU memory videocrop cannot touch pixels; it attaches a crop
         # rectangle (GstVideoCropMeta) for the next element to honour, and
         # refuses to run unless that element says it will. d3d11convert does
@@ -674,6 +851,8 @@ class GstComparePipeline:
         self._seeker.close()
         self._pipeline.set_state(self.Gst.State.NULL)
         self._release()
+        if self._film_grain is not None:
+            self._film_grain.close()
 
     def _release(self) -> None:
         """Removes the callbacks into this object that the pipeline's
@@ -688,6 +867,11 @@ class GstComparePipeline:
             if element.handler_is_connected(handler):
                 element.disconnect(handler)
         self._handlers.clear()
+        for pad, probe in self._probes:
+            pad.remove_probe(probe)
+        self._probes.clear()
+        if self._film_grain is not None:
+            self._film_grain.remove_probe()
 
     def set_playing(self, playing: bool) -> None:
         self._wanted_playing = bool(playing)
@@ -811,6 +995,9 @@ class GstComparePipeline:
         details = [f"{width}×{height} {fmt}", memory, self._decoder_description()]
         if color:
             details.insert(1, str(color))
+        grain = self._film_grain.status() if self._film_grain is not None else None
+        if grain is not None:
+            details.append(grain)
         if self._shaded == "sdr":
             details.append("GPU HDR→SDR · fixed Reinhard 1000→100 nit")
         elif self._shaded == "hdr":
@@ -852,13 +1039,15 @@ class GstComparePipeline:
                 )
                 self._pipeline.set_state(target_state)
         status = None
-        if not self._decoder_status_reported:
+        grain = self._film_grain.status() if self._film_grain is not None else None
+        if not self._decoder_status_reported or grain != self._reported_grain_status:
             caps = [
                 sink.get_static_pad("sink").get_current_caps()
                 for sink in self._sinks.values()
             ]
             if all(item is not None for item in caps):
                 self._decoder_status_reported = True
+                self._reported_grain_status = grain
                 status = self._negotiated_description()
         return PlaybackUpdate(status, error, ended)
 

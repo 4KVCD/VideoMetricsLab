@@ -51,6 +51,16 @@ else:
     print("WARNING: d3d11_tonemap.dll is missing; the build will fall back "
           "to FFmpeg tone mapping. Run scripts/build_d3d11_tonemap.ps1 first.")
 
+# Video Compare's film grain synthesis for VVC (vmaf_app.core.d3d11_film_grain
+# finds it beside the tone mapper), with the notice of the VTM tables it holds.
+FILM_GRAIN_DLL = PROJECT / "vmaf_app" / "native" / "d3d11_film_grain.dll"
+if FILM_GRAIN_DLL.is_file():
+    datas.append((str(FILM_GRAIN_DLL), "vmaf_app/native"))
+    datas.append((str(PROJECT / "native" / "h274" / "LICENSE.vtm.txt"), "vmaf_app/native/licenses"))
+else:
+    print("WARNING: d3d11_film_grain.dll is missing; Video Compare will play VVC "
+          "without its film grain. Run scripts/build_d3d11_film_grain.ps1 first.")
+
 # The decoders the GPU metrics read their frames from -- NVIDIA's, Intel's
 # and AMD's, and the software decoder for what FFmpeg decodes in software
 # (scripts/build_gpu_frames.ps1) -- with the notices of the headers compiled

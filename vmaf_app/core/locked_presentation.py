@@ -8,7 +8,7 @@ import threading
 import time
 from collections import deque
 
-from vmaf_app.core.d3d11_tonemap import boxed_pointer, library_path
+from vmaf_app.core.d3d11_tonemap import boxed_pointer, library_path, object_pointer
 from vmaf_app.core.gstreamer_playback import Seeker, _load_gstreamer
 
 #: The colour beside a frame: the views' background (VideoCompareView).
@@ -60,13 +60,6 @@ class _CropMeta(ctypes.Structure):
                 ("x", ctypes.c_uint), ("y", ctypes.c_uint), ("width", ctypes.c_uint), ("height", ctypes.c_uint)]
 
 
-def _object_pointer(instance) -> int:
-    """The GObject a PyGObject wrapper stands for."""
-    capsule = ctypes.pythonapi.PyCapsule_GetPointer
-    capsule.restype, capsule.argtypes = ctypes.c_void_p, [ctypes.py_object, ctypes.c_char_p]
-    return capsule(instance.__gpointer__, None)
-
-
 def yuv_to_rgb(matrix: str, full_range: bool, ten_bit: bool) -> tuple[float, ...]:
     """The presenter's rows of Y, U, V coefficients and an offset, for a
     frame's planes as its shader samples them: NV12's 8-bit codes over 255,
@@ -107,7 +100,7 @@ class LockedPresentation:
         self.window, self.device = window, device
         self._lib, self._gst = _presenter_api()
         self._crop_meta = _crop_meta_api()
-        handle = self._gst.gst_d3d11_device_get_device_handle(_object_pointer(device))
+        handle = self._gst.gst_d3d11_device_get_device_handle(object_pointer(device))
         device.lock()
         try:
             self._presenter = self._lib.vmaf_present_create(handle, window, int(settings.display_hdr_enabled is True))

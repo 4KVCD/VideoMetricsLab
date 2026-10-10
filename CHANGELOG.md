@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.1 (in development)
+
+### New features
+
+- Added film grain synthesis for VVC encodes in Video Compare.
+
 ## v2.0
 
 v2.0 is a major performance update. VMAF, VMAF NEG and VMAF v1 now run on
