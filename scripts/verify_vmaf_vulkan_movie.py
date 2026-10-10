@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from vmaf_app.core import gpu_frames, vmaf_cuda, vmaf_vulkan
 from vmaf_app.core.ffprobe import probe_video
-from vmaf_app.core.frame_sync import frame_pairs
+from vmaf_app.core.frame_sync import decoded_frame_pairs
 from vmaf_app.core.gpu import plan_hwaccel
 from vmaf_app.core.models import VmafOptions
 from vmaf_app.core.vmaf_runner import (
@@ -92,28 +92,13 @@ def main() -> int:
     try:
         test.start()
         ref.start()
-        test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
-        stop = gpu_frames.duration_in(f"{arguments.seconds + 1 / distorted.fps:.3f}", test_base) \
-            if arguments.seconds > 0 else None
-
-        def puller(stream):
-            def pull():
-                while True:
-                    try:
-                        return stream.next(100)
-                    except TimeoutError:
-                        continue
-            return pull
-
-        pairs = frame_pairs(puller(test), puller(ref), test_base, ref_base, test.release, ref.release)
+        # As the app's run: libvmaf scores the frame in flight at the limit too.
+        limit = f"{arguments.seconds + 1 / distorted.fps:.3f}" if arguments.seconds > 0 else None
+        pairs = decoded_frame_pairs(test, ref, distorted, limit, lambda: None, test.release, ref.release)
         count = 0
         started = time.perf_counter()
         try:
-            for test_slot, ref_slot, when in pairs:
-                if stop is not None and when >= stop:
-                    break
-                if ref_slot is None:
-                    raise SystemExit("the source has no frame for the test video's first")
+            for test_slot, ref_slot in pairs:
                 cuda.add_on_device(lambda address, pitch, slot=ref_slot: ref.copy_luma(slot, address, pitch),
                                    lambda address, pitch, slot=test_slot: test.copy_luma(slot, address, pitch))
                 vulkan.add_decoded(lambda address, slot=ref_slot: ref.download(slot, address),

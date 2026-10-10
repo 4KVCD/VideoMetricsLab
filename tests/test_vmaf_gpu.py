@@ -40,31 +40,43 @@ def test_only_vmaf_and_neg_with_a_built_in_model_go_to_the_gpu():
     assert vmaf_cuda.gpu_models(False, False, "version=vmaf_v0.6.1") is None
 
 
-def test_the_graph_gives_the_gpu_libvmafs_frame_pairs_and_nothing_else():
+@pytest.mark.parametrize("pairing", ["number", "timestamp"])
+def test_the_graph_gives_the_gpu_libvmafs_frame_pairs_and_nothing_else(monkeypatch, pairing):
     """The GPU's pairs come through overlay's frame sync with libvmaf's
-    options -- by position, they were not always libvmaf's pairs. FFmpeg's
-    own filters score nothing in a GPU run: VMAF and NEG are all it has."""
+    options, both videos numbered at the test video's frame rate: each
+    video's frame N, as libvmaf pairs them (frame_sync) -- or pairing by
+    timestamp, as before, each video's times started at 0 and the nearest
+    taken. FFmpeg's own filters score nothing in a GPU run: VMAF and NEG are
+    all it has."""
+    monkeypatch.setenv("VML_FRAME_PAIRING", pairing)
     graph = vr._build_filtergraph(_info("d.mkv"), _info("s.mkv"), VmafOptions(compute_vmaf_neg=True), None, None,
                                   HwAccelPlan(), Path("vmaf_log.json"), gpu_vmaf=True)
+    timing, sync = (("settb=AVTB,setpts=N*1000000/24", "shortest=1:repeatlast=0") if pairing == "number" else
+                    ("setpts=PTS-STARTPTS", "shortest=1:repeatlast=0:ts_sync_mode=nearest"))
+    assert graph.startswith(f"[0:V:0]format=yuv420p,{timing}[main];[1:V:0]format=yuv420p,{timing}[ref];")
     assert ("[main]pad=3840:1080[vmaf_canvas];[vmaf_canvas][ref]overlay=x=1920:y=0:eval=init:"
-            "format=yuv420:shortest=1:repeatlast=0:ts_sync_mode=nearest,split=2[vmaf_left][vmaf_right];"
+            f"format=yuv420:{sync},split=2[vmaf_left][vmaf_right];"
             "[vmaf_left]crop=1920:1080:0:0[vmaf_dist];[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]") in graph
     assert graph.endswith("[vmaf_right]crop=1920:1080:1920:0[vmaf_ref]")
     assert "libvmaf" not in graph and "xpsnr" not in graph
 
 
-def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through():
+@pytest.mark.parametrize("pairing", ["number", "timestamp"])
+def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through(monkeypatch, pairing):
+    monkeypatch.setenv("VML_FRAME_PAIRING", pairing)
     raw = ["-map", "[vmaf_dist]", "D", "-map", "[vmaf_ref]", "R"]
     assert vr._build_ffmpeg_output_args("G", 30.0, raw) == [
         "-lavfi", "G", "-progress", "pipe:1", "-nostats", *raw]
+    # frame_sync.duration_args: held to the numbered times, or a plain -t as before.
+    cut = ["-enc_time_base", "filter", "-t"] if pairing == "number" else ["-t"]
     assert vr._build_ffmpeg_output_args("G", 30.0) == [
-        "-lavfi", "G", "-progress", "pipe:1", "-nostats", "-t", "30.000", "-f", "null", "-"]
+        "-lavfi", "G", "-progress", "pipe:1", "-nostats", *cut, "30.000", "-f", "null", "-"]
     attempt = object.__new__(vmaf_cuda.GpuAttempt)
     attempt.paired = True  # by FFmpeg; test_vmaf_gpu_streams.py for the pairing in the app
     attempt.distorted, attempt.reference = SimpleNamespace(path="D"), SimpleNamespace(path="R")
     assert attempt.output_args(30.5) == [
-        "-map", "[vmaf_dist]", "-fps_mode", "passthrough", "-t", "30.500", "-f", "rawvideo", "D",
-        "-map", "[vmaf_ref]", "-fps_mode", "passthrough", "-t", "30.500", "-f", "rawvideo", "R"]
+        "-map", "[vmaf_dist]", "-fps_mode", "passthrough", *cut, "30.500", "-f", "rawvideo", "D",
+        "-map", "[vmaf_ref]", "-fps_mode", "passthrough", *cut, "30.500", "-f", "rawvideo", "R"]
 
 
 def test_the_gpus_scores_are_the_runs_frame_scores():

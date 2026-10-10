@@ -139,6 +139,11 @@ def isolate_user_state(tmp_path, monkeypatch):
     # app's own (vmaf_runner._run_cpu_metrics): it runs in a process of its
     # own, which a test faking FFmpeg's run would start for real.
     monkeypatch.setenv(vmaf_runner.CPU_METRICS_VARIABLE, "ffmpeg")
+    # Frames are paired by number unless a test asks for the old pairing by
+    # timestamp (frame_sync.by_timestamp), whatever the shell has set.
+    from vmaf_app.core import frame_sync
+
+    monkeypatch.delenv(frame_sync.PAIRING_VARIABLE, raising=False)
     # Detected black bars are remembered per file for the life of the
     # process; a test's answer must not leak into the next one's.
     crop_detect.clear_cache()

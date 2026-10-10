@@ -14,36 +14,26 @@ from vmaf_app.core.vmaf_runner import Cancelled
 HEADER = b"YUV4MPEG2 W2 H2 F24000:1001 Ip A1:1 C420jpeg\n"
 
 
-def _listing(time_base: str, stamps) -> bytes:
-    lines = ["#software: Lavf", f"#tb 0: {time_base}", "#media_type 0: video"]
-    lines += [f"0, {stamp:10d}, {stamp:10d},       41,      424, 0x28dc17fd" for stamp in stamps]
-    return ("\n".join(lines) + "\n").encode()
-
-
-def _write(reader, frames, time_base="1/1000", stamps=None, tail=b""):
-    """As FFmpeg: the frames to one pipe, their timestamps to the other, then gone."""
-    stamps = range(0, 42 * len(frames), 42) if stamps is None else stamps
+def _write(reader, frames, tail=b""):
+    """As FFmpeg: the frames to the pipe, then gone."""
     with open(reader.path, "wb") as pixels:
         pixels.write(HEADER + b"".join(b"FRAME\n" + frame for frame in frames) + tail)
-    with open(reader.listing_path, "wb") as listing:
-        listing.write(_listing(time_base, stamps))
 
 
 def _pulled(reader):
-    items = []
-    while (item := reader.pull()) is not None:
-        items.append((bytes(item[0]), item[1]))
-        reader.release(item[0])
-    return items
+    frames = []
+    while (frame := reader.pull()) is not None:
+        frames.append(bytes(frame))
+        reader.release(frame)
+    return frames
 
 
-def test_a_video_comes_as_its_frames_and_their_timestamps():
+def test_a_video_comes_as_its_frames():
     reader = vmaf_cuda._StreamReader("test", 6)
     reader.start()
-    writer = threading.Thread(target=_write, args=(reader, [b"abcdef", b"ghijkl", b"mnopqr"], "1001/24000", [0, 1, 3]))
+    writer = threading.Thread(target=_write, args=(reader, [b"abcdef", b"ghijkl", b"mnopqr"]))
     writer.start()
-    assert reader.wait_time_base() == Fraction(1001, 24000)
-    assert _pulled(reader) == [(b"abcdef", 0), (b"ghijkl", 1), (b"mnopqr", 3)]
+    assert _pulled(reader) == [b"abcdef", b"ghijkl", b"mnopqr"]
     writer.join(5)
     reader.ffmpeg_ended()
     reader.join()
@@ -55,9 +45,9 @@ def test_frames_that_end_inside_one_are_an_error_not_a_short_video():
     reader.start()
     writer = threading.Thread(target=_write, args=(reader, [b"abcdef"]), kwargs={"tail": b"FRAME\nxyz"})
     writer.start()
-    item = reader.pull()
-    assert bytes(item[0]) == b"abcdef"
-    reader.release(item[0])
+    frame = reader.pull()
+    assert bytes(frame) == b"abcdef"
+    reader.release(frame)
     writer.join(5)
     reader.ffmpeg_ended()
     with pytest.raises(vmaf_cuda.VmafGpuError, match="ended"):
@@ -80,16 +70,71 @@ class _Scorer:
         self.closed = True
 
 
-def test_the_attempt_pairs_the_two_videos_frames_as_libvmafs_filter_would(monkeypatch):
-    """By the nearest timestamp, each video's from its own first frame and
-    in its own time base (frame_sync); the source's extra frame at the end
-    is read and dropped."""
+def test_the_attempt_pairs_frame_n_of_one_video_with_frame_n_of_the_other(monkeypatch):
+    """As libvmaf's filter pairs the two videos' numbered frames
+    (frame_sync); the source's extra frame at the end is read and dropped."""
     monkeypatch.setattr(vmaf_cuda, "GpuScorer", _Scorer)
     attempt = vmaf_cuda.GpuAttempt(2, 2, 8, {"vmaf": "vmaf_v0.6.1"}, 1, paired=False)
     test = [b"t0....", b"t1....", b"t2...."]
     source = [b"s0....", b"s1....", b"s2....", b"s3...."]
-    writers = [threading.Thread(target=_write, args=(attempt.distorted, test, "1/1000", [0, 42, 83])),
-               threading.Thread(target=_write, args=(attempt.reference, source, "1001/24000", [7, 8, 9, 10]))]
+    writers = [threading.Thread(target=_write, args=(attempt.distorted, test)),
+               threading.Thread(target=_write, args=(attempt.reference, source))]
+    for writer in writers:
+        writer.start()
+    for writer in writers:
+        writer.join(10)
+    assert attempt.finish(True) == ("frames", {"vmaf": 3})
+    assert attempt._scorer.pairs == [(b"s0....", b"t0...."), (b"s1....", b"t1...."), (b"s2....", b"t2....")]
+    assert attempt._scorer.closed
+
+
+# --------------------------------------------- pairing by timestamp, as before
+
+def _listing(time_base: str, stamps) -> bytes:
+    lines = ["#software: Lavf", f"#tb 0: {time_base}", "#media_type 0: video"]
+    lines += [f"0, {stamp:10d}, {stamp:10d},       41,      424, 0x28dc17fd" for stamp in stamps]
+    return ("\n".join(lines) + "\n").encode()
+
+
+def _write_timed(reader, frames, time_base="1/1000", stamps=None):
+    """As FFmpeg when pairing by timestamp: the frames to one pipe, their
+    timestamps to the other, then gone."""
+    stamps = range(0, 42 * len(frames), 42) if stamps is None else stamps
+    _write(reader, frames)
+    with open(reader.listing_path, "wb") as listing:
+        listing.write(_listing(time_base, stamps))
+
+
+def test_pairing_by_timestamp_a_video_comes_as_its_frames_and_their_timestamps():
+    reader = vmaf_cuda._TimedStreamReader("test", 6)
+    reader.start()
+    writer = threading.Thread(target=_write_timed,
+                              args=(reader, [b"abcdef", b"ghijkl", b"mnopqr"], "1001/24000", [0, 1, 3]))
+    writer.start()
+    assert reader.wait_time_base() == Fraction(1001, 24000)
+    pulled = []
+    while (item := reader.pull()) is not None:
+        pulled.append((bytes(item[0]), item[1]))
+        reader.release(item[0])
+    assert pulled == [(b"abcdef", 0), (b"ghijkl", 1), (b"mnopqr", 3)]
+    writer.join(5)
+    reader.ffmpeg_ended()
+    reader.join()
+    assert reader.pull() is None  # and stays ended
+
+
+def test_pairing_by_timestamp_the_attempt_pairs_as_libvmafs_filter_would(monkeypatch):
+    """With VML_FRAME_PAIRING=timestamp: by the nearest timestamp, each
+    video's from its own first frame and in its own time base
+    (frame_sync_by_time); the source's extra frame at the end is read and
+    dropped."""
+    monkeypatch.setenv("VML_FRAME_PAIRING", "timestamp")
+    monkeypatch.setattr(vmaf_cuda, "GpuScorer", _Scorer)
+    attempt = vmaf_cuda.GpuAttempt(2, 2, 8, {"vmaf": "vmaf_v0.6.1"}, 1, paired=False)
+    test = [b"t0....", b"t1....", b"t2...."]
+    source = [b"s0....", b"s1....", b"s2....", b"s3...."]
+    writers = [threading.Thread(target=_write_timed, args=(attempt.distorted, test, "1/1000", [0, 42, 83])),
+               threading.Thread(target=_write_timed, args=(attempt.reference, source, "1001/24000", [7, 8, 9, 10]))]
     for writer in writers:
         writer.start()
     for writer in writers:

@@ -1,15 +1,17 @@
-"""frame_sync.frame_pairs against FFmpeg's own frame sync: the overlay
-vmaf_runner._gpu_pairs_stage pairs the two videos with (libvmaf's options),
-on small videos whose frames carry their numbers in their pixels, with
-timestamps of many kinds -- the same rate, a millisecond off, other rates,
-gaps, ties, one video longer, other time bases, a -t limit. And, on a PC
-with an NVIDIA GPU, VMAF from frames decoded and paired here against VMAF
-from FFmpeg's."""
+"""frame_sync's pairing -- each video's frame N with the other's -- against
+FFmpeg: on small videos whose frames carry their numbers in their pixels,
+with timestamps of many kinds (the same rate, a millisecond off, other
+rates, gaps, ties, one video longer, other time bases), FFmpeg's overlay
+pairs the two videos' numbered frames (numbering_filters) N with N, as
+frame_pairs does, and an output's -t keeps the frames frames_within counts.
+And, on a PC with an NVIDIA GPU, VMAF from frames decoded and paired here
+against VMAF from FFmpeg's."""
 from __future__ import annotations
 
 import subprocess
 from fractions import Fraction
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,10 +19,9 @@ import pytest
 from tests.test_gpu_frames import _clip as _coded_clip
 from tests.test_gpu_frames import _gpu_decodes
 from vmaf_app.core import gpu_frames as nv
-from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
+from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.ffprobe import probe_video
-from vmaf_app.core.frame_sync import frame_pairs
-from vmaf_app.core.gpu_frames import duration_in
+from vmaf_app.core.frame_sync import duration_args, frame_pairs, frame_rate, frames_within, numbering_filters
 from vmaf_app.core.vmaf_runner import _gpu_pairs_stage
 
 W, H = 64, 32
@@ -40,21 +41,15 @@ def _clip(path: Path, count: int, pts_expression: str, time_base: str = "1/1000"
     return path
 
 
-def _timestamps(path: Path) -> tuple[Fraction, list[int]]:
-    out = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries",
-                          "stream=time_base:frame=pts", "-of", "csv=p=0", str(path)],
-                         capture_output=True, text=True, check=True).stdout.split()
-    base = next(line for line in out if "/" in line)
-    num, den = base.split("/")
-    return Fraction(int(num), int(den)), [int(line.strip(",")) for line in out if "/" not in line and line.strip(",")]
-
-
-def _ffmpeg_pairs(main: Path, ref: Path, tmp: Path, limit: str | None) -> list[tuple[int, int]]:
-    graph = ("[0:v]format=yuv420p,setpts=PTS-STARTPTS[main];[1:v]format=yuv420p,setpts=PTS-STARTPTS[ref];"
+def _ffmpeg_pairs(main: Path, ref: Path, tmp: Path, rate: Fraction, limit: str | None) -> list[tuple[int, int]]:
+    """The frame numbers of the pairs FFmpeg's overlay makes of the two
+    videos' numbered frames, cut at `limit` as every output is (duration_args)."""
+    numbering = ",".join(numbering_filters(rate))
+    graph = (f"[0:v]format=yuv420p,{numbering}[main];[1:v]format=yuv420p,{numbering}[ref];"
              + _gpu_pairs_stage("yuv420p", W, H, "main", "ref"))
     outputs = []
     for label, name in (("vmaf_dist", "d.raw"), ("vmaf_ref", "r.raw")):
-        outputs += ["-map", f"[{label}]", "-fps_mode", "passthrough", *(["-t", limit] if limit else []),
+        outputs += ["-map", f"[{label}]", "-fps_mode", "passthrough", *duration_args(limit),
                     "-f", "rawvideo", str(tmp / name)]
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-i", str(main), "-i", str(ref),
                     "-lavfi", graph, *outputs], check=True)
@@ -63,22 +58,6 @@ def _ffmpeg_pairs(main: Path, ref: Path, tmp: Path, limit: str | None) -> list[t
     source = np.fromfile(tmp / "r.raw", dtype=np.uint8).reshape(-1, size)[:, 0].astype(int) - 3
     assert len(dist) == len(source)
     return list(zip(dist.tolist(), source.tolist(), strict=True))
-
-
-def _our_pairs(main: Path, ref: Path, limit: str | None) -> list[tuple[int, int]]:
-    main_base, main_pts = _timestamps(main)
-    ref_base, ref_pts = _timestamps(ref)
-    main_frames = iter(enumerate(main_pts))
-    ref_frames = iter(enumerate(ref_pts))
-    stop = duration_in(limit, main_base) if limit else None
-    pairs = []
-    for test, source, when in frame_pairs(lambda: next(main_frames, None), lambda: next(ref_frames, None),
-                                          main_base, ref_base, lambda _f: None, lambda _f: None):
-        if stop is not None and when >= stop:
-            break
-        assert source is not None
-        pairs.append((test, source))
-    return pairs
 
 
 # (test video: frames, pts, time base, container), (source: ...), -t
@@ -91,9 +70,7 @@ CASES = {
     "test frames a millisecond late": (
         (48, "N*42+if(eq(mod(N\\,4)\\,1)\\,1\\,0)", "1/1000", "mkv"), (48, "N*42", "1/1000", "mkv"), None),
     "24 against 25 fps": ((48, "N*1000/24", "1/1000", "mkv"), (50, "N*40", "1/1000", "mkv"), None),
-    "25 against 24 fps": ((50, "N*40", "1/1000", "mkv"), (48, "N*1000/24", "1/1000", "mkv"), None),
     "30 against 60 fps": ((30, "N*1000/30", "1/1000", "mkv"), (60, "N*1000/60", "1/1000", "mkv"), None),
-    "60 against 30 fps": ((60, "N*1000/60", "1/1000", "mkv"), (30, "N*1000/30", "1/1000", "mkv"), None),
     "ties halfway": ((30, "N*40+20", "1/1000", "mkv"), (31, "N*40", "1/1000", "mkv"), None),
     "test video has gaps": (
         (40, "N*42+if(gt(N\\,10)\\,84\\,0)+if(gt(N\\,25)\\,42\\,0)", "1/1000", "mkv"),
@@ -102,52 +79,70 @@ CASES = {
         (48, "N*42", "1/1000", "mkv"), (44, "N*42+if(gt(N\\,5)\\,126\\,0)", "1/1000", "mkv"), None),
     "variable rate both": (
         (45, "N*40+mod(N*7\\,13)", "1/1000", "mkv"), (45, "N*41+mod(N*5\\,11)", "1/1000", "mkv"), None),
-    "mp4 source, other time base": (
-        (48, "N*42", "1/1000", "mkv"), (48, "N*3754", "1/90000", "mp4")),
+    "source starts later": ((48, "N*42", "1/1000", "mkv"), (48, "500+N*42", "1/1000", "mkv"), None),
     "mp4 test video, 1/24000": ((48, "N*1001", "1/24000", "mp4"), (48, "N*42", "1/1000", "mkv"), None),
-    # vmaf_runner's case: timestamps a fraction of a millisecond apart, from
-    # two containers' clocks -- the GPU once compared 240 pairs to the CPU's 239.
     "23.976 fps from two clocks": (
         (240, "N*1001", "1/24000", "mp4"), (240, "round(N*1001/24)", "1/1000", "mkv"), None),
-    "23.976 fps from two clocks, source first": (
-        (240, "round(N*1001/24)", "1/1000", "mkv"), (240, "N*1001", "1/24000", "mp4"), None),
-    "limit on a frame": ((48, "N*42", "1/1000", "mkv"), (48, "N*42", "1/1000", "mkv"), "1.008"),
-    "limit between frames": ((48, "N*42", "1/1000", "mkv"), (48, "N*42", "1/1000", "mkv"), "1.000"),
-    "limit, other time base": ((48, "N*1001", "1/24000", "mp4"), (48, "N*42", "1/1000", "mkv"), "1.043"),
+    "limit on a frame": ((48, "N*1001", "1/24000", "mp4"), (48, "N*42", "1/1000", "mkv"), "1.001"),
+    "limit between frames": ((48, "N*1001", "1/24000", "mp4"), (48, "N*42", "1/1000", "mkv"), "1.000"),
+    "limit between frames at a whole rate": ((60, "N*1000/24", "1/1000", "mkv"), (60, "N*40", "1/1000", "mkv"),
+                                              "1.010"),
+    "limit a frame on, as the GPU paths give it": (
+        (48, "N*1001", "1/24000", "mp4"), (48, "N*42", "1/1000", "mkv"), "1.043"),
 }
 
 
-def test_pairs_are_ffmpegs(tmp_path_factory, subtests):
+def test_frames_are_paired_by_number_whatever_their_timestamps(tmp_path_factory, subtests):
     def check(name, tmp_path):
-        test_spec, source_spec, *rest = CASES[name]
-        limit = rest[0] if rest else None
+        test_spec, source_spec, limit = CASES[name]
         main = _clip(tmp_path / f"main.{test_spec[3]}", *test_spec[:3])
         ref = _clip(tmp_path / f"ref.{source_spec[3]}", *source_spec[:3])
-        expected = _ffmpeg_pairs(main, ref, tmp_path, limit)
-        assert expected, "FFmpeg paired nothing"
-        assert _our_pairs(main, ref, limit) == expected
+        rate = frame_rate(probe_video(main))
+        kept = frames_within(limit, rate)
+        count = min(test_spec[0], source_spec[0], *([kept] if kept is not None else []))
+        expected = [(number, number) for number in range(count)]
+        assert _ffmpeg_pairs(main, ref, tmp_path, rate, limit) == expected
+        test_frames, source_frames = iter(range(test_spec[0])), iter(range(source_spec[0]))
+        ours = frame_pairs(lambda: next(test_frames, None), lambda: next(source_frames, None),
+                           lambda _frame: None, lambda _frame: None, kept)
+        assert list(ours) == expected
 
-    for name in list(CASES):
+    for name in CASES:
         with subtests.test(name=name):
             check(name, tmp_path_factory.mktemp("case"))
 
 
-def test_frames_are_released_once_no_pair_needs_them():
-    """Each frame is released exactly once, and only after the pair after
-    its last pair is asked for."""
+def test_frames_are_numbered_at_the_test_videos_exact_frame_rate(subtests):
+    for fps, rate in ((23.976023976023978, Fraction(24000, 1001)), (29.97002997002997, Fraction(30000, 1001)),
+                      (119.88011988011988, Fraction(120000, 1001)), (25.0, Fraction(25)), (0.0, Fraction(25))):
+        with subtests.test(fps=fps):
+            assert frame_rate(SimpleNamespace(fps=fps)) == rate
+    # 30 s at 23.976 fps keeps frames 0 to 719 (719 * 1001 / 24000 = 29.99 s).
+    assert frames_within("30.000", Fraction(24000, 1001)) == 720
+    assert frames_within(None, Fraction(25)) is None
+
+
+def test_frames_are_released_once_the_next_pair_is_asked_for():
+    """Each frame is released exactly once: a pair's once the next pair is
+    asked for, a test frame with no source frame left at once, and the last
+    pair's when the pairing ends; past a limit, no frame is taken."""
     released = []
-    main = iter([("m0", 0), ("m1", 42), ("m2", 83), ("m3", 125)])
-    ref = iter([("r0", 0), ("r1", 30), ("r2", 50), ("r3", 84)])
-    pairs = frame_pairs(lambda: next(main, None), lambda: next(ref, None), Fraction(1, 1000), Fraction(1, 1000),
-                        released.append, released.append)
+    main = iter(["m0", "m1", "m2", "m3"])
+    ref = iter(["r0", "r1", "r2"])
+    pairs = frame_pairs(lambda: next(main, None), lambda: next(ref, None), released.append, released.append)
     seen = []
-    for test, source, _when in pairs:
+    for test, source in pairs:
         assert test not in released and source not in released
         seen.append((test, source))
-    # r1 is passed over (r2 is nearer m1); m3 comes after the source's end,
-    # stamped a tick after r3, and ends the comparison (shortest=1).
-    assert seen == [("m0", "r0"), ("m1", "r2"), ("m2", "r3")]
-    assert sorted(released) == ["m0", "m1", "m2", "m3", "r0", "r1", "r2", "r3"]
+    assert seen == [("m0", "r0"), ("m1", "r1"), ("m2", "r2")]
+    assert sorted(released) == ["m0", "m1", "m2", "m3", "r0", "r1", "r2"]
+
+    released.clear()
+    main, ref = iter(["m0", "m1", "m2"]), iter(["r0", "r1", "r2"])
+    pairs = frame_pairs(lambda: next(main, None), lambda: next(ref, None), released.append, released.append, 2)
+    assert list(pairs) == [("m0", "r0"), ("m1", "r1")]
+    assert sorted(released) == ["m0", "m1", "r0", "r1"]
+    assert next(main) == "m2"
 
 
 def test_vmaf_from_pictures_decoded_here_is_vmaf_from_ffmpegs(tmp_path):

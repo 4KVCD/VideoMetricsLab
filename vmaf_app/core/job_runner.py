@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from vmaf_app.core import vmaf_cuda
+from vmaf_app.core import frame_sync, vmaf_cuda
 from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import ExecutionPlan, MetricTask, build_execution_plan
@@ -347,9 +347,10 @@ class JobScheduler:
                 _log.error("Video %d '%s' could not be set up: %s", index + 1, job.label, error, exc_info=error)
                 self.events.job_started(index, job.label)
                 self.events.job_failed(index, str(error), getattr(error, "stderr_tail", "") or "")
-        _log.info("%s %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time%s", RUN_START,
+        _log.info("%s %d video(s), CPU metrics for up to %d at once, GPU metrics one video at a time%s%s", RUN_START,
                   len(self.jobs), self.parallel_jobs,
-                  ", each video's in one pass" if self.gpu_metrics_together else "")
+                  ", each video's in one pass" if self.gpu_metrics_together else "",
+                  ", frames paired by timestamp (VML_FRAME_PAIRING)" if frame_sync.by_timestamp() else "")
         for run in runs:
             _log.info("%s", run.describe())
         for run in runs:

@@ -24,7 +24,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
-from vmaf_app.core.frame_sync import FRAMESYNC_OPTS
+from vmaf_app.core.frame_sync import by_timestamp, duration_args, frame_rate, framesync_opts, pairing_filters
 from vmaf_app.core.geometry import (
     analysis_dimensions,
     content_size,
@@ -256,7 +256,7 @@ def _build_libvmaf_opts(options: VmafOptions, log_path: Path, model: str | None 
         opts.append(f"n_subsample={options.n_subsample}")
     if options.extra_features:
         opts.append("feature=" + "|".join(options.extra_features))
-    opts += FRAMESYNC_OPTS
+    opts += framesync_opts()
     return opts
 
 
@@ -277,18 +277,11 @@ _OVERLAY_FORMAT = {"yuv420p": "yuv420", "yuv420p10le": "yuv420p10"}
 
 
 def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: str, ref_label: str) -> str:
-    """The frame pairs FFmpeg's libvmaf filter compares, as the raw outputs
-    [vmaf_dist] and [vmaf_ref] that VMAF on the GPU reads: the two streams
-    are synchronized by overlay with libvmaf's own frame sync options
-    (FRAMESYNC_OPTS), side by side in one frame, and cut apart again,
-    every pixel unchanged.
-
-    The two outputs used to come straight from the two streams, paired by
-    position, where libvmaf pairs them by timestamp: on a test video whose
-    timestamps were a fraction of a millisecond from the source's, libvmaf
-    on the CPU compared 239 frames and the GPU 240 -- and with VMAF v1,
-    PSNR, SSIM or XPSNR beside it, VMAF on the GPU was refused and the
-    video calculated again on the CPU.
+    """The frame pairs FFmpeg's libvmaf filter compares (frame_sync), as the
+    raw outputs [vmaf_dist] and [vmaf_ref] that VMAF on the GPU reads, when
+    FFmpeg pairs them (vmaf_cuda.pairs_in_app): overlay pairs the two
+    streams as libvmaf does (frame_sync.framesync_opts), side by side in one
+    frame, and they are cut apart again, every pixel unchanged.
 
     For an even width and height only (vmaf_cuda.scores_on_gpu sends an odd
     comparison to the CPU): pad gives a 4:2:0 picture an even size and
@@ -297,7 +290,7 @@ def _gpu_pairs_stage(analysis_format: str, width: int, height: int, main_label: 
     the run still failed in FFmpeg, every time."""
     if width & 1 or height & 1:
         raise ValueError(f"the GPU's frame pairs need an even size, not {width}x{height}")
-    sync = ":".join(FRAMESYNC_OPTS)
+    sync = ":".join(framesync_opts())
     return (f"[{main_label}]pad={2 * width}:{height}[vmaf_canvas];"
             f"[vmaf_canvas][{ref_label}]overlay=x={width}:y=0:eval=init:"
             f"format={_OVERLAY_FORMAT[analysis_format]}:{sync},split=2[vmaf_left][vmaf_right];"
@@ -337,7 +330,7 @@ def _xpsnr_filter(source_label: str, test_label: str, xpsnr_log_path: Path) -> s
     from the encode: XPSNR 1.2 dB lower on a 4K film's 3 Mb/s encode, 0.9 dB
     on its 12 Mb/s one, 1.8 dB on a 1080p test pattern's."""
     return (f"[{source_label}][{test_label}]xpsnr=stats_file={xpsnr_log_path.name}:"
-            + ":".join(FRAMESYNC_OPTS))
+            + ":".join(framesync_opts()))
 
 
 def _build_libvmaf_stage(
@@ -389,8 +382,13 @@ def _build_filtergraph(
     (vmaf_cuda._StreamReader, frame_sync), from each video as it would reach
     libvmaf's filter, and two graphs come back, a line each -- the test
     video's and the source's, each for an FFmpeg of its own
-    (_build_stream_cmds): the video's frames ([vmaf_dist], [vmaf_ref]) and a
-    copy that costs nothing, which FFmpeg lists the timestamps of ([.._ts])."""
+    (_build_stream_cmds) -- giving the video's frames ([vmaf_dist],
+    [vmaf_ref]) and, when pairing by timestamp, a copy that costs nothing,
+    which FFmpeg lists the timestamps of ([.._ts]).
+
+    Both videos' frames are numbered (frame_sync.pairing_filters), so that
+    libvmaf, xpsnr and overlay pair frame N with frame N; when pairing by
+    timestamp, each video's times start at 0 instead."""
     dist_content_w, dist_content_h = content_size(distorted_info, distorted_crop)
     ref_content_w, ref_content_h = content_size(source_info, source_crop)
     resolutions_differ = (ref_content_w, ref_content_h) != (dist_content_w, dist_content_h)
@@ -404,6 +402,10 @@ def _build_filtergraph(
     # XPSNR beside libvmaf's metrics: each in a filter graph of its own,
     # which FFmpeg runs on a thread of its own (_split_graphs).
     split = not gpu_vmaf and _split_graphs(options, xpsnr_log_path)
+
+    # Frame N of each video stamped N frame times of the test video (or,
+    # pairing by timestamp, each video's times started at 0).
+    numbering = pairing_filters(frame_rate(distorted_info))
 
     # --- distorted (main, input 0) chain ---
     main_ops = []
@@ -421,9 +423,7 @@ def _build_filtergraph(
         # the default (scaling the source down to the distorted video's
         # resolution) -- see ScaleDirection.
         main_ops.append(f"scale={ref_content_w}:{ref_content_h}:flags={options.scale_algorithm}")
-    main_ops.append("setpts=PTS-STARTPTS")
-    if gpu_vmaf and not gpu_paired:
-        main_ops.append("split=2[vmaf_dist][vmaf_dist_ts]")
+    main_ops += numbering
     main_chain = f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[main]"
 
     # --- source / reference (input 1) chain ---
@@ -446,10 +446,13 @@ def _build_filtergraph(
     if resolutions_differ and not upscale_distorted:
         ref_ops.append(f"scale={dist_content_w}:{dist_content_h}:flags={options.scale_algorithm}")
 
-    ref_ops.append("setpts=PTS-STARTPTS")
+    ref_ops += numbering
     if gpu_vmaf and not gpu_paired:
-        return (f"[0:{VIDEO_STREAM}]{','.join(main_ops)}\n"
-                f"[0:{VIDEO_STREAM}]{','.join([*ref_ops, 'split=2[vmaf_ref][vmaf_ref_ts]'])}")
+        if by_timestamp():
+            return (f"[0:{VIDEO_STREAM}]{','.join([*main_ops, 'split=2[vmaf_dist][vmaf_dist_ts]'])}\n"
+                    f"[0:{VIDEO_STREAM}]{','.join([*ref_ops, 'split=2[vmaf_ref][vmaf_ref_ts]'])}")
+        return (f"[0:{VIDEO_STREAM}]{','.join(main_ops)}[vmaf_dist]\n"
+                f"[0:{VIDEO_STREAM}]{','.join(ref_ops)}[vmaf_ref]")
     ref_chain = f"[1:{VIDEO_STREAM}]{','.join(ref_ops)}[ref]"
 
     compared_w, compared_h = (
@@ -513,10 +516,11 @@ def _build_resample_test_filtergraph(
     base_chain = f"[0:{VIDEO_STREAM}]{','.join(base_ops)}[base]"
 
     split_chain = "[base]split=2[ref_src][dist_src]"
-    ref_chain = "[ref_src]setpts=PTS-STARTPTS[ref]"
+    numbering = ",".join(pairing_filters(frame_rate(source_info)))  # as _build_filtergraph's
+    ref_chain = f"[ref_src]{numbering}[ref]"
     dist_chain = (
         f"[dist_src]scale={down_w}:{down_h}:flags={options.scale_algorithm},"
-        f"scale={orig_w}:{orig_h}:flags={options.scale_algorithm},setpts=PTS-STARTPTS[main]"
+        f"scale={orig_w}:{orig_h}:flags={options.scale_algorithm},{numbering}[main]"
     )
 
     tail = _build_libvmaf_stage(options, log_path, model, xpsnr_log_path)
@@ -641,26 +645,22 @@ def _build_ffmpeg_output_args(
     """`gpu_outputs`: GPU VMAF's raw outputs (vmaf_cuda.GpuAttempt), each
     with its own -t, and the run's only outputs. Several filter graphs
     (_GRAPH_SEPARATOR): a -filter_complex each, and a null output each for
-    its [graphN], each with the -t."""
+    its [graphN], each with the -t.
+
+    An output-side -t (frame_sync.duration_args) caps how much of the
+    filtered output is produced, and so how many frames reach libvmaf,
+    whatever the two inputs' lengths."""
+    cut = duration_args(f"{duration_limit:.3f}" if duration_limit > 0 else None)
     graphs = filtergraph.split(_GRAPH_SEPARATOR)
     if len(graphs) > 1 and gpu_outputs is None:
         args = [part for graph in graphs for part in ("-filter_complex", graph)] + ["-progress", "pipe:1", "-nostats"]
         for index in range(len(graphs)):
-            args += ["-map", f"[graph{index}]"]
-            if duration_limit > 0:
-                args += ["-t", f"{duration_limit:.3f}"]
-            args += ["-f", "null", "-"]
+            args += ["-map", f"[graph{index}]", *cut, "-f", "null", "-"]
         return args
     args = ["-lavfi", filtergraph, "-progress", "pipe:1", "-nostats"]
     if gpu_outputs is not None:
         return args + gpu_outputs
-    if duration_limit > 0:
-        # An output-side -t caps how much of the filtered output is produced
-        # (and so how many frames reach libvmaf), regardless of any length
-        # mismatch between the two inputs -- simpler than trying to bound
-        # each input separately.
-        args += ["-t", f"{duration_limit:.3f}"]
-    return [*args, "-f", "null", "-"]
+    return [*args, *cut, "-f", "null", "-"]
 
 
 def _cancelled(cancel_event: threading.Event | None, process_handle: ProcessHandle | None) -> bool:

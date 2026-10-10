@@ -10,7 +10,6 @@ import hashlib
 import subprocess
 import threading
 from dataclasses import replace
-from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -52,24 +51,6 @@ def test_what_the_gpu_decoders_do_not_decode_is_left_to_ffmpeg(subtests):
                                                   ("width", 1919), ("height", 1079)]:
         with subtests.test(field=field, value=value):
             check(field, value)
-
-
-# ------------------------------------------------------------ the arithmetic
-
-def test_rescale_rounds_as_av_rescale_q(subtests):
-    def check(value, source, target, expected):
-        assert nv.rescale(value, source, target) == expected
-
-    for value, source, target, expected in [
-        (1, Fraction(1, 1000), Fraction(1, 90000), 90),
-        (41, Fraction(1, 1000), Fraction(1001, 24000), 1),        # 0.98 -> 1
-        (1001, Fraction(1, 24000), Fraction(1, 1000), 42),        # 41.708 -> 42
-        (3, Fraction(1, 2), Fraction(1, 1), 2),                   # 1.5: halves away from zero
-        (-3, Fraction(1, 2), Fraction(1, 1), -2),
-        (5, Fraction(1, 2), Fraction(1, 1), 3),
-    ]:
-        with subtests.test(value=value, source=source, target=target, expected=expected):
-            check(value, source, target, expected)
 
 
 # ----------------------------------------- decoding, on the PC's GPUs

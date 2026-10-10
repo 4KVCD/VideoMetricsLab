@@ -6,6 +6,11 @@
 
 - Added film grain synthesis for VVC encodes in Video Compare.
 
+### Other changes
+
+- Every metric now pairs the two videos' frames by frame number, on the CPU and
+  the GPU alike.
+
 ## v2.0
 
 v2.0 is a major performance update. VMAF, VMAF NEG and VMAF v1 now run on

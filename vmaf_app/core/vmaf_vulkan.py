@@ -462,8 +462,7 @@ def score_decoded(
     import time
     from dataclasses import replace
 
-    from vmaf_app.core import gpu_frames
-    from vmaf_app.core.frame_sync import frame_pairs
+    from vmaf_app.core import frame_sync, gpu_frames
 
     found = devices()
     chosen = best_device(found) if device is None else next((d for d in found if d.index == device), None)
@@ -513,28 +512,12 @@ def score_decoded(
             scorer = VulkanScorer(width, height, bit_depth, models, n_subsample, device=chosen.index)
         test.start()
         ref.start()
-        test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
-        stop = gpu_frames.duration_in(duration_limit, test_base) if duration_limit else None
-
-        def puller(stream):
-            def pull():
-                while True:
-                    check_cancel()
-                    try:
-                        return stream.next(100)
-                    except TimeoutError:
-                        continue
-            return pull
-
-        pairs = frame_pairs(puller(test), puller(ref), test_base, ref_base, test.release, ref.release)
+        pairs = frame_sync.decoded_frame_pairs(test, ref, distorted, duration_limit, check_cancel,
+                                               test.release, ref.release)
         count = 0
         started = reported = time.perf_counter()
         try:
-            for test_slot, ref_slot, when in pairs:
-                if stop is not None and when >= stop:
-                    break
-                if ref_slot is None:
-                    raise gpu_frames.GpuDecodeFailedError("the source has no frame for the test video's first")
+            for test_slot, ref_slot in pairs:
                 if shared:
                     scorer.add_shared(lambda address, pitch, slot=ref_slot: ref.copy_luma(slot, address, pitch),
                                       lambda address, pitch, slot=test_slot: test.copy_luma(slot, address, pitch))

@@ -21,6 +21,8 @@ from vmaf_app.core import perceptual_vship as vship
 from vmaf_app.core.analysis_request import AnalysisRequest
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path, ffprobe_path
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+from vmaf_app.core.ffprobe import probe_video
+from vmaf_app.core.frame_sync import duration_args, frame_rate, frames_within
 from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import CropMode, GpuVendor, VideoInfo, VmafOptions
 from vmaf_app.core.perceptual_cpu import PerceptualCancelled, PerceptualTaskOutput
@@ -337,8 +339,9 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     `children` maps "source"/"test" to the commands that input's successive
     starts run: the two readers start concurrently, so which spawns first is
     a race, and children are matched to inputs by path rather than by order.
-    Each child's frames are stamped as FFmpeg stamps them (-stats_enc_pre):
-    the n-th at `timestamps[side](n)` ms, 42 ms apart unless given.
+    When pairing by timestamp, each child's frames are stamped as FFmpeg
+    stamps them (-stats_enc_pre): the n-th at `timestamps[side](n)` ms, 42 ms
+    apart unless given.
 
     The fake score is the frame index read back out of the pinned buffer the
     lane was handed, so a mixed-up slot or pairing shows up in the values.
@@ -361,11 +364,12 @@ def _run(monkeypatch, *, children, metrics=("ssimulacra2", "butteraugli"), gpu_d
     def fake_spawn(command):
         side = "source" if source_path in command else "test"
         spawned[side].append(command)
-        # Written whole before the frames: FFmpeg writes each frame's line
-        # before the frame.
-        stamps_path = Path(command[command.index("-stats_enc_pre") + 1])
-        stamped = stamps[side][min(len(spawned[side]), len(stamps[side])) - 1]  # one per start, the last reused
-        stamps_path.write_text("".join(f"{stamped(n)} 1/1000\n" for n in range(5000)))
+        if "-stats_enc_pre" in command:  # pairing by timestamp
+            # Written whole before the frames: FFmpeg writes each frame's
+            # line before the frame.
+            stamps_path = Path(command[command.index("-stats_enc_pre") + 1])
+            stamped = stamps[side][min(len(spawned[side]), len(stamps[side])) - 1]  # one per start, the last reused
+            stamps_path.write_text("".join(f"{stamped(n)} 1/1000\n" for n in range(5000)))
         # The last command is reused: each metric has a pass (and a decode) of its own.
         queue = queues[side]
         process = vship.proc_util.popen(queue.pop(0) if len(queue) > 1 else queue[0], stdout=subprocess.PIPE,
@@ -471,11 +475,15 @@ def _decoded_here(monkeypatch, **kwargs) -> dict[str, _FakeDecoder]:
     return made
 
 
-def test_a_gpu_decoded_video_gives_every_step_th_picture_up_to_the_limit(monkeypatch):
-    """FFmpeg's chain: select every 3rd picture, then -t 0.5 (trim): with
-    pictures 42 ms apart, pictures 0, 3, 6 and 9 -- 12 is at 504 ms. The
-    source gives every picture, for each test picture's pair to be found,
-    and is stopped when the pass ends."""
+@pytest.mark.parametrize("pairing", ["number", "timestamp"])
+def test_a_gpu_decoded_video_gives_every_step_th_picture_up_to_the_limit(monkeypatch, pairing):
+    """FFmpeg's chain: the pictures numbered at the test video's 24 fps,
+    every 3rd kept, cut at 0.5 s: pictures 0, 3, 6 and 9 -- 12 is at 500 ms.
+    Both videos give the same pictures, and stop at the limit. Pairing by
+    timestamp (as before), the pictures 42 ms apart are cut by -t 0.5 (trim)
+    at picture 12, at 504 ms, and the source gives every picture, for each
+    test picture's pair to be found, and is stopped when the pass ends."""
+    monkeypatch.setenv("VML_FRAME_PAIRING", pairing)
     made = _decoded_here(monkeypatch, count=40)
     output, _spawned = _run(monkeypatch, children=_both(_frames_command(0, _FRAME_BYTES)), metrics=("ssimulacra2",),
                             gpu_decode=True, hwaccel=lambda _vendor, _codec: "cuda",
@@ -484,7 +492,10 @@ def test_a_gpu_decoded_video_gives_every_step_th_picture_up_to_the_limit(monkeyp
     assert list(result.values) == [0.0, 3.0, 6.0, 9.0]
     assert list(result.frame) == [0, 3, 6, 9]
     assert made["test"].verified  # the pictures up to the limit were checked
-    assert made["source"].number > 13  # past picture 12, at 504 ms: the source is not cut at the limit
+    if pairing == "number":
+        assert made["source"].number == made["test"].number == 13  # picture 12 seen, and the end found there
+    else:
+        assert made["source"].number > 13  # past picture 12, at 504 ms: the source is not cut at the limit
     assert all(d.closed and not d.held for d in made.values())
 
 
@@ -500,10 +511,24 @@ def _pairs_seen(monkeypatch, **kwargs) -> list[tuple[int, int]]:
     return sorted(seen[-len(output.metrics.get("ssimulacra2").values):])
 
 
+def test_frames_are_paired_by_number(monkeypatch):
+    """The test video is the source with its sixth frame dropped: frame N of
+    each is paired, so every frame after the gap is compared with the
+    source's next one, as every metric pairs them (frame_sync)."""
+    test_frames = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]
+    pairs = _pairs_seen(
+        monkeypatch,
+        children={"source": [_frames_command(12, _FRAME_BYTES)],
+                  "test": [_frames_command(11, _FRAME_BYTES, numbers=test_frames)]})
+
+    assert pairs == list(zip(test_frames, range(11), strict=True))
+
+
 def test_frames_are_paired_by_timestamp_as_libvmaf_pairs_them(monkeypatch):
-    """The test video is the source with its sixth frame dropped, the
-    others' times kept. Paired by position, every frame after the gap was
-    compared with the source's next one."""
+    """Pairing by timestamp, as before (VML_FRAME_PAIRING=timestamp): the
+    test video is the source with its sixth frame dropped, the others' times
+    kept, and each frame is compared with itself."""
+    monkeypatch.setenv("VML_FRAME_PAIRING", "timestamp")
     test_frames = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]
     pairs = _pairs_seen(
         monkeypatch,
@@ -512,43 +537,6 @@ def test_frames_are_paired_by_timestamp_as_libvmaf_pairs_them(monkeypatch):
         timestamps={"test": lambda n: test_frames[n] * 42 if n < len(test_frames) else 9999 + n})
 
     assert pairs == [(frame, frame) for frame in test_frames]
-
-
-class _FakeProcess:
-    def __init__(self, ended=False):
-        self.ended = ended
-
-    def poll(self):
-        return 0 if self.ended else None
-
-
-@pytest.mark.parametrize(("step", "limit"), [(1, None), (3, "1.500000")])
-def test_ffmpeg_gives_each_piped_frames_own_timestamp(tmp_path, monkeypatch, step, limit):
-    """Through real FFmpeg: the timestamp read for each piped frame is the
-    one ffprobe gives that frame, from the first frame's."""
-    monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
-    path = _numbered_clip(tmp_path / "clip.mkv", 60, "N*40+mod(N*7\\,13)", "1/1000")
-    chain = (f"select=not(mod(n\\,{step})),setpts=PTS-STARTPTS,format=yuv420p" if step > 1
-             else "setpts=PTS-STARTPTS,format=yuv420p")
-    command = [ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
-               *(["-t", limit] if limit else []), "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
-               "-f", "rawvideo", "pipe:1"]
-    stream = vship._FrameStream(None, _W * _H * 3 // 2, [command], None, "test video")
-    stream.start()
-    stamps = []
-    try:
-        while (slot := stream.next(None)) != vship._EOF:
-            stamps.append((stream.buffers[slot].array[0] - 3, stream.pts[slot]))
-            stream.release(slot)
-    finally:
-        stream.close()
-
-    out = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts",
-                          "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True).stdout
-    probed = [int(line.strip(",")) for line in out.split() if line.strip(",")]
-    assert stream.time_base == Fraction(1, 1000)
-    assert stamps and all(pts == probed[number] - probed[0] for number, pts in stamps)
-    assert [number for number, _pts in stamps] == _ffmpeg_piped(path, step, limit)
 
 
 @pytest.mark.parametrize(("pixel_format", "shift"), [("yuv420p", 0), ("yuv420p16le", 0), ("yuv420p10le", 6)])
@@ -572,35 +560,69 @@ def test_the_gpu_decoder_gives_the_layout_vship_is_told(monkeypatch, pixel_forma
 # ------------------------------------------------ the frames as YUV4MPEG
 
 
-def _stream_frames(command: list[str], frame_bytes: int) -> tuple[list[bytes], list[int]]:
-    stream = vship._FrameStream(None, frame_bytes, [command], None, "test video")
+def _stream_frames(command: list[str], frame_bytes: int, timestamps: bool = False) -> tuple[list[bytes], list[int]]:
+    """The frames _FrameStream reads from `command`, and with `timestamps`
+    (pairing by timestamp), their timestamps."""
+    stream = vship._FrameStream(None, frame_bytes, [command], None, "test video", timestamps=timestamps)
     stream.start()
     frames, stamps = [], []
     try:
         while (slot := stream.next(None)) != vship._EOF:
             frames.append(bytes(stream.buffers[slot].array))
-            stamps.append(stream.pts[slot])
+            if timestamps:
+                stamps.append(stream.pts[slot])
             stream.release(slot)
     finally:
         stream.close()
     return frames, stamps
 
 
+@pytest.mark.parametrize("timestamps", [False, True])
 @pytest.mark.parametrize("pixel_format", ["yuv420p", "yuv420p10le", "yuv444p16le"])
-def test_ffmpegs_yuv4mpeg_frames_are_its_raw_frames_with_the_same_timestamps(tmp_path, monkeypatch, pixel_format):
-    """Through real FFmpeg and the real pipe: the frames and timestamps the
-    scoring gets are the ones the raw video gave it."""
+def test_ffmpegs_yuv4mpeg_frames_are_its_raw_frames(tmp_path, monkeypatch, pixel_format, timestamps):
+    """Through real FFmpeg and the real pipe: the frames the scoring gets are
+    the ones the raw video gave it -- and pairing by timestamp, with the
+    same timestamps."""
     monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
     path = _numbered_clip(tmp_path / "clip.mkv", 30, "N*40+mod(N*7\\,13)", "1/1000")
     samples = _W * _H * {"yuv420p": 3, "yuv420p10le": 3, "yuv444p16le": 6}[pixel_format] // 2
     frame_bytes = samples * (1 if pixel_format == "yuv420p" else 2)
     head = [ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0",
-            "-vf", "setpts=PTS-STARTPTS", "-fps_mode", "passthrough"]
+            *(["-vf", "setpts=PTS-STARTPTS"] if timestamps else []), "-fps_mode", "passthrough"]
     piped = vship._piped_as(pixel_format)
     assert "yuv4mpegpipe" in piped
-    raw = _stream_frames([*head, "-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"], frame_bytes)
+    raw = _stream_frames([*head, "-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"], frame_bytes, timestamps)
     assert len(raw[0]) == 30
-    assert _stream_frames([*head, *piped], frame_bytes) == raw
+    assert len(raw[1]) == (30 if timestamps else 0)
+    assert _stream_frames([*head, *piped], frame_bytes, timestamps) == raw
+
+
+@pytest.mark.parametrize(("step", "limit"), [(1, None), (3, "1.500000")])
+def test_ffmpeg_gives_each_piped_frames_own_timestamp(tmp_path, monkeypatch, step, limit):
+    """Pairing by timestamp, through real FFmpeg: the timestamp read for each
+    piped frame is the one ffprobe gives that frame, from the first frame's."""
+    monkeypatch.setattr(vship, "_PinnedBuffer", _FakePinned)
+    path = _numbered_clip(tmp_path / "clip.mkv", 60, "N*40+mod(N*7\\,13)", "1/1000")
+    chain = vship._filter_chain(probe_video(path), None, (_W, _H), "yuv420p", step, "bicubic")
+    command = [ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
+               *(["-t", limit] if limit else []), "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
+               "-f", "rawvideo", "pipe:1"]
+    stream = vship._FrameStream(None, _W * _H * 3 // 2, [command], None, "test video", timestamps=True)
+    stream.start()
+    stamps = []
+    try:
+        while (slot := stream.next(None)) != vship._EOF:
+            stamps.append((stream.buffers[slot].array[0] - 3, stream.pts[slot]))
+            stream.release(slot)
+    finally:
+        stream.close()
+
+    out = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts",
+                          "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True).stdout
+    probed = [int(line.strip(",")) for line in out.split() if line.strip(",")]
+    assert stream.time_base == Fraction(1, 1000)
+    assert stamps and all(pts == probed[number] - probed[0] for number, pts in stamps)
+    assert [number for number, _pts in stamps] == _ffmpeg_piped_by_time(path, step, limit)
 
 
 # ----------------- which pictures a video decoded in the scoring process gives
@@ -622,9 +644,34 @@ def _numbered_clip(path: Path, count: int, pts_expression: str, time_base: str =
 
 
 def _ffmpeg_piped(path: Path, step: int, limit: str | None) -> list[int]:
-    """The frames the Vship command (perceptual_vship) pipes, by number."""
-    chain = (f"select=not(mod(n\\,{step})),setpts=PTS-STARTPTS,format=yuv420p" if step > 1
-             else "setpts=PTS-STARTPTS,format=yuv420p")
+    """The frames the Vship command pipes (its _filter_chain and duration
+    limit, the video numbered at its own frame rate), by number."""
+    info = probe_video(path)
+    chain = vship._filter_chain(info, None, (_W, _H), "yuv420p", step, "bicubic", numbered_at=frame_rate(info))
+    raw = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
+                          *duration_args(limit), "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
+                          "-f", "rawvideo", "pipe:1"], capture_output=True, check=True).stdout
+    frames = np.frombuffer(raw, dtype=np.uint8).reshape(-1, _W * _H * 3 // 2)
+    return (frames[:, 0].astype(int) - 3).tolist()
+
+
+def _selected(path: Path, count: int, step: int, limit: str | None) -> list[int]:
+    """The frames _FrameSelection gives of the video's `count` decoded frames."""
+    selection = vship._FrameSelection(step, frames_within(limit, frame_rate(probe_video(path))))
+    kept = []
+    for number in range(count):
+        taken = selection.take()
+        if taken is None:
+            break
+        if taken:
+            kept.append(number)
+    return kept
+
+
+def _ffmpeg_piped_by_time(path: Path, step: int, limit: str | None) -> list[int]:
+    """The frames the Vship command pipes when pairing by timestamp (its
+    _filter_chain without numbering, a plain -t), by number."""
+    chain = vship._filter_chain(probe_video(path), None, (_W, _H), "yuv420p", step, "bicubic")
     raw = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
                           *(["-t", limit] if limit else []), "-fps_mode", "passthrough", "-pix_fmt", "yuv420p",
                           "-f", "rawvideo", "pipe:1"], capture_output=True, check=True).stdout
@@ -632,13 +679,15 @@ def _ffmpeg_piped(path: Path, step: int, limit: str | None) -> list[int]:
     return (frames[:, 0].astype(int) - 3).tolist()
 
 
-def _selected(path: Path, step: int, limit: str | None) -> list[int]:
+def _selected_by_time(path: Path, step: int, limit: str | None) -> list[int]:
+    """The frames _TimedFrameSelection gives of the video's decoded frames,
+    by their timestamps (pairing by timestamp)."""
     out = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-show_entries",
                           "stream=time_base:frame=pts", "-of", "csv=p=0", str(path)],
                          capture_output=True, text=True, check=True).stdout.split()
     num, den = next(line for line in out if "/" in line).split("/")
     stamps = [int(line.strip(",")) for line in out if "/" not in line and line.strip(",")]
-    selection = vship._FrameSelection(step, limit)
+    selection = vship._TimedFrameSelection(step, limit)
     kept = []
     for number, pts in enumerate(stamps):
         taken = selection.take(pts, Fraction(int(num), int(den)))
@@ -650,6 +699,8 @@ def _selected(path: Path, step: int, limit: str | None) -> list[int]:
 
 
 def test_the_selection_is_the_ffmpeg_chains(tmp_path_factory, subtests):
+    """_FrameSelection, and _TimedFrameSelection when pairing by timestamp,
+    give the frames FFmpeg's chain pipes."""
     def check(name, clip, step, limit, tmp_path):
         count, expression, *rest = clip
         time_base = rest[0] if rest else "1/1000"
@@ -657,7 +708,10 @@ def test_the_selection_is_the_ffmpeg_chains(tmp_path_factory, subtests):
         path = _numbered_clip(tmp_path / f"clip.{suffix}", count, expression, time_base)
         expected = _ffmpeg_piped(path, step, limit)
         assert expected
-        assert _selected(path, step, limit) == expected
+        assert _selected(path, count, step, limit) == expected
+        expected = _ffmpeg_piped_by_time(path, step, limit)
+        assert expected
+        assert _selected_by_time(path, step, limit) == expected
 
     for name, clip, step, limit in [
         ("every frame", (48, "N*42"), 1, None),

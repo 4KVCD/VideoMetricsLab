@@ -401,8 +401,9 @@ def test_a_run_retries_down_the_ladder_until_one_succeeds(monkeypatch, tmp_path)
 # ------------------------------------------- frame-count mismatch (framesync)
 
 
+@pytest.mark.parametrize("pairing", ["number", "timestamp"])
 @pytest.mark.parametrize("compute_xpsnr", [False, True])
-def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
+def test_the_comparison_stops_at_the_shorter_input(monkeypatch, compute_xpsnr, pairing):
     """libvmaf and xpsnr are both framesync filters, and framesync's defaults
     extend the last frame of the secondary input past its EOF. A distorted
     file two frames longer than its source -- routine encoder padding, well
@@ -410,8 +411,11 @@ def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
     against a frozen copy of the source's final frame.
 
     Measured on a 30-vs-32-frame fixture: 32 scores, the last two 48.31 and
-    31.27, dragging the mean from 99.64 to 95.84.
+    31.27, dragging the mean from 99.64 to 95.84. Pairing by timestamp (as
+    before), the nearest timestamp is taken too.
     """
+    monkeypatch.setenv("VML_FRAME_PAIRING", pairing)
+    nearest = pairing == "timestamp"
     graph = _build_filtergraph(
         _info("source.mkv", 320, 180), _info("distorted.mkv", 320, 180),
         VmafOptions(model="version=vmaf_v0.6.1", compute_xpsnr=compute_xpsnr),
@@ -423,7 +427,7 @@ def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
     libvmaf_stage = graph.split("libvmaf=")[1]
     assert "shortest=1" in libvmaf_stage
     assert "repeatlast=0" in libvmaf_stage
-    assert "ts_sync_mode=nearest" in libvmaf_stage
+    assert ("ts_sync_mode=nearest" in libvmaf_stage) == nearest
     if compute_xpsnr:
         # xpsnr sits before libvmaf and does its own framesync, so it needs
         # the same treatment or its stats file gains the phantom frames even
@@ -431,7 +435,7 @@ def test_the_comparison_stops_at_the_shorter_input(compute_xpsnr):
         xpsnr_stage = graph.split("xpsnr=")[1].split("[xmain]")[0]
         assert "shortest=1" in xpsnr_stage
         assert "repeatlast=0" in xpsnr_stage
-        assert "ts_sync_mode=nearest" in xpsnr_stage
+        assert ("ts_sync_mode=nearest" in xpsnr_stage) == nearest
 
 
 # ------------------------------------------------- display geometry (shape)

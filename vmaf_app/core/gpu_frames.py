@@ -62,8 +62,8 @@ import re
 import subprocess
 import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 
@@ -547,29 +547,6 @@ def decoder_supports(device: int, plan: DecodePlan, backend: str = "nvidia") -> 
 
 # ------------------------------------------------------------- the packets
 
-def _ffmpeg_time(text: str) -> int:
-    """`text`, an FFmpeg duration in seconds ("30.042"), in microseconds, as
-    av_parse_time reads it: exactly, to the sixth decimal."""
-    return int(Decimal(text).scaleb(6).to_integral_value(rounding="ROUND_DOWN"))
-
-
-def rescale(value: int, source: Fraction, target: Fraction) -> int:
-    """av_rescale_q: `value` in time base `source` in time base `target`,
-    rounded to nearest, halves away from zero."""
-    b = source.numerator * target.denominator
-    c = target.numerator * source.denominator
-    product = value * b
-    if product >= 0:
-        return (product + c // 2) // c
-    return -((-product + c // 2) // c)
-
-
-def duration_in(text: str, time_base: Fraction) -> int:
-    """FFmpeg's output -t `text` in `time_base`, as its trim filter holds it:
-    a picture is kept while its time from the first is below this."""
-    return rescale(_ffmpeg_time(text), Fraction(1, 1_000_000), time_base)
-
-
 _TB_RE = re.compile(r"#tb 0: (\d+)/(\d+)")
 
 
@@ -971,6 +948,20 @@ class GpuFrameStream:
         if code == _NVF_ABORTED:
             raise GpuDecodeFailedError("decoding was stopped", self.backend)
         raise GpuDecodeFailedError(self._error() or f"{self.decoder} failed", self.backend)
+
+    def pictures(self, check_cancel: Callable[[], None]) -> Callable[[], int | None]:
+        """This video's pictures for frame_sync.frame_pairs: a function that
+        gives the next picture's slot, or None at the video's end, calling
+        `check_cancel` every 100 ms while it waits for one."""
+        def next_picture() -> int | None:
+            while True:
+                check_cancel()
+                try:
+                    picture = self.next(100)
+                except TimeoutError:
+                    continue
+                return None if picture is None else picture[0]
+        return next_picture
 
     def _take(self, pts: int) -> bool:
         """Checks the picture stamped `pts`, as it comes out, against the

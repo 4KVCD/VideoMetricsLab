@@ -39,14 +39,14 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import gpu_frames
+from vmaf_app.core import frame_sync_by_time, gpu_frames
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.colour import UnsupportedColourError, video_colour
@@ -54,7 +54,14 @@ from vmaf_app.core.comparison_recipe import ComparisonRecipe
 from vmaf_app.core.cvvdp import VSHIP_MODEL_KEY, CvvdpSettings, vship_display_json
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, ffmpeg_path
 from vmaf_app.core.frame_coverage import short_comparison
-from vmaf_app.core.frame_sync import frame_pairs
+from vmaf_app.core.frame_sync import (
+    by_timestamp,
+    duration_args,
+    frame_pairs,
+    frame_rate,
+    frames_within,
+    numbering_filters,
+)
 from vmaf_app.core.geometry import content_size
 from vmaf_app.core.gpu import (
     GPU_PASS,
@@ -823,12 +830,18 @@ def _scaled_sizes(
 def _filter_chain(
     info: VideoInfo, crop: CropBox | None, target_size: tuple[int, int],
     pixel_format: str, step: int, algorithm: str, hwaccel: str | None = None,
+    numbered_at: Fraction | None = None,
 ) -> str:
-    operations: list[str] = []
+    """The filters a video's frames go through on their way to Vship: every
+    step-th kept, then brought from the GPU, cropped, scaled and converted.
+    `numbered_at`: the test video's frame rate, which the frames are first
+    numbered at, as every metric's are (frame_sync); None when pairing by
+    timestamp, where each video's times start at 0 instead."""
+    operations: list[str] = [] if numbered_at is None else numbering_filters(numbered_at)
     if step > 1:
-        # First: the frames it drops are not downloaded, cropped or scaled
-        # (they were: at step 24, 23 of every 24). Nothing after it drops a
-        # frame, so n counts the same frames wherever it stands.
+        # Before the rest: the frames it drops are not downloaded, cropped or
+        # scaled (they were: at step 24, 23 of every 24). Nothing after it
+        # drops a frame, so n counts the same frames wherever it stands.
         operations.append(f"select=not(mod(n\\,{step}))")
     if hwaccel:
         # A hardware-decoded surface is brought to system memory in its
@@ -841,7 +854,9 @@ def _filter_chain(
     current_size = content_size(info, crop)
     if current_size != target_size:
         operations.append(f"scale={target_size[0]}:{target_size[1]}:flags={algorithm}")
-    operations.extend(("setpts=PTS-STARTPTS", f"format={pixel_format}"))
+    if numbered_at is None:
+        operations.append("setpts=PTS-STARTPTS")
+    operations.append(f"format={pixel_format}")
     return ",".join(operations)
 
 
@@ -863,11 +878,12 @@ _RING_SLOTS = _LANES_PER_METRIC + 3
 #: 55 -> 107 fps alone, 46 -> 78 fps with the two inputs in parallel.
 _PIPE_BYTES = proc_util.FRAME_PIPE_BYTES
 _EOF = -1
-#: What FFmpeg writes about each frame it pipes to Vship (-stats_enc_pre):
-#: the picture's timestamp as it leaves the filter chain, in the chain's
-#: time base (-enc_time_base filter: the stream's) -- the timestamp
-#: libvmaf's frame sync is given at the end of the same chain. The frames
-#: are paired by it, as libvmaf pairs them (frame_sync).
+#: What FFmpeg writes about each frame it pipes to Vship (-stats_enc_pre)
+#: when pairing by timestamp (frame_sync.by_timestamp): the picture's
+#: timestamp as it leaves the filter chain, in the chain's time base
+#: (-enc_time_base filter: the stream's) -- the timestamp libvmaf's frame
+#: sync is given at the end of the same chain. The frames are paired by it,
+#: as libvmaf pairs them (frame_sync_by_time).
 #:
 #: It was the decoder's ({ptsi} {tbi}), which is the same number less the
 #: first frame's where the file stores presentation times. A file that
@@ -1065,11 +1081,11 @@ class _LaneFailedError(Exception):
 
 
 class _FramesApartError(Exception):
-    """With frame subsampling the source gives only its step-th frames, as
-    the test video does: while the two videos' frames line up, those are the
-    frames the test video's are paired with. A pair further apart than
-    _APART_FRAMES shows they do not; the pass is then made again with every
-    source frame (_score_vship_pass)."""
+    """Pairing by timestamp only. With frame subsampling the source gives
+    only its step-th frames, as the test video does: while the two videos'
+    frames line up, those are the frames the test video's are paired with.
+    A pair further apart than _APART_FRAMES shows they do not; the pass is
+    then made again with every source frame (_score_vship_pass)."""
 
 
 #: How far apart, in frames, a subsampled pair's two frames may be while the
@@ -1086,14 +1102,15 @@ class _FrameStream:
     Both the pipe read and the Vship call release the GIL, so the two inputs
     and the GPU all make progress at once. If hardware decode fails before
     delivering a frame, the same pictures are decoded in software instead,
-    and `on_software` is called first.
+    and `on_software` is called first. `timestamps`: each frame's timestamp
+    is read too (pts, time_base), for pairing by timestamp.
     """
 
     def __init__(
         self, lib: ctypes.CDLL, frame_bytes: int, commands: list[list[str]],
         process_handle: ProcessHandle | None, label: str,
         interleaved_chroma: tuple[int, int, type[np.integer]] | None = None,
-        on_software: Callable[[], None] | None = None, gpu_id: int = 0,
+        on_software: Callable[[], None] | None = None, gpu_id: int = 0, timestamps: bool = False,
     ) -> None:
         self.buffers = _pinned_ring(lib, frame_bytes, gpu_id)
         self.views = [memoryview(buffer.array).cast("B") for buffer in self.buffers]
@@ -1116,8 +1133,10 @@ class _FrameStream:
         self._process_handle = process_handle
         self._label = label
         self._on_software = on_software
+        self._timestamps = timestamps
         #: Each slot's frame's timestamp, in time_base (known from the
-        #: first frame): set before the slot is handed over.
+        #: first frame), when pairing by timestamp: set before the slot is
+        #: handed over.
         self.pts = [0] * _RING_SLOTS
         self.time_base: Fraction | None = None
         self._free: queue.Queue[int] = queue.Queue()
@@ -1155,6 +1174,8 @@ class _FrameStream:
             self._filled.put(error)
 
     def _decode(self, command: list[str]) -> tuple[int, int, str]:
+        if not self._timestamps:
+            return self._decode_with(command, None)
         descriptor, name = tempfile.mkstemp(prefix="vml-vship-pts-", suffix=".txt")
         os.close(descriptor)
         stamps_path = Path(name)
@@ -1164,12 +1185,14 @@ class _FrameStream:
             with contextlib.suppress(OSError):
                 stamps_path.unlink()
 
-    def _decode_with(self, command: list[str], stamps_path: Path) -> tuple[int, int, str]:
+    def _decode_with(self, command: list[str], stamps_path: Path | None) -> tuple[int, int, str]:
+        """Pipes the frames of one FFmpeg command into the ring; with
+        `stamps_path`, each frame's timestamp is read from it too."""
         try:
             process, reader = _spawn_raw_ffmpeg(command)
         except OSError as error:
             raise VshipUnavailableError(f"Could not start FFmpeg for Vship: {error}") from error
-        stamps = _Timestamps(stamps_path, process, self._label)
+        stamps = _Timestamps(stamps_path, process, self._label) if stamps_path is not None else None
         with self._lock:
             self._process, self._reader = process, reader
         if self._process_handle is not None:
@@ -1195,12 +1218,13 @@ class _FrameStream:
                     break
                 received = self._fill(reader, slot)
                 if received == len(self.views[slot]):
-                    try:
-                        self.pts[slot] = stamps.next()
-                    except BaseException:
-                        self._free.put(slot)
-                        raise
-                    self.time_base = stamps.time_base
+                    if stamps is not None:
+                        try:
+                            self.pts[slot] = stamps.next()
+                        except BaseException:
+                            self._free.put(slot)
+                            raise
+                        self.time_base = stamps.time_base
                     self._filled.put(slot)
                     frames += 1
                     continue
@@ -1212,7 +1236,8 @@ class _FrameStream:
             with contextlib.suppress(OSError):
                 reader.close()
             code = process.wait()
-            stamps.close()
+            if stamps is not None:
+                stamps.close()
             drain.join(timeout=5)
             if self._process_handle is not None:
                 self._process_handle.detach(process.pid)
@@ -1320,11 +1345,32 @@ def _pinned_ring(lib: ctypes.CDLL, frame_bytes: int, gpu_id: int) -> list[_Pinne
 
 class _FrameSelection:
     """Which decoded pictures an input's FFmpeg chain pipes to Vship
-    (_filter_chain and the command's -t): its select filter keeps every
-    step-th picture, setpts starts them at 0, and the output's -t is FFmpeg's
-    trim filter, which keeps a picture while its time is below the limit in
-    the stream's time base (gpu_frames.duration_in) and ends the output at
-    the first that is not."""
+    (_filter_chain and the command's -t): its frames are numbered, select
+    keeps every step-th, and the output's -t keeps the first `limit` numbered
+    frames (frame_sync.frames_within; None: every frame)."""
+
+    def __init__(self, step: int, limit: int | None) -> None:
+        self._step = step
+        self._limit = limit
+        self._number = 0
+
+    def take(self) -> bool | None:
+        """For the next decoded picture: True if it is piped, False if it is
+        skipped, None if the output has ended at it."""
+        number = self._number
+        self._number += 1
+        if self._limit is not None and number >= self._limit:
+            return None
+        return number % self._step == 0
+
+
+class _TimedFrameSelection:
+    """_FrameSelection when pairing by timestamp, as before: the chain's
+    select filter keeps every step-th picture, setpts starts them at 0, and
+    the output's -t is FFmpeg's trim filter, which keeps a picture while its
+    time is below the limit in the stream's time base
+    (frame_sync_by_time.duration_in) and ends the output at the first that
+    is not."""
 
     def __init__(self, step: int, duration_limit: str | None) -> None:
         self._step = step
@@ -1343,7 +1389,7 @@ class _FrameSelection:
         if self._first is None:
             self._first = pts
             if self._duration_limit is not None:
-                self._limit = gpu_frames.duration_in(self._duration_limit, time_base)
+                self._limit = frame_sync_by_time.duration_in(self._duration_limit, time_base)
         if self._limit is not None and pts - self._first >= self._limit:
             return None
         return True
@@ -1356,14 +1402,19 @@ class _NativeFrameStream:
     (_FrameSelection) goes straight into a free slot -- copied there by the
     GPU from NVIDIA's decoder, by the CPU in one pass from Intel's or AMD's.
     A decoding failure after the start is raised from next() as
-    GpuDecodeFailedError: the pass is then made again through FFmpeg."""
+    GpuDecodeFailedError: the pass is then made again through FFmpeg.
+
+    `limit`: the number of frames the duration limit keeps (None: every
+    frame), or when pairing by timestamp (`by_time`), the limit as -t takes
+    it (_TimedFrameSelection)."""
 
     def __init__(self, lib: ctypes.CDLL, frame_bytes: int, decoder: gpu_frames.GpuFrameStream, step: int,
-                 duration_limit: str | None, label: str, gpu_id: int = 0) -> None:
+                 limit: int | str | None, label: str, gpu_id: int = 0, by_time: bool = False) -> None:
         self.buffers = _pinned_ring(lib, frame_bytes, gpu_id)
         self._decoder = decoder
-        self._selection = _FrameSelection(step, duration_limit)
-        self.pts = [0] * _RING_SLOTS  # as _FrameStream's
+        self._by_time = by_time
+        self._selection = _TimedFrameSelection(step, limit) if by_time else _FrameSelection(step, limit)
+        self.pts = [0] * _RING_SLOTS  # as _FrameStream's, when pairing by timestamp
         self.time_base: Fraction | None = None
         self._label = label
         self._free: queue.Queue[int] = queue.Queue()
@@ -1389,7 +1440,7 @@ class _NativeFrameStream:
                     break  # the end, checked (GpuFrameStream.verify)
                 picture, pts = item
                 try:
-                    taken = self._selection.take(pts, decoder.time_base)
+                    taken = self._selection.take(pts, decoder.time_base) if self._by_time else self._selection.take()
                     if taken is None:
                         decoder.verify()  # the pictures up to here
                         break
@@ -1399,7 +1450,8 @@ class _NativeFrameStream:
                     if slot == _EOF:
                         return
                     decoder.download(picture, self.buffers[slot].address.value)
-                    self.pts[slot], self.time_base = pts, decoder.time_base
+                    if self._by_time:
+                        self.pts[slot], self.time_base = pts, decoder.time_base
                     self._filled.put(slot)
                 finally:
                     decoder.release(picture)
@@ -2052,7 +2104,9 @@ def _score_vship_pass(
     """One Vship pass, with the videos NVIDIA's decoder takes decoded in
     this process (_NativeFrameStream). If that decoding fails after it has
     started -- a damaged stream, pictures that are not the packets' -- the
-    pass is made again with FFmpeg decoding, as before."""
+    pass is made again with FFmpeg decoding, as before. When pairing by
+    timestamp, a subsampled pass whose frames do not line up with the
+    source's (_FramesApartError) is made again with every source frame."""
     kwargs = {"on_progress": on_progress, "on_status": on_status, "cancel_event": cancel_event,
               "process_handle": process_handle}
     native, every_source_frame = True, False
@@ -2151,13 +2205,21 @@ def _score_vship_pass_with(
     abort = threading.Event()
     pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
     #: Per stream (source, test): slot -> holders. A slot goes back to its
-    #: stream once the pairing and every pair it is in are done with it: a
-    #: source frame can be in more than one pair.
+    #: stream once the pairing and every pair it is in are done with it
+    #: (pairing by timestamp, a source frame can be in more than one pair).
     held: tuple[dict[int, int], dict[int, int]] = ({}, {})
     pending_lock = threading.Lock()
+    # By frame number, both videos' frames are numbered at the test video's
+    # frame rate (frame_sync), and both are cut at the duration limit: the
+    # same frames. By timestamp (as before), only the test video is cut.
+    by_time = by_timestamp()
+    numbering_rate = frame_rate(distorted)
+    duration_limit = f"{request.recipe.duration_limit:.6f}" if request.recipe.duration_limit > 0 else None
     expected_frames = min(source.estimated_frame_count, distorted.estimated_frame_count)
-    if request.recipe.duration_limit > 0:
+    if by_time and request.recipe.duration_limit > 0:
         expected_frames = min(expected_frames, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
+    elif duration_limit is not None:
+        expected_frames = min(expected_frames, max(1, frames_within(duration_limit, numbering_rate)))
     expected_samples = max(1, math.ceil(expected_frames / step))
     total_units = expected_samples * step
 
@@ -2169,7 +2231,7 @@ def _score_vship_pass_with(
         for accel in ([hwaccel, None] if hwaccel else [None]):
             filter_chain = _filter_chain(
                 info, crop, target, pixel_format, every,
-                request.recipe.scale_algorithm, accel,
+                request.recipe.scale_algorithm, accel, None if by_time else numbering_rate,
             )
             command = [
                 ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-nostdin",
@@ -2177,22 +2239,23 @@ def _score_vship_pass_with(
                 "-i", str(info.path.resolve()), "-map", f"0:{VIDEO_STREAM}", "-an", "-sn", "-dn",
                 "-vf", filter_chain,
             ]
-            if cut and request.recipe.duration_limit > 0:
-                command += ["-t", f"{request.recipe.duration_limit:.6f}"]
+            if cut:
+                command += duration_args(duration_limit)
             command += ["-fps_mode", "passthrough", *_piped_as(pixel_format)]
             attempts.append(command)
         return attempts
 
     # Each test frame is one pair, as each of libvmaf's is: every step-th,
-    # up to the duration limit. The source gives the frames frame_pairs
-    # finds each one's pair among -- by its time, so it is never cut at the
-    # limit, and it is subsampled as the test video is while the two line
-    # up (_FramesApartError); a source without a frame rate gives every frame.
-    every_source_frame = every_source_frame or source.fps <= 0
-    check_apart = step > 1 and not every_source_frame
+    # up to the duration limit. When pairing by timestamp, the source gives
+    # the frames frame_pairs finds each one's pair among -- by its time, so
+    # it is never cut at the limit, and it is subsampled as the test video
+    # is while the two line up (_FramesApartError); a source without a frame
+    # rate gives every frame.
+    every_source_frame = by_time and (every_source_frame or source.fps <= 0)
+    check_apart = by_time and step > 1 and not every_source_frame
     try:
         def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label, side):
-            cut = side == "distorted"
+            cut = side == "distorted" or not by_time
             every = 1 if side == "source" and every_source_frame else step
             # Decoded here, by the GPU decoder FFmpeg would decode it with.
             backend = _decoded_here(hwaccel, device) if native else None
@@ -2200,10 +2263,13 @@ def _score_vship_pass_with(
                 decoder = _native_decoder(info, crop, size, image_format, frame_bytes, device.gpu_id,
                                           process_handle, label, backend, request.recipe.scale_algorithm)
                 if decoder is not None:
-                    limit = (f"{request.recipe.duration_limit:.6f}"
-                             if cut and request.recipe.duration_limit > 0 else None)
+                    if by_time:
+                        limit = duration_limit if cut else None
+                    else:
+                        limit = frames_within(duration_limit, numbering_rate)
                     try:
-                        return _NativeFrameStream(lib, frame_bytes, decoder, every, limit, label, device.gpu_id)
+                        return _NativeFrameStream(lib, frame_bytes, decoder, every, limit, label, device.gpu_id,
+                                                  by_time)
                     except BaseException:
                         decoder.close()
                         raise
@@ -2213,7 +2279,7 @@ def _score_vship_pass_with(
                 split = (plane_sizes[0], plane_sizes[1], dtype)
             pixel_format = passthrough[1] if passthrough else image_format.pixel_format
             return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format, every, cut),
-                                process_handle, label, split, decoded_in_software(side), device.gpu_id)
+                                process_handle, label, split, decoded_in_software(side), device.gpu_id, by_time)
 
         # Appended one at a time: if the test video's buffers cannot be
         # allocated, the reference's stream is already in `streams`, so the
@@ -2251,9 +2317,23 @@ def _score_vship_pass_with(
             drop(0, entry[1])
             drop(1, entry[2])
 
+        def frames_of(side: int) -> Callable[[], int | None]:
+            """frame_pairs' source of stream `side`'s frames: the next one's
+            slot, held for the pairing, or None at the stream's end."""
+            stream = streams[side]
+
+            def next_frame() -> int | None:
+                slot = stream.next(cancel_event)
+                if slot == _EOF:
+                    return None
+                with pending_lock:
+                    held[side][slot] = held[side].get(slot, 0) + 1
+                return slot
+            return next_frame
+
         def puller(side: int, first: int) -> Callable[[], tuple[int, int] | None]:
-            """frame_pairs' source of stream `side`'s frames, starting with
-            `first` (taken already, for its time base)."""
+            """frame_sync_by_time.frame_pairs' source of stream `side`'s
+            frames, starting with `first` (taken already, for its time base)."""
             stream, waiting = streams[side], [first]
 
             def pull() -> tuple[int, int] | None:
@@ -2291,38 +2371,25 @@ def _score_vship_pass_with(
                 errors["cvvdp"] = cvvdp_lane.error
             return {key: error for key, error in errors.items() if error is not None}
 
-        frame = 0
-        rate = _PassRate(step)
-        # Each test frame with the source frame libvmaf pairs it with, by
-        # timestamp (frame_sync): the same pairs VMAF is calculated on. They
-        # used to be paired by position, which a frame dropped from the test
-        # video put one apart for the rest of the video. The comparison is
-        # the frames both have (shortest=1): it ends with the test video, or
-        # at its first frame past the source's end; the longer input's
-        # reader is stopped when the streams close.
-        first_source = source_stream.next(cancel_event)
-        first_test = distorted_stream.next(cancel_event)
-        if _EOF in (first_source, first_test):
-            for stream, slot in ((source_stream, first_source), (distorted_stream, first_test)):
-                if slot != _EOF:
-                    stream.release(slot)
-        else:
+        def timed_pairs() -> Iterator[tuple[int, int]]:
+            """The (test slot, source slot) pairs by timestamp, as before:
+            each test frame with the source frame libvmaf pairs it with, by
+            timestamp (frame_sync_by_time). The comparison is the frames both
+            have (shortest=1): it ends with the test video, or at its first
+            frame past the source's end."""
+            first_source = source_stream.next(cancel_event)
+            first_test = distorted_stream.next(cancel_event)
+            if _EOF in (first_source, first_test):
+                for stream, slot in ((source_stream, first_source), (distorted_stream, first_test)):
+                    if slot != _EOF:
+                        stream.release(slot)
+                return
             test_base, source_base = distorted_stream.time_base, source_stream.time_base
             source_start = source_stream.pts[first_source]
-            pairs = frame_pairs(puller(1, first_test), puller(0, first_source), test_base, source_base,
-                                lambda slot: drop(1, slot), lambda slot: drop(0, slot))
+            pairs = frame_sync_by_time.frame_pairs(puller(1, first_test), puller(0, first_source), test_base,
+                                                   source_base, lambda slot: drop(1, slot), lambda slot: drop(0, slot))
             try:
                 for distorted_slot, source_slot, when in pairs:
-                    errors = lane_errors()
-                    if len(errors) == len(specs):
-                        # Nothing left to score: stop now rather than decode
-                        # the rest of the video (a film took ~30 minutes to
-                        # report a CVVDP handler that had failed to start).
-                        raise next(iter(errors.values()))
-                    # No abort here: a failed lane keeps handing its frames
-                    # back, so the ring never fills with slots nobody will
-                    # release, and the check above ends the pass once no
-                    # metric is left.
                     if source_slot is None:
                         raise VshipUnavailableError("The source has no frame at the test video's first.")
                     if check_apart:
@@ -2332,22 +2399,47 @@ def _score_vship_pass_with(
                             raise _FramesApartError(
                                 f"the test frame at {float(test_time):.3f} s is {float(apart) * 1000:.1f} ms from "
                                 f"the nearest of the source frames sampled with it (one in {step})")
-                    with pending_lock:
-                        pending[frame] = [len(specs), source_slot, distorted_slot]
-                        held[0][source_slot] += 1
-                        held[1][distorted_slot] += 1
-                    for spec in frame_specs:
-                        scores[spec.key].reserve(frame)
-                    for spec in frame_specs:
-                        by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put(
-                            (frame, source_slot, distorted_slot))
-                    if cvvdp_lane is not None:
-                        cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
-                    frame += 1
-                    if on_progress:
-                        on_progress(min(frame * step, total_units), total_units, rate.frames_per_second(frame))
+                    yield distorted_slot, source_slot
             finally:
-                pairs.close()  # hands back the frames the pairing holds
+                pairs.close()
+
+        frame = 0
+        rate = _PassRate(step)
+        # Each test frame with the source frame of the same number, as every
+        # metric pairs them (frame_sync), until either video ends -- or by
+        # timestamp, as before (timed_pairs). The longer video's reader is
+        # stopped when the streams close.
+        if by_time:
+            pairs = timed_pairs()
+        else:
+            pairs = frame_pairs(frames_of(1), frames_of(0), lambda slot: drop(1, slot), lambda slot: drop(0, slot))
+        try:
+            for distorted_slot, source_slot in pairs:
+                errors = lane_errors()
+                if len(errors) == len(specs):
+                    # Nothing left to score: stop now rather than decode
+                    # the rest of the video (a film took ~30 minutes to
+                    # report a CVVDP handler that had failed to start).
+                    raise next(iter(errors.values()))
+                # No abort here: a failed lane keeps handing its frames
+                # back, so the ring never fills with slots nobody will
+                # release, and the check above ends the pass once no
+                # metric is left.
+                with pending_lock:
+                    pending[frame] = [len(specs), source_slot, distorted_slot]
+                    held[0][source_slot] += 1
+                    held[1][distorted_slot] += 1
+                for spec in frame_specs:
+                    scores[spec.key].reserve(frame)
+                for spec in frame_specs:
+                    by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put((frame, source_slot, distorted_slot))
+                if cvvdp_lane is not None:
+                    cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
+                frame += 1
+                if on_progress:
+                    on_progress(min(frame * step, total_units), total_units, rate.frames_per_second(frame))
+        finally:
+            pairs.close()  # hands back the frames the pairing holds
         for lane in lanes:
             lane.stop()
         for lane in lanes:
