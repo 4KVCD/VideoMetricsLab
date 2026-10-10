@@ -4,9 +4,9 @@ CVVDP predicts how visible the differences between two videos are to a person
 watching a particular display from a particular distance in a particular room,
 so its score depends on that display as much as on the videos: on the same
 Beekeeper frames an AV1 encode scored 9.76 JOD on a 4K HDR monitor and 9.28 on
-a 24-inch 1080p one. The display is therefore part of what a CVVDP score
-means -- it goes into the cache identity -- and is described here by its
-physical properties, never by a name, so renaming a preset changes nothing.
+a 24-inch 1080p one. So the display is part of what a CVVDP score means (it
+is part of the cache key), and it is described here by its physical
+properties, never by a name, so that renaming a preset changes nothing.
 
 The built-in presets are the official ColorVideoVDP display models
 (pycvvdp/vvdp_data/display_models.json, v0.5.7). Where an official model
@@ -111,24 +111,29 @@ class CvvdpSettings:
     resize_to_display: bool = False
 
     def spec_parameters(self) -> tuple[tuple[str, object], ...]:
+        """The settings as a request's parameters: the display's identity, and whether frames fill it."""
         return (("display", self.display.identity()), ("resize_to_display", bool(self.resize_to_display)))
 
     def to_dict(self) -> dict:
+        """The settings as saved in Settings."""
         return {"display": asdict(self.display), "resize_to_display": self.resize_to_display}
 
     @classmethod
     def from_dict(cls, data: dict) -> CvvdpSettings:
+        """The settings read back from to_dict's form."""
         known = set(CvvdpDisplay.__dataclass_fields__)
         display = CvvdpDisplay(**{k: v for k, v in dict(data.get("display", {})).items() if k in known})
         return cls(display.validated(), bool(data.get("resize_to_display", False)))
 
     def same_as(self, other: CvvdpSettings) -> bool:
+        """Whether two settings give the same scores."""
         return self.spec_parameters() == other.spec_parameters()
 
     @classmethod
     def from_spec_parameters(cls, parameters) -> CvvdpSettings:
-        """The settings a CVVDP request was made with -- the rounded values
-        of its identity, so what is scored is exactly what is cached."""
+        """Returns the settings a CVVDP request was made with: the rounded
+        values of its identity, so that what is scored is exactly what is
+        saved."""
         values = dict(parameters)
         display = dict(values["display"])
         width, height = display.pop("resolution")
@@ -137,9 +142,9 @@ class CvvdpSettings:
 
 
 def vship_display_json(display: CvvdpDisplay) -> str:
-    """The display for Vship, as JSON text in the official
-    display_models.json format -- Vship 5.1 parses text that starts with "{"
-    as the config itself. Every property is set, so none falls back to a
+    """Returns the display for Vship, as JSON text in the official
+    display_models.json format (Vship 5.1 reads text that starts with "{" as
+    the config itself). Every property is set, so that none falls back to a
     Vship default."""
     model = {
         "name": "VideoMetricsLab display",
@@ -170,6 +175,7 @@ class CvvdpPreset:
 
 
 def _official(name: str, description: str, **display) -> CvvdpPreset:
+    """A built-in preset made from an official display model."""
     return CvvdpPreset(name, CvvdpSettings(CvvdpDisplay(**display)), builtin=True, description=description)
 
 
@@ -215,24 +221,26 @@ def presets(user_presets: list[dict]) -> list[CvvdpPreset]:
         try:
             found.append(CvvdpPreset(str(data["name"]), CvvdpSettings.from_dict(data["settings"])))
         except (KeyError, TypeError, ValueError, AttributeError):
-            # AttributeError: "settings" not a mapping, e.g. {"settings": [1]},
-            # which used to escape and stop the app at startup.
+            # AttributeError: "settings" is not a mapping, as in
+            # {"settings": [1]}, which must not stop the app at startup.
             continue
     return found
 
 
 def preset_named(name: str, user_presets: list[dict]) -> CvvdpPreset | None:
+    """The preset with this name, built-in or the user's, or None."""
     return next((preset for preset in presets(user_presets) if preset.name == name), None)
 
 
 def matching_preset(settings: CvvdpSettings, user_presets: list[dict],
                     preferred: str = "") -> CvvdpPreset | None:
-    """The preset whose display these settings use, if any -- user presets first, since a
-    user preset saved from a built-in should show under the user's name.
+    """Returns the preset whose display these settings use, if any. User
+    presets come first, since a user preset saved from a built-in one should
+    show under the user's name.
 
     `preferred` is the preset the video was given. It wins while its display
-    still matches: of two presets with the same values, the later one's name
-    was shown, whichever the user had chosen."""
+    still matches, so that of two presets with the same values, the one the
+    user chose is shown."""
     candidates = presets(user_presets)
     if preferred:
         for preset in candidates:
@@ -245,6 +253,7 @@ def matching_preset(settings: CvvdpSettings, user_presets: list[dict],
 
 
 def with_display(settings: CvvdpSettings, **changes) -> CvvdpSettings:
+    """The settings with some of the display's properties changed (and checked)."""
     return replace(settings, display=replace(settings.display, **changes).validated())
 
 
@@ -271,4 +280,5 @@ def with_user_preset(user_presets: list[dict], name: str, settings: CvvdpSetting
 
 
 def without_user_preset(user_presets: list[dict], name: str) -> list[dict]:
+    """The saved-preset list without the preset called `name`."""
     return [data for data in user_presets if data.get("name") != name]

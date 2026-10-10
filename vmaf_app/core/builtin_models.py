@@ -43,10 +43,12 @@ def builtin_model_path(model_id: str) -> Path:
 
 
 def is_builtin_model_choice(choice: str) -> bool:
+    """Whether a model choice names a bundled model ("__builtin:<id>")."""
     return choice.startswith("__builtin:") and choice.removeprefix("__builtin:") in BUILTIN_MODEL_FILES
 
 
 def builtin_choice(model_id: str) -> str:
+    """The model choice that names a bundled model."""
     if model_id not in BUILTIN_MODEL_FILES:
         raise ValueError(f"Unknown built-in VMAF model: {model_id}")
     return f"__builtin:{model_id}"

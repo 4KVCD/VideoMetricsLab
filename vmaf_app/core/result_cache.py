@@ -27,12 +27,14 @@ def set_cache_dir_override(directory: Path | None) -> None:
 
 
 def cache_dir() -> Path:
+    """The folder results are saved in, made if need be: the one in Settings, or the default."""
     directory = _dir_override if _dir_override is not None else default_cache_dir()
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
 def _cache_dir() -> Path:
+    """The same as cache_dir()."""
     return cache_dir()
 
 

@@ -22,10 +22,12 @@ CHOICE_VARIABLE = "VIDEOMETRICSLAB_PRESENTER"
 
 
 def library_path() -> Path:
+    """Where the Vulkan presenter's DLL is."""
     return Path(__file__).resolve().parents[1] / "native" / "vulkan_presenter.dll"
 
 
 def available() -> bool:
+    """Whether the Vulkan presenter's DLL is here (Windows only)."""
     return sys.platform == "win32" and library_path().is_file()
 
 
@@ -37,6 +39,7 @@ def chosen() -> bool:
 
 @functools.cache
 def _library():
+    """The Vulkan presenter's DLL, loaded once."""
     library = ctypes.CDLL(str(library_path()))
     library.vmaf_present_prepare.restype = ctypes.c_int
     library.vmaf_present_problem.restype = ctypes.c_char_p

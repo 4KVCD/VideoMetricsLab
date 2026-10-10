@@ -1,8 +1,9 @@
-"""The canonical description of metrics supported by VideoMetricsLab.
+"""The registry of the metrics VideoMetricsLab supports (METRICS): each
+one's name, labels, number format, direction and way of averaging.
 
-This module deliberately has no Qt, ffmpeg, or result-model imports.  The
-registry is consequently safe to use from the calculation pipeline, saved
-result adapters, and every UI surface without creating a dependency cycle.
+This module imports no Qt, FFmpeg or result models on purpose, so that the
+calculations, the saved results and every part of the window can use it
+without import cycles.
 """
 from __future__ import annotations
 
@@ -15,23 +16,30 @@ import numpy as np
 
 
 class MetricKind(str, Enum):
+    """Whether a metric scores each frame or the whole video."""
+
     FRAME = "frame"
     SEQUENCE = "sequence"
 
 
 class MetricDirection(str, Enum):
+    """Whether a higher or a lower score is better."""
+
     HIGHER_IS_BETTER = "higher_is_better"
     LOWER_IS_BETTER = "lower_is_better"
 
 
 class MetricAggregation(str, Enum):
+    """How a metric's per-frame scores become one number (see stats.aggregate_scores)."""
+
     ARITHMETIC = "arithmetic"
     SQUARE_MEAN_ROOT_DB = "square_mean_root"
 
 
 @dataclass(frozen=True, slots=True)
 class FfmpegMetricBinding:
-    """How an established metric maps onto the current FFmpeg/UI options."""
+    """How an FFmpeg metric is switched on in VmafOptions: by a True/False
+    option, or by a libvmaf feature in extra_features."""
 
     bool_option: str | None = None
     libvmaf_feature: str | None = None
@@ -39,6 +47,8 @@ class FfmpegMetricBinding:
 
 @dataclass(frozen=True, slots=True)
 class MetricDefinition:
+    """A metric's details: its key, labels, number format, direction, averaging, score bands and backend."""
+
     key: str
     label: str
     short_label: str
@@ -52,14 +62,15 @@ class MetricDefinition:
     fixed_y_max: float | None
     thresholds: tuple[tuple[str, float], ...]
     ffmpeg_binding: FfmpegMetricBinding | None = None
-    # Optional because a registry entry can be display/import-only before an
-    # executable backend ships. FFmpeg metrics retain their established
-    # binding; standalone metrics name their backend explicitly.
+    # Optional, because a metric can be in the registry for showing or
+    # importing before a backend calculates it. FFmpeg metrics have their
+    # ffmpeg_binding; the others name their backend here.
     backend_id: str | None = None
 
-    # These small presentation helpers keep all precision and infinity rules
-    # together with the metric metadata rather than duplicated in Qt panels.
+    # These small display helpers keep the rules for precision and infinity
+    # with the metric's details, rather than repeated in the window's panels.
     def format_value(self, value: float | None) -> str:
+        """A score as shown, at the metric's precision, with infinity as a sign and no value as a dash."""
         if value is None or not np.isfinite(value):
             if value is not None and np.isposinf(value):
                 return "∞"
@@ -69,11 +80,11 @@ class MetricDefinition:
         return self.value_format.format(float(value))
 
     def best_and_worst(self, scores: Sequence[float | None]) -> list[str | None]:
-        """"best", "worst" or None for each of `scores` (one a video; None
-        where a video has none), by this metric's direction. Compared as
-        shown (format_value): scores that show the same number are equally
-        best or worst, and with fewer than two to compare, or all showing
-        the same, there is neither."""
+        """Returns "best", "worst" or None for each of `scores` (one per
+        video; None where a video has none), by this metric's direction.
+        Scores are compared as shown (format_value), so scores that show the
+        same number are equally best or worst. With fewer than two to
+        compare, or all showing the same, there is neither."""
         shown = {index: self.format_value(score) for index, score in enumerate(scores)
                  if score is not None and not np.isnan(score)}
         if len(shown) < 2:
@@ -87,6 +98,7 @@ class MetricDefinition:
                 for index in range(len(scores))]
 
     def format_delta(self, value: float | None) -> str:
+        """A difference between two scores as shown, with its sign."""
         if value is None or np.isnan(value):
             return "—"
         if np.isposinf(value):

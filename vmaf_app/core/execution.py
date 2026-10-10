@@ -1,4 +1,6 @@
-"""Backend-neutral grouping of metric requests into executable tasks."""
+"""Groups the metrics a request asks for into tasks, one per backend (the
+program that calculates them), leaving out what is already saved
+(build_execution_plan)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +14,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class MetricTask:
+    """One backend's metrics for one video: the backend, the metric keys and their request specs."""
+
     backend_id: str
     metric_keys: tuple[str, ...]
     requested_specs: tuple[MetricRequestSpec, ...]
@@ -19,21 +23,25 @@ class MetricTask:
 
 @dataclass(frozen=True, slots=True)
 class ExecutionPlan:
+    """The metrics asked for, and the tasks that calculate those not already saved."""
+
     requested_metrics: tuple[str, ...]
     tasks: tuple[MetricTask, ...]
 
 
 @dataclass(slots=True)
 class TaskExecutionResult:
+    """A task's results, or its error."""
+
     metric_results: MetricResultSet | None
     error: str | None = None
 
 
-#: Backends whose metrics share only the decode: SSIMULACRA2, Butteraugli
-#: and CVVDP each have their own handler and score. Keeping the group
-#: together here meant ticking CVVDP on a video with a saved SSIMULACRA2
-#: recalculated SSIMULACRA2 as well -- days of work when it was set to CPU,
-#: and without the long-CPU-run warning, which counts only unscored metrics.
+#: Backends whose metrics share only the decoding: SSIMULACRA2, Butteraugli
+#: and CVVDP each have their own handler and score. Don't keep such a group
+#: together: ticking CVVDP on a video with a saved SSIMULACRA2 would
+#: calculate SSIMULACRA2 again too, which takes days on the CPU, without the
+#: long-CPU-run warning (which counts only metrics without scores).
 _INDEPENDENT_BACKENDS = frozenset({"perceptual"})
 
 
@@ -41,15 +49,15 @@ def build_execution_plan(
     request: AnalysisRequest,
     cached_results: MetricResultSet | None = None,
 ) -> ExecutionPlan:
-    """Group requested metrics by backend while preserving backend efficiency.
+    """Returns the plan: the requested metrics grouped into one task per
+    backend.
 
-    A backend group is skipped only when every metric in that group is already
-    cached. If one is missing, the whole group remains together so coupled
-    implementations such as the current FFmpeg/libvmaf filtergraph still get
-    one efficient pass. Future backends can coexist without planner changes.
-
-    Except for backends whose metrics are independent (_INDEPENDENT_BACKENDS):
-    there a cached metric is left out and only the missing ones run.
+    A backend's task is skipped only when every metric in it is already
+    saved. If one is missing, the whole group stays together, so that
+    metrics calculated together, such as FFmpeg's in one filter graph, still
+    get one efficient pass. The exception is backends whose metrics are
+    independent (_INDEPENDENT_BACKENDS): there a saved metric is left out,
+    and only the missing ones run.
     """
     if not request.metrics:
         raise ValueError("Select at least one metric to calculate.")

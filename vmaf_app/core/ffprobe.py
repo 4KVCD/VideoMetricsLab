@@ -12,6 +12,8 @@ from vmaf_app.core.process_control import ProcessHandle
 
 
 class ProbeError(RuntimeError):
+    """ffprobe could not read a file."""
+
     pass
 
 
@@ -33,9 +35,9 @@ def _parse_frame_rate(rate_str: str) -> float:
 
 
 def _video_stream(streams: list[dict]) -> dict | None:
-    """The first video stream that is a video: not cover art or a
-    thumbnail, which FFmpeg lists as video streams too -- an MP4's cover
-    (covr) can come before its video track. The same stream FFmpeg's
+    """Returns the first video stream that is a video, not cover art or a
+    thumbnail, which FFmpeg lists as video streams too (an MP4's cover,
+    covr, can come before its video track). It is the same stream FFmpeg's
     commands read (ffmpeg_locate.VIDEO_STREAM)."""
     for stream in streams:
         disposition = stream.get("disposition") or {}
@@ -63,6 +65,7 @@ def _clock_seconds(text: str | None) -> float | None:
 
 
 def _whole(value) -> int:
+    """A number read as a whole number, or 0."""
     try:
         return int(float(value))
     except (TypeError, ValueError):
@@ -114,12 +117,12 @@ def _video_bit_rate(video: dict, streams: list[dict], fmt: dict, duration: float
 
 
 def _stream_duration(stream: dict, container: float) -> float:
-    """The video's own length. A Matroska file gives no stream duration,
-    and the container's is its longest stream's -- an audio track running
-    on after the picture, which then failed "Durations do not match", or
-    made a whole video read as cut short. Its writers record each track's
-    length as a DURATION tag; one longer than the container is stale (left
-    by a remux that cut the file) and is not used."""
+    """Returns the video's own length. A Matroska file gives no stream
+    duration, and the container's is its longest stream's, such as an audio
+    track running on after the picture, which would fail "Durations do not
+    match" or make a whole video read as cut short. Matroska writers record
+    each track's length as a DURATION tag; one longer than the container is
+    stale (left by a remux that cut the file) and is not used."""
     if stream.get("duration"):
         try:
             return float(stream["duration"])
@@ -132,13 +135,13 @@ def _stream_duration(stream: dict, container: float) -> float:
 
 
 def probe_video(path: Path, process_handle: ProcessHandle | None = None) -> VideoInfo:
-    """Reads `path`'s media info.
+    """Reads a video file's details with ffprobe.
 
-    `process_handle` makes the probe abandonable. ffprobe on a large file on
-    a slow or network disk can take many seconds, and a plain
-    subprocess.run() cannot be interrupted -- the flag a canceller sets is
-    invisible to a call already blocked inside it. That is what let the
-    window be torn down with an ffprobe still running underneath it.
+    `process_handle` lets the probe be abandoned. ffprobe on a large file
+    on a slow or network disk can take many seconds, and a plain
+    subprocess.run() cannot be interrupted: a call already waiting inside
+    it never sees the flag a canceller sets, so the window could be closed
+    with an ffprobe still running under it.
     """
     cmd = [
         ffprobe_path(),

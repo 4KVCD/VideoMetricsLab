@@ -1,8 +1,9 @@
-"""Packet-level video bitrate analysis and plot aggregation.
+"""Reads a video stream's packets with ffprobe and works out its bitrate
+graphs: per frame, per second and per group of pictures.
 
-Only the first video stream is examined.  Audio, subtitles and container
-overhead are deliberately excluded: this viewer answers how the encoded
-video stream spends its bits, not how large the whole file is.
+Only the first video stream is read. Audio, subtitles and the container's
+own bytes are left out on purpose: the Bitrate tab shows how the encoded
+video spends its bits, not how large the whole file is.
 """
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ BitrateProgress = Callable[[int, int], None]
 
 
 class BitrateError(RuntimeError):
+    """The video's packets could not be read."""
+
     pass
 
 
@@ -33,19 +36,20 @@ class BitrateCancelled(BitrateError):  # noqa: N818
 
 @dataclass(slots=True)
 class BitrateData:
+    """A video stream's packets: each one's time, duration, size in bytes, and whether it is a keyframe."""
+
     path: Path
     times: np.ndarray
     durations: np.ndarray
     sizes: np.ndarray
     keyframes: np.ndarray
-    # Derived once, kept for the life of the data. The per-second bins walk
-    # every packet in Python -- 290 ms for a 151,919-packet encode -- and
-    # the table asked for them again on every refresh, for every row: a
-    # five-row table cost 1.4 s of UI thread each time it redrew. The scan
-    # that produced this data took minutes; its summary is not worth
-    # recomputing, and analyze_video_bitrate primes it on the worker so the
-    # UI thread never computes it at all. Keyed by adjust_start, because the
-    # bin edges move with it.
+    # Worked out once and kept with the data. The per-second bins walk every
+    # packet in Python (290 ms for a 151,919-packet encode), and the table
+    # asks for them on every refresh, for every row: worked out each time, a
+    # five-row table would cost 1.4 s of the window's thread per redraw.
+    # analyze_video_bitrate works them out on the worker thread, so the
+    # window's thread never does. Kept per adjust_start, because the bins'
+    # edges move with it.
     _second_bins: dict = field(default_factory=dict, repr=False, compare=False)
     _summary: object = field(default=None, repr=False, compare=False)
 
@@ -62,28 +66,34 @@ class BitrateData:
 
     @property
     def frame_count(self) -> int:
+        """The number of packets."""
         return len(self.times)
 
     @property
     def start_time(self) -> float:
+        """The first packet's time, in seconds."""
         return float(self.times[0]) if self.frame_count else 0.0
 
     @property
     def end_time(self) -> float:
+        """When the last packet ends, in seconds."""
         if not self.frame_count:
             return 0.0
         return float(np.max(self.times + self.durations))
 
     @property
     def duration(self) -> float:
+        """The stream's length, in seconds."""
         return max(0.0, self.end_time - self.start_time)
 
     @property
     def total_bytes(self) -> int:
+        """The size of all packets, in bytes."""
         return int(self.sizes.sum(dtype=np.int64))
 
     @property
     def average_kbps(self) -> float:
+        """The average bitrate over the whole stream, in kb/s."""
         return self.total_bytes * 8 / self.duration / 1000 if self.duration > 0 else 0.0
 
     def second_bins(self, adjust_start: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -95,6 +105,7 @@ class BitrateData:
         return bins
 
     def summary(self) -> BitrateSummary:
+        """The average, lowest and highest bitrate, worked out once."""
         if self._summary is None:
             _starts, _ends, rates = self.second_bins(True)
             self._summary = BitrateSummary(
@@ -112,6 +123,8 @@ class BitrateData:
 
 @dataclass(frozen=True, slots=True)
 class BitratePlot:
+    """A graph line: its times and values, and the labels for its axis and values."""
+
     times: np.ndarray
     values: np.ndarray
     axis_label: str
@@ -120,12 +133,15 @@ class BitratePlot:
 
 @dataclass(frozen=True, slots=True)
 class BitrateSummary:
+    """A video's average, lowest and highest bitrate, in kb/s (the lowest and highest per second)."""
+
     average_kbps: float
     minimum_kbps: float
     maximum_kbps: float
 
 
 def _number(value: str | None) -> float | None:
+    """A number as ffprobe printed it, or None for none ("N/A") or one that is not finite."""
     try:
         parsed = float(value) if value not in {None, "", "N/A"} else None
     except ValueError:
@@ -134,6 +150,7 @@ def _number(value: str | None) -> float | None:
 
 
 def _parse_compact_line(line: str) -> dict[str, str]:
+    """One line of ffprobe's compact output as {key: value}."""
     fields: dict[str, str] = {}
     for item in line.strip().split("|"):
         if "=" in item:
@@ -167,9 +184,9 @@ def analyze_video_bitrate(
         raise BitrateError(f"Could not start ffprobe: {exc}") from exc
 
     handle.attach(process.pid)
-    # ffprobe's complaints, read as they come: a damaged file can report an
-    # error for every packet, and read only after the packets, they filled
-    # the pipe and ffprobe stopped -- waiting on it -- with the scan.
+    # ffprobe's error output is read as it comes. A damaged file can report
+    # an error for every packet; read only after the packets, the errors
+    # would fill the pipe, and ffprobe would stop, waiting on it, mid-scan.
     complaints: deque[str] = deque(maxlen=200)
     assert process.stderr is not None
     drain = threading.Thread(target=complaints.extend, args=(process.stderr,), name="bitrate-stderr", daemon=True)
@@ -232,6 +249,7 @@ def analyze_video_bitrate(
 
 
 def _step_points(starts: np.ndarray, ends: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Turns (start, end, value) spans into the points of a stepped line."""
     if not len(values):
         return np.empty(0, np.float64), np.empty(0, np.float32)
     times = np.empty(len(values) * 2, np.float64)
@@ -242,6 +260,7 @@ def _step_points(starts: np.ndarray, ends: np.ndarray, values: np.ndarray) -> tu
 
 
 def frame_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
+    """The graph of each frame's size, in kilobits."""
     offset = data.start_time if adjust_start else 0.0
     return BitratePlot(
         times=data.times - offset,
@@ -287,12 +306,14 @@ def _compute_second_bins(data: BitrateData, adjust_start: bool) -> tuple[np.ndar
 
 
 def second_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
+    """The graph of the bitrate in each second, in kb/s."""
     starts, ends, rates = data.second_bins(adjust_start)
     times, values = _step_points(starts, ends, rates)
     return BitratePlot(times, values, "Video bitrate (kb/s)", "kb/s")
 
 
 def gop_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
+    """The graph of each group of pictures' bitrate (keyframe to keyframe), in kb/s."""
     if not data.frame_count:
         return BitratePlot(
             np.empty(0, np.float64), np.empty(0, np.float32),
@@ -322,4 +343,5 @@ def gop_plot(data: BitrateData, adjust_start: bool = True) -> BitratePlot:
 
 
 def bitrate_summary(data: BitrateData) -> BitrateSummary:
+    """The video's bitrate summary."""
     return data.summary()

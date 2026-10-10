@@ -1,7 +1,7 @@
 """Is there a newer release? Asked once, when the app starts.
 
 The releases are published on GitHub, and GitHub's public API names the
-latest one -- drafts and pre-releases left out -- so no server of our own is
+latest one (drafts and pre-releases left out), so no server of our own is
 needed. No key either: GitHub allows 60 such requests an hour from one
 address. Nothing is sent but the request itself; GitHub sees the address it
 comes from, as it would for any page.
@@ -23,6 +23,8 @@ class UpdateCheckError(RuntimeError):
 
 @dataclass(frozen=True)
 class Release:
+    """A release on GitHub: its version, its page and its notes."""
+
     version: str  # "1.3", from the tag "v1.3"
     page_url: str
     notes: str
@@ -47,6 +49,7 @@ def is_newer(candidate: str, current: str) -> bool:
 
 
 def latest_release(opener=urllib.request.urlopen, timeout: float = TIMEOUT_SECONDS) -> Release:
+    """Asks GitHub for the latest release. Raises an error if it cannot be asked."""
     from vmaf_app import APP_NAME, __version__
 
     request = urllib.request.Request(RELEASES_URL, headers={

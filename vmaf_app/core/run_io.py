@@ -1,4 +1,5 @@
-"""Portable result persistence and CSV export."""
+"""Saves results to run files and reads them back (save_run, load_run), and
+exports them as CSV (export_csv)."""
 from __future__ import annotations
 
 import csv
@@ -46,17 +47,17 @@ def safe_filename_stem(label: str) -> str:
 def unique_output_path(
     directory: Path, label: str, suffix: str, reserved: set[Path] | None = None
 ) -> Path:
-    """A path in `directory` for `label` that collides with nothing.
+    """Returns a path in `directory` for `label` that clashes with nothing.
 
-    Batch exports name their files after the series label, and two labels
-    collide easily -- the same basename from two directories, or one file
-    compared twice under different options, both reduce to "movie". Writing
-    them in a loop meant the second silently replaced the first, and the
-    user was told N files had been written when fewer existed.
+    Batch exports name their files after the graph line's label, and two
+    labels clash easily: the same file name from two folders, or one file
+    compared twice with different options, both come down to "movie". The
+    second file must not quietly replace the first while the user is told
+    that every file was written.
 
-    Checks both what is already on disk and what this batch has already
-    claimed (via `reserved`, which is updated in place), because within a
-    single loop the earlier file may not have been written yet.
+    It checks both what is already on disk and what this batch has already
+    taken (`reserved`, which is updated in place), because within one batch
+    the earlier file may not have been written yet.
     """
     reserved = reserved if reserved is not None else set()
     stem = safe_filename_stem(label) or "run"
@@ -70,6 +71,7 @@ def unique_output_path(
 
 
 def _json_float(value: float) -> float | str | None:
+    """A score as JSON allows: NaN as null, infinities as text."""
     value = float(value)
     if math.isnan(value):
         return None
@@ -79,6 +81,7 @@ def _json_float(value: float) -> float | str | None:
 
 
 def _float_from_json(value: float | int | str | None) -> float:
+    """A score read back from _json_float's form."""
     if value is None:
         return float("nan")
     if value == "Infinity":
@@ -111,6 +114,7 @@ def _portable_metric_results(result: ComparisonResult) -> MetricResultSet:
 
 
 def _metric_to_dict(metric) -> dict:
+    """One metric's result as the run file saves it."""
     common = {
         "key": metric.key,
         "provenance": provenance_to_dict(metric.provenance),
@@ -136,6 +140,7 @@ def _metric_to_dict(metric) -> dict:
 
 
 def _metric_from_dict(data: dict):
+    """One metric's result read back from _metric_to_dict's form."""
     if not isinstance(data, dict):
         raise TypeError("metric result must be an object")
     key = data["key"]
@@ -171,6 +176,7 @@ def _metric_from_dict(data: dict):
 
 
 def save_run(result: ComparisonResult, path: Path, label: str | None = None) -> None:
+    """Saves a result to a run file, with an optional label."""
     metrics = _portable_metric_results(result)
     payload = {
         "format_version": FORMAT_VERSION,
@@ -205,6 +211,7 @@ def save_run(result: ComparisonResult, path: Path, label: str | None = None) -> 
 
 
 def load_run(path: Path) -> tuple[ComparisonResult, str]:
+    """Reads a run file back, and returns (result, label)."""
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("format_version") != FORMAT_VERSION:
         raise ValueError(
@@ -264,19 +271,18 @@ _CSV_FIRST_COLUMNS = ("vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr")
 
 
 def export_csv(result: ComparisonResult, path: Path) -> None:
-    """One row per frame, one column per frame metric.
+    """Writes a result as CSV: one row per frame, one column per frame
+    metric.
 
-    The first seven columns are what the export always had (frame, time_s,
-    vmaf, vmaf_neg, psnr, ssim, xpsnr), so existing scripts keep working;
-    every other frame metric follows in registry order (ssimulacra2,
-    butteraugli). The export used to read only the shared frame table with
-    those five columns hard-coded, so SSIMULACRA2 and Butteraugli were never
-    written -- a SSIMULACRA2-only result exported rows of empty cells.
+    The first seven columns are always the same (frame, time_s, vmaf,
+    vmaf_neg, psnr, ssim, xpsnr), so existing scripts keep working, and
+    every other frame metric follows in the registry's order (ssimulacra2,
+    butteraugli).
 
-    Metrics need not share a frame axis (a subsampled perceptual metric
-    scores every n-th frame), so rows are every frame any metric scored,
-    and a metric with no score for a frame leaves its cell blank. A genuine
-    0.0 is written as 0.0, never blank.
+    Metrics need not share frames (a subsampled metric scores every nth
+    frame), so the rows are every frame any metric scored, and a metric
+    with no score for a frame leaves its cell blank. A real 0.0 is written
+    as 0.0, never blank.
 
     A result with a CVVDP score gets two more columns at the end:
     cvvdp_second_jod, the JOD of the second starting at that row's frame,

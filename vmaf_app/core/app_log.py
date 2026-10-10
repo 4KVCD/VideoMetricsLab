@@ -76,10 +76,12 @@ def start_logging(directory: Path | None = None) -> Path | None:
     previous_hook, previous_thread_hook = _previous_hooks
 
     def excepthook(exc_type, exc, traceback) -> None:
+        """Logs an exception nothing caught, then passes it on."""
         logger.critical("Uncaught exception", exc_info=(exc_type, exc, traceback))
         previous_hook(exc_type, exc, traceback)
 
     def thread_excepthook(args) -> None:
+        """Logs an exception nothing caught in a thread, then passes it on."""
         if args.exc_type is not SystemExit:
             logger.critical("Uncaught exception in thread %s", getattr(args.thread, "name", "?"),
                             exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
@@ -215,6 +217,8 @@ def _physical_memory_gb() -> float | None:
     import ctypes
 
     class _MemoryStatus(ctypes.Structure):
+        """Windows' MEMORYSTATUSEX."""
+
         _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong),
                     ("total_physical", ctypes.c_ulonglong), ("available_physical", ctypes.c_ulonglong),
                     ("total_page_file", ctypes.c_ulonglong), ("available_page_file", ctypes.c_ulonglong),

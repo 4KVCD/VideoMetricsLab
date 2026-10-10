@@ -1,4 +1,6 @@
-"""Generic metric results, independent of any particular execution backend."""
+"""Metric results as every backend gives them: a score per frame
+(FrameMetricResult) or one for the whole video (SequenceMetricResult), each
+with its provenance, collected in a MetricResultSet."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -89,6 +91,8 @@ def current_ffmpeg_provenance(key: str, version: str, parameters: dict[str, JSON
 
 @dataclass(slots=True)
 class FrameMetricResult:
+    """A metric with a score per frame: the frame numbers, their times, the scores and the provenance."""
+
     key: str
     frame: np.ndarray
     time: np.ndarray
@@ -104,6 +108,7 @@ class FrameMetricResult:
 
     @property
     def aggregate(self) -> float | None:
+        """The one number for the whole video, by the metric's own way of averaging."""
         from vmaf_app.core.stats import aggregate_scores
 
         definition = METRIC_BY_KEY.get(self.key)
@@ -118,10 +123,10 @@ class FrameMetricResult:
 class SequenceMetricResult:
     """One score for the whole comparison.
 
-    `frame`/`time`/`values` optionally carry a timeline -- for CVVDP, the JOD
-    of each one-second window, at the window's first frame. The timeline is
-    for finding bad stretches; `score` is the metric (it is not the mean of
-    the timeline).
+    `frame`, `time` and `values` may hold a timeline: for CVVDP, the JOD of
+    each one-second window, at the window's first frame. The timeline is for
+    finding bad stretches; `score` is the metric (it is not the timeline's
+    mean).
     """
 
     key: str
@@ -142,10 +147,12 @@ class SequenceMetricResult:
 
     @property
     def has_timeline(self) -> bool:
+        """Whether the result has a timeline."""
         return self.values is not None and len(self.values) > 0
 
     @property
     def aggregate(self) -> float:
+        """The one number for the whole video: the score."""
         return self.score
 
 
@@ -153,7 +160,8 @@ MetricResult = FrameMetricResult | SequenceMetricResult
 
 
 class MetricResultSet:
-    """Independent metric outputs; frame metrics need not share an axis."""
+    """The results of a comparison's metrics, by key. Each is independent,
+    and frame metrics need not share the same frames."""
 
     def __init__(self, results: Iterable[MetricResult] = ()) -> None:
         self._results: dict[str, MetricResult] = {}
@@ -161,23 +169,29 @@ class MetricResultSet:
             self.add(result)
 
     def add(self, result: MetricResult) -> None:
+        """Adds or replaces a metric's result."""
         self._results[result.key] = result
 
     def get(self, key: str) -> MetricResult | None:
+        """A metric's result, or None."""
         return self._results.get(key)
 
     def has(self, key: str) -> bool:
+        """Whether the set has the metric."""
         return key in self._results
 
     def frame(self, key: str) -> FrameMetricResult | None:
+        """A per-frame metric's result, or None."""
         result = self.get(key)
         return result if isinstance(result, FrameMetricResult) else None
 
     def sequence(self, key: str) -> SequenceMetricResult | None:
+        """A whole-video metric's result, or None."""
         result = self.get(key)
         return result if isinstance(result, SequenceMetricResult) else None
 
     def keys(self) -> tuple[str, ...]:
+        """The metrics' keys, in the order they were added."""
         return tuple(self._results)
 
     def __iter__(self):
@@ -187,6 +201,7 @@ class MetricResultSet:
         return bool(self._results)
 
     def copy(self) -> MetricResultSet:
+        """A new set with the same results."""
         return MetricResultSet(self._results.values())
 
 
@@ -217,19 +232,18 @@ def frame_scores_from_results(results: MetricResultSet):
     if not present:
         return FrameScores.empty()
 
-    # The first registered metric that is present defines the UI axis. Metrics
-    # with their own sampling axis stay authoritative in MetricResultSet and
-    # are simply omitted from this shared-axis projection. One independent
-    # metric must never make otherwise-displayable scores disappear.
+    # The first metric present, in the registry's order, sets the frames of
+    # this view. Metrics on other frames stay in the MetricResultSet and are
+    # left out of the view, so that one metric on its own frames never makes
+    # the others' scores disappear.
     #
-    # Alignment is by frame number alone, which identifies the frame. Times
-    # are derived -- frame / fps, from the reference's or the test's frame
-    # rate depending on the backend -- and can differ by rounding for the
-    # same frames. Requiring them to be bit-identical dropped every metric
-    # but VMAF from real results: on a cached 151,919-frame film PSNR, SSIM,
-    # XPSNR, SSIMULACRA2 and Butteraugli all had VMAF's frame numbers but
-    # times up to 3.3e-7 s apart, so the CSV export, the "scored frames"
-    # text and Video Compare lost them. The table uses the first metric's
+    # Frames are matched by frame number alone, which identifies the frame.
+    # The times are worked out (frame / fps, from the source's or the test
+    # video's frame rate, by backend) and can differ by rounding for the
+    # same frames. Don't require them to be identical: on a saved 151,919-frame
+    # film, every metric but VMAF had VMAF's frame numbers but times up to
+    # 3.3e-7 s apart, and would be lost from the CSV export, the "scored
+    # frames" text and Video Compare. The view uses the first metric's
     # times.
     reference = present[0]
     aligned = [result for result in present if np.array_equal(reference.frame, result.frame)]
@@ -250,13 +264,13 @@ def sampled_every(result: FrameMetricResult, step: int) -> FrameMetricResult:
 
 
 def as_requested(results: MetricResultSet, specs) -> MetricResultSet:
-    """`results` with each frame metric on the frames its request covers
-    (MetricRequestSpec.coverage). XPSNR requested beside subsampled libvmaf
-    metrics covers their frames -- in one FFmpeg run, libvmaf's log decides
-    which frames are reported -- but scored in a run of its own, beside VMAF
-    on the GPU, it came back for every frame: stored as the sampled metric,
-    then off the shared frame axis, out of the table's frames and the CSV.
-    The set itself when nothing changes."""
+    """Returns `results` with each frame metric on the frames its request
+    covers (MetricRequestSpec.coverage), or the set itself when nothing
+    changes. XPSNR asked for beside subsampled libvmaf metrics covers their
+    frames: in one FFmpeg run, libvmaf's log decides which frames are
+    reported. But scored in a run of its own, beside VMAF on the GPU, it
+    comes back for every frame, and kept that way it would fall off the
+    shared frames, out of the table and the CSV."""
     steps = {spec.key: spec.coverage.step for spec in specs if spec.coverage is not None}
     changed = False
     conformed = MetricResultSet()

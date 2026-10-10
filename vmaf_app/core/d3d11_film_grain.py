@@ -57,10 +57,12 @@ class GrainParams(ctypes.Structure):
 
 
 def library_path() -> Path:
+    """Where the film grain DLL is."""
     return Path(__file__).resolve().parents[1] / "native" / "d3d11_film_grain.dll"
 
 
 def available() -> bool:
+    """Whether the film grain DLL is here (Windows only)."""
     return sys.platform == "win32" and library_path().is_file()
 
 

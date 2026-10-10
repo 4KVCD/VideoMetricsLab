@@ -83,6 +83,7 @@ def _canonical(data: object) -> str:
 
 
 def _json_default(value: object):
+    """How json writes the recipe's enums (their value) and objects (their fields)."""
     if hasattr(value, "value"):
         return value.value
     if hasattr(value, "__dict__"):
@@ -97,6 +98,7 @@ def recipe_hash(source: Path, distorted: Path, recipe: ComparisonRecipe) -> str:
 
 
 def _hash(source_identity: str, distorted_identity: str, recipe_identity: dict) -> str:
+    """The SHA-256 of both files' identities and the recipe's."""
     raw = _canonical({"source": source_identity, "distorted": distorted_identity, "recipe": recipe_identity})
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -651,10 +653,12 @@ def _old_v1_scores(directory: Path, spec: MetricRequestSpec) -> list[tuple[Path,
 
 
 def _is_v1_spec(spec: MetricRequestSpec) -> bool:
+    """Whether a request is for FFmpeg's VMAF v1."""
     return spec.key == "vmaf_v1" and spec.backend_id == "ffmpeg"
 
 
 def _is_vmaf_spec(spec: MetricRequestSpec) -> bool:
+    """Whether a request is for FFmpeg's VMAF (v0.6.1)."""
     return spec.key == "vmaf" and spec.backend_id == "ffmpeg"
 
 
@@ -719,6 +723,7 @@ def load_metrics(
 
 
 def _context_from_result(result: ComparisonResult, label: str, recipe: ComparisonRecipe) -> dict:
+    """The comparison's context.json: its files, crops, frame rate and recipe."""
     return {
         "format_version": METRIC_CACHE_FORMAT_VERSION, "label": label,
         "source": str(result.source), "distorted": str(result.distorted), "fps": result.fps,

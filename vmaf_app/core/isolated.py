@@ -228,6 +228,7 @@ class _Sender:
         self._lock = threading.Lock()
 
     def send(self, message) -> None:
+        """Sends a message to the parent, one thread at a time."""
         with self._lock:
             self._connection.send(message)
 
@@ -241,14 +242,17 @@ class _ForwardedHandle:
         self._sender = sender
 
     def attach(self, pid: int) -> None:
+        """Asks the parent to attach a process to its handle."""
         self._sender.send(("attach", pid))
 
     def detach(self, pid: int | None = None) -> None:
+        """Asks the parent to detach a process from its handle."""
         if pid is not None:
             self._sender.send(("detach", pid))
 
     @property
     def is_pause_requested(self) -> bool:
+        """Always False here: the parent pauses the processes."""
         return False
 
     @property
@@ -267,6 +271,7 @@ class _LogForwarder(logging.Handler):
         self._sender = sender
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Sends one log record to the parent."""
         try:
             text = record.getMessage()
             if record.exc_info:

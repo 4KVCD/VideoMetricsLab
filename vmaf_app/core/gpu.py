@@ -1,14 +1,12 @@
-"""GPU / hardware-decode capability detection.
+"""Finds out which GPUs this PC has and how FFmpeg can decode each video on
+them (its -hwaccel), and works out pixel formats and bit depths.
 
-We keep this deliberately conservative: pick a decode hwaccel that's likely
-to work for a given video's codec, and let vmaf_runner fall back to
-software decode if the hardware path fails to launch.
-
-The two inputs of a comparison are decided independently. They are
-unrelated bitstreams -- a 10-bit HEVC master against an AV1 encode of it --
-so one can be GPU-decodable on this machine while the other is not, and a
-single shared answer would have to be "no" whenever either side was
-unsupported.
+The choice is cautious: a -hwaccel likely to work for the video's codec,
+with vmaf_runner falling back to software decoding if the hardware path
+fails to start. The two videos of a comparison are decided separately.
+They are unrelated streams (a 10-bit HEVC master against an AV1 encode of
+it, say), so one can be decodable on this PC's GPU while the other is not,
+and a single shared answer would have to be "no" whenever either was not.
 """
 from __future__ import annotations
 
@@ -27,11 +25,13 @@ from vmaf_app.core.models import GpuVendor
 #: perceptual_vship._gpu_pass) or VMAF on the GPU (vmaf_runner). Each
 #: already fills the GPU, and two at once can run a card out of memory.
 GPU_PASS = threading.Lock()
-#: Sent through on_status while a pass waits for another video's to end; the
-#: worker recognises it to say which half of a video is waiting.
+#: Sent through on_status while a pass waits for another video's pass to
+#: end. Sent with the status kind GPU_WAIT, it lets the run line show which
+#: of the video's tasks is waiting.
 GPU_WAIT_MESSAGE = "Waiting for the GPU: another video's GPU pass is running…"
 
-# hwaccel name -> codecs it reliably decodes via ffmpeg's generic hwaccel path
+# For each -hwaccel, the codecs it reliably decodes through FFmpeg's generic
+# hardware decoding.
 _HWACCEL_CODEC_SUPPORT = {
     "cuda": {"h264", "hevc", "vp8", "vp9", "mpeg2video", "mpeg4", "av1", "vc1"},
     "qsv": {"h264", "hevc", "vp8", "vp9", "mpeg2video", "av1"},
@@ -46,22 +46,22 @@ _VENDOR_PREFERRED_HWACCEL = {
 
 
 def start_hwaccel_probe() -> None:
-    """FFmpeg's -hwaccels asked in the background, at the window's startup:
-    asked on Video Compare's first opening instead, FFmpeg's start held the
-    window for 40 ms then."""
+    """Asks FFmpeg for its -hwaccels in the background at the window's
+    start. Asked at Video Compare's first opening instead, FFmpeg's start
+    would hold the window for 40 ms."""
     threading.Thread(target=available_hwaccels, name="hwaccel-probe", daemon=True).start()
 
 
 def available_hwaccels() -> set[str]:
-    """The -hwaccel methods the FFmpeg in use was built with. Asked once
-    per FFmpeg: the answer was kept for the session whatever FFmpeg it came
-    from, so pointing the app at another one (Settings, or "Locate
-    ffmpeg.exe") kept the first one's list."""
+    """The -hwaccel methods the FFmpeg in use was built with. The answer is
+    kept per FFmpeg, so pointing the app at another one (Settings, or
+    "Locate ffmpeg.exe") asks again."""
     return set(_hwaccels_of(ffmpeg_path()))
 
 
 @lru_cache(maxsize=4)
 def _hwaccels_of(executable: str) -> frozenset[str]:
+    """The -hwaccel methods one FFmpeg lists."""
     try:
         proc = proc_util.run(
             [executable, "-hide_banner", "-hwaccels"],
@@ -87,12 +87,13 @@ PCI_VENDORS = {0x10DE: GpuVendor.NVIDIA, 0x1002: GpuVendor.AMD, 0x1022: GpuVendo
 
 @lru_cache(maxsize=1)
 def detected_gpu_vendors() -> list[GpuVendor]:
-    """The makers of the GPUs DirectX lists (Windows only), NVIDIA first,
-    then Intel, then AMD -- the order "auto" tries their decoders in.
+    """The makers of the GPUs DirectX lists (Windows only): NVIDIA first,
+    then Intel, then AMD, the order in which "auto" tries their decoders.
 
-    Asked of DXGI in-process, in milliseconds. It was a PowerShell query
-    (Get-CimInstance Win32_VideoController): 0.3 to 0.4 s warm, seconds
-    cold, on the UI thread while the window was being built."""
+    DXGI is asked in this process, which takes milliseconds. Don't use a
+    PowerShell query (Get-CimInstance Win32_VideoController) instead: it
+    takes 0.3 to 0.4 s, or seconds when cold, on the window's thread while
+    the window is being built."""
     if sys.platform != "win32":  # not platform.system(): a 50 ms WMI query on Windows
         return []
     try:
@@ -103,11 +104,15 @@ def detected_gpu_vendors() -> list[GpuVendor]:
 
 
 class _Guid(ctypes.Structure):
+    """A Windows GUID."""
+
     _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16), ("Data3", ctypes.c_uint16),
                 ("Data4", ctypes.c_ubyte * 8)]
 
 
 class _AdapterDesc1(ctypes.Structure):  # DXGI_ADAPTER_DESC1
+    """DXGI_ADAPTER_DESC1."""
+
     _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", ctypes.c_uint32),
                 ("DeviceId", ctypes.c_uint32), ("SubSysId", ctypes.c_uint32), ("Revision", ctypes.c_uint32),
                 ("DedicatedVideoMemory", ctypes.c_size_t), ("DedicatedSystemMemory", ctypes.c_size_t),
@@ -124,14 +129,15 @@ _RELEASE, _ENUM_ADAPTERS1, _GET_DESC1 = 2, 12, 10
 
 
 def _com_call(interface: ctypes.c_void_p, slot: int, *args, argtypes=()) -> int:
+    """Calls a COM method by its slot in the interface's vtable."""
     vtable = ctypes.cast(interface, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
     method = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *argtypes)(vtable[slot])
     return method(interface, *args)
 
 
 def _dxgi_vendor_ids() -> list[int]:
-    """The PCI vendor ID of each hardware adapter DXGI lists. OSError when
-    DXGI cannot be asked."""
+    """The PCI vendor ID of each hardware adapter DXGI lists. Raises OSError
+    when DXGI cannot be asked."""
     factory = ctypes.c_void_p()
     result = ctypes.WinDLL("dxgi").CreateDXGIFactory1(ctypes.byref(_IID_IDXGIFACTORY1), ctypes.byref(factory))
     if result < 0 or not factory:
@@ -160,7 +166,8 @@ def _dxgi_vendor_ids() -> list[int]:
 
 
 def pick_hwaccel(vendor: GpuVendor, codec_name: str) -> str | None:
-    """Returns an ffmpeg -hwaccel value to try, or None for software decode."""
+    """Returns the FFmpeg -hwaccel to try for a codec on this GPU maker (or
+    the first one found, for "auto"), or None for software decoding."""
     hwaccels = available_hwaccels()
     codec_name = (codec_name or "").lower()
 
@@ -182,11 +189,10 @@ def pick_hwaccel(vendor: GpuVendor, codec_name: str) -> str | None:
 
 @dataclass(frozen=True)
 class HwAccelPlan:
-    """The ffmpeg -hwaccel to use for each input of one run.
+    """The FFmpeg -hwaccel to use for each video of one run.
 
-    None on either side means "decode this one in software". Both being
-    None is the all-CPU plan, which is also what every fallback eventually
-    reaches.
+    None for a video means it is decoded in software. Both None is the
+    all-CPU plan, which every fallback eventually reaches.
     """
 
     source: str | None = None
@@ -194,37 +200,39 @@ class HwAccelPlan:
 
     @property
     def uses_gpu(self) -> bool:
+        """Whether either video is decoded on the GPU."""
         return self.source is not None or self.distorted is not None
 
     def describe(self) -> str:
-        """For the status line, so it is visible which input actually got
-        hardware decode -- otherwise a silent per-input fallback looks
-        identical to a run that never tried."""
+        """The plan for the status line, which shows which video was really
+        decoded on the GPU; otherwise a quiet fallback for one video would
+        look the same as a run that never tried."""
         if not self.uses_gpu:
             return "off"
         return f"source {self.source or 'cpu'}, distorted {self.distorted or 'cpu'}"
 
 
 def downloads_from_gpu(pix_fmt: str, width: int = 0, height: int = 0) -> bool:
-    """Whether FFmpeg's hardware decode as the app runs it (-hwaccel X
-    -hwaccel_output_format X, then hwdownload,format=hw_native_format) gives
-    a video of this pixel format and size as its software decode does.
+    """Whether FFmpeg's hardware decoding, as the app runs it (-hwaccel X
+    -hwaccel_output_format X, then hwdownload,format=hw_native_format), gives
+    a video of this pixel format and size the same pictures as its software
+    decoding does.
 
-    The format: 4:2:0 at 8 or 10 bits, the NV12 and P010 surfaces. A 4:2:2,
-    4:4:4 or 12-bit video decodes to another surface, the download fails,
-    and the run started again in software -- every run (checked on an RTX
+    The format must be 4:2:0 at 8 or 10 bits (the NV12 and P010 surfaces). A
+    4:2:2, 4:4:4 or 12-bit video decodes to another surface, the download
+    fails, and every run would start again in software (checked on an RTX
     5090 with HEVC, H.264 and AV1). An unknown format is left to try.
 
-    The size: an even width and height. Of an odd-sized video (AV1 and VP9
-    can be) FFmpeg's NVIDIA decode gives the decoder's own picture, a sample
-    wider or a row taller -- 854x480 for 853x479 -- with whatever the decoder
-    left in the added column and row, and for an odd height its chroma a row
-    out (FFmpeg 9.0.1, RTX 5090: luma identical to the software decode,
-    chroma 26 dB PSNR from it). With default settings an 854x479 AV1 pair
-    scored SSIMULACRA2 20.4 where its pictures score 45.1, and 853x480, its
-    black bars measured on the padded picture, 16.1 for 44.0. Intel's decode
-    gave the video's own picture; AMD's is unchecked, and a size this rare
-    is not worth a rule per maker. An unknown size (0) is left to try."""
+    The width and height must be even. For an odd-sized video (AV1 and VP9
+    can be), FFmpeg's NVIDIA decoding gives the decoder's own picture, a
+    sample wider or a row taller (854x480 for 853x479), with whatever the
+    decoder left in the added column and row, and for an odd height the
+    chroma a row out (FFmpeg 9.0.1, RTX 5090: the luma identical to the
+    software decode's, the chroma 26 dB PSNR from it). With default
+    settings, an 854x479 AV1 pair scored SSIMULACRA2 20.4 where its pictures
+    score 45.1. Intel's decoding gave the video's own picture; AMD's is
+    unchecked, and a size this rare is not worth a rule per maker. An
+    unknown size (0) is left to try."""
     if width & 1 or height & 1:
         return False
     name = (pix_fmt or "").casefold()
@@ -235,17 +243,17 @@ def downloads_from_gpu(pix_fmt: str, width: int = 0, height: int = 0) -> bool:
 
 
 def pick_decode(vendor: GpuVendor, codec_name: str, pix_fmt: str, width: int = 0, height: int = 0) -> str | None:
-    """The ffmpeg -hwaccel to start for this video, or None for software
-    decode: pick_hwaccel's, for a format and size downloads_from_gpu takes,
-    and for H.264 at more than 8 bits NVIDIA's only.
+    """Returns the FFmpeg -hwaccel to start this video with, or None for
+    software decoding: pick_hwaccel's choice, for a format and size that
+    downloads_from_gpu accepts, and for H.264 above 8 bits only NVIDIA's.
 
     Intel's and AMD's GPUs do not decode 10-bit H.264. Asked to with
     -hwaccel qsv or d3d11va, FFmpeg decodes it in software, the frames reach
-    hwdownload in system memory and the run fails after 0.3 s ("Error
-    reinitializing filters!" on a Radeon 780M, "Invalid argument" with
-    FFmpeg 9 here) to be started again in software -- every run. NVIDIA's
-    RTX 50 series does decode it (RTX 5090: the software decode's pictures,
-    by MD5); an older card fails and starts again as before."""
+    hwdownload in system memory, and every run would fail after 0.3 s
+    ("Error reinitializing filters!" on a Radeon 780M, "Invalid argument"
+    with FFmpeg 9 here) and start again in software. NVIDIA's RTX 50 series
+    does decode it (on an RTX 5090, the software decode's pictures, by MD5);
+    an older card fails and starts again in software."""
     if not downloads_from_gpu(pix_fmt, width, height):
         return None
     hwaccel = pick_hwaccel(vendor, codec_name)
@@ -259,12 +267,12 @@ def plan_hwaccel(
     source_pix_fmt: str = "", distorted_pix_fmt: str = "",
     source_size: tuple[int, int] = (0, 0), distorted_size: tuple[int, int] = (0, 0),
 ) -> HwAccelPlan:
-    """Chooses FFmpeg's hardware decode for each input separately: by codec,
-    and only for a pixel format and a size (width, height) it gives as the
-    software decode does (pick_decode).
+    """Chooses FFmpeg's hardware decoding for each video separately: by
+    codec, and only for a pixel format and size (width, height) that it
+    decodes as the software decoder does (pick_decode).
 
-    `distorted_codec` of None is the round-trip-test case: there is only one
-    input file, so there is nothing to decide for the distorted side.
+    `distorted_codec` is None for a resolution test, which has only one
+    file, so there is nothing to decide for the test video.
     """
     return HwAccelPlan(
         source=pick_decode(vendor, source_codec, source_pix_fmt, *source_size),
@@ -274,47 +282,48 @@ def plan_hwaccel(
 
 
 # ---------------------------------------------------------------- pixel formats
-# Here rather than in vmaf_runner because crop detection needs them too, and
-# vmaf_runner imports crop_detect.
+# These are here rather than in vmaf_runner because black-bar detection
+# needs them too, and vmaf_runner imports crop_detect.
 
-#: Analysis bit depth -> the planar 4:2:0 format both branches are converted
-#: to before they meet. libvmaf compares two streams that must agree on
-#: format, so one has to be picked for the pair.
+#: For each comparison bit depth, the planar 4:2:0 format both videos are
+#: converted to before they meet. libvmaf compares two streams that must
+#: have the same format, so one is picked for the pair.
 _ANALYSIS_FORMAT_BY_DEPTH = {8: "yuv420p", 10: "yuv420p10le", 12: "yuv420p12le"}
 
 
 def analysis_pix_fmt(*pix_fmts: str) -> str:
-    """The common format the inputs are converted to before comparison.
+    """Returns the common format the videos are converted to before they are
+    compared.
 
-    Takes the *deepest* of the inputs, so a 10-bit master compared against
-    an 8-bit encode promotes the encode rather than truncating the master.
-    Everything used to be forced to 8-bit yuv420p, which quietly discarded
-    two bits of both sides on any HDR/10-bit comparison and put a floor
-    under PSNR/XPSNR that had nothing to do with the encode being measured.
+    It takes the deepest of the videos, so a 10-bit master compared with an
+    8-bit encode raises the encode to 10 bits rather than cutting the master
+    to 8. Don't force 8-bit yuv420p: on an HDR or 10-bit comparison it
+    throws away two bits of both videos, and puts a floor under PSNR and
+    XPSNR that has nothing to do with the encode being measured.
     """
     depth = max((bit_depth(f) for f in pix_fmts), default=8)
     if depth <= 8:
         return _ANALYSIS_FORMAT_BY_DEPTH[8]
     if depth <= 10:
         return _ANALYSIS_FORMAT_BY_DEPTH[10]
-    # libvmaf accepts up to 12-bit; deeper sources (16-bit intermediates)
-    # are analysed at 12 rather than being dropped back to 8.
+    # libvmaf accepts up to 12 bits, so deeper sources (16-bit intermediates)
+    # are compared at 12 rather than dropped back to 8.
     return _ANALYSIS_FORMAT_BY_DEPTH[12]
 
 
 def hw_native_format(pix_fmt: str) -> str:
-    """The system-memory pixel format a cuda/qsv/d3d11va hw surface downloads
-    to, based on that input's bit depth. 10/12-bit 4:2:0 video decodes to a
-    p010-family surface; everything else (including 8-bit) decodes to nv12."""
+    """Returns the system-memory pixel format that a cuda, qsv or d3d11va
+    surface downloads to, by the video's bit depth: video deeper than 8 bits
+    decodes to a P010-family surface, and everything else to NV12."""
     if bit_depth(pix_fmt) > 8:
         return "p010le"
     return "nv12"
 
 
-#: Depth digits sit immediately after the planar marker and at the end of
-#: the name: yuv420p10le, gbrp12be, yuv444p16le. Anchoring on that "p" is
-#: what keeps nv12 (8-bit semi-planar, whose 12 is part of the *name*) and
-#: rgb24 (8-bit, whose 24 is bits per pixel) from being read as deep.
+#: The depth digits come right after the planar "p", at the end of the
+#: name: yuv420p10le, gbrp12be, yuv444p16le. Matching on that "p" keeps nv12
+#: (8-bit semi-planar, whose 12 is part of the name) and rgb24 (8-bit, whose
+#: 24 is bits per pixel) from being read as deep.
 _PLANAR_DEPTH_RE = re.compile(r"p(\d{1,2})(?:le|be)?$")
 #: Single-plane formats put the digits straight after the plane name.
 _GRAY_DEPTH_RE = re.compile(r"^(?:gray|ya)(\d{1,2})(?:le|be)?$")
@@ -324,12 +333,12 @@ _HW_SURFACE_DEPTHS = (("p016", 16), ("p012", 12), ("p010", 10))
 
 
 def bit_depth(pix_fmt: str) -> int:
-    """The bit depth encoded in an ffmpeg pixel-format name.
+    """Returns the bit depth written in an FFmpeg pixel format's name.
 
-    ffmpeg spells depth into the name rather than reporting it separately,
-    and the 8-bit names carry no depth digits at all. Anything unrecognised
-    is treated as 8-bit, which is the safe direction: it costs precision
-    only for a format the pipeline was never going to handle specially.
+    FFmpeg puts the depth in the name rather than reporting it separately,
+    and the 8-bit names have no depth digits at all. Anything not recognised
+    is taken as 8-bit, which is the safe direction: it costs precision only
+    for a format the app would not handle specially anyway.
     """
     name = (pix_fmt or "").lower()
     if not name:
@@ -350,14 +359,14 @@ _HWACCEL_OUTPUT_FORMATS = {"d3d11va": "d3d11"}
 
 
 def hwaccel_output_format(hwaccel: str) -> str:
-    """The -hwaccel_output_format that keeps `hwaccel`'s frames on the GPU
-    for hwdownload: the name of its pixel format.
+    """Returns the -hwaccel_output_format that keeps `hwaccel`'s frames on
+    the GPU for hwdownload: the name of its pixel format.
 
-    It was the hwaccel's name, which for d3d11va -- AMD's -- is no pixel
-    format: FFmpeg said "Unrecognised hwaccel output format: d3d11va", gave
-    the frames in system memory, the graph's hwdownload refused them, and
-    the run started again in software. Every run on an AMD GPU: right
-    scores, never a hardware decode. Found on a Radeon 780M."""
+    Don't use the hwaccel's own name: for d3d11va (AMD's) it is not a pixel
+    format. FFmpeg then says "Unrecognised hwaccel output format: d3d11va"
+    and gives the frames in system memory, the graph's hwdownload refuses
+    them, and every run on an AMD GPU starts again in software (found on a
+    Radeon 780M)."""
     return _HWACCEL_OUTPUT_FORMATS.get(hwaccel, hwaccel)
 
 
@@ -366,19 +375,19 @@ _ONE_THREAD_HWACCELS = frozenset({"cuda"})
 
 
 def hwaccel_args(hwaccel: str | None) -> list[str]:
-    """The -hwaccel options for ONE input. ffmpeg reads these as per-input
-    options, applying to the next -i on the command line, which is what
-    allows the two inputs to be decoded differently.
+    """Returns the -hwaccel options for one video. FFmpeg reads them as
+    options of the next -i on the command line, which lets the two videos
+    be decoded differently.
 
-    NVIDIA's with one decoder thread: FFmpeg's frame threads each hold
-    pictures of their own, and the GPU decoding the video gains nothing
-    from them -- a 4K HEVC 10-bit film decoded and downloaded as fast in
-    260 MB less memory, 1080p in 50 MB less; the XPSNR run beside PSNR and
-    SSIM in the app took 1.3 GB, 0.8 GB this way. Intel's took the same
-    memory either way. A video NVIDIA's decoder does not take, which FFmpeg
-    then decodes on the CPU -- slowly on one thread -- fails instead, the
-    frames being kept on the GPU here (hwaccel_output_format) for a graph
-    that downloads them, and the run is made again without -hwaccel."""
+    NVIDIA's decoding runs on one decoder thread. FFmpeg's frame threads
+    each hold pictures of their own, and a GPU decoding the video gains
+    nothing from them: a 4K HEVC 10-bit film decoded and downloaded as fast
+    in 260 MB less memory, and 1080p in 50 MB less; XPSNR beside PSNR and
+    SSIM took 0.8 GB instead of 1.3 GB. Intel's took the same memory either
+    way. A video that NVIDIA's decoder does not take is not left to decode
+    slowly on one CPU thread: the frames are kept on the GPU here
+    (hwaccel_output_format) for a graph that downloads them, so the run
+    fails, and is made again without -hwaccel."""
     if not hwaccel:
         return []
     threads = ["-threads", "1"] if hwaccel in _ONE_THREAD_HWACCELS else []

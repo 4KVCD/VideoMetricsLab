@@ -1,4 +1,6 @@
-"""Extract one display frame using the same geometry a VMAF run would."""
+"""Extracts one frame of a video as a PNG for Frame Compare, cropped and
+scaled as a metric run would (extract_frame_png), and converted for the
+display (PreviewColorSettings)."""
 from __future__ import annotations
 
 import subprocess
@@ -33,16 +35,19 @@ class PreviewColorMode(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class PreviewColorSettings:
+    """How Frame Compare converts HDR frames for the display."""
+
     mode: PreviewColorMode = PreviewColorMode.DISPLAY_AWARE
     display_hdr_enabled: bool | None = None
     display_sdr_white_nits: float | None = None
 
     @property
     def target_nits(self) -> float:
-        """The SDR diffuse-white target used by zscale.
+        """The SDR white level (in nits) that zscale maps to.
 
-        Windows' SDR-content brightness only applies while HDR is enabled.
-        Reject implausible driver values instead of feeding them to ffmpeg.
+        Windows' SDR content brightness applies only while HDR is on.
+        Implausible values from the driver are ignored rather than given to
+        FFmpeg.
         """
         value = self.display_sdr_white_nits
         if (
@@ -56,6 +61,7 @@ class PreviewColorSettings:
 
     @property
     def cache_token(self) -> tuple[str, bool | None, float]:
+        """What the converted picture depends on, for caching it."""
         return (self.mode.value, self.display_hdr_enabled, round(self.target_nits, 3))
 
 
@@ -69,16 +75,16 @@ class FrameExtractCancelledError(FrameExtractError):
 
 @dataclass(frozen=True)
 class FrameComparison:
-    """Everything needed to render one pair of comparable frames.
+    """Everything needed to show one pair of comparable frames.
 
-    This is the preprocessing recipe -- which files, cropped how, scaled
-    which way -- and deliberately NOT the scores. Looking at two frames side
-    by side is useful on its own, and requiring a finished VMAF run before
-    the pictures could be shown made the tab unavailable exactly when it is
-    most wanted: while deciding whether a comparison is worth running at all.
+    It holds how the pictures are prepared (which files, cropped how, scaled
+    which way), and not the scores, on purpose. Looking at two frames side
+    by side is useful on its own, and needing a finished run before the
+    pictures can be shown would make the tab unavailable exactly when it is
+    most wanted: while deciding whether a comparison is worth running.
 
-    A run produces one of these (from_result); so does a source/distorted
-    pair that has only been probed.
+    A run makes one of these (from_result), and so does a source and test
+    video pair that has only been probed.
     """
 
     source_info: VideoInfo
@@ -133,6 +139,7 @@ def frame_input_path(comparison: FrameComparison, side: FrameSide) -> Path:
 
 
 def frame_video_info(comparison: FrameComparison, side: FrameSide) -> VideoInfo:
+    """The details of the video shown on `side`."""
     if side == "source" or comparison.resample_target is not None:
         return comparison.source_info
     return comparison.distorted_info
@@ -162,6 +169,7 @@ def hdr_kind(info: VideoInfo) -> str | None:
 
 
 def _tone_map_filter(info: VideoInfo, settings: PreviewColorSettings) -> list[str]:
+    """The filters that convert a frame to 8-bit RGB for the display, mapping HDR to SDR where needed."""
     kind = hdr_kind(info)
     if settings.mode == PreviewColorMode.UNMANAGED:
         return ["format=rgb24"]
@@ -271,14 +279,14 @@ def frame_filter(
         )
     elif (content_w, content_h) != (output_w, output_h):
         if _would_distort(comparison, info, crop, output_w, output_h):
-            # Fitting rather than stretching. This only arises while
-            # auto-crop is still pending: a letterboxed source is 16:9 until
-            # its bars come off, and scaling it straight onto the shape of an
-            # already-cropped 2.35:1 encode squashes the picture. A run would
-            # never compare these two as they are -- validation refuses the
-            # pair -- so a preview must not imply that it would. Padding
-            # keeps both sides on one canvas for flipping between them while
-            # every proportion stays true.
+            # Fit rather than stretch. This happens only while black bars
+            # are still being detected: a letterboxed source is 16:9 until
+            # its bars come off, and scaling it straight to the shape of an
+            # already cropped 2.35:1 encode would squash the picture. A run
+            # would never compare these two as they are (the pair is
+            # refused), so a preview must not suggest it would. Padding keeps
+            # both on one canvas for flipping between them, with every
+            # proportion true.
             ops.append(
                 f"scale={output_w}:{output_h}:flags={comparison.scale_algorithm}"
                 ":force_original_aspect_ratio=decrease"
@@ -303,6 +311,7 @@ def build_frame_command(
     frame: int,
     color_settings: PreviewColorSettings | None = None,
 ) -> list[str]:
+    """The FFmpeg command that writes one frame of `side` as a PNG to its output."""
     if frame < 0:
         raise ValueError("frame number must be non-negative")
     if comparison.fps <= 0:
@@ -335,6 +344,7 @@ def extract_frame_png(
     process_handle: ProcessHandle | None = None,
     color_settings: PreviewColorSettings | None = None,
 ) -> bytes:
+    """Returns one frame of `side` as PNG bytes."""
     path = frame_input_path(comparison, side)
     if not path.is_file():
         raise FrameExtractError(f"Video file is missing: {path}")

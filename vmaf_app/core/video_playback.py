@@ -98,9 +98,10 @@ def build_video_series_command(
     Vulkan device made from the CUDA one; "transfer" through system memory
     (2.4x slower for 4K HEVC: 133 fps against 318). The software-decode
     retry still uses GPU processing; CPU processing is the final safe
-    fallback. Not FFmpeg's Vulkan decoder: on an RTX 5090 it corrupted 2-3%
-    of HEVC frames -- the lower part of the picture green -- and stalled,
-    where NVDEC decoded the same frames clean (FFmpeg 9.0.1, driver 616.92).
+    fallback. Don't use FFmpeg's Vulkan decoder: on an RTX 5090 it corrupted
+    2-3% of HEVC frames (the lower part of the picture green) and stalled,
+    where NVDEC decoded the same frames cleanly (FFmpeg 9.0.1, driver
+    616.92).
     """
     if not comparisons or len(plans) != len(comparisons):
         raise ValueError("a decode plan is required for every comparison")
@@ -229,6 +230,7 @@ def _input_args(
     hwaccel: str | None,
     realtime: bool,
 ) -> list[str]:
+    """FFmpeg's options for one video: real-time reading, the start time, hardware decoding and the file."""
     args: list[str] = []
     if realtime:
         args += ["-readrate", "1"]
@@ -239,6 +241,7 @@ def _input_args(
 
 
 def ffplay_path() -> Path | None:
+    """The ffplay beside the FFmpeg in use, or None if there is none."""
     candidate = Path(ffmpeg_path()).with_name(
         "ffplay.exe" if Path(ffmpeg_path()).suffix.lower() == ".exe" else "ffplay"
     )

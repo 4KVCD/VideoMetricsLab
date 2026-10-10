@@ -1,4 +1,6 @@
-"""Per-frame metric statistics and metric-specific sequence aggregation."""
+"""Statistics of a metric's per-frame scores (compute_stats), and the one
+number for a whole run, by each metric's own way of averaging
+(aggregate_scores)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,11 +9,13 @@ import numpy as np
 
 from vmaf_app.core.metrics import METRIC_BY_KEY, MetricAggregation, MetricDirection
 
-# Default threshold breakdown requested: >95, >90, >85, <85, <80, <70
+# The default score bands, VMAF's: >95, >90, >85, <85, <80, <70.
 DEFAULT_THRESHOLDS = METRIC_BY_KEY["vmaf"].thresholds
 
 @dataclass
 class ThresholdStat:
+    """How many frames score above (">") or below ("<") a threshold."""
+
     comparison: str  # ">" or "<"
     threshold: float
     count: int
@@ -19,51 +23,56 @@ class ThresholdStat:
 
     @property
     def label(self) -> str:
+        """The band as shown, such as "> 95"."""
         return f"{self.comparison} {self.threshold:g}"
 
 
 @dataclass
 class VmafStats:
+    """The statistics of one metric's per-frame scores (for any metric,
+    despite the name)."""
+
     count: int
     mean: float
     median: float
     stdev: float
     minimum: float
     maximum: float
-    # The worst-frames tail. For a higher-is-better metric, "10% low": the
+    # The worst frames' tail. For a higher-is-better metric, "10% low" is the
     # score below which the worst 10% of frames fall. For a lower-is-better
-    # one (Butteraugli) the worst frames are the HIGH ones, so these hold the
-    # 90th/95th/99th/99.9th percentiles instead -- see worst_is_high.
+    # metric (Butteraugli) the worst frames are the high ones, so these hold
+    # the 90th, 95th, 99th and 99.9th percentiles instead (see worst_is_high).
     percentile_10: float
     percentile_5: float
     percentile_1: float
-    percentile_0_1: float  # needs a lot of frames to be meaningful
-    #: Frames scoring +inf: mathematically identical to the reference. Kept
-    #: in the sequence aggregate and counted here too -- see
-    #: compute_stats. They still appear per-frame and in the threshold
-    #: counts, where "better than X" is exactly what they are.
+    percentile_0_1: float  # needs a lot of frames to mean anything
+    #: Frames scoring +inf: identical to the source. They count in the run's
+    #: average and are counted here too (see compute_stats). They also appear
+    #: per frame and in the threshold counts, where "better than X" is
+    #: exactly what they are.
     identical: int = 0
     thresholds: list[ThresholdStat] = field(default_factory=list)
-    #: True for a lower-is-better metric: the percentile_* tail fields are
-    #: taken from the top, and are labelled "High" rather than "Low".
+    #: True for a lower-is-better metric: the percentile_* fields are taken
+    #: from the top, and labelled "High" rather than "Low".
     worst_is_high: bool = False
 
     @staticmethod
     def tail_labels(worst_is_high: bool = False) -> list[str]:
+        """The tail fields' labels, such as "1% Low"."""
         side = "High" if worst_is_high else "Low"
         return [f"{share} {side}" for share in ("10%", "5%", "1%", "0.1%")]
 
     @property
     def values(self) -> list[tuple[str, float]]:
-        """(label, value) pairs. This is the single place that defines what
-        shows up in the graph's stats table -- add a stat here (and compute
-        it in compute_stats()) and it appears there automatically, no UI code
-        changes needed.
+        """The statistics as (label, value) pairs. This is the one place
+        that defines what the graph's statistics table shows: a statistic
+        added here (and calculated in compute_stats()) appears there with
+        no change to the window's code.
 
-        Unformatted, because the right precision depends on the metric: 2dp
-        suits VMAF's 0-100 and PSNR's dB, and destroys SSIM, whose entire
-        range is 0-1. The caller knows which metric it is asking about; this
-        does not.
+        The values are not formatted, because the right precision depends on
+        the metric: 2 decimals suit VMAF's 0-100 and PSNR's decibels, but
+        ruin SSIM, whose whole range is 0-1. The caller knows the metric;
+        this does not.
         """
         return [
             ("Mean", self.mean),
@@ -79,7 +88,7 @@ class VmafStats:
         ]
 
     def summary(self, value_format: str = "{:.2f}") -> list[tuple[str, str]]:
-        """`values`, rendered at the metric's own precision."""
+        """`values` as text, at the metric's own precision."""
         def formatted(value: float) -> str:
             if np.isnan(value):
                 return "—"
@@ -94,15 +103,15 @@ class VmafStats:
 
 #: How a metric's per-frame scores combine into one number for the run.
 #:
-#: "arithmetic" is the plain mean, correct for VMAF and SSIM (both bounded)
-#: and for libvmaf's PSNR, which clamps a perfect frame to its bit depth's
-#: ceiling -- 60 dB at 8-bit, 72 dB at 10-bit -- rather than reporting
-#: infinity. Verified over 4.2M frames of real results: VMAF, PSNR and SSIM
-#: never produced a single infinite value.
+#: "arithmetic" is the plain mean, which is right for VMAF and SSIM (both
+#: bounded) and for libvmaf's PSNR, which caps a perfect frame at its bit
+#: depth's ceiling (60 dB at 8 bits, 72 dB at 10 bits) rather than reporting
+#: infinity. Over 4.2 million frames of real results, VMAF, PSNR and SSIM
+#: never gave an infinite value.
 #:
-#: "square_mean_root" is XPSNR's own sequence average, and XPSNR is the one
-#: metric here that does report infinity for an identical frame. FFmpeg's
-#: vf_xpsnr accumulates sqrt(wsse) per frame and reports
+#: "square_mean_root" is XPSNR's own average over the video, and XPSNR is
+#: the one metric here that does report infinity for an identical frame.
+#: FFmpeg's vf_xpsnr adds up sqrt(wsse) per frame and reports
 #:
 #:     10*log10(W*H*max_error / (sum_sqrt_wsse / N)^2)
 #:
@@ -113,33 +122,36 @@ class VmafStats:
 #:     -20 * log10( mean( 10^(-xpsnr_i/20) ) )
 #:
 #: which needs nothing but the per-frame values. An identical frame has
-#: xpsnr = inf, so it contributes 0 to the sum and 1 to N -- exactly what
-#: ffmpeg's own accumulator does with sqrt(0). Checked against ffmpeg's
-#: printed average on the same clip: 54.9459 over 72 frames and 45.0831 over
-#: 480, matching to four decimal places both times.
+#: xpsnr = inf, so it adds 0 to the sum and 1 to N, exactly as FFmpeg's own
+#: sum does with sqrt(0). Checked against FFmpeg's printed average on the
+#: same clip: 54.9459 over 72 frames and 45.0831 over 480, matching to four
+#: decimal places both times.
 ARITHMETIC = MetricAggregation.ARITHMETIC
 SQUARE_MEAN_ROOT = MetricAggregation.SQUARE_MEAN_ROOT_DB
 
-#: Only XPSNR differs, and only because only XPSNR reports infinity.
+#: Each metric's way of averaging. Only XPSNR's differs, because only XPSNR
+#: reports infinity.
 AGGREGATE_BY_METRIC = {key: definition.aggregation for key, definition in METRIC_BY_KEY.items()}
 
 
 def _square_mean_root_db(data: np.ndarray) -> float:
-    """XPSNR's sequence average over per-frame decibels. See SQUARE_MEAN_ROOT."""
+    """XPSNR's average over the video from per-frame decibels (see
+    SQUARE_MEAN_ROOT)."""
     with np.errstate(over="ignore"):
         distortion = np.power(10.0, -data / 20.0)
     mean = float(distortion.mean())
-    # Every frame identical: no error to average, and infinity is the answer
-    # ffmpeg gives too.
+    # When every frame is identical there is no error to average, and
+    # infinity is FFmpeg's answer too.
     return float("inf") if mean <= 0.0 else float(-20.0 * np.log10(mean))
 
 
 def aggregate_scores(values, aggregate: MetricAggregation | str = ARITHMETIC) -> float | None:
-    """One number for a whole run, by the metric's own convention.
+    """Returns one number for a whole run, by the metric's own way of
+    averaging, or None when there is nothing to average.
 
-    None when there is nothing to combine. NaN frames -- ones the metric was
-    not computed for -- are dropped first; infinities are not, because for
-    XPSNR they are meaningful and this is what handles them.
+    NaN frames (those the metric was not calculated for) are dropped first.
+    Infinities are not, because for XPSNR they mean something, and this is
+    what handles them.
     """
     data = np.asarray(values, dtype=np.float64)
     data = data[~np.isnan(data)]
@@ -156,20 +168,18 @@ def compute_stats(
     aggregate: MetricAggregation | str = ARITHMETIC,
     direction: MetricDirection | str = MetricDirection.HIGHER_IS_BETTER,
 ) -> VmafStats:
-    """Despite the name (kept for the VMAF-specific callers/tests that exist
-    already), this works over any sequence of per-frame float scores -- PSNR,
-    SSIM and XPSNR reuse it with their own threshold bands and aggregation.
-    Pass an empty threshold list to omit bands entirely.
+    """Returns the statistics of any metric's per-frame scores, with its own
+    score bands (`thresholds`; an empty list leaves the bands out) and its
+    own way of averaging (`aggregate`).
 
-    `direction` decides which end is the worst-frames tail: the low end for
-    VMAF and friends, the high end for Butteraugli, where 0 is identical and
-    a bigger number is a more visible difference.
+    `direction` decides which end is the worst frames' tail: the low end for
+    VMAF and most metrics, the high end for Butteraugli, where 0 means
+    identical and a bigger number a more visible difference.
 
-    Accepts a numpy array or a plain list. Computed vectorised: a run is
-    hundreds of thousands of frames and this is called once per metric per
-    series, so a Python-level sort + several passes was real, avoidable time.
-    NaN entries (a metric present for only some frames) are ignored rather
-    than poisoning every statistic.
+    `values` can be a numpy array or a list. The work is done with numpy,
+    because a run has hundreds of thousands of frames and this is called
+    once per metric per graph line. NaN values (a metric missing for some
+    frames) are ignored, rather than spoiling every statistic.
     """
     thresholds = thresholds if thresholds is not None else DEFAULT_THRESHOLDS
     worst_is_high = MetricDirection(direction) is MetricDirection.LOWER_IS_BETTER
@@ -183,17 +193,17 @@ def compute_stats(
             thresholds=[], worst_is_high=worst_is_high,
         )
 
-    # A frame identical to the reference scores +inf, which XPSNR reports
-    # outright. Counted so the display can say so; the mean handles them by
-    # using the metric's own aggregation (see aggregate_scores), and the
-    # threshold tallies below see them too, because "better than 38 dB" is
-    # precisely what a perfect frame is.
+    # A frame identical to the source scores +inf, which XPSNR reports as it
+    # is. Such frames are counted, so that the window can say so. The mean
+    # handles them through the metric's own way of averaging (see
+    # aggregate_scores), and the threshold counts below include them,
+    # because "better than 38 dB" is exactly what a perfect frame is.
     identical = int(np.isposinf(data).sum())
     finite = data[np.isfinite(data)]
 
     # One sort, then every percentile is a lookup into it. Order statistics
-    # are well defined with infinities present -- and the percentiles that
-    # may also fall in the infinite tail for mostly identical material.
+    # are well defined with infinities present, and for mostly identical
+    # video the percentiles may fall among the infinities too.
     ordered = np.sort(data)
     if np.isposinf(ordered).all():
         p10 = p5 = p1 = p01 = float("inf")
@@ -201,14 +211,15 @@ def compute_stats(
         p10 = p5 = p1 = p01 = float("-inf")
     else:
         def percentile(q: float) -> float:
+            """The q-th percentile, interpolated linearly as numpy does."""
             position = (len(ordered) - 1) * q / 100.0
             lower = int(np.floor(position))
             upper = int(np.ceil(position))
             a, b = ordered[lower], ordered[upper]
             if lower == upper or a == b:
                 return float(a)
-            # Extended-real linear interpolation: finite-to-infinite is
-            # infinite at any interior point. Opposite infinities are undefined.
+            # Between a finite value and an infinity, every point in between
+            # is infinite. Between opposite infinities, it is undefined.
             if np.isinf(a) or np.isinf(b):
                 if np.isneginf(a) and np.isposinf(b):
                     return float("nan")
@@ -224,10 +235,10 @@ def compute_stats(
         threshold_stats.append(ThresholdStat(cmp_op, thresh, count, 100.0 * count / n))
 
     mean = aggregate_scores(data, aggregate)
-    # Standard deviation over the finite frames only: it is undefined for a
-    # set containing infinity (numpy returns nan), and a spread of "nan"
-    # whenever one frame happened to be identical says less than a spread of
-    # the frames that actually differ.
+    # The standard deviation is taken over the finite frames only. It is
+    # undefined for a set containing infinity (numpy returns NaN), and a
+    # spread of "NaN" whenever one frame happens to be identical says less
+    # than the spread of the frames that do differ.
     with np.errstate(invalid="ignore"):
         stdev = float(finite.std()) if finite.size else float("nan")
 

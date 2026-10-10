@@ -1,19 +1,20 @@
-"""Black-bar (letterbox/pillarbox) detection via ffmpeg's cropdetect filter.
+"""Detects black bars (letterbox and pillarbox) with FFmpeg's cropdetect
+filter. The main entry points are detect_crop, detect_pair and
+common_picture.
 
-cropdetect with reset=0 reports the *tightest* crop box that still contains
-every non-black pixel it has seen so far in the analyzed window -- a single
-bright pixel of noise near an edge can prevent any crop from being detected.
-To be robust we sample several short windows spread across the middle of the
-video (skipping fades at the very start/end) and take the most common result
-across windows, rather than trusting a single long pass.
+cropdetect with reset=0 reports the tightest box that still holds every
+non-black pixel it has seen so far, so a single bright pixel of noise near
+an edge can keep any crop from being found. So several short windows are
+sampled across the middle of the video (skipping fades at the very start
+and end), and the most common box wins, rather than trusting one long pass.
 
-The windows are independent, so they run at the same time rather than one
-after another: measured on a 4K HEVC source, five sequential windows took
-6.9s and five concurrent ones 2.0s. Each may decode on the GPU when the run
-itself would, falling back to software on its own if that fails -- the
-decoded pixels are identical either way, so the box is too. And the answer
-for a file is kept for the life of the process: a batch of six encodes of
-one film used to detect the source's bars six times over.
+A video's windows run one after another, so each video uses one decoder at
+a time; the two videos of a comparison are detected at the same time
+(detect_pair). A window decodes on the GPU when the run itself would, and
+falls back to software if that fails; the decoded pixels are the same
+either way, so the box is too. The answer for a file is kept, in this
+process and between sessions (see set_store), so a batch of encodes of one
+film detects the source's bars once.
 """
 from __future__ import annotations
 
@@ -44,16 +45,15 @@ _SAMPLE_WINDOW_SECONDS = 3.0
 _SAMPLE_COUNT = 5
 _SAMPLE_SPAN = (0.1, 0.9)  # fraction of duration to sample within
 
-#: Detection decoders allowed to run at once in the whole app, across every
-#: job. Windows of one input already run in turn; this bounds the rest --
-#: two jobs in parallel, each detecting both of its inputs -- at two, which
-#: is 2.5 GB of VRAM for 4K on the GPU decoder rather than whatever the
-#: number of jobs multiplies it to.
+#: How many detection decoders may run at once in the whole app, across
+#: every job. One video's windows already run in turn, so this limits the
+#: rest (two jobs in parallel, each detecting both its videos) to two, which
+#: is 2.5 GB of GPU memory for 4K on the GPU decoder, however many jobs run.
 _MAX_DETECTION_DECODERS = 2
 _decoder_slots = threading.BoundedSemaphore(_MAX_DETECTION_DECODERS)
 
-#: How many files' answers to remember. A CropBox is four ints; this is a
-#: bound against a pathological session, not a memory budget.
+#: How many files' answers to remember. A CropBox is four integers, so this
+#: is a bound against an extreme session, not a memory budget.
 _CACHE_LIMIT = 512
 
 
@@ -61,30 +61,30 @@ _log = logging.getLogger(__name__)
 
 
 class CropDetectError(RuntimeError):
-    pass
+    """Black bars could not be detected."""
 
 
 class CropDetectCancelled(RuntimeError):  # noqa: N818 - expected control flow
-    pass
+    """Black-bar detection was cancelled."""
 
 
 def _sample_window(duration: float) -> float:
-    """How much media each sample reads.
-
-    Clamped to the interval being analysed, so a short scored segment is not
-    measured using footage from beyond it.
-    """
+    """How many seconds of video each sample reads: at most the part being
+    compared, so that a short compared part is not measured with footage
+    from beyond it."""
     if duration <= 0:
         return _SAMPLE_WINDOW_SECONDS
     return min(_SAMPLE_WINDOW_SECONDS, duration)
 
 
 def _sample_offsets(duration: float, window: float = _SAMPLE_WINDOW_SECONDS) -> list[float]:
+    """The start times of the sample windows, spread over the middle of the
+    video."""
     if duration <= 0:
         return [0.0]
-    # -ss is a window *start*. Every sample must leave enough media for the
-    # whole analysis window; the previous formula sent most samples beyond
-    # EOF on clips shorter than ~17 seconds.
+    # -ss is a window's start, so every sample must leave enough video for
+    # the whole window; otherwise, on clips shorter than about 17 seconds,
+    # most samples would start past the end.
     max_start = max(0.0, duration - window)
     lo = min(duration * _SAMPLE_SPAN[0], max_start)
     hi = min(duration * _SAMPLE_SPAN[1], max_start)
@@ -100,12 +100,13 @@ def _window_command(
     path: str, start: float, window: float, limit: float,
     hwaccel: str | None, download_format: str,
 ) -> list[str]:
+    """The FFmpeg command for one sample window."""
     filters = f"cropdetect=limit={limit}:round=2:reset=0"
     if hwaccel:
-        # hwdownload can only emit the surface's native format and cropdetect
-        # cannot take that directly, so the same explicit conversion the
-        # metric run uses sits between them. Without it ffmpeg fails to
-        # negotiate the link and the window reports nothing.
+        # hwdownload can only give the surface's own format, which cropdetect
+        # cannot take as it is, so the same conversion as in the metric run
+        # sits between them. Without it, FFmpeg cannot link the two filters
+        # and the window reports nothing.
         filters = f"hwdownload,format={download_format},{filters}"
     return [
         ffmpeg_path(),
@@ -132,9 +133,9 @@ def _launch_window(
             raise CropDetectCancelled("Crop detection cancelled")
     proc = None
     try:
-        # UTF-8, not the Windows code page: ffmpeg's stderr starts with the
-        # input's path and tags, and a curly quote (”) in either is a byte
-        # cp1252 cannot decode -- stderr then came back as None.
+        # UTF-8, not the Windows code page: FFmpeg's error output starts with
+        # the file's path and tags, and a curly quote (”) in either is a byte
+        # that cp1252 cannot decode, which would make the output None.
         proc = proc_util.popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
@@ -164,8 +165,9 @@ def _launch_window(
             raise
         raise CropDetectError(f"Could not run crop detection: {e}") from e
     finally:
-        # This window's pid only. Others may still be running under the same
-        # handle, and a bare detach() would drop them from Pause and Cancel.
+        # Detach this window's process only. Others may still be running
+        # under the same handle, and a bare detach() would drop them from
+        # Pause and Cancel.
         if process_handle is not None and proc is not None:
             process_handle.detach(proc.pid)
         _decoder_slots.release()
@@ -178,6 +180,7 @@ def _run_single_window(
     hwaccel: str | None = None,
     download_format: str = "nv12",
 ) -> CropBox | None:
+    """Runs one sample window and returns the box it found, or None."""
     if cancel_event is not None and cancel_event.is_set():
         raise CropDetectCancelled("Crop detection cancelled")
     attempts = [hwaccel, None] if hwaccel else [None]
@@ -191,10 +194,10 @@ def _run_single_window(
             raise CropDetectError(f"{e} ({path})") from e
         if returncode == 0:
             break
-        # A hardware attempt that fails -- no free decoder session, an
-        # unsupported profile -- is retried on the CPU, exactly as the
-        # metric run itself would fall back. The pixels, and so the box,
-        # are the same either way.
+        # A hardware attempt that fails (no free decoder session, an
+        # unsupported profile) is retried on the CPU, as the metric run
+        # itself would fall back. The pixels, and so the box, are the same
+        # either way.
     if returncode != 0:
         detail = stderr.strip().splitlines()
         tail = detail[-1] if detail else f"ffmpeg exited with code {returncode}"
@@ -208,7 +211,7 @@ def _run_single_window(
 
 
 def analysed_duration(info: VideoInfo, duration_limit: float = 0.0) -> float:
-    """How much of `info` a run will actually compare."""
+    """How many seconds of `info` a run will compare."""
     if duration_limit <= 0:
         return info.duration
     if info.duration <= 0:
@@ -217,21 +220,21 @@ def analysed_duration(info: VideoInfo, duration_limit: float = 0.0) -> float:
 
 
 # ------------------------------------------------------------------ the cache
-# Keyed on what the answer depends on: which bytes are in the file, and which
-# stretch of it is sampled. Not on how it was decoded -- the GPU and CPU paths
-# return the same pixels.
+# The cache is keyed on what the answer depends on: which bytes are in the
+# file, and which stretch of it is sampled. It is not keyed on how the video
+# was decoded, because the GPU and the CPU give the same pixels.
 _cache_lock = threading.Lock()
 _cache: OrderedDict[tuple, CropBox] = OrderedDict()
-#: Files whose detection is currently running, so a second caller for the
-#: same file waits for that answer instead of launching its own five
-#: processes -- which is exactly what two parallel lanes starting on the same
-#: source at the same moment would otherwise do.
+#: The files whose detection is running now, so that a second caller for the
+#: same file waits for that answer instead of starting its own processes, as
+#: two lanes starting on the same source at the same moment would.
 _in_flight: dict[tuple, threading.Event] = {}
 
 
 def _cache_key(path: Path, scored_duration: float, limit: float) -> tuple | None:
-    """None when the file cannot be identified, in which case nothing is
-    cached: a path with no size or mtime behind it is not a stable identity."""
+    """The cache key for a file, or None when the file cannot be identified,
+    in which case nothing is cached: a path without a size and time behind
+    it is not a stable identity."""
     try:
         stat = Path(path).resolve().stat()
     except OSError:
@@ -240,12 +243,13 @@ def _cache_key(path: Path, scored_duration: float, limit: float) -> tuple | None
             round(scored_duration, 3), round(limit, 6))
 
 
-#: Where answers are kept between sessions: a JSON file in the results
-#: cache's folder (result_cache registers it), read once per file. Every
-#: new session detected each film's bars again -- 4-6 s of decoding a 4K
-#: pair before a run or Video Compare had them, the preview shown uncropped
-#: and its playback rebuilt once they came. Bump _STORE_VERSION when the
-#: detection itself changes what it finds: older answers are then ignored.
+#: Answers are kept between sessions in a JSON file in the results cache's
+#: folder (result_cache registers it), read once per file. Otherwise each
+#: new session would detect each film's bars again: 4-6 s of decoding a 4K
+#: pair before a run or Video Compare has them, with the preview shown
+#: uncropped and its playback rebuilt once they come. Raise _STORE_VERSION
+#: when the detection itself changes what it finds, so that older answers
+#: are ignored.
 _STORE_VERSION = 1
 _store_of: Callable[[], Path] | None = None
 #: The store file whose answers are in the cache already.
@@ -253,14 +257,15 @@ _store_read: Path | None = None
 
 
 def set_store(path_of: Callable[[], Path] | None) -> None:
-    """Keeps answers between sessions in the file `path_of` returns when
-    asked (the results cache's folder can move), or, None, not at all."""
+    """Keeps answers between sessions in the file that `path_of` returns when
+    called (the results cache's folder can move), or, with None, not at all."""
     global _store_of, _store_read
     with _cache_lock:
         _store_of, _store_read = path_of, None
 
 
 def _store_path() -> Path | None:
+    """The store file now, or None if there is none."""
     if _store_of is None:
         return None
     try:
@@ -270,8 +275,8 @@ def _store_path() -> Path | None:
 
 
 def _read_store() -> None:
-    """With _cache_lock held: the store's answers into the cache, once per
-    store file."""
+    """Reads the store's answers into the cache, once per store file. Called
+    with _cache_lock held."""
     global _store_read
     path = _store_path()
     if path is None or path == _store_read:
@@ -294,9 +299,9 @@ def _read_store() -> None:
 
 
 def _write_store() -> None:
-    """With _cache_lock held: the cache's answers into the store, replaced
-    whole. Two processes writing at once lose one's newest answer at worst:
-    it is detected again."""
+    """Writes the cache's answers to the store, replacing it whole. Called
+    with _cache_lock held. At worst, two processes writing at once lose one
+    process's newest answer, which is then detected again."""
     path = _store_path()
     if path is None:
         return
@@ -311,8 +316,9 @@ def _write_store() -> None:
 
 
 def _claim(key: tuple, cancel_event: threading.Event | None) -> CropBox | None:
-    """The cached box, or None once this caller has been given the job of
-    computing it. Waits, cancellably, while another caller is on it."""
+    """Returns the cached box, or None once this caller has been given the
+    job of detecting it. While another caller is on it, it waits, and can
+    be cancelled meanwhile."""
     while True:
         with _cache_lock:
             _read_store()
@@ -332,6 +338,7 @@ def _claim(key: tuple, cancel_event: threading.Event | None) -> CropBox | None:
 
 
 def _settle(key: tuple, box: CropBox | None) -> None:
+    """Stores a detected box (if any), and wakes the callers waiting for it."""
     with _cache_lock:
         if box is not None:
             _cache[key] = box
@@ -345,9 +352,9 @@ def _settle(key: tuple, box: CropBox | None) -> None:
 
 
 def clear_cache() -> None:
-    """Forgets every remembered box in this process -- the store is read
-    again when next asked. For tests, and for anyone who has replaced a file
-    in place with the same size and mtime (with forget_store)."""
+    """Forgets every box remembered in this process; the store is read again
+    when next needed. It is for tests, and (with forget_store) for a file
+    replaced by another with the same size and modification time."""
     global _store_read
     with _cache_lock:
         _cache.clear()
@@ -355,8 +362,8 @@ def clear_cache() -> None:
 
 
 def forget_store() -> None:
-    """Deletes the kept answers and forgets them here: Settings' clearing of
-    the results cache starts afresh."""
+    """Deletes the kept answers and forgets them here, so that clearing the
+    results cache in Settings starts afresh."""
     global _store_read
     with _cache_lock:
         _cache.clear()
@@ -380,17 +387,18 @@ def common_picture(
     source: VideoInfo, distorted: VideoInfo,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
 ) -> tuple[CropBox | None, CropBox | None]:
-    """The two videos' black-bar boxes, made to cover the same picture.
+    """Returns the two videos' black-bar boxes, made to cover the same
+    picture.
 
     Each video's bars are found on their own, and an encode's soft bar edge
-    can put its box a row or two from the source's: 1920x800 against
-    1920x802. The two were then compared at different sizes, so one was
-    scaled to the other -- a comparison of two same-size videos, scaled.
-    Where the two videos are the same picture at one size or two (their
-    sizes one factor apart, across and down), each box becomes the picture
-    both show: the boxes' overlap, in each video's own pixels, its edges on
-    even samples (4:2:0). Boxes that already agree are unchanged; so is any
-    pair that is not the same picture, or where a box is missing."""
+    can put its box a row or two from the source's (1920x800 against
+    1920x802). The two would then be compared at different sizes, so one
+    would be scaled to the other, needlessly. Where the two videos show the
+    same picture at one size or two (their sizes one factor apart, across
+    and down), each box becomes the picture both show: the boxes' overlap,
+    in each video's own pixels, with its edges on even samples (4:2:0).
+    Boxes that already agree are kept, and so is any pair that is not the
+    same picture, or where a box is missing."""
     if source_crop is None or distorted_crop is None:
         return source_crop, distorted_crop
     if min(source.width, source.height, distorted.width, distorted.height) <= 0:
@@ -400,6 +408,7 @@ def common_picture(
         return source_crop, distorted_crop
 
     def edges(box: CropBox, info: VideoInfo) -> tuple[float, float, float, float]:
+        """A box's edges as fractions of the frame: left, top, right, bottom."""
         return (box.x / info.width, box.y / info.height,
                 (box.x + box.w) / info.width, (box.y + box.h) / info.height)
 
@@ -409,7 +418,8 @@ def common_picture(
         return source_crop, distorted_crop
 
     def box(info: VideoInfo) -> CropBox:
-        # Inward, so the box never takes in a row of the other's bars.
+        """The shared picture in this video's pixels."""
+        # Rounded inward, so the box never takes in a row of the other's bars.
         x = math.ceil(left * info.width - 1e-6)
         y = math.ceil(top * info.height - 1e-6)
         x, y = x + (x & 1), y + (y & 1)
@@ -434,18 +444,19 @@ def detect_pair(
     detect_source: Callable[[], CropBox | None],
     detect_distorted: Callable[[], CropBox | None],
 ) -> tuple[CropBox | None, CropBox | None]:
-    """Detects a comparison's two inputs at the same time.
+    """Detects the black bars of a comparison's two videos at the same time.
 
-    Each input's windows run in turn, so this is two decoders -- exactly the
-    app-wide limit -- and about half the wall time of one input after the
-    other. Both are waited for before anything is raised, so no detection
-    outlives the call. Cancellation is reported in preference to an error,
-    and the reference's error in preference to the test's.
+    Each video's windows run in turn, so this is two decoders (exactly the
+    app-wide limit), in about half the time of one video after the other.
+    Both are waited for before anything is raised, so no detection outlives
+    the call. A cancel is reported before an error, and the source's error
+    before the test video's.
     """
     results: list[CropBox | None] = [None, None]
     errors: list[BaseException | None] = [None, None]
 
     def run(index: int, detect: Callable[[], CropBox | None]) -> None:
+        """One video's detection thread."""
         try:
             results[index] = detect()
         except BaseException as error:  # re-raised on the calling thread
@@ -475,15 +486,15 @@ def detect_crop(
     duration_limit: float = 0.0,
     hwaccel: str | None = None,
 ) -> CropBox:
-    """Detects the black-bar crop box, or raises when it cannot analyze it.
+    """Returns the box that cuts the video's black bars, or raises
+    CropDetectError when it cannot be found.
 
-    `duration_limit` bounds crop sampling when explicitly requested. Metric
-    workflows omit their score-duration limit so a short/dark opening cannot
-    incorrectly determine the crop used for the entire comparison.
+    `duration_limit` limits the sampling, when asked for. The metric runs
+    leave out their duration limit, so that a short or dark opening cannot
+    decide the crop for the whole comparison.
 
-    `hwaccel` is the decoder the run itself will use for this input, or
-    None for software. It changes how fast the answer arrives, never what
-    it is.
+    `hwaccel` is the decoder the run itself will use for this video, or None
+    for software. It changes how fast the answer arrives, never what it is.
     """
     scored_duration = analysed_duration(info, duration_limit)
     key = _cache_key(info.path, scored_duration, limit)
@@ -513,6 +524,8 @@ def _detect_uncached(
     process_handle: ProcessHandle | None,
     hwaccel: str | None,
 ) -> CropBox:
+    """detect_crop's work, without the cache: samples the windows and returns
+    the winning box."""
     path = str(info.path)
     window = _sample_window(scored_duration)
     starts = _sample_offsets(scored_duration, window)
@@ -521,10 +534,11 @@ def _detect_uncached(
     if cancel_event is not None and cancel_event.is_set():
         raise CropDetectCancelled("Crop detection cancelled")
 
-    # One window at a time. Running all five at once was faster, but each
-    # one is its own decoder: five hardware decoders per input held 6.2 GB of
-    # VRAM for a 4K source, and a two-input comparison reached ten, more
-    # than most GPUs have. Sequential windows keep one decoder per input.
+    # One window at a time. Running all five at once is faster, but each is
+    # its own decoder: five hardware decoders per video held 6.2 GB of GPU
+    # memory for a 4K source, and a comparison of two videos reached ten
+    # decoders, more than most GPUs have. One window at a time keeps one
+    # decoder per video.
     boxes: list[CropBox] = []
     failures: list[str] = []
     for start in starts:
@@ -540,15 +554,15 @@ def _detect_uncached(
             if box is not None:
                 boxes.append(box)
 
-    # Cancel wins over any boxes that came back before it landed: a partial
-    # vote is not an answer the caller asked for.
+    # A cancel wins over any boxes that came back before it: a partial vote
+    # is not an answer the caller asked for.
     if cancel_event is not None and cancel_event.is_set():
         raise CropDetectCancelled("Crop detection cancelled")
 
     if not boxes and not failures:
-        # FFmpeg decoded nothing where the video says it has pictures: not
-        # a question of black bars, and cropping off would only score the
-        # pictures it does have (see frame_coverage).
+        # FFmpeg decoded nothing where the video says it has pictures. That
+        # is not a question of black bars, and turning cropping off would
+        # only score the pictures it does have (see frame_coverage).
         raise CropDetectError(
             f"Could not auto-detect black bars in {info.path}: FFmpeg found no pictures in the parts of it "
             "that were sampled. The file may be damaged or cut short."
@@ -563,9 +577,10 @@ def _detect_uncached(
     for b in boxes:
         key = (b.w, b.h, b.x, b.y)
         counts[key] = counts.get(key, 0) + 1
-    # The most common box; between equally common ones the largest. A box
-    # from a dark stretch is too tight -- dark picture reads as bar -- and a
-    # tie went to whichever window came first, which could crop picture off.
+    # The most common box wins, and between equally common ones the largest.
+    # A box from a dark stretch is too tight (dark picture reads as bar), so
+    # a tie must not go to whichever window came first, which could cut off
+    # some of the picture.
     best_key = max(counts, key=lambda k: (counts[k], k[0] * k[1]))
     w, h, x, y = best_key
     return CropBox(w=w, h=h, x=x, y=y)

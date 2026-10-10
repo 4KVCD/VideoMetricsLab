@@ -1,4 +1,5 @@
-"""Adapter from the current FFmpeg/UI options into generic analysis requests."""
+"""Turns a row's settings (VmafOptions) into the analysis request every
+backend reads (analysis_request_from_vmaf_options)."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -19,6 +20,7 @@ from vmaf_app.core.models import ResampleTarget, VmafOptions, clone_options
 
 
 def _copy_resample(target: ResampleTarget | None) -> ResampleTarget | None:
+    """A copy of a resolution test's target, or None."""
     return None if target is None else ResampleTarget(target.width, target.label)
 
 
@@ -77,10 +79,10 @@ def metric_request_specs(
             # Only what decides the score. An explicit or bundled choice is
             # the model that runs. Auto's model depends on the size compared
             # at, known for certain only once black bars are detected, and is
-            # recorded in the score's provenance instead. This used to be
-            # `options.model`, a field that is not the model on a row set to
-            # Auto -- empty, a leftover default or a loaded result's -- so the
-            # same row was saved and looked up under different keys.
+            # recorded in the score's provenance instead. Don't use
+            # `options.model` here: on a row set to Auto it is not the model
+            # (it may be empty, a leftover default, or a loaded result's), so
+            # the same row would be saved and looked up under different keys.
             choice = options.model_choice
             model = "" if choice in (AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE) else choice
             custom_identity = ""

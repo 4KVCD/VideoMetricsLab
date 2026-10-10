@@ -1,4 +1,6 @@
-"""Shared data structures used across the core pipeline and UI."""
+"""The data the core and the window share: a video's details (VideoInfo), a
+row's settings (VmafOptions), black-bar crops (CropBox), and a comparison's
+result (ComparisonResult, with each frame's scores in FrameScores)."""
 from __future__ import annotations
 
 import math
@@ -18,11 +20,16 @@ from vmaf_app.core.metrics import FRAME_METRICS, metric_definition
 
 
 class CropMode(str, Enum):
+    """Whether black bars are detected and cut (AUTO) or kept (NONE)."""
+
     AUTO = "auto"
     NONE = "none"
 
 
 class GpuVendor(str, Enum):
+    """The GPU maker whose decoder to use: AUTO picks one found on this PC,
+    and NONE decodes in software."""
+
     AUTO = "auto"
     NVIDIA = "nvidia"
     INTEL = "intel"
@@ -31,28 +38,32 @@ class GpuVendor(str, Enum):
 
 
 class ScaleDirection(str, Enum):
-    # Default: scale the source to match the distorted video's resolution
-    # (whichever direction that means) -- evaluates quality at the
-    # resolution actually delivered/viewed.
+    """Which video is scaled when the two sizes differ."""
+
+    # The default: scale the source to the test video's size (up or down),
+    # which judges quality at the size actually delivered.
     SOURCE_TO_DISTORTED = "source_to_distorted"
-    # Scale the distorted video UP to match the source's resolution instead
-    # -- evaluates quality as if the distorted video were upscaled back to
-    # the source's native resolution for playback.
+    # Scale the test video up to the source's size instead, which judges
+    # quality as if the test video were played back at the source's size.
     DISTORTED_TO_SOURCE = "distorted_to_source"
 
 
 @dataclass
 class CropBox:
-    """A crop rectangle in source-pixel coordinates, ffmpeg crop=w:h:x:y order."""
+    """A crop rectangle in the video's own pixels, in FFmpeg's crop=w:h:x:y
+    order."""
+
     w: int
     h: int
     x: int
     y: int
 
     def as_filter(self) -> str:
+        """The FFmpeg crop filter."""
         return f"crop={self.w}:{self.h}:{self.x}:{self.y}"
 
     def is_noop(self, frame_w: int, frame_h: int) -> bool:
+        """Whether the crop keeps the whole frame of this size."""
         return self.w == frame_w and self.h == frame_h and self.x == 0 and self.y == 0
 
 
@@ -62,6 +73,7 @@ def crop_to_dict(crop: CropBox | None) -> dict | None:
 
 
 def crop_from_dict(data: Mapping | None) -> CropBox | None:
+    """A crop read back from crop_to_dict's form."""
     return None if data is None else CropBox(**data)
 
 
@@ -74,6 +86,8 @@ RAW_STREAM_FORMATS = frozenset({
 
 @dataclass(slots=True)
 class VideoInfo:
+    """A video file's details, as ffprobe reports them (core.ffprobe)."""
+
     path: Path
     width: int
     height: int
@@ -87,32 +101,34 @@ class VideoInfo:
     # The file's bitrate, soundtrack included, where the video's own is not
     # recorded (a Matroska file without statistics tags).
     bit_rate_whole_file: bool = False
-    # ffprobe's r_frame_rate. A meaningful difference from average fps is a
-    # practical warning that frame-number/fps timestamps are unsafe (VFR).
+    # ffprobe's r_frame_rate. A real difference from the average frame rate
+    # warns that the frame rate varies, so frame number / fps is not a safe
+    # time.
     nominal_fps: float = 0.0
     # ffprobe's avg_frame_rate as it gives it: 0 where it gives none, and
     # `fps` is then the nominal rate (vmaf_runner._xpsnr_frame_rate).
     average_fps: float = 0.0
-    # Stream colour tags are needed to distinguish a 10-bit SDR encode from
-    # PQ/HLG HDR.  Empty means the container did not declare the value.
+    # The stream's colour tags, which tell a 10-bit SDR encode from PQ or HLG
+    # HDR. Empty means the file did not state the value.
     color_range: str = ""
     color_space: str = ""
     color_transfer: str = ""
     color_primaries: str = ""
     chroma_location: str = ""
     # ffprobe's format_name: the container, or the raw stream's demuxer
-    # ("hevc", "h264"...). Not saved with results: a raw stream is refused
-    # before it has any (is_raw_stream).
+    # ("hevc", "h264", ...). It is not saved with results, because a raw
+    # stream is refused before it has any (is_raw_stream).
     format_name: str = ""
-    # How long after the file's start -- its earliest stream's, which
-    # FFmpeg's -ss counts from -- the video's first frame comes, in seconds.
-    # An MP4 whose soundtrack starts at 0 can have its video start frames
-    # later (frame_extract.seek_seconds). Not saved with results: read again
-    # with the file, and no part of what the video is.
+    # How long after the file's start (its earliest stream's, which FFmpeg's
+    # -ss counts from) the video's first frame comes, in seconds. An MP4
+    # whose soundtrack starts at 0 can have its video start frames later
+    # (frame_extract.seek_seconds). It is not saved with results: it is read
+    # again with the file, and is no part of what the video is.
     start_offset: float = field(default=0.0, compare=False)
 
     @property
     def estimated_frame_count(self) -> int:
+        """The frame count ffprobe reports, or else duration times fps."""
         if self.nb_frames > 0:
             return self.nb_frames
         return max(1, round(self.duration * self.fps))
@@ -126,15 +142,18 @@ class VideoInfo:
 
     @property
     def is_variable_frame_rate(self) -> bool:
+        """Whether the nominal and the average frame rate differ by more
+        than rounding."""
         if self.nominal_fps <= 0 or self.fps <= 0:
             return False
         return abs(self.nominal_fps - self.fps) > max(0.01, self.fps * 0.001)
 
 
 def video_info_to_dict(info: VideoInfo) -> dict:
-    """A video's info as run files (run_io) and the metric cache's
-    context.json save it: one form, so a field added to VideoInfo is saved
-    by both or by neither (format_name and start_offset are not saved)."""
+    """A video's details as run files (run_io) and the metric cache's
+    context.json save them. Both use this one form, so a field added to
+    VideoInfo is saved by both or by neither (format_name and start_offset
+    are not saved)."""
     return {
         "path": str(info.path), "width": info.width, "height": info.height,
         "fps": info.fps, "duration": info.duration, "nb_frames": info.nb_frames,
@@ -148,8 +167,8 @@ def video_info_to_dict(info: VideoInfo) -> dict:
 
 
 def video_info_from_dict(data: Mapping) -> VideoInfo:
-    """video_info_to_dict's form back. A field saved before it existed
-    loads as its default."""
+    """A video's details read back from video_info_to_dict's form. A field
+    missing from older files loads as its default."""
     return VideoInfo(path=Path(data["path"]), width=data["width"], height=data["height"],
                      fps=data["fps"], duration=data["duration"], nb_frames=data["nb_frames"],
                      codec_name=data["codec_name"], sar=data.get("sar", "1:1"),
@@ -164,13 +183,11 @@ def video_info_from_dict(data: Mapping) -> VideoInfo:
 
 @dataclass
 class ResampleTarget:
-    """Describes a "downscale then upscale back" resolution round-trip test:
-    the source is scaled down to `width` (height derived to preserve the
-    source's own aspect ratio), then scaled back up to the source's original
-    resolution, and compared against the untouched source. Named by
-    horizontal resolution (not the conventional vertical-resolution meaning
-    of "1080p" etc.) so it's well-defined for any source aspect ratio, not
-    just 16:9.
+    """A resolution test: the source is scaled down to `width` (the height
+    keeping the source's aspect ratio), scaled back up to its own size, and
+    compared with the untouched source. It is named by width rather than
+    the usual height ("1080p"), so that it is well defined for any aspect
+    ratio, not just 16:9.
     """
     width: int
     label: str  # e.g. "1080p", for display
@@ -185,36 +202,36 @@ RESAMPLE_TARGET_CHOICES: list[ResampleTarget] = [
 
 
 def synthetic_scale_direction_variant_path(distorted_path: Path, direction: ScaleDirection) -> Path:
-    """A well-formed but non-existent Path standing in for a second run of the
-    *same* distorted file against the *other* ScaleDirection, so both
-    directions can be added as separate rows and compared side by side (in
-    the table and the comparison graph) without one silently colliding with
-    -- and overwriting the cache entry or graph series of -- the other, the
-    same way synthetic_resample_distorted_path does for resample tests.
+    """Returns a made-up path that stands for a second run of the same test
+    video with the other ScaleDirection. Both directions can then be rows of
+    their own, side by side in the table and the graph, without one
+    overwriting the other's cache entry or graph line (as
+    synthetic_resample_distorted_path does for resolution tests).
     """
     tag = "upscale-distorted-to-source" if direction == ScaleDirection.DISTORTED_TO_SOURCE else "downscale-source-to-distorted"
     return distorted_path.with_name(f"{distorted_path.stem} [{tag}]{distorted_path.suffix}")
 
 
 def synthetic_resample_distorted_path(source_path: Path, target: ResampleTarget) -> Path:
-    """A well-formed but non-existent Path standing in for the "distorted"
-    file in a resolution round-trip test, since there isn't a real second
-    file -- both branches are derived from the same source at run time. It
-    exists so a resample test gets a stable, resolution-specific identity
-    for caching, dedup in the comparison graph, and display, the same way a
-    real distorted file's path would -- carrying the target resolution in
-    the name is what keeps different targets (e.g. 1080p vs 720p) of the
-    same source from colliding as if they were the same result.
+    """Returns a made-up path that stands for the test video of a resolution
+    test, which has no second file: both videos are made from the source
+    during the run. It gives the test a stable identity for the cache, the
+    graph and the table, as a real test video's path would. The target
+    resolution is in the name, so that different targets of the same
+    source (1080p and 720p, say) are not taken for the same result.
     """
     return source_path.with_name(f"{source_path.stem} [downscale-{target.label}-upscale]{source_path.suffix}")
 
 
 @dataclass
 class VmafOptions:
-    model: str = "version=vmaf_v0.6.1"  # the resolved ffmpeg model= value actually used to run
-    # model_choice/custom_model_path capture the *UI selection* driving `model` (e.g. "__auto__"
-    # picks the 4K model based on the distorted video's resolution at run time) -- kept alongside
-    # the resolved value so per-video settings in the UI can be edited and re-resolved later.
+    """A row's settings: which metrics to calculate, and how."""
+
+    model: str = "version=vmaf_v0.6.1"  # the FFmpeg model= value a run actually uses
+    # model_choice and custom_model_path are what the user chose, from which
+    # `model` is worked out ("__auto__" picks the 4K model when the videos
+    # are compared at 4K). They are kept beside it so that the row's
+    # settings can be edited and worked out again later.
     model_choice: str = "__auto__"
     custom_model_path: str | None = None
     extra_features: list[str] = field(default_factory=list)  # e.g. ["name=psnr", "name=float_ssim"]
@@ -226,39 +243,40 @@ class VmafOptions:
     compute_vmaf: bool = True
     compute_vmaf_neg: bool = False
     # VMAF v1, a column of its own beside VMAF v0.6.1 ("vmaf"), with its own
-    # model: model_choice_v1 is the UI selection ("__auto__" or a bundled v1
-    # model), model_v1 what a run resolved it to.
+    # model: model_choice_v1 is what the user chose ("__auto__" or a bundled
+    # v1 model), and model_v1 what a run worked it out to be.
     compute_vmaf_v1: bool = False
     model_choice_v1: str = "__auto__"
     model_v1: str = ""
 
     duration_limit: float = 0.0  # seconds; 0 = no limit, process the full video
 
-    # Applies to BOTH inputs; each is planned separately (see gpu.plan_hwaccel)
-    # and each falls back to software decode on its own.
+    # Applies to both videos. Each is planned separately (see
+    # gpu.plan_hwaccel), and each falls back to software decoding on its own.
     gpu_decode: bool = True
     gpu_vendor: GpuVendor = GpuVendor.AUTO
-    # VMAF v0.6.1 and VMAF NEG on the GPU (vmaf_cuda, vmaf_vulkan) and VMAF
-    # v1 with it (vmaf_v1_gpu) when one can be used, else on the CPU.
-    # Execution only, like
-    # gpu_decode: the two agree to within a thousandth of a point per frame,
-    # so it is no part of cache identity and a saved score is kept either way.
+    # Calculate VMAF v0.6.1 and VMAF NEG on the GPU (vmaf_cuda, vmaf_vulkan),
+    # and VMAF v1 with it (vmaf_v1_gpu), when a GPU can be used; else on the
+    # CPU. Like gpu_decode, this changes only how scores are calculated: the
+    # two agree to within a thousandth of a point per frame, so it is not
+    # part of the cache key, and a saved score is kept either way.
     vmaf_on_gpu: bool = True
 
     crop_mode: CropMode = CropMode.AUTO
 
-    # When set, this row is a resolution round-trip test (see ResampleTarget)
-    # instead of a normal comparison against a second, already-encoded file.
+    # When set, this row is a resolution test (see ResampleTarget) instead of
+    # a comparison with a second, already encoded file.
     resample_test: ResampleTarget | None = None
 
     def requested_metrics(self) -> tuple[str, ...]:
+        """The keys of the FFmpeg metrics these options ask for."""
         return tuple(
             metric.key for metric in FRAME_METRICS
             if metric.ffmpeg_binding is not None and self.metric_enabled(metric.key)
         )
 
     def metric_enabled(self, metric: str) -> bool:
-        """Whether an established metric is requested by this options object."""
+        """Whether these options ask for an FFmpeg metric."""
         binding = metric_definition(metric).ffmpeg_binding
         if binding is None:
             return False
@@ -267,7 +285,7 @@ class VmafOptions:
         return binding.libvmaf_feature in self.extra_features
 
     def set_metric_enabled(self, metric: str, enabled: bool) -> None:
-        """Enable or disable one metric without disturbing custom features."""
+        """Turns one FFmpeg metric on or off, leaving other features alone."""
         binding = metric_definition(metric).ffmpeg_binding
         if binding is None:
             raise ValueError(f"metric {metric!r} is not provided by the FFmpeg options backend")
@@ -283,27 +301,25 @@ class VmafOptions:
             self.extra_features = [item for item in self.extra_features if item != feature]
 
 def clone_options(opts: VmafOptions) -> VmafOptions:
-    """A real copy, not a shared reference -- each row needs its own
-    VmafOptions instance so editing one row can never bleed into another.
+    """Returns a real copy of the options, so that editing one row can never
+    change another.
 
-    `extra_features` is the reason this exists rather than a bare
-    dataclasses.replace(): it's a mutable list, and a shallow copy would
-    leave every row appending into the same one.
+    A plain dataclasses.replace() is not enough, because `extra_features`
+    is a list: a shallow copy would leave every row adding to the same one.
     """
     return replace(opts, extra_features=list(opts.extra_features))
 
 
 @dataclass(frozen=True, slots=True)
 class FrameScore:
-    """A single frame's scores. This is a read-only *view* type -- convenient
-    to pass around and read, but never how a whole run is stored (see
-    FrameScores): a feature-length run is hundreds of thousands of frames,
-    and one Python object per frame costs ~180 bytes against 28 in packed
-    arrays.
+    """One frame's scores. It is a read-only view, handy to pass around and
+    read, but never how a whole run is stored (see FrameScores): a
+    feature-length run has hundreds of thousands of frames, and one Python
+    object per frame takes about 180 bytes, against 28 in packed arrays.
 
-    Frozen deliberately: indexing a FrameScores builds one of these on the
-    fly, so assigning to it would update a throwaway object and silently
-    lose the write. Better to raise than to quietly do nothing.
+    It is frozen on purpose: indexing a FrameScores builds one of these on
+    the fly, so assigning to it would change a throwaway object and lose the
+    change without a word. Raising an error is better.
     """
     frame: int
     time: float
@@ -315,18 +331,18 @@ class FrameScore:
 
 
 class FrameScores:
-    """Per-frame scores for a whole run, stored as packed arrays rather than
-    one object per frame (structure-of-arrays).
+    """A whole run's scores for each frame, stored as packed arrays (one per
+    metric) rather than one object per frame.
 
-    Behaves like a sequence of FrameScore -- len(), indexing and iteration
-    all work -- so readability at call sites is unchanged, but indexing
-    builds a throwaway view rather than retaining an object per frame. Hot
-    paths (plotting, stats, hover) should read the arrays directly instead:
-    `scores.vmaf` rather than `[f.vmaf for f in scores]`.
+    It behaves like a sequence of FrameScore (len(), indexing and iteration
+    all work), but indexing builds a throwaway view rather than keeping an
+    object per frame. Code that runs often (graphs, statistics, hovering)
+    should read the arrays directly: `scores.vmaf` rather than
+    `[f.vmaf for f in scores]`.
 
-    An optional metric that wasn't computed is None rather than an array of
-    NaN, so "not computed" stays distinguishable from a real 0.0 score --
-    both of which genuinely occur.
+    A metric that was not calculated is None rather than an array of NaN,
+    so that "not calculated" stays distinct from a real score of 0.0, and
+    both do occur.
     """
 
     __slots__ = ("_metrics", "frame", "time")
@@ -344,8 +360,9 @@ class FrameScores:
         metrics: Mapping[str, object] | None = None,
     ) -> None:
         self.frame = np.asarray(frame, dtype=np.int32)
-        # float64 for time: bisect during hover needs to stay exact across a
-        # multi-hour run, where float32 only has ~0.001s of resolution.
+        # Times are float64, because the search when hovering must stay exact
+        # across a run of several hours, where float32 resolves only about
+        # a millisecond.
         self.time = np.asarray(time, dtype=np.float64)
         self._metrics: dict[str, np.ndarray] = {}
         metric_arrays = {
@@ -362,36 +379,43 @@ class FrameScores:
                 self._metrics[key] = np.asarray(values, dtype=np.float32)
 
     def _metric_values(self, metric: str) -> np.ndarray | None:
+        """A metric's array, or None if it was not calculated."""
         return self._metrics.get(metric)
 
     @property
     def vmaf(self) -> np.ndarray | None:
+        """VMAF's scores, or None."""
         return self._metric_values("vmaf")
 
     @property
     def vmaf_neg(self) -> np.ndarray | None:
+        """VMAF NEG's scores, or None."""
         return self._metric_values("vmaf_neg")
 
     @property
     def psnr(self) -> np.ndarray | None:
+        """PSNR's scores, or None."""
         return self._metric_values("psnr")
 
     @property
     def ssim(self) -> np.ndarray | None:
+        """SSIM's scores, or None."""
         return self._metric_values("ssim")
 
     @property
     def xpsnr(self) -> np.ndarray | None:
+        """XPSNR's scores, or None."""
         return self._metric_values("xpsnr")
 
     @classmethod
     def empty(cls) -> FrameScores:
+        """Scores for no frames."""
         i32, f64 = np.int32, np.float64
         return cls(np.empty(0, i32), np.empty(0, f64))
 
     @classmethod
     def from_frames(cls, frames: Sequence[FrameScore]) -> FrameScores:
-        """Pack a sequence of per-frame view objects into arrays."""
+        """Packs a sequence of FrameScore into arrays."""
         if not frames:
             return cls.empty()
 
@@ -410,14 +434,16 @@ class FrameScores:
         )
 
     def values(self, metric: str) -> np.ndarray | None:
-        """The array for a metric by name, or None if it wasn't computed."""
+        """The array for a metric by name, or None if it was not calculated."""
         return self._metrics.get(metric)
 
     def has(self, metric: str) -> bool:
+        """Whether the metric was calculated."""
         return self.values(metric) is not None
 
     @property
     def metric_keys(self) -> tuple[str, ...]:
+        """The keys of the metrics calculated."""
         return tuple(self._metrics)
 
     def __len__(self) -> int:
@@ -438,8 +464,7 @@ class FrameScores:
             if arr is None:
                 return None
             value = float(arr[index])
-            # NaN is how "no value for this particular frame" is stored
-            # inside an otherwise-present column.
+            # NaN stores "no value for this frame" in a metric's column.
             return None if math.isnan(value) else value
 
         return FrameScore(
@@ -451,8 +476,9 @@ class FrameScores:
         )
 
     def with_values(self, metric: str, values: np.ndarray | None) -> FrameScores:
-        """A copy with one metric's column replaced -- the supported way to
-        change scores, since the per-frame views are read-only."""
+        """Returns a copy with one metric's column replaced (or removed, for
+        None). This is the way to change scores, since the per-frame views
+        are read-only."""
         columns = dict(self._metrics)
         if values is None:
             columns.pop(metric, None)
@@ -480,6 +506,7 @@ class FrameScores:
         return True
 
     def nbytes(self) -> int:
+        """The memory the arrays take, in bytes."""
         total = self.frame.nbytes + self.time.nbytes
         total += sum(arr.nbytes for arr in self._metrics.values())
         return total
@@ -487,6 +514,9 @@ class FrameScores:
 
 @dataclass
 class ComparisonResult:
+    """One comparison's result: the two videos, how they were compared, and
+    every metric's scores."""
+
     source: Path
     distorted: Path
     frames: FrameScores
@@ -496,56 +526,60 @@ class ComparisonResult:
     distorted_crop: CropBox | None
     source_info: VideoInfo
     distorted_info: VideoInfo
-    # Which direction resolution mismatches were resolved in for this run --
-    # recorded (not just derived from the row's *current* options) so a
-    # reloaded/cached result always reflects what actually produced these
-    # scores, even if the row's own settings were changed since.
+    # The way the sizes were matched in this run. It is recorded, rather than
+    # taken from the row's current settings, so that a reloaded or saved
+    # result always says what produced these scores, even if the row's
+    # settings changed since.
     scale_direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED
-    # Frame Compare needs the exact preprocessing recipe that produced the
-    # scored pictures.
+    # Frame Compare needs exactly how the scored pictures were made.
     scale_algorithm: str = "bicubic"
     resample_target: ResampleTarget | None = None
     compared_frame_count: int = 0
-    # The UI choice that produced ``model`` (for example a bundled VMAF v1
-    # model). Programmatically-created results may leave it unset.
+    # What the user chose that gave ``model`` (a bundled VMAF v1 model, say).
+    # Results made in code may leave it unset.
     model_choice: str | None = None
-    # The same for VMAF v1 (a bundled model's path, and the UI choice).
+    # The same for VMAF v1 (a bundled model's path, and the user's choice).
     model_v1: str = ""
     model_choice_v1: str | None = None
-    # Generic results are authoritative. ``frames`` is the shared-axis view
-    # consumed by the current UI and established frame-oriented tools.
+    # The scores themselves. ``frames`` is a view of the frame metrics that
+    # share one frame axis, which the window and the frame tools read.
     metric_results: MetricResultSet = field(default_factory=MetricResultSet)
 
     def __post_init__(self) -> None:
-        # Accept a plain list of FrameScore and pack it so storage always has
-        # exactly one representation downstream.
+        # A plain list of FrameScore is packed, so that there is only one
+        # form from here on.
         if not isinstance(self.frames, FrameScores):
             self.frames = FrameScores.from_frames(self.frames)
         if not self.metric_results:
             self.metric_results = results_from_frame_scores(self.frames)
         else:
             compatible = frame_scores_from_results(self.metric_results)
-            # Generic-only construction supplies FrameScores.empty(); rebuild
-            # the UI view when the available frame metrics share one axis.
+            # A result made from metric_results alone gets FrameScores.empty();
+            # the view is rebuilt when the frame metrics share one axis.
             if not self.frames and compatible:
                 self.frames = compatible
         if self.compared_frame_count <= 0 and len(self.frames):
             self.compared_frame_count = int(self.frames.frame[-1]) + 1
 
     def metric(self, key: str):
+        """A metric's result, or None."""
         return self.metric_results.get(key)
 
     def has_metric(self, key: str) -> bool:
+        """Whether the result has the metric."""
         return self.metric_results.has(key)
 
     def frame_metric(self, key: str):
+        """A per-frame metric's result, or None."""
         return self.metric_results.frame(key)
 
     def sequence_metric(self, key: str):
+        """A whole-video metric's result (CVVDP), or None."""
         return self.metric_results.sequence(key)
 
     def merge_metric_results(self, incoming: MetricResultSet) -> None:
-        """Single merge point for result adapters; UI never merges arrays."""
+        """Adds or replaces metrics' results, and rebuilds `frames`. This is
+        the one place results are merged; the window never merges arrays."""
         from vmaf_app.core.metric_results import merge_metric_results
 
         self.metric_results = merge_metric_results(self.metric_results, incoming)

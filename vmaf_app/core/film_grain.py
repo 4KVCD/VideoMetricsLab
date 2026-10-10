@@ -132,11 +132,13 @@ class BitReader:
         return (code + 1) // 2 if code & 1 else -(code // 2)
 
     def skip(self, bit_count: int) -> None:
+        """Skips bit_count bits."""
         if self.position + bit_count > 8 * len(self.data):
             raise IndexError("reading past the end")
         self.position += bit_count
 
     def skip_to_byte_boundary(self) -> None:
+        """Skips to the start of the next byte."""
         self.position = (self.position + 7) & ~7
 
 
@@ -299,6 +301,8 @@ class SequenceParameterSet:
 
 
 class PictureHeader(NamedTuple):
+    """What a picture header gives: the picture order count's parts, its parameter set, and whether other pictures refer to it."""
+
     poc_lsb: int  # the low bits of the picture order count
     poc_msb_cycle: int | None  # the high part, where the header gives it
     sps: SequenceParameterSet
@@ -306,6 +310,7 @@ class PictureHeader(NamedTuple):
 
 
 def _skip_general_constraints_info(bits: BitReader) -> None:
+    """Skips general_constraints_info() (H.266 section 7.3.3.2)."""
     if bits.read(1):  # gci_present_flag
         bits.skip(71)  # the constraint flags of H.266 section 7.3.3.2
         bits.skip(bits.read(8))  # gci_num_additional_bits, and those bits
@@ -313,6 +318,7 @@ def _skip_general_constraints_info(bits: BitReader) -> None:
 
 
 def _skip_profile_tier_level(bits: BitReader, max_sublayers_minus1: int) -> None:
+    """Skips profile_tier_level() (H.266 section 7.3.3.1)."""
     bits.skip(7 + 1 + 8 + 1 + 1)  # profile, tier, level, frame-only and multilayer flags
     _skip_general_constraints_info(bits)
     sublayer_level_present = [bits.read(1) for _ in range(max_sublayers_minus1)]
@@ -357,6 +363,7 @@ def parse_sps(payload: bytes) -> tuple[int, SequenceParameterSet]:
 
 
 def _skip_subpicture_info(bits: BitReader, width: int, height: int, ctu_size: int) -> None:
+    """Skips the subpicture layout in a sequence parameter set."""
     count_minus1 = bits.read_unsigned_exp_golomb()
     if count_minus1 >= _MAX_SUBPICTURES:
         # A damaged parameter set. Read on, a count this large would keep
@@ -489,6 +496,7 @@ class FilmGrainTracker:
             self._remember_parameter_set(unit)
 
     def _remember_parameter_set(self, unit) -> None:
+        """Keeps a sequence or picture parameter set, which the picture headers that follow refer to."""
         try:
             if nal_type(unit) == SPS_NUT:
                 sps_id, sps = parse_sps(nal_payload(unit))
@@ -542,6 +550,7 @@ class FilmGrainTracker:
         return self._access_units
 
     def _read_header(self, bits: BitReader) -> PictureHeader | None:
+        """Reads a picture header, or returns None if it cannot be read."""
         try:
             return read_picture_header(bits, self._pps_to_sps, self._sequence_parameter_sets)
         except (IndexError, KeyError, ValueError):

@@ -72,7 +72,9 @@ class AnalysisRequest:
 
     @property
     def requested_metrics(self) -> tuple[str, ...]:
+        """The keys of the metrics asked for."""
         return tuple(spec.key for spec in self.metrics)
 
     def metric(self, key: str) -> MetricRequestSpec | None:
+        """The request for one metric, or None."""
         return next((spec for spec in self.metrics if spec.key == key), None)

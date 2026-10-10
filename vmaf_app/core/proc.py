@@ -1,10 +1,11 @@
-"""Launching ffmpeg/ffprobe without a console window flashing up.
+"""Starts and controls the app's child processes (FFmpeg, ffprobe, the
+metric tools): without a console window, ended with the app, and suspended,
+resumed or ended together with any processes they start themselves.
 
-The app runs under pythonw.exe, which has no console of its own, so every
-child process Windows starts gets a brand new console window -- ffprobe on
-each added video, the version checks at startup, crop detection during a
-run. They appear and vanish, and with several videos it looks like the app
-is misbehaving.
+The app runs under pythonw.exe, which has no console of its own, so Windows
+would give every child process a new console window: ffprobe for each added
+video, the version checks at startup, black-bar detection during a run.
+They would flash up and vanish, which looks as if the app is misbehaving.
 """
 from __future__ import annotations
 
@@ -17,8 +18,8 @@ import threading
 
 _log = logging.getLogger(__name__)
 
-# CREATE_NO_WINDOW. Defined here rather than imported from subprocess so the
-# module still imports cleanly off Windows, where the flag does not exist.
+# CREATE_NO_WINDOW. It is defined here rather than imported from subprocess,
+# so that the module still imports on other systems, where it does not exist.
 _CREATE_NO_WINDOW = 0x0800_0000
 
 
@@ -43,19 +44,21 @@ def popen(cmd, **kwargs):
 
 
 # A Windows job object that ends every process in it when the app's process
-# ends, however it ends: the handle is the app's alone, and Windows closes
-# it then (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE). The app's FFmpeg and its
-# isolated scorers used to run on after a crash or End task -- a whole
-# film's CPU fallback, hours of it. Only what the app starts for its work
-# is put in it (popen, isolated.run_isolated), and what those start goes
-# with them; what it opens for the user (a link, a folder) is not, so
-# closing the app never closes those.
+# ends, however it ends: the handle is the app's alone, and Windows closes it
+# then (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE). Without it, the app's FFmpeg and
+# isolated scorers would run on after a crash or End task, possibly for
+# hours. Only what the app starts for its work is put in it (popen,
+# isolated.run_isolated), and what those start goes with them. What the app
+# opens for the user (a link, a folder) is not, so closing the app never
+# closes those.
 _JOB_LOCK = threading.Lock()
 _job: int | None = None
 _job_failed = False
 
 
 def _kill_on_close_job() -> int | None:
+    """Returns the app's job object, made on first use, or None if Windows
+    would not make one."""
     global _job, _job_failed
     with _JOB_LOCK:
         if _job is not None or _job_failed:
@@ -93,8 +96,9 @@ def _kill_on_close_job() -> int | None:
 
 
 def end_with_app(pid: int) -> None:
-    """Has process `pid` -- just started by the app, before it starts any of
-    its own -- ended when the app's process ends (_kill_on_close_job)."""
+    """Makes process `pid` end when the app's process ends
+    (_kill_on_close_job). Call it as soon as the app has started the
+    process, before that starts any of its own."""
     if os.name != "nt":
         return
     job = _kill_on_close_job()
@@ -112,26 +116,26 @@ def end_with_app(pid: int) -> None:
     if not handle:
         return  # already gone
     try:
-        # Fails where the process is in a job that cannot nest (Windows 7);
-        # it then outlives a crashed app, as before.
+        # This fails where the process is already in a job that cannot nest
+        # (Windows 7), and the process can then outlive a crashed app.
         if not kernel32.AssignProcessToJobObject(job, handle):
             _log.debug("Process %d is not ended with the app (error %d)", pid, ctypes.get_last_error())
     finally:
         kernel32.CloseHandle(handle)
 
 
-#: The pipe a program's raw video frames come through. subprocess.PIPE is
-#: Windows' default of 4 KB: a writer hands a 4K frame over in thousands of
-#: pieces, each a switch between the two processes. Measured on one 4K
-#: 10-bit HEVC stream piped as YUV: 55 fps with it, 107 with 64 MB; 4K RGBA
-#: for playback: 30 fps against 72.
+#: The size of the pipe a program's raw video frames come through.
+#: subprocess.PIPE is Windows' default of 4 KB, so a writer hands a 4K frame
+#: over in thousands of pieces, each a switch between the two processes. One
+#: 4K 10-bit HEVC stream sent as YUV ran at 55 fps with it and 107 fps with
+#: 64 MB; 4K RGBA for playback at 30 fps against 72.
 FRAME_PIPE_BYTES = 64 * 1024 * 1024
 
 
 def popen_piped(cmd, pipe_bytes: int = FRAME_PIPE_BYTES):
     """Starts `cmd` writing its standard output to a pipe of `pipe_bytes`
-    (see FRAME_PIPE_BYTES); returns (process, reader), the reader
-    unbuffered. Standard error is a pipe, standard input nothing."""
+    (see FRAME_PIPE_BYTES), and returns (process, reader), the reader
+    unbuffered. Standard error is a pipe, and standard input is empty."""
     if os.name == "nt":
         import _winapi
         import msvcrt
@@ -151,20 +155,20 @@ def popen_piped(cmd, pipe_bytes: int = FRAME_PIPE_BYTES):
 
 
 def process_tree(pid: int) -> list:
-    """The process and every process it started, oldest first.
+    """Returns the process and every process it started, oldest first.
 
     FFmpeg is not always the process the app starts. Chocolatey installs
     ffmpeg.exe as a "shim", a launcher that starts the real ffmpeg.exe as a
-    child and waits for it. Suspending or ending the launcher alone left
-    FFmpeg running: Pause did not pause, Cancel did not stop it, and the
-    CPU perceptual-metric extraction ran ahead of scoring unchecked (364
-    images waiting on disk on the GitHub runner, where the limit is 52).
+    child and waits for it. Suspending or ending the launcher alone would
+    leave FFmpeg running: Pause would not pause, Cancel would not stop it,
+    and the CPU metrics' pictures would pile up unchecked (364 waiting on
+    disk on the GitHub runner, where the limit is 52).
 
-    On Windows the PC's processes are listed by Windows' own snapshot
-    (_parent_pids), which lets go of Python's lock while it is taken:
-    psutil's children() held the lock all along, 14-22 ms a call here, and
-    the window's thread waited behind it -- for each decoder a seek in
-    Video Compare stopped.
+    On Windows, the PC's processes are listed from Windows' own snapshot
+    (_parent_pids), which lets go of Python's lock while it is taken.
+    psutil's children() holds the lock all along, 14-22 ms per call here,
+    and the window's thread would wait behind it for each decoder that a
+    seek in Video Compare stops.
     """
     import psutil
 
@@ -174,8 +178,8 @@ def process_tree(pid: int) -> list:
         children = root.children(recursive=True) if parents is None else _descendants(root, parents)
     except psutil.Error:
         return []
-    # Not the console host Windows gives each console program: it does no
-    # work, and suspending it serves nothing.
+    # Leave out the console host Windows gives each console program: it does
+    # no work, and suspending it serves no purpose.
     tree = [root]
     for child in children:
         with contextlib.suppress(psutil.Error):
@@ -185,9 +189,10 @@ def process_tree(pid: int) -> list:
 
 
 def _descendants(root, parents: dict[int, int]) -> list:
-    """root.children(recursive=True) from `parents` ({pid: parent pid}):
-    what root started, and what those started, none older than root (a
-    process whose pid Windows has since given to another)."""
+    """Returns what root.children(recursive=True) would, worked out from
+    `parents` ({pid: parent pid}): what root started, and what those
+    started. A process older than root is left out, because its parent's
+    pid has since been given to another process."""
     import psutil
 
     started_by: dict[int, list[int]] = {}
@@ -211,8 +216,9 @@ def _descendants(root, parents: dict[int, int]) -> list:
 
 @functools.cache
 def _toolhelp():
-    """(kernel32 letting go of Python's lock, kernel32 keeping it, and
-    PROCESSENTRY32W) for _parent_pids."""
+    """Returns what _parent_pids needs: kernel32 loaded so that its calls
+    let go of Python's lock, kernel32 loaded so that they keep it, and the
+    PROCESSENTRY32W structure."""
     import ctypes
     from ctypes import wintypes
 
@@ -235,14 +241,14 @@ def _toolhelp():
 
 
 def _parent_pids() -> dict[int, int] | None:
-    """{pid: parent pid} for every process on the PC (Windows), or None
-    when Windows would not list them.
+    """Returns {pid: parent pid} for every process on the PC (Windows), or
+    None when Windows would not list them.
 
-    Windows takes the snapshot (8-10 ms) with Python's lock let go; the
-    walk through it (2 ms) and closing it keep the lock. Letting it go for each of the
-    PC's ~460 processes as well, the walk waited up to Python's switch
-    interval (5 ms) to have it back, each time, whenever another thread
-    was busy: 1.5-2.5 s, the window frozen."""
+    Windows takes the snapshot (8-10 ms) with Python's lock let go, but the
+    walk through it (2 ms) and closing it keep the lock. Letting go of it
+    for each of the PC's ~460 processes too would make the walk wait up to
+    Python's switch interval (5 ms) to get it back each time another thread
+    was busy: 1.5-2.5 s with the window frozen."""
     import ctypes
 
     releasing, holding, entry_type = _toolhelp()
@@ -263,8 +269,8 @@ def _parent_pids() -> dict[int, int] | None:
 
 
 def process_root(pid: int) -> list:
-    """Just the process, as a one-item tree: quick, for when its children
-    have not been listed yet."""
+    """Returns just the process, as a one-item tree. It is quick, for when
+    its children have not been listed yet."""
     import psutil
 
     try:
@@ -284,7 +290,7 @@ def signal_tree(pid: int, action: str) -> None:
 
 def signal_processes(tree: list, action: str) -> None:
     """signal_tree for a tree already listed by process_tree, for callers
-    that switch it often: listing it takes ~13 ms on Windows."""
+    that switch it often, because listing it takes about 13 ms on Windows."""
     import psutil
 
     for process in (tree if action == "suspend" else reversed(tree)):
@@ -307,9 +313,9 @@ def kill(process) -> None:
 
 
 def raise_current_thread_priority() -> None:
-    """Makes the calling thread preempt ordinary work (Windows
-    THREAD_PRIORITY_HIGHEST). For light, timing-critical threads only.
-    Does nothing elsewhere or if Windows refuses."""
+    """Lets the calling thread run ahead of ordinary work (Windows'
+    THREAD_PRIORITY_HIGHEST). Use it only for light threads whose timing
+    matters. It does nothing on other systems, or if Windows refuses."""
     if os.name != "nt":
         return
     with contextlib.suppress(Exception):

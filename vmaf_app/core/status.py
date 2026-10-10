@@ -50,6 +50,7 @@ class Status(str):
 
 
 def _rebuild(text: str, plan: HwAccelPlan | None, kind: str, brief: str) -> Status:
+    """Rebuilds a Status from its parts (for pickling across processes)."""
     return Status(text, plan=plan, kind=kind, brief=brief)
 
 

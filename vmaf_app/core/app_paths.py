@@ -17,4 +17,5 @@ def user_data_dir() -> Path:
 
 
 def settings_file() -> Path:
+    """Where settings.json is."""
     return user_data_dir() / "settings.json"

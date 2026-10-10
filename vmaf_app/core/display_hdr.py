@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class DisplayHdrInfo:
+    """The HDR state of a monitor, with None for what could not be read."""
+
     device_name: str = ""
     hdr_supported: bool | None = None
     hdr_enabled: bool | None = None
@@ -38,21 +40,30 @@ def query_display_hdr(window_handle: int | None = None) -> DisplayHdrInfo:
 
 
 def _query_windows_display_hdr(window_handle: int | None) -> DisplayHdrInfo:
+    """Asks Windows' DisplayConfig API for the HDR state of the monitor nearest the window."""
     from ctypes import wintypes
 
     class Luid(ctypes.Structure):
+        """Windows' LUID."""
+
         _fields_ = [("LowPart", wintypes.DWORD), ("HighPart", wintypes.LONG)]
 
     class Rational(ctypes.Structure):
+        """DISPLAYCONFIG_RATIONAL."""
+
         _fields_ = [("Numerator", wintypes.UINT), ("Denominator", wintypes.UINT)]
 
     class SourceInfo(ctypes.Structure):
+        """DISPLAYCONFIG_PATH_SOURCE_INFO."""
+
         _fields_ = [
             ("adapterId", Luid), ("id", wintypes.UINT),
             ("modeInfoIdx", wintypes.UINT), ("statusFlags", wintypes.UINT),
         ]
 
     class TargetInfo(ctypes.Structure):
+        """DISPLAYCONFIG_PATH_TARGET_INFO."""
+
         _fields_ = [
             ("adapterId", Luid), ("id", wintypes.UINT),
             ("modeInfoIdx", wintypes.UINT), ("outputTechnology", wintypes.UINT),
@@ -62,33 +73,45 @@ def _query_windows_display_hdr(window_handle: int | None) -> DisplayHdrInfo:
         ]
 
     class PathInfo(ctypes.Structure):
+        """DISPLAYCONFIG_PATH_INFO."""
+
         _fields_ = [
             ("sourceInfo", SourceInfo), ("targetInfo", TargetInfo),
             ("flags", wintypes.UINT),
         ]
 
     class ModeUnion(ctypes.Union):
+        """The union inside DISPLAYCONFIG_MODE_INFO."""
+
         _fields_ = [("opaque", ctypes.c_byte * 56)]
 
     class ModeInfo(ctypes.Structure):
+        """DISPLAYCONFIG_MODE_INFO."""
+
         _fields_ = [
             ("infoType", wintypes.UINT), ("id", wintypes.UINT),
             ("adapterId", Luid), ("mode", ModeUnion),
         ]
 
     class DeviceInfoHeader(ctypes.Structure):
+        """DISPLAYCONFIG_DEVICE_INFO_HEADER."""
+
         _fields_ = [
             ("type", wintypes.UINT), ("size", wintypes.UINT),
             ("adapterId", Luid), ("id", wintypes.UINT),
         ]
 
     class SourceDeviceName(ctypes.Structure):
+        """DISPLAYCONFIG_SOURCE_DEVICE_NAME."""
+
         _fields_ = [
             ("header", DeviceInfoHeader),
             ("viewGdiDeviceName", wintypes.WCHAR * 32),
         ]
 
     class AdvancedColorInfo(ctypes.Structure):
+        """DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO."""
+
         _fields_ = [
             ("header", DeviceInfoHeader), ("value", wintypes.UINT),
             ("colorEncoding", wintypes.UINT),
@@ -96,11 +119,15 @@ def _query_windows_display_hdr(window_handle: int | None) -> DisplayHdrInfo:
         ]
 
     class SdrWhiteLevel(ctypes.Structure):
+        """DISPLAYCONFIG_SDR_WHITE_LEVEL."""
+
         _fields_ = [
             ("header", DeviceInfoHeader), ("SDRWhiteLevel", wintypes.ULONG),
         ]
 
     class MonitorInfoEx(ctypes.Structure):
+        """MONITORINFOEXW."""
+
         _fields_ = [
             ("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
             ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD),
