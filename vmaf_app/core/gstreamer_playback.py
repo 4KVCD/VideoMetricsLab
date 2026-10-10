@@ -179,11 +179,12 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
 def start_loading() -> None:
     """What Video Compare's first native opening loads, loaded in the
     background at the window's startup: GStreamer, its D3D11 plugin, the
-    D3D11 device, the presenter (Vulkan's device and pipelines, or the
-    Direct3D 11 presenter's shaders) and the film grain synthesis.
-    Loaded by that opening instead, they held the window for 0.4 s then. The
-    window's only: metric-only use (the command line, the scoring processes)
-    does not pay their start or their memory."""
+    D3D11 device, the film grain synthesis, and the Direct3D 11 presenter's
+    shaders where Vulkan's presenter is not used (Vulkan's is made ready
+    once there are videos: start_loading_presenter). Loaded by that opening
+    instead, they held the window for 0.4 s then. The window's only:
+    metric-only use (the command line, the scoring processes) does not pay
+    their start or their memory."""
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen":
         threading.Thread(target=_warm_up, name="gstreamer-load", daemon=True).start()
 
@@ -199,11 +200,40 @@ def _warm_up() -> None:
         d3d11_device()
         from vmaf_app.core import d3d11_film_grain, d3d11_tonemap, vulkan_presenter
 
-        if not vulkan_presenter.chosen() or vulkan_presenter.prepare() is not None:
-            d3d11_tonemap.prepare_presenter()  # the presenter used instead of Vulkan's
+        if not vulkan_presenter.chosen():
+            d3d11_tonemap.prepare_presenter()
         d3d11_film_grain.prepare()
     except Exception:
         pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg
+
+
+_PRESENTER_LOADING_STARTED = False
+
+
+def start_loading_presenter() -> None:
+    """Vulkan's presenter (its device and pipelines) made ready in the
+    background, once a process, as Video Compare first may have something to
+    play: the window calls this as its Videos table gains a row. Made at the
+    window's start (start_loading), its 130 ms and 25 MB of memory were spent
+    whether Video Compare was used or not; left to the first native opening,
+    it would hold the window for those 130 ms."""
+    global _PRESENTER_LOADING_STARTED
+    if _PRESENTER_LOADING_STARTED or os.environ.get("QT_QPA_PLATFORM", "").casefold() == "offscreen":
+        return
+    _PRESENTER_LOADING_STARTED = True
+    threading.Thread(target=_prepare_presenter, name="presenter-load", daemon=True).start()
+
+
+def _prepare_presenter() -> None:
+    if not gstreamer_available()[0]:
+        return  # no native playback, so no presenter
+    try:
+        from vmaf_app.core import d3d11_tonemap, vulkan_presenter
+
+        if vulkan_presenter.prepare() is not None:
+            d3d11_tonemap.prepare_presenter()  # the presenter used instead of Vulkan's
+    except Exception:
+        pass  # only a head start, as _warm_up's
 
 
 def d3d11_device() -> Any:

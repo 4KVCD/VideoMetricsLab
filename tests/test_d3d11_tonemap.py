@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from vmaf_app.core import d3d11_tonemap, gstreamer_playback, locked_presentation, vulkan_presenter
+from vmaf_app.core import d3d11_film_grain, d3d11_tonemap, gstreamer_playback, locked_presentation, vulkan_presenter
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings
 from vmaf_app.core.models import VideoInfo
 
@@ -75,6 +75,30 @@ def test_native_presentation_draws_and_fails_safely(monkeypatch, caplog, subtest
         assert [name for name, _path in locked_presentation._presenters()] == ["Direct3D 11"]
         patch.delenv("VIDEOMETRICSLAB_PRESENTER")
         assert [name for name, _path in locked_presentation._presenters()] == ["Vulkan", "Direct3D 11"]
+    with subtests.test("Vulkan's presenter is made ready once there are videos, not at the window's start"), \
+            monkeypatch.context() as patch:
+        prepared = []
+        gstreamer = SimpleNamespace(ElementFactory=SimpleNamespace(find=lambda name: None))
+        patch.setattr(gstreamer_playback, "gstreamer_available", lambda: (True, ""))
+        patch.setattr(gstreamer_playback, "_load_gstreamer", lambda: (gstreamer, None))
+        patch.setattr(gstreamer_playback, "d3d11_device", lambda: None)
+        patch.setattr(d3d11_film_grain, "prepare", lambda: None)
+        patch.setattr(vulkan_presenter, "chosen", lambda: True)
+        patch.setattr(vulkan_presenter, "prepare", lambda: prepared.append("Vulkan") or "no Vulkan here")
+        patch.setattr(d3d11_tonemap, "prepare_presenter", lambda: prepared.append("Direct3D 11"))
+        gstreamer_playback._warm_up()  # the window's start
+        assert prepared == []
+        patch.setenv("QT_QPA_PLATFORM", "windows")
+        patch.setattr(gstreamer_playback, "_PRESENTER_LOADING_STARTED", False)
+        gstreamer_playback.start_loading_presenter()  # a first video
+        gstreamer_playback.start_loading_presenter()  # and another: nothing more
+        for thread in threading.enumerate():
+            if thread.name == "presenter-load":
+                thread.join()
+        assert prepared == ["Vulkan", "Direct3D 11"]  # Direct3D 11's where Vulkan's cannot start
+        patch.setattr(vulkan_presenter, "chosen", lambda: False)
+        gstreamer_playback._warm_up()  # Vulkan's set aside: Direct3D 11's at the start
+        assert prepared[2:] == ["Direct3D 11"]
     with subtests.test("Vulkan's frame is handed over holding the device lock, and presented after it"):
         presentation, calls = _presentation(monkeypatch)
         presentation._lib.vmaf_present_flip = lambda presenter: calls.append("flip") or 0

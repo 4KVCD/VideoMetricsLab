@@ -60,7 +60,15 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app import APP_NAME, __version__, i18n
-from vmaf_app.core import app_log, metric_cache, perceptual_vship, result_cache, update_check, vmaf_cuda
+from vmaf_app.core import (
+    app_log,
+    gstreamer_playback,
+    metric_cache,
+    perceptual_vship,
+    result_cache,
+    update_check,
+    vmaf_cuda,
+)
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
@@ -2402,6 +2410,8 @@ class MainWindow(QMainWindow):
             cvvdp_preset=self._settings.cvvdp_default_preset,
         ))
         self._set_row_metrics(row)
+        # Video Compare may have something to play from now on.
+        gstreamer_playback.start_loading_presenter()
         return row
 
     def _set_row_metrics(self, row: int) -> None:

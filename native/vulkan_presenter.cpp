@@ -14,11 +14,11 @@
 //     wrong in Vulkan (its chroma plane on an RTX 5090 with driver 616.92; the
 //     whole frame at 4K on a Core Ultra 9 285K's iGPU). Shared textures of one
 //     plane read back right on both, at every size tried (64x48 to 8K).
-//   - So a small Direct3D 11 compute shader copies each frame's two planes
-//     into two such textures (R8 and R8G8, or R16 and R16G16 for P010), which
-//     Vulkan imports once and samples. There are two sets of them, used in
-//     turn, so that Direct3D 11 can copy a frame while Vulkan may still be
-//     drawing the one before.
+//   - So a small Direct3D 11 compute shader copies each frame's two planes --
+//     the part of them the drawing samples -- into two such textures (R8 and
+//     R8G8, or R16 and R16G16 for P010), which Vulkan imports once and
+//     samples. There are two sets of them, used in turn, so that Direct3D 11
+//     can copy a frame while Vulkan may still be drawing the one before.
 //   - A fence shared by the two APIs orders the work on the GPU: Vulkan's
 //     drawing waits for Direct3D 11's copy. Before Direct3D 11 copies into a
 //     set again, the CPU checks that Vulkan has drawn the frame it held, which
@@ -657,23 +657,44 @@ static bool drawing_for(VulkanDevice& device, VkFormat format, Drawing* drawing)
 
 // A frame's two planes copied, code for code, into the textures shared with
 // Vulkan: a value read from a UNORM texture as a float and written to one of
-// the same depth is the same code.
+// the same depth is the same code. Only the part of the frame the drawing
+// samples is copied (`region`, in chroma texels: left, top, right, bottom),
+// by a thread per luma texel of it counted from its corner; the threads of
+// its first chroma-sized quarter copy a chroma texel too. The dispatch's size
+// comes from a buffer (DispatchIndirect), so one recorded command list fits
+// every region. Of the shapes tried, groups of 16x16 threads were the fastest
+// on both an RTX 5090 and a Core Ultra 9 285K's iGPU: a whole 4K P010 frame,
+// read from video memory, took 0.026 and 0.82 ms (a thread per chroma texel
+// and its 2x2 luma texels: 0.025 and 1.19 ms).
 static const char copy_planes_source[] = R"(
 Texture2D<float> luma_in : register(t0);
 Texture2D<float2> chroma_in : register(t1);
 RWTexture2D<unorm float> luma_out : register(u0);
 RWTexture2D<unorm float2> chroma_out : register(u1);
+cbuffer Region : register(b0) {
+    uint4 region;
+};
 
-[numthreads(16, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 id : SV_DispatchThreadID) {
-    uint width, height;
-    luma_out.GetDimensions(width, height);
-    if (id.x < width && id.y < height)
-        luma_out[id.xy] = luma_in[id.xy];
-    if (id.x < width / 2 && id.y < height / 2)
-        chroma_out[id.xy] = chroma_in[id.xy];
+    uint2 size = region.zw - region.xy;
+    if (all(id.xy < size * 2)) {
+        uint2 luma = region.xy * 2 + id.xy;
+        luma_out[luma] = luma_in[luma];
+    }
+    if (all(id.xy < size)) {
+        uint2 chroma = region.xy + id.xy;
+        chroma_out[chroma] = chroma_in[chroma];
+    }
 }
 )";
+
+// The thread groups of the copy shader that cover `region`.
+static void copy_groups_for(const UINT region[4], UINT groups[3]) {
+    groups[0] = ((region[2] - region[0]) * 2 + 15) / 16;
+    groups[1] = ((region[3] - region[1]) * 2 + 15) / 16;
+    groups[2] = 1;
+}
 
 // The copy shader's bytecode, compiled once a process and never released (as
 // d3d11_tonemap.cpp's shaders: at the process's exit the compiler's library
@@ -703,6 +724,25 @@ static bool can_write(ID3D11Device* device, DXGI_FORMAT format) {
            (support.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE);
 }
 
+// The part of a frame of `width` x `height` that drawing `source` samples
+// (x, y, width, height in luma pixels; all of it if null), in chroma texels:
+// left, top, right, bottom. The bilinear filter reaches up to a texel past
+// the part drawn, so a chroma texel more is taken all round.
+static void sampled_region(UINT width, UINT height, const int* source, UINT region[4]) {
+    const int chroma_width = int(width / 2), chroma_height = int(height / 2);
+    int left = 0, top = 0, right = chroma_width, bottom = chroma_height;
+    if (source) {
+        left = std::clamp(source[0] / 2 - 1, 0, chroma_width);
+        top = std::clamp(source[1] / 2 - 1, 0, chroma_height);
+        right = std::clamp((source[0] + source[2] + 1) / 2 + 1, left, chroma_width);
+        bottom = std::clamp((source[1] + source[3] + 1) / 2 + 1, top, chroma_height);
+    }
+    region[0] = UINT(left);
+    region[1] = UINT(top);
+    region[2] = UINT(right);
+    region[3] = UINT(bottom);
+}
+
 // ---------------------------------------------------------------------------
 // The presenter
 
@@ -725,10 +765,27 @@ struct HandoverSlot {
     uint64_t last_frame = 0;
 };
 
-// A source texture's shader views, kept.
+// A source texture's shader views, kept, and the Direct3D 11 command lists
+// that copy it into each hand-over slot, recorded the first time and run
+// again for every frame after (the part of the frame they copy comes from
+// buffers): recording one each frame cost some 14 us with the device lock
+// held.
 struct SourceViews {
     ComPtr<ID3D11Texture2D> texture;
     ComPtr<ID3D11ShaderResourceView> luma, chroma;
+    ComPtr<ID3D11CommandList> copy[kHandoverSlots];
+};
+
+// A window image's drawing of a slot, recorded once and submitted again for
+// every frame that draws the same way: re-recorded only when the slot is
+// made again or the drawing's constants, place or background change.
+struct RecordedDrawing {
+    VkCommandBuffer commands = VK_NULL_HANDLE;
+    bool recorded = false;
+    uint64_t slots_made = 0;  // Presenter::slots_made as it was recorded
+    DrawConstants constants = {};
+    VkViewport viewport = {};
+    float clear[4] = {};
 };
 
 // The window's swapchain and what drawing into its images needs.
@@ -744,20 +801,23 @@ struct Swapchain {
     std::vector<VkSemaphore> ready_to_present;
 };
 
-// What drawing one frame needs until the GPU has drawn it.
+// A frame of drawing until the GPU has done it: what its submission waits on.
 struct FrameInFlight {
-    VkCommandBuffer commands = VK_NULL_HANDLE;
-    VkFence drawn = VK_NULL_HANDLE;           // signalled when the frame's drawing is done
-    VkSemaphore acquired = VK_NULL_HANDLE;    // signalled when the image it is drawn into is free
+    VkFence drawn = VK_NULL_HANDLE;         // signalled when the frame's drawing is done
+    VkSemaphore acquired = VK_NULL_HANDLE;  // signalled when the image it is drawn into is free
 };
 
 // A frame handed over by vmaf_present_texture, to be drawn and presented by
 // vmaf_present_flip once the caller has let go of the device lock.
 struct PendingDraw {
-    HandoverSlot* slot = nullptr;  // null when no frame is waiting
+    bool waiting = false;
+    int slot = 0;
     DrawConstants constants = {};
-    VkViewport viewport = {};
+    float source[4] = {};  // the part of the frame drawn, in its pixels
+    bool fitted = true;    // fitted into the window; else drawn at `target`
+    int target[4] = {};
     float clear[4] = {};
+    VkColorSpaceKHR colour_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 };
 
 struct Presenter {
@@ -770,6 +830,11 @@ struct Presenter {
     ComPtr<ID3D11DeviceContext4> immediate4;
     ComPtr<ID3D11DeviceContext> deferred;
     ComPtr<ID3D11ComputeShader> copy_planes;
+    // The part of the frame the copy shader copies (its constant buffer), its
+    // dispatch's thread groups (DispatchIndirect's arguments), and the region
+    // they were set for.
+    ComPtr<ID3D11Buffer> copy_region, copy_groups;
+    UINT copy_region_now[4] = {};
     SourceViews source_views[kKeptSourceViews];
     int next_source_view = 0;
     ComPtr<ID3D11Texture2D> source_copy;  // frames a shader cannot read, copied first
@@ -783,6 +848,7 @@ struct Presenter {
     uint64_t frames_handed_over = 0;
     uint64_t last_frame_submitted = 0;         // the last frame whose drawing was given to the GPU
     HandoverSlot slots[kHandoverSlots];
+    uint64_t slots_made = 0;                   // how many times the slots were made
     UINT slot_width = 0, slot_height = 0;
     bool slot_deep = false;                    // R16 planes for P010, else R8 for NV12
     VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
@@ -797,6 +863,9 @@ struct Presenter {
 
     // Drawing.
     VkCommandPool command_pool = VK_NULL_HANDLE;
+    // By window image and slot (image * kHandoverSlots + slot); kept when the
+    // swapchain is made again, and recorded again.
+    std::vector<RecordedDrawing> recorded;
     FrameInFlight frames[kFramesInFlight];
     uint64_t frames_drawn = 0;                 // frames whose drawing was submitted, of any slot
     VkFence acquired_free = VK_NULL_HANDLE;    // signalled when the image last acquired is free
@@ -849,6 +918,9 @@ static void free_swapchain(Presenter* p) {
     if (swapchain.handle)
         vk.vkDestroySwapchainKHR(vk.handle, swapchain.handle, nullptr);
     swapchain = Swapchain{};
+    // The recorded drawings were of its framebuffers.
+    for (RecordedDrawing& drawing : p->recorded)
+        drawing.recorded = false;
 }
 
 // Makes the window's swapchain, or makes it again: at the window's size, and
@@ -954,6 +1026,8 @@ static HRESULT make_swapchain(Presenter* p, VkColorSpaceKHR colour_space) {
     vk.vkGetSwapchainImagesKHR(vk.handle, handle, &count, nullptr);
     swapchain.images.resize(count);
     vk.vkGetSwapchainImagesKHR(vk.handle, handle, &count, swapchain.images.data());
+    if (p->recorded.size() < size_t(count) * kHandoverSlots)
+        p->recorded.resize(size_t(count) * kHandoverSlots);
     for (VkImage image : swapchain.images) {
         VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         view.image = image;
@@ -1118,6 +1192,9 @@ static HRESULT ensure_slots(Presenter* p, UINT width, UINT height, bool deep) {
     for (HandoverSlot& slot : p->slots)
         free_slot(p, slot);
     p->slot_width = p->slot_height = 0;
+    for (SourceViews& views : p->source_views)
+        for (ComPtr<ID3D11CommandList>& copy : views.copy)
+            copy.Reset();  // they wrote into the old slots' textures
     const DXGI_FORMAT luma = deep ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
     const DXGI_FORMAT chroma = deep ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
     const VkFormat vulkan_luma = deep ? VK_FORMAT_R16_UNORM : VK_FORMAT_R8_UNORM;
@@ -1148,6 +1225,7 @@ static HRESULT ensure_slots(Presenter* p, UINT width, UINT height, bool deep) {
         }
         p->vulkan->vkUpdateDescriptorSets(p->vulkan->handle, 2, writes, 0, nullptr);
     }
+    p->slots_made++;  // the drawings recorded from the old slots go too
     p->slot_width = width;
     p->slot_height = height;
     p->slot_deep = deep;
@@ -1209,11 +1287,13 @@ static ID3D11Texture2D* readable_source(Presenter* p, ID3D11Texture2D* frame, UI
 }
 
 // Direct3D 11's part of drawing a frame: its planes copied into the next
-// hand-over slot, and the copied fence signalled with the frame's number.
-// Gives the slot, and the description of the texture the frame was read from
-// (`desc`). With GStreamer's device lock held.
-static HRESULT hand_over(Presenter* p, ID3D11Resource* frame, UINT subresource, D3D11_TEXTURE2D_DESC& desc,
-                         HandoverSlot** handed) {
+// hand-over slot -- only the part that drawing `source` samples (x, y, width,
+// height in the frame's pixels; all of it if null) -- and the copied fence
+// signalled with the frame's number. Gives the slot's index, and the
+// description of the texture the frame was read from (`desc`). With
+// GStreamer's device lock held.
+static HRESULT hand_over(Presenter* p, ID3D11Resource* frame, UINT subresource, const int* source,
+                         D3D11_TEXTURE2D_DESC& desc, int* handed) {
     ComPtr<ID3D11Texture2D> texture;
     HRESULT hr = frame->QueryInterface(IID_PPV_ARGS(&texture));
     if (FAILED(hr))
@@ -1233,7 +1313,8 @@ static HRESULT hand_over(Presenter* p, ID3D11Resource* frame, UINT subresource, 
     if (FAILED(hr))
         return hr;
     const uint64_t number = p->frames_handed_over + 1;
-    HandoverSlot& slot = p->slots[number % kHandoverSlots];
+    const int index = int(number % kHandoverSlots);
+    HandoverSlot& slot = p->slots[index];
     // Vulkan has drawn the frame the slot held, two frames ago, long since;
     // this makes sure before the slot is written again.
     if (slot.last_frame) {
@@ -1241,19 +1322,31 @@ static HRESULT hand_over(Presenter* p, ID3D11Resource* frame, UINT subresource, 
         if (FAILED(hr))
             return hr;
     }
-    ID3D11DeviceContext* context = p->deferred.Get();
-    context->CSSetShader(p->copy_planes.Get(), nullptr, 0);
-    ID3D11ShaderResourceView* inputs[2] = {views->luma.Get(), views->chroma.Get()};
-    context->CSSetShaderResources(0, 2, inputs);
-    ID3D11UnorderedAccessView* outputs[2] = {slot.luma.writer.Get(), slot.chroma.writer.Get()};
-    context->CSSetUnorderedAccessViews(0, 2, outputs, nullptr);
-    context->Dispatch((desc.Width + 15) / 16, (desc.Height + 7) / 8, 1);
-    ComPtr<ID3D11CommandList> commands;
-    hr = context->FinishCommandList(FALSE, &commands);
-    if (FAILED(hr))
-        return hr;
+    UINT region[4];
+    sampled_region(desc.Width, desc.Height, source, region);
+    if (memcmp(region, p->copy_region_now, sizeof region) != 0) {
+        UINT groups[3];
+        copy_groups_for(region, groups);
+        p->immediate->UpdateSubresource(p->copy_region.Get(), 0, nullptr, region, 0, 0);
+        p->immediate->UpdateSubresource(p->copy_groups.Get(), 0, nullptr, groups, 0, 0);
+        memcpy(p->copy_region_now, region, sizeof region);
+    }
+    ComPtr<ID3D11CommandList>& copy = views->copy[index];
+    if (!copy) {
+        ID3D11DeviceContext* context = p->deferred.Get();
+        context->CSSetShader(p->copy_planes.Get(), nullptr, 0);
+        context->CSSetConstantBuffers(0, 1, p->copy_region.GetAddressOf());
+        ID3D11ShaderResourceView* inputs[2] = {views->luma.Get(), views->chroma.Get()};
+        context->CSSetShaderResources(0, 2, inputs);
+        ID3D11UnorderedAccessView* outputs[2] = {slot.luma.writer.Get(), slot.chroma.writer.Get()};
+        context->CSSetUnorderedAccessViews(0, 2, outputs, nullptr);
+        context->DispatchIndirect(p->copy_groups.Get(), 0);
+        hr = context->FinishCommandList(FALSE, &copy);
+        if (FAILED(hr))
+            return hr;
+    }
     // Run on GStreamer's context, its own state kept as it was.
-    p->immediate->ExecuteCommandList(commands.Get(), TRUE);
+    p->immediate->ExecuteCommandList(copy.Get(), TRUE);
     hr = p->immediate4->Signal(p->copied_fence.Get(), number);
     if (FAILED(hr))
         return hr;
@@ -1261,7 +1354,7 @@ static HRESULT hand_over(Presenter* p, ID3D11Resource* frame, UINT subresource, 
     // drawing waits for the fence.
     p->immediate->Flush();
     p->frames_handed_over = number;
-    *handed = &slot;
+    *handed = index;
     return S_OK;
 }
 
@@ -1368,23 +1461,48 @@ static void record_drawing(VulkanDevice& vk, VkCommandBuffer commands, const Han
                             0, nullptr, 0, nullptr, 2, planes);
 }
 
-// Vulkan's part of drawing a frame: drawn from `slot` into the image acquired,
-// then presented.
-static HRESULT draw_and_present(Presenter* p, HandoverSlot& slot, const DrawConstants& constants,
-                                const VkViewport& viewport, const float* clear) {
+// Vulkan's part of drawing a frame: the frame handed over drawn into the
+// image acquired, then presented. The image's drawing of the slot is recorded
+// once and submitted again while nothing about it changes: recording it each
+// frame cost some 20 us.
+static HRESULT draw_and_present(Presenter* p, const PendingDraw& draw) {
     VulkanDevice& vk = *p->vulkan;
     FrameInFlight& frame = next_frame(p);
     const uint32_t image = uint32_t(p->acquired);
     const uint64_t number = p->frames_handed_over;
-    vk.vkResetCommandBuffer(frame.commands, 0);
-    VkCommandBufferBeginInfo begin = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vk.vkBeginCommandBuffer(frame.commands, &begin);
-    record_drawing(vk, frame.commands, slot, p->swapchain.drawing, p->swapchain.framebuffers[image],
-                   p->swapchain.extent, constants, viewport, clear);
-    VkResult result = vk.vkEndCommandBuffer(frame.commands);
-    if (result != VK_SUCCESS)
-        return vulkan_failure(vk, result, "recording a frame's drawing");
+    HandoverSlot& slot = p->slots[draw.slot];
+    const VkViewport viewport = placed(draw.source, draw.fitted ? nullptr : draw.target, p->swapchain.extent);
+    RecordedDrawing& drawing = p->recorded[image * kHandoverSlots + draw.slot];
+    VkResult result = VK_SUCCESS;
+    if (!drawing.commands) {
+        VkCommandBufferAllocateInfo allocate = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        allocate.commandPool = p->command_pool;
+        allocate.commandBufferCount = 1;
+        result = vk.vkAllocateCommandBuffers(vk.handle, &allocate, &drawing.commands);
+        if (result != VK_SUCCESS)
+            return vulkan_failure(vk, result, "making a command buffer");
+    }
+    if (!drawing.recorded || drawing.slots_made != p->slots_made ||
+        memcmp(&drawing.constants, &draw.constants, sizeof draw.constants) != 0 ||
+        memcmp(&drawing.viewport, &viewport, sizeof viewport) != 0 ||
+        memcmp(drawing.clear, draw.clear, sizeof draw.clear) != 0) {
+        // Its last submission is done: the image it drew into was given back by the display.
+        vk.vkResetCommandBuffer(drawing.commands, 0);
+        VkCommandBufferBeginInfo begin = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        vk.vkBeginCommandBuffer(drawing.commands, &begin);
+        record_drawing(vk, drawing.commands, slot, p->swapchain.drawing, p->swapchain.framebuffers[image],
+                       p->swapchain.extent, draw.constants, viewport, draw.clear);
+        result = vk.vkEndCommandBuffer(drawing.commands);
+        if (result != VK_SUCCESS) {
+            drawing.recorded = false;
+            return vulkan_failure(vk, result, "recording a frame's drawing");
+        }
+        drawing.recorded = true;
+        drawing.slots_made = p->slots_made;
+        drawing.constants = draw.constants;
+        drawing.viewport = viewport;
+        std::copy(draw.clear, draw.clear + 4, drawing.clear);
+    }
 
     // It waits for the image (at the colour output) and for Direct3D 11's copy
     // (at the fragment shader), and signals the image ready to present and
@@ -1405,7 +1523,7 @@ static HRESULT draw_and_present(Presenter* p, HandoverSlot& slot, const DrawCons
     submit.pWaitSemaphores = waits;
     submit.pWaitDstStageMask = stages;
     submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &frame.commands;
+    submit.pCommandBuffers = &drawing.commands;
     submit.signalSemaphoreCount = 2;
     submit.pSignalSemaphores = signals;
     VkPresentInfoKHR present = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
@@ -1479,6 +1597,22 @@ static HRESULT prepare_direct3d(Presenter* p, HANDLE* fence_handle) {
         hr = copy_shader(&code);
     if (SUCCEEDED(hr))
         hr = p->d3d->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &p->copy_planes);
+    // The copy's region and thread groups: none, as copy_region_now says,
+    // until the first frame's are set.
+    const UINT no_groups[3] = {0, 0, 1};
+    D3D11_BUFFER_DESC buffer = {};
+    buffer.ByteWidth = sizeof p->copy_region_now;
+    buffer.Usage = D3D11_USAGE_DEFAULT;
+    buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    D3D11_SUBRESOURCE_DATA initial = {p->copy_region_now, 0, 0};
+    if (SUCCEEDED(hr))
+        hr = p->d3d->CreateBuffer(&buffer, &initial, &p->copy_region);
+    buffer.ByteWidth = sizeof no_groups;
+    buffer.BindFlags = 0;
+    buffer.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+    initial.pSysMem = no_groups;
+    if (SUCCEEDED(hr))
+        hr = p->d3d->CreateBuffer(&buffer, &initial, &p->copy_groups);
     if (FAILED(hr))
         return hr;
     for (DXGI_FORMAT format :
@@ -1521,11 +1655,6 @@ static HRESULT prepare_vulkan(Presenter* p, HANDLE fence_handle) {
     VkFenceCreateInfo signalled = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     signalled.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (FrameInFlight& frame : p->frames) {
-        VkCommandBufferAllocateInfo commands = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        commands.commandPool = p->command_pool;
-        commands.commandBufferCount = 1;
-        if (result == VK_SUCCESS)
-            result = vk.vkAllocateCommandBuffers(vk.handle, &commands, &frame.commands);
         if (result == VK_SUCCESS)
             result = vk.vkCreateFence(vk.handle, &signalled, nullptr, &frame.drawn);
         if (result == VK_SUCCESS)
@@ -1771,7 +1900,7 @@ extern "C" __declspec(dllexport) int vmaf_present_wait(void* opaque, unsigned ti
             if (FAILED(hr))
                 return -1;
         }
-        // The frame drawn last time this frame's command buffer was used is done.
+        // The frame drawn three frames ago, which waited on this acquire semaphore, is done.
         FrameInFlight& frame = next_frame(p);
         VkResult result = vk.vkWaitForFences(vk.handle, 1, &frame.drawn, VK_TRUE, remaining_ns());
         if (result == VK_TIMEOUT)
@@ -1815,16 +1944,30 @@ extern "C" __declspec(dllexport) int vmaf_present_wait(void* opaque, unsigned ti
 // After vmaf_present_texture, holding no lock: the frame it handed over drawn
 // into the image acquired, and presented. Vulkan's part of a frame needs no
 // Direct3D 11, so the decoders, which need the device lock for each frame, do
-// not wait for it. 0, or an error (vmaf_present_problem says why).
+// not wait for it -- nor for the swapchain to be made again in another colour
+// space, which takes some 4-5 ms. 0, or an error (vmaf_present_problem says why).
 extern "C" __declspec(dllexport) int vmaf_present_flip(void* opaque) {
     auto p = static_cast<Presenter*>(opaque);
     if (!p)
         return E_INVALIDARG;
-    if (!p->pending.slot)
+    if (!p->pending.waiting)
         return S_OK;
     const PendingDraw draw = p->pending;
-    p->pending.slot = nullptr;
-    return draw_and_present(p, *draw.slot, draw.constants, draw.viewport, draw.clear);
+    p->pending.waiting = false;
+    if (draw.colour_space != p->swapchain.colour_space) {
+        // Between frames: the image acquired goes back with the old swapchain.
+        HRESULT hr = give_back_acquired(p);
+        if (SUCCEEDED(hr))
+            hr = make_swapchain(p, draw.colour_space);
+        if (hr == S_FALSE)
+            return S_OK;  // no area to draw in for now: this frame is not shown
+        if (FAILED(hr))
+            return hr;
+        const int waited = vmaf_present_wait(p, 1000);
+        if (waited != 0)
+            return waited > 0 ? S_OK : E_FAIL;
+    }
+    return draw_and_present(p, draw);
 }
 
 // With the device lock held: the frame handed over to Vulkan, which draws and
@@ -1844,7 +1987,7 @@ extern "C" __declspec(dllexport) int vmaf_present_texture(void* opaque, ID3D11Re
     if (p->vulkan->lost)
         return DXGI_ERROR_DEVICE_REMOVED;
     // A frame handed over and never flipped is presented first.
-    if (p->pending.slot) {
+    if (p->pending.waiting) {
         const HRESULT hr = vmaf_present_flip(p);
         if (FAILED(hr))
             return hr;
@@ -1855,35 +1998,28 @@ extern "C" __declspec(dllexport) int vmaf_present_texture(void* opaque, ID3D11Re
         if (waited != 0)
             return waited > 0 ? S_OK : E_FAIL;
     }
-    // HDR10 where asked for and the display takes it, else sRGB.
-    const VkColorSpaceKHR colour_space = space == kHdr10Space && p->hdr10_offered ? VK_COLOR_SPACE_HDR10_ST2084_EXT
-                                                                                   : VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    if (colour_space != p->swapchain.colour_space) {
-        // Between frames: the image acquired goes back with the old swapchain.
-        HRESULT hr = give_back_acquired(p);
-        if (SUCCEEDED(hr))
-            hr = make_swapchain(p, colour_space);
-        if (hr == S_FALSE)
-            return S_OK;
-        if (FAILED(hr))
-            return hr;
-        const int waited = vmaf_present_wait(p, 1000);
-        if (waited != 0)
-            return waited > 0 ? S_OK : E_FAIL;
-    }
     D3D11_TEXTURE2D_DESC desc;
-    HandoverSlot* slot = nullptr;
-    const HRESULT hr = hand_over(p, frame, subresource, desc, &slot);
+    int slot = 0;
+    const HRESULT hr = hand_over(p, frame, subresource, source, desc, &slot);
     if (FAILED(hr))
         return hr;
-    float part[4] = {0, 0, float(desc.Width), float(desc.Height)};
+    PendingDraw& draw = p->pending;
+    draw.waiting = true;
+    draw.slot = slot;
+    draw.source[0] = draw.source[1] = 0;
+    draw.source[2] = float(desc.Width);
+    draw.source[3] = float(desc.Height);
     if (source)
         for (int i = 0; i < 4; i++)
-            part[i] = float(source[i]);
-    p->pending.slot = slot;
-    p->pending.constants = draw_constants(desc.Width, desc.Height, part, to_rgb, shading);
-    p->pending.viewport = placed(part, target, p->swapchain.extent);
-    std::copy(clear, clear + 4, p->pending.clear);
+            draw.source[i] = float(source[i]);
+    draw.constants = draw_constants(desc.Width, desc.Height, draw.source, to_rgb, shading);
+    draw.fitted = target == nullptr;
+    if (target)
+        std::copy(target, target + 4, draw.target);
+    std::copy(clear, clear + 4, draw.clear);
+    // HDR10 where asked for and the display takes it, else sRGB.
+    draw.colour_space = space == kHdr10Space && p->hdr10_offered ? VK_COLOR_SPACE_HDR10_ST2084_EXT
+                                                                 : VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     return S_OK;
 }
 
