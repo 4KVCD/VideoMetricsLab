@@ -179,7 +179,8 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
 def start_loading() -> None:
     """What Video Compare's first native opening loads, loaded in the
     background at the window's startup: GStreamer, its D3D11 plugin, the
-    D3D11 device, the presenter's shaders and the film grain synthesis.
+    D3D11 device, the presenter (Vulkan's device and pipelines, or the
+    Direct3D 11 presenter's shaders) and the film grain synthesis.
     Loaded by that opening instead, they held the window for 0.4 s then. The
     window's only: metric-only use (the command line, the scoring processes)
     does not pay their start or their memory."""
@@ -196,9 +197,10 @@ def _warm_up() -> None:
         if plugin is not None:
             plugin.load()
         d3d11_device()
-        from vmaf_app.core import d3d11_film_grain, d3d11_tonemap
+        from vmaf_app.core import d3d11_film_grain, d3d11_tonemap, vulkan_presenter
 
-        d3d11_tonemap.prepare_presenter()
+        if not vulkan_presenter.chosen() or vulkan_presenter.prepare() is not None:
+            d3d11_tonemap.prepare_presenter()  # the presenter used instead of Vulkan's
         d3d11_film_grain.prepare()
     except Exception:
         pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg

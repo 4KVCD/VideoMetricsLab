@@ -1,27 +1,34 @@
-"""Native playback's presentation -- the app's own, on the decoders' D3D11
-device -- and one audio-only playback pipeline."""
+"""Native playback's presentation -- the app's own, with Vulkan or, where
+that cannot start, Direct3D 11, on the GPU of the decoders' D3D11 device --
+and one audio-only playback pipeline."""
 from __future__ import annotations
 
 import ctypes
 import functools
+import logging
 import threading
 import time
 from collections import deque
 
-from vmaf_app.core.d3d11_tonemap import boxed_pointer, library_path, object_pointer
+from vmaf_app.core import d3d11_tonemap, vulkan_presenter
+from vmaf_app.core.d3d11_tonemap import boxed_pointer, object_pointer
 from vmaf_app.core.gstreamer_playback import Seeker, _load_gstreamer
+
+_LOG = logging.getLogger(__name__)
 
 #: The colour beside a frame: the views' background (VideoCompareView).
 _BACKGROUND = (0x17 / 255,) * 3 + (1.0,)
 #: DXGI colour spaces: SDR (sRGB-coded BT.709) and HDR10 (PQ in BT.2020).
 _SDR_SPACE, _HDR10_SPACE = 0, 12
+#: The presenters that could not start in this process: said once each in the log.
+_PRESENTERS_FAILED: set[str] = set()
 
 
 @functools.cache
-def _presenter_api():
-    """The native presenter's entry points (d3d11_tonemap.dll), and the ones
-    of GStreamer's D3D11 library it needs, typed."""
-    lib = ctypes.CDLL(str(library_path()))
+def _presenter_api(path: str):
+    """A native presenter's entry points, typed: vulkan_presenter.dll's or
+    d3d11_tonemap.dll's, which have the same calls."""
+    lib = ctypes.CDLL(path)
     ints, floats = ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_float)
     for name, restype, argtypes in (
         ("vmaf_present_create", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]),
@@ -33,6 +40,21 @@ def _presenter_api():
     ):
         function = getattr(lib, name)
         function.restype, function.argtypes = restype, argtypes
+    # Vulkan's only: why a call failed; the swapchain made ahead of the first
+    # frame; and a frame drawn and presented once the device lock is let go.
+    problem = getattr(lib, "vmaf_present_problem", None)
+    if problem is not None:
+        problem.restype, problem.argtypes = ctypes.c_char_p, []
+    for name in ("vmaf_present_start", "vmaf_present_flip"):
+        function = getattr(lib, name, None)
+        if function is not None:
+            function.restype, function.argtypes = ctypes.c_int, [ctypes.c_void_p]
+    return lib
+
+
+@functools.cache
+def _gstreamer_d3d11_api():
+    """The entry points of GStreamer's D3D11 library the presenters need, typed."""
     gst = ctypes.CDLL("gstd3d11-1.0-0.dll")
     for name, restype in (("gst_is_d3d11_memory", ctypes.c_int),
                           ("gst_d3d11_memory_get_resource_handle", ctypes.c_void_p),
@@ -40,7 +62,20 @@ def _presenter_api():
                           ("gst_d3d11_device_get_device_handle", ctypes.c_void_p)):
         function = getattr(gst, name)
         function.restype, function.argtypes = restype, [ctypes.c_void_p]
-    return lib, gst
+    return gst
+
+
+def _presenters():
+    """The native presenters to try, in order, by name: Vulkan's where it is
+    chosen (vulkan_presenter.chosen), then Direct3D 11's."""
+    vulkan = [("Vulkan", vulkan_presenter.library_path())] if vulkan_presenter.chosen() else []
+    return [*vulkan, ("Direct3D 11", d3d11_tonemap.library_path())]
+
+
+def _problem(lib) -> str:
+    """Why a presenter's last call failed, if it says (Vulkan's does)."""
+    problem = getattr(lib, "vmaf_present_problem", None)
+    return (problem() or b"").decode("utf-8", "replace") if problem is not None else ""
 
 
 @functools.cache
@@ -85,27 +120,44 @@ def yuv_to_rgb(matrix: str, full_range: bool, ten_bit: bool) -> tuple[float, ...
 
 class LockedPresentation:
     """Native playback's frames, drawn and presented by the app's own
-    presenter (d3d11_tonemap.dll's vmaf_present_*): a waitable flip-model
-    swapchain in a window of its own over `window`, on the decoders' D3D11
-    device. A thread waits until the swapchain takes a frame, holding no
-    lock, then draws the one due and presents it holding the device's: the
-    present has nothing to wait for. GStreamer's d3d11videosink, which this
-    replaced, waited for the display's refresh holding that lock whenever it
-    presented at the display's own rate, and the decoders, which need it for
-    each frame, stalled up to 40 ms: 120 fps video showed some 100 frames a
-    second, and its sound stopped now and then to wait for them."""
+    presenter (vmaf_present_*): Vulkan's (vulkan_presenter.dll), or
+    Direct3D 11's (d3d11_tonemap.dll) where Vulkan's cannot start. Either
+    draws into a swapchain in a window of its own over `window`, on the GPU
+    of the decoders' D3D11 device, and takes a frame at each refresh. A
+    thread waits until the swapchain takes a frame, holding no lock, then
+    draws the one due holding the device's -- Vulkan's presenter only hands
+    it over then, and draws and presents it once the lock is let go -- and
+    the present has nothing to wait for. GStreamer's d3d11videosink, which
+    this replaced, waited for the display's refresh holding that lock
+    whenever it presented at the display's own rate, and the decoders, which
+    need it for each frame, stalled up to 40 ms: 120 fps video showed some
+    100 frames a second, and its sound stopped now and then to wait for
+    them."""
 
     def __init__(self, window, device, settings):
         self._video = _load_gstreamer()[1]
         self.window, self.device = window, device
-        self._lib, self._gst = _presenter_api()
+        self._gst = _gstreamer_d3d11_api()
         self._crop_meta = _crop_meta_api()
         handle = self._gst.gst_d3d11_device_get_device_handle(object_pointer(device))
-        device.lock()
-        try:
-            self._presenter = self._lib.vmaf_present_create(handle, window, int(settings.display_hdr_enabled is True))
-        finally:
-            device.unlock()
+        hdr_display = int(settings.display_hdr_enabled is True)
+        #: The presenter's library, its native handle, and its name ("Vulkan"
+        #: or "Direct3D 11", for the status line).
+        self._lib = self._presenter = self.name = None
+        for name, path in _presenters():
+            lib = _presenter_api(str(path))
+            device.lock()
+            try:
+                presenter = lib.vmaf_present_create(handle, window, hdr_display)
+            finally:
+                device.unlock()
+            if presenter:
+                self._lib, self._presenter, self.name = lib, presenter, name
+                break
+            if name not in _PRESENTERS_FAILED:
+                _PRESENTERS_FAILED.add(name)
+                _LOG.warning("The %s video presenter could not start (%s); the next one is used",
+                             name, _problem(lib) or "no reason given")
         if not self._presenter:
             raise RuntimeError("Could not set up the native video presentation")
         # The frames to draw, one each time the swapchain takes one, in order:
@@ -139,11 +191,21 @@ class LockedPresentation:
         refresh -- in order: chosen 4 ms apart at times, two within one
         refresh would otherwise lose one. A frame it cannot draw ends it,
         the error left for poll(): the picture would stop with no word."""
+        # Vulkan's swapchain, made while the decoders start: the first one
+        # took some 85 ms, which the first frame waited for.
+        start = getattr(self._lib, "vmaf_present_start", None)
+        if start is not None and start(self._presenter) < 0:
+            self._error = f"Native presentation failed: {_problem(self._lib) or 'no swapchain'}"
+            return
         while True:
             self._due_ready.wait()
             if self._stopping:
                 return
-            if self._lib.vmaf_present_wait(self._presenter, 100) != 0:
+            waited = self._lib.vmaf_present_wait(self._presenter, 100)
+            if waited < 0:
+                self._error = f"Native presentation failed: {_problem(self._lib) or 'the swapchain failed'}"
+                return
+            if waited:
                 continue  # not taken yet (a hidden window): asked again
             with self._due_lock:
                 sample, view, shading = self._due.popleft()
@@ -199,8 +261,14 @@ class LockedPresentation:
                                                     shade, space, self._clear)
         finally:
             self.device.unlock()
+        # Vulkan draws and presents the frame handed over without the lock,
+        # which the decoders need for each frame.
+        flip = getattr(self._lib, "vmaf_present_flip", None)
+        if result >= 0 and flip is not None:
+            result = flip(self._presenter)
         if result < 0:
-            self._error = f"Native presentation failed: 0x{result & 0xffffffff:08x}"
+            reason = _problem(self._lib)
+            self._error = f"Native presentation failed: 0x{result & 0xffffffff:08x}" + (f" ({reason})" if reason else "")
 
     def _colours_of(self, caps):
         """(YUV-to-RGB rows or None, DXGI colour space, (width, height)) for

@@ -345,7 +345,9 @@ class LockedNativePool:
         audio = "source soundtrack" if not self.audio.failed else "audio unavailable"
         details = [self.status_details.get(key, "") for key in
                    (self.source_key, ("distorted", self.selected))]
-        return f"{state} · {audio} · " + " · ".join(filter(None, details))
+        # The presenter drawing the frames: Vulkan, or Direct3D 11.
+        presenter = getattr(self.output, "name", None)
+        return f"{state} · {audio} · " + " · ".join(filter(None, [presenter, *details]))
 
     def resize(self):
         self.surface.setGeometry(self.view.rect())

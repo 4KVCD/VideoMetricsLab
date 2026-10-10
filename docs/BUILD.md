@@ -45,7 +45,20 @@ case anyone overrides that.
   QtMultimedia's FFmpeg, the QML stack, PDF, networking and 96 translations.
   `scripts/qt_bundle.py` decides; the self-test reports the platform plugin,
   style and image formats that actually loaded.
-- **`d3d11_tonemap.dll`**, the GPU HDR→SDR shader, built from
+- **`vulkan_presenter.dll`**, Video Compare's presenter: it draws the
+  frames -- NV12 or P010 into RGB, HDR mapped to SDR or kept for an HDR
+  display -- and presents them with Vulkan. GStreamer decodes into Direct3D
+  11 textures, which Vulkan cannot read as they are, so each frame's planes
+  are copied by a Direct3D 11 compute shader into textures shared with
+  Vulkan. Built from `native/vulkan_presenter.cpp` by
+  `scripts/build_vulkan_presenter.ps1`; its shaders
+  (`native/vulkan_presenter.slang`) are compiled into the committed
+  `native/vulkan_presenter_spv.h` by `scripts/build_vulkan_presenter_shader.py`
+  and Slang, run only after a change to them. The Vulkan headers' notice is
+  shipped in `licenses`.
+- **`d3d11_tonemap.dll`**, the Direct3D 11 presenter, with the same shading:
+  Video Compare's presenter where Vulkan's cannot start, or when
+  `VIDEOMETRICSLAB_PRESENTER=d3d11` is set. Built from
   `native/d3d11_tonemap.cpp` as part of the build.
 - **`d3d11_film_grain.dll`**, Video Compare's film grain for VVC videos:
   GStreamer's VVC decoder applies none, so this draws each frame's H.274

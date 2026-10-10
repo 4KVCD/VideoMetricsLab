@@ -61,6 +61,17 @@ else:
     print("WARNING: d3d11_film_grain.dll is missing; Video Compare will play VVC "
           "without its film grain. Run scripts/build_d3d11_film_grain.ps1 first.")
 
+# Video Compare's Vulkan presenter (vmaf_app.core.vulkan_presenter finds it
+# beside the Direct3D 11 one, which it falls back to), with the notice of the
+# Vulkan headers compiled into it.
+VULKAN_PRESENTER_DLL = PROJECT / "vmaf_app" / "native" / "vulkan_presenter.dll"
+if VULKAN_PRESENTER_DLL.is_file():
+    datas.append((str(VULKAN_PRESENTER_DLL), "vmaf_app/native"))
+    datas.append((str(PROJECT / "native" / "vulkan" / "LICENSE.vulkan-headers.txt"), "vmaf_app/native/licenses"))
+else:
+    print("WARNING: vulkan_presenter.dll is missing; Video Compare will draw with "
+          "Direct3D 11. Run scripts/build_vulkan_presenter.ps1 first.")
+
 # The decoders the GPU metrics read their frames from -- NVIDIA's, Intel's
 # and AMD's, and the software decoder for what FFmpeg decodes in software
 # (scripts/build_gpu_frames.ps1) -- with the notices of the headers compiled

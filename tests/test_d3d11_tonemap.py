@@ -1,10 +1,12 @@
 import ctypes
+import logging
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from vmaf_app.core import d3d11_tonemap, gstreamer_playback, locked_presentation
+from vmaf_app.core import d3d11_tonemap, gstreamer_playback, locked_presentation, vulkan_presenter
 from vmaf_app.core.frame_extract import FrameComparison, PreviewColorSettings
 from vmaf_app.core.models import VideoInfo
 
@@ -38,7 +40,55 @@ def _sample(count=1):
     return SimpleNamespace(get_buffer=lambda: buffer, get_caps=lambda: None)
 
 
-def test_draw_failures_unlock_the_device_and_cpu_memory_is_refused(monkeypatch, subtests):
+def test_native_presentation_draws_and_fails_safely(monkeypatch, caplog, subtests):
+    with subtests.test("Vulkan's presenter is tried first, and Direct3D 11's where it cannot start"):
+        tried = []
+
+        def library(name, made):
+            return SimpleNamespace(
+                vmaf_present_create=lambda handle, window, hdr: tried.append(name) or made,
+                vmaf_present_problem=lambda: b"no Vulkan here",
+                vmaf_present_destroy=lambda presenter: tried.append(f"{name} destroyed"))
+        libraries = {"vulkan.dll": library("Vulkan", 0), "d3d11.dll": library("Direct3D 11", 5)}
+        with monkeypatch.context() as patch:
+            patch.setattr(locked_presentation, "_presenters",
+                          lambda: [("Vulkan", Path("vulkan.dll")), ("Direct3D 11", Path("d3d11.dll"))])
+            patch.setattr(locked_presentation, "_presenter_api", lambda path: libraries[Path(path).name])
+            patch.setattr(locked_presentation, "_gstreamer_d3d11_api",
+                          lambda: SimpleNamespace(gst_d3d11_device_get_device_handle=lambda pointer: 1))
+            patch.setattr(locked_presentation, "_crop_meta_api", lambda: (None, 0))
+            patch.setattr(locked_presentation, "_load_gstreamer", lambda: (None, None))
+            patch.setattr(locked_presentation, "object_pointer", lambda device: 2)
+            patch.setattr(locked_presentation, "_PRESENTERS_FAILED", set())
+            device = SimpleNamespace(lock=lambda: None, unlock=lambda: None)
+            with caplog.at_level(logging.WARNING, logger=locked_presentation.__name__):
+                presentation = locked_presentation.LockedPresentation(3, device, SimpleNamespace(display_hdr_enabled=False))
+            try:
+                assert tried == ["Vulkan", "Direct3D 11"] and presentation.name == "Direct3D 11"
+                assert "The Vulkan video presenter could not start (no Vulkan here)" in caplog.text
+            finally:
+                presentation.stop()
+            assert tried[-1] == "Direct3D 11 destroyed"
+    with subtests.test("VIDEOMETRICSLAB_PRESENTER=d3d11 sets Vulkan's presenter aside"), monkeypatch.context() as patch:
+        patch.setattr(vulkan_presenter, "available", lambda: True)
+        patch.setenv("VIDEOMETRICSLAB_PRESENTER", "d3d11")
+        assert [name for name, _path in locked_presentation._presenters()] == ["Direct3D 11"]
+        patch.delenv("VIDEOMETRICSLAB_PRESENTER")
+        assert [name for name, _path in locked_presentation._presenters()] == ["Vulkan", "Direct3D 11"]
+    with subtests.test("Vulkan's frame is handed over holding the device lock, and presented after it"):
+        presentation, calls = _presentation(monkeypatch)
+        presentation._lib.vmaf_present_flip = lambda presenter: calls.append("flip") or 0
+        presentation._draw(_sample(), None, None)
+        assert calls == ["lock", ("draw", None, locked_presentation._SDR_SPACE), "unlock", "flip"]
+    with subtests.test("a presenter whose wait fails stops presenting, and says why"):
+        presentation, _calls = _presentation(monkeypatch)
+        presentation._lib.vmaf_present_wait = lambda presenter, timeout: -1
+        presentation._lib.vmaf_present_problem = lambda: b"the device was lost"
+        presentation._stopping = False
+        presentation._due_ready = threading.Event()
+        presentation._due_ready.set()
+        presentation._present_paced()  # returns, rather than asking again and again
+        assert "the device was lost" in presentation._error
     with subtests.test("a native failure unlocks the device, and is reported"):
         presentation, calls = _presentation(monkeypatch, -1)
         presentation._draw(_sample(), None, None)

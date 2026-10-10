@@ -1,7 +1,9 @@
-"""Native playback's presenter (d3d11_tonemap.dll): the facts its shader
-works from. It shows each frame in the display's colours as it draws it --
-HDR video mapped to SDR, or converted to PQ in BT.2020 for an HDR display
-(shading()). This module does not map, copy or allocate CPU pixel buffers.
+"""Native playback's Direct3D 11 presenter (d3d11_tonemap.dll), used where
+the Vulkan presenter (vulkan_presenter) cannot start, and the facts both
+presenters' shaders work from. They show each frame in the display's colours
+as they draw it -- HDR video mapped to SDR, or converted to PQ in BT.2020
+for an HDR display (shading()). This module does not map, copy or allocate
+CPU pixel buffers.
 """
 from __future__ import annotations
 

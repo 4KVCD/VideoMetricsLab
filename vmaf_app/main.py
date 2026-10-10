@@ -111,6 +111,14 @@ def self_test() -> SelfTestReport:
     else:
         report.warn("Native playback's presenter absent or out of date; videos play through FFmpeg")
 
+    from vmaf_app.core import vulkan_presenter
+
+    problem = vulkan_presenter.check()
+    if problem is None:
+        report.ok(f"Video Compare draws with Vulkan ({vulkan_presenter.library_path().name})")
+    else:
+        report.warn(f"Video Compare draws with Direct3D 11: the Vulkan presenter is unavailable ({problem})")
+
     from vmaf_app.core import d3d11_film_grain
 
     problem = d3d11_film_grain.check()
