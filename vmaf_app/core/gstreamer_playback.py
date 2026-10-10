@@ -1,9 +1,11 @@
-"""GStreamer/D3D11 playback for synchronized source/distorted comparison.
+"""Plays the source and the test video in step for Video Compare, with
+GStreamer and Direct3D 11.
 
-The UI deliberately never receives decoded pixels.  GStreamer owns demuxing,
-decoding and the soundtrack's clock, and the app's own presenter
-(locked_presentation) shows the frames: D3D11 textures remain on the GPU from a
-hardware decoder through crop/scale and into its swapchain.
+The window never receives decoded pixels. GStreamer reads and decodes the
+files and runs the soundtrack's clock, and the app's own presenter
+(locked_presentation) shows the frames. The frames stay on the GPU as D3D11
+textures, from a hardware decoder through cropping and scaling into the
+presenter's swap chain.
 """
 from __future__ import annotations
 
@@ -35,12 +37,13 @@ class GStreamerPlaybackError(RuntimeError):
 
 
 class Seeker:
-    """A pipeline's flushing seeks, made on a thread of its own, the latest
-    only. A flushing seek waits for the pipeline's streaming threads: made
-    on the window's thread, it held the window as long as one of them was
-    held up (a seek into a file on a USB hard disk froze it 16 s once).
-    `refused`, given with each seek, is called on that thread if the
-    pipeline refuses it; `done`, if given, once it has been made."""
+    """Makes a pipeline's flushing seeks on a thread of its own, only the
+    latest one asked for. A flushing seek waits for the pipeline's streaming
+    threads, so on the window's thread it would hold the window as long as
+    one of them is held up (a seek into a file on a USB hard disk once froze
+    it for 16 s). The `refused` callback given with each seek is called on
+    that thread if the pipeline refuses the seek, and `done`, if given, once
+    the seek has been made."""
 
     def __init__(self, name: str) -> None:
         self._name = name
@@ -50,6 +53,7 @@ class Seeker:
         self._thread: threading.Thread | None = None
 
     def seek(self, pipeline, gst, time_ns: int, refused, done=None) -> None:
+        """Asks for a seek to `time_ns`, replacing any seek not yet made."""
         with self._condition:
             if self._closed:
                 return
@@ -60,14 +64,15 @@ class Seeker:
             self._condition.notify()
 
     def close(self) -> None:
-        """No more seeks; one under way finishes (stopping the pipeline
-        ends it)."""
+        """Stops taking seeks. A seek under way finishes (stopping the
+        pipeline ends it)."""
         with self._condition:
             self._closed = True
             self._wanted = None
             self._condition.notify()
 
     def _run(self) -> None:
+        """The seek thread: makes the latest seek asked for, until closed."""
         while True:
             with self._condition:
                 while self._wanted is None and not self._closed:
@@ -85,6 +90,9 @@ class Seeker:
 
 @dataclass(frozen=True, slots=True)
 class PlaybackUpdate:
+    """A change in playback for the window: a status message, an error, or
+    the end of the videos."""
+
     status: str | None = None
     error: str | None = None
     ended: bool = False
@@ -109,13 +117,14 @@ _PIPELINE_ELEMENTS = (
 #: ProRes), and the soundtrack path. The self-test and the packaging check
 #: (scripts/verify_gstreamer_bundle.py) both test against this list, so a
 #: bundle that dropped a plugin fails loudly instead of quietly falling back
-#: to FFmpeg for one kind of file. GPU decoders are deliberately absent:
-#: which of d3d11h264dec, d3d11h265dec, d3d11av1dec and d3d11vp9dec exist
-#: depends on the GPU the registry was scanned on, not on the installation.
+#: to FFmpeg for one kind of file. GPU decoders are left out on purpose,
+#: because which of d3d11h264dec, d3d11h265dec, d3d11av1dec and d3d11vp9dec
+#: exist depends on the GPU the registry was scanned on, not on the
+#: installation.
 REQUIRED_ELEMENTS = (
     *_PIPELINE_ELEMENTS,
     "queue", "capsfilter", "appsink",
-    "playbin3", "uridecodebin3",  # the soundtrack: playbin3 is built on uridecodebin3
+    "playbin3", "uridecodebin3",  # for the soundtrack (playbin3 is built on uridecodebin3)
     "h264parse", "h265parse", "h266parse", "av1parse", "vp9parse", "mpegvideoparse",
     "matroskademux", "qtdemux", "tsdemux", "avidemux",
     "avdec_h264", "avdec_h265", "avdec_h266", "avdec_prores", "dav1ddec",
@@ -129,10 +138,11 @@ REQUIRED_ELEMENTS = (
 GPU_DECODERS = ("d3d11h264dec", "d3d11h265dec", "d3d11av1dec", "d3d11vp9dec", "d3d11mpeg2dec")
 
 
-#: Variables the GStreamer wheels' setup (gstreamer_libs.setup_python_
-#: environment, run by gstreamer_bundle.pth and the packaged app's runtime
-#: hook) sets by putting its value in front of what is there already: each
-#: names one file, and the others are path lists.
+#: The variables that the GStreamer wheels' setup sets by putting its value
+#: in front of what is there already. The setup is
+#: gstreamer_libs.setup_python_environment, run by gstreamer_bundle.pth and
+#: by the packaged app's runtime hook. Each of these two variables names one
+#: file; the variables in _PATH_LIST_VARIABLES are lists of paths.
 _SINGLE_PATH_VARIABLES = ("GST_REGISTRY_1_0", "GST_PLUGIN_SCANNER_1_0")
 _PATH_LIST_VARIABLES = ("PATH", "PYGI_DLL_DIRS", "GST_PLUGIN_PATH_1_0", "GST_PLUGIN_SYSTEM_PATH_1_0",
                         "GST_PYTHONPATH_1_0", "GI_TYPELIB_PATH", "GIO_EXTRA_MODULES", "XDG_DATA_DIRS",
@@ -140,18 +150,22 @@ _PATH_LIST_VARIABLES = ("PATH", "PYGI_DLL_DIRS", "GST_PLUGIN_PATH_1_0", "GST_PLU
 
 
 def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None) -> list[str]:
-    """Undoes GStreamer's setup having run twice. A process started by a
-    Python process that ran it inherits its variables and runs it again:
-    every path is then there twice, and the two variables that name a file
-    -- the plugin registry and the plugin scanner -- name none ("a;a").
-    GStreamer then found no registry and no scanner, loaded every plugin
-    into the process to scan it, and crashed doing so in about one start in
-    five (heap corruption, 0xc0000374): measured in fresh processes, 0 of 25
-    once repaired. That is any process started from Python -- the test
-    suite's workers, the app run from an editor's launcher.
+    """Undoes the effect of GStreamer's setup running twice, and returns the
+    names of the variables it changed.
 
-    Keeps a file variable's first path and a list's first occurrence of
-    each path. Returns the names of the variables it changed."""
+    A process started by a Python process that ran the setup inherits its
+    variables and runs it again. Every path is then there twice, and the two
+    variables that name a file (the plugin registry and the plugin scanner)
+    name no file at all ("a;a"). GStreamer then finds no registry and no
+    scanner, loads every plugin into the process to scan it, and crashed
+    doing so in about one start in five (heap corruption, 0xc0000374), but
+    in none of 25 fresh processes once repaired. This affects any process
+    started from Python, such as the test suite's workers, or the app run
+    from an editor.
+
+    It keeps a file variable's first path, and the first occurrence of each
+    path in a list.
+    """
     environ = os.environ if environ is None else environ
     changed = []
     for name in (*_SINGLE_PATH_VARIABLES, *_PATH_LIST_VARIABLES):
@@ -177,19 +191,20 @@ def repair_gstreamer_environment(environ: MutableMapping[str, str] | None = None
 
 
 def start_loading() -> None:
-    """What Video Compare's first native opening loads, loaded in the
-    background at the window's startup: GStreamer, its D3D11 plugin, the
-    D3D11 device, the film grain synthesis, and the Direct3D 11 presenter's
-    shaders (the Vulkan presenter, when asked for, is made ready once there
-    are videos: start_loading_presenter). Loaded by that opening instead,
-    they held the window for 0.4 s then. The window's only: metric-only use
-    (the command line, the scoring processes) does not pay their start or
-    their memory."""
+    """Loads in the background, at the window's start, what Video Compare
+    needs the first time it opens videos natively: GStreamer, its D3D11
+    plugin, the D3D11 device, the film grain synthesis, and the Direct3D 11
+    presenter's shaders. Loading them at that first opening would hold the
+    window for 0.4 s. (The Vulkan presenter, when it is chosen, is made
+    ready later, once there are videos: see start_loading_presenter.) Only
+    the window calls this, so uses without Video Compare (the command line,
+    the scoring processes) do not pay for the time or the memory."""
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen":
         threading.Thread(target=_warm_up, name="gstreamer-load", daemon=True).start()
 
 
 def _warm_up() -> None:
+    """start_loading's thread."""
     if not gstreamer_available()[0]:
         return
     try:
@@ -204,20 +219,20 @@ def _warm_up() -> None:
             d3d11_tonemap.prepare_presenter()
         d3d11_film_grain.prepare()
     except Exception:
-        pass  # only a head start: Video Compare meets the same error itself, and plays with FFmpeg
+        pass  # only a head start: Video Compare meets the same error itself, and then plays with FFmpeg
 
 
 _PRESENTER_LOADING_STARTED = False
 
 
 def start_loading_presenter() -> None:
-    """The Vulkan presenter, when it is asked for (vulkan_presenter.chosen),
-    made ready in the background -- its device and pipelines -- once a
-    process, as Video Compare first may have something to play: the window
-    calls this as its Videos table gains a row. Made at the window's start
-    (start_loading), its 130 ms and 25 MB of memory were spent whether Video
-    Compare was used or not; left to the first native opening, it would hold
-    the window for those 130 ms."""
+    """Makes the Vulkan presenter ready in the background (its device and
+    pipelines), when it is chosen (vulkan_presenter.chosen). This happens
+    once per process, when Video Compare may first have something to play:
+    the window calls this as its Videos table gains a row. Made at the
+    window's start, it would cost 130 ms and 25 MB of memory whether Video
+    Compare is used or not, and left to the first native opening, it would
+    hold the window for those 130 ms."""
     global _PRESENTER_LOADING_STARTED
     from vmaf_app.core import vulkan_presenter
 
@@ -229,28 +244,30 @@ def start_loading_presenter() -> None:
 
 
 def _prepare_presenter() -> None:
+    """start_loading_presenter's thread."""
     if not gstreamer_available()[0]:
         return  # no native playback, so no presenter
     try:
         from vmaf_app.core import d3d11_tonemap, vulkan_presenter
 
         if vulkan_presenter.prepare() is not None:
-            d3d11_tonemap.prepare_presenter()  # the presenter used instead of Vulkan's
+            # Vulkan cannot present here, so the Direct3D 11 presenter is used.
+            d3d11_tonemap.prepare_presenter()
     except Exception:
-        pass  # only a head start, as _warm_up's
+        pass  # only a head start, as in _warm_up
 
 
 def d3d11_device() -> Any:
-    """The D3D11 device native playback draws on: one for the session,
-    shared by each comparison's pipelines, and made again only once lost (a
-    GPU reset). Each comparison made its own before: a process's first took
-    about 0.14 s, the driver loading, and so did one made while no other was
-    left."""
+    """Returns the D3D11 device that native playback draws on. There is one
+    for the session, shared by every comparison's pipelines, and made again
+    only once lost (after a GPU reset). Don't make one per comparison:
+    making a device takes about 0.14 s while the driver loads, for a
+    process's first device and for one made while no other is left."""
     global _D3D11_DEVICE
     with _D3D11_LOCK:
         device = _D3D11_DEVICE
         if device is None or device.get_property("device-removed-reason"):
-            _load_gstreamer()  # first: it repairs the environment gi reads
+            _load_gstreamer()  # first, because it repairs the environment that gi reads
             import gi
 
             gi.require_version("GstD3D11", "1.0")
@@ -264,13 +281,15 @@ def d3d11_device() -> Any:
 
 
 def _load_gstreamer() -> tuple[Any, Any]:
-    """Import lazily so metric-only use does not pay GStreamer's start cost.
-    Once: start_loading's thread and the window's first use may meet."""
+    """Imports GStreamer when it is first needed, so that uses without Video
+    Compare do not pay for its start. The lock makes this happen once,
+    because start_loading's thread and the window's first use may meet."""
     with _GST_LOCK:
         return _load_gstreamer_once()
 
 
 def _load_gstreamer_once() -> tuple[Any, Any]:
+    """_load_gstreamer's work, done under its lock."""
     global _GST, _GST_ERROR
     if _GST is not None:
         return _GST
@@ -286,9 +305,10 @@ def _load_gstreamer_once() -> tuple[Any, Any]:
         from gi.repository import Gst, GstVideo
 
         Gst.init(None)
-        # Keep hardware decode in the same graphics API as processing/output.
-        # D3D12 currently outranks D3D11 by default and can introduce a bridge
-        # (or download/upload) before this application's D3D11 renderer.
+        # Keep hardware decoding in the same graphics API as the processing
+        # and the output. D3D12's decoders outrank D3D11's by default, and
+        # would put a bridge (or a download and upload) before the app's
+        # D3D11 presenter.
         for name in ("d3d11h264dec", "d3d11h265dec", "d3d11av1dec", "d3d11vp9dec"):
             factory = Gst.ElementFactory.find(name)
             if factory is not None:
@@ -304,10 +324,10 @@ def _load_gstreamer_once() -> tuple[Any, Any]:
 
 
 def gstreamer_available() -> tuple[bool, str]:
-    """Whether the D3D11 pipeline can be built in this process."""
-    # Offscreen Qt tests have no real HWND for the presenter.  Keeping this
-    # explicit also prevents native graphics drivers from being initialized by
-    # otherwise headless unit tests.
+    """Returns whether the D3D11 pipeline can be built in this process, and
+    why not."""
+    # Offscreen Qt tests have no real window for the presenter. Saying so
+    # here also keeps headless tests from starting the graphics drivers.
     if os.environ.get("QT_QPA_PLATFORM", "").casefold() == "offscreen":
         return False, "native video output is disabled by the offscreen Qt platform"
     try:
@@ -320,7 +340,10 @@ def gstreamer_available() -> tuple[bool, str]:
 def uses_native_gstreamer(
     comparison: FrameComparison, settings: PreviewColorSettings
 ) -> tuple[bool, str]:
-    """Require the explicit GPU shader for HDR content on an SDR output."""
+    """Returns whether this comparison plays through GStreamer (native
+    playback), and if not, why: FFmpeg then plays it. HDR video needs the
+    presenter's shader, so it plays natively only where the shader supports
+    its colours."""
     available, reason = gstreamer_available()
     if not available:
         return False, reason
@@ -350,11 +373,15 @@ def uses_native_gstreamer(
 
 
 def _shading(info: VideoInfo, settings: PreviewColorSettings) -> str | None:
-    """What the D3D11 shader does to one video's frames: "sdr", HDR mapped
-    to SDR BT.709; "hdr", HDR kept for an HDR display and converted to the
-    PQ in BT.2020 it takes -- passed through as they came, Display P3 colours
-    were shown as BT.2020, oversaturated, and HLG has no swapchain colour
-    space of its own; None, nothing."""
+    """Returns what the D3D11 shader does to one video's frames:
+
+    - "sdr": HDR is mapped to SDR BT.709.
+    - "hdr": HDR is kept for an HDR display, and converted to the PQ in
+      BT.2020 that the display takes. Passed through as they come, Display
+      P3 colours would be shown as BT.2020, oversaturated, and HLG has no
+      swap chain colour space of its own.
+    - None: nothing.
+    """
     if hdr_kind(info) is None:
         return None
     if needs_sdr_tonemap(settings):
@@ -373,12 +400,13 @@ _GST_MATRICES = {"bt709": 3, "bt470bg": 4, "smpte170m": 4, "smpte240m": 5, "bt20
 
 
 def _hdr_colorimetry(info: VideoInfo) -> str:
-    """An HDR video's own colorimetry, as GStreamer writes it (range, YUV
-    matrix, transfer, primaries): stated in the caps a converter is to give,
-    it converts none of the colours, which the presenter's shader takes as
-    they come. In GStreamer's own words -- "bt2100-pq", not "2:6:14:7":
-    caps compare them as text, and an element that writes the name, as
-    d3d11compositor did, has the caps it gives refused."""
+    """Returns an HDR video's own colorimetry as GStreamer writes it (range,
+    YUV matrix, transfer, primaries). Stated in the caps a converter is to
+    give, it makes the converter leave the colours alone, for the
+    presenter's shader to take as they come. It is in GStreamer's own words
+    ("bt2100-pq", not "2:6:14:7"), because caps compare it as text, and an
+    element that writes the name (as d3d11compositor did) would have the
+    caps it gives refused."""
     from vmaf_app.core.d3d11_tonemap import hdr_primaries
 
     full = info.color_range.casefold() in {"pc", "full", "jpeg"}
@@ -391,11 +419,12 @@ def _hdr_colorimetry(info: VideoInfo) -> str:
 
 @functools.cache
 def _crop_meta_answer():
-    """GStreamer's functions to answer an allocation query through ctypes,
-    and the GTypes of the APIs of GstVideoCropMeta and GstVideoMeta, which
-    videocrop asks for both; None if a query's type is not where GstQuery
-    has it. Through PyGObject the query cannot be answered: its wrapper
-    holds a reference, and a query held twice is not writable."""
+    """Returns GStreamer's functions for answering an allocation query
+    through ctypes, and the GTypes of GstVideoCropMeta's and GstVideoMeta's
+    APIs, both of which videocrop asks for. Returns None if a query's type
+    is not where this expects it in GstQuery. The query cannot be answered
+    through PyGObject, because its wrapper holds a reference, and a query
+    held twice is not writable."""
     core = ctypes.CDLL("gstreamer-1.0-0.dll")
     for name, restype, argtypes in (
         ("gst_pad_probe_info_get_query", ctypes.c_void_p, [ctypes.c_void_p]),
@@ -424,8 +453,9 @@ def _crop_meta_answer():
 
 
 def _accept_crop_meta(_pad, info):
-    """Pad probe on an appsink: its allocation queries answered as taking a
-    GstVideoCropMeta (GstComparePipeline). Holds nothing of the pipeline."""
+    """A pad probe on an appsink that answers its allocation queries as
+    taking a GstVideoCropMeta (see GstComparePipeline). It holds no
+    reference to the pipeline."""
     from vmaf_app.core.d3d11_tonemap import boxed_pointer
 
     answer = _crop_meta_answer()
@@ -440,6 +470,8 @@ def _accept_crop_meta(_pad, info):
 
 
 def needs_sdr_tonemap(settings: PreviewColorSettings) -> bool:
+    """Whether HDR video is mapped to SDR: when the user chose HDR to SDR, or
+    when the display is not known to be in HDR mode."""
     return settings.mode == PreviewColorMode.HDR_TO_SDR or (
         settings.mode == PreviewColorMode.DISPLAY_AWARE
         and settings.display_hdr_enabled is not True
@@ -447,6 +479,8 @@ def needs_sdr_tonemap(settings: PreviewColorSettings) -> bool:
 
 
 def _crop_edges(info: VideoInfo, crop: CropBox | None) -> tuple[int, int, int, int]:
+    """The black-bar crop as the pixels to cut from each edge: (left, top,
+    right, bottom)."""
     if crop is None:
         return 0, 0, 0, 0
     return (
@@ -458,14 +492,17 @@ def _crop_edges(info: VideoInfo, crop: CropBox | None) -> tuple[int, int, int, i
 
 
 def _output_format(info: VideoInfo) -> str:
-    """NV12, or P010 for deeper video -- 12-bit as 10: what the presenter
-    reads (locked_presentation). Given as P012, 12-bit frames came in two
-    textures, which it cannot draw, and played through FFmpeg."""
+    """Returns the pixel format the presenter reads (locked_presentation):
+    NV12, or P010 for video deeper than 8 bits, 12-bit video included. Don't
+    give 12-bit video as P012: its frames would come in two textures, which
+    the presenter cannot draw, so it would play through FFmpeg."""
     fmt = analysis_pix_fmt(info.pix_fmt, info.pix_fmt)
     return "P010_10LE" if "10" in fmt or "12" in fmt else "NV12"
 
 
 def _native_colorimetry(info: VideoInfo) -> str | None:
+    """The colorimetry that keeps an HDR or BT.2020 video's colour signal in
+    the output caps for an HDR display, or None for other video."""
     kind = hdr_kind(info)
     if kind == "HDR10 / PQ":
         return "bt2100-pq"
@@ -479,7 +516,8 @@ def _native_colorimetry(info: VideoInfo) -> str | None:
 def output_caps_string(
     comparison: FrameComparison, settings: PreviewColorSettings, side: str
 ) -> str:
-    """GPU surface caps for one side, preserving that input's colour signal."""
+    """Returns the output caps for one side's frames on the GPU, keeping that
+    video's colour signal."""
     width, height = comparison_dimensions(comparison)
     info = frame_video_info(comparison, side)
     fields = [
@@ -556,6 +594,8 @@ class _FilmGrain:
         return self._gst.PadProbeReturn.OK
 
     def _read_parser_output(self, pad, info) -> None:
+        """Reads one access unit's grain messages and tags its buffer with
+        the access unit's number, or resets the tracker at a seek's flush."""
         gst = self._gst
         if info.type & gst.PadProbeType.EVENT_FLUSH:
             if info.get_event().type == gst.EventType.FLUSH_STOP:
@@ -593,6 +633,7 @@ class _FilmGrain:
         return self._gst.PadProbeReturn.OK
 
     def _draw_grain(self, pad, info) -> None:
+        """Draws the grain of the frame in this buffer, if it has any."""
         from vmaf_app.core.d3d11_film_grain import native_params
         from vmaf_app.core.d3d11_tonemap import boxed_pointer
 
@@ -617,6 +658,8 @@ class _FilmGrain:
         logging.getLogger(__name__).warning("Film grain could not be drawn, and is left off: %s", reason)
 
     def _frame_layout(self, caps) -> tuple:
+        """The frames' layout for these caps, worked out once per caps:
+        (caps, bit depth, plane sizes, chroma subsampling)."""
         if self._layout is None or self._layout[0] != caps.to_string():
             from vmaf_app.core.d3d11_film_grain import plane_sizes
 
@@ -654,13 +697,9 @@ def _start_film_grain(gst, gst_video, device, info: VideoInfo) -> _FilmGrain | N
 
 
 class GstComparePipeline:
-    """One video of a comparison -- its `side`, "source" or "distorted" --
-    decoded, cropped, scaled and converted on the GPU into an appsink, as
-    D3D11 textures LockedNativePool presents.
-
-    It could also draw both videos itself, into two window handles through
-    d3d11videosink, with the test video's soundtrack: the way of the view
-    playback was before LockedNativePool, which nothing used any more."""
+    """Plays one video of a comparison, its `side` ("source" or
+    "distorted"): decoded, cropped, scaled and converted on the GPU into an
+    appsink, as D3D11 textures that LockedNativePool presents."""
 
     def __init__(
         self,
@@ -682,30 +721,33 @@ class GstComparePipeline:
         self._video_linked = {"source": False, "distorted": False}
         self._decoder_status_reported = False
         #: What the status line last said about the film grain
-        #: (_FilmGrain.status): the line is given again when that changes.
+        #: (_FilmGrain.status). The line is sent again when that changes.
         self._reported_grain_status: str | None = None
         self._wanted_playing = False
         self._ready = False
         self._pending_initial_seek_ms: int | None = None
         self._initial_seek_sent = False
         #: Where the video's first frame is on the pipeline's timeline (ns),
-        #: from its first preroll (_prerolled_time): frames and positions
-        #: count from it, as the metrics and FFmpeg's playback count them.
+        #: found at its first preroll (_prerolled_time). Frames and positions
+        #: are counted from it, as the metrics and FFmpeg's playback count
+        #: them.
         self._first_frame: int | None = None
         #: How the presenter's shader shows this video's frames
-        #: (d3d11_tonemap.shading), None as they come; and which way, "sdr"
-        #: or "hdr" (_shading).
+        #: (d3d11_tonemap.shading), or None to show them as they come; and
+        #: which way, "sdr" or "hdr" (_shading).
         self.shading: tuple[float, ...] | None = None
         self._shaded: str | None = None
         self._seeker = Seeker(f"{side}-seek")
-        #: A seek the pipeline refused (Seeker, on its thread), for poll().
+        #: The error of a seek the pipeline refused (set on the Seeker's
+        #: thread), for poll() to report.
         self._seek_error: str | None = None
-        #: Seeks asked for (the window's thread) and made (the Seeker's): `seeking`.
+        #: How many seeks were asked for (on the window's thread) and made (on
+        #: the Seeker's thread); see `seeking`.
         self._seeks_asked = self._seeks_made = 0
-        #: Signal handlers that call back into this object, (object, id):
+        #: Signal handlers that call back into this object, as (object, id).
         #: stop() removes them (_release).
         self._handlers: list[tuple[Any, int]] = []
-        #: Pad probes that call back into this object's parts, (pad, id):
+        #: Pad probes that call back into this object's parts, as (pad, id).
         #: stop() removes them (_release).
         self._probes: list[tuple[Any, int]] = []
         #: The VVC video's film grain, drawn on its frames (_FilmGrain); None
@@ -735,16 +777,20 @@ class GstComparePipeline:
         self._bus = self._pipeline.get_bus()
 
     def _make(self, factory: str, name: str):
+        """Makes a GStreamer element, or raises GStreamerPlaybackError."""
         element = self.Gst.ElementFactory.make(factory, name)
         if element is None:
             raise GStreamerPlaybackError(f"Could not create GStreamer element {factory}.")
         return element
 
     def _add(self, *elements) -> None:
+        """Adds elements to the pipeline."""
         for element in elements:
             self._pipeline.add(element)
 
     def _build_video_branch(self, side: str, settings) -> None:
+        """Builds the chain of elements that reads, decodes, crops, scales and
+        converts the video into its appsink."""
         info = (
             self._comparison.source_info
             if side == "source" else self._comparison.distorted_info
@@ -754,17 +800,17 @@ class GstComparePipeline:
             if side == "source" else self._comparison.distorted_crop
         )
         # filesrc into decodebin3, not uridecodebin3. The difference is
-        # urisourcebin, which uridecodebin3 puts in front of decodebin3: it
+        # urisourcebin, which uridecodebin3 puts in front of decodebin3. It
         # holds the demuxed streams in a multiqueue with no byte limit, only
-        # a time limit that it grows whenever one stream looks empty while
-        # another is full. For AV1 on a hardware decoder the parser emits
-        # frame-aligned buffers whose time level reads as zero, so that
-        # queue kept growing until it held the whole file: 2.7 GB of RAM per
-        # 4K AV1 stream against 0.35 GB for HEVC, and 5.7 GB for a
-        # four-video comparison. decodebin3 on its own has the same
-        # autoplugging, the same select-stream and pad-added signals, seeks
-        # the same way, and its multiqueue is bounded (10 MB / 250 ms): the
-        # same AV1 stream then costs 0.39 GB.
+        # a time limit that it raises whenever one stream looks empty while
+        # another is full. For AV1 on a hardware decoder, the parser gives
+        # frame-aligned buffers whose time level reads as zero, so that queue
+        # would keep growing until it held the whole file: 2.7 GB of memory
+        # per 4K AV1 stream against 0.35 GB for HEVC, and 5.7 GB for a
+        # four-video comparison. decodebin3 on its own plugs in the same
+        # elements, has the same select-stream and pad-added signals, seeks
+        # the same way, and its multiqueue is bounded (10 MB or 250 ms): the
+        # same AV1 stream then takes 0.39 GB.
         source = self._make("filesrc", f"{side}-file")
         source.set_property("location", str(frame_input_path(self._comparison, side).resolve()))
         decoder = self._make("decodebin3", f"{side}-decoder")
@@ -787,21 +833,22 @@ class GstComparePipeline:
         gpu_memory = self._make("capsfilter", f"{side}-gpu-memory")
         gpu_memory.set_property("caps", self.Gst.Caps.from_string("video/x-raw(memory:D3D11Memory)"))
         if self._film_grain is not None:
-            # The whole decoded frame, on the GPU: its grain is drawn here.
+            # Here the whole decoded frame is on the GPU, so its grain is drawn here.
             pad = gpu_memory.get_static_pad("src")
             self._probes.append((pad, pad.add_probe(self.Gst.PadProbeType.BUFFER, self._film_grain.on_frame_uploaded)))
-        # On GPU memory videocrop cannot touch pixels; it attaches a crop
-        # rectangle (GstVideoCropMeta) for the next element to honour, and
-        # refuses to run unless that element says it will. d3d11convert does
-        # in GStreamer 1.28: a letterboxed 10-bit frame comes out as FFmpeg
-        # crops it, code for code. It did not when cropping came in, and
-        # d3d11compositor cropped instead -- through RGB and back, up to 82
-        # codes apart, and, given YUV to give, never: every letterboxed HDR
-        # comparison played through FFmpeg. Stretched to the comparison's
-        # size, as the metrics compare the frames -- but while black bars
-        # are still being detected, boxed in black, as the FFmpeg paths fit
-        # it: a letterboxed 16:9 source beside a 2.4:1 encode is squashed
-        # otherwise, a pair no run compares as it is.
+        # On GPU memory, videocrop cannot touch the pixels. It attaches a
+        # crop rectangle (GstVideoCropMeta) for the next element to apply,
+        # and refuses to run unless that element says it will. d3d11convert
+        # does so in GStreamer 1.28, and a letterboxed 10-bit frame comes out
+        # exactly as FFmpeg crops it. Don't crop with d3d11compositor instead:
+        # it converts through RGB and back (up to 82 codes apart), and asked
+        # to output YUV it does not crop at all.
+        #
+        # The frame is stretched to the comparison's size, as the metrics
+        # compare the frames. But while black bars are still being detected,
+        # it is boxed in black, as the FFmpeg paths fit it, because otherwise
+        # a letterboxed 16:9 source beside a 2.4:1 encode would be squashed,
+        # a pair that no run compares as it is.
         width, height = comparison_dimensions(self._comparison)
         convert = self._make("d3d11convert", f"{side}-convert")
         convert.set_property("add-borders", bool(self._comparison.auto_crop_pending))
@@ -813,11 +860,11 @@ class GstComparePipeline:
         if shading:
             from vmaf_app.core import d3d11_tonemap
 
-            # Shaded by the presenter as it draws the frame shown, at the
-            # size shown: the converter only crops and scales, the video's
-            # own colours kept (12-bit video as 10, which the presenter
-            # reads). Shaded here, each frame of each video was converted
-            # to 16-bit RGBA, copied and shaded at full size.
+            # The presenter shades the frame as it draws it, at the size
+            # shown, so the converter only crops and scales, keeping the
+            # video's own colours (12-bit video as 10, which the presenter
+            # reads). Shading here would convert each frame of each video to
+            # 16-bit RGBA, copy it and shade it at full size.
             caps = self.Gst.Caps.from_string(
                 f"video/x-raw(memory:D3D11Memory),format={_output_format(info)},"
                 f"width={width},height={height},pixel-aspect-ratio=1/1,colorimetry={_hdr_colorimetry(info)}"
@@ -833,14 +880,15 @@ class GstComparePipeline:
         sink.set_property("wait-on-eos", False)
         sink.set_property("enable-last-sample", False)
         if any((left, top, right, bottom)):
-            # Cropped with nothing else to do -- the sizes and formats the
-            # same either side -- d3d11convert passes frames on as they come,
-            # and asks this sink whether it takes a crop meta: the presenter
-            # does (LockedPresentation._draw). Asked of the sink as it is,
-            # videocrop refused to run.
+            # When cropping is all there is to do (the same sizes and formats
+            # on either side), d3d11convert passes frames on as they come,
+            # and asks this sink whether it takes a crop meta. The presenter
+            # does (LockedPresentation._draw), so the probe says yes; the
+            # appsink alone would say no, and videocrop would refuse to run.
             sink.get_static_pad("sink").add_probe(
                 self.Gst.PadProbeType.QUERY_DOWNSTREAM | self.Gst.PadProbeType.PUSH, _accept_crop_meta)
-        # CPU-only decoders (including H.266) upload once, before GPU cropping.
+        # Software decoders (including H.266's) upload each frame once,
+        # before the GPU crops it.
         chain = [queue, upload, gpu_memory, crop, convert, capsfilter, sink]
         self._add(source, decoder, *chain)
         if not source.link(decoder):
@@ -855,17 +903,20 @@ class GstComparePipeline:
 
     @staticmethod
     def _stream_caps_name(stream) -> str:
+        """The media type of a stream's caps, such as "video/x-h265"."""
         caps = stream.get_caps()
         if caps is None or caps.get_size() == 0:
             return ""
         return caps.get_structure(0).get_name()
 
     def _select_stream(self, _decoder, _collection, stream, side: str) -> int:
-        # The video only: the soundtrack plays on its own
-        # (locked_presentation.SingleSoundtrack).
+        """decodebin3's select-stream signal: selects the video only, because
+        the soundtrack plays on its own (locked_presentation.SingleSoundtrack)."""
         return 1 if self._stream_caps_name(stream).startswith("video/") else 0
 
     def _pad_added(self, _decoder, pad, side: str) -> None:
+        """decodebin3's pad-added signal: links the decoded video's pad to
+        the branch's queue."""
         name = pad.get_name()
         if name.startswith("video_") and not self._video_linked[side]:
             queue = self._pipeline.get_by_name(f"{side}-video-queue")
@@ -874,9 +925,11 @@ class GstComparePipeline:
                 self._video_linked[side] = True
 
     def start(self, position_ms: int, playing: bool) -> None:
-        # Preroll both sinks before seeking or playing.  decodebin3 cannot
-        # accept a reliable seek while still in READY, and starting PLAYING
-        # would briefly display frame zero when opening at a later timestamp.
+        """Opens the video paused, then seeks to `position_ms` and plays if
+        `playing` (poll() finishes this once the sink has prerolled)."""
+        # The sink is prerolled before seeking or playing: decodebin3 cannot
+        # take a reliable seek while still in READY, and starting in PLAYING
+        # would briefly show frame 0 when opening at a later time.
         self._wanted_playing = bool(playing)
         self._pending_initial_seek_ms = max(0, int(position_ms))
         result = self._pipeline.set_state(self.Gst.State.PAUSED)
@@ -884,6 +937,7 @@ class GstComparePipeline:
             raise GStreamerPlaybackError("GStreamer could not open the comparison.")
 
     def stop(self) -> None:
+        """Stops the pipeline and frees what it holds."""
         self._seeker.close()
         self._pipeline.set_state(self.Gst.State.NULL)
         self._release()
@@ -892,13 +946,14 @@ class GstComparePipeline:
 
     def _release(self) -> None:
         """Removes the callbacks into this object that the pipeline's
-        elements hold. Each is a cycle -- the decoder holds a bound method,
-        which holds this object, which holds the pipeline -- that
-        passes through GStreamer's C side, where Python's collector cannot
-        see it: a stopped pipeline, with its decoder's D3D11 surfaces, was
-        never freed. Moving the window between an HDR and an SDR display
-        rebuilds the players each time; 4K video kept 0.8-1.8 GB of the
-        GPU's memory a move (issue #3). After NULL nothing calls them."""
+        elements hold. Each is a reference cycle (the decoder holds a bound
+        method, which holds this object, which holds the pipeline) that
+        passes through GStreamer's C side, where Python's garbage collector
+        cannot see it. Left in place, they keep a stopped pipeline and its
+        decoder's D3D11 surfaces from being freed. Moving the window between
+        an HDR and an SDR display rebuilds the players each time, and 4K
+        video kept 0.8-1.8 GB of the GPU's memory per move (issue #3). Once
+        the pipeline is in the NULL state, nothing calls the callbacks."""
         for element, handler in self._handlers:
             if element.handler_is_connected(handler):
                 element.disconnect(handler)
@@ -910,6 +965,7 @@ class GstComparePipeline:
             self._film_grain.remove_probe()
 
     def set_playing(self, playing: bool) -> None:
+        """Plays or pauses, or keeps the wish until the pipeline is ready."""
         self._wanted_playing = bool(playing)
         if not self._ready:
             return
@@ -917,13 +973,16 @@ class GstComparePipeline:
         self._pipeline.set_state(state)
 
     def seek(self, position_ms: int) -> None:
+        """Seeks to `position_ms`, counted from the video's first frame, or
+        keeps it until the pipeline is ready."""
         if not self._ready:
             self._pending_initial_seek_ms = max(0, int(position_ms))
             return
         self._seek_to(position_ms, "GStreamer could not seek to that frame.")
 
     def _seek_to(self, position_ms: int, refused: str) -> None:
-        """A seek made by the Seeker; refused, poll() reports `refused`."""
+        """Has the Seeker make a seek. If the pipeline refuses it, poll()
+        reports `refused`."""
         def report() -> None:
             self._seek_error = refused
 
@@ -936,7 +995,7 @@ class GstComparePipeline:
 
     @property
     def seeking(self) -> bool:
-        """Whether the seek asked for last is still to be made: until it is,
+        """Whether the last seek asked for is still to be made. Until it is,
         the sink can still give frames from before it (LockedNativePool)."""
         return self._seeks_made < self._seeks_asked
 
@@ -946,13 +1005,14 @@ class GstComparePipeline:
         return max(0, int(position_ms)) * self.Gst.MSECOND + (self._first_frame or 0)
 
     def _prerolled_time(self) -> int:
-        """The timeline's time of the frame prerolled (ns): at the first
-        preroll, from the file's start, the video's first frame. GStreamer
-        does not count from that frame for every file: VideoQ's MP4 source
-        starts its timeline 32 ms before it, as FFmpeg does, where its
-        Matroska encodes start theirs at it. Counted from the timeline's
-        start, the two were paired 4 frames apart and never started
-        playing from the beginning: no source frame had the number 0."""
+        """Returns the timeline time of the prerolled frame (ns). At the
+        first preroll, from the file's start, that is the video's first
+        frame. GStreamer does not count from that frame for every file:
+        VideoQ's MP4 source starts its timeline 32 ms before it, as FFmpeg
+        does, while its Matroska encodes start theirs at it. Counting from
+        the timeline's start instead would pair the two 4 frames apart, and
+        playback would never start from the beginning, because no source
+        frame would have the number 0."""
         sample = next(iter(self._sinks.values())).emit("try-pull-preroll", 0)
         if sample is None:
             return 0
@@ -960,8 +1020,8 @@ class GstComparePipeline:
         return 0 if time == self.Gst.CLOCK_TIME_NONE else time
 
     def frame_time(self, sample) -> int | None:
-        """A sample's time from the video's first frame (ns); None where it
-        has no usable timestamp."""
+        """Returns a sample's time from the video's first frame (ns), or None
+        if it has no usable timestamp."""
         time = sample.get_segment().to_stream_time(self.Gst.Format.TIME, sample.get_buffer().pts)
         if time == self.Gst.CLOCK_TIME_NONE:
             return None
@@ -974,6 +1034,7 @@ class GstComparePipeline:
         return None if self._first_frame is None else round(self._first_frame / self.Gst.MSECOND)
 
     def _decoder_factories(self, decoder) -> list[str]:
+        """The names of the video decoders that decodebin3 has plugged in."""
         factories: list[str] = []
         iterator = decoder.iterate_recurse()
         while True:
@@ -996,6 +1057,8 @@ class GstComparePipeline:
         return sorted(set(factories))
 
     def _decoder_description(self) -> str:
+        """Says which decoder the video uses, GPU or software, for the status
+        line."""
         descriptions: list[str] = []
         for side, decoder in self._decoders.items():
             factories = self._decoder_factories(decoder)
@@ -1004,7 +1067,7 @@ class GstComparePipeline:
                 continue
             # GPU decoders: Direct3D's, NVIDIA's (nvcodec) and Intel's (Quick
             # Sync). nvh265dec, which decodes 12-bit HEVC where the full
-            # GStreamer is installed, was called software: "CPU decode".
+            # GStreamer is installed, must count as a GPU decoder too.
             hardware = [
                 name for name in factories if name.startswith(("d3d11", "d3d12", "nv", "qsv"))
             ]
@@ -1014,6 +1077,8 @@ class GstComparePipeline:
         return " · ".join(descriptions)
 
     def _negotiated_description(self) -> str:
+        """The status line once the frames' format is settled: size, format,
+        colours, memory, decoder, film grain and shading."""
         caps_by_side = {
             side: sink.get_static_pad("sink").get_current_caps()
             for side, sink in self._sinks.items()
@@ -1041,6 +1106,9 @@ class GstComparePipeline:
         return " · ".join(details)
 
     def poll(self) -> PlaybackUpdate:
+        """Returns what changed since the last call: a status line, an error,
+        or the end of the video. It also finishes opening the video: the
+        first seek, then playing or staying paused."""
         error = self._seek_error
         ended = False
         while True:
@@ -1088,8 +1156,9 @@ class GstComparePipeline:
         return PlaybackUpdate(status, error, ended)
 
     def position_ms(self) -> int | None:
-        """Where the pipeline is, counted from the video's first frame (a
-        report's; poll() leaves it out: queried at each of the view's ticks,
-        it was 750 pipeline queries a second, read by nothing)."""
+        """Returns where the pipeline is (ms), counted from the video's first
+        frame, for reports (scripts/smoke_playback_pool.py). poll() leaves it
+        out: queried at each of the view's ticks, it would make 750 pipeline
+        queries a second that nothing reads."""
         ok, position = self._pipeline.query_position(self.Gst.Format.TIME)
         return round((position - (self._first_frame or 0)) / self.Gst.MSECOND) if ok else None

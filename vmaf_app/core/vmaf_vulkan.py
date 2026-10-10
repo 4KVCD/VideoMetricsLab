@@ -1,17 +1,19 @@
-"""VMAF and VMAF NEG on any GPU with Vulkan: the features VMAF is predicted
-from (VIF, ADM and motion) are calculated by tools/vmaf_vulkan/vmaf_vulkan.dll
-(libvmaf-fast's fast/vulkan, from its release like libvmaf.dll), a port of
-libvmaf's CUDA feature extractors to Vulkan compute shaders.
+"""Calculates VMAF and VMAF NEG on any GPU with Vulkan. The features VMAF is
+predicted from (VIF, ADM and motion) are calculated by
+tools/vmaf_vulkan/vmaf_vulkan.dll, a port of libvmaf's CUDA feature
+extractors to Vulkan compute shaders. It is built from libvmaf-fast's
+fast/vulkan folder, and comes from the same release as libvmaf.dll.
 
-The port gives the same feature values as libvmaf's CUDA code (vmaf_cuda), to
-the last bit, on any GPU: its shaders use integer arithmetic only. The score
-is then predicted from them by libvmaf itself (the bundled libvmaf.dll, on the
-CPU: vmaf_import_feature_score and vmaf_score_at_index), so a score is the
-same number whichever of the two calculated the features.
+The port gives the same feature values as libvmaf's CUDA code (vmaf_cuda),
+to the last bit, on any GPU, because its shaders use integer arithmetic
+only. libvmaf itself then predicts the score from the features (the bundled
+libvmaf.dll, on the CPU, through vmaf_import_feature_score and
+vmaf_score_at_index), so a score is the same number whichever of the two
+calculated the features.
 
-VulkanScorer takes the frames GpuScorer takes and returns what it returns.
-VMAF and VMAF NEG together cost little more than one of them: the library
-calculates what the two share once.
+VulkanScorer takes the same frames as vmaf_cuda.GpuScorer and returns the
+same results. VMAF and VMAF NEG together cost little more than one of them,
+because the library calculates what the two share only once.
 """
 from __future__ import annotations
 
@@ -29,13 +31,14 @@ from vmaf_app.core import vmaf_cuda
 _log = logging.getLogger(__name__)
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "vmaf_vulkan" / "vmaf_vulkan.dll"
-#: What a score records it was calculated with (its provenance).
+#: The library a score records as having calculated it (its provenance).
 LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan)"
 
 #: Positions in the library's feature rows (vmaf_vulkan.cpp).
 _VIF, _ADM2, _MOTION2, _VIF_NEG, _ADM2_NEG, _MOTION = 0, 4, 5, 6, 10, 11
 FEATURE_COUNT = 12
-#: libvmaf's names for a model's features -> their position in a row.
+#: For VMAF (False) and VMAF NEG (True): libvmaf's names for the model's
+#: features, and their positions in a row.
 _MODEL_FEATURES = {
     False: {"VMAF_integer_feature_adm2_score": _ADM2, "VMAF_integer_feature_motion2_score": _MOTION2,
             **{f"VMAF_integer_feature_vif_scale{scale}_score": _VIF + scale for scale in range(4)}},
@@ -45,22 +48,26 @@ _MODEL_FEATURES = {
 }
 _NEG_MODELS = ("vmaf_v0.6.1neg", "vmaf_4k_v0.6.1neg")
 
-#: Vulkan's device types: the others are virtual GPUs and CPU rasterisers.
+#: Vulkan's device types for real GPUs. The other types are virtual GPUs and
+#: CPU renderers.
 _TYPE_INTEGRATED, _TYPE_DISCRETE = 1, 2
 
 
 class VmafVulkanError(vmaf_cuda.VmafGpuError):
-    """VMAF could not be calculated with Vulkan; the CPU calculates it."""
+    """VMAF could not be calculated with Vulkan, so the CPU calculates it."""
 
 
 @dataclass(frozen=True)
 class VulkanDevice:
+    """A GPU as Vulkan lists it."""
+
     index: int
     name: str
     vendor: int
     kind: int
-    #: Has what the shaders need (64-bit integers).
+    #: Whether it has what the shaders need (64-bit integers).
     usable: bool
+    #: Whether it has 64-bit floating point.
     has_double: bool
 
 
@@ -68,6 +75,7 @@ _library: ctypes.CDLL | None = None
 
 
 def _load() -> ctypes.CDLL:
+    """vmaf_vulkan.dll, loaded once, with its functions declared."""
     global _library
     if _library is None:
         lib = ctypes.CDLL(str(LIBRARY_PATH))
@@ -90,7 +98,8 @@ def _load() -> ctypes.CDLL:
         ):
             function = getattr(lib, name)
             function.restype, function.argtypes = restype, argtypes
-        # libvmaf-fast 3.2.0-fast.1's has none: AMD's decoder then does not share its memory.
+        # The engine of libvmaf-fast 3.2.0-fast.1 has no vv_shared_device, and
+        # AMD's decoder then does not share its memory.
         if hasattr(lib, "vv_shared_device"):
             lib.vv_shared_device.restype = ctypes.c_int
             lib.vv_shared_device.argtypes = [handle, ctypes.c_char_p, ctypes.c_char_p, unsigned]
@@ -99,6 +108,7 @@ def _load() -> ctypes.CDLL:
 
 
 def _check(lib: ctypes.CDLL, error: int, what: str) -> None:
+    """Raises VmafVulkanError with the engine's message if `error` is negative."""
     if error < 0:
         raise VmafVulkanError(f"{what} failed: {(lib.vv_error() or b'').decode(errors='replace')}")
 
@@ -132,10 +142,10 @@ SHARED_FLAG = 1 << 19
 
 @dataclass(frozen=True)
 class SharedDevice:
-    """What a decoder importing a context's shared buffers on its own Vulkan
-    device must match (vv_shared_device): the GPU and the driver -- Vulkan
-    imports the memory only where both are the exporter's -- and the memory
-    type to allocate it as."""
+    """What a decoder that imports a context's shared buffers into its own
+    Vulkan device must match (vv_shared_device): the GPU and the driver,
+    because Vulkan imports the memory only when both are the exporter's, and
+    the memory type to allocate it as."""
 
     device_uuid: bytes
     driver_uuid: bytes
@@ -143,16 +153,19 @@ class SharedDevice:
 
 
 class SharedLumas:
-    """The buffers a Vulkan context made with SHARED_FLAG copies each frame
-    pair's luma planes from, as GPU memory a decoder on the same GPU writes
-    them into (gpu_frames' copy_luma): the planes then never leave the GPU,
-    where they used to be copied to system memory and back by the CPU.
-    `stream`: the decoder that imports them (GpuFrameStream) -- with CUDA
-    (NVIDIA's), or into a Vulkan device of its own (AMD's), which takes the
-    SharedDevice vv_shared_device names: import_memory(handle, size,
-    exporter), exporter None from an engine without vv_shared_device.
-    VmafVulkanError when the two cannot share memory -- another GPU, an old
-    driver -- and the caller then scores from system memory as before."""
+    """The buffers that a Vulkan context made with SHARED_FLAG reads each
+    frame pair's luma planes from, shared as GPU memory that a decoder on
+    the same GPU writes the planes into (gpu_frames' copy_luma). The planes
+    then never leave the GPU, instead of being copied by the CPU to system
+    memory and back.
+
+    `stream` is the decoder that imports the buffers (GpuFrameStream): with
+    CUDA (NVIDIA's decoder), or into a Vulkan device of its own (AMD's),
+    which needs the SharedDevice that vv_shared_device describes. It is
+    called as import_memory(handle, size, exporter), with exporter None for
+    an engine without vv_shared_device. VmafVulkanError is raised when the
+    two cannot share memory (another GPU, an old driver), and the caller
+    then scores from system memory."""
 
     def __init__(self, lib: ctypes.CDLL, context: ctypes.c_void_p, stream) -> None:
         self._lib, self._context, self._stream = lib, context, stream
@@ -176,17 +189,17 @@ class SharedLumas:
                 self._imports.append(imported)
             if not self._imports:
                 raise VmafVulkanError(f"Vulkan's memory is not shared: {(lib.vv_error() or b'').decode(errors='replace')}")
-            #: The engine's slots: a frame begun (next) waits for the one this
-            #: many before it to be done.
+            #: The number of shared slots. Starting a frame (next) waits until
+            #: the frame this many before it is done.
             self.slots = len(self._imports)
         except BaseException:
             self.close()
             raise
 
     def next(self) -> tuple[int, int, int]:
-        """Where the next pair's planes go: (the reference's address, the
-        distorted's, the bytes from one row to the next). vv_commit scores
-        them once both are written."""
+        """Returns where the next pair's planes go: (the source plane's
+        address, the test plane's address, the bytes from one row to the
+        next). vv_commit scores them once both are written."""
         slot, stride, plane = ctypes.c_int(), ctypes.c_uint32(), ctypes.c_uint32()
         _check(self._lib, self._lib.vv_shared_next(self._context, ctypes.byref(slot), ctypes.byref(stride),
                                                    ctypes.byref(plane)), "Scoring a frame")
@@ -194,22 +207,31 @@ class SharedLumas:
         return address, address + plane.value, stride.value
 
     def close(self) -> None:
-        """Before the decoder and the context are closed."""
+        """Gives the imported memory back. Call it before the decoder and the
+        context are closed."""
         for _address, memory in self._imports:
             self._stream.unimport(memory)
         self._imports = []
 
 
 class VulkanScorer:
-    """VMAF's features of frame pairs given in order, calculated with Vulkan:
-    the luma and chroma planes of 4:2:0 frames, packed as FFmpeg's rawvideo
-    writes them, at `bit_depth` bits (16-bit little-endian samples above 8).
-    Only the luma is used, as by VMAF. `shared`: the frames come from GPU
-    memory instead (add_shared), from the decoder `shared` is."""
+    """Calculates VMAF's features with Vulkan for frame pairs given in order:
+    4:2:0 frames with luma and chroma planes, packed as FFmpeg's rawvideo
+    writes them, at `bit_depth` bits (16-bit little-endian samples above 8
+    bits). Only the luma is used, as in VMAF. With `shared`, the frames come
+    instead from GPU memory written by that decoder (add_shared)."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
                  device: int | None = None, native_double: bool = False, in_flight: int = 3, skip: int = 0, pass_limit: int = 0,
                  decouple_variant: int = 0, shared=None):
+        """`device` is Vulkan's number for the GPU; None picks best_device().
+        `in_flight` is how many frames the engine works on at once (1 to
+        16). `native_double` lets the shaders use the GPU's 64-bit floating
+        point where it has it. `skip`, `pass_limit` and `decouple_variant`
+        are only for timing and testing the engine: `skip` leaves out motion
+        (1), VIF (2) or ADM (4), `pass_limit` runs only the first scored
+        passes, and `decouple_variant` picks a variant of the adm_decouple
+        shader."""
         self._shared: SharedLumas | None = None
         self._lib = lib = _load()
         self._vmaf = vmaf_cuda._load()
@@ -241,7 +263,8 @@ class VulkanScorer:
         self.frame_bytes = width * height * sample + 2 * chroma
 
     def add(self, reference: bytearray, distorted: bytearray) -> None:
-        """Scores one more pair (frame index = how many came before)."""
+        """Scores one more pair. Its frame index is the number of pairs given
+        before it."""
         score = self._count % self._step == 0
         if min(len(reference), len(distorted)) < self._luma_bytes:  # the library reads that much of each
             raise VmafVulkanError(f"frame {self._count} is shorter than its luma plane")
@@ -253,12 +276,12 @@ class VulkanScorer:
         self._count += 1
 
     def add_decoded(self, reference, distorted) -> None:
-        """Scores one more pair that a decoder writes itself: `reference` and
-        `distorted` are each given the address to write a luma plane to,
-        rows packed (gpu_frames' download of a luma-only plan), and return
-        once it is written. The planes go straight into the memory the GPU
-        copies them from; a frame that is not scored (n_subsample) needs the
-        reference alone, for motion."""
+        """Scores one more pair that a decoder writes in itself. `reference`
+        and `distorted` are each called with the address to write a luma
+        plane to, with its rows packed (gpu_frames' download of a luma-only
+        plan), and return once it is written. The planes go straight into
+        the memory the GPU copies them from. A frame that is not scored
+        (n_subsample) needs only the source plane, for motion."""
         score = self._count % self._step == 0
         ref, dist, stride = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_uint32()
         _check(self._lib, self._lib.vv_staging(self._context, ctypes.byref(ref), ctypes.byref(dist),
@@ -266,7 +289,7 @@ class VulkanScorer:
         for fill, address in ((reference, ref.value), (distorted, dist.value)) if score else ((reference, ref.value),):
             if stride.value == self._luma_stride:
                 fill(address)
-            else:  # rows padded to four bytes: an odd width
+            else:  # an odd width: the engine pads its rows to four bytes
                 packed = np.empty(self._luma_bytes, dtype=np.uint8)
                 fill(packed.ctypes.data)
                 rows = self._luma_bytes // self._luma_stride
@@ -277,9 +300,10 @@ class VulkanScorer:
         self._count += 1
 
     def add_shared(self, reference, distorted) -> None:
-        """Scores one more pair a decoder copies on the GPU: `reference` and
-        `distorted` are each given (the GPU address to copy a luma plane to,
-        the bytes between its rows), and return once it is there."""
+        """Scores one more pair that a decoder copies on the GPU. `reference`
+        and `distorted` are each called with the GPU address to copy a luma
+        plane to and the bytes between its rows, and return once the plane
+        is there."""
         score = self._count % self._step == 0
         ref, dist, pitch = self._shared.next()
         reference(ref, pitch)
@@ -289,8 +313,9 @@ class VulkanScorer:
         self._count += 1
 
     def features(self) -> tuple[np.ndarray, np.ndarray]:
-        """The frame numbers scored and their feature rows (FEATURE_COUNT
-        doubles each), once every frame is in."""
+        """Returns the frame numbers scored and their feature rows
+        (FEATURE_COUNT numbers each). Call it once every frame has been
+        given."""
         _check(self._lib, self._lib.vv_flush(self._context), "Scoring")
         frames = np.arange(0, self._count, self._step, dtype=np.int32)
         rows = np.zeros((len(frames), FEATURE_COUNT), dtype=np.float64)
@@ -307,14 +332,16 @@ class VulkanScorer:
         return out[:count]
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """As GpuScorer.finish: the frame numbers scored and each model's
-        scores for them, rounded as libvmaf's JSON log rounds them."""
+        """Returns the frame numbers scored and each model's scores for them,
+        rounded as libvmaf's JSON log rounds them (as GpuScorer.finish
+        does)."""
         if not self._count:
             return np.zeros(0, dtype=np.int32), {name: np.zeros(0) for name in self._models}
         frames, rows = self.features()
         return frames, {name: predict(version, frames, rows) for name, version in self._models.items()}
 
     def close(self) -> None:
+        """Frees the shared memory and the engine's context."""
         if self._shared is not None:
             self._shared.close()
             self._shared = None
@@ -324,8 +351,9 @@ class VulkanScorer:
 
 
 def predict(version: str, frames: np.ndarray, rows: np.ndarray) -> np.ndarray:
-    """A libvmaf model's scores for feature rows: libvmaf's own prediction,
-    from the features under the names its extractors would give them."""
+    """Returns a libvmaf model's scores for feature rows, predicted by
+    libvmaf itself from the features given under the names its extractors
+    would use."""
     lib = vmaf_cuda._load()
     lib.vmaf_import_feature_score.restype = ctypes.c_int
     lib.vmaf_import_feature_score.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_double, ctypes.c_uint]
@@ -357,25 +385,28 @@ def predict(version: str, frames: np.ndarray, rows: np.ndarray) -> np.ndarray:
 
 # ------------------------------------------------------------ availability
 
-#: Vulkan's number of the GPU to score on, instead of the one best_device()
-#: picks: for testing an integrated GPU on a PC that also has a discrete one.
+#: Vulkan's number for the GPU to score on, instead of the one best_device()
+#: picks. It is for testing an integrated GPU on a PC that also has a
+#: discrete one.
 DEVICE_VARIABLE = "VML_VMAF_VULKAN_DEVICE"
-#: SHA-256 of the sums the probe's frames give (8-bit, then 10-bit), which
-#: are the sums behind feature values identical to libvmaf's CUDA code's
-#: (tests/test_vmaf_vulkan.py compares them where CUDA runs).
-#: VMAF v0.6.1's sums in the engine's accumulator, which the probe checks:
-#: motion's, VIF's (4 scales of 9), ADM's denominators (4 x 3) and its
-#: numerators (2 limits x 4 scales x 3); VMAF v1's CAMBI follows them.
+#: How many of the engine's sums per frame are VMAF v0.6.1's, which the probe
+#: checks: motion's (1), VIF's (4 scales of 9), ADM's denominators (4 x 3)
+#: and its numerators (2 limits x 4 scales x 3). VMAF v1's CAMBI sums follow
+#: them.
 _PROBE_SLOTS = 1 + 4 * 9 + 4 * 3 + 2 * 4 * 3
+#: The SHA-256 of the sums the probe's frames give, at 8 and then 10 bits.
+#: These sums give feature values identical to libvmaf's CUDA code's
+#: (tests/test_vmaf_vulkan.py compares them where CUDA runs).
 _PROBE_SUMS = ("33668b74708340de30734d996e3b60ea025c4c55a5d977707ea6482467f85dee",
                "76f6f75034298e831c97642952e3682d896b85713efddf8e32d65a19c09bc3b1")
 _PROBE_SIZE = (320, 192)
 
 
 def probe_frames(bits: int, count: int = 3) -> tuple[list[bytearray], list[bytearray]]:
-    """The probe's frame pairs: flat, smooth and textured areas, blurred,
-    noisy and sharpened in turn, so every branch of the shaders is taken.
-    Made with integer arithmetic only: the same bytes on every PC."""
+    """Makes the probe's frame pairs: flat, smooth and textured areas,
+    blurred, noisy and sharpened in turn, so that every branch of the
+    shaders is taken. They are made with integer arithmetic only, so they
+    are the same bytes on every PC."""
     width, height = _PROBE_SIZE
     peak = (1 << bits) - 1
     y, x = np.mgrid[0:height, 0:width].astype(np.int64)
@@ -415,11 +446,12 @@ def probe_sums(device: int, bits: int) -> str:
 
 
 def probe() -> tuple[bool, int | None, str]:
-    """(whether Vulkan scores VMAF on this PC, on which GPU, what it is or
-    why not). Scores the probe's frames at 8 and 10 bits and accepts the GPU
-    only if its sums are exactly the known ones: a driver that compiles a
-    shader wrongly (Intel's and AMD's did, see libvmaf-fast's README) gives wrong
-    scores, not an error. Run in a process of its own."""
+    """Returns (whether Vulkan scores VMAF on this PC, on which GPU, what the
+    GPU is or why not). It scores the probe's frames at 8 and 10 bits, and
+    accepts the GPU only if its sums are exactly the known ones, because a
+    driver that compiles a shader wrongly gives wrong scores, not an error
+    (Intel's and AMD's did; see libvmaf-fast's README). Run it in a process
+    of its own."""
     if not LIBRARY_PATH.is_file():
         return False, None, "vmaf_vulkan.dll is not bundled"
     if not vmaf_cuda.LIBRARY_PATH.is_file():
@@ -451,14 +483,16 @@ def score_decoded(
     scale_algorithm: str = "bicubic", on_progress=None, check_cancel=lambda: None, process_handle=None,
     device: int | None = None, decoder: str | None = None,
 ):
-    """vmaf_cuda.score_decoded with the Vulkan scorer: both videos decoded
-    in this process by the GPU's own decoder (gpu_frames), cropped, scaled
-    and widened there, paired as libvmaf's filter pairs them (frame_sync),
-    and each frame's luma written by the decoder straight into the memory
-    Vulkan copies it to the GPU from. FFmpeg only copies the compressed
-    streams out of their containers. `decoder`: gpu_frames' library
-    ("nvidia", "intel", "amd", "software"), one for both videos or (the
-    source's, the test video's); by default the one of the GPU scored on."""
+    """The counterpart of vmaf_cuda.score_decoded with the Vulkan scorer.
+
+    Both videos are decoded in this process by the GPU's own decoder
+    (gpu_frames), and cropped, scaled and widened there. They are paired as
+    libvmaf's filter pairs them (frame_sync), and the decoder writes each
+    frame's luma straight into the memory that Vulkan copies it to the GPU
+    from. FFmpeg only copies the compressed streams out of their containers.
+    `decoder` is gpu_frames' decoder library ("nvidia", "intel", "amd",
+    "software"): one name for both videos, or a pair (the source's, the
+    test video's). By default it is the library for the GPU scored on."""
     import time
     from dataclasses import replace
 
@@ -501,7 +535,8 @@ def score_decoded(
         raise
     scorer = None
     try:
-        # The planes stay on the GPU where its decoder and Vulkan share memory: both NVIDIA's.
+        # The planes stay on the GPU when the decoder and Vulkan share memory,
+        # which needs NVIDIA's decoder for both videos.
         if source_backend == test_backend == "nvidia":
             try:
                 scorer = VulkanScorer(width, height, bit_depth, models, n_subsample, device=chosen.index, shared=test)
@@ -535,7 +570,7 @@ def score_decoded(
         ref.verify()
         return scorer.finish()
     finally:
-        if scorer is not None:  # first: it gives the decoder's hold on its memory back
+        if scorer is not None:  # closed first, because it holds on to the decoder's memory
             scorer.close()
         test.close()
         ref.close()

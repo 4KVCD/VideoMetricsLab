@@ -1,12 +1,14 @@
 """How a video's colours are read for the perceptual metrics: its matrix,
-transfer, primaries and range, from its tags -- the H.273 numbers -- with
-untagged ones guessed as FFVship (Vship's own tool) guesses them.
+transfer, primaries and range, as H.273 numbers taken from its tags. Values
+the video does not tag are guessed as FFVship (Vship's own tool) guesses
+them.
 
-One reading for both implementations: Vship is given these numbers on the
-GPU (perceptual_vship._vship_colorspace), and the CPU tools get pictures
-converted and described the same way (perceptual_cpu). Read differently,
-the two scored the same frames far apart: a tagged BT.709 film, 40.4
-SSIMULACRA2 on the CPU against 55.1 on the GPU.
+Both implementations read colours the same way: Vship is given these
+numbers on the GPU (perceptual_vship._vship_colorspace), and the CPU tools
+are given pictures converted and described the same way (perceptual_cpu).
+When the two read colours differently, they scored the same frames far
+apart: a tagged BT.709 film scored 40.4 SSIMULACRA2 on the CPU and 55.1 on
+the GPU.
 """
 from __future__ import annotations
 
@@ -18,14 +20,15 @@ from pathlib import Path
 
 from vmaf_app.core.models import VideoInfo
 
-#: FFmpeg's tag names (as ffprobe prints them, and their aliases) for the
-#: values of Vship's enums in VshipColor.h -- the H.273 numbers. The
-#: mapping is FFVship's (src/ffvship_utility/ffmpegToVshipColorFormat.hpp,
-#: Vship 5.1.1); a tag missing here has no Vship value.
+#: FFmpeg's tag names (as ffprobe prints them, with their aliases), mapped to
+#: the values of Vship's enums in VshipColor.h, which are the H.273 numbers.
+#: The mapping is FFVship's (src/ffvship_utility/ffmpegToVshipColorFormat.hpp
+#: in Vship 5.1.1). A tag missing here has no Vship value.
 MATRICES = {"gbr": 0, "rgb": 0, "bt709": 1, "bt470bg": 5, "smpte170m": 6, "ycgco": 8, "ycocg": 8,
             "bt2020nc": 9, "bt2020ncl": 9, "bt2020c": 10, "bt2020cl": 10, "ictcp": 14,
             "ycgco-re": 16, "ycgco-ro": 17}
-#: BT.2020's own 10- and 12-bit curves are BT.709's (H.273), as FFVship maps them.
+#: BT.2020's 10- and 12-bit curves are BT.709's curve (H.273), and FFVship
+#: maps them that way.
 TRANSFERS = {"bt709": 1, "bt470m": 4, "gamma22": 4, "bt470bg": 5, "gamma28": 5, "smpte170m": 6,
              "smpte240m": 7, "linear": 8, "iec61966-2-1": 13, "srgb": 13, "iec61966_2_1": 13,
              "bt2020-10": 1, "bt2020_10bit": 1, "bt2020-12": 1, "bt2020_12bit": 1,
@@ -37,14 +40,14 @@ UNTAGGED = {"", "unknown", "unspecified", "reserved"}
 #: The matrices' names in FFmpeg's filters (setparams' colorspace).
 FFMPEG_MATRICES = {1: "bt709", 5: "bt470bg", 6: "smpte170m", 8: "ycgco", 9: "bt2020nc", 10: "bt2020c",
                    14: "ictcp", 16: "ycgco-re", 17: "ycgco-ro"}
-#: The transfers whose light is relative to the display's white (SDR); the
-#: others -- PQ, ST 428, HLG -- are HDR.
+#: The transfers whose light is relative to the display's white (SDR). The
+#: others (PQ, ST 428 and HLG) are HDR.
 SDR_TRANSFERS = frozenset({1, 4, 5, 6, 7, 8, 13})
 
 
 class UnsupportedColourError(ValueError):
-    """A tag with no value here: `kind` is "matrix", "transfer",
-    "primaries", "range" or "siting", `value` the tag."""
+    """A colour tag that has no value here. `kind` is "matrix", "transfer",
+    "primaries", "range" or "siting"; `value` is the tag."""
 
     def __init__(self, kind: str, value: str) -> None:
         super().__init__(f"unsupported {kind}: {value}")
@@ -54,6 +57,8 @@ class UnsupportedColourError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class VideoColour:
+    """A video's colours as H.273 numbers, and whether it is full range."""
+
     matrix: int        # 0 for RGB
     transfer: int
     primaries: int
@@ -61,18 +66,23 @@ class VideoColour:
 
     @property
     def hdr(self) -> bool:
+        """Whether the transfer is an HDR one."""
         return self.transfer not in SDR_TRANSFERS
 
 
 def video_colour(info: VideoInfo, *, rgb: bool, full_range_untagged: bool = False) -> VideoColour:
-    """`info`'s colours. Untagged values are guessed as FFVship guesses
-    them: the matrix by the video's height (BT.709 above 650 lines, else
-    BT.470BG), the transfer and primaries from the matrix (BT.470BG's, or
-    PQ and BT.2020 for BT.2020 and ICtCp); untagged RGB is sRGB, full range.
-    `full_range_untagged`: a format that is full range when untagged (yuvj).
+    """Returns the video's colours.
 
-    The height is the video's own. It was the size compared at, so an
-    untagged 1080p source scaled to a 640x360 encode was read as BT.470BG."""
+    Untagged values are guessed as FFVship guesses them: the matrix from the
+    video's height (BT.709 above 650 lines, otherwise BT.470BG), and the
+    transfer and primaries from the matrix (BT.470BG's for BT.470BG; PQ and
+    BT.2020 for BT.2020 and ICtCp; BT.709's otherwise). Untagged RGB is
+    sRGB, full range. `full_range_untagged` says the pixel format is full
+    range when untagged (yuvj formats).
+
+    The height used is the video's own, not the size it is compared at:
+    otherwise an untagged 1080p source scaled to a 640x360 encode would be
+    read as BT.470BG."""
     matrix_name = (info.color_space or "").casefold()
     if rgb:
         matrix = 0
@@ -116,8 +126,8 @@ def is_rgb_format(pix_fmt: str) -> bool:
 
 
 def colour_of(info: VideoInfo) -> VideoColour | None:
-    """`info`'s colours as both implementations read them, or None for a tag
-    neither can (left to FFmpeg's own conversion)."""
+    """The video's colours as both implementations read them, or None for a
+    tag neither can read (such a video is left to FFmpeg's own conversion)."""
     name = (info.pix_fmt or "").casefold()
     try:
         return video_colour(info, rgb=is_rgb_format(name), full_range_untagged=name.startswith("yuvj"))
@@ -127,9 +137,9 @@ def colour_of(info: VideoInfo) -> VideoColour | None:
 
 # ------------------------------------------------------- PNG colour chunks
 
-#: Each transfer that is a plain power curve in Vship, and its exponent:
-#: BT.709 (and BT.2020's SDR curves) is the 2.4 gamma of a display
-#: (BT.1886), as Vship takes it, not the camera curve H.273 defines.
+#: Each transfer that Vship treats as a plain power curve, with its exponent.
+#: Vship takes BT.709 (and BT.2020's SDR curves) as a display's 2.4 gamma
+#: (BT.1886), not as the camera curve H.273 defines.
 _GAMMAS = {1: 2.4, 4: 2.2, 5: 2.8, 6: 2.8, 7: 2.4}
 #: (white, red, green, blue) chromaticities of each primaries code, as x, y.
 _CHROMATICITIES = {
@@ -141,20 +151,21 @@ _CHROMATICITIES = {
     9: ((0.3127, 0.3290), (0.708, 0.292), (0.170, 0.797), (0.131, 0.046)),
     12: ((0.3127, 0.3290), (0.680, 0.320), (0.265, 0.690), (0.150, 0.060)),
 }
-#: The chunks that say how a PNG's values are to be read; what FFmpeg wrote
-#: of them is replaced.
+#: The PNG chunks that say how its values are to be read. Any of these that
+#: FFmpeg wrote are replaced.
 _COLOUR_CHUNKS = {b"gAMA", b"cHRM", b"sRGB", b"iCCP", b"cICP", b"mDCV", b"cLLI"}
 
 
 def _png_chunk(kind: bytes, body: bytes) -> bytes:
+    """One PNG chunk: length, type, body and CRC."""
     return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
 
 
 def png_colour_chunks(colour: VideoColour) -> bytes:
-    """The chunks that make libjxl's tools read an RGB picture's values as
-    Vship reads the video's: a plain power curve as gAMA with cHRM (no
-    H.273 code is a plain 2.4 gamma), every other transfer -- sRGB, linear,
-    PQ, HLG -- as cICP."""
+    """The PNG chunks that make libjxl's tools read an RGB picture's values
+    as Vship reads the video's. A plain power curve is described with gAMA
+    and cHRM, because no H.273 code means a plain 2.4 gamma. Every other
+    transfer (sRGB, linear, PQ, HLG) is described with cICP."""
     gamma = _GAMMAS.get(colour.transfer)
     if gamma is not None and colour.primaries in _CHROMATICITIES:
         points = [round(value * 100000) for point in _CHROMATICITIES[colour.primaries] for value in point]
@@ -164,8 +175,8 @@ def png_colour_chunks(colour: VideoColour) -> bytes:
 
 
 def describe_png(path: Path, colour: VideoColour) -> None:
-    """Rewrites the colour chunks of the PNG at `path` (one FFmpeg wrote)
-    as png_colour_chunks gives them for `colour`."""
+    """Replaces the colour chunks of the PNG at `path` (one FFmpeg wrote)
+    with those png_colour_chunks gives for `colour`."""
     path = Path(path)
     data = path.read_bytes()
     parts, position = [data[:8]], 8

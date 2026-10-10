@@ -1,30 +1,30 @@
-"""GPU implementation of the perceptual metrics via Vship's C API.
+"""Calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU, through Vship's
+C API. The main entry points are run_vship_task and apply_vship_cpu_fallback.
 
-The API is Vship 5.1's (Vship_InitHandler / Vship_ComputeHandler, see
-https://codeberg.org/Line-fr/Vship/src/tag/v5.1.1/src/VshipAPI.h); the older
-per-metric functions are a deprecated compatibility layer in 5.1.
+The API is Vship 5.1's (Vship_InitHandler and Vship_ComputeHandler; see
+https://codeberg.org/Line-fr/Vship/src/tag/v5.1.1/src/VshipAPI.h). The
+older per-metric functions are a deprecated compatibility layer in 5.1.
 
-SSIMULACRA2 and Butteraugli score each frame pair on its own; CVVDP is
-temporal and scores the video (see _CvvdpLane).
+SSIMULACRA2 and Butteraugli score each frame pair on its own. CVVDP is
+temporal, and scores the video as a whole (see _CvvdpLane).
 
-FFmpeg decodes, crops, samples and scales -- the same FFmpeg as the rest of
-the app, so every codec it reads works, VVC included, with hardware decode
-per input where the GPU has one. It streams tightly packed frames into rings
-of pinned host buffers (see _FrameStream). A video the GPU's decoder
-decodes -- NVIDIA's with Vship's CUDA build, Intel's or AMD's with any -- is
-decoded in the scoring process instead (gpu_frames, _NativeFrameStream):
-FFmpeg only copies its packets out of the container, and each picture goes
-into the ring without FFmpeg's CPU copies and the pipe -- the same pictures.
-Vship converts each
-frame from the colorspace it is described in (_vship_colorspace) and
-computes the metric on
-the GPU -- through Vship's CUDA build on NVIDIA, its HIP build on AMD, or
-its Vulkan build, which runs on any GPU with a Vulkan driver (see
-VSHIP_BUILDS). Vship takes a frame as three planes, so a hardware-decoded
-frame
-crossing the pipe in the decoder's NV12/P010 layout has only its chroma
-split into planes here (see _passthrough_format). No FFVship or FFMS2
-executable is bundled.
+FFmpeg decodes, crops, samples and scales the frames. It is the same FFmpeg
+as the rest of the app, so every codec it reads works, VVC included, with
+hardware decoding for each video whose codec the GPU decodes. It streams
+tightly packed frames into rings of pinned host buffers (see _FrameStream).
+A video that the GPU's own decoder can decode (NVIDIA's with Vship's CUDA
+build, Intel's or AMD's with any build) is decoded in the scoring process
+instead (gpu_frames, _NativeFrameStream). FFmpeg then only copies its
+packets out of the container, and each picture goes into the ring without
+FFmpeg's CPU copies and the pipe; the pictures are the same.
+
+Vship converts each frame from the colour space it is described in
+(_vship_colorspace), and calculates the metric on the GPU: through Vship's
+CUDA build on NVIDIA, its HIP build on AMD, or its Vulkan build, which runs
+on any GPU with a Vulkan driver (see VSHIP_BUILDS). Vship takes a frame as
+three planes, so a hardware-decoded frame that crosses the pipe in the
+decoder's NV12 or P010 layout has only its chroma split into planes here
+(see _passthrough_format). No FFVship or FFMS2 program is bundled.
 """
 from __future__ import annotations
 
@@ -106,13 +106,15 @@ _log = logging.getLogger(__name__)
 
 
 class VshipUnavailableError(PerceptualRunError):
-    """The GPU implementation could not be loaded or run; CPU fallback is safe."""
+    """Vship could not be loaded or run, so the metrics can safely be
+    calculated on the CPU instead."""
 
 
 class VshipPassesFailedError(VshipUnavailableError):
-    """Every metric's GPU pass failed. Raised with the first error's text,
-    and `failures` holds each metric's own reason, so a metric is never
-    reported with another's (CVVDP given SSIMULACRA2's out-of-memory)."""
+    """Every metric's GPU pass failed. The message is the first error's text,
+    and `failures` holds each metric's own reason, so that no metric is
+    reported with another's reason (such as CVVDP given SSIMULACRA2's
+    out-of-memory error)."""
 
     def __init__(self, message: str, failures: dict[str, str]) -> None:
         super().__init__(message)
@@ -120,14 +122,20 @@ class VshipPassesFailedError(VshipUnavailableError):
 
 
 class _Subsampling(ctypes.Structure):
+    """The chroma subsampling in Vship_ColorSpace_t: two shifts."""
+
     _fields_ = [("subw", ctypes.c_int), ("subh", ctypes.c_int)]
 
 
 class _Crop(ctypes.Structure):
+    """The crop in Vship_ColorSpace_t."""
+
     _fields_ = [(name, ctypes.c_int) for name in ("top", "bottom", "left", "right")]
 
 
 class _Colorspace(ctypes.Structure):
+    """Vship_ColorSpace_t: how Vship reads a frame's samples."""
+
     _fields_ = [
         ("width", ctypes.c_int64), ("height", ctypes.c_int64),
         ("target_width", ctypes.c_int64), ("target_height", ctypes.c_int64),
@@ -140,6 +148,8 @@ class _Colorspace(ctypes.Structure):
 
 
 class _Version(ctypes.Structure):
+    """Vship's version, and the backend it was built for."""
+
     _fields_ = [
         ("major", ctypes.c_int), ("minor", ctypes.c_int),
         ("minorMinor", ctypes.c_int), ("backend", ctypes.c_int),
@@ -147,6 +157,8 @@ class _Version(ctypes.Structure):
 
 
 class _DeviceInfo(ctypes.Structure):
+    """What Vship reports about a GPU."""
+
     _fields_ = [
         ("name", ctypes.c_char * 256), ("VRAMSize", ctypes.c_uint64),
         ("integrated", ctypes.c_int), ("MultiProcessorCount", ctypes.c_int),
@@ -211,21 +223,23 @@ _I64_3 = ctypes.c_int64 * 3
 #: and half and float samples too; the layouts are FFmpeg's.
 _VSHIP_ENUMS = {8: 2, 9: 3, 10: 5, 12: 7, 14: 9, 16: 11}
 #: Subsampling shifts (width, height) of FFmpeg's planar YUV layouts. 4:1:0
-#: (yuv410p) has one chroma sample per 4x4 block, (2, 2). It was (2, 1), as
-#: in FFVship 5.1.1 (Vship issue 21): Vship then read chroma planes twice the
-#: height FFmpeg wrote, and the run stopped partway through the first frame.
+#: (yuv410p) has one chroma sample per 4x4 block, so (2, 2). Don't use (2, 1)
+#: as FFVship 5.1.1 does (Vship issue 21): Vship then reads chroma planes
+#: twice the height FFmpeg wrote, and the run stops partway through the
+#: first frame.
 _SUBSAMPLING = {"410": (2, 2), "411": (2, 0), "420": (1, 1), "422": (1, 0), "440": (0, 1), "444": (0, 0)}
-#: The first Vship that reads 4:1:0 (Vship issue 21). Before it, subsampling
-#: (2, 2) gave nonsense on the same frames -- SSIMULACRA2 -52477, Butteraugli
-#: not finite -- so for an older build FFmpeg upsamples 4:1:0 to 4:4:4.
+#: The first Vship version that reads 4:1:0 correctly (Vship issue 21). Older
+#: versions give nonsense with subsampling (2, 2) (SSIMULACRA2 -52477,
+#: Butteraugli not finite), so for them FFmpeg upsamples 4:1:0 to 4:4:4.
 _READS_410_SINCE = (5, 1, 2)
 
 
 @dataclass(frozen=True, slots=True)
 class _ImageFormat:
-    """What FFmpeg pipes (pixel_format) and how Vship reads it. `family` is
-    this module's: 1 for RGB, planes all full size. Vship 5.1 itself tells
-    RGB from YUV by the matrix (0 is RGB); its colorFamily field is unused."""
+    """The pixel format FFmpeg sends (pixel_format), and how Vship reads it.
+    `family` is this module's own: 1 for RGB, whose planes are all full
+    size. Vship 5.1 itself tells RGB from YUV by the matrix (0 is RGB), and
+    does not use its colorFamily field."""
 
     pixel_format: str
     family: int
@@ -237,6 +251,8 @@ class _ImageFormat:
     plane_order: tuple[int, int, int] = (0, 1, 2)
 
     def frame_layout(self, width: int, height: int) -> tuple[int, tuple[int, int, int], _I64_3, tuple[int, int, int]]:
+        """Returns a frame's layout at this size: (total bytes, each plane's
+        bytes, each plane's row stride, the order Vship reads the planes in)."""
         bytes_per_sample = 1 if self.sample == _VSHIP_ENUMS[8] else 2
         if self.family == 1:
             sizes = (width * height * bytes_per_sample,) * 3
@@ -258,6 +274,9 @@ class _ImageFormat:
 
 @dataclass(slots=True)
 class _LoadedVship:
+    """A Vship build loaded in this process: its backend, its DLL's path, the
+    library, and the DLL folder added for its dependencies."""
+
     backend: str
     path: Path
     library: ctypes.CDLL
@@ -266,12 +285,14 @@ class _LoadedVship:
 
 @dataclass(frozen=True, slots=True)
 class VshipDevice:
+    """A GPU that Vship can use, and the Vship build that runs on it."""
+
     backend: str  # "vulkan", "cuda" or "hip": the Vship build it runs on (VSHIP_BUILDS)
     name: str
     gpu_id: int
     version: str
-    #: The library, where it was loaded in this process. None in the app
-    #: itself: Vship is probed and run in a process of its own (see
+    #: The library, if it was loaded in this process. It is None in the app
+    #: itself, because Vship is probed and run in a process of its own (see
     #: _run_vship_pass), which loads the build again (_library).
     loaded: _LoadedVship | None
     #: Who made the GPU: NVIDIA for CUDA, AMD for HIP, and for Vulkan what
@@ -291,10 +312,12 @@ _API_FUNCTIONS = (
 
 
 def _has_api(lib) -> bool:
+    """Whether the library has Vship 5.1's API."""
     return all(hasattr(lib, name) for name in _API_FUNCTIONS)
 
 
 def _configure_api(lib: ctypes.CDLL) -> None:
+    """Declares the API's functions."""
     lib.Vship_GetVersion.argtypes = []
     lib.Vship_GetVersion.restype = _Version
     lib.Vship_GetDeviceCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
@@ -330,8 +353,9 @@ def _configure_api(lib: ctypes.CDLL) -> None:
 
 
 def _handler_error(lib: ctypes.CDLL, handle: _Handle, code: int) -> str:
-    """Why a call on `handle` failed: the handler's own last error -- other
-    handlers on other threads may have failed since -- or the code's text."""
+    """Returns why a call on `handle` failed: the handler's own last error,
+    or else the text for `code`. The handler's own error is used because
+    other handlers, on other threads, may have failed since."""
     detail = ctypes.create_string_buffer(1024)
     with contextlib.suppress(Exception):
         lib.Vship_GetDetailedLastErrorHandler(handle, detail, len(detail))
@@ -341,6 +365,8 @@ def _handler_error(lib: ctypes.CDLL, handle: _Handle, code: int) -> str:
 
 
 def _message(lib: ctypes.CDLL, code: int | None = None) -> str:
+    """Returns Vship's text for the error `code`, or its last detailed error
+    when `code` is None."""
     buffer = ctypes.create_string_buffer(1024)
     try:
         if code is None:
@@ -354,43 +380,40 @@ def _message(lib: ctypes.CDLL, code: int | None = None) -> str:
 
 
 #: Vship's builds, bundled in tools/vship/<folder>: CUDA runs on NVIDIA,
-#: HIP on AMD, and Vulkan on any GPU with a Vulkan driver -- NVIDIA, AMD and
-#: Intel.
+#: HIP on AMD, and Vulkan on any GPU with a Vulkan driver (NVIDIA, AMD and
+#: Intel).
 VSHIP_BUILDS: dict[str, str] = {"cuda": "nvidia", "hip": "amd", "vulkan": "vulkan"}
 #: Settings > GPU metrics > backend: "auto", or the build to try first. Auto
 #: tries CUDA, then HIP, then Vulkan: the fastest build whose scores agree
 #: with the reference on each GPU (CUDA is faster than Vulkan on NVIDIA for
 #: SSIMULACRA2 and CVVDP), and Vulkan for a GPU neither of the others can use.
-#: Whatever is chosen, the other builds follow if it cannot run.
+#: If the chosen build cannot run, the others are tried after it.
 VSHIP_BACKENDS = ("auto", "vulkan", "cuda", "hip")
 DEFAULT_VSHIP_BACKEND = "auto"
 _AUTO_ORDER = ("cuda", "hip", "vulkan")
 _BACKEND_LABELS = {"vulkan": "Vulkan", "cuda": "CUDA", "hip": "HIP"}
-#: (build, GPU maker, metric) a Vship build scores wrongly: the metric is
-#: calculated on the CPU instead, as on a PC without a usable GPU. A GPU whose
-#: maker could not be told counts as every maker. Add an entry only for a
-#: bundled build measured to disagree with CUDA and libjxl on the same frames.
+#: The (build, GPU maker, metric) combinations that a Vship build scores
+#: wrongly. Such a metric is calculated on the CPU instead, as on a PC
+#: without a usable GPU. A GPU whose maker could not be told counts as every
+#: maker. Add an entry only for a bundled build measured to disagree with
+#: CUDA and libjxl on the same frames.
 #:
-#: Empty since the bundled Vulkan build is Vship 5.1.2 (its fix is commit 97d0dc5).
-#: Before it, Vship's Vulkan build (5.1.1, and commit 0732ed3) scored
-#: SSIMULACRA2 far too high on NVIDIA GPUs -- HoneyBee 4K against a CRF 22
-#: HEVC encode: libjxl 47.4, CUDA 45.5, Vulkan 62.9; +7 at 1080p, +1 at 360p
-#: (Vship issue 18) -- because NVIDIA's driver miscompiles a small
-#: two-dimensional array in its blur, which 5.1.2 flattens. An RTX 5090 now
-#: scores 45.5019 there against CUDA's 45.5020, and Intel's scores are
-#: unchanged. Butteraugli and CVVDP always agreed. AMD's Vulkan is
-#: unmeasured.
+#: It is empty since the bundled Vulkan build is Vship 5.1.2. Older Vulkan
+#: builds scored SSIMULACRA2 far too high on NVIDIA GPUs (Vship issue 18,
+#: fixed in commit 97d0dc5), because NVIDIA's driver miscompiles a small
+#: two-dimensional array in the blur. With 5.1.2, an RTX 5090 scores 45.5019
+#: where CUDA scores 45.5020. AMD's Vulkan scores have not been measured.
 SCORED_WRONGLY: frozenset[tuple[str, GpuVendor, str]] = frozenset()
-#: (build, GPU maker, metric) -> the largest frame it is given, in pixels,
-#: and the GPUs and sizes that is, for the reason the video shows: above it
-#: the metric is not calculated. Vship 5.1.2's Vulkan CVVDP hangs Intel's
-#: GPU above 1080p. On a Core Ultra 9 285K's (driver 32.0.101.8860), 4K
-#: HEVC stopped after 3 to 6
-#: frames, with one handler or two: Windows reset the GPU (LiveKernelEvent
-#: 141; the screen goes black for a moment) and the pass failed with "Failed
-#: to Submit commandBuffer to queue". At 1920x1080 all 240 frames were
-#: scored, 13 a second. Sizes in between are untested, so they are refused
-#: too. Not reported to Vship yet.
+#: The largest frame, in pixels, that a (build, GPU maker, metric)
+#: combination is given, with the GPUs and sizes that limit covers, for the
+#: reason shown with the video. Above it, the metric is not calculated.
+#: Vship 5.1.2's Vulkan CVVDP hangs Intel's GPU above 1080p: on a Core
+#: Ultra 9 285K (driver 32.0.101.8860), 4K HEVC stopped after 3 to 6
+#: frames, with one handler or two. Windows reset the GPU (LiveKernelEvent
+#: 141, and the screen goes black for a moment), and the pass failed with
+#: "Failed to Submit commandBuffer to queue". At 1920x1080, all 240 frames
+#: were scored, 13 a second. Sizes in between are untested, so they are
+#: refused too. This has not been reported to Vship yet.
 GPU_PIXEL_LIMITS: dict[tuple[str, GpuVendor, str], tuple[int, str]] = {
     ("vulkan", GpuVendor.INTEL, "cvvdp"): (1920 * 1080, "Intel GPUs above 1920x1080"),
 }
@@ -406,9 +429,10 @@ FAILED_PROBE_RETRY_SECONDS = 60.0
 
 
 def set_vship_backend(backend: str) -> None:
-    """ "auto" or the Vship build to try first (Settings > GPU metrics); an
-    unknown name is "auto". A probe made for another choice is forgotten, so
-    the next one -- start_vship_probe, or the next GPU run -- uses this."""
+    """Sets the Vship build to try first, or "auto" (Settings > GPU
+    metrics). An unknown name means "auto". A probe made for another choice
+    is forgotten, so that the next probe (start_vship_probe, or the next GPU
+    run) uses this one."""
     global _backend, _probed
     backend = backend if backend in VSHIP_BACKENDS else DEFAULT_VSHIP_BACKEND
     with _PROBE_LOCK:
@@ -418,26 +442,27 @@ def set_vship_backend(backend: str) -> None:
 
 
 def vship_backend() -> str:
+    """The Vship build to try first, or "auto"."""
     return _backend
 
 
 def backend_label(backend: str) -> str:
-    """ "Vulkan", "CUDA" or "HIP"."""
+    """The name shown for a Vship build: "Vulkan", "CUDA" or "HIP"."""
     return _BACKEND_LABELS.get(backend, backend)
 
 
 def scores_correctly(device: VshipDevice, key: str) -> bool:
-    """Whether `device`'s Vship build scores `key` right on its GPU
-    (SCORED_WRONGLY); a GPU of unknown make is assumed to be affected."""
+    """Whether `device`'s Vship build scores `key` correctly on its GPU (see
+    SCORED_WRONGLY). A GPU of unknown make is taken to be affected."""
     return not any(device.backend == backend and key == metric and device.vendor in (vendor, None)
                    for backend, vendor, metric in SCORED_WRONGLY)
 
 
 def size_refusal(device: VshipDevice, key: str, size: tuple[int, int],
                  computed: tuple[int, int] | None = None) -> str | None:
-    """Why `device` does not calculate `key` on frames of `size` -- computed
-    at `computed` where that differs (CVVDP scaled to the display) --
-    (GPU_PIXEL_LIMITS), or None where it does."""
+    """Returns why `device` does not calculate `key` on frames of `size` (see
+    GPU_PIXEL_LIMITS), or None if it does. `computed` is the size the metric
+    is calculated at, where that differs (CVVDP scaled to the display)."""
     limit = GPU_PIXEL_LIMITS.get((device.backend, device.vendor, key))
     at = computed or size
     if limit is None or at[0] * at[1] <= limit[0]:
@@ -448,11 +473,12 @@ def size_refusal(device: VshipDevice, key: str, size: tuple[int, int],
 
 
 def cvvdp_computed_size(size: tuple[int, int], settings: CvvdpSettings) -> tuple[int, int]:
-    """The size Vship computes CVVDP at for frames of `size`: theirs, or
-    with resize_to_display, theirs fitted to the display (aspect kept) --
-    the larger of the two, as whether Vship shrinks a frame larger than
-    the display is not known, and the size decides whether Intel's GPU
-    hangs (GPU_PIXEL_LIMITS)."""
+    """Returns the size Vship calculates CVVDP at for frames of `size`: their
+    own size, or with resize_to_display, the larger of their own size and
+    their size fitted to the display (keeping the aspect ratio). The larger
+    is taken because it is not known whether Vship shrinks a frame larger
+    than the display, and the size decides whether Intel's GPU hangs (see
+    GPU_PIXEL_LIMITS)."""
     if not settings.resize_to_display:
         return size
     scale = min(settings.display.width / size[0], settings.display.height / size[1])
@@ -461,16 +487,19 @@ def cvvdp_computed_size(size: tuple[int, int], settings: CvvdpSettings) -> tuple
 
 
 def gpu_can_score(key: str) -> bool:
-    """Whether SSIMULACRA2 or Butteraugli set to GPU is calculated on the GPU
-    here: a GPU Vship can use, whose build scores it right. Probes once."""
+    """Whether SSIMULACRA2 or Butteraugli set to the GPU is calculated on the
+    GPU here: when Vship can use a GPU, and its build scores the metric
+    correctly. The GPU is probed once."""
     device, _reason = detect_vship_device()
     return device is not None and scores_correctly(device, key)
 
 
 def detect_vship_device() -> tuple[VshipDevice | None, str]:
-    """Return a fully verified GPU for Vship, or a user-readable reason.
+    """Returns a fully checked GPU for Vship, or a reason the user can read
+    for why there is none.
 
-    Probed once and cached; see start_vship_probe and forget_failed_vship_probe."""
+    The probe is made once and its result kept; see start_vship_probe and
+    forget_failed_vship_probe."""
     global _probed
     with _PROBE_LOCK:
         if _probed is None:
@@ -480,24 +509,26 @@ def detect_vship_device() -> tuple[VshipDevice | None, str]:
             if device is not None:
                 _log.info("Vship %s (%s) GPU: %s", device.version, backend_label(device.backend), device.name)
             else:
-                # Stopped as the app closed, it is no warning: the other
-                # probes say so at INFO, and this one said it as a warning.
+                # A probe stopped because the app is closing is not worth a
+                # warning; the other probes log that at INFO too.
                 _log.log(logging.INFO if stopped else logging.WARNING, "Vship GPU unavailable: %s", reason)
         return _probed[0]
 
 
 def start_vship_probe() -> None:
-    """Probe in the background, at startup. The first probe loads the Vship
-    library and initializes the GPU driver, and ran on the UI thread when the
-    first video was added, freezing the window for that long."""
+    """Probes the GPU in the background at startup. The first probe loads
+    the Vship library and starts the GPU driver, which would freeze the
+    window for that long if it ran on the window's thread when the first
+    video is added."""
     threading.Thread(target=detect_vship_device, name="vship-probe", daemon=True).start()
 
 
 def forget_failed_vship_probe() -> None:
-    """Before a GPU run, off the UI thread: redo a probe that failed a while
-    ago. The failure may have been passing -- a driver being updated or
-    restarted, a GPU briefly unavailable -- and was kept for the whole
-    session, running every GPU metric on the CPU until the app restarted."""
+    """Forgets a probe that failed a while ago, so that the next run probes
+    again. Call it before a GPU run, off the window's thread. The failure
+    may have been temporary (a driver being updated or restarted, a GPU
+    briefly unavailable); without this, every GPU metric would run on the
+    CPU until the app restarted."""
     global _probed
     with _PROBE_LOCK:
         if (_probed is not None and _probed[0][0] is None
@@ -512,12 +543,17 @@ def _probe_order(choice: str | None = None) -> tuple[str, ...]:
 
 
 class _VkApplicationInfo(ctypes.Structure):
+    """Vulkan's VkApplicationInfo, to start the Vulkan instance of the checks
+    below."""
+
     _fields_ = [("sType", ctypes.c_int), ("pNext", ctypes.c_void_p), ("pApplicationName", ctypes.c_char_p),
                 ("applicationVersion", ctypes.c_uint32), ("pEngineName", ctypes.c_char_p),
                 ("engineVersion", ctypes.c_uint32), ("apiVersion", ctypes.c_uint32)]
 
 
 class _VkInstanceCreateInfo(ctypes.Structure):
+    """Vulkan's VkInstanceCreateInfo."""
+
     _fields_ = [("sType", ctypes.c_int), ("pNext", ctypes.c_void_p), ("flags", ctypes.c_uint32),
                 ("pApplicationInfo", ctypes.POINTER(_VkApplicationInfo)), ("enabledLayerCount", ctypes.c_uint32),
                 ("ppEnabledLayerNames", ctypes.c_void_p), ("enabledExtensionCount", ctypes.c_uint32),
@@ -525,15 +561,16 @@ class _VkInstanceCreateInfo(ctypes.Structure):
 
 
 def _vulkan_unavailable() -> str | None:
-    """Why no GPU is usable through Vulkan here, or None if one is.
+    """Returns why no GPU is usable through Vulkan here, or None if one is.
 
-    Asked of the Vulkan loader itself before Vship's Vulkan build is
-    loaded. Where the loader is installed but no driver answers -- a virtual
-    machine, GitHub's test runner -- Vship's Vulkan builds before 5.1.2
+    The Vulkan loader itself is asked, before Vship's Vulkan build is
+    loaded. Where the loader is installed but no driver answers (a virtual
+    machine, GitHub's test runner), Vship's Vulkan builds before 5.1.2
     failed their DLL initialisation (WinError 1114), and the process then
     crashed with an access violation as it exited. The bundled build starts
-    Vulkan on first use and loads there (tests/test_perceptual_vship.py); the
-    loader is still asked first, as it says why without loading Vship."""
+    Vulkan on first use, and loads there too (tests/test_perceptual_vship.py),
+    but the loader is still asked first, because it says why without
+    loading Vship."""
     try:
         vulkan = ctypes.WinDLL("vulkan-1.dll")
     except OSError:
@@ -557,10 +594,11 @@ def _vulkan_unavailable() -> str | None:
 
 
 def _vulkan_vendor(name: str) -> GpuVendor | None:
-    """Who made the Vulkan GPU called `name`, from the Vulkan loader: Vship
-    names a GPU by its VkPhysicalDeviceProperties.deviceName. Asked of the
-    loader because names do not always say (NVIDIA's "Quadro" and "Tesla"
-    cards). GpuVendor.NONE for another maker, None if no GPU has the name."""
+    """Returns who made the Vulkan GPU called `name` (Vship names a GPU by its
+    VkPhysicalDeviceProperties.deviceName). The Vulkan loader is asked,
+    because names do not always say (NVIDIA's "Quadro" and "Tesla" cards).
+    Returns GpuVendor.NONE for another maker, or None if no GPU has the
+    name."""
     try:
         vulkan = ctypes.WinDLL("vulkan-1.dll")
     except OSError:
@@ -591,11 +629,14 @@ def _vulkan_vendor(name: str) -> GpuVendor | None:
         vulkan.vkDestroyInstance(instance, None)
 
 
-#: The GPU maker each build runs on; Vulkan's is asked of the loader.
+#: The GPU maker each build runs on. For Vulkan, the loader is asked
+#: (_vulkan_vendor).
 _BUILD_VENDORS = {"cuda": GpuVendor.NVIDIA, "hip": GpuVendor.AMD}
 
 
 def _probe_vship_device() -> tuple[VshipDevice | None, str]:
+    """Tries the Vship builds in turn (_probe_order), and returns the first
+    usable GPU found, a discrete one first, or the reasons none was found."""
     if os.name != "nt":
         return None, "Vship GPU acceleration is only bundled for Windows."
     tools = Path(__file__).resolve().parents[1] / "tools" / "vship"
@@ -638,8 +679,8 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
                 name = bytes(info.name).split(b"\0", 1)[0].decode("utf-8", errors="replace")
                 usable.append((bool(info.integrated), gpu_id, name or f"{label} GPU {gpu_id}"))
             if usable:
-                # Vulkan lists every GPU, an integrated one too, in the
-                # driver's order: a discrete GPU comes first here.
+                # Vulkan lists every GPU, integrated ones included, in the
+                # driver's order; a discrete GPU is preferred here.
                 _integrated, gpu_id, name = min(usable)
                 version = lib.Vship_GetVersion()
                 version_text = f"{version.major}.{version.minor}.{version.minorMinor}"
@@ -653,12 +694,13 @@ def _probe_vship_device() -> tuple[VshipDevice | None, str]:
 
 
 def _probe_isolated(stopped: list | None = None) -> tuple[VshipDevice | None, str]:
-    """_probe_vship_device in a process of its own. Loading Vship starts the
-    GPU driver, and a crash there took the app down: Vship 5.1.1's Vulkan
-    build on a PC whose only GPU is Intel's crashed it as it closed. Now it
-    ends that process, and the GPU metrics are calculated on the CPU.
-    `stopped`, if given, gets True appended when the app ended the probe
-    (closing) rather than it failing."""
+    """Runs _probe_vship_device in a process of its own. Loading Vship
+    starts the GPU driver, and a crash there would take the app down (Vship
+    5.1.1's Vulkan build crashed as it closed, on a PC whose only GPU is
+    Intel's). A crash now ends only that process, and the GPU metrics are
+    calculated on the CPU. If given, `stopped` gets True appended when the
+    app ended the probe (because it is closing) rather than the probe
+    failing."""
     try:
         return run_isolated(_probe_in_own_process, _backend, what="Vship's GPU probe")
     except IsolatedCrashError as error:
@@ -668,8 +710,9 @@ def _probe_isolated(stopped: list | None = None) -> tuple[VshipDevice | None, st
 
 
 def _probe_in_own_process(choice: str) -> tuple[VshipDevice | None, str]:
-    """Run by _probe_isolated: the device goes back without the library,
-    which belongs to the process that loaded it."""
+    """The probe in its own process (see _probe_isolated). The device is
+    returned without the library, which belongs to the process that loaded
+    it."""
     global _backend
     _backend = choice  # this process starts with the default
     device, reason = _probe_vship_device()
@@ -681,9 +724,9 @@ _loaded_builds: dict[str, _LoadedVship] = {}
 
 
 def _library(device: VshipDevice) -> ctypes.CDLL:
-    """The Vship library `device` runs on: the probe's own, or, in the
-    process a pass runs in (which gets the device without it), loaded there
-    once."""
+    """Returns the Vship library `device` runs on: the probe's own, or, in
+    the process a pass runs in (which gets the device without its library),
+    the build loaded there once."""
     if device.loaded is not None:
         return device.loaded.library
     loaded = _loaded_builds.get(device.backend)
@@ -697,8 +740,8 @@ def _library(device: VshipDevice) -> ctypes.CDLL:
 
 
 def _reads_410(version: str | None) -> bool:
-    """Whether Vship `version` ("5.1.2") reads 4:1:0 (_READS_410_SINCE); an
-    unknown version is taken not to."""
+    """Whether Vship `version` ("5.1.2") reads 4:1:0 correctly (see
+    _READS_410_SINCE). An unknown version is taken not to."""
     try:
         return tuple(int(part) for part in (version or "").split(".")[:3]) >= _READS_410_SINCE
     except ValueError:
@@ -706,11 +749,12 @@ def _reads_410(version: str | None) -> bool:
 
 
 def _image_format(info: VideoInfo, version: str | None = None) -> _ImageFormat:
-    """The planar layout FFmpeg pipes a decoded video in, and how Vship
-    `version` reads it. FFmpeg converts to it exactly: a semi-planar or
-    big-endian layout to the planar little-endian one, alpha dropped, a
-    monochrome video given neutral chroma. 4:1:0 goes as it is to a Vship
-    that reads it, upsampled to 4:4:4 for an older one (_READS_410_SINCE)."""
+    """Returns the planar layout FFmpeg sends a decoded video in, and how
+    Vship `version` reads it. FFmpeg converts to it exactly: a semi-planar
+    or big-endian layout to the planar little-endian one, with alpha dropped
+    and neutral chroma added to a monochrome video. 4:1:0 is sent as it is
+    to a Vship that reads it, and upsampled to 4:4:4 for an older one (see
+    _READS_410_SINCE)."""
     name = (info.pix_fmt or "").strip().casefold()
     if name in {"nv12", "nv21"}:
         return _format_yuv("420", 8)
@@ -729,7 +773,7 @@ def _image_format(info: VideoInfo, version: str | None = None) -> _ImageFormat:
             sampling = "444"
         image = _format_yuv(sampling, int(yuv.group(3) or 8))
         return replace(image, full_range=yuv.group(1) == "j")
-    # Monochrome (AV1 can be): the luma as it is, chroma neutral.
+    # Monochrome (AV1 can be): the luma as it is, with neutral chroma.
     gray = re.fullmatch(r"gray(?:(9|10|12|14|16)(?:le|be)?)?", name)
     if gray:
         return _format_yuv("420", int(gray.group(1) or 8))
@@ -750,24 +794,25 @@ def _image_format(info: VideoInfo, version: str | None = None) -> _ImageFormat:
 
 
 def _passthrough_format(info: VideoInfo, hwaccel: str | None) -> tuple[_ImageFormat, str] | None:
-    """The planar layout Vship is given, and the layout FFmpeg pipes, when a
-    hardware-decoded 4:2:0 frame can cross the pipe exactly as it downloads.
+    """Returns the planar layout Vship is given and the layout FFmpeg sends,
+    when a hardware-decoded 4:2:0 frame can cross the pipe exactly as it is
+    downloaded; otherwise None.
 
-    NVDEC (and D3D11VA/QSV) hand back NV12 or P010: a luma plane, then U and
-    V interleaved in one plane. Vship only takes separate planes, and having
-    FFmpeg rearrange the whole frame cost 10-12 ms of CPU per 4K frame --
-    about half of what feeding Vship cost. Piped as-is, the luma plane is
-    read straight into pinned memory and only the chroma is split, which
-    numpy does in under 1 ms (_FrameStream._fill).
+    NVDEC (and D3D11VA and QSV) give back NV12 or P010: a luma plane, then U
+    and V interleaved in one plane. Vship only takes separate planes, and
+    having FFmpeg rearrange the whole frame costs 10-12 ms of CPU per 4K
+    frame, about half of what feeding Vship costs. Sent as it is, the luma
+    plane is read straight into pinned memory and only the chroma is split,
+    which numpy does in under 1 ms (_FrameStream._fill).
 
-    P010 keeps each 10-bit sample in the top bits of 16. Declared to Vship as
-    16-bit, limited range, that is the same picture exactly: Vship brings
-    limited-range samples to 8-bit scale by dividing by 2^(depth-8), so
-    (v << 6) / 256 and v / 4 are the same float (FullRange in Vship 5.1.1's
-    gpuColorToLinear/rangeToFull.hpp; the 16-bit read masks nothing off).
-    Full range divides by 2^depth - 1 instead, where the two differ, so
-    full-range 10-bit keeps FFmpeg's conversion. 8-bit NV12 is exact in
-    either range.
+    P010 keeps each 10-bit sample in the top bits of 16. Declared to Vship
+    as 16-bit and limited range, that is exactly the same picture: Vship
+    brings limited-range samples to 8-bit scale by dividing by 2^(depth-8),
+    so (v << 6) / 256 and v / 4 are the same float (FullRange in Vship
+    5.1.1's gpuColorToLinear/rangeToFull.hpp; the 16-bit read masks nothing
+    off). Full range divides by 2^depth - 1 instead, where the two differ,
+    so full-range 10-bit video keeps FFmpeg's conversion. 8-bit NV12 is
+    exact in either range.
     """
     if not hwaccel:
         return None
@@ -783,14 +828,15 @@ def _passthrough_format(info: VideoInfo, hwaccel: str | None) -> tuple[_ImageFor
 
 
 def _format_yuv(sampling: str, depth: int) -> _ImageFormat:
+    """The planar YUV format for a subsampling ("420") and bit depth."""
     subw, subh = _SUBSAMPLING[sampling]
     suffix = "" if depth == 8 else f"{depth}le"
     return _ImageFormat(f"yuv{sampling}p{suffix}", 0, _VSHIP_ENUMS[depth], subw, subh)
 
 
 def _vship_colorspace(info: VideoInfo, image: _ImageFormat, width: int, height: int) -> _Colorspace:
-    """The frame's colorspace for Vship, from the stream's tags, read as
-    colour.video_colour reads them for both implementations."""
+    """Returns the frame's colour space for Vship, from the stream's tags,
+    read as colour.video_colour reads them for both the GPU and the CPU."""
     try:
         colour = video_colour(info, rgb=image.family == 1, full_range_untagged=image.full_range)
     except UnsupportedColourError as error:
@@ -818,6 +864,8 @@ def _scaled_sizes(
     source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe,
     source_crop: CropBox | None, distorted_crop: CropBox | None,
 ) -> tuple[tuple[int, int], tuple[int, int]]:
+    """The sizes the source's and the test video's frames are scaled to:
+    both the same, by the comparison's scaling direction."""
     source_size = content_size(source, source_crop)
     distorted_size = content_size(distorted, distorted_crop)
     if source_size == distorted_size:
@@ -832,16 +880,17 @@ def _filter_chain(
     pixel_format: str, step: int, algorithm: str, hwaccel: str | None = None,
     numbered_at: Fraction | None = None,
 ) -> str:
-    """The filters a video's frames go through on their way to Vship: every
-    step-th kept, then brought from the GPU, cropped, scaled and converted.
-    `numbered_at`: the test video's frame rate, which the frames are first
-    numbered at, as every metric's are (frame_sync); None when pairing by
-    timestamp, where each video's times start at 0 instead."""
+    """Returns the filters a video's frames go through on their way to
+    Vship: every step-th frame is kept, then brought from the GPU, cropped,
+    scaled and converted. `numbered_at` is the test video's frame rate, at
+    which the frames are first numbered, as every metric's are (frame_sync).
+    It is None when pairing by timestamp, where each video's times start at
+    0 instead."""
     operations: list[str] = [] if numbered_at is None else numbering_filters(numbered_at)
     if step > 1:
-        # Before the rest: the frames it drops are not downloaded, cropped or
-        # scaled (they were: at step 24, 23 of every 24). Nothing after it
-        # drops a frame, so n counts the same frames wherever it stands.
+        # select comes before the rest, so that the frames it drops are not
+        # downloaded, cropped or scaled. Nothing after it drops a frame, so
+        # n counts the same frames wherever it stands.
         operations.append(f"select=not(mod(n\\,{step}))")
     if hwaccel:
         # A hardware-decoded surface is brought to system memory in its
@@ -860,55 +909,54 @@ def _filter_chain(
     return ",".join(operations)
 
 
-#: Concurrent Vship handlers per metric. One handler leaves the GPU idle
-#: between its own kernels; two keep it busy. Measured at 4K 10-bit on an
-#: RTX 5090 (Vship's CUDA build): SSIMULACRA2 217 -> 277 pairs/s,
-#: Butteraugli 82 -> 95, both metrics together 61 -> 72. (FFVship runs 8
-#: GPU streams by default, -g, and its documentation calls 3 usually
-#: enough; each holds its own VRAM.)
+#: Vship handlers working at once per metric. One handler leaves the GPU
+#: idle between its own kernels, and two keep it busy: at 4K 10-bit on an
+#: RTX 5090 (Vship's CUDA build), SSIMULACRA2 went from 217 to 277 pairs a
+#: second, Butteraugli from 82 to 95, and both together from 61 to 72.
+#: (FFVship runs 8 GPU streams by default, and its documentation calls 3
+#: usually enough; each holds its own GPU memory.)
 _LANES_PER_METRIC = 2
 #: Frames in flight per video: one per lane being scored, one waiting and
-#: one being filled, so decode, transfer and GPU compute overlap instead of
-#: taking turns. A 4K 10-bit frame is 25 MB of pinned memory, so this is
+#: one being filled, so that decoding, transfer and GPU work overlap instead
+#: of taking turns. A 4K 10-bit frame is 25 MB of pinned memory, so this is
 #: 250 MB for a 4K pair.
 _RING_SLOTS = _LANES_PER_METRIC + 3
-#: The pipe between FFmpeg and this process. Windows' default is a few
-#: kilobytes, which caps a raw 4K stream near 55 fps no matter how fast the
-#: decoder is; 64 MB doubles that. Measured on one 4K 10-bit HEVC stream:
-#: 55 -> 107 fps alone, 46 -> 78 fps with the two inputs in parallel.
+#: The size of the pipe between FFmpeg and this process. Windows' default
+#: is a few kilobytes, which holds a raw 4K stream near 55 fps however fast
+#: the decoder is. With 64 MB, one 4K 10-bit HEVC stream went from 55 to
+#: 107 fps alone, and from 46 to 78 fps with the two videos in parallel.
 _PIPE_BYTES = proc_util.FRAME_PIPE_BYTES
 _EOF = -1
-#: What FFmpeg writes about each frame it pipes to Vship (-stats_enc_pre)
+#: What FFmpeg writes about each frame it sends to Vship (-stats_enc_pre)
 #: when pairing by timestamp (frame_sync.by_timestamp): the picture's
 #: timestamp as it leaves the filter chain, in the chain's time base
-#: (-enc_time_base filter: the stream's) -- the timestamp libvmaf's frame
-#: sync is given at the end of the same chain. The frames are paired by it,
-#: as libvmaf pairs them (frame_sync_by_time).
+#: (-enc_time_base filter, the stream's). That is the timestamp libvmaf's
+#: frame sync is given at the end of the same chain, so the frames are
+#: paired by it as libvmaf pairs them (frame_sync_by_time).
 #:
-#: It was the decoder's ({ptsi} {tbi}), which is the same number less the
-#: first frame's where the file stores presentation times. A file that
-#: stores none (H.264 with B-frames in AVI) has no decoder timestamp --
-#: FFmpeg works its frames' times out after decoding -- and every GPU pass
-#: on one failed with "FFmpeg gave a test video frame no timestamp".
+#: Don't use the decoder's timestamp ({ptsi} {tbi}) instead: a file that
+#: stores no presentation times (H.264 with B-frames in AVI) has none,
+#: because FFmpeg works its frames' times out after decoding.
 _TIMESTAMP_FORMAT = "{pts} {tb}"
 #: How long a frame's timestamp may be missing once the frame has arrived.
-#: FFmpeg writes it, and flushes it, before the frame: it is there at once.
+#: FFmpeg writes and flushes it before the frame, so it is there at once.
 _TIMESTAMP_WAIT_SECONDS = 10.0
 _NO_PTS = -(1 << 63)  # AV_NOPTS_VALUE
 
 
 def _with_timestamps(command: list[str], path: Path) -> list[str]:
-    """`command`, whose last argument is its output, also writing each piped
-    frame's timestamp to `path` (_TIMESTAMP_FORMAT), a line per frame."""
+    """Returns `command`, whose last argument is its output, made to also
+    write each piped frame's timestamp to `path` (_TIMESTAMP_FORMAT), one
+    line per frame."""
     return [*command[:-1], "-enc_time_base", "filter", "-stats_enc_pre", str(path),
             "-stats_enc_pre_fmt", _TIMESTAMP_FORMAT, command[-1]]
 
 
 class _Timestamps:
-    """The timestamp lines one FFmpeg writes as it pipes frames
-    (_with_timestamps), read a line per frame read. A frame's line is
-    written before the frame, so it is in the file by the time the frame
-    has been read; waiting is only for a line caught part-way."""
+    """Reads the timestamp lines one FFmpeg writes as it sends frames
+    (_with_timestamps), one line per frame read. A frame's line is written
+    before the frame, so it is in the file by the time the frame has been
+    read; the only wait is for a line caught part-way through."""
 
     def __init__(self, path: Path, process: subprocess.Popen, label: str,
                  clock: Callable[[], float] = time.monotonic) -> None:
@@ -940,12 +988,14 @@ class _Timestamps:
             time.sleep(0.001)
 
     def _missing(self, what: str) -> VshipUnavailableError:
-        """The pass's failure for a frame without a usable timestamp: one
-        message for the window (it has a translation), `what` in the log."""
+        """The pass's failure for a frame without a usable timestamp. The
+        window gets one fixed message (it has a translation), and the log
+        gets `what`."""
         _log.error("Vship: no timestamp for a %s frame: %s", self._label, what)
         return VshipUnavailableError(f"FFmpeg did not give the timestamp of a {self._label} frame.")
 
     def _parse(self, line: bytes) -> int:
+        """Returns the timestamp on one line, checking its time base."""
         try:
             pts_text, base_text = line.decode("ascii").split()
             pts, time_base = int(pts_text), Fraction(base_text)
@@ -969,16 +1019,16 @@ class _PassRate:
     """A pass's frame rate for its progress reports, timed from its first
     frame pair rather than from the pass's start.
 
-    The start -- FFmpeg opening both inputs, the first 4K frames decoded,
-    Vship's handlers set up -- takes a second or more that is not the rate
-    the pass runs at. Counted in, it put "1.7 fps, 0:05:39 left" on the run
-    line at the start of a pass over an 8-second clip. No rate until there
-    is some time to measure over.
+    The start (FFmpeg opening both videos, the first 4K frames decoded,
+    Vship's handlers set up) takes a second or more that says nothing about
+    the pass's speed. Counted in, it would show "1.7 fps, 0:05:39 left" at
+    the start of a pass over an 8-second clip. So there is no rate until
+    there is some time to measure over.
 
     The rate is in the video's frames, as the progress is: with frame
-    subsampling each compared pair covers `step` frames. Pairs per second
-    against frames left made a sampled pass's time left `step` times too
-    long (the CPU tools already counted frames).
+    subsampling, each compared pair covers `step` frames. Pairs per second
+    against frames left would make a sampled pass's time left `step` times
+    too long.
     """
 
     WARMUP_SECONDS = 0.5
@@ -999,35 +1049,37 @@ class _PassRate:
         return (pairs - self._first_pairs) * self._step / span if span >= self.WARMUP_SECONDS else 0.0
 
 
-#: The planar layouts FFmpeg's YUV4MPEG muxer writes (-strict -1 for more
-#: than 8 bits); 4:1:0, 4:4:0, planar RGB and the semi-planar layouts a GPU
-#: decoder hands back (NV12, P010) go as raw video.
+#: The planar layouts FFmpeg's YUV4MPEG muxer writes (with -strict -1 above
+#: 8 bits). 4:1:0, 4:4:0, planar RGB, and the semi-planar layouts a GPU
+#: decoder gives back (NV12, P010) are sent as raw video.
 _Y4M_FORMAT = re.compile(r"yuv(411|420|422|444)p(?:(9|10|12|14|16)le)?")
 _Y4M_FRAME = b"FRAME\n"
 
 
 def _piped_as(pixel_format: str) -> list[str]:
-    """FFmpeg's output arguments for piping frames of `pixel_format`.
+    """Returns FFmpeg's output arguments for sending frames of
+    `pixel_format` down the pipe.
 
-    YUV4MPEG where the muxer takes the layout: the same planes as raw
-    video, each after a "FRAME" line, which FFmpeg writes straight from its
-    frames -- the rawvideo encoder first copies every frame into a packet
-    it allocates. Measured on a 4K 10-bit HEVC video FFmpeg decodes: 23 ms
-    of FFmpeg's CPU a frame against 35."""
+    YUV4MPEG is used where the muxer takes the layout. It holds the same
+    planes as raw video, each frame after a "FRAME" line, and FFmpeg writes
+    it straight from its frames, while the rawvideo encoder first copies
+    every frame into a packet. On a 4K 10-bit HEVC video, that is 23 ms of
+    FFmpeg's CPU per frame against 35."""
     if _Y4M_FORMAT.fullmatch(pixel_format):
         return ["-pix_fmt", pixel_format, "-f", "yuv4mpegpipe", "-strict", "-1", "pipe:1"]
     return ["-pix_fmt", pixel_format, "-f", "rawvideo", "pipe:1"]
 
 
 def _is_y4m(command: list[str]) -> bool:
+    """Whether an FFmpeg command sends YUV4MPEG."""
     return "yuv4mpegpipe" in command
 
 
 def _gather(reader, count: int, process: subprocess.Popen, stopping: threading.Event) -> None:
-    """Waits until `count` bytes of a frame are in the pipe (or all it can
-    hold), FFmpeg has ended, or the stream is stopping. Read as it comes, a
-    4K frame arrives in some 300 pieces, each a wake-up of the reading
-    thread: 6 ms of CPU a frame against 4 taken in one read."""
+    """Waits until `count` bytes of a frame are in the pipe (or as much as it
+    can hold), FFmpeg has ended, or the stream is stopping. Read as it
+    comes, a 4K frame arrives in some 300 pieces, each waking the reading
+    thread: 6 ms of CPU per frame, against 4 ms when taken in one read."""
     if os.name != "nt":
         return
     import msvcrt
@@ -1037,10 +1089,10 @@ def _gather(reader, count: int, process: subprocess.Popen, stopping: threading.E
         handle = wintypes.HANDLE(msvcrt.get_osfhandle(reader.fileno()))
     except (OSError, ValueError):
         return
-    # Never for more than half of what the pipe holds: FFmpeg, its pipe
-    # full, would wait for this side to read while this side waited for the
-    # rest of the frame. (A pipe of Windows' default few kilobytes, as the
-    # tests' stand-ins have, is read as it comes.)
+    # Never wait for more than half of what the pipe holds: with its pipe
+    # full, FFmpeg would wait for this side to read while this side waited
+    # for the rest of the frame. (A pipe of Windows' default few kilobytes,
+    # as the tests' stand-ins have, is read as it comes.)
     held = wintypes.DWORD()
     if not ctypes.windll.kernel32.GetNamedPipeInfo(handle, None, None, ctypes.byref(held), None):
         return
@@ -1056,16 +1108,17 @@ def _gather(reader, count: int, process: subprocess.Popen, stopping: threading.E
 
 
 def _spawn_raw_ffmpeg(command: list[str]) -> tuple[subprocess.Popen, object]:
-    """Start FFmpeg writing raw frames to a large pipe; returns (process, reader)."""
+    """Starts FFmpeg writing frames to a large pipe; returns (process, reader)."""
     return proc_util.popen_piped(command, _PIPE_BYTES)
 
 
 def _read_exact(reader, view: memoryview) -> int:
-    """Fill `view` from the pipe with whole-buffer reads; returns bytes read.
+    """Fills `view` from the pipe with whole-buffer reads, and returns the
+    number of bytes read.
 
-    readinto straight into pinned memory: no intermediate bytes objects and
-    no second copy. The previous transport read 1 MB chunks into new bytes
-    objects and memmoved each one, which held a 4K stream to 6 fps.
+    It reads straight into pinned memory, with no intermediate bytes
+    objects and no second copy. Reading 1 MB chunks into new bytes objects
+    and copying each one would hold a 4K stream to 6 fps.
     """
     offset, total = 0, len(view)
     while offset < total:
@@ -1081,29 +1134,31 @@ class _LaneFailedError(Exception):
 
 
 class _FramesApartError(Exception):
-    """Pairing by timestamp only. With frame subsampling the source gives
-    only its step-th frames, as the test video does: while the two videos'
-    frames line up, those are the frames the test video's are paired with.
-    A pair further apart than _APART_FRAMES shows they do not; the pass is
-    then made again with every source frame (_score_vship_pass)."""
+    """Raised only when pairing by timestamp. With frame subsampling, the
+    source gives only every step-th frame, as the test video does, and while
+    the two videos' frames line up, those are the frames the test video's
+    are paired with. A pair further apart than _APART_FRAMES shows that they
+    do not, and the pass is then made again with every source frame
+    (_score_vship_pass)."""
 
 
 #: How far apart, in frames, a subsampled pair's two frames may be while the
-#: source frame is still the nearest of all its frames: evenly spaced, any
-#: other is at least three quarters of a frame away.
+#: source frame is still the nearest of all its frames: with evenly spaced
+#: frames, any other is at least three quarters of a frame away.
 _APART_FRAMES = 0.25
 
 
 class _FrameStream:
-    """One input's FFmpeg decode, feeding a ring of pinned frame buffers.
+    """One video decoded by FFmpeg, feeding a ring of pinned frame buffers.
 
     A background thread reads frames into free slots and hands them over in
-    order; the scoring thread returns each slot once Vship is done with it.
-    Both the pipe read and the Vship call release the GIL, so the two inputs
-    and the GPU all make progress at once. If hardware decode fails before
-    delivering a frame, the same pictures are decoded in software instead,
-    and `on_software` is called first. `timestamps`: each frame's timestamp
-    is read too (pts, time_base), for pairing by timestamp.
+    order, and the scoring thread gives each slot back once Vship is done
+    with it. Both the pipe read and the Vship call release the GIL, so the
+    two videos and the GPU all make progress at once. If hardware decoding
+    fails before giving a frame, the same pictures are decoded in software
+    instead, and `on_software` is called first. With `timestamps`, each
+    frame's timestamp is read too (pts, time_base), for pairing by
+    timestamp.
     """
 
     def __init__(
@@ -1114,10 +1169,10 @@ class _FrameStream:
     ) -> None:
         self.buffers = _pinned_ring(lib, frame_bytes, gpu_id)
         self.views = [memoryview(buffer.array).cast("B") for buffer in self.buffers]
-        # (luma bytes, bytes of one chroma plane, sample type) when FFmpeg
-        # pipes NV12/P010: the luma goes straight into the slot, the U/V pairs
-        # into one staging buffer, and are then split into the slot's U and
-        # V planes. None when the frame arrives already planar.
+        # Set when FFmpeg sends NV12 or P010: the luma goes straight into
+        # the slot, and the U/V pairs into one staging buffer, from which
+        # they are split into the slot's U and V planes. None when the frame
+        # arrives already planar.
         self._split = None
         if interleaved_chroma is not None:
             luma, plane, dtype = interleaved_chroma
@@ -1134,8 +1189,8 @@ class _FrameStream:
         self._label = label
         self._on_software = on_software
         self._timestamps = timestamps
-        #: Each slot's frame's timestamp, in time_base (known from the
-        #: first frame), when pairing by timestamp: set before the slot is
+        #: When pairing by timestamp, each slot's frame's timestamp in
+        #: time_base (known from the first frame), set before the slot is
         #: handed over.
         self.pts = [0] * _RING_SLOTS
         self.time_base: Fraction | None = None
@@ -1150,9 +1205,12 @@ class _FrameStream:
         self._thread = threading.Thread(target=self._run, name=f"vship-{label}", daemon=True)
 
     def start(self) -> None:
+        """Starts decoding."""
         self._thread.start()
 
     def _run(self) -> None:
+        """The reading thread: runs each FFmpeg command in turn (hardware
+        decoding first) until one succeeds."""
         try:
             for attempt, command in enumerate(self._commands):
                 frames, code, stderr = self._decode(command)
@@ -1174,6 +1232,8 @@ class _FrameStream:
             self._filled.put(error)
 
     def _decode(self, command: list[str]) -> tuple[int, int, str]:
+        """Runs one FFmpeg command into the ring, with a timestamp file when
+        pairing by timestamp. Returns (frames, exit code, error output)."""
         if not self._timestamps:
             return self._decode_with(command, None)
         descriptor, name = tempfile.mkstemp(prefix="vml-vship-pts-", suffix=".txt")
@@ -1270,7 +1330,7 @@ class _FrameStream:
         return True
 
     def _fill(self, reader, slot: int) -> int:
-        """Read one frame into `slot`; returns the bytes read."""
+        """Reads one frame into `slot`, and returns the number of bytes read."""
         if self._split is None:
             return _read_exact(reader, self.views[slot])
         luma, staging, pairs, planes = self._split
@@ -1279,21 +1339,22 @@ class _FrameStream:
             return received
         chroma = _read_exact(reader, staging)
         if chroma == len(staging):
-            # Strided copies; numpy releases the GIL for them, so the other
-            # input's reader and the scoring lanes keep going meanwhile.
+            # Strided copies. numpy releases the GIL for them, so the other
+            # video's reader and the scoring lanes keep going meanwhile.
             u, v = planes[slot]
             u[:] = pairs[:, 0]
             v[:] = pairs[:, 1]
         return received + chroma
 
     def next(self, cancel_event: threading.Event | None, abort: threading.Event | None = None) -> int:
-        """The next filled slot, or _EOF. Raises the reader's error, on
-        cancel, or with _LaneFailedError once `abort` is set.
+        """Returns the next filled slot, or _EOF. Raises the reader's error,
+        PerceptualCancelled on cancel, or _LaneFailedError once `abort` is
+        set.
 
         A lane that fails keeps the slots of the frames it was handed, so
-        after a failure the ring can fill with slots nobody will release: the
-        reader then waits for a free slot and no frame ever comes. Waiting on
-        `abort` as well is what lets the pass end with the lane's error.
+        after a failure the ring can fill with slots that nobody will give
+        back: the reader then waits for a free slot, and no frame ever comes.
+        Waiting on `abort` as well lets the pass end with the lane's error.
         """
         while True:
             if cancel_event is not None and cancel_event.is_set():
@@ -1309,9 +1370,11 @@ class _FrameStream:
             return item
 
     def release(self, slot: int) -> None:
+        """Gives a slot back once Vship is done with it."""
         self._free.put(slot)
 
     def close(self) -> None:
+        """Stops decoding and the reading thread, and frees the ring."""
         self._stopping.set()
         self._free.put(_EOF)  # wake a reader waiting for a slot
         with self._lock:
@@ -1328,10 +1391,10 @@ class _FrameStream:
 
 
 def _pinned_ring(lib: ctypes.CDLL, frame_bytes: int, gpu_id: int) -> list[_PinnedBuffer]:
-    """_RING_SLOTS pinned frame buffers, allocated one by one so a failure
-    part-way frees what was already allocated: a list comprehension left
-    those buffers -- pinned RAM, 25 MB each for 4K 10-bit -- allocated for
-    the rest of the session, once per failed attempt."""
+    """Returns _RING_SLOTS pinned frame buffers. They are allocated one by
+    one, so that a failure part-way through frees those already allocated;
+    otherwise they (pinned memory, 25 MB each for 4K 10-bit) would stay
+    allocated for the rest of the session, once per failed attempt."""
     buffers: list[_PinnedBuffer] = []
     try:
         for _ in range(_RING_SLOTS):
@@ -1344,10 +1407,10 @@ def _pinned_ring(lib: ctypes.CDLL, frame_bytes: int, gpu_id: int) -> list[_Pinne
 
 
 class _FrameSelection:
-    """Which decoded pictures an input's FFmpeg chain pipes to Vship
-    (_filter_chain and the command's -t): its frames are numbered, select
-    keeps every step-th, and the output's -t keeps the first `limit` numbered
-    frames (frame_sync.frames_within; None: every frame)."""
+    """Says which decoded pictures a video's FFmpeg chain would send to
+    Vship (_filter_chain and the command's -t): its frames are numbered,
+    select keeps every step-th, and the output's -t keeps the first `limit`
+    numbered frames (frame_sync.frames_within; None keeps every frame)."""
 
     def __init__(self, step: int, limit: int | None) -> None:
         self._step = step
@@ -1365,12 +1428,12 @@ class _FrameSelection:
 
 
 class _TimedFrameSelection:
-    """_FrameSelection when pairing by timestamp, as before: the chain's
-    select filter keeps every step-th picture, setpts starts them at 0, and
-    the output's -t is FFmpeg's trim filter, which keeps a picture while its
-    time is below the limit in the stream's time base
-    (frame_sync_by_time.duration_in) and ends the output at the first that
-    is not."""
+    """_FrameSelection when pairing by timestamp. The chain's select filter
+    keeps every step-th picture, setpts starts their times at 0, and the
+    output's -t is FFmpeg's trim filter: it keeps a picture while its time
+    is below the limit in the stream's time base
+    (frame_sync_by_time.duration_in), and ends the output at the first
+    picture that is not."""
 
     def __init__(self, step: int, duration_limit: str | None) -> None:
         self._step = step
@@ -1396,17 +1459,17 @@ class _TimedFrameSelection:
 
 
 class _NativeFrameStream:
-    """One input decoded in this process by the GPU's decoder
+    """One video decoded in this process by the GPU's decoder
     (gpu_frames.GpuFrameStream), feeding a ring of pinned frame buffers as
-    _FrameStream does: each picture FFmpeg's chain would pipe
-    (_FrameSelection) goes straight into a free slot -- copied there by the
-    GPU from NVIDIA's decoder, by the CPU in one pass from Intel's or AMD's.
-    A decoding failure after the start is raised from next() as
-    GpuDecodeFailedError: the pass is then made again through FFmpeg.
+    _FrameStream does. Each picture that FFmpeg's chain would send
+    (_FrameSelection) goes straight into a free slot: copied there by the
+    GPU from NVIDIA's decoder, or by the CPU in one pass from Intel's or
+    AMD's. A decoding failure after the start is raised from next() as
+    GpuDecodeFailedError, and the pass is then made again through FFmpeg.
 
-    `limit`: the number of frames the duration limit keeps (None: every
-    frame), or when pairing by timestamp (`by_time`), the limit as -t takes
-    it (_TimedFrameSelection)."""
+    `limit` is the number of frames the duration limit keeps (None keeps
+    every frame), or, when pairing by timestamp (`by_time`), the limit as
+    -t takes it (_TimedFrameSelection)."""
 
     def __init__(self, lib: ctypes.CDLL, frame_bytes: int, decoder: gpu_frames.GpuFrameStream, step: int,
                  limit: int | str | None, label: str, gpu_id: int = 0, by_time: bool = False) -> None:
@@ -1425,10 +1488,12 @@ class _NativeFrameStream:
         self._thread = threading.Thread(target=self._run, name=f"vship-gpu-decode-{label}", daemon=True)
 
     def start(self) -> None:
+        """Starts decoding."""
         self._decoder.start()
         self._thread.start()
 
     def _run(self) -> None:
+        """The reading thread: copies each selected picture into a free slot."""
         decoder = self._decoder
         try:
             while not self._stopping.is_set():
@@ -1462,9 +1527,11 @@ class _NativeFrameStream:
     next = _FrameStream.next
 
     def release(self, slot: int) -> None:
+        """Gives a slot back once Vship is done with it."""
         self._free.put(slot)
 
     def close(self) -> None:
+        """Stops decoding and the reading thread, and frees the ring."""
         self._stopping.set()
         self._free.put(_EOF)  # wake a reader waiting for a slot
         self._decoder.abort()
@@ -1479,20 +1546,21 @@ class _NativeFrameStream:
             _log.error("The %s's GPU decoding thread did not stop; its memory is left allocated", self._label)
 
 
-#: The GPU decoder that decodes in the scoring process what FFmpeg would
-#: decode with each -hwaccel the app picks (gpu.pick_hwaccel): NVIDIA's
+#: For each -hwaccel the app picks for FFmpeg (gpu.pick_hwaccel), the GPU
+#: decoder that decodes the same video in the scoring process: NVIDIA's
 #: through nvcuvid, Intel's through oneVPL, AMD's through AMF.
 _GPU_DECODERS = {"cuda": "nvidia", "qsv": "intel", "d3d11va": "amd"}
 
 
 def _decoded_here(hwaccel: str | None, device: VshipDevice) -> str | None:
-    """The decoder an input FFmpeg would decode with `hwaccel` is decoded by
-    in the scoring process, or None: the GPU's, or, for an input FFmpeg would
-    decode in software (`hwaccel` None), the software decoder. NVIDIA's copies
-    each picture with the GPU into the ring, which must then be CUDA's
-    page-locked memory (Vship's CUDA build); Intel's, AMD's and the software
-    decoder hand pictures over in system memory, and the CPU copies them into
-    any build's ring in one pass."""
+    """Returns the decoder that decodes, in the scoring process, a video
+    FFmpeg would decode with `hwaccel`: the GPU's, or the software decoder
+    for a video FFmpeg would decode in software (`hwaccel` None). Returns
+    None when FFmpeg must decode it. NVIDIA's decoder copies each picture
+    into the ring with the GPU, so the ring must be CUDA's page-locked
+    memory (Vship's CUDA build). Intel's, AMD's and the software decoder
+    give pictures in system memory, which the CPU copies into any build's
+    ring in one pass."""
     if hwaccel is None:
         return gpu_frames.SOFTWARE if gpu_frames.software_bundled() else None
     backend = _GPU_DECODERS.get(hwaccel)
@@ -1504,12 +1572,13 @@ def _decoded_here(hwaccel: str | None, device: VshipDevice) -> str | None:
 def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int], image_format: _ImageFormat,
                     frame_bytes: int, gpu_id: int, process_handle: ProcessHandle | None,
                     label: str, backend: str = "nvidia", algorithm: str = "bicubic") -> gpu_frames.GpuFrameStream | None:
-    """The decoder for one input of a pass, when GPU decoder `backend` can
-    give it in the layout Vship is told (8-bit planes, P016's 16-bit samples
-    as they are, or shifted to 10-bit, as FFmpeg converts full-range 10-bit),
-    scaled to `size` with `algorithm` where it is (by the GPU; by the CPU on
-    Intel and AMD if their GPU scaling fails its check, gpu_frames.scale_note).
-    None, with the reason logged, when FFmpeg decodes it."""
+    """Returns the decoder for one video of a pass, when GPU decoder
+    `backend` can give it in the layout Vship is told: 8-bit planes, or
+    P016's 16-bit samples as they are or shifted to 10-bit (as FFmpeg
+    converts full-range 10-bit). Where it is scaled, it is scaled to `size`
+    with `algorithm`, by the GPU, or by the CPU on Intel and AMD if their
+    GPU scaling fails its check (gpu_frames.scale_note). Returns None, with
+    the reason logged, when FFmpeg decodes the video."""
     shifts = {"yuv420p": 0, "yuv420p16le": 0, "yuv420p10le": 6}
     reason = None
     if image_format.pixel_format not in shifts:
@@ -1521,8 +1590,8 @@ def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int]
             if plan.frame_bytes != frame_bytes:
                 raise gpu_frames.GpuDecodeUnavailableError(
                     f"its frames would be {plan.frame_bytes} bytes, not {frame_bytes}")
-            # Asked first: a stream the decoder refuses once the pass has
-            # started (10-bit H.264, say) makes the whole pass again.
+            # Asked first, because a stream the decoder refuses once the pass
+            # has started (10-bit H.264, say) means making the whole pass again.
             supported, refusal = gpu_frames.decoder_supports(gpu_id, plan, backend)
             if not supported:
                 raise gpu_frames.GpuDecodeUnavailableError(refusal)
@@ -1538,6 +1607,8 @@ def _native_decoder(info: VideoInfo, crop: CropBox | None, size: tuple[int, int]
 
 
 class _PinnedBuffer:
+    """One frame's buffer in Vship's pinned (page-locked) memory."""
+
     def __init__(self, lib: ctypes.CDLL, size: int, gpu_id: int) -> None:
         self.lib = lib
         self.gpu_id = gpu_id
@@ -1548,6 +1619,7 @@ class _PinnedBuffer:
         self.array = (ctypes.c_uint8 * size).from_address(self.address.value)
 
     def planes(self, layout: _ImageFormat, sizes: tuple[int, int, int]) -> _PLANES:
+        """The addresses of the frame's three planes, in the order Vship reads them."""
         ptrs: list[_U8P] = []
         offsets = (0, sizes[0], sizes[0] + sizes[1])
         base = self.address.value
@@ -1556,21 +1628,23 @@ class _PinnedBuffer:
         return (_U8P * 3)(*ptrs)
 
     def close(self) -> None:
+        """Frees the buffer."""
         if self.address.value:
             self.lib.Vship_PinnedFree2(self.address, self.gpu_id)
             self.address = ctypes.c_void_p()
 
 
 class _ScoreArray:
-    """Per-frame scores in packed float64 chunks, written by frame index.
+    """Each frame's score, in packed float64 chunks, written by frame index.
 
-    Lanes finish frames out of order, so scores are stored by position rather
-    than appended. Chunks rather than one array because a feature-length
-    video's frame count is only estimated up front, and growing one array
-    would reallocate it under a lane that is writing to it; a new chunk is
-    added by the dispatching thread before any lane can be handed an index
-    in it, and existing chunks never move. 172,800 frames (two hours at 24
-    fps) take 1.4 MB, where a dict of Python floats took about 17 MB.
+    Lanes finish frames out of order, so scores are stored by position
+    rather than appended. They are kept in chunks rather than one array
+    because a feature-length video's frame count is only estimated at the
+    start, and growing one array would move it under a lane that is writing
+    to it. The dispatching thread adds a new chunk before any lane can be
+    handed an index in it, and existing chunks never move. 172,800 frames
+    (two hours at 24 fps) take 1.4 MB, where a dict of Python floats takes
+    about 17 MB.
     """
 
     _CHUNK = 8192
@@ -1579,7 +1653,7 @@ class _ScoreArray:
         self._chunks: list[np.ndarray] = []
 
     def reserve(self, index: int) -> None:
-        """Make room for `index`; called before the index is dispatched."""
+        """Makes room for `index`. Called before the index is dispatched."""
         while index >= len(self._chunks) * self._CHUNK:
             self._chunks.append(np.full(self._CHUNK, np.nan))
 
@@ -1587,6 +1661,7 @@ class _ScoreArray:
         self._chunks[index // self._CHUNK][index % self._CHUNK] = value
 
     def values(self, count: int) -> np.ndarray:
+        """The first `count` scores, as float32."""
         if not self._chunks:
             return np.empty(0, dtype=np.float32)
         return np.concatenate(self._chunks)[:count].astype(np.float32)
@@ -1595,9 +1670,10 @@ class _ScoreArray:
 class _MetricLane:
     """One Vship handler for one metric, on its own thread.
 
-    Frame pairs are dealt to lanes round-robin; each lane writes its score
-    by frame index, so completion order does not matter. The pinned slots
-    of a pair go back to their readers once every metric has scored it.
+    Frame pairs are dealt to the lanes in turn. Each lane writes its score
+    by frame index, so the order in which they finish does not matter. A
+    pair's pinned slots go back to their readers once every metric has
+    scored it.
     """
 
     def __init__(self, device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace,
@@ -1609,15 +1685,17 @@ class _MetricLane:
         self._strides = (src_strides, dist_strides)
         self._scores, self._finished, self._abort = scores, finished, abort
         self.jobs: queue.Queue[tuple[int, int, int] | None] = queue.Queue()
-        #: Set when the handler failed; the lane then hands frames back
-        #: unscored, like _CvvdpLane, so the other metrics can finish.
+        #: Set when the handler failed. The lane then hands frames back
+        #: unscored, as _CvvdpLane does, so that the other metrics can finish.
         self.error: BaseException | None = None
         self._thread = threading.Thread(target=self._run, name=f"vship-{key}", daemon=True)
 
     def start(self) -> None:
+        """Starts the lane's thread."""
         self._thread.start()
 
     def _run(self) -> None:
+        """The lane's thread: scores each pair it is given until stopped."""
         device, src, dist = self._args
         lib = _library(device)
         handler = None
@@ -1646,19 +1724,22 @@ class _MetricLane:
                     lib.Vship_FreeHandler(handler)
 
     def stop(self) -> None:
+        """Tells the lane to stop after the pairs already given."""
         self.jobs.put(None)
 
     def join(self) -> None:
+        """Waits for the lane's thread to end."""
         self._thread.join()
 
 
 def _init_handler(device: VshipDevice, key: str, src: _Colorspace, dist: _Colorspace) -> _Handle:
+    """Makes a Vship handler for SSIMULACRA2 or Butteraugli."""
     lib = _library(device)
     if key == "ssimulacra2":
         init = _InitSsimulacra2(_INIT_SSIMULACRA2, src, dist, device.gpu_id)
     else:
-        # Vship's defaults (doc/BUTTERAUGLI.md): the 2-norm, beside the
-        # 3-norm the app graphs, for a 203-nit display.
+        # Vship's defaults (doc/BUTTERAUGLI.md): the 2-norm, reported beside
+        # the 3-norm the app shows, for a 203-nit display.
         init = _InitButteraugli(_INIT_BUTTERAUGLI, src, dist, 2, 203.0, device.gpu_id)
     handle = _Handle()
     error = lib.Vship_InitHandler(ctypes.byref(handle), ctypes.byref(init))
@@ -1671,6 +1752,7 @@ def _compute_metric(
     device: VshipDevice, key: str, handler: _Handle, source_planes: _PLANES,
     distorted_planes: _PLANES, source_strides: _I64_3, distorted_strides: _I64_3,
 ) -> float:
+    """Scores one frame pair with a handler, and returns the score."""
     lib = _library(device)
     label = "SSIMULACRA2" if key == "ssimulacra2" else "Butteraugli"
     # Butteraugli's distortion map is not wanted: its dstp stays NULL.
@@ -1688,18 +1770,19 @@ def _compute_metric(
 
 # ------------------------------------------------------------------ CVVDP
 #
-# Vship pools CVVDP's per-frame quality q the way ColorVideoVDP does: a
-# running sum of q^2 over the n frames scored since the last reset, reported
-# as JOD(sqrt(sum / n)) -- except for a single frame, reported as
+# Vship pools CVVDP's per-frame quality q as ColorVideoVDP does: a running
+# sum of q^2 over the n frames scored since the last reset, reported as
+# JOD(sqrt(sum / n)), except that a single frame is reported as
 # JOD(q * IMAGE_INT). Vship_ResetScore clears only that sum (the temporal
-# filters keep their history), so resetting it at each second gives a JOD
-# per second, and inverting each second's JOD back to its sum rebuilds the
-# score of the whole video. On 2 s of the Beekeeper 4K AV1 encode the
-# rebuilt score matched an unreset handler's to 6e-7 JOD; on 49 and 73
-# frames at 23.976 fps, which end in a one-frame second, to 2e-7 and 3e-7
-# (pooling that frame like any other would be off by 0.01). The constants are
-# Vship's (and ColorVideoVDP's) jod_a, jod_exp and image_int: src/HIP/cvvdp/
-# parameters.hpp and CVVDPComputingImplementation::run in Vship 5.1.1.
+# filters keep their history), so resetting it every second gives a JOD per
+# second, and turning each second's JOD back into its sum rebuilds the
+# whole video's score. On 2 s of the Beekeeper 4K AV1 encode, the rebuilt
+# score matched an unreset handler's to 6e-7 JOD; on 49 and 73 frames at
+# 23.976 fps, which end in a one-frame second, to 2e-7 and 3e-7 (pooling
+# that frame like any other would be off by 0.01). The constants are
+# Vship's (and ColorVideoVDP's) jod_a, jod_exp and image_int, from
+# src/HIP/cvvdp/parameters.hpp and CVVDPComputingImplementation::run in
+# Vship 5.1.1.
 _JOD_A = 0.0439569391310215
 _JOD_EXP = 0.9302042722702026
 _IMAGE_INT = 0.577918291091919
@@ -1707,10 +1790,12 @@ _JOD_LINEAR_A = _JOD_A * 0.1 ** (_JOD_EXP - 1.0)
 
 
 def _jod_from_quality(q: float) -> float:
+    """CVVDP's JOD for a pooled quality q."""
     return 10.0 - (_JOD_A * q ** _JOD_EXP if q > 0.1 else _JOD_LINEAR_A * q)
 
 
 def _quality_from_jod(jod: float) -> float:
+    """The pooled quality q that gives a JOD (the inverse of _jod_from_quality)."""
     gap = max(0.0, 10.0 - jod)
     linear = gap / _JOD_LINEAR_A
     return linear if linear <= 0.1 else (gap / _JOD_A) ** (1.0 / _JOD_EXP)
@@ -1730,18 +1815,19 @@ def pool_cvvdp_windows(windows: list[tuple[int, int, float]]) -> float:
 
 def _init_cvvdp(device: VshipDevice, src: _Colorspace, dist: _Colorspace,
                 settings: CvvdpSettings, fps: float) -> _Handle:
+    """Makes a Vship handler for CVVDP, with the display model and frame rate."""
     lib = _library(device)
     if not (math.isfinite(fps) and fps > 0):
-        # CVVDP models how the eye integrates over time, so the frame rate
-        # is part of the score; it used to be replaced by 1 fps silently.
+        # CVVDP models how the eye integrates over time, so the frame rate is
+        # part of the score, and must not be quietly replaced by a guess.
         raise VshipUnavailableError(
             "CVVDP needs the video's frame rate, and none was found (it was read as "
             f"{fps:g} fps)."
         )
-    # The display as JSON text: Vship parses a config that starts with "{"
-    # itself (DisplayModel::parseJson), with no file to write and no path
-    # for its narrow-character open to fail on -- a Windows user name
-    # outside the ANSI code page broke the file this used to pass.
+    # The display is given as JSON text, which Vship parses itself when it
+    # starts with "{" (DisplayModel::parseJson). Don't pass a file instead:
+    # Vship opens it with a narrow-character path, which fails for a
+    # Windows user name outside the ANSI code page.
     config = vship_display_json(settings.display).encode("utf-8")
     init = _InitCvvdp(_INIT_CVVDP, src, dist, fps, bool(settings.resize_to_display),
                       VSHIP_MODEL_KEY.encode(), config, device.gpu_id)
@@ -1768,6 +1854,7 @@ def _compute_cvvdp(device: VshipDevice, handler: _Handle, source_planes: _PLANES
 
 
 def _reset_cvvdp_score(device: VshipDevice, handler: _Handle) -> None:
+    """Starts a new CVVDP window: clears the score sum, not the history."""
     lib = _library(device)
     error = lib.Vship_ResetScore(handler)
     if error != 0:
@@ -1775,6 +1862,7 @@ def _reset_cvvdp_score(device: VshipDevice, handler: _Handle) -> None:
 
 
 def _free_cvvdp(device: VshipDevice, handler: _Handle) -> None:
+    """Frees a CVVDP handler."""
     _library(device).Vship_FreeHandler(handler)
 
 
@@ -1782,14 +1870,14 @@ class _CvvdpLane:
     """CVVDP's one Vship handler, fed every frame pair in order.
 
     CVVDP judges each frame together with the ones before it, so its frames
-    cannot be dealt round-robin to two handlers like SSIMULACRA2's. The
-    score is reset at each new second of video, giving the JOD of every
-    second (the per-second curve); the overall JOD is pooled from those
+    cannot be dealt in turn to two handlers, as SSIMULACRA2's are. The score
+    is reset at each new second of video, which gives the JOD of every
+    second (the per-second graph), and the overall JOD is pooled from those
     seconds (pool_cvvdp_windows).
 
-    A CVVDP failure does not end the pass for SSIMULACRA2/Butteraugli: the
-    lane keeps the error, keeps handing each frame back so its ring slots
-    are freed, and the pass reports CVVDP as failed.
+    A CVVDP failure does not end the pass for SSIMULACRA2 and Butteraugli:
+    the lane keeps the error, keeps handing each frame back so that its ring
+    slots are freed, and the pass reports CVVDP as failed.
     """
 
     def __init__(self, device: VshipDevice, src: _Colorspace, dist: _Colorspace,
@@ -1807,9 +1895,11 @@ class _CvvdpLane:
         self._thread = threading.Thread(target=self._run, name="vship-cvvdp", daemon=True)
 
     def start(self) -> None:
+        """Starts the lane's thread."""
         self._thread.start()
 
     def _run(self) -> None:
+        """The lane's thread: scores every pair in order, one window per second."""
         device, src, dist, settings, fps = self._args
         handler = None
         try:
@@ -1846,19 +1936,22 @@ class _CvvdpLane:
                     _free_cvvdp(device, handler)
 
     def stop(self) -> None:
+        """Tells the lane to stop after the pairs already given."""
         self.jobs.put(None)
 
     def join(self) -> None:
+        """Waits for the lane's thread to end."""
         self._thread.join()
 
 
-#: One Vship pass at a time in the whole app. A pass already fills the GPU:
-#: at 4K two passes at once scored no faster than one after the other (84.5
-#: vs 83.6 pairs/s, Vship's CUDA build) while holding twice the VRAM (9.1 vs 4.5 GB, more than
-#: most cards have). Running two jobs in parallel still pays off -- 23% at
-#: 1080p, 27% at 4K -- because one job's VMAF/PSNR/SSIM pass, which is CPU
-#: work, overlaps the other's Vship pass; only this GPU pass is serialized,
-#: never crop detection or the FFmpeg metrics. Shared with VMAF on the GPU
+#: One Vship pass at a time in the whole app, because a pass already fills
+#: the GPU. At 4K, two passes at once scored no faster than one after the
+#: other (84.5 against 83.6 pairs a second, Vship's CUDA build), while
+#: holding twice the GPU memory (9.1 against 4.5 GB, more than most cards
+#: have). Running two jobs in parallel still pays off (23% at 1080p, 27% at
+#: 4K), because one job's VMAF, PSNR and SSIM, which are CPU work, overlap
+#: the other's Vship pass. Only this GPU pass waits its turn, never black-bar
+#: detection or the FFmpeg metrics. The lock is shared with VMAF on the GPU
 #: (gpu.GPU_PASS).
 _gpu_pass = GPU_PASS
 
@@ -1866,11 +1959,11 @@ _gpu_pass = GPU_PASS
 def vship_passes(
     specs: tuple[MetricRequestSpec, ...], together: bool = False,
 ) -> list[tuple[MetricRequestSpec, ...]]:
-    """The Vship passes `specs` are scored in, in order: one per metric, or
-    with `together` one per set of frames scored -- every metric scoring
-    the same frames in one pass, so the video is decoded once for them all.
-    CVVDP scores every frame, so with frame subsampling it keeps a pass of
-    its own."""
+    """Returns the Vship passes `specs` are scored in, in order: one per
+    metric, or with `together` one per set of frames scored, so that every
+    metric scoring the same frames shares one pass and the video is decoded
+    once for them all. CVVDP scores every frame, so with frame subsampling
+    it keeps a pass of its own."""
     if not together:
         return [(spec,) for spec in specs]
     groups: dict[int, list[MetricRequestSpec]] = {}
@@ -1894,42 +1987,44 @@ def run_vship_task(
     """Scores `specs` on the GPU once no other Vship pass is running.
 
     `on_pass_done` gets each pass's scores as it finishes, before the next
-    starts: the window shows a score the moment it exists. `on_pass` gets
-    each pass as it starts: its number, how many there are, and the keys of
-    the metrics it scores -- the run line's figures are per metric.
+    pass starts, so the window shows a score the moment it exists. `on_pass`
+    is called as each pass starts, with its number, how many passes there
+    are, and the keys of the metrics it scores, because the run line's
+    figures are per metric.
 
-    One metric at a time by default: each gets a pass of its own, and the
-    video is decoded again for each. Scoring them in one pass holds every
-    metric's GPU memory at once -- 7.3 GB for SSIMULACRA2, Butteraugli and
-    CVVDP together on a full 3840x2160 frame (Vship's CUDA build; its Vulkan
-    build reports no memory size to check against), more than an 8 GB card has
-    free -- for little speed where the GPU decodes: 34 fps together against
-    about 31.5 fps one after the other at 4K, and 91 against 90.5 fps at
-    1080p (RTX 5090, Beekeeper AV1 and a synthetic SDR clip). One at a
-    time, the peak is the largest single metric: SSIMULACRA2 2.7 GB,
-    Butteraugli 4.4 GB, CVVDP 4.8 GB.
+    By default each metric gets a pass of its own, and the video is decoded
+    again for each. Scoring them in one pass holds every metric's GPU memory
+    at once: 7.3 GB for SSIMULACRA2, Butteraugli and CVVDP together on a
+    full 3840x2160 frame (Vship's CUDA build; its Vulkan build reports no
+    memory size to check against), more than an 8 GB card has free. That
+    gains little speed where the GPU decodes: 34 fps together against about
+    31.5 fps one after the other at 4K, and 91 against 90.5 fps at 1080p
+    (RTX 5090, Beekeeper AV1 and a synthetic SDR clip). One at a time, the
+    peak is the largest single metric's: SSIMULACRA2 2.7 GB, Butteraugli
+    4.4 GB, CVVDP 4.8 GB.
 
     `together` (Settings > GPU metrics) scores them in one pass anyway (see
-    vship_passes): where the CPU decodes -- 4K VVC, which no GPU decodes --
-    decoding each video once instead of once per metric saves far more
-    than the memory costs. A metric that fails in a shared pass, out of GPU
-    memory most likely, is calculated again in a pass of its own.
+    vship_passes). Where the CPU decodes (4K VVC, which no GPU decodes),
+    decoding each video once instead of once per metric saves far more than
+    the memory costs. A metric that fails in a shared pass, most likely out
+    of GPU memory, is calculated again in a pass of its own.
 
     A metric whose pass fails is reported in the output's `failures` while
-    the others still run; only when every pass fails is the first error
-    raised (and the caller may retry on the CPU).
+    the others still run. Only when every pass fails is the first error
+    raised, and the caller may then retry on the CPU.
 
     A metric this GPU does not calculate at this size (GPU_PIXEL_LIMITS) is
-    not started: it is a failure with the reason, before any GPU work.
+    not started: it is reported as failed with the reason, before any GPU
+    work.
     """
     refused = {}
     if any((device.backend, device.vendor, spec.key) in GPU_PIXEL_LIMITS for spec in specs):
         size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)[0]
 
         def computed(spec: MetricRequestSpec) -> tuple[int, int]:
-            # CVVDP set to fill the display is computed at the display's
-            # size: a 1080p comparison on the default 4K display was let
-            # through, at the size that hung Intel's GPU.
+            # CVVDP set to fill the display is calculated at the display's
+            # size, so a 1080p comparison on the default 4K display would
+            # otherwise get through at the size that hangs Intel's GPU.
             if spec.key != "cvvdp":
                 return size
             return cvvdp_computed_size(size, CvvdpSettings.from_spec_parameters(spec.parameters))
@@ -1950,8 +2045,8 @@ def run_vship_task(
         except (PerceptualCancelled, ComparisonCutShortError):
             raise
         except Exception as error:
-            # The others failed too: each keeps its own reason (the caller
-            # reads `failures`), not CVVDP given theirs.
+            # The others failed too. Each keeps its own reason (the caller
+            # reads `failures`), so that CVVDP is not given theirs.
             reasons = getattr(error, "failures", None) or {spec.key: str(error) for spec in specs}
             raise VshipPassesFailedError(str(error), {**reasons, **refused}) from error
         return replace(output, failures={**output.failures, **refused})
@@ -1974,17 +2069,17 @@ def run_vship_task(
         failures: dict[str, str] = {}
         errors: list[BaseException] = []
         frames = 0
-        # How far each pass run so far got, in its own progress units: the
-        # figure is one count across every pass, a retry's after the passes
-        # before it. A retry reported only itself, so the half went from
-        # 100% back to 0% when a metric that failed in the shared pass was
-        # calculated again, and its time left was that retry's alone.
+        # How far each pass run so far got, in its own progress units. The
+        # task's progress is one count across every pass, with a retry's
+        # after the passes before it. Otherwise the task would go from 100%
+        # back to 0% when a metric that failed in the shared pass is
+        # calculated again, and its time left would be that retry's alone.
         reached: list[int] = []
 
         def pass_progress(slot: int, done: int, left: int) -> Callable[[int, int, float], None]:
-            """A pass's progress as the task's: after `done` units of the
-            passes before it, with `left` passes of its length to go (this
-            one included -- they score the same frames)."""
+            """Reports a pass's progress as the task's: after `done` units of
+            the passes before it, with `left` passes of its length to go,
+            this one included (they score the same frames)."""
             def progress(current: int, total: int, fps: float) -> None:
                 reached[slot] = current
                 on_progress(done + current, done + left * total, fps)
@@ -2010,8 +2105,8 @@ def run_vship_task(
                         cancel_event=cancel_event, process_handle=process_handle,
                     )
                 except (PerceptualCancelled, ComparisonCutShortError):
-                    # A video that ends early is cut short for every metric:
-                    # the file's fault, the same in each pass and on the CPU.
+                    # A video that ends early is cut short for every metric.
+                    # It is the file's fault, the same in each pass and on the CPU.
                     raise
                 except Exception as error:
                     if cancel_event is not None and cancel_event.is_set():
@@ -2041,8 +2136,8 @@ def run_vship_task(
                 del failures[spec.key]
             failed_before = list(errors)
             errors.clear()
-            # Numbered after the passes before them -- "GPU metric 2/2" after
-            # a shared pass -- so the window counts the shared pass as done.
+            # Numbered after the passes before them ("GPU metric 2/2" after a
+            # shared pass), so that the window counts the shared pass as done.
             run_passes([(spec,) for spec in shared], len(passes), len(passes) + len(shared))
             errors.extend(failed_before)  # the retries' own errors first
         if not metrics:
@@ -2063,18 +2158,19 @@ def _run_vship_pass(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
-    """One Vship pass (_score_vship_pass), in a process of its own.
+    """Runs one Vship pass (_score_vship_pass) in a process of its own.
 
-    Vship and the GPU driver under it run in the process that loads them: a
-    crash in either took the app down, every video's progress with it, with
-    no message. Now it ends the pass's process: the pass fails like any
-    other GPU failure -- its metrics are calculated on the CPU, or fail with
-    the reason -- and the run goes on. The pass's FFmpeg processes are
-    attached to `process_handle` as before, so Pause and Cancel reach them.
+    Vship and the GPU driver under it run in the process that loads them,
+    so a crash in either would take the app down, with every video's
+    progress and no message. Instead it ends the pass's process: the pass
+    fails like any other GPU failure (its metrics are calculated on the CPU,
+    or fail with the reason), and the run goes on. The pass's FFmpeg
+    processes are attached to `process_handle`, so Pause and Cancel reach
+    them.
 
-    A device whose library this process has already loaded is scored here:
-    the crash it could cause is this process's anyway. The app's devices
-    come from the isolated probe without one."""
+    A device whose library this process has already loaded is scored here,
+    because a crash it causes would be this process's anyway. The app's
+    devices come from the isolated probe without a library."""
     if device.loaded is not None:
         return _score_vship_pass(
             source, distorted, request, specs, device, source_crop, distorted_crop,
@@ -2101,10 +2197,10 @@ def _score_vship_pass(
     cancel_event: threading.Event | None = None,
     process_handle: ProcessHandle | None = None,
 ) -> PerceptualTaskOutput:
-    """One Vship pass, with the videos NVIDIA's decoder takes decoded in
-    this process (_NativeFrameStream). If that decoding fails after it has
-    started -- a damaged stream, pictures that are not the packets' -- the
-    pass is made again with FFmpeg decoding, as before. When pairing by
+    """Runs one Vship pass, with the videos that the GPU's decoder takes
+    decoded in this process (_NativeFrameStream). If that decoding fails
+    after it has started (a damaged stream, pictures that do not match the
+    packets), the pass is made again with FFmpeg decoding. When pairing by
     timestamp, a subsampled pass whose frames do not line up with the
     source's (_FramesApartError) is made again with every source frame."""
     kwargs = {"on_progress": on_progress, "on_status": on_status, "cancel_event": cancel_event,
@@ -2139,6 +2235,9 @@ def _score_vship_pass_with(
     process_handle: ProcessHandle | None = None,
     every_source_frame: bool = False,
 ) -> PerceptualTaskOutput:
+    """_score_vship_pass's single attempt: `native` decodes in this process
+    where it can, and `every_source_frame` takes every source frame when
+    pairing by timestamp."""
     if not specs or any(spec.backend_id != BACKEND_ID or spec.key not in _METRICS for spec in specs):
         raise ValueError("Vship task requires supported perceptual metric specs")
     if request.recipe.resample_test is not None:
@@ -2149,15 +2248,16 @@ def _score_vship_pass_with(
 
     lib = _library(device)
 
-    # Decode follows the row's GPU-decode setting, per input and per codec:
-    # NVDEC for HEVC/AV1/H.264 on NVIDIA, software where the GPU has no
-    # decoder (VVC) or where FFmpeg's hardware decode does not give the
-    # video's own pictures (gpu.pick_decode: 4:2:2, 4:4:4, 12-bit, an
-    # odd size, 10-bit H.264 on Intel and AMD). Hardware decode is otherwise bit-exact: it
-    # changes speed only.
+    # Decoding follows the row's GPU decode setting, per video and per codec:
+    # NVDEC for HEVC, AV1 and H.264 on NVIDIA, and software where the GPU
+    # has no decoder (VVC) or where FFmpeg's hardware decoding does not give
+    # the video's own pictures (gpu.pick_decode: 4:2:2, 4:4:4, 12-bit, an
+    # odd size, 10-bit H.264 on Intel and AMD). Otherwise hardware decoding
+    # is bit-exact, so it changes only the speed.
     vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
 
     def decoder_of(info: VideoInfo) -> str | None:
+        """The -hwaccel FFmpeg decodes the video with, or None for software."""
         return pick_decode(vendor, info.codec_name, info.pix_fmt, info.width, info.height)
 
     src_hwaccel, dist_hwaccel = decoder_of(source), decoder_of(distorted)
@@ -2180,14 +2280,14 @@ def _score_vship_pass_with(
     frame_specs = tuple(spec for spec in specs if spec.key != "cvvdp")
     if cvvdp_spec is not None and step != 1:
         raise VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.")
-    # Where each video is decoded, in the "(GPU decode: ...)" form FFmpeg's
-    # runs report it in: the window's run line shows it as "Decoder: Source:
-    # GPU, test video: CPU". Only FFmpeg's metrics reported it, so a video
-    # with only GPU metrics never said where it was decoded.
+    # Where each video is decoded, reported as FFmpeg's runs report it, so
+    # that the window's run line can show "Decoder: Source: GPU, test video:
+    # CPU" for a video with only GPU metrics too.
     decode = {"source": src_hwaccel, "distorted": dist_hwaccel}
     decode_lock = threading.Lock()
 
     def decoded_in_software(side: str) -> Callable[[], None]:
+        """The callback that reports `side` falling back to software decoding."""
         def report() -> None:
             with decode_lock:  # the two inputs' threads can both fall back
                 decode[side] = None
@@ -2204,14 +2304,16 @@ def _score_vship_pass_with(
     scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in frame_specs}
     abort = threading.Event()
     pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
-    #: Per stream (source, test): slot -> holders. A slot goes back to its
-    #: stream once the pairing and every pair it is in are done with it
-    #: (pairing by timestamp, a source frame can be in more than one pair).
+    #: For each stream (source, test): slot -> how many hold it. A slot goes
+    #: back to its stream once the pairing and every pair it is in are done
+    #: with it (when pairing by timestamp, a source frame can be in more than
+    #: one pair).
     held: tuple[dict[int, int], dict[int, int]] = ({}, {})
     pending_lock = threading.Lock()
-    # By frame number, both videos' frames are numbered at the test video's
-    # frame rate (frame_sync), and both are cut at the duration limit: the
-    # same frames. By timestamp (as before), only the test video is cut.
+    # Pairing by frame number, both videos' frames are numbered at the test
+    # video's frame rate (frame_sync) and both are cut at the duration limit,
+    # so they keep the same frames. Pairing by timestamp, only the test video
+    # is cut.
     by_time = by_timestamp()
     numbering_rate = frame_rate(distorted)
     duration_limit = f"{request.recipe.duration_limit:.6f}" if request.recipe.duration_limit > 0 else None
@@ -2225,8 +2327,10 @@ def _score_vship_pass_with(
 
     def commands(info: VideoInfo, crop: CropBox | None, target: tuple[int, int],
                  hwaccel: str | None, pixel_format: str, every: int, cut: bool) -> list[list[str]]:
-        # The software retry pipes the same layout as the hardware attempt:
-        # Vship's handlers are set up for one layout per input.
+        """The FFmpeg commands to try for one video: with hardware decoding
+        first if it has any, then in software."""
+        # The software retry sends the same layout as the hardware attempt,
+        # because Vship's handlers are set up for one layout per video.
         attempts = []
         for accel in ([hwaccel, None] if hwaccel else [None]):
             filter_chain = _filter_chain(
@@ -2245,19 +2349,21 @@ def _score_vship_pass_with(
             attempts.append(command)
         return attempts
 
-    # Each test frame is one pair, as each of libvmaf's is: every step-th,
-    # up to the duration limit. When pairing by timestamp, the source gives
-    # the frames frame_pairs finds each one's pair among -- by its time, so
-    # it is never cut at the limit, and it is subsampled as the test video
-    # is while the two line up (_FramesApartError); a source without a frame
+    # Each test frame gives one pair, as in libvmaf: every step-th frame, up
+    # to the duration limit. When pairing by timestamp, the source gives the
+    # frames among which frame_pairs finds each test frame's pair, by time.
+    # So it is never cut at the limit, and it is subsampled as the test video
+    # is while the two line up (_FramesApartError). A source without a frame
     # rate gives every frame.
     every_source_frame = by_time and (every_source_frame or source.fps <= 0)
     check_apart = by_time and step > 1 and not every_source_frame
     try:
         def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label, side):
+            """Makes one video's frame stream: decoded in this process where
+            it can be, else by FFmpeg."""
             cut = side == "distorted" or not by_time
             every = 1 if side == "source" and every_source_frame else step
-            # Decoded here, by the GPU decoder FFmpeg would decode it with.
+            # Decoded here, by the same GPU decoder FFmpeg would use.
             backend = _decoded_here(hwaccel, device) if native else None
             if backend is not None:
                 decoder = _native_decoder(info, crop, size, image_format, frame_bytes, device.gpu_id,
@@ -2281,9 +2387,9 @@ def _score_vship_pass_with(
             return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format, every, cut),
                                 process_handle, label, split, decoded_in_software(side), device.gpu_id, by_time)
 
-        # Appended one at a time: if the test video's buffers cannot be
-        # allocated, the reference's stream is already in `streams`, so the
-        # finally block below frees it. Built as one list, it leaked.
+        # Appended one at a time, so that if the test video's buffers cannot
+        # be allocated, the source's stream is already in `streams` and the
+        # finally block below frees it.
         streams.append(stream(source, source_crop, src_size, src_hwaccel, src_format, src_passthrough,
                               src_frame_bytes, src_plane_sizes, "reference", "source"))
         streams.append(stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format,
@@ -2308,6 +2414,8 @@ def _score_vship_pass_with(
             streams[side].release(slot)
 
         def finished(index: int) -> None:
+            """One metric is done with pair `index`; the last one gives its
+            slots back."""
             with pending_lock:
                 entry = pending[index]
                 entry[0] -= 1
@@ -2318,8 +2426,9 @@ def _score_vship_pass_with(
             drop(1, entry[2])
 
         def frames_of(side: int) -> Callable[[], int | None]:
-            """frame_pairs' source of stream `side`'s frames: the next one's
-            slot, held for the pairing, or None at the stream's end."""
+            """Returns frame_pairs' source of stream `side`'s frames: each call
+            gives the next frame's slot, held for the pairing, or None at the
+            stream's end."""
             stream = streams[side]
 
             def next_frame() -> int | None:
@@ -2332,8 +2441,9 @@ def _score_vship_pass_with(
             return next_frame
 
         def puller(side: int, first: int) -> Callable[[], tuple[int, int] | None]:
-            """frame_sync_by_time.frame_pairs' source of stream `side`'s
-            frames, starting with `first` (taken already, for its time base)."""
+            """Returns frame_sync_by_time.frame_pairs' source of stream
+            `side`'s frames, starting with `first` (already taken, for its
+            time base)."""
             stream, waiting = streams[side], [first]
 
             def pull() -> tuple[int, int] | None:
@@ -2363,8 +2473,9 @@ def _score_vship_pass_with(
             lane.start()
 
         def lane_errors() -> dict[str, BaseException]:
-            """Each failed metric's first error. One failed lane fails its
-            metric: the other lane's frames alone would leave holes."""
+            """Returns each failed metric's first error. One failed lane fails
+            its metric, because the other lane's frames alone would leave
+            holes."""
             errors = {key: next((lane.error for lane in metric_lanes if lane.error is not None), None)
                       for key, metric_lanes in by_metric.items()}
             if cvvdp_lane is not None:
@@ -2372,11 +2483,11 @@ def _score_vship_pass_with(
             return {key: error for key, error in errors.items() if error is not None}
 
         def timed_pairs() -> Iterator[tuple[int, int]]:
-            """The (test slot, source slot) pairs by timestamp, as before:
-            each test frame with the source frame libvmaf pairs it with, by
-            timestamp (frame_sync_by_time). The comparison is the frames both
-            have (shortest=1): it ends with the test video, or at its first
-            frame past the source's end."""
+            """Yields the (test slot, source slot) pairs when pairing by
+            timestamp: each test frame with the source frame that libvmaf
+            pairs it with by timestamp (frame_sync_by_time). The comparison is
+            the frames both videos have (shortest=1), so it ends with the test
+            video, or at its first frame after the source's end."""
             first_source = source_stream.next(cancel_event)
             first_test = distorted_stream.next(cancel_event)
             if _EOF in (first_source, first_test):
@@ -2405,10 +2516,10 @@ def _score_vship_pass_with(
 
         frame = 0
         rate = _PassRate(step)
-        # Each test frame with the source frame of the same number, as every
-        # metric pairs them (frame_sync), until either video ends -- or by
-        # timestamp, as before (timed_pairs). The longer video's reader is
-        # stopped when the streams close.
+        # Each test frame is paired with the source frame of the same number,
+        # as every metric pairs them (frame_sync), until either video ends;
+        # or by timestamp (timed_pairs). The longer video's reader is stopped
+        # when the streams close.
         if by_time:
             pairs = timed_pairs()
         else:
@@ -2421,10 +2532,10 @@ def _score_vship_pass_with(
                     # the rest of the video (a film took ~30 minutes to
                     # report a CVVDP handler that had failed to start).
                     raise next(iter(errors.values()))
-                # No abort here: a failed lane keeps handing its frames
-                # back, so the ring never fills with slots nobody will
-                # release, and the check above ends the pass once no
-                # metric is left.
+                # No abort here: a failed lane keeps handing its frames back,
+                # so the ring never fills with slots that nobody will give
+                # back, and the check above ends the pass once no metric is
+                # left.
                 with pending_lock:
                     pending[frame] = [len(specs), source_slot, distorted_slot]
                     held[0][source_slot] += 1
@@ -2448,9 +2559,8 @@ def _score_vship_pass_with(
             raise VshipUnavailableError("FFmpeg produced no frame pairs for Vship.")
         if (short := short_comparison(expected_frames, frame * step, source.fps, step)) is not None:
             raise ComparisonCutShortError(short)
-        # A metric whose handler failed (out of VRAM on a smaller card, say)
-        # is reported on its own; the others keep their scores. A SSIMULACRA2
-        # or Butteraugli failure used to end the pass and take CVVDP with it.
+        # A metric whose handler failed (out of GPU memory on a smaller card,
+        # say) is reported on its own, and the others keep their scores.
         errors = lane_errors()
         if len(errors) == len(specs):
             raise next(iter(errors.values()))
@@ -2466,8 +2576,8 @@ def _score_vship_pass_with(
                      "native range/transfer and primaries",
             "coverage_step": step,
             "butteraugli_norm": "3-norm",
-            # How the videos' color tags were read (_vship_colorspace); the
-            # cache recalculates GPU scores of v1.2, which has none.
+            # How the videos' colour tags were read (_vship_colorspace). The
+            # cache recalculates GPU scores from v1.2, which have none.
             "color_tags": VSHIP_COLOR_TAGS,
         }
         for spec in frame_specs:
@@ -2512,15 +2622,15 @@ def _score_vship_pass_with(
         for key, error in errors.items():
             _log.error("Vship %s failed in its pass: %s", metric_definition(key).label, error, exc_info=error)
         if on_progress:
-            # A pass too short to time from its first frame keeps the old
-            # figure: its whole length.
+            # A pass too short to time from its first frame is timed over its
+            # whole length instead.
             on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame * step / elapsed)
         return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
     except (PerceptualCancelled, ComparisonCutShortError, gpu_frames.GpuDecodeFailedError, _FramesApartError):
-        # The file's fault, not the GPU's: the CPU would stop as short. A
-        # failed GPU decode is made again through FFmpeg, and a subsampled
-        # pass whose frames do not line up with every source frame
-        # (_score_vship_pass).
+        # A video cut short is the file's fault, not the GPU's: the CPU would
+        # stop as short. A failed GPU decode is made again through FFmpeg, and
+        # a subsampled pass whose frames do not line up is made again with
+        # every source frame (_score_vship_pass).
         raise
     except VshipUnavailableError as error:
         _log.error("Vship pass (%s) failed: %s", ", ".join(metric_definition(spec.key).label for spec in specs),
@@ -2555,30 +2665,33 @@ def apply_vship_cpu_fallback(
     on_cpu: Callable[[tuple[str, ...]], None] | None = None,
     concurrent_cpu_tasks: int = 1,
 ) -> PerceptualTaskOutput:
-    """Run selected backends, with a per-metric GPU-to-CPU fallback.
-    `together` scores the GPU metrics in one pass (see run_vship_task), and
-    `on_pass` hears of each GPU pass as it starts. `concurrent_cpu_tasks` is
-    how many tasks share the CPU while this one runs: the CPU metrics take
-    their share of it (perceptual_cpu.scoring_workers).
+    """Calculates SSIMULACRA2, Butteraugli and CVVDP each where it is set to
+    run (GPU or CPU), and moves a metric from the GPU to the CPU when the
+    GPU cannot calculate it. `together` scores the GPU metrics in one pass
+    (see run_vship_task), and `on_pass` is called as each GPU pass starts.
+    `concurrent_cpu_tasks` is how many tasks share the CPU while this one
+    runs, which sets the CPU metrics' share (perceptual_cpu.scoring_workers).
 
     `on_cpu` gets the keys of the metrics the CPU is about to calculate,
-    just before it starts on them: ones chosen for the CPU, and ones meant
-    for the GPU and handed over -- no usable GPU, a failed GPU pass, or a
-    GPU this build of Vship scores wrongly on. Progress reported after it
-    is the CPU's own, from 0: the run line shows those metrics as CPU
+    just before it starts on them: those chosen for the CPU, and those meant
+    for the GPU and handed over (no usable GPU, a failed GPU pass, or a GPU
+    this build of Vship scores wrongly on). The progress reported after it
+    is the CPU's own, from 0, and the run line shows those metrics as CPU
     metrics, with the CPU's figures.
 
-    CVVDP runs on the GPU only. Without a usable GPU it fails on its own --
-    reported in the output's `failures` -- and the other metrics are scored
+    CVVDP runs on the GPU only. Without a usable GPU it fails on its own
+    (reported in the output's `failures`), and the other metrics are scored
     as they would have been without it.
     """
     from vmaf_app.core import perceptual_cpu
     from vmaf_app.core.perceptual_cpu import _resolve_crops
 
     def run_perceptual_task(*args, **kwargs) -> PerceptualTaskOutput:
+        """perceptual_cpu.run_perceptual_task with this task's CPU share."""
         return perceptual_cpu.run_perceptual_task(*args, concurrent_tasks=concurrent_cpu_tasks, **kwargs)
 
     def backend(spec: MetricRequestSpec) -> str:
+        """Where a metric is set to run: "gpu" or "cpu"."""
         return "gpu" if spec.key in GPU_ONLY_METRICS else request.execution.perceptual_backend(spec.key)
 
     cpu_specs = tuple(spec for spec in specs if backend(spec) == "cpu")
@@ -2591,11 +2704,12 @@ def apply_vship_cpu_fallback(
 
     def gpu_only_failed(reason: str, error: BaseException | None = None, *,
                         no_gpu: bool = True, reasons: dict[str, str] | None = None) -> dict[str, str]:
-        """The failures for the GPU-only metrics; raises if nothing else was
-        asked for. `no_gpu` is for when no usable GPU was found; otherwise
-        the GPU pass itself failed, possibly for a reason that has nothing to
-        do with the GPU (the two videos' frame rates differing, say), and
-        blaming the GPU sent people looking for the wrong problem."""
+        """Returns the failures of the GPU-only metrics, or raises them if
+        nothing else was asked for. `no_gpu` means no usable GPU was found.
+        Otherwise the GPU pass itself failed, possibly for a reason that has
+        nothing to do with the GPU (the two videos' frame rates differing,
+        say), so the message does not blame the GPU, which would send people
+        looking for the wrong problem."""
         def message(spec: MetricRequestSpec) -> str:
             label = metric_definition(spec.key).label
             own = (reasons or {}).get(spec.key, reason)
@@ -2608,10 +2722,11 @@ def apply_vship_cpu_fallback(
         return messages
 
     def with_failures(output: PerceptualTaskOutput, failures: dict[str, str]) -> PerceptualTaskOutput:
+        """`output` with `failures` added."""
         return replace(output, failures={**output.failures, **failures}) if failures else output
 
     def to_cpu(handed: tuple[MetricRequestSpec, ...]) -> None:
-        """The metrics the CPU is about to calculate."""
+        """Reports the metrics the CPU is about to calculate (on_cpu)."""
         if on_cpu is not None and handed:
             on_cpu(tuple(spec.key for spec in handed))
 
@@ -2638,7 +2753,7 @@ def apply_vship_cpu_fallback(
         ), failures)
 
     # A metric this build scores wrongly goes to the CPU, planned like a CPU
-    # choice: as on a PC with no GPU for it, the Videos tab asks before a
+    # choice. As on a PC with no GPU for it, the Videos tab asks before a
     # long CPU run (MainWindow._confirm_long_cpu_perceptual).
     wrong = tuple(spec for spec in gpu_specs if not scores_correctly(device, spec.key))
     if wrong:
@@ -2665,9 +2780,8 @@ def apply_vship_cpu_fallback(
             process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass,
         )
     except (PerceptualCancelled, ComparisonCutShortError):
-        # Cut short (a video that ends early): the CPU would stop as short,
-        # after hours instead of the GPU's minutes. It used to be retried
-        # there as if the GPU had failed.
+        # Don't retry a video cut short (one that ends early) on the CPU: it
+        # would stop as short, after hours instead of the GPU's minutes.
         raise
     except Exception as error:
         if cancel_event is not None and cancel_event.is_set():
@@ -2677,14 +2791,13 @@ def apply_vship_cpu_fallback(
         gpu_retry = tuple(spec for spec in gpu_specs if spec.key not in GPU_ONLY_METRICS)
         if gpu_retry and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
             # Nobody agreed to a CPU run of this length: the Videos tab asks
-            # before one, but a GPU failure mid-run cannot. Falling back
-            # silently meant days of CPU work and terabytes of temporary
-            # images for a film. The metric fails instead, with the reason;
-            # the video keeps its other metrics.
+            # before one, but a GPU failure during a run cannot. Falling back
+            # without asking would mean days of CPU work and terabytes of
+            # temporary pictures for a film. So the metric fails, with the
+            # reason, and the video keeps its other metrics.
             labels = " and ".join(metric_definition(spec.key).label for spec in gpu_retry)
-            # CVVDP's own failure goes into the same message: raising here
-            # used to drop it, leaving only advice about the CPU that does
-            # not apply to a GPU-only metric.
+            # CVVDP's own failure goes into the same message, because the
+            # advice about the CPU does not apply to a GPU-only metric.
             raise PerceptualRunError(
                 f"GPU scoring failed ({error}). It was not retried on the CPU, which would take "
                 "hours to days for a video over 10 minutes. "
@@ -2694,8 +2807,8 @@ def apply_vship_cpu_fallback(
         if on_status:
             on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
         to_cpu(retryable)
-        # Run all metrics together after a GPU failure so CPU frame extraction
-        # happens only once, and the returned result remains atomic.
+        # After a GPU failure, all metrics run together on the CPU, so that
+        # the frames are extracted only once and the result stays whole.
         return with_failures(run_perceptual_task(
             source, distorted, request, retryable,
             on_progress=on_progress, on_status=on_status,
@@ -2717,7 +2830,8 @@ def apply_vship_cpu_fallback(
             )
         gpu_failed = ()
     # Kept for the message if the CPU retry fails too: the GPU failure is
-    # the first cause, and dropping it sent a GPU user to fix a CPU tool.
+    # the first cause, and without it a GPU user would be sent to fix a CPU
+    # tool.
     gpu_reasons = {spec.key: failures.pop(spec.key) for spec in gpu_failed}
     cpu_specs = cpu_specs + gpu_failed
     if not cpu_specs:
@@ -2732,13 +2846,14 @@ def apply_vship_cpu_fallback(
             on_status("Calculating selected perceptual metric(s) on CPU…")
 
     def failed_on_cpu(key: str, reason: str) -> str:
+        """A CPU failure's message, with the GPU failure first if there was one."""
         if key in gpu_reasons:
             return f"GPU scoring failed ({gpu_reasons[key]}); the CPU retry failed too: {reason}"
         return reason
 
-    # The GPU pass has finished: a CPU failure from here on fails only the
-    # CPU metrics. It used to raise out of here and throw away what the GPU
-    # had scored -- a finished CVVDP pass lost to a missing libjxl tool.
+    # The GPU pass has finished, so a CPU failure from here on fails only the
+    # CPU metrics, and does not throw away what the GPU scored (a finished
+    # CVVDP pass lost to a missing libjxl tool, say).
     try:
         cpu_output = run_perceptual_task(
             source, distorted, request, cpu_specs,
@@ -2757,10 +2872,10 @@ def apply_vship_cpu_fallback(
             raise
         failures.update({spec.key: failed_on_cpu(spec.key, str(error)) for spec in cpu_specs})
         return replace(gpu_output, failures=failures)
-    # Each metric is kept on its own frames. Vship and the CPU tools can end
-    # a frame apart -- each stops where the shorter input's pictures do --
-    # and that used to throw the CPU's finished scores away, where the cache
-    # and the window have always taken each metric's own frames.
+    # Each metric keeps its own frames. Vship and the CPU tools can end a
+    # frame apart (each stops where the shorter video's pictures do), and the
+    # cache and the window take each metric's own frames, so a difference
+    # must not throw the CPU's finished scores away.
     combined = MetricResultSet()
     for spec in specs:
         if spec.key in failures:

@@ -65,7 +65,8 @@ def test_a_crash_in_the_child_is_an_error_here(caplog, tmp_path, monkeypatch):
     are now logged with the error, and the file they were written to is
     removed."""
     monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
-    with caplog.at_level(logging.ERROR, logger="vmaf_app.core.isolated"),             pytest.raises(IsolatedCrashError, match="Vship crashed"):
+    with (caplog.at_level(logging.ERROR, logger="vmaf_app.core.isolated"),
+          pytest.raises(IsolatedCrashError, match="Vship crashed")):
         run_isolated(faulthandler._sigsegv, what="Vship")
     assert "its threads at the crash" in caplog.text
     assert "_child_main" in caplog.text  # the crashed thread's Python stack

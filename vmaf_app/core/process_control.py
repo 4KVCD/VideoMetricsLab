@@ -1,16 +1,15 @@
-"""A thread-safe handle for pausing/resuming the ffmpeg subprocesses of one
-job.
+"""A thread-safe handle for pausing, resuming and ending the FFmpeg processes
+of one job.
 
-This is an OS-level suspend (like Task Manager's "Suspend"), not a
-checkpoint: the process is frozen in place and CPU/GPU usage drops to zero,
-but it must stay alive in memory to be resumed -- closing the app or
-rebooting loses the run, same as a hard cancel would.
+Pausing is an operating-system suspend (like Task Manager's "Suspend"), not
+a checkpoint: the process is frozen in place and its CPU and GPU use drop to
+zero, but it must stay in memory to be resumed. Closing the app or
+restarting the PC loses the run, as a Cancel would.
 
-One handle can address several processes at once. A job is usually one
-ffmpeg, but black-bar detection runs its sample windows as a handful of
-short-lived processes concurrently, and Pause or Cancel pressed during that
-moment has to reach every one of them -- a handle that remembered only the
-most recent pid left the others running.
+One handle can reach several processes at once. A job is usually one
+FFmpeg, but black-bar detection runs a handful of short-lived processes at
+the same time, and Pause or Cancel pressed then must reach every one of
+them.
 """
 from __future__ import annotations
 
@@ -23,32 +22,37 @@ from vmaf_app.core.proc import signal_tree
 
 
 class ProcessHandle:
+    """The processes of one job, and whether the user has asked for them to
+    be paused or ended."""
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._pids: set[int] = set()
         self._want_paused = False
-        # Set when terminate() is called, so a non-zero exit can be told
-        # apart from a genuine failure of the tool.
+        # Set when terminate() is called, so that a non-zero exit can be told
+        # apart from a real failure of the tool.
         self._terminated = False
 
     @property
     def was_terminated(self) -> bool:
+        """Whether terminate() has been called (the user cancelled)."""
         with self._lock:
             return self._terminated
 
     def attach(self, pid: int) -> None:
-        """Called when a new ffmpeg process starts; re-applies a pause
-        request made before this process existed (e.g. right at a job
-        boundary, or during the GPU-decode-failure CPU retry). One that
-        starts after terminate() is ended at once: Cancel has been given,
-        and a process started after it -- the next attempt of a fallback --
-        came up paused, with nothing left to end it, and the run waited for
-        it for good."""
-        # Suspended under the lock, not after releasing it: a resume landing
-        # in that gap would run first and this stale suspend afterwards,
-        # leaving the process paused for good with nothing left to resume it.
+        """Adds a newly started process to the handle.
+
+        A pause requested before the process existed (at the start of a job,
+        say, or during the CPU retry after a GPU decode failure) is applied
+        to it. A process that starts after terminate() is ended at once:
+        Cancel has been given, and otherwise the next attempt of a fallback
+        would start paused, with nothing left to end it, and the run would
+        wait for it forever."""
+        # The suspend happens under the lock, not after releasing it: a
+        # resume landing in between would run first and this stale suspend
+        # afterwards, leaving the process paused with nothing to resume it.
         # terminate() sets its flag under the lock too, so a process is
-        # either among those it ends or ended here.
+        # either among those terminate() ends or is ended here.
         with self._lock:
             self._pids.add(pid)
             if self._terminated:
@@ -59,9 +63,9 @@ class ProcessHandle:
     def detach(self, pid: int | None = None) -> None:
         """Forgets one process, or every process when no pid is given.
 
-        Concurrent callers must name their own pid: a bare detach() from one
-        of several windows would drop the rest from reach of Pause and
-        Cancel while they were still running.
+        Callers that run at the same time must name their own pid: a bare
+        detach() from one of them would put the others out of reach of
+        Pause and Cancel while they are still running.
         """
         with self._lock:
             if pid is None:
@@ -70,6 +74,7 @@ class ProcessHandle:
                 self._pids.discard(pid)
 
     def pause(self) -> None:
+        """Suspends every attached process, and any attached later."""
         with self._lock:
             self._want_paused = True
             pids = list(self._pids)
@@ -77,6 +82,7 @@ class ProcessHandle:
             self._try(pid, "suspend")
 
     def resume(self) -> None:
+        """Resumes every attached process."""
         with self._lock:
             self._want_paused = False
             pids = list(self._pids)
@@ -84,11 +90,10 @@ class ProcessHandle:
             self._try(pid, "resume")
 
     def terminate(self) -> None:
-        """Kills every attached process, regardless of pause state. A
-        suspended process blocks its own stdout reader forever (no more
-        output is ever coming), so cancelling a paused run has to reach in
-        and kill it directly rather than waiting for the reader loop to
-        notice a cancellation flag that will never get checked."""
+        """Kills every attached process, paused or not. A suspended process
+        blocks the thread reading its output forever (no more output is
+        coming), so a paused run is cancelled by killing its processes
+        directly, not by waiting for the reader to check a flag."""
         with self._lock:
             pids = list(self._pids)
             self._terminated = True
@@ -97,15 +102,18 @@ class ProcessHandle:
 
     @property
     def is_pause_requested(self) -> bool:
+        """Whether the user has paused the job."""
         with self._lock:
             return self._want_paused
 
     @staticmethod
     def _try(pid: int, action: str) -> None:
-        # The process finishing on its own between the check and the call
-        # is normal, not an error -- pausing/resuming a dead process is a no-op.
-        # The whole tree: FFmpeg can be a child of the process started, when
-        # ffmpeg.exe is a launcher such as a Chocolatey shim (see
-        # proc.process_tree), and pausing only the launcher paused nothing.
+        """Applies `action` ("suspend", "resume" or "terminate") to the
+        process and everything under it."""
+        # A process can finish on its own between the check and the call;
+        # that is normal, so acting on a process that is gone does nothing.
+        # The whole tree is acted on: when ffmpeg.exe is a launcher (such as
+        # a Chocolatey shim, see proc.process_tree), the real FFmpeg is its
+        # child, and pausing only the launcher would pause nothing.
         with contextlib.suppress(psutil.NoSuchProcess):
             signal_tree(pid, action)

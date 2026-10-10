@@ -1,6 +1,10 @@
-"""Native playback's presentation -- the app's own, with Direct3D 11 (or
-Vulkan, when asked for), on the GPU of the decoders' D3D11 device -- and one
-audio-only playback pipeline."""
+"""How native playback shows its frames, and plays the source's soundtrack.
+
+LockedPresentation draws and presents the decoded frames with the app's own
+presenter: Direct3D 11, or Vulkan when it is asked for. It runs on the GPU
+of the decoders' D3D11 device. SingleSoundtrack plays the source video's
+audio on its own pipeline.
+"""
 from __future__ import annotations
 
 import ctypes
@@ -16,18 +20,20 @@ from vmaf_app.core.gstreamer_playback import Seeker, _load_gstreamer
 
 _LOG = logging.getLogger(__name__)
 
-#: The colour beside a frame: the views' background (VideoCompareView).
+#: The colour around a frame: the views' background (VideoCompareView).
 _BACKGROUND = (0x17 / 255,) * 3 + (1.0,)
 #: DXGI colour spaces: SDR (sRGB-coded BT.709) and HDR10 (PQ in BT.2020).
 _SDR_SPACE, _HDR10_SPACE = 0, 12
-#: The presenters that could not start in this process: said once each in the log.
+#: The presenters that could not start in this process, so that each failure
+#: is logged only once.
 _PRESENTERS_FAILED: set[str] = set()
 
 
 @functools.cache
 def _presenter_api(path: str):
-    """A native presenter's entry points, typed: vulkan_presenter.dll's or
-    d3d11_tonemap.dll's, which have the same calls."""
+    """Loads a native presenter and declares its functions' types. The two
+    presenters, vulkan_presenter.dll and d3d11_tonemap.dll, have the same
+    functions."""
     lib = ctypes.CDLL(path)
     ints, floats = ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_float)
     for name, restype, argtypes in (
@@ -40,8 +46,9 @@ def _presenter_api(path: str):
     ):
         function = getattr(lib, name)
         function.restype, function.argtypes = restype, argtypes
-    # Vulkan's only: why a call failed; the swapchain made ahead of the first
-    # frame; and a frame drawn and presented once the device lock is let go.
+    # Only Vulkan's presenter has these: the reason a call failed, making the
+    # swapchain before the first frame, and drawing and presenting a frame
+    # after the device lock is released.
     problem = getattr(lib, "vmaf_present_problem", None)
     if problem is not None:
         problem.restype, problem.argtypes = ctypes.c_char_p, []
@@ -54,7 +61,8 @@ def _presenter_api(path: str):
 
 @functools.cache
 def _gstreamer_d3d11_api():
-    """The entry points of GStreamer's D3D11 library the presenters need, typed."""
+    """Loads GStreamer's D3D11 library and declares the types of the
+    functions the presenters need."""
     gst = ctypes.CDLL("gstd3d11-1.0-0.dll")
     for name, restype in (("gst_is_d3d11_memory", ctypes.c_int),
                           ("gst_d3d11_memory_get_resource_handle", ctypes.c_void_p),
@@ -66,22 +74,25 @@ def _gstreamer_d3d11_api():
 
 
 def _presenters():
-    """The native presenters to try, in order, by name: Vulkan's where it is
-    asked for (vulkan_presenter.chosen), then Direct3D 11's."""
+    """The native presenters to try, in order, as (name, library path):
+    Vulkan's when it is asked for (vulkan_presenter.chosen), then Direct3D
+    11's."""
     vulkan = [("Vulkan", vulkan_presenter.library_path())] if vulkan_presenter.chosen() else []
     return [*vulkan, ("Direct3D 11", d3d11_tonemap.library_path())]
 
 
 def _problem(lib) -> str:
-    """Why a presenter's last call failed, if it says (Vulkan's does)."""
+    """Why a presenter's last call failed, if the presenter can say (Vulkan's
+    can); "" otherwise."""
     problem = getattr(lib, "vmaf_present_problem", None)
     return (problem() or b"").decode("utf-8", "replace") if problem is not None else ""
 
 
 @functools.cache
 def _crop_meta_api():
-    """gst_buffer_get_meta, typed, and the GType of GstVideoCropMeta's API:
-    where a frame's picture is in its texture (LockedPresentation._draw)."""
+    """Returns gst_buffer_get_meta (typed) and the GType of GstVideoCropMeta's
+    API, which together say where a frame's picture is in its texture (see
+    LockedPresentation._draw)."""
     get_meta = ctypes.CDLL("gstreamer-1.0-0.dll").gst_buffer_get_meta
     get_meta.restype, get_meta.argtypes = ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_size_t]
     api = ctypes.CDLL("gstvideo-1.0-0.dll").gst_video_crop_meta_api_get_type
@@ -90,16 +101,18 @@ def _crop_meta_api():
 
 
 class _CropMeta(ctypes.Structure):
-    """GstVideoCropMeta: its GstMeta, then the picture's rectangle."""
+    """GstVideoCropMeta's layout: its GstMeta header, then the picture's
+    rectangle."""
     _fields_ = [("flags", ctypes.c_int), ("info", ctypes.c_void_p),
                 ("x", ctypes.c_uint), ("y", ctypes.c_uint), ("width", ctypes.c_uint), ("height", ctypes.c_uint)]
 
 
 def yuv_to_rgb(matrix: str, full_range: bool, ten_bit: bool) -> tuple[float, ...]:
-    """The presenter's rows of Y, U, V coefficients and an offset, for a
-    frame's planes as its shader samples them: NV12's 8-bit codes over 255,
-    P010's 10-bit codes in the top of 16 bits over 65535. `matrix`: GStreamer's
-    name for the YUV matrix (bt709, bt601, bt2020...)."""
+    """The presenter's YUV-to-RGB conversion: three rows of Y, U and V
+    coefficients and an offset, for a frame's planes as the shader samples
+    them. The shader sees NV12's 8-bit codes divided by 255, and P010's
+    10-bit codes (in the top of 16 bits) divided by 65535. `matrix` is
+    GStreamer's name for the YUV matrix (bt709, bt601, bt2020...)."""
     kr, kb = {"bt601": (0.299, 0.114), "bt2020": (0.2627, 0.0593), "smpte240m": (0.212, 0.087),
               "fcc": (0.30, 0.11)}.get(matrix, (0.2126, 0.0722))
     kg = 1 - kr - kb
@@ -119,20 +132,21 @@ def yuv_to_rgb(matrix: str, full_range: bool, ten_bit: bool) -> tuple[float, ...
 
 
 class LockedPresentation:
-    """Native playback's frames, drawn and presented by the app's own
-    presenter (vmaf_present_*): Direct3D 11's (d3d11_tonemap.dll), or
-    Vulkan's (vulkan_presenter.dll) when it is asked for and can start. Either
-    draws into a swapchain in a window of its own over `window`, on the GPU
-    of the decoders' D3D11 device, and takes a frame at each refresh. A
-    thread waits until the swapchain takes a frame, holding no lock, then
-    draws the one due holding the device's -- Vulkan's presenter only hands
-    it over then, and draws and presents it once the lock is let go -- and
-    the present has nothing to wait for. GStreamer's d3d11videosink, which
-    this replaced, waited for the display's refresh holding that lock
-    whenever it presented at the display's own rate, and the decoders, which
-    need it for each frame, stalled up to 40 ms: 120 fps video showed some
-    100 frames a second, and its sound stopped now and then to wait for
-    them."""
+    """Draws and presents native playback's frames with the app's own
+    presenter (its vmaf_present_* functions): Direct3D 11's
+    (d3d11_tonemap.dll), or Vulkan's (vulkan_presenter.dll) when it is asked
+    for and can start.
+
+    The presenter draws into a swapchain in a window of its own over
+    `window`, on the GPU of the decoders' D3D11 device, and takes one frame
+    per display refresh. A thread waits, holding no lock, until the
+    swapchain can take a frame, and only then takes the device's lock to
+    draw the frame that is due. Vulkan's presenter just hands the frame over
+    while the lock is held, and draws and presents it after the lock is
+    released. The decoders need the same lock for each frame, so it must
+    never be held while waiting for the display: GStreamer's d3d11videosink
+    did that, stalling the decoders by up to 40 ms, so 120 fps video showed
+    about 100 frames a second and its sound stopped now and then."""
 
     def __init__(self, window, device, settings):
         self._video = _load_gstreamer()[1]
@@ -160,8 +174,9 @@ class LockedPresentation:
                              name, _problem(lib) or "no reason given")
         if not self._presenter:
             raise RuntimeError("Could not set up the native video presentation")
-        # The frames to draw, one each time the swapchain takes one, in order:
-        # two at most, the oldest dropped past that (_present_paced).
+        # The frames waiting to be drawn, in order, one each time the
+        # swapchain takes a frame. At most two wait; past that the oldest is
+        # dropped (see _present_paced).
         self._due = deque()
         self._due_lock = threading.Lock()
         self._due_ready = threading.Event()
@@ -174,11 +189,13 @@ class LockedPresentation:
         self._presenter_thread.start()
 
     def present(self, sample, view=None, shading=None):
-        """`sample` shown at the next refresh. `view`: None to fit it to the
-        window, letterboxed; else the part of it to show and where in the
-        window, in device pixels (VideoCompareView.native_view). `shading`:
-        what the shader does to its video's colours (d3d11_tonemap.shading),
-        None to show them as they come."""
+        """Shows `sample` at the next display refresh.
+
+        `view` is None to fit the frame to the window, letterboxed, or else
+        the part of the frame to show and where in the window, in device
+        pixels (VideoCompareView.native_view). `shading` is what the shader
+        does to the video's colours (d3d11_tonemap.shading), or None to show
+        them as they are."""
         self._lib.vmaf_present_follow(self._presenter, self.window)
         with self._due_lock:
             self._due.append((sample, view, shading))
@@ -187,12 +204,15 @@ class LockedPresentation:
             self._due_ready.set()
 
     def _present_paced(self):
-        """The frames due, one each time the swapchain takes one -- once per
-        refresh -- in order: chosen 4 ms apart at times, two within one
-        refresh would otherwise lose one. A frame it cannot draw ends it,
-        the error left for poll(): the picture would stop with no word."""
-        # Vulkan's swapchain, made while the decoders start: the first one
-        # took some 85 ms, which the first frame waited for.
+        """The presenting thread: draws the waiting frames in order, one each
+        time the swapchain takes a frame (once per refresh). Frames can be
+        chosen as little as 4 ms apart, and two that fall within one refresh
+        would otherwise lose one.
+
+        A frame that cannot be drawn ends the thread, and the error is left
+        for poll() to raise, so the picture never stops without a word."""
+        # Vulkan's swapchain is made while the decoders start: making it
+        # takes about 85 ms, which the first frame would otherwise wait for.
         start = getattr(self._lib, "vmaf_present_start", None)
         if start is not None and start(self._presenter) < 0:
             self._error = f"Native presentation failed: {_problem(self._lib) or 'no swapchain'}"
@@ -206,7 +226,7 @@ class LockedPresentation:
                 self._error = f"Native presentation failed: {_problem(self._lib) or 'the swapchain failed'}"
                 return
             if waited:
-                continue  # not taken yet (a hidden window): asked again
+                continue  # the swapchain took no frame yet (a hidden window, say): wait again
             with self._due_lock:
                 sample, view, shading = self._due.popleft()
                 if not self._due:
@@ -221,12 +241,14 @@ class LockedPresentation:
                 return
 
     def _draw(self, sample, view, shading):
+        """Hands one frame to the presenter, and with Vulkan's, presents it.
+        On a failure, sets the error poll() raises."""
         buffer = sample.get_buffer()
         if buffer.n_memory() != 1:
             self._error = "Native presentation needs one GPU texture a frame"
             return
         memory = buffer.peek_memory(0)
-        # Kept alive (``memory``) until the native calls return.
+        # `memory` keeps the pointer's object alive until the native calls return.
         pointer = boxed_pointer(memory)
         if not self._gst.gst_is_d3d11_memory(pointer):
             self._error = "Native presentation received CPU memory instead of a D3D11 texture"
@@ -237,15 +259,16 @@ class LockedPresentation:
             shade = self._shadings.get(shading)
             if shade is None:
                 shade = self._shadings[shading] = (ctypes.c_float * 16)(*shading)
-            # Mapped to SDR, or kept HDR as PQ in BT.2020: what the swapchain is told.
+            # Tell the swapchain whether the shader maps the frame to SDR or
+            # keeps it HDR, as PQ in BT.2020.
             space = _HDR10_SPACE if shading[0] == 2 else _SDR_SPACE
         crop, rectangle = view if view is not None else (None, None)
-        # The frame's own size, not its texture's: a decoder's is padded
-        # (1608 rows to 1616), and its padding was drawn as picture.
+        # The frame's own size, not its texture's: a decoder's texture is
+        # padded (1608 rows to 1616, say), and the padding must not be drawn.
         x, y, width, height = crop if crop is not None else (0, 0, *size)
-        # Cropped with nothing else to do, the converter passes the decoder's
-        # frame on whole, its letterbox in it, and a crop meta says where the
-        # picture is (GstComparePipeline).
+        # When the converter only has to crop, it passes the decoder's frame
+        # on whole, letterbox included, and a crop meta says where the
+        # picture is (see GstComparePipeline).
         get_meta, crop_api = self._crop_meta
         if meta := get_meta(boxed_pointer(buffer), crop_api):
             picture = _CropMeta.from_address(meta)
@@ -255,14 +278,14 @@ class LockedPresentation:
         self.device.lock()
         try:
             resource = self._gst.gst_d3d11_memory_get_resource_handle(pointer)
-            # The frame's slice of its texture: H.264's decoder gives arrays.
+            # The frame's slice of its texture: H.264's decoder gives texture arrays.
             subresource = self._gst.gst_d3d11_memory_get_subresource_index(pointer)
             result = self._lib.vmaf_present_texture(self._presenter, resource, subresource, source, target, to_rgb,
                                                     shade, space, self._clear)
         finally:
             self.device.unlock()
-        # Vulkan draws and presents the frame handed over without the lock,
-        # which the decoders need for each frame.
+        # Vulkan's presenter draws and presents the frame after the lock is
+        # released, because the decoders need that lock for each frame.
         flip = getattr(self._lib, "vmaf_present_flip", None)
         if result >= 0 and flip is not None:
             result = flip(self._presenter)
@@ -271,8 +294,8 @@ class LockedPresentation:
             self._error = f"Native presentation failed: 0x{result & 0xffffffff:08x}" + (f" ({reason})" if reason else "")
 
     def _colours_of(self, caps):
-        """(YUV-to-RGB rows or None, DXGI colour space, (width, height)) for
-        frames of `caps`, worked out once."""
+        """Returns (YUV-to-RGB rows or None, DXGI colour space, (width,
+        height)) for frames of `caps`, worked out once per kind of frame."""
         key = caps.to_string()
         colours = self._colours.get(key)
         if colours is None:
@@ -288,12 +311,15 @@ class LockedPresentation:
         return colours
 
     def poll(self):
+        """Raises the presenting thread's error, if it had one."""
         if self._error:
             raise RuntimeError(self._error)
 
     def stop(self):
-        """On any thread: the window goes with the view's (its owner's).
-        Left, not freed, if its thread were still drawing a second on."""
+        """Stops presenting and frees the presenter; callable on any thread.
+        The presenter's window goes with the view that owns it. If the
+        presenting thread is still drawing a second later, the presenter is
+        left, not freed."""
         self._stopping = True
         self._due_ready.set()
         self._presenter_thread.join(timeout=1)
@@ -307,11 +333,12 @@ class LockedPresentation:
 
 
 class SingleSoundtrack:
-    """Audio-only source soundtrack. Never changes when selecting an encode.
+    """The source video's soundtrack, played on an audio-only pipeline. It
+    does not change when another encode is selected.
 
-    Its positions count from the source video's first frame, `offset_ms`
-    into the file's timeline (GstComparePipeline.first_frame_ms), as the
-    video's frames do: its clock times them."""
+    Its positions count from the source video's first frame, which is
+    `offset_ms` into the file's timeline (GstComparePipeline.first_frame_ms),
+    as the video frames' positions do, because its clock times the frames."""
 
     offset_ms = 0
 
@@ -328,18 +355,22 @@ class SingleSoundtrack:
         self.failed = None
         self.seeking = False
         self.playing = False
-        #: The clock's last reading (ms), the smallest step it has moved in,
-        #: and the last value given while playing, with when (ms,
-        #: time.monotonic) (poll).
+        #: For poll: the clock's last reading (ms), the smallest step it has
+        #: moved in, and the last position returned while playing, with the
+        #: time it was returned (ms, time.monotonic()).
         self._last_reading = None
         self._step_ms = 10.0
         self._given = None
-        #: The clock's own last reading (ms, from the video's first frame),
-        #: not carried on: what falling behind is judged by (LockedNativePool).
+        #: The clock's own last reading (ms from the video's first frame),
+        #: without poll's smoothing. LockedNativePool judges by it whether
+        #: playback has fallen behind.
         self.reading_ms = None
         self.pipeline.set_state(self.gst.State.PAUSED)
 
     def poll(self):
+        """Handles the pipeline's messages and returns the soundtrack's
+        position (ms from the source video's first frame), or None when it
+        has none yet."""
         bus = self.pipeline.get_bus()
         while (message := bus.pop_filtered(self.gst.MessageType.ERROR | self.gst.MessageType.ASYNC_DONE)):
             if message.type == self.gst.MessageType.ERROR:
@@ -354,13 +385,14 @@ class SingleSoundtrack:
         if not ok:
             self.reading_ms = None
             return None
-        # Its sink's clock moves in steps of its buffer, 10 ms here, where a
-        # frame of 120 fps video lasts 8.3 ms: one frame in five was skipped.
-        # Between steps it is carried on from the value given last by the
-        # time passed -- held between the reading and a step past it, and
-        # never back while playing. Carried on from when a poll saw it step,
-        # polled a frame apart, it fell up to a frame behind and caught up
-        # in one jump: two frames at once.
+        # The audio sink's clock moves in steps of its buffer, 10 ms here,
+        # while a frame of 120 fps video lasts 8.3 ms, so read as it is, one
+        # frame in five would be skipped. Between steps, the position is
+        # carried on from the last one returned by the time that has passed.
+        # It is kept between the reading and one step past it, and never
+        # goes back while playing. (Carrying on from the moment a poll saw
+        # the clock step instead let it fall up to a frame behind, and then
+        # catch up by showing two frames at once.)
         position_ms, now = position / self.gst.MSECOND, time.monotonic()
         self.reading_ms = position_ms - self.offset_ms
         last = self._last_reading
@@ -379,16 +411,18 @@ class SingleSoundtrack:
         return given - self.offset_ms
 
     def set_offset(self, offset_ms, position):
-        """Counts from the source video's first frame, `offset_ms` into the
-        file's timeline, from now on: at `position` again, unless its first
-        seek, which waits for the preroll, has still to come and takes it."""
+        """From now on, counts positions from the source video's first frame,
+        `offset_ms` into the file's timeline, and seeks to `position` again
+        (unless the first seek, which waits for the preroll, has yet to
+        happen and will use the new offset)."""
         self.offset_ms = offset_ms
         if self.pending is None and not self.failed:
             self.seek(position)
 
     def seek(self, position):
-        """Made by its Seeker, on a thread of its own: ready again at the
-        preroll that follows (poll)."""
+        """Seeks to `position`. The seek is made by the Seeker on a thread of
+        its own; the soundtrack is ready again at the preroll that follows
+        (see poll)."""
         self.ready, self.seeking = False, True
         self._last_reading, self._given = None, None
 
@@ -397,17 +431,20 @@ class SingleSoundtrack:
         self._seeker.seek(self.pipeline, self.gst, max(0, int(position) + self.offset_ms) * self.gst.MSECOND, refused)
 
     def set_playing(self, playing):
+        """Plays or pauses the soundtrack."""
         if not self.failed:
             if bool(playing) != self.playing:
-                # Carried on from now: from the value it gave before a
-                # pause, it went a whole step on at once.
+                # Start the smoothing again from now. Carrying on from the
+                # position given before a pause would jump a whole step.
                 self._last_reading, self._given = None, None
             self.playing = bool(playing)
             self.pipeline.set_state(self.gst.State.PLAYING if playing else self.gst.State.PAUSED)
 
     def set_enabled(self, enabled):
+        """Unmutes (True) or mutes (False) the soundtrack."""
         self.pipeline.set_property("mute", not enabled)
 
     def stop(self):
+        """Stops the soundtrack and frees its pipeline."""
         self._seeker.close()
         self.pipeline.set_state(self.gst.State.NULL)

@@ -1,3 +1,9 @@
+"""The app's entry point: starts the window, or with --self-test, checks the
+app's tools and libraries and reports what it found.
+
+The packaged build has a second program, VideoMetricsLab-cli.exe, that runs
+the command line (vmaf_app.cli) instead of the window.
+"""
 from __future__ import annotations
 
 import contextlib
@@ -14,17 +20,16 @@ from vmaf_app.core.app_paths import user_data_dir
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
 
-# Qt and the window are imported in main(), not here: every process the app
-# starts for Vship and libvmaf (vmaf_app.core.isolated) runs this module
-# again before multiprocessing hands it its work, and importing them took
-# about 0.45 s of each such process's start.
+# Qt and the window are imported in main(), not here. Every process the app
+# starts for Vship and libvmaf (vmaf_app.core.isolated) runs this module again
+# before multiprocessing hands it its work, and importing them here would add
+# about 0.45 s to the start of each such process.
 
 
 class SelfTestReport:
-    """The self-test's lines, and whether any check failed. Failure is
-    recorded as each check is made: it used to be read back from the text
-    ("FAIL" anywhere in it), so a path or a message containing the word
-    failed a good run."""
+    """The self-test's lines, and whether any check failed. Each check
+    records its failure as it is made; reading "FAIL" back from the text
+    would wrongly fail a run whose paths or messages contain that word."""
 
     def __init__(self, title: str) -> None:
         self.lines = [title]
@@ -49,11 +54,12 @@ class SelfTestReport:
 
 
 def self_test() -> SelfTestReport:
-    """A report on external tools and bundled runtime components.
+    """Checks the external tools and the components found at run time (not
+    at build time), and returns a report on them.
 
-    Exists for the packaged build: it has no console, so when it fails to
-    start or silently falls back there is otherwise nothing to look at.
-    Checks the pieces that are found at runtime rather than at build time.
+    It exists for the packaged build, which has no console: when the build
+    fails to start, or quietly falls back to something slower, the report
+    is the only thing to look at.
     """
     report = SelfTestReport(f"{APP_NAME} {__version__} self-test (Python {sys.version.split()[0]})")
     frozen = getattr(sys, "frozen", False)
@@ -74,9 +80,10 @@ def self_test() -> SelfTestReport:
         gst, _ = _load_gstreamer()
         version = ".".join(str(part) for part in gst.version()[:3])
         report.ok(f"GStreamer {version}")
-        # Element by element rather than plugin by plugin: the packaged
-        # build ships a pruned plugin set (scripts/gstreamer_bundle.py), and
-        # a plugin can be present while the decoder someone needs is not.
+        # Checked element by element rather than plugin by plugin: the
+        # packaged build ships a pruned set of plugins
+        # (scripts/gstreamer_bundle.py), and a plugin can be present while
+        # the decoder someone needs is not.
         missing = [name for name in REQUIRED_ELEMENTS if gst.ElementFactory.find(name) is None]
         if missing:
             report.fail(f"GStreamer elements missing: {', '.join(missing)}")
@@ -91,8 +98,9 @@ def self_test() -> SelfTestReport:
         report.warn(f"GStreamer unavailable, playback falls back to FFmpeg: {error}")
 
     # Which Qt platform plugin, style and image formats loaded. The packaged
-    # build ships a pruned PySide6 (scripts/qt_bundle.py); Qt would silently
-    # fall back to a plain style or refuse an image format if one were missing.
+    # build ships a pruned PySide6 (scripts/qt_bundle.py), and if a piece
+    # were missing Qt would quietly fall back to a plain style or refuse an
+    # image format.
     from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance()
@@ -136,8 +144,9 @@ def self_test() -> SelfTestReport:
             report.ok(f"{maker} frame decoder for the GPU metrics ({library})")
         else:
             report.warn(f"{maker} frame decoder absent ({library}); FFmpeg decodes the GPU metrics' videos")
-    # It decodes with the app's FFmpeg (vmaf_app/tools/ffmpeg) and GStreamer's
-    # dav1d: what it takes says the packaged build found them.
+    # The software decoder uses the app's FFmpeg libraries
+    # (vmaf_app/tools/ffmpeg) and GStreamer's dav1d, so the codecs it reports
+    # show that the packaged build found them.
     library = gpu_frames.LIBRARIES[gpu_frames.SOFTWARE].name
     codecs, why = gpu_frames.software_codecs()
     if codecs:
@@ -155,9 +164,9 @@ def self_test() -> SelfTestReport:
         else:
             report.warn(f"{metric} tool absent")
 
-    # Vship runs in processes of its own (vmaf_app.core.isolated): in the
-    # packaged build that is the executable started again, which only works
-    # while main() calls multiprocessing.freeze_support() first.
+    # Vship runs in processes of its own (vmaf_app.core.isolated). In the
+    # packaged build each is the executable started again, which works only
+    # because the script calls multiprocessing.freeze_support() first.
     import os
 
     from vmaf_app.core.isolated import run_isolated
@@ -204,19 +213,21 @@ _QT_LOG_LEVELS = {"QtDebugMsg": logging.DEBUG, "QtInfoMsg": logging.INFO, "QtWar
 
 
 def _log_qt_message(mode, _context, message: str) -> None:
+    """Qt's own messages, written to the app's log at the matching level."""
     logging.getLogger("vmaf_app.qt").log(_QT_LOG_LEVELS.get(getattr(mode, "name", ""), logging.WARNING), message)
 
 
-#: Where the ffmpeg folder was kept before settings.json held it: the
-#: registry, under the app's old name.
+#: Where older versions kept the ffmpeg folder, before settings.json held it:
+#: the registry, under the app's old name.
 _REGISTRY_ORG = "VmafApp"
 _REGISTRY_APP = "VmafCalculator"
 
 
 def adopt_registry_ffmpeg_dir() -> str | None:
     """Moves an ffmpeg folder still kept in the registry into settings.json,
-    unless settings.json names one already; the registry's copy is removed
-    either way, so this happens once. The folder adopted, or None."""
+    unless settings.json names one already. The registry's copy is removed
+    either way, so this happens only once. Returns the folder moved, or
+    None."""
     from PySide6.QtCore import QSettings
 
     from vmaf_app.core.settings import Settings
@@ -237,7 +248,7 @@ def adopt_registry_ffmpeg_dir() -> str | None:
 
 
 def start_session_log() -> None:
-    """The log file for this session, headed with what it runs on."""
+    """Starts this session's log, headed with what the app runs on."""
     if app_log.start_logging() is None:
         return
     log = logging.getLogger("vmaf_app.main")
@@ -251,9 +262,10 @@ def start_session_log() -> None:
 
 
 def log_tools() -> None:
-    """FFmpeg and the GPUs, in this session's log: once the window is up,
-    when the tools' check started first thing (start_tool_check) is done.
-    Waited for while the log was started, it held the start 80 ms."""
+    """Writes FFmpeg's version and the GPUs found to this session's log.
+    It is called once the window is up, when the tools' check started at
+    launch (start_tool_check) has finished; waiting for that check while
+    starting the log would delay the start by 80 ms."""
     from vmaf_app.core.ffmpeg_locate import check_tools, format_version
     from vmaf_app.core.gpu import detected_gpu_vendors
 
@@ -268,11 +280,12 @@ def log_tools() -> None:
 
 
 def apply_language(app: QApplication, chosen: str) -> str:
-    """Shows the app in `chosen` -- or, when that is empty, Windows' display
-    language -- and English where there is no translation. Qt's own dialogs
-    and buttons follow (its translations for the language, where it has
-    them), and a right-to-left language mirrors the window. The language
-    applied."""
+    """Shows the app in the `chosen` language, or Windows' display language
+    when none is chosen, with English where there is no translation.
+    Returns the language applied.
+
+    Qt's own dialogs and buttons follow, using Qt's translations where it
+    has them, and a right-to-left language mirrors the window."""
     from PySide6.QtCore import QLibraryInfo, Qt, QTranslator
 
     windows = i18n.windows_language()
@@ -293,8 +306,9 @@ def apply_language(app: QApplication, chosen: str) -> str:
 
 
 def main() -> int:
-    # Before anything looks for ffmpeg, the self-test included; the tools'
-    # check then runs while the window's modules load.
+    """Starts the window (or runs the self-test) and returns the exit code."""
+    # This comes before anything looks for ffmpeg, the self-test included.
+    # The tools' check then runs while the window's modules load.
     adopted = adopt_registry_ffmpeg_dir()
     from vmaf_app.core.ffmpeg_locate import start_tool_check
 
@@ -308,9 +322,9 @@ def main() -> int:
 
     if "--self-test" in sys.argv:
         report = self_test()
-        # Both, because neither alone reaches every caller: a packaged build
-        # has no console to print to, and an automated check has no one to
-        # dismiss a dialog.
+        # The report is both printed and saved to a file, because neither
+        # alone reaches every caller: a packaged build has no console to
+        # print to, and an automated check has no one to close a dialog.
         with contextlib.suppress(OSError, ValueError):
             print(report.text)  # a windowed build has no usable stdout
         destination = user_data_dir() / "self-test.txt"
@@ -335,7 +349,8 @@ def main() -> int:
 
     settings = Settings.load()
     apply_language(app, settings.language)
-    # Before the window is built: what it colours itself reads the theme.
+    # The theme is applied before the window is built, because the window
+    # reads it to colour itself.
     from vmaf_app.ui import theme
 
     theme.apply_theme(settings.theme)
@@ -354,8 +369,8 @@ def main() -> int:
     window = MainWindow()
     window.show()
     log_tools()
-    # Video Compare's first opening, made ready in the background now:
-    # GStreamer and its D3D11 output loaded, FFmpeg's hardware decoders listed.
+    # Prepare Video Compare's first opening in the background now: load
+    # GStreamer and its D3D11 output, and list FFmpeg's hardware decoders.
     from vmaf_app.core import gpu, gstreamer_playback
 
     gstreamer_playback.start_loading()
@@ -366,11 +381,12 @@ def main() -> int:
 
 if __name__ == "__main__":
     # The packaged app starts itself again for the processes Vship and
-    # libvmaf run in (vmaf_app.core.isolated): there this runs that process's
-    # work and exits, before any window.
+    # libvmaf run in (vmaf_app.core.isolated). In such a process, this call
+    # runs the process's work and exits, before any window is made.
     multiprocessing.freeze_support()
     # The packaged build's second program, VideoMetricsLab-cli.exe, is this
-    # one with a console (VideoMetricsLab.spec): the command line, no window.
+    # program with a console (see VideoMetricsLab.spec): it runs the command
+    # line and makes no window.
     if Path(sys.executable).stem.casefold().endswith("-cli"):
         from vmaf_app import cli
 

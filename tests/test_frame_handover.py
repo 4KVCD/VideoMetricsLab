@@ -20,7 +20,8 @@ W, H = 640, 360
 
 
 def _clip(path: Path, pix_fmt: str, quality: int, codec: str = "hevc") -> Path:
-    encoder = ["-c:v", "libx264", "-qp", str(quality)] if codec == "h264" else         ["-c:v", "libx265", "-x265-params", f"qp={quality}:log-level=error"]
+    encoder = (["-c:v", "libx264", "-qp", str(quality)] if codec == "h264" else
+               ["-c:v", "libx265", "-x265-params", f"qp={quality}:log-level=error"])
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
                     "-i", f"testsrc2=s={W}x{H}:r=24000/1001:d=1", "-pix_fmt", pix_fmt, "-preset", "ultrafast",
                     *encoder, str(path)], check=True)

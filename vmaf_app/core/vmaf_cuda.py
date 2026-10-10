@@ -1,43 +1,49 @@
-"""VMAF and VMAF NEG on the GPU. On an NVIDIA GPU: libvmaf's CUDA feature
-extractors (VIF, ADM and motion) from the bundled tools/libvmaf/libvmaf.dll,
-libvmaf-fast's (github.com/4KVCD/libvmaf-fast, a fork of libvmaf with the pull
-requests that fix its CUDA code merged; scripts/fetch_libvmaf_fast.ps1
-installs a release of it, scripts/build_libvmaf_fast_local.ps1 a build of its
-latest commit while the app is developed). On any other GPU, or when Settings >
-GPU metrics > GPU backend is Vulkan: the port of those extractors to Vulkan
-(vmaf_vulkan), which gives the same scores. What is said below of libvmaf's
-scores holds for both.
+"""VMAF and VMAF NEG on the GPU.
 
-Only those two scores: VMAF v1 on the GPU is vmaf_v1_gpu's, and PSNR, SSIM
-and XPSNR, which have no GPU code, are scored on the CPU by this library's
-extractors (CpuScorer) or by FFmpeg's filters (vmaf_runner._cpu_metrics_plan).
-A run that scores VMAF on the GPU still decodes each video once:
-an FFmpeg for each video writes its frames, as they would reach libvmaf's
-filter, to a named pipe (_StreamReader), and this module pairs them as that
-filter does -- frame N with frame N (frame_sync), or by timestamp with
-VML_FRAME_PAIRING=timestamp, as before -- and feeds libvmaf frame pair by
-frame pair (see vmaf_runner._run_on_gpu), each frame's luma
-uploaded into a picture of libvmaf's on the GPU (_HostUpload). With
-VML_VMAF_PIPES=canvas, one FFmpeg pairs them itself and writes two raw
-outputs (_PipeReader), as every run did before: about twice the CPU for the
-same frames (pairs_in_app).
+On an NVIDIA GPU, the scores come from libvmaf's CUDA feature extractors
+(VIF, ADM and motion) in the bundled tools/libvmaf/libvmaf.dll. That library
+is built from libvmaf-fast (github.com/4KVCD/libvmaf-fast), a fork of libvmaf
+with the fixes to its CUDA code merged. scripts/fetch_libvmaf_fast.ps1
+installs a release of it, and scripts/build_libvmaf_fast_local.ps1 installs
+a build of its latest commit while the app is being developed. On any other
+GPU, or when Settings > GPU metrics > GPU backend is Vulkan, the scores come
+from the port of those extractors to Vulkan (vmaf_vulkan), which gives the
+same scores. What is said below about libvmaf holds for both.
 
-Where NVIDIA's decoder decodes both videos, VMAF is scored without FFmpeg's
-decode (score_decoded): the videos are decoded in libvmaf's process
-(gpu_frames), scaled and widened on the GPU to the size and depth they
-are compared at, the frames paired as libvmaf's filter pairs them
-(frame_sync), and each frame's luma -- all VMAF reads -- copied on the GPU
-into a picture of libvmaf's on the GPU. No frame crosses to system memory;
-FFmpeg only copies the compressed streams out of their containers.
+This module scores only VMAF and NEG. VMAF v1 on the GPU is vmaf_v1_gpu's.
+PSNR, SSIM and XPSNR have no GPU code, so they are scored on the CPU, by
+this library's extractors (CpuScorer) or by FFmpeg's filters
+(vmaf_runner._cpu_metrics_plan).
 
-Scores against the CPU (vmaf.exe of the same build, frame by frame): VIF and
-ADM identical; motion within about 3e-5, from the order the CUDA kernel
-rounds its blur in (libvmaf issue 1562, which nobody has fixed). VMAF and
-NEG within 4e-5 per frame on 8-bit 1080p and 4K clips, 5e-6 on 4K 10-bit
-Beekeeper -- 95.493080 against 95.493079 over 120 frames.
+How the frames get here: a run that scores VMAF on the GPU still decodes
+each video once. One FFmpeg per video writes the video's frames, as they
+would reach libvmaf's filter, to a named pipe (_StreamReader). This module
+pairs them as that filter does: frame N with frame N (frame_sync), or by
+timestamp with VML_FRAME_PAIRING=timestamp. It then feeds libvmaf one pair
+at a time (see vmaf_runner._run_on_gpu), uploading each frame's luma into a
+libvmaf picture on the GPU (_HostUpload). With VML_VMAF_PIPES=canvas, a
+single FFmpeg pairs the frames itself and writes two raw outputs
+(_PipeReader), as every run once did; that costs about twice the CPU for the
+same frames (see pairs_in_app).
 
-libvmaf runs in a process of its own (vmaf_app.core.isolated): a crash in it
-or the NVIDIA driver ends that process, and VMAF is calculated on the CPU.
+Where NVIDIA's decoder can decode both videos, VMAF is scored without
+FFmpeg decoding them (score_decoded). The videos are decoded in libvmaf's
+process (gpu_frames) and scaled and widened on the GPU to the size and bit
+depth they are compared at. The frames are paired as libvmaf's filter pairs
+them (frame_sync), and each frame's luma (all VMAF reads) is copied on the
+GPU into a libvmaf picture. No frame crosses to system memory: FFmpeg only
+copies the compressed streams out of their containers.
+
+How the GPU's scores compare with the CPU's (vmaf.exe of the same build,
+frame by frame): VIF and ADM are identical. Motion is within about 3e-5,
+because the CUDA kernel rounds its blur in a different order (libvmaf issue
+1562, still open). VMAF and NEG are within 4e-5 per frame on 8-bit 1080p
+and 4K clips, and within 5e-6 on a 4K 10-bit film (95.493080 against
+95.493079 over 120 frames).
+
+libvmaf runs in a process of its own (vmaf_app.core.isolated), so a crash in
+it or in the NVIDIA driver ends only that process, and VMAF is then
+calculated on the CPU.
 """
 from __future__ import annotations
 
@@ -70,17 +76,17 @@ _log = logging.getLogger(__name__)
 _ERROR_PIPE_CONNECTED, _ERROR_NO_DATA = 535, 232
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "libvmaf" / "libvmaf.dll"
-#: What the bundled libvmaf.dll and vmaf_vulkan.dll were built from, as the
-#: script that installed them recorded it: a libvmaf-fast release
-#: (scripts/fetch_libvmaf_fast.ps1) or, while the app is developed, a local
-#: build of the fork's latest commit (scripts/build_libvmaf_fast_local.ps1).
+#: Where the script that installed the bundled libvmaf.dll and vmaf_vulkan.dll
+#: recorded what they were built from: a libvmaf-fast release
+#: (scripts/fetch_libvmaf_fast.ps1) or, while the app is being developed, a
+#: local build of the fork's latest commit (scripts/build_libvmaf_fast_local.ps1).
 BUILD_RECORD = LIBRARY_PATH.with_name("libvmaf-fast.json")
 
 
 def _bundled_version(record: Path) -> str:
-    """The libvmaf-fast version `record` names -- v1 for release v1,
-    v1-2-g211f80e0 for a local build 2 commits after it -- or "unknown"
-    without one."""
+    """The libvmaf-fast version the build record names ("v1" for release
+    v1, "v1-2-g211f80e0" for a local build two commits after it), or
+    "unknown" without a record."""
     try:
         return str(json.loads(record.read_text(encoding="utf-8"))["version"])
     except (OSError, ValueError, KeyError, TypeError):
@@ -88,26 +94,25 @@ def _bundled_version(record: Path) -> str:
 
 
 LIBVMAF_FAST_VERSION = _bundled_version(BUILD_RECORD)
-#: What a GPU score records it was calculated with (its provenance).
+#: The library a GPU score records it was calculated with (its provenance).
 LIBRARY_BUILD = f"libvmaf-fast {LIBVMAF_FAST_VERSION} (CUDA)"
 
-#: The app's built-in VMAF models -> libvmaf's names for them. A custom model
-#: file is calculated on the CPU.
+#: The app's built-in VMAF models, mapped to libvmaf's names for them. A
+#: custom model file is calculated on the CPU.
 _GPU_MODELS = {"version=vmaf_v0.6.1": "vmaf_v0.6.1", "version=vmaf_4k_v0.6.1": "vmaf_4k_v0.6.1"}
 _NEG_MODEL = "vmaf_v0.6.1neg"
 
 _VMAF_PIX_FMT_YUV420P = 1
 _VMAF_PIX_FMT_YUV400P = 4
 _VMAF_LOG_LEVEL_ERROR = 1
-#: The CUDA device GPU VMAF runs on, its decoders included: CUDA's first,
-#: which by its default order (CUDA_DEVICE_ORDER=FASTEST_FIRST) is the
-#: fastest NVIDIA GPU. It is the one FFmpeg's -hwaccel cuda takes, and the
-#: one Vship's CUDA build picks (the first discrete GPU it lists;
-#: perceptual_vship._probe_vship_device), so on a PC with two NVIDIA GPUs
-#: every GPU metric and decode still lands on the same card. The app offers
-#: no choice of GPU.
+#: The CUDA device that GPU VMAF and its decoders run on: CUDA's first
+#: device, which in CUDA's default order (CUDA_DEVICE_ORDER=FASTEST_FIRST) is
+#: the fastest NVIDIA GPU. FFmpeg's -hwaccel cuda takes the same device, and
+#: so does Vship's CUDA build (the first discrete GPU it lists, see
+#: perceptual_vship._probe_vship_device), so on a PC with two NVIDIA GPUs every
+#: GPU metric and decode runs on the same card. The app offers no choice of GPU.
 _GPU = 0
-#: Frames each reader may hold ready before the feeder takes them.
+#: How many frames each reader may hold ready before the feeder takes them.
 _READ_AHEAD = 3
 _PIPE_BYTES = 64 * 1024 * 1024
 
@@ -119,6 +124,7 @@ class VmafGpuError(RuntimeError):
 # ------------------------------------------------------------------ binding
 
 class _Configuration(ctypes.Structure):
+    """libvmaf's VmafConfiguration."""
     _fields_ = [("log_level", ctypes.c_int), ("n_threads", ctypes.c_uint), ("n_subsample", ctypes.c_uint),
                 ("cpumask", ctypes.c_uint64), ("gpumask", ctypes.c_uint64)]
 
@@ -131,48 +137,52 @@ class _PlainPicture(ctypes.Structure):
 
 
 class _ColorPicture(ctypes.Structure):
-    """VmafPicture since upstream libvmaf's vmaf_picture_convert (Netflix/vmaf
-    0497a0f2, in libvmaf-fast after v3.2.0-fast.1): a VmafColor (range,
-    primaries, transfer, matrix: four enums) between data and ref. With the
-    old layout against such a libvmaf, it writes past the app's pictures
-    (vmaf_picture_alloc: heap corruption) and reads ref and priv from the
-    wrong place."""
+    """libvmaf's VmafPicture since upstream libvmaf added vmaf_picture_convert
+    (Netflix/vmaf 0497a0f2, in libvmaf-fast after v3.2.0-fast.1): it has a
+    VmafColor (range, primaries, transfer and matrix, four enums) between
+    data and ref. Using the old layout with such a libvmaf makes it write
+    past the app's pictures (heap corruption in vmaf_picture_alloc) and read
+    ref and priv from the wrong place."""
     _fields_ = [("pix_fmt", ctypes.c_int), ("bpc", ctypes.c_uint), ("w", ctypes.c_uint * 3),
                 ("h", ctypes.c_uint * 3), ("stride", ctypes.c_ssize_t * 3), ("data", ctypes.c_void_p * 3),
                 ("color", ctypes.c_int * 4), ("ref", ctypes.c_void_p), ("priv", ctypes.c_void_p)]
 
 
-#: The VmafPicture layout of the libvmaf loaded: _load sets it, and pictures
-#: are made through this name after _load, never before.
+#: The VmafPicture layout of the libvmaf loaded. _load sets it, so pictures
+#: are made through this name only after _load.
 _Picture: type[ctypes.Structure] = _PlainPicture
 
 
 class _PictureParameters(ctypes.Structure):
+    """libvmaf's VmafPictureParameters: a picture's size, depth and format."""
     _fields_ = [("w", ctypes.c_uint), ("h", ctypes.c_uint), ("bpc", ctypes.c_uint), ("pix_fmt", ctypes.c_int)]
 
 
 class _PictureConfiguration(ctypes.Structure):
-    """libvmaf's pool of pictures in system memory: vmaf_v1_gpu's (VMAF v1's
-    CPU features). GpuScorer's are in GPU memory."""
+    """libvmaf's pool of pictures in system memory, used by vmaf_v1_gpu for
+    VMAF v1's CPU features. GpuScorer's pictures are in GPU memory."""
 
     _fields_ = [("pic_params", _PictureParameters), ("pic_cnt", ctypes.c_uint)]
 
 
 class _ModelConfig(ctypes.Structure):
+    """libvmaf's VmafModelConfig."""
     _fields_ = [("name", ctypes.c_char_p), ("flags", ctypes.c_uint64)]
 
 
 class _CudaConfiguration(ctypes.Structure):
+    """libvmaf's VmafCudaConfiguration: the CUDA context to use."""
     _fields_ = [("cu_ctx", ctypes.c_void_p)]
 
 
 class _CudaPictureConfiguration(ctypes.Structure):
+    """libvmaf's VmafCudaPictureConfiguration."""
     _fields_ = [("pic_params", _PictureParameters), ("pic_prealloc_method", ctypes.c_int)]
 
 
 #: VMAF_CUDA_PICTURE_PREALLOCATION_METHOD_DEVICE: libvmaf's own pictures in
-#: GPU memory, which frames decoded on the GPU are copied into there, and
-#: frames from system memory uploaded into (_HostUpload).
+#: GPU memory. Frames decoded on the GPU are copied into them there, and
+#: frames from system memory are uploaded into them (_HostUpload).
 _PREALLOCATE_ON_DEVICE = 1
 
 
@@ -180,11 +190,12 @@ _library: ctypes.CDLL | None = None
 
 
 def _load() -> ctypes.CDLL:
+    """Loads the bundled libvmaf once and declares its functions' types."""
     global _library, _Picture
     if _library is None:
         lib = ctypes.CDLL(str(LIBRARY_PATH))
-        # The picture layout this libvmaf has: vmaf_picture_convert came with
-        # the colour field.
+        # The picture layout this libvmaf uses: the colour field came with
+        # vmaf_picture_convert.
         _Picture = _ColorPicture if hasattr(lib, "vmaf_picture_convert") else _PlainPicture
         handle, pointer = ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)
         for name, restype, argtypes in (
@@ -217,17 +228,20 @@ def _load() -> ctypes.CDLL:
 
 
 def _check(error: int, what: str) -> None:
+    """Raises VmafGpuError if a libvmaf call returned an error."""
     if error:
         raise VmafGpuError(f"{what} failed (libvmaf error {error})")
 
 
 def path_bytes(path) -> bytes:
-    """An existing file's path as libvmaf opens it: with fopen(), which reads
-    the name in Windows' ANSI code page, not UTF-8. UTF-8 bytes of a folder
-    with an accented letter (a user's own name in their profile and its Temp
-    folder) named a file that is not there. A name the code page has no
-    letters for (Chinese on a western Windows) goes by its short 8.3 path
-    where the drive keeps those; VmafGpuError where it does not."""
+    """An existing file's path encoded as libvmaf needs it to open the file.
+
+    libvmaf opens files with fopen(), which reads the name in Windows' ANSI
+    code page, not UTF-8. (Encoded as UTF-8, a folder name with an accented
+    letter, such as the user's name in their profile and Temp folder, would
+    name a file that is not there.) A name with letters the code page lacks
+    (Chinese on a Western Windows, say) is given by its short 8.3 path,
+    where the drive keeps those; otherwise VmafGpuError is raised."""
     text = str(path)
     for attempt in range(2):
         try:
@@ -245,7 +259,7 @@ def path_bytes(path) -> bytes:
 # ------------------------------------------------- frames from system memory
 
 class _Copy2D(ctypes.Structure):
-    """CUDA_MEMCPY2D."""
+    """CUDA's CUDA_MEMCPY2D: a copy of a rectangle of memory."""
 
     _fields_ = [("srcXInBytes", ctypes.c_size_t), ("srcY", ctypes.c_size_t), ("srcMemoryType", ctypes.c_uint),
                 ("srcHost", ctypes.c_void_p), ("srcDevice", ctypes.c_uint64), ("srcArray", ctypes.c_void_p),
@@ -264,8 +278,8 @@ _cuda_library: ctypes.CDLL | None = None
 
 
 def _cuda() -> ctypes.CDLL:
-    """CUDA's driver API (nvcuda.dll, the NVIDIA driver's), which libvmaf
-    loads too."""
+    """Loads CUDA's driver API (nvcuda.dll, part of the NVIDIA driver, which
+    libvmaf loads too) once, and declares the types of the functions used."""
     global _cuda_library
     if _cuda_library is None:
         lib = ctypes.CDLL("nvcuda.dll")
@@ -291,23 +305,26 @@ def _cuda() -> ctypes.CDLL:
 
 
 def _cuda_check(error: int, what: str) -> None:
+    """Raises VmafGpuError if a CUDA call returned an error."""
     if error:
         raise VmafGpuError(f"{what} failed (CUDA error {error})")
 
 
 class _HostUpload:
     """Copies frames' luma from system memory into libvmaf's pictures on the
-    GPU: through one page-locked buffer a side, allocated once, and a stream
-    of its own.
+    GPU, through one page-locked buffer per side, allocated once, on a CUDA
+    stream of its own.
 
-    libvmaf's own way with frames in system memory (a pool of CPU pictures,
-    each uploaded from pageable memory when it is read) scored 4K 10-bit
-    pairs at about 180 a second on an RTX 5090, and this at about 330.
-    Its page-locked pictures (HOST_PINNED) are no way round: each fetch
-    allocates, locks and zeroes a new one, 9 ms a 4K pair.
+    This is faster than libvmaf's own handling of frames in system memory (a
+    pool of CPU pictures, each uploaded from pageable memory when it is
+    read): about 330 4K 10-bit pairs a second on an RTX 5090, against about
+    180. libvmaf's page-locked pictures (HOST_PINNED) are no faster, because
+    each fetch allocates, locks and zeroes a new one, which takes 9 ms per
+    4K pair.
 
-    In libvmaf's CUDA context, the primary one of its GPU, which is made
-    current around each use: the frames come on a thread of the caller's."""
+    It works in libvmaf's CUDA context, the primary context of its GPU,
+    which is made current around each use because the frames arrive on the
+    caller's thread."""
 
     def __init__(self, width: int, height: int, sample: int):
         self._cu = cu = _cuda()
@@ -334,6 +351,7 @@ class _HostUpload:
             raise
 
     def __enter__(self) -> _HostUpload:
+        """Makes libvmaf's CUDA context current on this thread."""
         _cuda_check(self._cu.cuCtxPushCurrent_v2(self._context), "Taking the GPU")
         return self
 
@@ -341,9 +359,9 @@ class _HostUpload:
         self._cu.cuCtxPopCurrent_v2(ctypes.byref(ctypes.c_void_p()))
 
     def send(self, side: int, frame, address: int, pitch: int) -> None:
-        """Starts the copy of `frame`'s luma to the picture at `address`
-        (rows `pitch` bytes apart); wait() says when `frame`'s side may be
-        sent again. Within `with self`."""
+        """Starts copying `frame`'s luma to the GPU picture at `address`, whose
+        rows are `pitch` bytes apart. Call wait() before sending on the same
+        side again. Must be called inside `with self`."""
         source = np.frombuffer(frame, dtype=np.uint8)
         if source.size < self.luma_bytes:
             raise VmafGpuError(f"a frame of {source.size} bytes, where its luma alone is {self.luma_bytes}")
@@ -355,8 +373,9 @@ class _HostUpload:
         _cuda_check(self._cu.cuMemcpy2DAsync_v2(ctypes.byref(copy), self._stream), "Uploading a frame")
 
     def send_filled(self, side: int, fill: Callable[[int], None], address: int, pitch: int) -> None:
-        """send, with the luma written by `fill` (given the side's page-locked
-        buffer, rows packed) rather than copied in from a frame."""
+        """Like send, but `fill` writes the luma itself into the side's
+        page-locked buffer (rows packed), instead of it being copied from a
+        frame."""
         fill(self._staging[side].value)
         copy = _Copy2D(srcMemoryType=_CU_MEMORYTYPE_HOST, srcHost=self._staging[side].value, srcPitch=self._row_bytes,
                        dstMemoryType=_CU_MEMORYTYPE_DEVICE, dstDevice=address, dstPitch=pitch,
@@ -364,9 +383,11 @@ class _HostUpload:
         _cuda_check(self._cu.cuMemcpy2DAsync_v2(ctypes.byref(copy), self._stream), "Uploading a frame")
 
     def wait(self) -> None:
+        """Waits until the copies started have finished."""
         _cuda_check(self._cu.cuStreamSynchronize(self._stream), "Uploading a frame")
 
     def close(self) -> None:
+        """Frees the buffers and the stream, and releases the GPU context."""
         if not self._context:
             return
         cu = self._cu
@@ -385,12 +406,14 @@ class _HostUpload:
 
 
 class GpuScorer:
-    """One libvmaf context on the GPU, given frame pairs in order: 4:2:0
-    frames packed as FFmpeg's rawvideo writes them, at `bit_depth` bits
-    (16-bit little-endian samples above 8), whose luma is uploaded (add;
-    VMAF reads nothing else) -- or pictures in GPU memory that add_on_device
-    has filled. `on_device`: add_on_device alone is used, and nothing is
-    allocated for uploads."""
+    """One libvmaf context on the GPU, scoring frame pairs given in order.
+
+    add takes 4:2:0 frames in system memory, packed as FFmpeg's rawvideo
+    writes them, at `bit_depth` bits (16-bit little-endian samples above 8
+    bits); only their luma is uploaded, because VMAF reads nothing else.
+    add_on_device takes pictures already in GPU memory instead. With
+    `on_device`, only add_on_device is used, and nothing is allocated for
+    uploads."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
                  on_device: bool = False):
@@ -413,8 +436,8 @@ class GpuScorer:
                        f"Loading the {version} model")
                 self._models[name] = model
                 _check(lib.vmaf_use_features_from_model(self._context, model), f"Setting up {version}")
-            # libvmaf's pictures in GPU memory, whoever fills them: the
-            # decoders, or _HostUpload from frames in system memory.
+            # libvmaf's pictures in GPU memory, filled either by the decoders
+            # or by _HostUpload from frames in system memory.
             parameters = _PictureParameters(width, height, bit_depth, _VMAF_PIX_FMT_YUV420P)
             pictures = _CudaPictureConfiguration(parameters, _PREALLOCATE_ON_DEVICE)
             _check(lib.vmaf_cuda_preallocate_pictures(self._context, pictures), "Allocating pictures")
@@ -424,20 +447,20 @@ class GpuScorer:
         except BaseException:
             self.close()
             raise
-        #: A frame as FFmpeg writes it: the luma, then the chroma planes,
-        #: which FFmpeg rounds up for an odd size.
+        #: The size of a frame as FFmpeg writes it: the luma plane, then the
+        #: chroma planes, whose size FFmpeg rounds up for an odd width or height.
         self.frame_bytes = (width * height + 2 * ((width + 1) // 2) * ((height + 1) // 2)) * sample
 
     def add(self, reference: bytearray, distorted: bytearray) -> None:
-        """Scores one more pair (frame index = how many came before). The
-        frames are the caller's again when it returns."""
+        """Scores one more pair; its frame index is the number of pairs given
+        before it. The frames belong to the caller again when this returns."""
         upload = self._upload
         if upload is None:
             raise VmafGpuError("this scorer takes pictures in GPU memory only")
 
         def fill_distorted(picture: _Picture) -> None:
-            # Both copies are under way together; the reference's is waited
-            # for too when this one could not be started.
+            # Both copies run at the same time. The wait also covers the
+            # reference's copy when this one could not be started.
             try:
                 upload.send(1, distorted, picture.data[0], picture.stride[0])
             finally:
@@ -447,18 +470,18 @@ class GpuScorer:
             self._add(lambda picture: upload.send(0, reference, picture.data[0], picture.stride[0]), fill_distorted)
 
     def add_on_device(self, reference: Callable[[int, int], None], distorted: Callable[[int, int], None]) -> None:
-        """Scores one more pair of pictures in GPU memory: `reference` and
-        `distorted` are each given a picture's luma plane (address, pitch)
-        to fill, and return once it is filled."""
+        """Scores one more pair of pictures in GPU memory. `reference` and
+        `distorted` are each given a picture's luma plane (address, pitch) to
+        fill, and return once it is filled."""
         self._add(lambda picture: reference(picture.data[0], picture.stride[0]),
                   lambda picture: distorted(picture.data[0], picture.stride[0]))
 
     def add_sides(self, reference: tuple[bool, Callable], distorted: tuple[bool, Callable]) -> None:
-        """Scores one more pair, each side as (on_device, fill): on the
-        device, fill(address, pitch) fills the picture's luma plane in GPU
-        memory itself (add_on_device); otherwise fill(address) writes the
-        luma, rows packed, into the page-locked memory it is uploaded from
-        (as add's frames are)."""
+        """Scores one more pair, where each side is given as (on_device,
+        fill). For a side on the device, fill(address, pitch) fills the
+        picture's luma plane in GPU memory itself (as in add_on_device).
+        Otherwise fill(address) writes the luma, rows packed, into the
+        page-locked memory it is uploaded from (as add's frames are)."""
         upload = self._upload
         if upload is None and not (reference[0] and distorted[0]):
             raise VmafGpuError("this scorer takes pictures in GPU memory only")
@@ -483,6 +506,8 @@ class GpuScorer:
             self._add(fill_reference, fill_distorted_and_wait)
 
     def _add(self, fill_reference, fill_distorted) -> None:
+        """Takes two pictures from libvmaf's pool, has them filled, and hands
+        them to libvmaf to score."""
         fetch = self._lib.vmaf_cuda_fetch_preallocated_picture
         ref, dist = _Picture(), _Picture()
         _check(fetch(self._context, ctypes.byref(ref)), "Taking a picture")
@@ -495,20 +520,21 @@ class GpuScorer:
             fill_reference(ref)
             fill_distorted(dist)
         except BaseException:
-            # Pictures taken from the pool and never handed over keep
-            # vmaf_close waiting for them.
+            # Pictures taken from the pool must be given back: vmaf_close
+            # would wait for them forever.
             self._lib.vmaf_picture_unref(ctypes.byref(ref))
             self._lib.vmaf_picture_unref(ctypes.byref(dist))
             raise
-        # libvmaf takes both pictures, also when it fails (pull request 1652).
+        # libvmaf takes both pictures, even when it fails (pull request 1652).
         _check(self._lib.vmaf_read_pictures(self._context, ctypes.byref(ref), ctypes.byref(dist), self._count),
                f"Scoring frame {self._count}")
         self._count += 1
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """The frame numbers scored (every n_subsample-th) and each model's
-        scores for them, as libvmaf's JSON log rounds them: six decimals.
-        Nothing when no pair came (the caller refuses that)."""
+        """Returns the frame numbers scored (every n_subsample-th frame) and
+        each model's scores for them, rounded to six decimals as libvmaf's
+        JSON log rounds them. Both are empty when no pair was given (the
+        caller treats that as a failure)."""
         if not self._count:
             return np.zeros(0, dtype=np.int32), {name: np.zeros(0) for name in self._models}
         _check(self._lib.vmaf_read_pictures(self._context, None, None, 0), "Finishing")
@@ -525,6 +551,7 @@ class GpuScorer:
         return frames, scores
 
     def close(self) -> None:
+        """Frees the upload, the models and the libvmaf context."""
         if self._upload is not None:
             self._upload.close()
             self._upload = None
@@ -536,52 +563,59 @@ class GpuScorer:
             self._context = ctypes.c_void_p()
 
 
-#: libvmaf's CPU feature extractors scored by CpuScorer: the app's metric key
-#: -> (the extractor, the feature whose score is the metric's, the decimals
-#: kept of it), as FFmpeg's libvmaf filter is asked for them ("name=psnr",
-#: "name=float_ssim") and as its log names and rounds the scores the app
-#: reads (vmaf_runner._parse_log); XPSNR as FFmpeg's xpsnr filter writes it
-#: in its stats file ("%3.4f"), by libvmaf-fast's port of that filter.
+#: The libvmaf CPU feature extractors CpuScorer runs, by the app's metric key:
+#: (the extractor, the feature that is the metric's score, the decimals kept).
+#: They match what FFmpeg's libvmaf filter is asked for ("name=psnr",
+#: "name=float_ssim") and how its log names and rounds the scores the app reads
+#: (vmaf_runner._parse_log). XPSNR comes from libvmaf-fast's port of FFmpeg's
+#: xpsnr filter, rounded as that filter writes its stats file ("%3.4f").
 CPU_FEATURES = {"psnr": ("psnr", "psnr_y", 6), "ssim": ("float_ssim", "float_ssim", 6),
                 "xpsnr": ("xpsnr", "xpsnr_y", 4)}
-#: What a CPU score records it was calculated with.
+#: The library a CPU score records it was calculated with.
 CPU_BUILD = f"libvmaf-fast {LIBVMAF_FAST_VERSION} (CPU)"
-#: The most memory CpuScorer's pictures take, unless two pairs of them take
-#: more (8K): page-locked, from NVIDIA's decoder. 4K 10-bit from NVIDIA's
-#: decoder, PSNR + SSIM: 2 pairs 49 fps, 3 93, 4 129, 5 159, 6 (this) and 8
-#: 172 fps, where the decoders' feed levels off. With XPSNR, whose pairs
-#: take longer, and the pair it keeps from the frames before on top: 7
-#: pairs 135 fps, 8 154, 9 169 (CPU_XPSNR_PICTURE_MEMORY), 10 171.
+#: The most memory CpuScorer's pictures may take (unless two pairs alone take
+#: more, at 8K). The memory is page-locked when the frames come from NVIDIA's
+#: decoder. Measured on 4K 10-bit video from NVIDIA's decoder, PSNR + SSIM
+#: ran at 49 fps with 2 pairs, 93 with 3, 129 with 4, 159 with 5, and 172 with
+#: 6 (this limit) or 8, where the decoders' feed levels off. XPSNR's pairs take
+#: longer, and it keeps a pair from the previous frames, so it gets more:
+#: 135 fps with 7 pairs, 154 with 8, 169 with 9 (CPU_XPSNR_PICTURE_MEMORY) and
+#: 171 with 10.
 CPU_PICTURE_MEMORY = 200 << 20
 CPU_XPSNR_PICTURE_MEMORY = 270 << 20
 
 
 class CpuScorer:
-    """PSNR, SSIM and XPSNR of frame pairs given in order, by libvmaf-fast's
-    own CPU extractors -- the ones FFmpeg's libvmaf filter runs, which give
-    the same scores to the six decimals its log keeps, and its port of
-    FFmpeg's xpsnr filter (CPU_FEATURES) -- in this process, on its
-    pictures (vmaf_preallocate_pictures). FFmpeg's filter allocates, zeroes
-    and copies two new pictures for every pair on its one filter thread
-    before libvmaf's threads see them: 4K PSNR + SSIM ran at 67 fps there,
-    with most cores idle. The pictures are luma only: the app keeps PSNR's
-    luma score (psnr_y) and SSIM, which read nothing else, and libvmaf's
-    PSNR leaves out the chroma planes of a picture without them -- the
-    same psnr_y, a third less to copy and to score. `metrics`: CPU_FEATURES
-    keys. Frames as GpuScorer takes them (4:2:0, packed as FFmpeg's rawvideo
-    writes them; their luma is read), or a decoder's (add_decoded)."""
+    """Scores PSNR, SSIM and XPSNR of frame pairs given in order, with
+    libvmaf-fast's own CPU extractors (CPU_FEATURES), in this process, on
+    libvmaf's preallocated pictures (vmaf_preallocate_pictures).
+
+    These are the extractors FFmpeg's libvmaf filter runs, and they give the
+    same scores to the six decimals its log keeps; XPSNR is libvmaf-fast's
+    port of FFmpeg's xpsnr filter. Running them here is faster than in
+    FFmpeg: FFmpeg's filter allocates, zeroes and copies two new pictures
+    for every pair on its single filter thread before libvmaf's threads see
+    them, so 4K PSNR + SSIM ran at 67 fps there, with most cores idle.
+
+    The pictures hold luma only. The app keeps PSNR's luma score (psnr_y)
+    and SSIM, which read nothing else, and libvmaf's PSNR skips the chroma
+    planes of a picture without them: the same psnr_y, with a third less to
+    copy and score. `metrics` are CPU_FEATURES keys. Frames are given as
+    GpuScorer takes them (4:2:0, packed as FFmpeg's rawvideo writes them;
+    only the luma is read), or as a decoder's pictures (add_decoded)."""
 
     def __init__(self, width: int, height: int, bit_depth: int, metrics: tuple[str, ...], n_subsample: int = 1,
                  threads: int = 0, frame_rate: int = 0):
-        """`frame_rate`: XPSNR's, as FFmpeg's filter takes it (whole frames a
-        second of the reference video, vmaf_runner._xpsnr_frame_rate)."""
+        """`frame_rate` is XPSNR's frame rate, as FFmpeg's filter takes it:
+        the reference video's whole frames per second
+        (vmaf_runner._xpsnr_frame_rate)."""
         self._lib = lib = _load()
         self._step = max(1, n_subsample)
         self._metrics = tuple(metrics)
         self._context = ctypes.c_void_p()
         self._count = 0
-        #: Pictures' memory page-locked for NVIDIA's decoder -> the stream
-        #: that did it (None: it could not).
+        #: The pictures' memory page-locked for NVIDIA's decoder, mapped to
+        #: the decoder stream that locked it (None where it could not).
         self._pinned: dict[int, object] = {}
         self._staging: list[bytearray] | None = None
         sample = 1 if bit_depth <= 8 else 2
@@ -614,7 +648,7 @@ class CpuScorer:
                         if lib.vmaf_feature_dictionary_set(ctypes.byref(options), key.encode(), value.encode()):
                             lib.vmaf_feature_dictionary_free(ctypes.byref(options))
                             raise VmafGpuError(f"Setting {extractor}'s {key} failed")
-                # libvmaf frees the options (one it refuses early keeps a few bytes).
+                # libvmaf frees the options (if it refuses them early, a few bytes leak).
                 _check(lib.vmaf_use_feature(self._context, extractor.encode(), options), f"Starting {extractor}")
             pairs = cpu_pairs(width, height, bit_depth, threads, xpsnr="xpsnr" in self._metrics)
             parameters = _PictureParameters(width, height, bit_depth, _VMAF_PIX_FMT_YUV400P)
@@ -625,8 +659,8 @@ class CpuScorer:
             raise
 
     def add(self, reference, distorted) -> None:
-        """Scores one more pair (frame index = how many came before). The
-        frames are the caller's again when it returns."""
+        """Scores one more pair; its frame index is the number of pairs given
+        before it. The frames belong to the caller again when this returns."""
         ref, dist = self._take()
         try:
             self._fill(ref, reference, self.frame_bytes)
@@ -637,14 +671,16 @@ class CpuScorer:
         self._score(ref, dist)
 
     def add_decoded(self, ref_stream, ref_slot: int, test_stream, test_slot: int) -> None:
-        """Scores one more pair held by gpu_frames' decoders, decoding luma
-        only (luma_bytes frames). NVIDIA's copies it into libvmaf's picture
-        itself, rows as far apart as the picture's (download_planes), into
-        memory it page-locks the first time each of the pool's pictures
-        comes round. Intel's and AMD's write it straight into the picture
-        where its rows are packed, as libvmaf aligns them at most widths
-        (multiples of 32 samples: 3840, 1920, 1280), else into memory it is
-        copied from as add() copies a frame."""
+        """Scores one more pair held by gpu_frames' decoders, which decode
+        luma only (luma_bytes per frame).
+
+        NVIDIA's decoder copies the luma into libvmaf's picture itself, with
+        the picture's row spacing (download_planes), into memory it
+        page-locks the first time each of the pool's pictures comes round.
+        Intel's and AMD's write it straight into the picture when the
+        picture's rows are packed, as libvmaf lays them out at most widths
+        (multiples of 32 samples: 3840, 1920, 1280); otherwise they write it
+        into a buffer that is then copied in, as add() copies a frame."""
         ref, dist = self._take()
         try:
             self._download(ref, ref_stream, ref_slot, 0)
@@ -655,6 +691,7 @@ class CpuScorer:
         self._score(ref, dist)
 
     def _take(self) -> tuple[_Picture, _Picture]:
+        """Takes a pair of pictures from libvmaf's pool."""
         lib = self._lib
         ref, dist = _Picture(), _Picture()
         _check(lib.vmaf_fetch_preallocated_picture(self._context, ctypes.byref(ref)), "Taking a picture")
@@ -666,18 +703,21 @@ class CpuScorer:
         return ref, dist
 
     def _give_back(self, ref: _Picture, dist: _Picture) -> None:
-        # Pictures taken from the pool and never handed over keep vmaf_close
-        # waiting for them.
+        """Returns a pair of pictures to the pool unscored. Pictures taken
+        from the pool must be given back: vmaf_close would wait for them."""
         self._lib.vmaf_picture_unref(ctypes.byref(ref))
         self._lib.vmaf_picture_unref(ctypes.byref(dist))
 
     def _score(self, ref: _Picture, dist: _Picture) -> None:
-        # libvmaf takes both pictures, also when it fails (pull request 1652).
+        """Hands a filled pair to libvmaf to score."""
+        # libvmaf takes both pictures, even when it fails (pull request 1652).
         _check(self._lib.vmaf_read_pictures(self._context, ctypes.byref(ref), ctypes.byref(dist), self._count),
                f"Scoring frame {self._count}")
         self._count += 1
 
     def _download(self, picture: _Picture, stream, slot: int, which: int) -> None:
+        """Fills `picture` with the luma of a decoder's picture (see
+        add_decoded); `which` is 0 for the source, 1 for the test video."""
         address, pitch = picture.data[0], picture.stride[0]
         if stream.backend == "nvidia":
             if address not in self._pinned:
@@ -693,7 +733,7 @@ class CpuScorer:
             self._fill(picture, buffer, self.luma_bytes)
 
     def _fill(self, picture: _Picture, frame, size: int) -> None:
-        """The luma of `frame`, `size` bytes or more."""
+        """Copies the luma of `frame` (at least `size` bytes) into `picture`."""
         source = np.frombuffer(frame, dtype=np.uint8)
         if len(source) < size:
             raise VmafGpuError(f"frame {self._count} is shorter than a picture")
@@ -702,9 +742,9 @@ class CpuScorer:
         target[:, :self._row_bytes] = source[:self.luma_bytes].reshape(self._rows, self._row_bytes)
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """The frame numbers scored (every n_subsample-th) and each metric's
-        scores for them, rounded as the files the app reads FFmpeg's from
-        round them (CPU_FEATURES)."""
+        """Returns the frame numbers scored (every n_subsample-th frame) and
+        each metric's scores for them, rounded as the files the app reads
+        FFmpeg's scores from round them (CPU_FEATURES)."""
         if not self._count:
             return np.zeros(0, dtype=np.int32), {metric: np.zeros(0) for metric in self._metrics}
         _check(self._lib.vmaf_read_pictures(self._context, None, None, 0), "Finishing")
@@ -723,11 +763,13 @@ class CpuScorer:
         return frames, scores
 
     def close(self) -> None:
-        """Before the decoders are closed, where the frames came from them."""
-        # Unpinned first: vmaf_close frees the pictures, and CUDA's memory is
-        # unregistered before it is freed. No copy into it is under way
-        # (download_planes returns once its copy is done); an extractor still
-        # reading it does not mind.
+        """Frees the libvmaf context. When the frames came from the decoders,
+        call this before closing them."""
+        # The page-locked memory is unregistered first, because vmaf_close
+        # frees the pictures, and memory must be unregistered from CUDA
+        # before it is freed. No copy into it can be under way
+        # (download_planes returns once its copy is done), and an extractor
+        # still reading it is not affected.
         for address, stream in self._pinned.items():
             if stream is not None:
                 stream.unpin(address)
@@ -740,9 +782,9 @@ class CpuScorer:
 @functools.cache
 def cpu_scores_xpsnr() -> bool:
     """Whether the bundled libvmaf-fast has the xpsnr extractor (a port of
-    FFmpeg's filter, in its builds after 3.2.0-fast.1) with its option
-    "psnr", which CpuScorer uses: a pair of tiny pictures is scored, as
-    libvmaf ignores an option it does not know."""
+    FFmpeg's filter, in builds after 3.2.0-fast.1) with the "psnr" option
+    CpuScorer uses. libvmaf ignores options it does not know, so the check
+    scores a pair of tiny pictures and looks for both scores."""
     try:
         return _scores_xpsnr_and_psnr()
     except (OSError, VmafGpuError):
@@ -750,6 +792,7 @@ def cpu_scores_xpsnr() -> bool:
 
 
 def _scores_xpsnr_and_psnr() -> bool:
+    """cpu_scores_xpsnr's check, which may raise."""
     lib = _load()
     context = ctypes.c_void_p()
     _check(lib.vmaf_init(ctypes.byref(context), _Configuration(_VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0)), "Starting libvmaf")
@@ -762,12 +805,12 @@ def _scores_xpsnr_and_psnr() -> bool:
         _check(lib.vmaf_preallocate_pictures(context, _PictureConfiguration(parameters, 2)), "Allocating pictures")
         ref, dist = _Picture(), _Picture()
         _check(lib.vmaf_fetch_preallocated_picture(context, ctypes.byref(ref)), "Taking a picture")
-        try:  # a picture never handed back keeps vmaf_close waiting for it
+        try:  # a picture never given back would keep vmaf_close waiting for it
             _check(lib.vmaf_fetch_preallocated_picture(context, ctypes.byref(dist)), "Taking a picture")
         except BaseException:
             lib.vmaf_picture_unref(ctypes.byref(ref))
             raise
-        # libvmaf takes both pictures, also when it fails.
+        # libvmaf takes both pictures, even when it fails.
         _check(lib.vmaf_read_pictures(context, ctypes.byref(ref), ctypes.byref(dist), 0), "Scoring")
         _check(lib.vmaf_read_pictures(context, None, None, 0), "Finishing")
         value = ctypes.c_double()
@@ -778,13 +821,15 @@ def _scores_xpsnr_and_psnr() -> bool:
 
 
 def cpu_pairs(width: int, height: int, bit_depth: int, threads: int, xpsnr: bool = False) -> int:
-    """How many pairs of pictures CpuScorer's pool holds: one for each of
-    libvmaf's threads and one being filled, up to 8 threads' worth -- PSNR
-    and SSIM of 4K pairs from memory went little faster with more (139 fps
-    with 8 threads, 152 with 24) -- in at most CPU_PICTURE_MEMORY
-    (CPU_XPSNR_PICTURE_MEMORY with XPSNR), but two; with XPSNR, one more for
-    the two test pictures it keeps from the frames before. A pair is scored
-    on one thread: each more in the pool is one more scored at a time."""
+    """How many pairs of pictures CpuScorer's pool holds.
+
+    Each pair is scored on one thread, so each extra pair in the pool is one
+    more scored at a time. The pool holds one pair per libvmaf thread plus
+    one being filled, counting at most 8 threads (PSNR and SSIM of 4K pairs
+    went little faster with more: 139 fps with 8 threads, 152 with 24). It
+    stays within CPU_PICTURE_MEMORY (CPU_XPSNR_PICTURE_MEMORY with XPSNR),
+    but holds at least two pairs. XPSNR gets one more pair, for the two test
+    pictures it keeps from the previous frames."""
     picture = ((width + 31) & ~31) * height * (1 if bit_depth <= 8 else 2)
     memory = CPU_XPSNR_PICTURE_MEMORY if xpsnr else CPU_PICTURE_MEMORY
     return max(2, min(min(8, max(1, threads)) + 1, memory // (2 * picture))) + xpsnr
@@ -799,18 +844,23 @@ def score_decoded_cpu(
     check_cancel: Callable[[], None] = lambda: None,
     process_handle=None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """PSNR and SSIM (CpuScorer; `models`: CPU_FEATURES keys) with both videos
-    decoded in this process by the GPU's own decoder (gpu_frames: NVIDIA's,
-    Intel's or AMD's) or the software decoder -- `decoder` one for both, or
-    (the source's, the test video's) -- luma only, as score_decoded does for
-    VMAF: the frames FFmpeg's outputs carry -- the decoders crop as FFmpeg's crop filter does
-    and widen 8-bit samples as FFmpeg converts them -- paired as libvmaf's
-    filter pairs them (frame_sync) and cut where FFmpeg's -t would cut them.
-    Not for a comparison scaled to a size: the decoders do not scale as
-    FFmpeg does to the sample, and PSNR and SSIM, unlike VMAF, are scored
-    here to be FFmpeg's (GpuDecodeUnavailableError, and FFmpeg decodes, as
-    for any video they do not take). GpuDecodeFailedError when decoding
-    failed after the start."""
+    """Scores PSNR, SSIM and XPSNR (CpuScorer; `models` are CPU_FEATURES keys)
+    with both videos decoded in this process, luma only, as score_decoded
+    does for VMAF.
+
+    The videos are decoded by the GPU's own decoder (gpu_frames: NVIDIA's,
+    Intel's or AMD's) or by the software decoder; `decoder` is one for both,
+    or (the source's, the test video's). The frames are those FFmpeg's
+    outputs would carry: the decoders crop as FFmpeg's crop filter does and
+    widen 8-bit samples as FFmpeg converts them. They are paired as
+    libvmaf's filter pairs them (frame_sync) and cut where FFmpeg's -t
+    would cut them.
+
+    A comparison that is scaled is refused with GpuDecodeUnavailableError
+    (FFmpeg then decodes, as for any video the decoders do not take): the
+    decoders do not scale exactly as FFmpeg does, and unlike VMAF, these
+    scores must match FFmpeg's. Raises GpuDecodeFailedError when decoding
+    fails after it has started."""
     plans = []
     source_decoder, test_decoder = gpu_frames.decoder_pair(decoder)
     for info, crop, backend in ((distorted, distorted_crop, test_decoder), (source, source_crop, source_decoder)):
@@ -862,7 +912,7 @@ def score_decoded_cpu(
         ref.verify()
         return scorer.finish()
     finally:
-        if scorer is not None:  # first: it gives back the memory the decoders page-locked
+        if scorer is not None:  # first: it releases the memory the decoders page-locked
             scorer.close()
         test.close()
         ref.close()
@@ -877,8 +927,8 @@ class _PipeReader(threading.Thread):
     def __init__(self, name: str, frame_bytes: int) -> None:
         super().__init__(name=f"vmaf-gpu-{name}", daemon=True)
         self.path = rf"\\.\pipe\vml-vmaf-{os.getpid()}-{uuid.uuid4().hex[:12]}-{name}"
-        # _pipe, not _handle: Thread has a _handle of its own since Python
-        # 3.13, which start() needs ("'handle' must be a _ThreadHandle").
+        # Named _pipe, not _handle: since Python 3.13 Thread has a _handle
+        # of its own, which start() needs ("'handle' must be a _ThreadHandle").
         self._pipe = _winapi.CreateNamedPipe(
             self.path, _winapi.PIPE_ACCESS_INBOUND, _winapi.PIPE_WAIT,  # byte mode: PIPE_TYPE_BYTE is 0
             1, _PIPE_BYTES, _PIPE_BYTES, 0, _winapi.NULL)
@@ -890,14 +940,17 @@ class _PipeReader(threading.Thread):
         self._stopped = threading.Event()
 
     def run(self) -> None:
+        """The reading thread: waits for FFmpeg to open the pipe, then reads
+        frames into the free buffers until the pipe ends."""
         try:
             try:
                 _winapi.ConnectNamedPipe(self._pipe, _winapi.NULL)
             except OSError as error:
-                # ERROR_PIPE_CONNECTED: FFmpeg was first. ERROR_NO_DATA: it
-                # came, wrote and went before this connected -- what it
-                # wrote is still there to read. Taken for an error, a short
-                # run on a busy machine lost all of it.
+                # ERROR_PIPE_CONNECTED: FFmpeg connected first. ERROR_NO_DATA:
+                # FFmpeg connected, wrote and closed before this connected;
+                # what it wrote is still there to read, so neither is an
+                # error (treating them as one lost all the frames of a short
+                # run on a busy PC).
                 if error.winerror not in (_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA):
                     raise
             if self._stopped.is_set():
@@ -910,8 +963,8 @@ class _PipeReader(threading.Thread):
                     if buffer is None or not _read_frame(stream, buffer):
                         break
                     self.frames.put(buffer)
-                # The feeder may stop early (the shorter video ended):
-                # FFmpeg still writes the rest of this one, read and dropped.
+                # The feeder may stop early (when the shorter video ends), but
+                # FFmpeg still writes the rest of this video: read and drop it.
                 spare = bytearray(1024 * 1024)
                 while not self._stopped.is_set() and stream.readinto(spare):
                     pass
@@ -924,17 +977,17 @@ class _PipeReader(threading.Thread):
             self.frames.put(None)
 
     def stop(self) -> None:
-        """Ends the thread, also while it waits for FFmpeg to open the pipe."""
+        """Ends the thread, even while it waits for FFmpeg to open the pipe."""
         self._stopped.set()
         self.free.put(None)
         self.release_if_unconnected()
 
     def release_if_unconnected(self) -> None:
-        """Once FFmpeg has ended: a pipe it never opened -- an output that got
-        no frame is never opened -- would be waited for forever. Connecting
-        to it here ends the wait, and the reader finds the pipe empty. A pipe
-        FFmpeg did open refuses a second client, and is read to its end:
-        frames can still be in it after FFmpeg has gone."""
+        """Call once FFmpeg has ended. FFmpeg never opens an output that got
+        no frame, and the reader would wait for such a pipe forever.
+        Connecting to it here ends the wait, and the reader finds the pipe
+        empty. A pipe FFmpeg did open refuses a second client and is read to
+        its end, because frames can still be in it after FFmpeg has gone."""
         if self.is_alive():
             try:
                 with open(self.path, "wb"):
@@ -944,7 +997,7 @@ class _PipeReader(threading.Thread):
 
 
 def _read_frame(stream, buffer: bytearray) -> bool:
-    """Fills `buffer`; False at the end of the stream."""
+    """Fills `buffer` from the stream; returns False at the end of the stream."""
     view = memoryview(buffer)
     filled = 0
     while filled < len(buffer):
@@ -957,7 +1010,7 @@ def _read_frame(stream, buffer: bytearray) -> bool:
     return True
 
 
-# ------------------------------------------- frames with their timestamps
+# ------------------------------------------- each video's frames, paired here
 
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _kernel32.PeekNamedPipe.restype = wintypes.BOOL
@@ -966,34 +1019,36 @@ _kernel32.PeekNamedPipe.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.D
 _kernel32.ReadFile.restype = wintypes.BOOL
 _kernel32.ReadFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
                                ctypes.c_void_p]
-#: The variable that takes the pairing back into FFmpeg ("canvas"), for
-#: comparing the two ways.
+#: The environment variable that moves the pairing back into FFmpeg
+#: ("canvas"), to compare the two ways.
 PIPES_VARIABLE = "VML_VMAF_PIPES"
 
 
 @functools.cache
 def pairs_in_app() -> bool:
-    """Whether the frame pairs are made here (frame_sync) from each video's
-    own frames -- _StreamReader -- and not by FFmpeg's overlay on a canvas of
-    both (vmaf_runner._gpu_pairs_stage), which cost FFmpeg about four times
-    the CPU. Each video then has an FFmpeg of its own: in one, the video that
-    decodes faster fills its pipe while its frames wait here for the other's,
-    and FFmpeg's one filter thread, held by that pipe, passes no frame of the
-    other's -- neither side moves again. VML_VMAF_PIPES=canvas asks for the
-    canvas."""
+    """Whether the frames are paired here (frame_sync) from each video's own
+    frames (_StreamReader), rather than by FFmpeg's overlay on a canvas of
+    both videos (vmaf_runner._gpu_pairs_stage), which costs FFmpeg about four
+    times the CPU. VML_VMAF_PIPES=canvas asks for the canvas.
+
+    When pairing here, each video has an FFmpeg of its own. (In one FFmpeg,
+    the faster-decoding video would fill its pipe while its frames waited
+    here for the other's, and FFmpeg's single filter thread, blocked on that
+    pipe, would pass no frame of the other video: a deadlock.)"""
     return os.environ.get(PIPES_VARIABLE, "").casefold() != "canvas"
 
 
 class _StreamReader:
-    """One of the two videos as it leaves FFmpeg's filter chain: its frames,
-    a YUV4MPEG stream on a named pipe. pull() gives the next frame to
+    """One of the two videos as it leaves FFmpeg's filter chain: its frames
+    as a YUV4MPEG stream on a named pipe. pull() gives the next frame to
     frame_sync.frame_pairs.
 
-    YUV4MPEG, not rawvideo: FFmpeg writes its frames' rows straight to the
-    pipe, where the rawvideo encoder first copies each frame into a packet
-    it allocates. Each frame is left to gather in the pipe and then taken
-    in one read: read as it comes, it arrives in about 300 pieces, each a
-    wake-up of this thread (2 ms of CPU a 4K frame against 4)."""
+    YUV4MPEG is used rather than rawvideo because FFmpeg writes a YUV4MPEG
+    frame's rows straight to the pipe, while the rawvideo encoder first
+    copies each frame into a packet it allocates. Each frame is left to
+    gather in the pipe and is then taken in one read: read as it arrives, a
+    4K frame comes in about 300 pieces, each waking this thread, which costs
+    4 ms of CPU per frame instead of 2."""
 
     def __init__(self, name: str, frame_bytes: int) -> None:
         self.path = rf"\\.\pipe\vml-vmaf-{os.getpid()}-{uuid.uuid4().hex[:12]}-{name}"
@@ -1001,7 +1056,7 @@ class _StreamReader:
         self._pipe = _winapi.CreateNamedPipe(self.path, _winapi.PIPE_ACCESS_INBOUND, _winapi.PIPE_WAIT, 1,
                                              _PIPE_BYTES, _PIPE_BYTES, 0, _winapi.NULL)
         self.free: queue.Queue[bytearray | None] = queue.Queue()
-        # The frame being paired (frame_pairs), and those read ahead.
+        # Buffers for the frame being paired (frame_pairs) and those read ahead.
         for _ in range(_READ_AHEAD + 1):
             self.free.put(bytearray(frame_bytes))
         self._pixels: queue.Queue[bytearray | None] = queue.Queue()
@@ -1011,31 +1066,34 @@ class _StreamReader:
         self._thread = threading.Thread(target=self._read_frames, name=f"vmaf-gpu-{name}", daemon=True)
 
     def start(self) -> None:
+        """Starts the reading thread."""
         self._thread.start()
 
     @staticmethod
     def _connect(pipe: int) -> None:
+        """Waits for FFmpeg to open the pipe."""
         try:
             _winapi.ConnectNamedPipe(pipe, _winapi.NULL)
         except OSError as error:
-            # As _PipeReader: FFmpeg was first, or came, wrote and went.
+            # As in _PipeReader.run: FFmpeg connected first, or connected,
+            # wrote and closed already. Neither is an error.
             if error.winerror not in (_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA):
                 raise
 
     def _gather(self, count: int) -> None:
-        """Waits until `count` bytes are in the pipe (or all it holds), or
-        FFmpeg has gone."""
+        """Waits until `count` bytes are in the pipe (or as many as it can
+        hold), or until FFmpeg has gone."""
         count = min(count, _PIPE_BYTES // 2)
         available = wintypes.DWORD()
         while not self._stopped.is_set():
             if not _kernel32.PeekNamedPipe(self._pipe, None, 0, None, ctypes.byref(available), None):
-                return  # closed and empty: the read says so
+                return  # closed and empty: the next read reports that
             if available.value >= count or self._writer_gone.is_set():
                 return
             time.sleep(0.001)
 
     def _read(self, buffer: bytearray) -> bool:
-        """Fills `buffer`; False at the end of the stream."""
+        """Fills `buffer` from the pipe; returns False at the end of the stream."""
         address = ctypes.addressof((ctypes.c_char * len(buffer)).from_buffer(buffer))
         filled, got = 0, wintypes.DWORD()
         while filled < len(buffer):
@@ -1048,11 +1106,14 @@ class _StreamReader:
         return True
 
     def _read_frames(self) -> None:
+        """The reading thread: reads the YUV4MPEG stream's frames into the
+        free buffers until the stream ends."""
         try:
             self._connect(self._pipe)
             if self._stopped.is_set():
                 return
-            # "YUV4MPEG2 W.. H.. ...\n", then "FRAME\n" and the planes, packed, for each frame.
+            # The stream is a header line, "YUV4MPEG2 W.. H.. ...\n", then for
+            # each frame a "FRAME\n" line and the frame's planes, packed.
             header, byte = bytearray(), bytearray(1)
             while byte != b"\n" and len(header) < 1024 and self._read(byte):
                 header += byte
@@ -1071,7 +1132,7 @@ class _StreamReader:
                 if not self._read(buffer):
                     raise VmafGpuError("FFmpeg's frames ended after a frame's start")
                 self._pixels.put(buffer)
-            # The comparison may end before this video does: the rest is read and dropped.
+            # The comparison may end before this video does: read and drop the rest.
             spare = bytearray(4 * 1024 * 1024)
             while not self._stopped.is_set():
                 self._gather(len(spare))
@@ -1087,7 +1148,7 @@ class _StreamReader:
             self._pixels.put(None)
 
     def pull(self) -> bytearray | None:
-        """The next frame; None at the video's end."""
+        """Returns the next frame, or None at the video's end."""
         buffer = self._pixels.get()
         if buffer is None:
             self._pixels.put(None)
@@ -1097,16 +1158,19 @@ class _StreamReader:
         return buffer
 
     def release(self, buffer: bytearray) -> None:
+        """Gives a frame's buffer back for the next frame."""
         self.free.put(buffer)
 
     def drop_rest(self) -> None:
-        """The comparison is over: what FFmpeg still writes is read and dropped."""
+        """Says the comparison is over: whatever FFmpeg still writes is read
+        and dropped."""
         self.free.put(None)
 
     def ffmpeg_ended(self) -> None:
-        """FFmpeg has gone: no wait for more, and a pipe it never opened --
-        an output that got no frame is never opened -- is connected to here,
-        which ends the wait for it (see _PipeReader.release_if_unconnected)."""
+        """Says FFmpeg has gone, so the reader stops waiting for more. FFmpeg
+        never opens an output that got no frame, so a pipe it never opened
+        is connected to here to end the wait for it (as in
+        _PipeReader.release_if_unconnected)."""
         self._writer_gone.set()
         if self._thread.is_alive():
             try:
@@ -1116,11 +1180,13 @@ class _StreamReader:
                 pass  # FFmpeg's already, or the pipe is gone
 
     def stop(self) -> None:
+        """Stops reading, even while waiting for FFmpeg."""
         self._stopped.set()
         self.free.put(None)
         self.ffmpeg_ended()
 
     def join(self) -> None:
+        """Waits for the reading thread to end, and raises its error, if any."""
         self._thread.join()
         if self.error is not None:
             raise self.error
@@ -1130,12 +1196,11 @@ _LISTING_TB = re.compile(r"#tb 0: (\d+)/(\d+)")
 
 
 class _TimedStreamReader(_StreamReader):
-    """_StreamReader with each frame's timestamp, for pairing by timestamp
-    as before (frame_sync.by_timestamp): the timestamps come as a framecrc
-    listing on a second named pipe (-enc_time_base filter: the filters' own
-    time base and timestamps, which are what libvmaf's frame sync pairs by),
-    and pull() gives the next (frame, timestamp) to
-    frame_sync_by_time.frame_pairs."""
+    """A _StreamReader that also reads each frame's timestamp, for pairing by
+    timestamp (frame_sync.by_timestamp). The timestamps come as a framecrc
+    listing on a second named pipe (with -enc_time_base filter, so they are
+    the filters' own timestamps, which libvmaf's frame sync pairs by), and
+    pull() gives the next (frame, timestamp) to frame_sync_by_time.frame_pairs."""
 
     def __init__(self, name: str, frame_bytes: int) -> None:
         super().__init__(name, frame_bytes)
@@ -1149,10 +1214,13 @@ class _TimedStreamReader(_StreamReader):
                                                 daemon=True)
 
     def start(self) -> None:
+        """Starts the frame and timestamp reading threads."""
         super().start()
         self._listing_thread.start()
 
     def _read_listing(self) -> None:
+        """The timestamp thread: reads the time base and each frame's
+        timestamp from FFmpeg's framecrc listing."""
         try:
             self._connect(self._listing)
             fd = msvcrt.open_osfhandle(self._listing, os.O_RDONLY)
@@ -1178,12 +1246,13 @@ class _TimedStreamReader(_StreamReader):
             self._stamps.put(None)
 
     def wait_time_base(self) -> Fraction:
-        """The time base of pull()'s timestamps; any, for a video without a frame."""
+        """The time base of pull()'s timestamps, once FFmpeg has reported it
+        (any time base for a video without frames)."""
         self._time_base_known.wait()
         return self.time_base or Fraction(1, 1000)
 
     def pull(self) -> tuple[bytearray, int] | None:
-        """The next frame and its timestamp; None at the video's end."""
+        """Returns the next frame and its timestamp, or None at the video's end."""
         buffer = super().pull()
         if buffer is None:
             return None
@@ -1194,33 +1263,38 @@ class _TimedStreamReader(_StreamReader):
         return buffer, stamp
 
     def ffmpeg_ended(self) -> None:
+        """As _StreamReader.ffmpeg_ended, for both pipes."""
         super().ffmpeg_ended()
         if self._listing_thread.is_alive():
             try:
                 with open(self.listing_path, "wb"):
                     pass
             except OSError:
-                pass  # FFmpeg's already, or the pipe is gone
+                pass  # FFmpeg connected already, or the pipe is gone
 
     def join(self) -> None:
+        """Waits for both reading threads, and raises an error either had."""
         self._listing_thread.join()
         super().join()
 
 
 class GpuAttempt:
-    """One FFmpeg run's GPU half: the pipes FFmpeg writes the two videos'
-    frames to, and the threads that read them and feed libvmaf (`backend`
-    "cuda") or the Vulkan port of its features ("vulkan", on Vulkan's GPU
-    number `device`). `paired`: the frames come paired by FFmpeg, on two
-    pipes of raw video (_PipeReader); by default (pairs_in_app) each video
-    comes as it is, and is paired here (_StreamReader; _TimedStreamReader
-    when pairing by timestamp)."""
+    """The GPU side of one FFmpeg run: the pipes FFmpeg writes the two
+    videos' frames to, and the threads that read them and feed the scorer.
+
+    The scorer is libvmaf on the GPU (`backend` "cuda"), the Vulkan port of
+    its features ("vulkan", on Vulkan's GPU number `device`), or libvmaf's
+    CPU extractors ("cpu"). With `paired`, FFmpeg pairs the frames and
+    writes them to two pipes of raw video (_PipeReader). By default (see
+    pairs_in_app) each video comes as it is and is paired here
+    (_StreamReader, or _TimedStreamReader when pairing by timestamp)."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int,
                  backend: str = "cuda", device: int | None = None, paired: bool | None = None,
                  threads: int = 0, frame_rate: int = 0):
-        """`backend` "cpu": `models` are CPU_FEATURES keys, scored by
-        CpuScorer with `threads` of libvmaf's (XPSNR's `frame_rate`)."""
+        """With `backend` "cpu", `models` are CPU_FEATURES keys, scored by
+        CpuScorer with `threads` libvmaf threads (and `frame_rate` for
+        XPSNR)."""
         self.paired = not pairs_in_app() if paired is None else paired
         if backend == "cpu":
             self._scorer = CpuScorer(width, height, bit_depth, tuple(models), n_subsample, threads, frame_rate)
@@ -1234,8 +1308,8 @@ class GpuAttempt:
             self._scorer = vmaf_vulkan.VulkanScorer(width, height, bit_depth, models, n_subsample, device=device)
         else:
             self._scorer = GpuScorer(width, height, bit_depth, models, n_subsample)
-        #: Pairing by timestamp, as before (frame_sync.by_timestamp), decided
-        #: once, so that the readers and the pairing agree.
+        #: Whether frames are paired by timestamp (frame_sync.by_timestamp),
+        #: decided once so that the readers and the pairing agree.
         self._by_time = frame_sync.by_timestamp()
         if self.paired:
             reader = _PipeReader
@@ -1254,8 +1328,8 @@ class GpuAttempt:
         self._feeder.start()
 
     def _stream_pairs(self) -> Iterator[tuple[bytearray, bytearray]]:
-        """The two videos' frames in pairs, as libvmaf's filter pairs them:
-        frame N with frame N (frame_sync), or by timestamp, as before
+        """Yields the two videos' frames in pairs, as libvmaf's filter pairs
+        them: frame N with frame N (frame_sync), or by timestamp
         (frame_sync_by_time)."""
         test, ref = self.distorted, self.reference
         if not self._by_time:
@@ -1286,11 +1360,12 @@ class GpuAttempt:
             for reader in (test, ref):
                 reader.join()
             self._result = self._scorer.finish()
-        except BaseException as error:  # finish() raises it in the run
+        except BaseException as error:  # finish() raises it on the run's thread
             self.error = error
             self.stop()
 
     def _feed(self) -> None:
+        """Scores the pairs FFmpeg made, as they arrive on the two raw pipes."""
         try:
             while True:
                 distorted = self.distorted.frames.get()
@@ -1310,17 +1385,19 @@ class GpuAttempt:
                 if reader.error is not None:
                     raise reader.error
             self._result = self._scorer.finish()
-        except BaseException as error:  # finish() raises it in the run
+        except BaseException as error:  # finish() raises it on the run's thread
             self.error = error
             self.stop()
 
     def stop(self) -> None:
+        """Stops both readers."""
         self.distorted.stop()
         self.reference.stop()
 
     def finish(self, ffmpeg_succeeded: bool) -> tuple[np.ndarray, dict[str, np.ndarray]] | None:
-        """The scores, once FFmpeg has ended. None when FFmpeg failed (the
-        caller retries or gives up); VmafGpuError when libvmaf failed."""
+        """Returns the scores, once FFmpeg has ended; None when FFmpeg failed
+        (the caller then retries or gives up). Raises VmafGpuError when the
+        scoring failed."""
         if not ffmpeg_succeeded:
             self.stop()
         elif self.paired:
@@ -1338,12 +1415,15 @@ class GpuAttempt:
             self._scorer.close()
 
     def output_args(self, duration_limit: float) -> list[str] | tuple[list[str], list[str]]:
-        """FFmpeg's outputs for the graph's [vmaf_dist] and [vmaf_ref]: every
-        frame as it comes (no frame rate conversion), cut at the duration
-        limit -- the same frames of both videos, which are numbered
-        (frame_sync). Paired by FFmpeg: two of raw video. Paired here: (the
-        test video's FFmpeg's, the source's), each its frames as YUV4MPEG
-        (and, pairing by timestamp, _timed_output_args)."""
+        """FFmpeg's output options for the graph's [vmaf_dist] and [vmaf_ref].
+
+        Every frame is passed as it comes (no frame rate conversion), cut at
+        the duration limit, which keeps the same frames of both videos
+        because they are numbered (frame_sync). When FFmpeg pairs the frames,
+        this is one list with two raw video outputs. When the frames are
+        paired here, it is a pair of lists, (the test video's FFmpeg's, the
+        source's), each writing its video's frames as YUV4MPEG (pairing by
+        timestamp, see _timed_output_args)."""
         if not self.paired and self._by_time:
             return self._timed_output_args(duration_limit)
         cut = frame_sync.duration_args(f"{duration_limit:.3f}" if duration_limit > 0 else None)
@@ -1357,11 +1437,11 @@ class GpuAttempt:
         return args
 
     def _timed_output_args(self, duration_limit: float) -> tuple[list[str], list[str]]:
-        """output_args when pairing by timestamp, as before: (the test video's
-        FFmpeg's, the source's), each its frames as YUV4MPEG and, from their
-        [.._ts] copy, their timestamps as a listing; the source runs a second
-        past the limit, for the frame nearest the test video's last to be
-        among them."""
+        """output_args when pairing by timestamp: (the test video's FFmpeg's,
+        the source's), each writing its video's frames as YUV4MPEG and, from
+        their [.._ts] copy, their timestamps as a framecrc listing. The
+        source runs a second past the limit, so that the source frame nearest
+        the test video's last frame is among those written."""
         both = []
         for label, reader, past in (("vmaf_dist", self.distorted, 0.0), ("vmaf_ref", self.reference, 1.0)):
             cut = ["-t", f"{duration_limit + past:.3f}"] if duration_limit > 0 else []
@@ -1382,26 +1462,26 @@ def score_decoded(
     check_cancel: Callable[[], None] = lambda: None,
     process_handle=None, decoder: str | tuple[str, str] = "nvidia",
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """VMAF and NEG with both videos decoded in this process -- by NVIDIA's
-    decoder, whose pictures stay on the GPU, or the software decoder, whose
-    are uploaded (`decoder`: one for both, or the source's and the test
-    video's) -- what GpuAttempt scores from FFmpeg's raw outputs, the same
-    frames compared.
+    """Scores VMAF and NEG with both videos decoded in this process, giving
+    the same scores GpuAttempt gets from FFmpeg's raw outputs for the same
+    frames.
 
-    FFmpeg's graph for those outputs -- the decoded frames cropped, scaled to
-    the size compared at, converted to its depth, numbered and paired by
-    overlay as libvmaf pairs them, cut by each output's -t -- is done here:
+    The videos are decoded by NVIDIA's decoder, whose pictures stay on the
+    GPU, or by the software decoder, whose pictures are uploaded; `decoder`
+    is one for both, or (the source's, the test video's).
+
+    What FFmpeg's graph does for those outputs is done here instead.
     gpu_frames crops as FFmpeg's crop filter does, shifts 10-bit samples and
-    widens 8-bit ones as FFmpeg converts them, and scales on the GPU with the
-    same filter (not to the sample: the user decided a comparison scaled any
-    way is the same one); frame_sync.decoded_frame_pairs pairs frame N with
-    frame N, as the overlay does (or by timestamp, as before), and as many
-    pairs are scored as FFmpeg's -t `duration_limit` (as text) keeps.
+    widens 8-bit ones as FFmpeg converts them, and scales on the GPU with
+    the same filter (not exactly to the sample; the user decided that is
+    the same comparison). frame_sync.decoded_frame_pairs pairs frame N with
+    frame N, as the overlay does (or by timestamp), and as many pairs are
+    scored as FFmpeg's -t `duration_limit` (as text) keeps.
 
-    GpuDecodeUnavailableError when the videos are not decoded here (FFmpeg then
-    decodes them, as before): another decoder, a codec or size it does not
-    take. GpuDecodeFailedError when decoding failed after the start -- the run
-    is then made again through FFmpeg."""
+    Raises GpuDecodeUnavailableError when the videos cannot be decoded here
+    (another decoder, or a codec or size the decoder does not take); FFmpeg
+    then decodes them. Raises GpuDecodeFailedError when decoding fails after
+    it has started; the run is then made again through FFmpeg."""
     plans = []
     source_decoder, test_decoder = gpu_frames.decoder_pair(decoder)
     if not {source_decoder, test_decoder} <= {"nvidia", gpu_frames.SOFTWARE}:
@@ -1421,11 +1501,12 @@ def score_decoded(
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
     # The software decoder writes each luma plane into the upload's memory,
-    # which is of the size compared at.
+    # which has the size the videos are compared at.
     if any(plan.frame_bytes != width * height * (2 if bit_depth > 8 else 1) for plan in plans):
         raise gpu_frames.GpuDecodeUnavailableError("the decoders' frames are not the size compared at")
-    # The decoders first: the first to start CUDA sets its waits to sleep
-    # rather than spin (gpu_frames), and libvmaf's then do too.
+    # The decoders are opened first: the first to start CUDA sets CUDA's
+    # waits to sleep rather than spin (see gpu_frames), and libvmaf's waits
+    # then sleep too.
     test = gpu_frames.GpuFrameStream(distorted, plans[0], gpu_frames.device_of(test_decoder, _GPU), pool=4,
                                      process_handle=process_handle, backend=test_decoder)
     try:
@@ -1440,6 +1521,7 @@ def score_decoded(
         scorer = GpuScorer(width, height, bit_depth, models, n_subsample, on_device=on_device)
 
         def side(stream, slot: int) -> tuple[bool, Callable]:
+            """A decoded picture as GpuScorer.add_sides takes it."""
             if stream.backend == "nvidia":  # copied on the GPU
                 return True, lambda address, pitch: stream.copy_luma(slot, address, pitch)
             return False, lambda address: stream.download(slot, address)  # into the upload's memory
@@ -1454,16 +1536,17 @@ def score_decoded(
             for test_slot, ref_slot in pairs:
                 scorer.add_sides(side(ref, ref_slot), side(test, test_slot))
                 count += 1
-                # Four times a second, about as often as FFmpeg's -progress:
-                # each report crosses to the app's process.
+                # Progress is reported four times a second, about as often as
+                # FFmpeg's -progress, because each report crosses to the app's
+                # process.
                 now = time.perf_counter()
                 if on_progress is not None and now - reported >= 0.25:
                     reported = now
                     on_progress(count, total_frames, count / (now - started))
         finally:
-            pairs.close()  # gives the frames it holds back
-        # The pictures decoded so far are the packets', one each (the end of
-        # a video was checked when it came).
+            pairs.close()  # gives back the frames the pairing holds
+        # Check that the pictures decoded so far match the packets, one each
+        # (a video that ended was checked at its end).
         test.verify()
         ref.verify()
         result = scorer.finish()
@@ -1472,7 +1555,7 @@ def score_decoded(
             on_progress(count, total_frames, count / elapsed if elapsed > 0 else 0.0)
         return result
     finally:
-        # The decoders before libvmaf: their threads stop first.
+        # The decoders are closed before libvmaf, so their threads stop first.
         test.close()
         ref.close()
         if scorer is not None:
@@ -1483,10 +1566,12 @@ def score_decoded(
 
 def gpu_models(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
                compute_vmaf_v1: bool = False, model_v1: str = "") -> dict[str, str] | None:
-    """{log name: libvmaf model} for a run's VMAF, NEG and VMAF v1 on the
-    GPU, or None when it scores none of them. VMAF with a custom model file
-    is calculated on the CPU, and VMAF NEG with it; VMAF v1 ("vmaf_v1": its
-    model's "path=<file>", for vmaf_v1_gpu) has bundled models only."""
+    """The models a run scores on the GPU, as {log name: libvmaf model}, or
+    None when it scores none there.
+
+    VMAF with a custom model file is calculated on the CPU, and so is VMAF
+    NEG beside it. VMAF v1 has bundled models only; its entry ("vmaf_v1") is
+    its model's "path=<file>", for vmaf_v1_gpu."""
     models = {}
     if compute_vmaf or compute_vmaf_neg:
         version = _GPU_MODELS.get(model) if compute_vmaf else ""
@@ -1501,9 +1586,11 @@ def gpu_models(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
 
 
 def probe() -> tuple[bool, str]:
-    """Whether libvmaf can score on this GPU: starts CUDA and scores three
-    small frame pairs (the kernels load only then; a GPU older than the
-    build supports fails here). Run in a process of its own."""
+    """Whether libvmaf can score on this GPU, and its version or why not.
+
+    It starts CUDA and scores three small frame pairs, because the CUDA
+    kernels load only then (a GPU older than the build supports fails here).
+    Run it in a process of its own."""
     if not LIBRARY_PATH.is_file():
         return False, "libvmaf with CUDA is not bundled"
     try:
@@ -1533,21 +1620,22 @@ def probe() -> tuple[bool, str]:
 _PROBE_LOCK = threading.Lock()
 _probed: tuple[bool, str] | None = None
 _probed_at = 0.0
-#: A failed probe older than this is made again before the next run
-#: (forget_failed_probe), as Vship's is.
+#: A failed probe older than this is made again before the next run (see
+#: forget_failed_probe), as Vship's is.
 FAILED_PROBE_RETRY_SECONDS = 60.0
 #: What the probe chose: "cuda" or "vulkan", and Vulkan's GPU number.
 _backend: tuple[str, int | None] = ("cuda", None)
-#: Settings > GPU metrics > GPU backend, which VMAF follows as Vship does:
-#: "cuda" and "auto" take libvmaf's CUDA code where it runs (an NVIDIA GPU)
-#: and Vulkan elsewhere; "vulkan" takes Vulkan on every GPU. "hip" is Vship's
-#: build for AMD: VMAF has none, and takes Vulkan there as with "auto".
+#: Settings > GPU metrics > GPU backend, which VMAF follows as Vship does.
+#: "cuda" and "auto" use libvmaf's CUDA code where it runs (on an NVIDIA GPU)
+#: and Vulkan elsewhere; "vulkan" uses Vulkan on every GPU. "hip" is Vship's
+#: build for AMD; VMAF has no such build, so it uses Vulkan there, as with
+#: "auto".
 _preference = "auto"
 
 
 def set_gpu_backend(preference: str) -> None:
-    """Follows the GPU backend setting; the GPU is probed again when the
-    choice changes what is tried first."""
+    """Follows the GPU backend setting. The GPU is probed again when the
+    choice changes which backend is tried first."""
     global _preference, _probed
     with _PROBE_LOCK:
         changed = _backend_order(preference) != _backend_order(_preference)
@@ -1558,13 +1646,14 @@ def set_gpu_backend(preference: str) -> None:
 
 
 def _backend_order(preference: str) -> tuple[str, ...]:
+    """The backends to try, in order, for a GPU backend setting."""
     return ("vulkan", "cuda") if preference == "vulkan" else ("cuda", "vulkan")
 
 
 def gpu_vmaf_available() -> tuple[bool, str]:
     """Whether VMAF is scored on this PC's GPU, and with what (or why not).
-    Probed once per backend choice, in a process of its own (and again
-    after a failure, see forget_failed_probe)."""
+    The GPU is probed once per backend setting, in a process of its own, and
+    again after a failure (see forget_failed_probe)."""
     global _probed, _probed_at, _backend
     with _PROBE_LOCK:
         if _probed is None:
@@ -1580,16 +1669,17 @@ def gpu_vmaf_available() -> tuple[bool, str]:
 
 
 def gpu_vmaf_backend() -> tuple[str, int | None]:
-    """("cuda", None) or ("vulkan", Vulkan's GPU number): what a run that
-    scores VMAF on the GPU uses. Meaningful when gpu_vmaf_available()."""
+    """What a run that scores VMAF on the GPU uses: ("cuda", None) or
+    ("vulkan", Vulkan's GPU number). Meaningful only when
+    gpu_vmaf_available() is true."""
     gpu_vmaf_available()
     return _backend
 
 
 def _probe_once(preference: str = "auto") -> tuple[str | None, int | None, str]:
-    """(backend, Vulkan's GPU number, what it is) for the first backend, in
-    the order the setting gives, that scores here; (None, None, why not)
-    when neither does."""
+    """Probes the backends in the order the setting gives, and returns
+    (backend, Vulkan's GPU number, description) for the first that scores
+    on this PC, or (None, None, why not) when neither does."""
     from vmaf_app.core.gpu import detected_gpu_vendors
     from vmaf_app.core.isolated import IsolatedCrashError, run_isolated
     from vmaf_app.core.models import GpuVendor
@@ -1619,19 +1709,19 @@ def _probe_once(preference: str = "auto") -> tuple[str | None, int | None, str]:
                     return "vulkan", device, text
                 reasons.append(f"Vulkan: {text}")
         except Exception as error:
-            # Any failure is "not on this GPU": one that escaped here left the
-            # probe unanswered and failed every video's setup with it, instead
-            # of calculating VMAF on the CPU.
+            # Any failure means "not on this GPU". A failure that escaped here
+            # would leave the probe unanswered and fail every video's setup,
+            # instead of VMAF being calculated on the CPU.
             _log.warning("The %s VMAF probe failed", backend, exc_info=error)
             reasons.append(f"{backend}: the GPU probe failed: {error}")
     return None, None, "; ".join(reasons)
 
 
 def forget_failed_probe() -> None:
-    """Before a run, off the UI thread: makes again a probe that failed a
-    while ago. The failure may have been passing -- a driver being updated
-    or restarted -- and was kept for the session, calculating VMAF on the
-    CPU until the app restarted."""
+    """Forgets a probe that failed a while ago, so that the next run probes
+    again. Call it before a run, off the UI thread. The failure may have been
+    temporary (a driver being updated or restarted); without this, VMAF
+    would be calculated on the CPU until the app restarted."""
     global _probed
     with _PROBE_LOCK:
         if (_probed is not None and not _probed[0]
@@ -1640,7 +1730,8 @@ def forget_failed_probe() -> None:
 
 
 def start_gpu_vmaf_probe() -> None:
-    """At startup, in the background: done by the time a run needs it."""
+    """Probes the GPU in the background at startup, so the answer is ready
+    by the time a run needs it."""
     threading.Thread(target=gpu_vmaf_available, name="vmaf-gpu-probe", daemon=True).start()
 
 
@@ -1648,24 +1739,23 @@ def scores_on_gpu(compute_vmaf: bool, compute_vmaf_neg: bool, model: str,
                   enabled: bool = True, bit_depth: int = 8,
                   size: tuple[int, int] | None = None,
                   compute_vmaf_v1: bool = False, model_v1: str = "") -> dict[str, str] | None:
-    """The models a run scores on the GPU (gpu_models), or None when its
-    VMAF is calculated on the CPU:
-    - the video set to CPU (`enabled`, its VmafOptions.vmaf_on_gpu);
-    - a custom model;
-    - a comparison deeper than 10 bits (`bit_depth`: the frames libvmaf
-      pairs reach the GPU through FFmpeg's overlay, which holds 8 and 10
-      bits);
-    - a comparison at an odd width or height (`size`, where it is known):
-      the pairs cross that overlay side by side on one 4:2:0 canvas
-      (vmaf_runner._gpu_pairs_stage), and FFmpeg's pad, which makes it,
-      keeps a 4:2:0 picture on whole chroma samples -- it gives an even
-      size and blacks out an odd picture's last column and row. The
-      attempt used to be made, fail in FFmpeg, and VMAF be calculated
-      again on the CPU after a "VMAF on the GPU failed";
-    - no GPU that scores it (CUDA or Vulkan).
-    VMAF v1 (`compute_vmaf_v1`, its model `model_v1`) is among them where
-    vmaf_v1_gpu calculates it here; what the GPU does not score is left out,
-    and FFmpeg's libvmaf calculates it."""
+    """The models a run scores on the GPU (see gpu_models), or None when its
+    VMAF is calculated on the CPU. That happens:
+    - when the video is set to CPU (`enabled`, its VmafOptions.vmaf_on_gpu);
+    - with a custom model;
+    - for a comparison deeper than 10 bits (`bit_depth`), because the frame
+      pairs can reach the GPU through FFmpeg's overlay, which holds only 8
+      and 10 bits;
+    - for a comparison at an odd width or height (`size`, where known). The
+      pairs cross that overlay side by side on one 4:2:0 canvas
+      (vmaf_runner._gpu_pairs_stage), and FFmpeg's pad, which makes the
+      canvas, keeps a 4:2:0 picture on whole chroma samples: it gives an
+      even size and blacks out an odd picture's last column and row, so the
+      attempt would fail in FFmpeg;
+    - when no GPU can score it (with CUDA or Vulkan).
+    VMAF v1 (`compute_vmaf_v1`, with model `model_v1`) is included where
+    vmaf_v1_gpu can calculate it. Whatever the GPU does not score is left
+    out, and FFmpeg's libvmaf calculates it."""
     if not enabled or bit_depth > 10 or (size is not None and (size[0] & 1 or size[1] & 1)):
         return None
     models = gpu_models(compute_vmaf, compute_vmaf_neg, model, compute_vmaf_v1, model_v1)

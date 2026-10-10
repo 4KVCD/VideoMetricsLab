@@ -1,31 +1,36 @@
-"""The old way of pairing the two videos' frames, by timestamp, kept for now
-beside the pairing by frame number (frame_sync). It is used only when the
-environment variable VML_FRAME_PAIRING is "timestamp" (frame_sync.by_timestamp).
+"""Pairs the two videos' frames by timestamp. This is the old way of pairing,
+kept for now beside the pairing by frame number (frame_sync), and used only
+when the environment variable VML_FRAME_PAIRING is "timestamp" (see
+frame_sync.by_timestamp).
 
-The frame pairs FFmpeg's libvmaf filter compares, worked out from the two
-videos' timestamps: FFmpeg's frame sync (libavfilter/framesync.c) with the
-options vmaf_runner gives libvmaf and the GPU's overlay pairing
-(FRAMESYNC_OPTS: shortest=1, repeatlast=0, ts_sync_mode=nearest). VMAF on
-the GPU uses it for the videos decoded in its own process
-(vmaf_cuda.score_decoded), where no FFmpeg filter graph pairs them.
+It works out, from the two videos' timestamps, the frame pairs that FFmpeg's
+libvmaf filter would compare. It follows FFmpeg's frame sync
+(libavfilter/framesync.c) with the options vmaf_runner gives libvmaf and the
+GPU's overlay pairing (FRAMESYNC_OPTS: shortest=1, repeatlast=0,
+ts_sync_mode=nearest). VMAF on the GPU uses it for videos decoded in the
+app's own process (the score_decoded functions), where no FFmpeg filter
+graph pairs the frames.
 
-How that frame sync pairs two inputs, for this configuration:
+With these options, FFmpeg's frame sync pairs two inputs as follows:
 
-- each input's timestamps start at 0 (the chains' setpts=PTS-STARTPTS), and
-  the second input's are rescaled to the first's time base, rounded to
-  nearest (framesync's time base is that of its only synchronising input);
-- each frame of the first input (the test video, the "main" input) gives
-  one pair, when it is the earliest frame either input has next;
-- the second (the source) moves on to a frame of its own when that frame is
-  the earliest next, or -- "nearest" -- when that frame is strictly nearer
-  the time being decided than the frame it has: a source frame stamped a
-  millisecond after a test frame pairs with it, not with the one before;
-- when the test video ends, so does the comparison; when the source ends,
+- Each input's timestamps start at 0 (the filter chains'
+  setpts=PTS-STARTPTS). The second input's timestamps are rescaled to the
+  first's time base and rounded to nearest, because the frame sync's time
+  base is that of its only synchronising input.
+- Each frame of the first input (the test video, the "main" input) gives one
+  pair, when it is the earliest frame that either input has next.
+- The second input (the source) moves on to its next frame when that frame
+  is the earliest next frame, or ("nearest") when that frame is strictly
+  nearer to the time being decided than its current frame. So a source frame
+  stamped a millisecond after a test frame is paired with that test frame,
+  not with the one before.
+- When the test video ends, so does the comparison. When the source ends,
   its end is stamped one tick after its last frame, and the comparison ends
-  at the first test frame at or past it (shortest=1).
+  at the first test frame at or after that time (shortest=1).
 
-tests/test_frame_sync_by_time.py checks it against FFmpeg's own pairing (the
-overlay vmaf_runner._gpu_pairs_stage uses) on many patterns of timestamps.
+tests/test_frame_sync_by_time.py checks this against FFmpeg's own pairing
+(the overlay that vmaf_runner._gpu_pairs_stage uses) on many patterns of
+timestamps.
 """
 from __future__ import annotations
 
@@ -39,39 +44,39 @@ from vmaf_app.core.gpu_frames import GpuDecodeFailedError, GpuFrameStream
 T = TypeVar("T")
 U = TypeVar("U")
 
-#: Both libvmaf and xpsnr are framesync filters, and framesync's defaults are
-#: wrong for measurement: repeatlast=true extends the last frame of the
-#: secondary input past its EOF, and eof_action=repeat keeps the comparison
-#: going. A distorted file two frames longer than the source -- routine
-#: encoder padding, and well inside the duration tolerance -- therefore got
-#: two extra "scores" comparing real distorted frames against a frozen copy
-#: of the source's final frame. Those frames score terribly (48 and 31 on a
-#: 30-frame fixture that is otherwise ~100) and drag the aggregate down, so
-#: the run silently reports a worse encode than was delivered.
+#: The frame sync options for libvmaf and xpsnr, which are both framesync
+#: filters. framesync's defaults are wrong for measurement:
 #:
-#: The default ts_sync_mode pairs each distorted frame with the last source
-#: frame at or before its timestamp. Two files with the same frames can have
-#: timestamps a millisecond apart -- MKV stores whole milliseconds, and each
-#: program rounds frame times from its own clock -- and a distorted frame
-#: stamped 1 ms early was compared with the source's previous frame: VMAF 0
-#: and XPSNR ~16 dB at scene cuts and in motion, on an anime episode whose
-#: SSIMULACRA2 (paired frame by frame) was 93 on the same frame. "nearest"
-#: takes the source frame nearest in time, the same frame whichever way the
-#: two timestamps are off by less than half a frame.
+#: - repeatlast=1 repeats the second input's last frame after it ends, and
+#:   eof_action=repeat keeps the comparison going. A test video two frames
+#:   longer than the source (common encoder padding) would get two extra
+#:   scores, of real test frames against a frozen copy of the source's last
+#:   frame. Those score very low (48 and 31 on a 30-frame test clip that
+#:   otherwise scores about 100) and pull the average down.
+#: - The default ts_sync_mode pairs each test frame with the last source
+#:   frame at or before its timestamp. Two files with the same frames can
+#:   have timestamps a millisecond apart (MKV stores whole milliseconds, and
+#:   each program rounds frame times its own way), so a test frame stamped
+#:   1 ms early would be compared with the source's previous frame. At scene
+#:   cuts and in motion, that gave VMAF 0 and XPSNR about 16 dB on frames
+#:   that SSIMULACRA2, paired frame by frame, scored 93. "nearest" takes the
+#:   source frame nearest in time, which is the same frame whichever way the
+#:   two timestamps differ, as long as they differ by less than half a frame.
 FRAMESYNC_OPTS = ["shortest=1", "repeatlast=0", "ts_sync_mode=nearest"]
 
-_END = (1 << 63) - 1  # INT64_MAX: an input that ended with nothing to extrapolate from
+_END = (1 << 63) - 1  # INT64_MAX: the end time of an input that ended before giving any frame
 
 
 def _ffmpeg_time(text: str) -> int:
-    """`text`, an FFmpeg duration in seconds ("30.042"), in microseconds, as
-    av_parse_time reads it: exactly, to the sixth decimal."""
+    """Converts an FFmpeg duration in seconds ("30.042") to microseconds as
+    av_parse_time reads it: exactly, cut off after the sixth decimal."""
     return int(Decimal(text).scaleb(6).to_integral_value(rounding="ROUND_DOWN"))
 
 
 def rescale(value: int, source: Fraction, target: Fraction) -> int:
-    """av_rescale_q: `value` in time base `source` in time base `target`,
-    rounded to nearest, halves away from zero."""
+    """Converts `value` from time base `source` to time base `target` as
+    av_rescale_q does: rounded to nearest, with halves rounded away from
+    zero."""
     b = source.numerator * target.denominator
     c = target.numerator * source.denominator
     product = value * b
@@ -81,30 +86,35 @@ def rescale(value: int, source: Fraction, target: Fraction) -> int:
 
 
 def duration_in(text: str, time_base: Fraction) -> int:
-    """FFmpeg's output -t `text` in `time_base`, as its trim filter holds it:
-    a picture is kept while its time from the first is below this."""
+    """Converts FFmpeg's output option -t `text` to `time_base`, as FFmpeg's
+    trim filter holds it. A picture is kept while its time from the first
+    picture is below the result."""
     return rescale(_ffmpeg_time(text), Fraction(1, 1_000_000), time_base)
 
 
 class _Input(Generic[T]):
+    """One input of the frame sync: its current frame and its next one, with
+    their times in the frame sync's time base."""
+
     def __init__(self, pull: Callable[[], tuple[T, int] | None], release: Callable[[T], None],
                  to_sync_time: Callable[[int], int], nearest: bool) -> None:
         self.pull = pull
         self.release = release
         self.to_sync_time = to_sync_time
         self.nearest = nearest
-        self.first: int | None = None    # the STARTPTS of its setpts
-        self.ended = False               # the input's frames have all been pulled
-        self.done = False                # its end has been taken (framesync's STATE_EOF)
+        self.first: int | None = None    # the first timestamp (STARTPTS in setpts=PTS-STARTPTS)
+        self.ended = False               # whether all of the input's frames have been pulled
+        self.done = False                # whether its end has been taken (framesync's STATE_EOF)
         self.frame: T | None = None
-        self.pts: int | None = None      # None: no frame taken yet (AV_NOPTS_VALUE)
+        self.pts: int | None = None      # None until a frame is taken (AV_NOPTS_VALUE)
         self.next: T | None = None
         self.next_pts: int | None = None
         self.has_next = False
 
     def fill(self) -> None:
-        """framesync's consume_from_fifos for one input: its next frame, or
-        its end, stamped as framesync stamps it with after=EXT_STOP."""
+        """Fetches the input's next frame, or its end, and stamps it as
+        framesync does with after=EXT_STOP (framesync's consume_from_fifos,
+        for one input)."""
         if self.has_next or self.done:
             return
         item = None if self.ended else self.pull()
@@ -120,6 +130,8 @@ class _Input(Generic[T]):
         self.has_next = True
 
     def take(self) -> None:
+        """Makes the next frame the current one, and releases the frame it
+        replaces."""
         old = self.frame
         self.frame, self.pts = self.next, self.next_pts
         self.next, self.next_pts, self.has_next = None, None, False
@@ -129,6 +141,7 @@ class _Input(Generic[T]):
             self.release(old)
 
     def drop(self) -> None:
+        """Releases the frames the input still holds."""
         for frame in (self.frame, self.next):
             if frame is not None:
                 self.release(frame)
@@ -140,13 +153,15 @@ def frame_pairs(
     main_time_base: Fraction, source_time_base: Fraction,
     release_main: Callable[[T], None], release_source: Callable[[U], None],
 ) -> Iterator[tuple[T, U | None, int]]:
-    """(test frame, source frame, time) for each pair, the time in the test
-    video's time base from its first frame. `main` and `source` give each
-    video's next (frame, pts) in display order, or None at its end; a frame
-    is handed to its release function once no later pair can use it -- after
-    the next pair is asked for, so a pair's frames stay valid until then.
-    The source frame is None only where FFmpeg's filter would see none (the
-    source has no frame by the test video's first); callers refuse that."""
+    """Yields (test frame, source frame, time) for each pair, with the time
+    in the test video's time base, counted from its first frame.
+
+    `main` and `source` return each video's next (frame, pts) in display
+    order, or None at its end. A frame is passed to its release function
+    once no later pair can use it, which is only after the next pair is
+    asked for, so a pair's frames stay valid until then. The source frame is
+    None only where FFmpeg's filter would have none (the source has no frame
+    by the time of the test video's first), and callers refuse that."""
     test = _Input(main, release_main, lambda pts: pts, nearest=False)
     ref = _Input(source, release_source, lambda pts: rescale(pts, source_time_base, main_time_base), nearest=True)
     inputs = (test, ref)
@@ -157,8 +172,8 @@ def frame_pairs(
                 for put in inputs:
                     put.fill()
                 if test.ended:
-                    # The test video's end drops the sync level to 0: the
-                    # comparison is over (framesync_sync_level_update).
+                    # The test video's end drops framesync's sync level to 0,
+                    # which ends the comparison (framesync_sync_level_update).
                     return
                 now = min(put.next_pts for put in inputs if put.has_next)
                 if now == _END:
@@ -171,7 +186,7 @@ def frame_pairs(
                         put.take()
                         if put is test and test.frame is not None:
                             ready = True
-                        if put.done:  # after=EXT_STOP (shortest=1): the end of the comparison
+                        if put.done:  # with after=EXT_STOP (shortest=1), an input's end ends the comparison
                             ended, ready = True, False
             if ended:
                 return
@@ -184,11 +199,12 @@ def frame_pairs(
 def decoded_pairs(test: GpuFrameStream, ref: GpuFrameStream, duration_limit: str | None,
                   check_cancel: Callable[[], None], release_test: Callable[[int], None],
                   release_ref: Callable[[int], None]) -> Iterator[tuple[int, int]]:
-    """The (test slot, source slot) pairs of two videos decoded in the app,
-    paired by timestamp as FFmpeg's overlay pairs them (frame_pairs): a pair
-    is given while the test frame's time from the first is below
-    `duration_limit` (the outputs' -t, as text) in the test video's time
-    base, as FFmpeg's trim filter cuts. Both streams have been started."""
+    """Yields the (test slot, source slot) pairs of two videos decoded in the
+    app, paired by timestamp as FFmpeg's overlay pairs them (see
+    frame_pairs). Pairs are given while the test frame's time from the first
+    frame is below `duration_limit` (the output's -t, as text) in the test
+    video's time base, which is where FFmpeg's trim filter cuts. Both streams
+    must already be started."""
     test_base, ref_base = test.wait_time_base(), ref.wait_time_base()
     stop = duration_in(duration_limit, test_base) if duration_limit else None
 

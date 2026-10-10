@@ -1,35 +1,38 @@
-"""VMAF v1 with the GPU: the score FFmpeg's libvmaf gives for a VMAF v1 model
-(vmaf_v1.0.16 and its variants), calculated several times faster.
+"""Calculates VMAF v1 with the GPU: the score FFmpeg's libvmaf gives for a
+VMAF v1 model (vmaf_v1.0.16 and its variants), several times faster.
 
-VMAF v1 is predicted from four features. Where each is calculated here:
+VMAF v1 is predicted from four features, calculated here as follows:
 
-- ADM3 and motion3, about two thirds of the CPU's work: on the GPU, by
-  vmaf_vulkan.dll's VMAF v1 mode (libvmaf-fast's fast/vulkan), which follows
-  libvmaf's CPU code (integer_adm.c, integer_motion.c) in integer arithmetic
-  and gives its values bit for bit, on any GPU.
-- CAMBI and SpEED chroma: on the GPU too where the engine calculates the
-  model's options (vv_v1_cambi, vv_v1_speed), bit for bit as libvmaf's CPU
-  code: CAMBI wholly; SpEED's filtering of the chroma planes, and what is
-  left of it (its 25x25 covariance in double, eigenvalues, CRT log2) by
-  libvmaf's own lines compiled into the engine. Otherwise by libvmaf's own
-  CPU extractors, from the bundled libvmaf.dll, on a pool of threads beside
-  the GPU: the same code on the same frames.
+- ADM3 and motion3, about two thirds of the CPU's work, are calculated on
+  the GPU by vmaf_vulkan.dll's VMAF v1 mode (libvmaf-fast's fast/vulkan).
+  It follows libvmaf's CPU code (integer_adm.c, integer_motion.c) in
+  integer arithmetic, and gives the same values bit for bit on any GPU.
+- CAMBI and SpEED chroma are calculated on the GPU too when the engine
+  supports the model's options for them (vv_v1_cambi, vv_v1_speed), again
+  bit for bit as libvmaf's CPU code. CAMBI runs wholly on the GPU. For
+  SpEED, the GPU filters the chroma planes, and the rest (its 25x25
+  covariance in double precision, the eigenvalues, the C runtime's log2)
+  runs libvmaf's own code compiled into the engine. Otherwise these two
+  features are calculated by libvmaf's own CPU extractors from the bundled
+  libvmaf.dll, on a pool of threads beside the GPU: the same code on the
+  same frames.
 
-The score is then predicted by libvmaf itself from the four (as vmaf_vulkan
-predicts VMAF v0.6.1), so it is libvmaf's CPU score, not an approximation of
-it.
+libvmaf itself then predicts the score from the four features (as
+vmaf_vulkan does for VMAF v0.6.1), so the score is libvmaf's CPU score, not
+an approximation of it.
 
-V1Scorer takes the frames vmaf_cuda.GpuScorer takes -- 4:2:0 frames packed as
-FFmpeg's rawvideo writes them, here with their chroma, which SpEED reads --
-and returns the frame numbers scored and their scores.
+V1Scorer takes the same frames as vmaf_cuda.GpuScorer: 4:2:0 frames packed
+as FFmpeg's rawvideo writes them, here with their chroma, which SpEED
+reads. It returns the frame numbers scored and their scores.
 
-From NVIDIA's decoder it takes them without a CPU copy (add_decoded): the
-lumas are copied on the GPU into memory the decoder and Vulkan share
-(vmaf_vulkan.SharedLumas), and the planes CAMBI and SpEED read are downloaded
-straight into libvmaf's pictures, page-locked, which the GPU writes by itself.
-Through system memory, as before, the one thread that feeds both halves spent
-9.7 ms a 4K frame pair copying -- all of its time at 98 frames a second; now
-0.6 ms, and the CPU's half sets the pace (about 145 frames a second).
+Frames decoded by NVIDIA's decoder reach it without a copy through the CPU
+(add_decoded). The lumas are copied on the GPU into memory that the decoder
+and Vulkan share (vmaf_vulkan.SharedLumas), and the GPU downloads the planes
+that CAMBI and SpEED read straight into libvmaf's page-locked pictures.
+Copying through system memory instead took the thread that feeds both the
+GPU and the CPU 9.7 ms per 4K frame pair, all of its time at 98 frames a
+second. This way it takes 0.6 ms, and the CPU's features set the pace
+(about 145 frames a second).
 """
 from __future__ import annotations
 
@@ -49,18 +52,19 @@ from vmaf_app.core import vmaf_cuda, vmaf_vulkan
 
 _log = logging.getLogger(__name__)
 
-#: What a score records it was calculated with (its provenance).
+#: The library a score records as having calculated it (its provenance).
 LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan: ADM3, motion3, CAMBI, SpEED)"
 
 _ADM3, _MOTION3 = "VMAF_integer_feature_adm3_score", "VMAF_integer_feature_motion3_score"
 _CAMBI, _SPEED = "Cambi_feature_cambi_score", "Speed_chroma_feature_speed_chroma_uv_score"
-#: The model's feature -> (libvmaf's extractor, the start of the name libvmaf
-#: gives its score).
+#: For each feature libvmaf can calculate on the CPU: (libvmaf's extractor,
+#: the start of the name libvmaf gives its score).
 _CPU_FEATURES = {_CAMBI: ("cambi", "cambi"), _SPEED: ("speed_chroma", "speed_chroma_uv")}
 _GPU_FEATURES = {_ADM3: "integer_adm3", _MOTION3: "integer_motion3"}
 _VMAF_OUTPUT_FORMAT_JSON = 2
-#: Large enough for SpEED with the smallest prescale a model has (see
-#: speed_too_small): libvmaf crashes on less.
+#: The probe's picture size. It must be large enough for SpEED with the
+#: smallest prescale a model has (see speed_too_small), because libvmaf
+#: crashes on smaller pictures.
 _PROBE_SIZE = (960, 720)
 
 _bound = False
@@ -68,10 +72,11 @@ _BIND_LOCK = threading.Lock()
 
 
 class VmafV1Error(vmaf_cuda.VmafGpuError):
-    """VMAF v1 could not be calculated with the GPU; the CPU calculates it."""
+    """VMAF v1 could not be calculated with the GPU, so the CPU calculates it."""
 
 
 def _libvmaf() -> ctypes.CDLL:
+    """The bundled libvmaf.dll, with the functions this module uses declared."""
     global _bound
     lib = vmaf_cuda._load()
     with _BIND_LOCK:
@@ -94,6 +99,8 @@ def _libvmaf() -> ctypes.CDLL:
 
 
 def _vulkan() -> ctypes.CDLL:
+    """vmaf_vulkan.dll, with its VMAF v1 functions declared. The optional ones
+    are declared only if this build of the engine has them."""
     lib = vmaf_vulkan._load()
     lib.vv_create_v1.restype = ctypes.c_int
     lib.vv_create_v1.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_int, ctypes.c_int, ctypes.c_int,
@@ -120,14 +127,14 @@ def _vulkan() -> ctypes.CDLL:
         lib.vv_shared_chroma.restype = ctypes.c_int
         lib.vv_shared_chroma.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint64),
                                          ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32)]
-    if hasattr(lib, "vv_pictures"):  # a decoder's pictures read where it left them (V1Scorer's pictures)
+    if hasattr(lib, "vv_pictures"):  # the GPU reads a decoder's pictures where it left them (V1Scorer.pictures)
         lib.vv_pictures.restype = ctypes.c_int
         lib.vv_pictures.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_int,
                                     ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_int,
                                     ctypes.c_int]
         lib.vv_pictures_mode.restype = ctypes.c_int
         lib.vv_pictures_mode.argtypes = [ctypes.c_void_p]
-    if hasattr(lib, "vv_import_timeline"):  # a decoder's copies the GPU waits for (vv_commit_after)
+    if hasattr(lib, "vv_import_timeline"):  # the GPU waits for a decoder's copies (vv_commit_after)
         lib.vv_import_timeline.restype = ctypes.c_int
         lib.vv_import_timeline.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         lib.vv_commit_after.restype = ctypes.c_int
@@ -135,20 +142,22 @@ def _vulkan() -> ctypes.CDLL:
     return lib
 
 
-#: CAMBI's options the GPU takes (vv_v1_cambi), with cambi.c's defaults.
+#: The CAMBI options the GPU supports (vv_v1_cambi), with cambi.c's defaults.
 _CAMBI_DEFAULTS = {"cambi_high_res_speedup": 0, "cambi_vis_lum_threshold": 0.0, "cambi_max_val": 1000.0,
                    "topk": 0.6, "cambi_topk": 0.6, "window_size": 65, "tvi_threshold": 0.019,
                    "max_log_contrast": 2, "eotf": "bt1886", "cambi_eotf": "bt1886"}
 
 
 def _cambi_gpu_options(options: dict) -> ctypes.Array | None:
-    """vv_v1_cambi's nine doubles for the model's CAMBI options, None when it
-    sets one the GPU does not take (full_ref, heatmaps, enc_* and src_* sizes,
-    another max_log_contrast or EOTF): libvmaf calculates it then."""
+    """Returns vv_v1_cambi's nine numbers for the model's CAMBI options, or
+    None when the model sets an option the GPU does not support (full_ref,
+    heatmaps, the enc_* and src_* sizes, another max_log_contrast or EOTF),
+    in which case libvmaf calculates CAMBI."""
     if set(options) - set(_CAMBI_DEFAULTS):
         return None
     o = {**_CAMBI_DEFAULTS, **options}
-    # cambi.c: topk and eotf if set to other than their default, else cambi_topk and cambi_eotf.
+    # As cambi.c chooses: topk if it is not the default, else cambi_topk; and
+    # cambi_eotf if it is not the default, else eotf.
     topk = float(o["topk"]) if float(o["topk"]) != 0.6 else float(o["cambi_topk"])
     eotf = str(o["cambi_eotf"]) if str(o["cambi_eotf"]) != "bt1886" else str(o["eotf"])
     if eotf not in ("bt1886", "pq") or int(o["max_log_contrast"]) != 2:
@@ -160,8 +169,8 @@ def _cambi_gpu_options(options: dict) -> ctypes.Array | None:
                                        | (2 if os.environ.get("VMAF_FAST_TEST_CAMBI_BRUTE_FORCE") else 0)))
 
 
-#: SpEED chroma's options the GPU takes (vv_v1_speed), with speed.c's
-#: defaults, and the aliases libvmaf also reads them by.
+#: The SpEED chroma options the GPU supports (vv_v1_speed), with speed.c's
+#: defaults, and the short names libvmaf also accepts for them.
 _SPEED_DEFAULTS = {"speed_kernelscale": 1.0, "speed_prescale": 1.0, "speed_prescale_method": "nearest",
                    "speed_sigma_nn": 0.29, "speed_nn_floor": 0.0, "speed_weight_var_mode": 0,
                    "speed_max_val": 1000.0}
@@ -171,8 +180,9 @@ _SPEED_ALIASES = {"ks": "speed_kernelscale", "ps": "speed_prescale", "psm": "spe
 
 
 def _speed_gpu_options(options: dict) -> ctypes.Array | None:
-    """vv_v1_speed's seven doubles for the model's SpEED options, None when it
-    sets one the GPU does not take: libvmaf calculates it then."""
+    """Returns vv_v1_speed's seven numbers for the model's SpEED options, or
+    None when the model sets an option the GPU does not support, in which
+    case libvmaf calculates SpEED."""
     named = {_SPEED_ALIASES.get(key, key): value for key, value in options.items()}
     if len(named) != len(options) or set(named) - set(_SPEED_DEFAULTS):
         return None
@@ -188,8 +198,8 @@ def _speed_gpu_options(options: dict) -> ctypes.Array | None:
 
 
 def model_options(model_path: Path) -> dict[str, dict]:
-    """A model's features and their options; VmafV1Error unless they are VMAF
-    v1's four."""
+    """Returns a model's features and their options. Raises VmafV1Error unless
+    they are VMAF v1's four features."""
     try:
         model = json.loads(Path(model_path).read_text(encoding="utf-8"))["model_dict"]
         options = dict(zip(model["feature_names"], model["feature_opts_dicts"], strict=True))
@@ -201,10 +211,11 @@ def model_options(model_path: Path) -> dict[str, dict]:
 
 
 def speed_too_small(options: dict[str, dict], width: int, height: int) -> bool:
-    """Whether SpEED has no block to score at this size: it works on the
-    chroma, scaled by the model's speed_prescale and then down by 16, in
-    blocks of 5 (speed_init_dimensions). libvmaf reports that and then reads
-    past its buffers, on the CPU as here, so such a video is refused."""
+    """Whether SpEED has no block to score at this size. SpEED works on the
+    chroma planes, scaled by the model's speed_prescale and then down by 16,
+    in blocks of 5 (speed_init_dimensions). On a video too small for one
+    block, libvmaf reports the problem and then reads past its buffers, on
+    the CPU as well as here, so such a video is refused."""
     prescale = float(options[_SPEED].get("speed_prescale", 1.0))
     return min(int((size // 2) * prescale + 0.5) >> 4 for size in (width, height)) < 5
 
@@ -218,6 +229,8 @@ def _text(value) -> str:
 
 def _use_cpu_features(lib: ctypes.CDLL, context: ctypes.c_void_p, options: dict[str, dict],
                       on_gpu: frozenset = frozenset()) -> None:
+    """Starts libvmaf's CPU extractors, with the model's options, for the
+    features that are not calculated on the GPU (`on_gpu`)."""
     for feature, (extractor, _prefix) in _CPU_FEATURES.items():
         if feature in on_gpu:
             continue
@@ -229,8 +242,8 @@ def _use_cpu_features(lib: ctypes.CDLL, context: ctypes.c_void_p, options: dict[
 
 
 def _output_names(lib: ctypes.CDLL, context: ctypes.c_void_p) -> list[str]:
-    """The names of the features a context has scores for (libvmaf has no
-    call that lists them: they are read from its JSON output)."""
+    """Returns the names of the features a context has scores for. libvmaf
+    has no call that lists them, so they are read from its JSON output."""
     handle, path = tempfile.mkstemp(prefix="vml-vmaf-v1-", suffix=".json")
     os.close(handle)
     try:
@@ -242,7 +255,7 @@ def _output_names(lib: ctypes.CDLL, context: ctypes.c_void_p) -> list[str]:
 
 
 def _probe_pictures(lib: ctypes.CDLL, context: ctypes.c_void_p) -> None:
-    """Three small grey frame pairs through a context."""
+    """Scores three small grey frame pairs with a context."""
     width, height = _PROBE_SIZE
     for index in range(3):
         pictures = vmaf_cuda._Picture(), vmaf_cuda._Picture()
@@ -261,10 +274,11 @@ _NAMES_LOCK = threading.Lock()
 
 
 def feature_names(model_path: Path) -> tuple[dict[str, str], dict[str, str]]:
-    """({feature: the name the model's prediction reads it under}, {CAMBI and
-    SpEED: the name libvmaf's extractor, given the model's options, stores it
-    under}). libvmaf builds both from the options; they are found by running
-    it on three small frames, once per model."""
+    """Returns two dictionaries: {feature: the name the model's prediction
+    reads it under}, and {CAMBI and SpEED: the name libvmaf's extractor
+    stores it under, given the model's options}. libvmaf builds both names
+    from the options, so they are found by running libvmaf on three small
+    frames, once per model."""
     key = str(Path(model_path).resolve())
     with _NAMES_LOCK:
         if key in _NAMES:
@@ -305,29 +319,37 @@ def feature_names(model_path: Path) -> tuple[dict[str, str], dict[str, str]]:
     return _NAMES[key]
 
 
-#: vv_create_v1's flag for VMAF v1 from a decoder's textures (vv_pictures).
+#: vv_create_v1's flag for reading the frames from a decoder's textures
+#: (vv_pictures).
 _PICTURES_FLAG = 1 << 2
 
 
 class V1Scorer:
-    """VMAF v1 of frame pairs given in order: 4:2:0 frames packed as FFmpeg's
-    rawvideo writes them, at `bit_depth` bits (16-bit little-endian samples
-    above 8). `threads`: libvmaf's for CAMBI and SpEED."""
+    """Calculates VMAF v1 of frame pairs given in order: 4:2:0 frames packed
+    as FFmpeg's rawvideo writes them, at `bit_depth` bits (16-bit
+    little-endian samples above 8 bits). `threads` is the number of threads
+    libvmaf uses for CAMBI and SpEED on the CPU."""
 
     def __init__(self, width: int, height: int, bit_depth: int, model_path: Path, n_subsample: int = 1,
                  device: int | None = None, threads: int | None = None, name: str = "vmaf_v1", shared=None,
                  gpu_cambi: bool = True, gpu_speed: bool = True, pictures: bool = False):
-        """`gpu_cambi`, `gpu_speed`: CAMBI, SpEED chroma on the GPU where the
-        engine calculates it (False: libvmaf's CPU code). `shared`: the decoder (GpuFrameStream) the frames come from without
-        a CPU copy (add_decoded): its lumas copied on the GPU into Vulkan's
-        memory, the planes libvmaf's extractors read downloaded by the GPU
-        into their pictures. `pictures`: the decoders give their pictures as
-        textures (GpuFrameStream.gives_textures), which the engine reads where
-        they are, not copied (vv_pictures), if it can (self.pictures says):
-        each pair's slots then released through release_later."""
+        """`gpu_cambi` and `gpu_speed` calculate CAMBI and SpEED chroma on the
+        GPU when the engine supports the model's options. False uses
+        libvmaf's CPU code.
+
+        `shared` is the decoder (GpuFrameStream) that the frames come from
+        without a copy through the CPU (add_decoded). Its lumas are copied on
+        the GPU into Vulkan's memory, and the GPU downloads the planes that
+        libvmaf's extractors read into their pictures.
+
+        `pictures` means the decoders give their pictures as textures
+        (GpuFrameStream.gives_textures). The engine then reads them where
+        they are, without copying them (vv_pictures), if it can, and
+        self.pictures says whether it does. Each pair's slots are then
+        released through release_later."""
         self._shared: vmaf_vulkan.SharedLumas | None = None
-        #: The decoders' slots given back (release_later) while the engine may
-        #: still read them: (the last frame that does, stream, slot).
+        #: The decoders' slots handed back (release_later) that the engine may
+        #: still read: (the last frame that reads the slot, stream, slot).
         self._held: collections.deque = collections.deque()
         self.pictures = False
         self._pinned: dict[int, object] = {}
@@ -377,7 +399,7 @@ class V1Scorer:
                 code = vulkan.vv_v1_cambi(self._gpu, cambi)
                 if code == 0:
                     self._on_gpu = self._on_gpu | {_CAMBI}
-                elif code != -4:  # -4: options it does not calculate; libvmaf does then
+                elif code != -4:  # -4: options the GPU does not support, so libvmaf calculates CAMBI
                     vmaf_vulkan._check(vulkan, code, "Starting CAMBI")
             speed = _speed_gpu_options(options[_SPEED]) if gpu_speed and hasattr(vulkan, "vv_v1_speed") else None
             if speed is not None:
@@ -386,9 +408,10 @@ class V1Scorer:
                     self._on_gpu = self._on_gpu | {_SPEED}
                 elif code != -4:
                     vmaf_vulkan._check(vulkan, code, "Starting SpEED")
-            #: From a decoder handing over: where its chroma planes go in each
-            #: shared buffer (offset, spacing, row bytes), for it to copy them
-            #: there on the GPU; None: through the engine's host memory.
+            #: Where a decoder handing frames over puts its chroma planes in
+            #: each shared buffer (offset, spacing, row bytes), copying them
+            #: there on the GPU. None means they go through the engine's host
+            #: memory instead.
             self._shared_chroma: tuple[int, int, int] | None = None
             if _SPEED in self._on_gpu and self._shared is not None and hasattr(vulkan, "vv_shared_chroma") \
                     and hasattr(shared, "copy_planes"):
@@ -396,9 +419,10 @@ class V1Scorer:
                 if vulkan.vv_shared_chroma(self._gpu, ctypes.byref(offset), ctypes.byref(spacing),
                                            ctypes.byref(stride)) == 0:
                     self._shared_chroma = (offset.value, spacing.value, stride.value)
-            #: Whether the decoder's copies into the shared buffers are waited for
-            #: by the GPU (its timeline semaphore, imported) instead of by this
-            #: thread, which then goes on to the next pair at once.
+            #: Whether the GPU, rather than this thread, waits for the decoder's
+            #: copies into the shared buffers (through the decoder's timeline
+            #: semaphore, imported). This thread then goes on to the next pair
+            #: at once.
             self._after = False
             if self._shared is not None and hasattr(vulkan, "vv_import_timeline") \
                     and hasattr(shared, "copy_luma_async"):
@@ -410,7 +434,8 @@ class V1Scorer:
                         ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(timeline))
             #: The engine reads the decoders' pictures where they are (vv_pictures).
             self.pictures = bool(flags & _PICTURES_FLAG) and vulkan.vv_pictures_mode(self._gpu) == 1
-            #: libvmaf's extractors are run only for what the GPU does not calculate.
+            #: Whether libvmaf's CPU extractors run, which they do only for the
+            #: features the GPU does not calculate.
             self._cpu_features = bool(set(_CPU_FEATURES) - self._on_gpu)
             if self._cpu_features:
                 workers = threads if threads is not None else max(2, min(16, (os.cpu_count() or 4) - 2))
@@ -427,6 +452,8 @@ class V1Scorer:
         self._set_layout(width, height, bit_depth)
 
     def _set_layout(self, width: int, height: int, bit_depth: int) -> None:
+        """Works out where each plane lies in a packed frame of this size and
+        bit depth."""
         sample = 1 if bit_depth <= 8 else 2
         self._sample = sample
         self._luma_stride = width * sample
@@ -440,13 +467,14 @@ class V1Scorer:
         self.frame_bytes = offset
 
     def add(self, reference: bytearray, distorted: bytearray) -> None:
-        """Scores one more pair (frame index = how many came before)."""
+        """Scores one more pair. Its frame index is the number of pairs given
+        before it."""
         if min(len(reference), len(distorted)) < self.frame_bytes:
             raise VmafV1Error(f"frame {self._count} is cut short")
         score = self._count % self._step == 0
         ref = (ctypes.c_char * len(reference)).from_buffer(reference)
         dist = (ctypes.c_char * len(distorted)).from_buffer(distorted)
-        if _SPEED in self._on_gpu:  # with the chroma planes
+        if _SPEED in self._on_gpu:  # the GPU needs the chroma planes too
             bases = (ctypes.addressof(ref), ctypes.addressof(dist))
             planes = (ctypes.c_void_p * 6)(*(base + offset for base in bases for offset, _r, _b in self._planes))
             strides = (ctypes.c_ssize_t * 6)(*(row_bytes for _base in bases for _o, _r, row_bytes in self._planes))
@@ -460,8 +488,8 @@ class V1Scorer:
         self._count += 1
 
     def add_decoded(self, ref_stream, ref_slot: int, test_stream, test_slot: int) -> None:
-        """Scores one more pair held by the decoders (the made-with-`shared`
-        way in): nothing of it is copied by the CPU."""
+        """Scores one more pair held by the decoders, for a scorer made with
+        `shared`. The CPU copies none of it."""
         score = self._count % self._step == 0
         ref_address, dist_address, pitch = self._shared.next()
         if self.pictures:
@@ -473,14 +501,17 @@ class V1Scorer:
                 self._to_libvmaf_decoded(ref_stream, ref_slot, test_stream, test_slot)
             self._count += 1
             return
-        # Not waited for where the GPU waits for them (self._after): the
-        # timeline's value once the last of them is done.
-        luma = (lambda stream, *a: stream.copy_luma_async(*a)) if self._after else             (lambda stream, *a: stream.copy_luma(*a) or 0)
-        planes = (lambda stream, *a: stream.copy_planes_async(*a)) if self._after else             (lambda stream, *a: stream.copy_planes(*a) or 0)
+        # The copies into the shared buffers. When the GPU waits for them
+        # (self._after), this thread does not: each copy returns the value
+        # the decoder's timeline reaches once the copy is done, else 0.
+        luma = ((lambda stream, *a: stream.copy_luma_async(*a)) if self._after else
+                (lambda stream, *a: stream.copy_luma(*a) or 0))
+        planes = ((lambda stream, *a: stream.copy_planes_async(*a)) if self._after else
+                  (lambda stream, *a: stream.copy_planes(*a) or 0))
         chroma_copied = score and _SPEED in self._on_gpu and self._shared_chroma is not None
         if chroma_copied:
-            # The chroma planes copied by the GPU into the slot's shared buffer,
-            # each picture's with its luma (one copy on the GPU a picture).
+            # The GPU copies each picture's chroma planes into the slot's shared
+            # buffer along with its luma (one copy on the GPU per picture).
             offset, spacing, stride = self._shared_chroma
             at = [ref_address + offset + i * spacing for i in range(4)]
             copied = max(planes(ref_stream, ref_slot, (ref_address, at[0], at[1]), (pitch, stride, stride)),
@@ -493,8 +524,9 @@ class V1Scorer:
             vmaf_vulkan._check(self._vulkan, self._vulkan.vv_commit_after(self._gpu, copied),
                                f"Scoring frame {self._count}")
         if score and _SPEED in self._on_gpu and not chroma_copied:
-            # The chroma planes downloaded into the engine's memory for them
-            # (Vulkan's, which another API is not given to pin).
+            # The chroma planes are downloaded into the engine's memory for
+            # them. That memory is Vulkan's, so unlike libvmaf's pictures it is
+            # not page-locked through the decoder (see _pin).
             chroma, stride = (ctypes.c_void_p * 4)(), ctypes.c_uint32()
             vmaf_vulkan._check(self._vulkan, self._vulkan.vv_chroma_staging(self._gpu, chroma, ctypes.byref(stride)),
                                f"Scoring frame {self._count}")
@@ -508,30 +540,31 @@ class V1Scorer:
         self._count += 1
 
     def release_later(self, stream, slot: int, reference: bool) -> None:
-        """Pictures mode: `stream`'s `slot`, which the pairs scored so far no
-        longer need, released once the engine has read it -- after the last
-        frame given (and a reference after the next one too, whose motion
-        reads it)."""
+        """In pictures mode, releases `stream`'s `slot`, which the pairs given
+        so far no longer need, once the engine has read it: after the last
+        frame given, or for a source picture after the next frame too,
+        because the next frame's motion feature reads it."""
         self._held.append((self._count - 1 + (1 if reference else 0), stream, slot))
 
     def _release_done(self) -> None:
-        """The slots release_later holds that the engine is done with: the
-        frames up to the one a slot back (its slot's next frame begun: the
-        engine waited for it)."""
+        """Releases the slots held by release_later that the engine is done
+        with. The engine has finished every frame up to one round of shared
+        slots back, because starting a frame in a shared slot waits for the
+        frame that used the slot before."""
         done = self._count - self._shared.slots
         while self._held and self._held[0][0] <= done:
             _last, stream, slot = self._held.popleft()
             stream.release(slot)
 
     def _release_all(self) -> None:
-        """Every slot release_later holds (the engine is done)."""
+        """Releases every slot release_later holds, once the engine is done."""
         while self._held:
             _last, stream, slot = self._held.popleft()
             stream.release(slot)
 
     def _to_libvmaf_decoded(self, ref_stream, ref_slot: int, test_stream, test_slot: int) -> None:
-        """The pair's planes libvmaf's extractors read, downloaded by the GPU
-        into libvmaf's pictures."""
+        """Gives libvmaf's extractors the pair. The GPU downloads the planes
+        they read straight into libvmaf's pictures."""
         lib = self._lib
         ref, dist = vmaf_cuda._Picture(), vmaf_cuda._Picture()
         vmaf_cuda._check(lib.vmaf_fetch_preallocated_picture(self._cpu, ctypes.byref(ref)), "Taking a picture")
@@ -545,7 +578,7 @@ class V1Scorer:
             for picture in (ref, dist):
                 self._pin(picture, test_stream)
             pitches = (dist.stride[0], dist.stride[1], dist.stride[2])
-            # As _to_libvmaf: the distorted frame whole, the reference's chroma.
+            # As in _to_libvmaf: the whole test frame, and the source's chroma.
             test_stream.download_planes(test_slot, (dist.data[0], dist.data[1], dist.data[2]), pitches)
             ref_stream.download_planes(ref_slot, (None, ref.data[1], ref.data[2]), pitches)
         except BaseException:
@@ -556,17 +589,18 @@ class V1Scorer:
                          f"Scoring frame {self._count}")
 
     def _pin(self, picture, stream) -> None:
-        """Page-locks a picture of libvmaf's pool the first time it comes
-        (they come round again), for the GPU to write into by itself."""
+        """Page-locks a picture from libvmaf's pool the first time it is used,
+        so that the GPU can write into it by itself. The pool's pictures are
+        used again and again, so each is locked only once."""
         address = picture.data[0]
         if address not in self._pinned:
             size = picture.stride[0] * picture.h[0] + 2 * picture.stride[1] * picture.h[1]
             self._pinned[address] = stream if stream.pin(address, size) else None
 
     def _to_libvmaf(self, reference: bytearray, distorted: bytearray) -> None:
-        """Gives libvmaf's extractors the pair: the distorted frame whole
-        (CAMBI reads its luma) and the reference's chroma (SpEED reads both
-        chromas; nothing reads the reference's luma here)."""
+        """Gives libvmaf's extractors the pair: the whole test frame (CAMBI
+        reads its luma) and the source's chroma (SpEED reads both videos'
+        chroma, and nothing here reads the source's luma)."""
         lib = self._lib
         ref, dist = vmaf_cuda._Picture(), vmaf_cuda._Picture()
         vmaf_cuda._check(lib.vmaf_fetch_preallocated_picture(self._cpu, ctypes.byref(ref)), "Taking a picture")
@@ -586,10 +620,11 @@ class V1Scorer:
                          f"Scoring frame {self._count}")
 
     def _fill(self, picture, frame: bytearray, planes: tuple[int, ...]) -> None:
+        """Copies the given planes of a packed frame into a libvmaf picture."""
         source = np.frombuffer(frame, dtype=np.uint8)
         for plane in planes:
             offset, rows, row_bytes = self._planes[plane]
-            # libvmaf's chroma planes are the size rounded down, FFmpeg's up.
+            # libvmaf rounds an odd size's chroma planes down, and FFmpeg up.
             rows = min(rows, picture.h[plane])
             width = min(row_bytes, picture.w[plane] * self._sample)
             stride = picture.stride[plane]
@@ -598,8 +633,8 @@ class V1Scorer:
             target[:, :width] = source[offset:offset + rows * row_bytes].reshape(rows, row_bytes)[:, :width]
 
     def features(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """The frame numbers scored and each feature's values for them, once
-        every frame is in."""
+        """Returns the frame numbers scored and each feature's values for
+        them. Call it once every frame has been given."""
         lib = self._lib
         vmaf_vulkan._check(self._vulkan, self._vulkan.vv_flush(self._gpu), "Scoring")
         frames = np.arange(0, self._count, self._step, dtype=np.int32)
@@ -634,26 +669,28 @@ class V1Scorer:
         return frames, values
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """As GpuScorer.finish: the frame numbers scored and the model's
-        scores for them, rounded as libvmaf's JSON log rounds them."""
+        """Returns the frame numbers scored and the model's scores for them,
+        rounded as libvmaf's JSON log rounds them (as GpuScorer.finish
+        does)."""
         if not self._count:
             self._release_all()
             return np.zeros(0, dtype=np.int32), {self._name: np.zeros(0)}
         frames, values = self.features()
-        self._release_all()  # (the engine's frames all done)
+        self._release_all()  # the engine has finished every frame
         return frames, {self._name: predict(self._model_path, frames, values, self._model_names)}
 
     def close(self) -> None:
-        """Before the decoders are closed, where the frames came from them."""
+        """Frees the scorer. When the frames came from decoders, call it
+        before the decoders are closed."""
         if self._shared is not None:
             self._shared.close()
             self._shared = None
         if self._gpu:
-            self._vulkan.vv_destroy(self._gpu)  # (waits for its frames)
+            self._vulkan.vv_destroy(self._gpu)  # waits for its frames
             self._gpu = ctypes.c_void_p()
         self._release_all()
         if self._cpu:
-            self._lib.vmaf_close(self._cpu)  # waits for the extractors: nothing reads the pictures after it
+            self._lib.vmaf_close(self._cpu)  # waits for the extractors, so nothing reads the pictures after it
             self._cpu = ctypes.c_void_p()
         for address, stream in self._pinned.items():
             if stream is not None:
@@ -663,8 +700,9 @@ class V1Scorer:
 
 def predict(model_path: Path, frames: np.ndarray, values: dict[str, np.ndarray],
             names: dict[str, str] | None = None) -> np.ndarray:
-    """A VMAF v1 model's scores for its four features' values: libvmaf's own
-    prediction, from the features under the names the model reads them by."""
+    """Returns a VMAF v1 model's scores for its four features' values,
+    predicted by libvmaf itself from the features given under the names the
+    model reads them by."""
     lib = _libvmaf()
     names = names or feature_names(model_path)[0]
     context, model = ctypes.c_void_p(), ctypes.c_void_p()
@@ -694,9 +732,10 @@ def predict(model_path: Path, frames: np.ndarray, values: dict[str, np.ndarray],
 
 def cpu_reference(model_path: Path, width: int, height: int, bit_depth: int, reference: list, distorted: list,
                   n_subsample: int = 1, threads: int = 0):
-    """libvmaf's CPU VMAF v1 of frames in memory: (the frame numbers scored,
-    {feature: values}, the scores rounded as V1Scorer's). What V1Scorer is
-    checked against, by the self-test here and scripts/compare_vmaf_v1.py."""
+    """Calculates VMAF v1 of frames in memory with libvmaf's CPU code, and
+    returns (the frame numbers scored, {feature: values}, the scores rounded
+    as V1Scorer rounds them). V1Scorer is checked against it by the
+    self-test here and by scripts/compare_vmaf_v1.py."""
     lib = _libvmaf()
     names, _ = feature_names(model_path)
     context, model = ctypes.c_void_p(), ctypes.c_void_p()
@@ -757,19 +796,20 @@ V1_KEY = "vmaf_v1"
 
 
 class MultiScorer:
-    """A run's GPU scorers fed the same frames: VMAF v0.6.1 and NEG's
-    (libvmaf's CUDA code or the Vulkan port, by `backend`) and VMAF v1's.
-    `models` as vmaf_cuda.gpu_models gives them: "vmaf_v1" maps to the
-    model's "path=<file>"."""
+    """Feeds the same frames to a run's GPU scorers: the one for VMAF v0.6.1
+    and NEG (libvmaf's CUDA code or the Vulkan port, chosen by `backend`),
+    and the one for VMAF v1. `models` is as vmaf_cuda.gpu_models gives it,
+    with "vmaf_v1" mapped to the model's "path=<file>"."""
 
     def __init__(self, width: int, height: int, bit_depth: int, models: dict[str, str], n_subsample: int = 1,
                  backend: str = "cuda", device: int | None = None, shared=None, pictures: bool = False):
-        """`shared`: NVIDIA's decoder (GpuFrameStream), whose pictures the
-        scorers then take on the GPU (add_decoded) instead of from system
-        memory (add). VmafGpuError where they cannot. `pictures`: VMAF v1's
-        from the decoders' textures (V1Scorer's), where the engine can
-        (self.pictures): the decoders' slots then given back through
-        release_later."""
+        """`shared` is the decoder (GpuFrameStream) whose pictures the scorers
+        then take on the GPU (add_decoded) instead of from system memory
+        (add). VmafGpuError is raised if they cannot.
+
+        `pictures` makes VMAF v1's scorer read the decoders' textures (see
+        V1Scorer) if the engine can, and self.pictures says whether it does.
+        The decoders' slots are then given back through release_later."""
         models = dict(models)
         v1_model = models.pop(V1_KEY, None)
         self._scorers = []
@@ -791,31 +831,36 @@ class MultiScorer:
             self.close()
             raise
         self.frame_bytes = self._scorers[0].frame_bytes
-        #: VMAF v1's scorer reads the decoders' pictures where they are.
+        #: VMAF v1's scorer if it reads the decoders' pictures where they are,
+        #: else None.
         self._pictures = next((scorer for scorer in self._scorers if isinstance(scorer, V1Scorer) and scorer.pictures),
                               None)
         self.pictures = self._pictures is not None
 
     def release_later(self, stream, slot: int, reference: bool) -> None:
-        """A decoder's slot the pairs no longer need (pictures mode): given
-        back once the GPU has read it."""
+        """In pictures mode, gives a decoder's slot that the pairs no longer
+        need back once the GPU has read it."""
         self._pictures.release_later(stream, slot, reference)
 
     def add_decoded(self, ref_stream, ref_slot: int, test_stream, test_slot: int) -> None:
-        """One more pair held by the decoders, scored without a CPU copy."""
+        """Scores one more pair held by the decoders, without a copy through
+        the CPU."""
         for scorer in self._scorers:
             if isinstance(scorer, V1Scorer):
                 scorer.add_decoded(ref_stream, ref_slot, test_stream, test_slot)
-            else:  # VMAF v0.6.1 and NEG: the luma planes, copied on the GPU
+            else:  # VMAF v0.6.1 and NEG read only the luma planes, copied on the GPU
                 (scorer.add_shared if isinstance(scorer, vmaf_vulkan.VulkanScorer) else scorer.add_on_device)(
                     lambda address, pitch: ref_stream.copy_luma(ref_slot, address, pitch),
                     lambda address, pitch: test_stream.copy_luma(test_slot, address, pitch))
 
     def add(self, reference: bytearray, distorted: bytearray) -> None:
+        """Scores one more pair given in system memory."""
         for scorer in self._scorers:
             scorer.add(reference, distorted)
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+        """Returns the frame numbers scored and every scorer's scores for
+        them."""
         frames, scores = None, {}
         for scorer in self._scorers:
             numbers, values = scorer.finish()
@@ -826,6 +871,7 @@ class MultiScorer:
         return frames, scores
 
     def close(self) -> None:
+        """Frees every scorer."""
         for scorer in self._scorers:
             scorer.close()
         self._scorers = []
@@ -837,13 +883,15 @@ def score_decoded(
     scale_algorithm: str = "bicubic", on_progress=None, check_cancel=lambda: None, process_handle=None,
     backend: str = "cuda", device: int | None = None, decoder: str = "nvidia",
 ):
-    """vmaf_cuda.score_decoded for a run with VMAF v1: both videos decoded in
-    this process by the GPU's own decoder (gpu_frames) -- whole frames, as
-    SpEED reads the chroma -- cropped, scaled and widened there, paired as
-    libvmaf's filter pairs them (frame_sync), and each pair given to the
-    run's scorers (MultiScorer). FFmpeg only copies the compressed streams
-    out of their containers. `decoder`: gpu_frames' library, one for both
-    videos or (the source's, the test video's)."""
+    """The counterpart of vmaf_cuda.score_decoded for a run with VMAF v1.
+
+    Both videos are decoded in this process by the GPU's own decoder
+    (gpu_frames), as whole frames because SpEED reads the chroma. They are
+    cropped, scaled and widened there, paired as libvmaf's filter pairs them
+    (frame_sync), and each pair is given to the run's scorers (MultiScorer).
+    FFmpeg only copies the compressed streams out of their containers.
+    `decoder` is gpu_frames' decoder library: one name for both videos, or a
+    pair (the source's, the test video's)."""
     import time
     from dataclasses import replace
 
@@ -867,14 +915,15 @@ def score_decoded(
         if not supported:
             raise gpu_frames.GpuDecodeUnavailableError(refusal)
         plans.append(plan)
-    # Pictures the engine reads where the decoder left them (V1Scorer's
-    # pictures) stay the decoder's until the GPU is done with them: two pairs
-    # being matched up, the frames in flight (3) and the reference before for
-    # motion, which takes six of a decoder's slots (4K HEVC: 98.2 -> 106.1
-    # fps). Two H.264 videos too, though Windows' H.264 decoder's pictures are
-    # layers of a texture array, copied into textures of their own anyway
-    # (native/mf_frames.cpp): the speed the same (1080p: 251.0 -> 251.3 fps),
-    # the GPU memory less -- the engine's buffers for the planes are not made
+    # When the engine reads pictures where the decoder left them (V1Scorer's
+    # pictures mode), they stay the decoder's until the GPU is done with them:
+    # two pairs being matched up, the frames in flight (3), and the previous
+    # source picture for motion. That takes six of a decoder's slots, and is
+    # faster (4K HEVC: 98.2 -> 106.1 fps). It is used for two H.264 videos
+    # too. Windows' H.264 decoder gives layers of a texture array, which are
+    # copied into textures of their own anyway (native/mf_frames.cpp), so the
+    # speed is the same (1080p: 251.0 -> 251.3 fps), but it uses less GPU
+    # memory, because the engine's buffers for the planes are not made
     # (1080p: 342 -> 291 MB committed).
     pool = 6 if (backend == "vulkan" and V1_KEY in models and source_decoder == test_decoder
                  and gpu_frames.hands_over_textures(test_decoder)) else 4
@@ -888,9 +937,10 @@ def score_decoded(
         raise
     scorer = None
     try:
-        # Its pictures stay on the GPU, and reach libvmaf's without a CPU copy:
-        # NVIDIA's, and AMD's handing over (to Vulkan only, not libvmaf's CUDA)
-        # -- one decoder's for both videos.
+        # The decoder's pictures stay on the GPU and reach the scorers without
+        # a copy through the CPU. This works with NVIDIA's decoder, and with
+        # AMD's when it hands over to Vulkan (not to libvmaf's CUDA code),
+        # when the same decoder decodes both videos.
         if (test.handover and ref.handover and source_decoder == test_decoder
                 and (test_decoder == "nvidia" or backend == "vulkan")):
             try:
@@ -934,7 +984,7 @@ def score_decoded(
         ref.verify()
         return scorer.finish()
     finally:
-        if scorer is not None:  # first: it gives the decoder's hold on its memory back
+        if scorer is not None:  # closed first, because it holds on to the decoders' memory
             scorer.close()
         test.close()
         ref.close()
@@ -943,8 +993,9 @@ def score_decoded(
 # ------------------------------------------------------------ availability
 
 def _self_test_frames(bits: int, count: int = 4) -> tuple[list[bytearray], list[bytearray]]:
-    """Frame pairs for the self-test: textured, moving, the distorted one
-    blurred and noisy. Integer arithmetic only: the same bytes on every PC."""
+    """Makes frame pairs for the self-test: textured and moving, with the
+    test frame blurred and noisy. They are made with integer arithmetic
+    only, so they are the same bytes on every PC."""
     width, height = _PROBE_SIZE
     peak = (1 << bits) - 1
     dtype = np.uint8 if bits == 8 else np.dtype("<u2")
@@ -967,13 +1018,14 @@ def _self_test_frames(bits: int, count: int = 4) -> tuple[list[bytearray], list[
 
 
 def probe() -> tuple[bool, str]:
-    """Whether VMAF v1 is calculated with the GPU on this PC. The GPU is
-    accepted only if it gives libvmaf's CPU values exactly: vmaf_vulkan's
-    self-test of the shaders it shares with VMAF v0.6.1, then ADM3 and
-    motion3 of a few frames, at 8 and at 10 bits and with the five-frame
-    motion window, against libvmaf's CPU extractors. A driver that compiles
-    a shader wrongly gives wrong scores, not an error. Run in a process of
-    its own."""
+    """Returns whether VMAF v1 can be calculated with the GPU on this PC, and
+    what the GPU is or why not. The GPU is accepted only if it gives
+    libvmaf's CPU values exactly: first vmaf_vulkan's self-test of the
+    shaders it shares with VMAF v0.6.1, then the four features of a few
+    frames, at 8 and at 10 bits and with the five-frame motion window,
+    compared with libvmaf's CPU extractors. A driver that compiles a shader
+    wrongly gives wrong scores, not an error. Run it in a process of its
+    own."""
     try:
         available, device, text = vmaf_vulkan.probe()
         if not available:
@@ -1006,8 +1058,8 @@ _probed: tuple[bool, str] | None = None
 
 
 def available() -> tuple[bool, str]:
-    """Whether VMAF v1 is calculated with the GPU here, and on what (or why
-    not). Probed once, in a process of its own."""
+    """Returns whether VMAF v1 is calculated with the GPU here, and on which
+    GPU or why not. The GPU is probed once, in a process of its own."""
     global _probed
     with _PROBE_LOCK:
         if _probed is None:
@@ -1025,11 +1077,12 @@ def available() -> tuple[bool, str]:
 
 
 def scores(model: str, size: tuple[int, int] | None = None) -> bool:
-    """Whether a run's VMAF v1 is calculated with the GPU: `model` as
-    vmaf_cuda.gpu_models names it ("path=<file>"; empty while Auto is not
-    resolved, when the job is planned), one of VMAF v1's, at a `size` (where
-    known) SpEED has blocks to score at, on a PC whose GPU passed the
-    self-test. FFmpeg's libvmaf calculates it otherwise."""
+    """Returns whether a run's VMAF v1 is calculated with the GPU: when
+    `model` is a VMAF v1 model, `size` (if known) leaves SpEED blocks to
+    score, and this PC's GPU passed the self-test. Otherwise FFmpeg's
+    libvmaf calculates it. `model` is as vmaf_cuda.gpu_models names it
+    ("path=<file>"), or empty while the job is planned and Auto is not yet
+    resolved."""
     options: dict[str, dict] = {_SPEED: {}}
     if model:
         try:

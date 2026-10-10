@@ -1,11 +1,17 @@
-"""A running video's line under the Run button, from its halves' snapshots
-(core.job_runner.JobRun.task_snapshots): which of its metrics are under
-way, where and how far -- "CPU metrics 1-4 of 4: VMAF v1, PSNR, SSIM, XPSNR
-23.3% (9.8 fps, 0:00:22 remaining)" -- its tooltip, and where each video is
-decoded.
+"""The progress line shown under the Run button while a video is running.
 
-Functions of the snapshots alone; MainWindow keeps which video has which
-line, and when each is drawn again."""
+The line says which of the video's metrics are being calculated, where (on
+the CPU or the GPU) and how far along they are, for example:
+
+    CPU metrics 1-4 of 4: VMAF v1, PSNR, SSIM, XPSNR 23.3% (9.8 fps, 0:00:22 remaining)
+
+It is built from snapshots of the video's tasks
+(core.job_runner.JobRun.task_snapshots). This module also builds the line's
+tooltip and the "Decoder: ..." text that says where each video is decoded.
+
+Everything here is a plain function of the snapshots. MainWindow decides
+which video shows which line and when the line is drawn again.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -17,36 +23,35 @@ from vmaf_app.core.status import STARTING, brief_of, kind_of
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.i18n import N_, tr, tr_message
 
-#: Each place's name on the run line.
+#: How each place is named on the run line.
 _PLACE_NAMES = {"CPU": N_("CPU metrics"), "GPU": N_("GPU metrics")}
 
 
 @dataclass(frozen=True)
 class MetricUnit:
-    """Metrics of a video calculated together -- in one pass, in one place --
-    and how far they are: one entry on its run line (metric_units).
+    """A group of a video's metrics that are calculated together, in one
+    pass and in one place, with how far along they are. Each unit is one
+    entry on the video's run line (see metric_units)."""
 
-    The line used to be built from the programs' halves -- FFmpeg's, Vship's
-    -- and counted their passes: with Vship's metrics in one pass, VMAF and
-    four GPU metrics read "GPU metrics 1 of 2"."""
-
-    place: str  # "CPU" or "GPU": where they are calculated as the run stands
+    place: str  # "CPU" or "GPU": where the metrics are calculated now
     keys: tuple[str, ...]
     state: str  # "running", "starting", "waiting", "queued", "done" or "failed"
-    task: dict  # the half's snapshot (core.job_runner.JobRun.task_snapshots)
-    done: int = 0  # how far: done / whole, rounded down on the line
+    task: dict  # the snapshot of the task the metrics belong to (core.job_runner.JobRun.task_snapshots)
+    done: int = 0  # progress is done / whole; the line rounds it down
     whole: int = 0
-    scale: int = 1  # whole / scale is the pass's frames: (whole - done) / scale / fps seconds left
+    scale: int = 1  # whole / scale is the pass's frame count, so (whole - done) / scale / fps is the seconds left
     fps: float = 0.0
 
 
 def step_text(message: str) -> str:
-    """A half's status message as its step before figures arrive, e.g.
-    "Detecting black bars in source" -- "" for one that only says FFmpeg
-    or a GPU pass is starting. The decode plan is left out (its brief):
-    it is shown on its own, as "Decoder: ...". Before, a video with
-    CPU and GPU halves said only "CPU starting" for as long as black
-    bars on a 4K source were being looked for."""
+    """The step a task is on, from its status message, shown before any
+    progress figures arrive: for example "Detecting black bars in source".
+
+    Returns "" for a message that only says FFmpeg or a GPU pass is
+    starting. The decode plan is left out of the text, because the line
+    shows it separately as "Decoder: ...". Without the step, a video with
+    CPU and GPU tasks said only "CPU starting" for as long as black bars
+    were being looked for on a 4K source."""
     if kind_of(message) in (STARTING, GPU_PASS_STATUS):
         return ""
     text = brief_of(message).strip().rstrip(".\u2026").strip().replace("distorted", "test video")
@@ -54,22 +59,23 @@ def step_text(message: str) -> str:
 
 
 def half_place(task: dict[str, object]) -> str:
-    """Where a half's metrics are calculated now: "CPU" for the CPU's
-    queue, and for a half in the GPU's whose metrics the CPU has taken
-    (cpu_keys); "GPU" otherwise."""
+    """Where a task's metrics are calculated now: "CPU" for a task in the
+    CPU's queue, and for a task in the GPU's queue whose metrics the CPU
+    has taken over (its cpu_keys); "GPU" otherwise."""
     return "CPU" if task.get("lane") == "cpu" or task.get("cpu_keys") else "GPU"
 
 
 def metric_units(snapshots) -> list[MetricUnit]:
-    """A video's metrics in the units they are calculated in -- a pass
-    of one or more metrics, in one place -- in the order they run, each
-    metric in one unit only: the last it is in (a retry, say).
+    """Splits a video's metrics into the units they are calculated in, in
+    the order they run. A unit is one pass of one or more metrics, in one
+    place. Each metric appears in one unit only: the last one it is in, for
+    example its retry.
 
-    From the worker's halves (VmafWorker.task_progress): FFmpeg's
-    metrics on the CPU, VMAF and NEG on the GPU, Vship's metrics on the
-    GPU in one or more passes, SSIMULACRA2/Butteraugli on the CPU; a
-    half in the GPU's queue whose metrics the CPU takes over -- a GPU
-    failure -- has them as CPU metrics, with the CPU's figures."""
+    The snapshots are the video's tasks (VmafWorker.task_progress): FFmpeg's
+    metrics on the CPU, VMAF and NEG on the GPU, Vship's metrics on the GPU
+    in one or more passes, and SSIMULACRA2 and Butteraugli on the CPU. When
+    the CPU takes over the metrics of a task in the GPU's queue (after a GPU
+    failure), they are shown as CPU metrics, with the CPU's figures."""
     units: list[MetricUnit] = []
     for task in snapshots:
         state = str(task.get("state"))
@@ -88,7 +94,7 @@ def metric_units(snapshots) -> list[MetricUnit]:
             units.append(MetricUnit(place, keys, state, task, current, total, 1, fps))
 
         if task.get("lane") == "cpu" or cpu_keys:
-            # A pass of its metrics on the CPU, after any on the GPU.
+            # One pass of the task's metrics on the CPU, after any passes on the GPU.
             for group in task.get("passes", ()) if cpu_keys else ():
                 finished(tuple(key for key in group if key not in cpu_keys), "GPU")
             keys = cpu_keys or tuple(task.get("metric_keys", ()))
@@ -113,8 +119,9 @@ def metric_units(snapshots) -> list[MetricUnit]:
             if position < number:
                 finished(group, "GPU")
             elif position == number:
-                # Its passes are one count (run_vship_task): this one
-                # from `start`, out of `left` passes of its length.
+                # All of the task's passes share one progress count
+                # (run_vship_task). This pass counts from `start`, out of
+                # `left` passes of the same length.
                 left = max(1, count - number + 1)
                 units.append(MetricUnit("GPU", group, "running", task, (current - start) * left,
                                          total - start, left, fps))
@@ -131,7 +138,7 @@ def metric_units(snapshots) -> list[MetricUnit]:
 
 
 def numbers_text(numbers: list[int]) -> str:
-    """Metric numbers as the line shows them: "3", "1\u20132", "1, 3"."""
+    """Metric numbers as the line shows them: "3", "1\u20132" or "1, 3"."""
     numbers = sorted(numbers)
     if len(numbers) > 1 and numbers[-1] - numbers[0] == len(numbers) - 1:
         return f"{numbers[0]}\u2013{numbers[-1]}"
@@ -139,22 +146,19 @@ def numbers_text(numbers: list[int]) -> str:
 
 
 def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAccelPlan]]:
-    """A video's run line, by metric: for the CPU and then the GPU, the
-    metrics under way, each numbered among that place's metrics, with
-    their figures -- "CPU metrics 1-4 of 4: VMAF v1, PSNR, SSIM, XPSNR
-    23.3% (9.8 fps, 0:00:22 remaining)", "GPU metrics 1-2 of 5: VMAF
-    v0.6.1, VMAF NEG 50.0% (55.0 fps, ...)". Metrics in one pass share
-    its figures. Then the tooltip: every metric on a line of its own.
+    """Builds a video's run line, its tooltip and its decode plans.
 
-    Built from FFmpeg's and Vship's halves it counted passes -- "GPU
-    metrics 1 of 2" for VMAF and Vship's metrics in one pass -- named
-    metrics by the program instead of the place, a CPU SSIMULACRA2 in
-    Vship's half among the GPU metrics, and took two halves on the CPU
-    for two "CPU metrics".
+    The line lists, for the CPU and then the GPU, the metrics under way,
+    each numbered among that place's metrics, with their progress, for
+    example "CPU metrics 1-4 of 4: VMAF v1, PSNR, SSIM, XPSNR 23.3% (9.8 fps,
+    0:00:22 remaining)" and "GPU metrics 1-2 of 5: VMAF v0.6.1, VMAF NEG
+    50.0% (55.0 fps, ...)". Metrics calculated in one pass share its
+    figures. The tooltip has every metric on a line of its own.
 
-    Last, each half's decode plan by the place it is in (decoder_text),
-    two halves in one place that decode differently by their metrics'
-    numbers: "Source: GPU (CPU metrics 1-4) / CPU (CPU metrics 5)"."""
+    The decode plans are each task's, keyed by the place the task is in
+    (for decoder_text). When two tasks in one place decode differently, each
+    key also names its metrics by number: "Source: GPU (CPU metrics 1-4) /
+    CPU (CPU metrics 5)"."""
     units = metric_units(snapshots)
     order: dict[str, list[str]] = {"CPU": [], "GPU": []}
     for unit in units:
@@ -169,8 +173,9 @@ def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAc
                   numbers=numbers_text(numbers), count=len(order[unit.place]), labels=labels)
 
     def holder(unit: MetricUnit) -> str:
-        """The metrics of this video holding the GPU's turn while `unit`
-        waits for it: on the CPU after a GPU failure, in the same turn."""
+        """The metrics of this video whose task holds the GPU's turn while
+        `unit` waits for it. That task may be running on the CPU after a GPU
+        failure; it keeps the GPU's turn until it finishes."""
         for other in units:
             if (other.task is not unit.task and other.state in ("running", "starting")
                     and other.task.get("lane") == "gpu"):
@@ -198,8 +203,8 @@ def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAc
                       numbers=order[place].index(key) + 1, count=len(order[place]),
                       labels=metric_definition(key).label)
             lines.append(_unit_tooltip(line, unit, paused))
-    # Each half decodes on its own; one that is done no longer does,
-    # unless none is left.
+    # Each task decodes the videos itself. A finished task no longer
+    # decodes, so it is left out unless every task has finished.
     decoding = ([task for task in snapshots if task.get("decode") and task.get("state") not in ("done", "failed")]
                 or [task for task in snapshots if task.get("decode")])
     places = [half_place(task) for task in decoding]
@@ -215,8 +220,9 @@ def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAc
 
 
 def _unit_text(head: str, unit: MetricUnit, paused: bool, holder: str) -> str:
-    """A unit on the run line: `head` ("GPU metrics 1-2 of 5: VMAF
-    v0.6.1, VMAF NEG"), then how far it is or what it waits for."""
+    """One unit's entry on the run line: `head` (for example "GPU metrics
+    1-2 of 5: VMAF v0.6.1, VMAF NEG"), then its progress or what it is
+    waiting for."""
     if unit.state == "waiting":
         if unit.task.get("waiting_for") == "CPU":
             return tr("{kind} queued (waiting for a free CPU slot)", kind=head)
@@ -228,11 +234,11 @@ def _unit_text(head: str, unit: MetricUnit, paused: bool, holder: str) -> str:
         return tr("{kind} ({step})", kind=head, step=step) if step else tr("{kind} starting", kind=head)
     if unit.state == "done":
         return tr("{kind} done", kind=head)
-    if unit.state == "failed":  # why: in the video's tooltip when it is over
+    if unit.state == "failed":  # the reason is in the video's tooltip once the run is over
         return tr("{kind} failed", kind=head)
     details = []
     if paused:
-        # Its last rate and time left would read as if it were running.
+        # The last speed and time left would read as if the unit were still running.
         details.append(tr("paused"))
     elif unit.fps > 0 and unit.whole > 0:
         details.append(tr("{fps:.1f} fps", fps=unit.fps))
@@ -242,8 +248,8 @@ def _unit_text(head: str, unit: MetricUnit, paused: bool, holder: str) -> str:
 
 
 def _unit_tooltip(line: str, unit: MetricUnit, paused: bool) -> str:
-    """A metric's line in its video's tooltip: "GPU metrics 3 of 5:
-    SSIMULACRA2 40.0% (0:00:15 remaining)", "... (done)"."""
+    """One metric's line in its video's tooltip, for example "GPU metrics 3
+    of 5: SSIMULACRA2 40.0% (0:00:15 remaining)" or "... (done)"."""
     if unit.state == "done":
         return tr("{label} (done)", label=line)
     if unit.state == "failed":
@@ -262,7 +268,8 @@ def _unit_tooltip(line: str, unit: MetricUnit, paused: bool) -> str:
 
 
 def _unit_percent(unit: MetricUnit) -> str:
-    """Rounded down: 99.96% must not read "100.0%" while work remains."""
+    """The unit's progress as a percentage, rounded down, so that 99.96%
+    does not read "100.0%" while work remains."""
     return f"{min(1000, 1000 * max(0, unit.done) // unit.whole) / 10 if unit.whole > 0 else 0.0:.1f}%"
 
 
@@ -270,12 +277,11 @@ def decoder_text(plans: dict[str, HwAccelPlan], *, source_only: bool) -> str:
     """Where each video is decoded, as the run line shows it: "Decoder:
     Source: GPU, test video: CPU".
 
-    `plans` holds each half's decode plan by the half's name on the line
-    ("CPU metrics"). The line showed it nearly as it came, "Decode:
-    source cuda, test cuda": the decoder API's name where the question
-    is only whether the GPU or the CPU decodes each video. Where the
-    halves differ -- one fell back to software -- each is named: "test
-    video: CPU (CPU metrics) / GPU (GPU metrics)".
+    `plans` holds each task's decode plan, keyed by the task's name on the
+    line ("CPU metrics"). Only whether the GPU or the CPU decodes each video
+    is shown, not the decoder's name. When tasks decode a video differently
+    (one fell back to the CPU, say), each is named: "test video: CPU (CPU
+    metrics) / GPU (GPU metrics)".
     """
     def where(plan: HwAccelPlan) -> dict[str, str]:
         return {"source": "GPU" if plan.source else "CPU", "distorted": "GPU" if plan.distorted else "CPU"}

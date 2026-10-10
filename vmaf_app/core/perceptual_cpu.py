@@ -1,11 +1,12 @@
-"""Standalone CPU perceptual-metric backend.
+"""Calculates SSIMULACRA2 and Butteraugli on the CPU, with libjxl's
+command-line tools.
 
-SSIMULACRA2 and Butteraugli are reference command-line tools for *images*,
-not video filters.  This adapter gives them lossless PNG pairs from one
-FFmpeg pass per comparison, scoring each pair as soon as it is written --
-several pairs at a time (scoring_workers) -- and holding FFmpeg to a small
-backlog (see _png_pairs). The temporary directory exists only for the
-lifetime of the task.
+The tools compare still images, not videos. FFmpeg writes each frame pair of
+a comparison as lossless PNG files, in one pass, and each pair is scored as
+soon as it is written, several pairs at a time (see scoring_workers). FFmpeg
+is kept only a few pairs ahead (see _png_pairs). The PNG files go to a
+temporary folder that exists only while the task runs. The main entry point
+is run_perceptual_task.
 """
 from __future__ import annotations
 
@@ -49,7 +50,8 @@ _NUMBER = re.compile(r"(?<![\w.])([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)
 
 
 class PerceptualRunError(RuntimeError):
-    """A recoverable failure from the standalone perceptual metric backend."""
+    """SSIMULACRA2, Butteraugli or CVVDP could not be calculated.
+    `stderr_tail` is the end of the tool's error output."""
 
     def __init__(self, message: str, stderr_tail: str = "") -> None:
         super().__init__(message)
@@ -57,9 +59,9 @@ class PerceptualRunError(RuntimeError):
 
 
 class ComparisonCutShortError(PerceptualRunError):
-    """A video whose pictures end long before its length says
-    (frame_coverage): a fault of the file, which no other backend can mend --
-    not one of the GPU's, to retry on the CPU."""
+    """A video's pictures end long before its stated length (see
+    frame_coverage). This is a fault of the file, which no other backend can
+    mend, so it is not a GPU failure to retry on the CPU."""
 
 
 class PerceptualCancelled(RuntimeError):  # noqa: N818 - mirrors the established runner exception
@@ -68,23 +70,29 @@ class PerceptualCancelled(RuntimeError):  # noqa: N818 - mirrors the established
 
 @dataclass(frozen=True, slots=True)
 class PerceptualTaskOutput:
+    """The result of a SSIMULACRA2, Butteraugli or CVVDP task: the scores,
+    the black-bar crops used, and how many frames were compared."""
+
     metrics: MetricResultSet
     source_crop: CropBox | None
     distorted_crop: CropBox | None
     compared_frame_count: int
-    #: Metrics that could not be scored while the others were, by key, with
-    #: the reason -- CVVDP, which only runs on the GPU, failing beside
-    #: SSIMULACRA2/Butteraugli. The worker reports these as a partial failure.
+    #: Metrics that could not be scored while the others were, with the
+    #: reason, by key: for example CVVDP, which runs only on the GPU, failing
+    #: beside SSIMULACRA2 and Butteraugli. The run reports these as a partial
+    #: failure.
     failures: dict[str, str] = field(default_factory=dict)
 
 
 def find_metric_executable(metric: str) -> str | None:
-    """Find the bundled or explicitly configured reference CLI.
+    """Returns the path of the tool for `metric` ("ssimulacra2" or
+    "butteraugli"): the one an environment variable names, else the bundled
+    one, else one on the PATH, or None if there is none.
 
-    Environment overrides keep this optional tooling out of app settings and
-    make CI/fake executable tests deterministic: ``SSIMULACRA2_PATH`` and
-    ``BUTTERAUGLI_PATH``.  Packaged builds ship the official static libjxl
-    tools, so a normal user does not need to install either executable.
+    The environment variables SSIMULACRA2_PATH and BUTTERAUGLI_PATH keep this
+    choice out of the app's settings, and let tests use fake tools. Packaged
+    builds include libjxl's official static tools, so users do not need to
+    install them.
     """
     if metric not in {"ssimulacra2", "butteraugli"}:
         raise KeyError(metric)
@@ -93,8 +101,8 @@ def find_metric_executable(metric: str) -> str | None:
         return override if Path(override).exists() else None
     bundled_names = {
         "ssimulacra2": ("ssimulacra2.exe", "ssimulacra2"),
-        # libjxl names the CLI butteraugli_main; accept the short name for
-        # user-provided installations as well.
+        # libjxl names the tool butteraugli_main. The short name is accepted
+        # too, for tools the user installed.
         "butteraugli": ("butteraugli_main.exe", "butteraugli.exe", "butteraugli_main", "butteraugli"),
     }[metric]
     bundled_dir = Path(__file__).resolve().parents[1] / "tools" / "libjxl"
@@ -110,6 +118,7 @@ def find_metric_executable(metric: str) -> str | None:
 
 
 def _tool_version(executable: str) -> str:
+    """The first line the tool prints for its version, or "unknown"."""
     for arg in ("--version", "-version", "-V"):
         try:
             completed = proc_util.run([executable, arg], capture_output=True, text=True, timeout=5)
@@ -122,7 +131,9 @@ def _tool_version(executable: str) -> str:
 
 
 def _implementation_version(executable: str) -> str:
-    """Prefer the bundled release manifest when a CLI omits its version flag."""
+    """The tool's version, for the scores' provenance. A bundled tool that
+    does not print its version takes it from the bundle's
+    LIBJXL-VERSION.txt."""
     version = _tool_version(executable)
     bundled_dir = (Path(__file__).resolve().parents[1] / "tools" / "libjxl").resolve()
     try:
@@ -141,17 +152,19 @@ def _resolve_crops(
     cancel_event: threading.Event | None, process_handle: ProcessHandle | None,
     on_status: Callable[[str], None] | None,
 ) -> tuple[CropBox | None, CropBox | None]:
+    """Returns the black-bar crops of the source and the test video, or
+    (None, None) when black bars are kept."""
     if recipe.crop_mode is CropMode.NONE:
         return None, None
     try:
         if on_status:
-            # Worded as the FFmpeg metrics' detection is: the two halves of a
-            # video share one detection (crop_detect waits for the other's
-            # answer), and their lines sit side by side.
+            # Worded as for FFmpeg's metrics, because a video's tasks share
+            # one detection (crop_detect waits for the other task's answer),
+            # and their parts of the run line sit side by side.
             on_status("Detecting black bars in source and distorted…")
-        # Crop detection samples representative windows across the whole
-        # file. A short score-duration limit may land entirely in a dark
-        # intro and must not define the crop used for the comparison.
+        # Black bars are detected from samples across the whole file, not
+        # only the part compared: a short duration limit may fall entirely
+        # in a dark intro, which must not decide the crop.
         boxes = detect_pair(
             lambda: detect_crop(source, cancel_event=cancel_event, process_handle=process_handle),
             lambda: detect_crop(distorted, cancel_event=cancel_event, process_handle=process_handle),
@@ -161,12 +174,14 @@ def _resolve_crops(
     return common_picture(source, distorted, *boxes)
 
 
-#: Longer than this, SSIMULACRA2/Butteraugli run on the CPU only when the
-#: user has agreed to it: the CPU tools score one still-image pair at a time,
-#: 1.1 s (SSIMULACRA2) and 2.0 s (Butteraugli) for a 3840x1608 pair with the
-#: bundled libjxl 0.12.0 tools -- days for a film. The Videos tab asks before such a run
-#: (MainWindow._confirm_long_cpu_perceptual) and the GPU path does not fall
-#: back to the CPU on its own past it (perceptual_vship.apply_vship_cpu_fallback).
+#: For comparisons longer than this, SSIMULACRA2 and Butteraugli run on the
+#: CPU only when the user has agreed. The CPU tools score one pair of still
+#: images at a time: 1.1 s (SSIMULACRA2) and 2.0 s (Butteraugli) for a
+#: 3840x1608 pair with the bundled libjxl 0.12.0 tools, which is days for a
+#: film. The Videos tab asks before such a run
+#: (MainWindow._confirm_long_cpu_perceptual), and a failed GPU run does not
+#: fall back to the CPU by itself past this length
+#: (perceptual_vship.apply_vship_cpu_fallback).
 LONG_CPU_RUN_SECONDS = 10 * 60
 
 
@@ -180,13 +195,15 @@ def compared_seconds(source: VideoInfo, distorted: VideoInfo, duration_limit: fl
 
 
 def _validate_pair(source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe) -> None:
-    """The window's rules (geometry.pair_problem): these had none for
-    durations that do not match."""
+    """Raises PerceptualRunError if the two videos cannot be compared by the
+    window's rules (geometry.pair_problem), such as durations that do not
+    match."""
     if problem := pair_problem(source, distorted, recipe.duration_limit):
         raise PerceptualRunError(problem)
 
 
 def _crop_filter(crop: CropBox | None, info: VideoInfo) -> list[str]:
+    """The crop filter that removes a video's black bars, if there are any."""
     if crop is None or crop.is_noop(info.width, info.height):
         return []
     return [crop.as_filter()]
@@ -196,18 +213,18 @@ def _image_filtergraph(
     source: VideoInfo, distorted: VideoInfo, recipe: ComparisonRecipe,
     source_crop: CropBox | None, distorted_crop: CropBox | None, step: int,
 ) -> str:
-    """Return two lossless, identically sized RGB48 image streams.
+    """Returns the filter graph that makes two lossless RGB48 picture streams
+    of the same size, one per video.
 
-    RGB48 avoids JPEG and 8-bit intermediate losses.  The command uses a
-    single decoder pass for each input, then both requested image metrics use
-    each resulting pair, so adding Butteraugli to SSIMULACRA2 does not decode
-    the videos again.
+    RGB48 avoids the losses of JPEG and of 8-bit intermediate steps. Each
+    video is decoded once, and both metrics use each resulting pair, so
+    adding Butteraugli to SSIMULACRA2 does not decode the videos again.
 
-    The n-th pictures of the two streams are a pair: each video's frame N,
-    as every metric pairs them (frame_sync), every step-th one. Both videos'
-    frames are numbered at the test video's frame rate first, so that the
+    The two streams' nth pictures are a pair: each video's frame N, as every
+    metric pairs them (frame_sync), taking every step-th frame. Both videos'
+    frames are first numbered at the test video's frame rate, so that the
     duration limit (each output's -t) keeps the same frames of both. When
-    pairing by timestamp, the pairs are made as before (_image_pairs_by_time).
+    frames are paired by timestamp, _image_pairs_by_time makes the pairs.
     """
     source_size = content_size(source, source_crop)
     distorted_size = content_size(distorted, distorted_crop)
@@ -222,20 +239,21 @@ def _image_filtergraph(
     def prepare(crop: CropBox | None, info: VideoInfo, target: tuple[int, int] | None) -> list[str]:
         ops = _crop_filter(crop, info)
         if target is not None:
-            # Scaled in the video's own format, as Vship's pictures are, and
-            # converted to RGB only after its tags are set (to_rgb). Left to
-            # FFmpeg, the scale filter made the RGB itself, before the tags:
-            # an untagged HD source scaled to its encode's size was converted
-            # with BT.601's matrix, not BT.709's.
+            # Scaled in the video's own pixel format, as Vship's pictures are,
+            # and converted to RGB only after its colour tags are set
+            # (to_rgb). Don't let the scale filter make the RGB itself: it
+            # would do so before the tags are set, and convert an untagged HD
+            # source with BT.601's matrix instead of BT.709's.
             ops += [f"scale={target[0]}:{target[1]}:flags={recipe.scale_algorithm}", f"format={info.pix_fmt}"]
         return ops
 
     def to_rgb(info: VideoInfo) -> list[str]:
-        # Converted to RGB with the matrix and range Vship reads the video
-        # with (colour.video_colour): FFmpeg's own choice for an untagged
-        # video is BT.601's, where Vship takes an HD one as BT.709. The
-        # conversion is the scale filter here, after the tags, not one FFmpeg
-        # puts wherever its format negotiation lands.
+        # Converted to RGB with the matrix and range that Vship reads the
+        # video with (colour.video_colour). For an untagged video FFmpeg
+        # would choose BT.601's matrix, where Vship takes an HD video as
+        # BT.709. The conversion is done by the scale filter here, after the
+        # tags are set, rather than wherever FFmpeg's format negotiation
+        # would put one.
         colour = colour_of(info)
         ops = []
         if colour is not None and colour.matrix in FFMPEG_MATRICES:
@@ -251,7 +269,8 @@ def _image_filtergraph(
 
     def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo,
               target: tuple[int, int] | None) -> str:
-        # Numbered, then sampled: the frames select drops are not cropped or scaled.
+        # Numbered first, then sampled, so that the frames select drops are
+        # not cropped or scaled.
         ops = [*numbering, *sample, *prepare(crop, info, target), *to_rgb(info)]
         return f"[{input_label}]{','.join(ops)}[{output_label}]"
 
@@ -261,9 +280,10 @@ def _image_filtergraph(
     ))
 
 
-#: Pixel formats FFmpeg's blend filter takes as they are, so it can carry a
-#: source frame through unchanged (_image_pairs_by_time): the planar YUV, GBR
-#: and gray ones, each checked frame by frame against the source's own.
+#: Pixel formats that FFmpeg's blend filter takes as they are, so that it can
+#: carry a source frame through unchanged (_image_pairs_by_time): the planar
+#: YUV, GBR and gray formats. Each was checked frame by frame against the
+#: source's own frames.
 _BLEND_FORMAT = re.compile(r"(yuv(420|422|444)p|gbrp|gray)(9|10|12|14|16)?(le)?")
 #: The names setparams knows for each colour tag, as ffprobe prints them.
 _SETPARAMS_NAMES = {
@@ -281,8 +301,8 @@ _SETPARAMS_NAMES = {
 
 
 def _frame_tags(info: VideoInfo) -> str | None:
-    """A setparams giving frames `info`'s colour tags again, or None for a
-    tag setparams has no name for."""
+    """Returns a setparams filter that gives frames `info`'s colour tags
+    again, or None if setparams has no name for one of the tags."""
     tags = {"range": info.color_range or "unknown", "color_primaries": info.color_primaries or "unknown",
             "color_trc": info.color_transfer or "unknown", "colorspace": info.color_space or "unknown",
             "chroma_location": info.chroma_location or "unspecified"}
@@ -298,19 +318,21 @@ def _image_pairs_by_time(
     prepare: Callable[[CropBox | None, VideoInfo, tuple[int, int] | None], list[str]],
     to_rgb: Callable[[VideoInfo], list[str]],
 ) -> str:
-    """_image_filtergraph's streams when pairing by timestamp, as before
-    (frame_sync.by_timestamp). `sizes`: the source's and the test video's
-    scaled sizes (None: not scaled), and the source's own.
+    """Returns _image_filtergraph's streams when frames are paired by
+    timestamp (frame_sync.by_timestamp). `sizes` holds the source's and the
+    test video's scaled sizes (None when not scaled), and the source's own
+    size.
 
-    The n-th pictures of the two streams are a pair: the test video's n-th
-    frame and the source frame libvmaf pairs it with, by timestamp
-    (frame_sync_by_time.FRAMESYNC_OPTS). blend makes the pairs, with the same
-    frame sync: one frame for each test frame, from a "clock" of all-zero
-    frames at the test frames' times OR'd with the source's frames -- the
-    source's pixels unchanged, then its own colour tags (blend's frame takes
-    the clock's, the test video's). Every step-th pair is kept. A source in
-    a format blend does not take as it is (packed RGB, NV12, full-range
-    "yuvj") is paired by position.
+    The two streams' nth pictures are a pair: the test video's nth frame,
+    and the source frame that libvmaf pairs it with by timestamp
+    (frame_sync_by_time.FRAMESYNC_OPTS). The blend filter makes the pairs
+    with the same frame sync. It ORs a "clock" of all-zero frames, one at
+    each test frame's time, with the source's frames, which gives one source
+    frame per test frame with the source's pixels unchanged. The source's
+    own colour tags are then set again, because blend's output takes the
+    clock's tags, which are the test video's. Every step-th pair is kept. A
+    source in a pixel format that blend does not take as it is (packed RGB,
+    NV12, full-range "yuvj") is paired by position instead.
     """
     from vmaf_app.core import frame_sync_by_time
 
@@ -324,7 +346,8 @@ def _image_pairs_by_time(
 
         def chain(input_label: str, output_label: str, crop: CropBox | None, info: VideoInfo,
                   target: tuple[int, int] | None) -> str:
-            # select first: the frames it drops are not cropped or scaled.
+            # select comes first, so that the frames it drops are not cropped
+            # or scaled.
             ops = [*sample, *prepare(crop, info, target), "setpts=PTS-STARTPTS", *to_rgb(info)]
             return f"[{input_label}]{','.join(ops)}[{output_label}]"
 
@@ -335,9 +358,10 @@ def _image_pairs_by_time(
 
     width, height = source_target or source_size
     # pad keeps a subsampled picture on whole chroma samples: asked for an
-    # odd size it gives the even one below, and blend then refused the two
-    # inputs ("size 852x480 do not match ... 853x480"). An odd-sized clock
-    # is padded to the even size above and cut to the picture's exactly.
+    # odd size, it gives the even size below, and blend then refuses the two
+    # inputs ("size 852x480 do not match ... 853x480"). So an odd-sized clock
+    # is padded to the even size above, then cropped to the picture's size
+    # exactly.
     clock_size = f"pad={width + (width & 1)}:{height + (height & 1)}"
     if width & 1 or height & 1:
         clock_size += f",crop={width}:{height}:0:0:exact=1"
@@ -347,9 +371,9 @@ def _image_pairs_by_time(
                     *([] if source_target else [f"format={source_format}"]), "setpts=PTS-STARTPTS"]
     return ";".join((
         f"[0:{VIDEO_STREAM}]{','.join(test_chain)}",
-        # Its own scale: the format the clock is made in is not the test
-        # frames', which reach the split -- and the test's pictures -- as
-        # they are decoded.
+        # The clock has a scale filter of its own, because it is made in the
+        # source's format, while the test frames reach the split (and the
+        # test's pictures) as they are decoded.
         f"[test_times]crop=2:2:0:0,scale,format={source_format},{clock_size},"
         "lut=c0=0:c1=0:c2=0:c3=0[clock]",
         f"[1:{VIDEO_STREAM}]{','.join(source_chain)}[source_frames]",
@@ -359,11 +383,12 @@ def _image_pairs_by_time(
     ))
 
 
-#: Frame pairs FFmpeg may write ahead of the scoring before it is paused.
-#: Extraction runs far faster than the tools score (1-2 s a 4K pair), so
-#: unthrottled it wrote the whole video out first: about 10 MB of 16-bit PNG
-#: per 4K frame, terabytes for a film, and no progress until it finished.
-#: 24 pairs of 4K is about 0.5 GB. FFmpeg resumes once half are scored.
+#: How many frame pairs FFmpeg may write ahead of the scoring before it is
+#: paused. FFmpeg writes the pictures far faster than the tools score them
+#: (1-2 s per 4K pair), so without a limit it would write the whole video
+#: out first: about 10 MB of 16-bit PNG per 4K frame, terabytes for a film,
+#: with no progress shown until it finished. 24 pairs of 4K take about
+#: 0.5 GB. FFmpeg resumes once half of them are scored.
 _BACKLOG_PAIRS = 24
 
 
@@ -373,29 +398,29 @@ def _png_pairs(
     directory: Path, cancel_event: threading.Event | None,
     process_handle: ProcessHandle | None, backlog: int | None = None,
 ) -> Iterator[tuple[Path, Path]]:
-    """Yield (reference, test) image pairs while FFmpeg is still writing them.
+    """Yields (source, test) picture pairs while FFmpeg is still writing them.
 
-    One FFmpeg decodes both videos and writes lossless 16-bit RGB PNGs.
-    Each image is written under a temporary name and renamed when complete
-    (-atomic_writing), so an image that exists is whole. The caller scores
+    One FFmpeg decodes both videos and writes lossless 16-bit RGB PNG files.
+    Each picture is written under a temporary name and renamed when complete
+    (-atomic_writing), so a picture that exists is whole. The caller scores
     and deletes each pair as it arrives.
 
-    FFmpeg is suspended while it has `backlog` (_BACKLOG_PAIRS unless the
-    caller scores more pairs at a time than half of that) complete pairs ready
-    ahead of the caller and resumed at half that, checked every 10 ms on a
-    thread of its own (a check made only as each pair was handed out let
-    FFmpeg run far ahead while one slow pair was being scored). Only
-    complete pairs count: the two sequences come from two decoders and one
-    can run well ahead of the other -- a 4K AV1 test ran 24 frames ahead of
-    its HEVC reference -- and suspending on the leading side alone stopped
-    the lagging side too, so the pair the caller was waiting for never came.
-    While the caller waits, FFmpeg is always running. The suspend nests
-    with the user's Pause (Windows counts suspends), so neither can undo
-    the other.
+    FFmpeg is suspended while it has `backlog` complete pairs ready ahead of
+    the caller, and resumed when it has half as many. `backlog` is
+    _BACKLOG_PAIRS unless the caller scores more than half that many pairs
+    at a time. A thread of its own checks this every 10 ms, because checking
+    only as each pair is handed out would let FFmpeg run far ahead while one
+    slow pair is scored. Only complete pairs count. The two picture
+    sequences come from two decoders, and one can run well ahead of the
+    other (a 4K AV1 test video ran 24 frames ahead of its HEVC source), so
+    suspending because of the side that is ahead would stop the side that
+    is behind too, and the pair the caller waits for would never come. So
+    while the caller waits, FFmpeg always runs. These suspends nest with the
+    user's Pause (Windows counts suspends), so neither can undo the other.
 
-    Each output runs to its own input's end; the comparison is the frames
-    both have (libvmaf's shortest=1), so the pairs end when either sequence
-    does.
+    Each output runs to its own input's end. The comparison is the frames
+    both videos have (libvmaf's shortest=1), so the pairs end when either
+    sequence does.
     """
     backlog = max(2, backlog or _BACKLOG_PAIRS)
     graph = _image_filtergraph(source, distorted, recipe, source_crop, distorted_crop, step)
@@ -408,9 +433,10 @@ def _png_pairs(
     cmd += ["-map", "[reference]", *output_args, str(directory / "reference-%08d.png")]
     if cancel_event is not None and cancel_event.is_set():
         raise PerceptualCancelled("Cancelled by user")
-    # FFmpeg's errors go to a file beside the images: a pipe nobody reads
-    # while the images are scored can fill, stopping FFmpeg mid-video, and
-    # sent nowhere they left a failed extraction without a reason.
+    # FFmpeg's errors go to a file beside the pictures. A pipe that nobody
+    # reads while the pictures are scored can fill up and stop FFmpeg in the
+    # middle of the video, and discarding the errors would leave a failure
+    # without a reason.
     errors_path = directory / "ffmpeg-errors.log"
     errors = open(errors_path, "wb")  # noqa: SIM115 -- closed in the finally below
     try:
@@ -420,6 +446,8 @@ def _png_pairs(
         raise
 
     def failure(message: str) -> PerceptualRunError:
+        """A PerceptualRunError with `message` and the end of FFmpeg's error
+        output."""
         errors.flush()
         try:
             tail = errors_path.read_text(encoding="utf-8", errors="replace").strip()[-2000:]
@@ -431,29 +459,31 @@ def _png_pairs(
         process_handle.attach(process.pid)
     throttled = False
     throttle_lock = threading.Lock()
-    consumed = [1]  # the pair the caller is on; read by the regulator
+    consumed = [1]  # the number of the pair the caller is on, read by the regulator
     stop = threading.Event()
 
-    # FFmpeg and anything under it -- the real ffmpeg.exe when the one
-    # started is a launcher (see proc.process_tree). Listing it takes 13-40
-    # ms on Windows, far longer on a loaded machine, so it happens on a
-    # thread of its own and the regulator never waits for it: until the
-    # list is there, the regulator suspends the process it started.
+    # `tree` lists FFmpeg and its child processes: the real ffmpeg.exe when
+    # the program started is a launcher (see proc.process_tree). Listing
+    # them takes 13-40 ms on Windows, and far longer on a busy PC, so it
+    # happens on a thread of its own and the regulator never waits for it.
+    # Until the list is there, the regulator suspends the process it
+    # started.
     #
     # The list is looked for from the moment FFmpeg starts, until a child
     # appears (a launcher's real FFmpeg) or the first pair is written (by
-    # then any child exists). Listing only once the first pair existed left
-    # a launcher's FFmpeg unthrottled for as long as that took: with every
-    # core busy, 80 pairs were on disk after 2 had been scored.
+    # then any child exists). Don't wait for the first pair before listing:
+    # a launcher's FFmpeg would run unchecked meanwhile, and with every core
+    # busy, 80 pairs were on disk after 2 had been scored.
     tree: list = []
     root = proc_util.process_root(process.pid)
-    suspended: list = []  # exactly what is suspended now, to resume the same
+    suspended: list = []  # exactly the processes suspended now, so that the same ones are resumed
 
     def adopt(found: list) -> None:
-        """Adds newly found processes to the tree, suspending them at once
-        if FFmpeg is meant to be suspended: suspended before they were
-        known, only the process started was, and behind a launcher that
-        left FFmpeg writing every frame (450 of 480 images on disk)."""
+        """Adds newly found processes to the tree, and suspends them at once
+        if FFmpeg is meant to be suspended. Otherwise a process found after
+        the suspend would keep running: behind a launcher, only the launcher
+        would be suspended, and FFmpeg would write every frame (450 of 480
+        pictures were on disk)."""
         with throttle_lock:
             new = [p for p in found if all(p.pid != q.pid for q in tree)]
             tree.extend(new)
@@ -462,15 +492,17 @@ def _png_pairs(
                 suspended.extend(new)
 
     def list_tree() -> None:
-        # Until the first pair is written, not until the first child shows:
-        # launchers can nest (a venv's python.exe starts the real one), so
-        # the first child found need not be FFmpeg.
+        """Lists FFmpeg's process tree until the first pair is written, not
+        only until the first child appears: launchers can nest (a venv's
+        python.exe starts the real one), so the first child found need not
+        be FFmpeg."""
         proc_util.raise_current_thread_priority()
         while True:
-            # Checked first: a list taken after it includes FFmpeg. The caller
-            # moving on counts too: it deletes each pair once scored, so a
-            # pair written and taken between two checks left this polling
-            # every 50 ms until FFmpeg ended.
+            # Checked before listing, so that a list taken after a pair was
+            # written includes FFmpeg. The caller moving on counts too: it
+            # deletes each pair once scored, so a pair written and taken
+            # between two checks would otherwise keep this polling every
+            # 50 ms until FFmpeg ended.
             written = consumed[0] > 1 or complete(1)
             found = proc_util.process_tree(process.pid)
             adopt(found)
@@ -480,6 +512,7 @@ def _png_pairs(
     lister = threading.Thread(target=list_tree, name="png-backlog-tree", daemon=True)
 
     def throttle(on: bool) -> None:
+        """Suspends FFmpeg's processes (on=True) or resumes them."""
         nonlocal throttled
         with throttle_lock:
             if on == throttled:
@@ -493,17 +526,22 @@ def _png_pairs(
             throttled = on
 
     def pair(number: int) -> tuple[Path, Path]:
+        """The paths of pair `number`: (source picture, test picture)."""
         return directory / f"reference-{number:08d}.png", directory / f"test-{number:08d}.png"
 
     def complete(number: int) -> bool:
+        """Whether both pictures of pair `number` have been written."""
         reference, test = pair(number)
         return reference.exists() and test.exists()
 
     def regulate() -> None:
-        # This thread does next to nothing, but must do it on time: with
-        # every core busy it woke late and FFmpeg wrote far past the limit
-        # (median ~70-125 images against 52 with 22 busy processes on 24
-        # cores). A higher priority lets it preempt the load.
+        """Suspends FFmpeg when it is `backlog` pairs ahead of the caller,
+        and resumes it at half that."""
+        # This thread does very little, but must do it on time. At normal
+        # priority, with every core busy, it woke late and FFmpeg wrote far
+        # past the limit (a median of 70-125 pictures against 52, with 22 busy
+        # processes on 24 cores). A higher priority lets it run ahead of the
+        # load.
         proc_util.raise_current_thread_priority()
         while not stop.wait(0.01):
             index = consumed[0]
@@ -532,7 +570,7 @@ def _png_pairs(
                     if index == 1:
                         raise failure("FFmpeg produced no frame pairs for perceptual metrics.")
                     return  # the shorter input has ended
-                throttle(False)  # the caller is waiting: FFmpeg must run
+                throttle(False)  # the caller is waiting, so FFmpeg must run
                 time.sleep(0.02)
             yield reference, test
             index += 1
@@ -550,7 +588,7 @@ def _png_pairs(
 
 
 def parse_score(metric: str, output: str) -> float:
-    """Extract the scalar reference-tool score from normal text output."""
+    """Returns the score a tool printed: the last number in its output."""
     values = _NUMBER.findall(output)
     if not values:
         raise PerceptualRunError(f"{metric} did not produce a numeric score: {output.strip()[:300]}")
@@ -560,24 +598,25 @@ def parse_score(metric: str, output: str) -> float:
         raise PerceptualRunError(f"Could not parse {metric} score.") from exc
 
 
-#: Longest one tool may run on one frame pair, counting only time the job is
-#: not paused. The bundled tools take 1-2 s for a 4K pair.
+#: The longest one tool may run on one frame pair, counting only the time the
+#: job is not paused. The bundled tools take 1-2 s for a 4K pair.
 _TOOL_TIMEOUT_SECONDS = 120.0
 
-#: The display Butteraugli models for SDR pictures, in nits: Vship's
-#: default, which the GPU is given (perceptual_vship._init_handler). The
-#: tool's own is 80. An HDR picture's brightness is its own (PQ and HLG are
-#: absolute): the tool takes it from the picture, as Vship does -- its
-#: scores then agree with Vship's (2.892 against 2.881 on a PQ film),
-#: where 203 gave 0.815.
+#: The display brightness Butteraugli assumes for SDR pictures, in nits. It
+#: is Vship's default, which the GPU is given too
+#: (perceptual_vship._init_handler); the tool's own default is 80. An HDR
+#: picture's brightness is its own, because PQ and HLG are absolute, so for
+#: HDR the tool takes it from the picture, as Vship does. Its scores then
+#: agree with Vship's: 2.892 against 2.881 on a PQ film, where 203 nits gave
+#: 0.815.
 BUTTERAUGLI_INTENSITY_NITS = 203.0
 
 
 def _butteraugli_norm3(distortion_map: Path) -> float:
-    """The 3-norm of a Butteraugli distortion map (the tool's --rawdistmap,
-    a PFM): (mean of d^3)^(1/3), as Vship reports it. The tool prints its
-    own "3-norm", the mean of the 3-, 6- and 12-norms, which read about 1.8
-    times Vship's on the same frames."""
+    """Returns the 3-norm of a Butteraugli distortion map (the tool's
+    --rawdistmap, a PFM file): (mean of d^3)^(1/3), as Vship reports it.
+    The tool prints its own "3-norm", the mean of the 3-, 6- and 12-norms,
+    which reads about 1.8 times Vship's on the same frames."""
     data = distortion_map.read_bytes()
     header, size, scale, rest = data.split(b"\n", 3)
     if header.strip() != b"Pf":
@@ -587,9 +626,9 @@ def _butteraugli_norm3(distortion_map: Path) -> float:
     return float(np.mean(np.abs(values.astype(np.float64)) ** 3) ** (1.0 / 3.0))
 
 
-#: Memory one tool takes at its peak for each pixel of the pair it scores,
-#: in bytes. Measured on a 3840x2160 pair: SSIMULACRA2 1.19 GB (143 a
-#: pixel), Butteraugli 1.85 GB (223 a pixel); with a margin.
+#: The memory one tool takes at its peak, in bytes per pixel of the pair it
+#: scores, with a margin. On a 3840x2160 pair, SSIMULACRA2 took 1.19 GB (143
+#: bytes per pixel) and Butteraugli 1.85 GB (223 bytes per pixel).
 _TOOL_BYTES_PER_PIXEL = {"ssimulacra2": 160, "butteraugli": 250}
 #: The share of the free memory the tools may fill between them.
 _MEMORY_SHARE = 0.6
@@ -599,21 +638,22 @@ def scoring_workers(
     pixels: int, metrics: tuple[str, ...], concurrent_tasks: int = 1, *,
     cores: int | None = None, free_memory: int | None = None,
 ) -> int:
-    """How many frame pairs are scored at a time.
+    """Returns how many frame pairs are scored at a time.
 
     The tools score one still image on one core: 1.6 s (SSIMULACRA2) and
-    2.7 s (Butteraugli) for a 4K pair, so in turn a 10-second 4K clip took
-    13 minutes with 1 core of 24 busy. Each pair's score is its own, so
-    scoring several at once changes how soon the scores arrive, never what
-    they are.
+    2.7 s (Butteraugli) for a 4K pair. One pair at a time, a 10-second 4K
+    clip took 13 minutes with 1 core of 24 busy. Each pair's score is its
+    own, so scoring several at once changes how soon the scores arrive,
+    never what they are.
 
-    Half the logical cores, shared with whatever else the CPU's queue runs
-    at the same time (`concurrent_tasks`, as auto_threads shares libvmaf's):
-    on 24 cores (8 fast, 16 slow), 12 at once scored 6.5 times as many pairs
-    a second as 1, and 24 only 7.4 times as many, for twice the memory --
-    the cores share the memory's speed, and FFmpeg needs some to write the
-    pairs. And no more than fit in memory: a worker runs its tools in turn,
-    so it needs what the larger takes.
+    The number is half the logical cores, shared with the other tasks the
+    CPU's queue runs at the same time (`concurrent_tasks`, as auto_threads
+    shares libvmaf's threads). On 24 cores (8 fast, 16 slow), 12 at once
+    scored 6.5 times as many pairs a second as 1, and 24 only 7.4 times as
+    many, for twice the memory: the cores share the memory's speed, and
+    FFmpeg needs some of them to write the pairs. It is also no more than
+    fits in memory. A worker runs its tools one after the other, so it
+    needs the memory of the larger one.
     """
     cores = cores or os.cpu_count() or 1
     concurrent_tasks = max(1, concurrent_tasks)
@@ -626,13 +666,15 @@ def scoring_workers(
 
 
 class _EitherEvent:
-    """Set when the user's Cancel or the task's own stop is: what the tools
-    of the other pairs are ended by when one pair fails."""
+    """An event that is set when either the user's Cancel or the task's own
+    stop is. When one pair fails, the task's stop ends the tools scoring the
+    other pairs."""
 
     def __init__(self, cancel_event: threading.Event | None, stop: threading.Event) -> None:
         self._cancel_event, self._stop = cancel_event, stop
 
     def is_set(self) -> bool:
+        """Whether the run was cancelled or the task stopped."""
         return self._stop.is_set() or (self._cancel_event is not None and self._cancel_event.is_set())
 
 
@@ -642,12 +684,12 @@ def _run_metric(
     cancel_event: threading.Event | _EitherEvent | None = None,
     hdr: bool = False,
 ) -> float:
-    """Score one frame pair with a still-image tool.
+    """Scores one frame pair with a still-image tool and returns the score.
 
-    The tool process is attached to the job's handle like FFmpeg is, so
-    Pause suspends it and Cancel ends it at once. It used to run outside the
-    handle: pausing a CPU run left the tools scoring while the app said
-    "Paused", and Cancel waited for the frame in progress.
+    The tool's process is attached to the job's process handle, as FFmpeg
+    is, so that Pause suspends it and Cancel ends it at once. Outside the
+    handle, the tools would keep scoring while the app says "Paused", and
+    Cancel would wait for the frame in progress.
     """
     command = [executable, str(reference), str(test)]
     distortion_map = None
@@ -713,10 +755,13 @@ def run_perceptual_task(
     resolved_crops: tuple[CropBox | None, CropBox | None] | None = None,
     concurrent_tasks: int = 1,
 ) -> PerceptualTaskOutput:
-    """Execute the CPU reference implementation and return independent frame results.
+    """Calculates SSIMULACRA2 and Butteraugli (those of `specs`) on the CPU,
+    and returns each frame's scores.
 
+    `resolved_crops` are black-bar crops already detected, if any.
     `concurrent_tasks` is how many tasks the CPU's queue runs at once, this
-    one included: its share of the cores and memory (scoring_workers)."""
+    one included, which sets this task's share of the cores and memory (see
+    scoring_workers)."""
     if not specs or any(spec.backend_id != BACKEND_ID for spec in specs):
         raise ValueError("perceptual task requires perceptual metric specs")
     if request.recipe.resample_test is not None:
@@ -746,11 +791,12 @@ def run_perceptual_task(
         on_status(Status.decoding("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
                                   HwAccelPlan()))
     started = time.perf_counter()
-    # How the tools are to read each picture's values: as Vship reads the
-    # video's (colour.describe_png). FFmpeg tags a BT.709 picture with
-    # H.273's BT.709 curve -- the camera's -- where Vship and a display use
-    # a 2.4 gamma, and an untagged one not at all (sRGB): a tagged BT.709
-    # film scored 40.4 SSIMULACRA2 here against 55.1 on the GPU.
+    # Each picture is tagged so that the tools read its values as Vship
+    # reads the video's (colour.describe_png). FFmpeg would tag a BT.709
+    # picture with H.273's BT.709 curve, the camera's, where Vship and a
+    # display use a 2.4 gamma, and an untagged picture not at all (sRGB). A
+    # tagged BT.709 film then scored 40.4 SSIMULACRA2 here against 55.1 on
+    # the GPU.
     source_colour, distorted_colour = colour_of(source), colour_of(distorted)
     hdr = any(colour is not None and colour.hdr for colour in (source_colour, distorted_colour))
     width, height = compared_dimensions(source, distorted, request.recipe.scale_direction, source_crop, distorted_crop)
@@ -762,7 +808,8 @@ def run_perceptual_task(
     stopped = _EitherEvent(cancel_event, stop)
 
     def score(reference: Path, test: Path) -> list[float]:
-        """One pair's scores, a tool at a time, in the specs' order."""
+        """Returns one pair's scores, one tool after the other, in the specs'
+        order."""
         try:
             for picture, colour in ((reference, source_colour), (test, distorted_colour)):
                 if colour is not None:
@@ -770,19 +817,20 @@ def run_perceptual_task(
             return [_run_metric(executables[spec.key], spec.key, reference, test, process_handle, stopped, hdr)
                     for spec in specs]
         finally:
-            # Each pair is deleted once every selected tool has scored it;
-            # with the extraction held to a small backlog the folder never
-            # holds more than the backlog and the pairs being scored.
+            # Each pair is deleted once every chosen tool has scored it. As
+            # FFmpeg is held to a small backlog, the folder never holds more
+            # than the backlog and the pairs being scored.
             reference.unlink(missing_ok=True)
             test.unlink(missing_ok=True)
 
-    scored: list[Future] = []  # every pair's, in the pairs' order
+    scored: list[Future] = []  # every pair's scores to come, in the pairs' order
     in_progress: set[Future] = set()
     finished = 0
 
     def collect(wait_for_one: bool) -> None:
-        """Takes the pairs that have finished: the first failure is raised,
-        and the progress goes by how many are scored, in whatever order."""
+        """Takes in the pairs that have finished, raising the first failure.
+        The progress counts how many pairs are scored, in whatever order they
+        finish."""
         nonlocal finished
         if not in_progress:
             return
@@ -794,8 +842,9 @@ def run_perceptual_task(
             if on_progress:
                 units = finished * step
                 rate = units / max(time.perf_counter() - started, 1e-6)
-                # The estimate can run short of the real length; the
-                # total grows with the work rather than passing 100%.
+                # The estimated frame count can be lower than the real one,
+                # so the total grows with the work rather than going past
+                # 100%.
                 on_progress(units, max(total_units, units + step), rate)
 
     with tempfile.TemporaryDirectory(prefix="videometricslab-perceptual-") as temp:
@@ -814,8 +863,8 @@ def run_perceptual_task(
                 scored.append(future)
                 in_progress.add(future)
                 collect(wait_for_one=False)
-                # A pair is taken from FFmpeg only when a worker is free
-                # for it: the pairs not yet started stay FFmpeg's backlog,
+                # A pair is taken from FFmpeg only when a worker is free for
+                # it, so the pairs not yet started count in FFmpeg's backlog,
                 # which holds it back (_png_pairs).
                 while len(in_progress) >= workers:
                     collect(wait_for_one=True)
@@ -828,8 +877,8 @@ def run_perceptual_task(
             try:
                 pairs.close()  # stops FFmpeg if the scoring ended early
             finally:
-                # Before the folder goes: a tool still reading its pair
-                # held the folder open.
+                # Wait for the tools before the folder is deleted, because a
+                # tool still reading its pair holds the folder open.
                 pool.shutdown(wait=True)
     total = len(scored)
     values = {spec.key: [future.result()[position] for future in scored] for position, spec in enumerate(specs)}
@@ -851,8 +900,9 @@ def run_perceptual_task(
                 compute_backend="cpu",
                 implementation_compatibility_id=compatibility,
                 parameters={"intermediate": "png/rgb48le", "coverage_step": step,
-                            # Read as Vship reads the colours, with its
-                            # Butteraugli 3-norm and display (metric_cache).
+                            # The colours are read as Vship reads them, with
+                            # its Butteraugli 3-norm and display brightness
+                            # (metric_cache).
                             "color_tags": CPU_COLOR_TAGS,
                             **({"butteraugli_norm": "3-norm",
                                 "intensity_target": "picture's own" if hdr else BUTTERAUGLI_INTENSITY_NITS}
