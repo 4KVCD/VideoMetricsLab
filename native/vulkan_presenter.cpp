@@ -1,7 +1,10 @@
 // Video Compare's frames, drawn and presented with Vulkan.
 //
-// This is the Vulkan counterpart of native/d3d11_tonemap.cpp, which stays as
-// the fallback: the same calls (vmaf_present_*), the same pacing, and a shader
+// This is the Vulkan counterpart of native/d3d11_tonemap.cpp, which Windows
+// draws with. This one is kept as the start of the presenter for macOS and
+// Linux, which have no Direct3D; on Windows it draws only when the app is
+// asked for it (VIDEOMETRICSLAB_PRESENTER=vulkan). It has the same calls
+// (vmaf_present_*), the same pacing, and a shader
 // (native/vulkan_presenter.slang) that draws a frame with the same arithmetic:
 // NV12 or P010 turned into RGB, and HDR video mapped to SDR or, for an HDR
 // display, converted to PQ in BT.2020. NV12 and P010 are the only frames

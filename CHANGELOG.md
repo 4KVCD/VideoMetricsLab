@@ -5,7 +5,6 @@
 ### New features
 
 - Added film grain synthesis for VVC encodes in Video Compare.
-- Video Compare now draws with Vulkan (Direct3D 11 where Vulkan cannot start).
 
 ## v2.0
 

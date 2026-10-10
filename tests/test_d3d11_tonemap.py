@@ -69,13 +69,16 @@ def test_native_presentation_draws_and_fails_safely(monkeypatch, caplog, subtest
             finally:
                 presentation.stop()
             assert tried[-1] == "Direct3D 11 destroyed"
-    with subtests.test("VIDEOMETRICSLAB_PRESENTER=d3d11 sets Vulkan's presenter aside"), monkeypatch.context() as patch:
+    with subtests.test("Direct3D 11 draws, unless VIDEOMETRICSLAB_PRESENTER=vulkan asks for Vulkan"), \
+            monkeypatch.context() as patch:
         patch.setattr(vulkan_presenter, "available", lambda: True)
+        patch.delenv("VIDEOMETRICSLAB_PRESENTER", raising=False)
+        assert [name for name, _path in locked_presentation._presenters()] == ["Direct3D 11"]
+        patch.setenv("VIDEOMETRICSLAB_PRESENTER", "vulkan")
+        assert [name for name, _path in locked_presentation._presenters()] == ["Vulkan", "Direct3D 11"]
         patch.setenv("VIDEOMETRICSLAB_PRESENTER", "d3d11")
         assert [name for name, _path in locked_presentation._presenters()] == ["Direct3D 11"]
-        patch.delenv("VIDEOMETRICSLAB_PRESENTER")
-        assert [name for name, _path in locked_presentation._presenters()] == ["Vulkan", "Direct3D 11"]
-    with subtests.test("Vulkan's presenter is made ready once there are videos, not at the window's start"), \
+    with subtests.test("Vulkan's presenter, asked for, is made ready once there are videos, not at the start"), \
             monkeypatch.context() as patch:
         prepared = []
         gstreamer = SimpleNamespace(ElementFactory=SimpleNamespace(find=lambda name: None))
@@ -97,8 +100,11 @@ def test_native_presentation_draws_and_fails_safely(monkeypatch, caplog, subtest
                 thread.join()
         assert prepared == ["Vulkan", "Direct3D 11"]  # Direct3D 11's where Vulkan's cannot start
         patch.setattr(vulkan_presenter, "chosen", lambda: False)
-        gstreamer_playback._warm_up()  # Vulkan's set aside: Direct3D 11's at the start
+        gstreamer_playback._warm_up()  # not asked for: Direct3D 11's at the start
         assert prepared[2:] == ["Direct3D 11"]
+        patch.setattr(gstreamer_playback, "_PRESENTER_LOADING_STARTED", False)
+        gstreamer_playback.start_loading_presenter()  # and nothing more once there are videos
+        assert not gstreamer_playback._PRESENTER_LOADING_STARTED
     with subtests.test("Vulkan's frame is handed over holding the device lock, and presented after it"):
         presentation, calls = _presentation(monkeypatch)
         presentation._lib.vmaf_present_flip = lambda presenter: calls.append("flip") or 0

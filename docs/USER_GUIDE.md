@@ -105,10 +105,6 @@ optional. Use still mode for frame inspection or playback mode for motion.
   VVenc's film grain analysis writes) are shown with their grain, drawn on
   the GPU as a decoder would draw it: as FFmpeg does for 8-bit video, and as
   the VVC reference software does for 10- and 12-bit video.
-- Videos play through the GPU, drawn with Vulkan, or with Direct3D 11 where
-  Vulkan cannot start; the status line names which. To use Direct3D 11
-  anyway, set the environment variable `VIDEOMETRICSLAB_PRESENTER` to
-  `d3d11` before starting the app.
 - Review HDR preview and source-resolution options for your comparison.
 
 This is an A/B switching view, not two permanently side-by-side players.

@@ -1,12 +1,13 @@
 """Video Compare's Vulkan presenter (vulkan_presenter.dll, built from
 native/vulkan_presenter.cpp). It draws and presents native playback's frames
 with Vulkan as d3d11_tonemap.dll's presenter does with Direct3D 11: the same
-calls, and the same pictures. Native playback uses it where it can start,
-and the Direct3D 11 presenter where it cannot (locked_presentation).
+calls, and the same pictures.
 
-Setting the environment variable VIDEOMETRICSLAB_PRESENTER to "d3d11" makes
-playback use the Direct3D 11 presenter, to compare the two or to get round a
-graphics driver's problem.
+On Windows, native playback draws with Direct3D 11. This presenter is kept as
+the start of the one for macOS and Linux, which have no Direct3D. On Windows
+it is used only when the environment variable VIDEOMETRICSLAB_PRESENTER is
+set to "vulkan", to test it, and Direct3D 11's presenter takes over where it
+cannot start (locked_presentation).
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import os
 import sys
 from pathlib import Path
 
-#: The environment variable that can choose the Direct3D 11 presenter.
+#: The environment variable that asks for this presenter ("vulkan").
 CHOICE_VARIABLE = "VIDEOMETRICSLAB_PRESENTER"
 
 
@@ -29,9 +30,9 @@ def available() -> bool:
 
 
 def chosen() -> bool:
-    """Whether native playback tries this presenter first: built, and not
-    set aside by VIDEOMETRICSLAB_PRESENTER=d3d11."""
-    return available() and os.environ.get(CHOICE_VARIABLE, "").strip().casefold() != "d3d11"
+    """Whether native playback tries this presenter first: built, and asked
+    for by VIDEOMETRICSLAB_PRESENTER=vulkan."""
+    return available() and os.environ.get(CHOICE_VARIABLE, "").strip().casefold() == "vulkan"
 
 
 @functools.cache
@@ -62,9 +63,7 @@ def prepare() -> str | None:
 
 def check() -> str | None:
     """None if Vulkan presents Video Compare's frames here, or why it does
-    not. For the self-test."""
+    not. For the self-test, when the presenter is asked for."""
     if not available():
         return f"{library_path().name} is not built"
-    if not chosen():
-        return f"set aside by {CHOICE_VARIABLE}=d3d11"
     return prepare()

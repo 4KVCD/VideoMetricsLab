@@ -1,6 +1,6 @@
-"""Native playback's presentation -- the app's own, with Vulkan or, where
-that cannot start, Direct3D 11, on the GPU of the decoders' D3D11 device --
-and one audio-only playback pipeline."""
+"""Native playback's presentation -- the app's own, with Direct3D 11 (or
+Vulkan, when asked for), on the GPU of the decoders' D3D11 device -- and one
+audio-only playback pipeline."""
 from __future__ import annotations
 
 import ctypes
@@ -67,7 +67,7 @@ def _gstreamer_d3d11_api():
 
 def _presenters():
     """The native presenters to try, in order, by name: Vulkan's where it is
-    chosen (vulkan_presenter.chosen), then Direct3D 11's."""
+    asked for (vulkan_presenter.chosen), then Direct3D 11's."""
     vulkan = [("Vulkan", vulkan_presenter.library_path())] if vulkan_presenter.chosen() else []
     return [*vulkan, ("Direct3D 11", d3d11_tonemap.library_path())]
 
@@ -120,8 +120,8 @@ def yuv_to_rgb(matrix: str, full_range: bool, ten_bit: bool) -> tuple[float, ...
 
 class LockedPresentation:
     """Native playback's frames, drawn and presented by the app's own
-    presenter (vmaf_present_*): Vulkan's (vulkan_presenter.dll), or
-    Direct3D 11's (d3d11_tonemap.dll) where Vulkan's cannot start. Either
+    presenter (vmaf_present_*): Direct3D 11's (d3d11_tonemap.dll), or
+    Vulkan's (vulkan_presenter.dll) when it is asked for and can start. Either
     draws into a swapchain in a window of its own over `window`, on the GPU
     of the decoders' D3D11 device, and takes a frame at each refresh. A
     thread waits until the swapchain takes a frame, holding no lock, then
