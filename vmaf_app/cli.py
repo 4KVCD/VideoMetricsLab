@@ -77,6 +77,7 @@ _PROGRESS_EVERY = 10.0
 # ------------------------------------------------------------------ arguments
 
 def _metric_list(text: str) -> tuple[str, ...]:
+    """The metric keys named in a --metrics value, or every metric for "all"."""
     if text.strip().lower() == "all":
         return tuple(metric.key for metric in METRICS)
     keys = tuple(dict.fromkeys(part.strip().lower() for part in text.split(",") if part.strip()))
@@ -88,7 +89,9 @@ def _metric_list(text: str) -> tuple[str, ...]:
 
 
 def _positive(kind):
+    """An argument type that reads a number of `kind` and requires it to be above 0."""
     def parse(text: str):
+        """Reads `text` as a number above 0."""
         value = kind(text)
         if not value > 0 or (kind is float and not math.isfinite(value)):
             raise argparse.ArgumentTypeError("must be above 0")
@@ -113,6 +116,7 @@ _EXAMPLES = f"""examples:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """The command line's parser, with its compare and devices commands."""
     parser = argparse.ArgumentParser(
         prog=PROGRAM, description=f"{APP_NAME} {__version__}: video quality metrics from the command line.",
         epilog=_EXAMPLES + f"\n{PROGRAM} compare --help lists every option.",
@@ -196,12 +200,14 @@ def _where(args: argparse.Namespace, key: str) -> str | None:
 
 def expand_tests(patterns: list[str], reference: Path) -> list[Path]:
     """The test videos named: each file as given, and what each pattern
-    finds, in name order -- Windows hands a program "*.mkv" as it is. A
-    pattern often takes in the reference too (reference.mkv *.mkv): it is
-    left out of what patterns find, as is a file already listed."""
+    finds, in name order. Windows passes a pattern such as "*.mkv" to a
+    program as it is, so the program must expand it. A pattern often takes
+    in the reference too (reference.mkv *.mkv), so the reference is left out
+    of what patterns find, as is a file already listed."""
     found: list[Path] = []
 
     def same(a: Path, b: Path) -> bool:
+        """Whether two paths name the same file."""
         return a.resolve() == b.resolve()
 
     for text in patterns:
@@ -260,6 +266,8 @@ def _default_metrics(settings: Settings) -> tuple[str, ...]:
 
 
 def _backends(args: argparse.Namespace, settings: Settings) -> dict[str, str]:
+    """Where SSIMULACRA2 and Butteraugli run: as asked on the command line,
+    else as saved in Settings."""
     chosen = {}
     for key in ("ssimulacra2", "butteraugli"):
         asked = _where(args, key)
@@ -332,9 +340,9 @@ def prepare(args: argparse.Namespace, settings: Settings, source: VideoInfo) -> 
 # ------------------------------------------------------------------- progress
 
 class Progress:
-    """The run's progress on stderr: one line a video, as the window's run
-    line words it -- redrawn in place on a terminal, else repeated every
-    few seconds."""
+    """The run's progress on stderr: one line a video, worded as in the
+    window's run line. On a terminal the line is redrawn in place; elsewhere
+    it is repeated every few seconds."""
 
     def __init__(self, videos: list[Video], *, quiet: bool, stream=None, clock=time.monotonic) -> None:
         self._names = {video.job_index: video.path.name for video in videos if video.job_index is not None}
@@ -345,6 +353,7 @@ class Progress:
         self._shown = ""  # the line being redrawn
 
     def _write(self, text: str, *, keep: bool) -> None:
+        """Writes a progress line, kept or to be redrawn in place."""
         if self._quiet:
             return
         with contextlib.suppress(OSError, ValueError):
@@ -360,10 +369,12 @@ class Progress:
             self._stream.flush()
 
     def message(self, text: str) -> None:
+        """Writes a line that stays."""
         with self._lock:
             self._write(text, keep=True)
 
     def tasks(self, index: int, snapshots: list) -> None:
+        """Shows a video's progress line."""
         lines = metric_line(snapshots, False)[0]
         if not lines:
             return
@@ -376,6 +387,7 @@ class Progress:
                 self._write(text, keep=True)
 
     def done(self) -> None:
+        """Wipes the line being redrawn, at the end of the run."""
         with self._lock:
             if self._redraw and self._shown and not self._quiet:
                 with contextlib.suppress(OSError, ValueError):
@@ -395,6 +407,7 @@ def run(videos: list[Video], jobs: list[VmafJob], settings: Settings, parallel: 
     cancelled = threading.Event()
 
     def save(index: int, result: ComparisonResult) -> None:
+        """Keeps a video's result so far, and saves it to the cache."""
         video = by_job[index]
         video.result = result
         try:
@@ -404,14 +417,17 @@ def run(videos: list[Video], jobs: list[VmafJob], settings: Settings, parallel: 
             progress.message(f"{video.path.name}: the scores could not be saved ({error})")
 
     def finished(index: int, result: ComparisonResult) -> None:
+        """Saves a finished video's result and says it is done."""
         save(index, result)
         progress.message(f"{by_job[index].path.name}: done")
 
     def failed(index: int, message: str, _stderr_tail: str) -> None:
+        """Records why a video failed, and says so."""
         by_job[index].error = message
         progress.message(f"{by_job[index].path.name}: FAILED: {message}")
 
     def partly_failed(index: int, result: ComparisonResult, message: str, _stderr_tail: str, failures: dict) -> None:
+        """Saves a video's scored metrics and records why the others failed."""
         save(index, result)
         by_job[index].failures = dict(failures) or {"": message}
         progress.message(f"{by_job[index].path.name}: some metrics FAILED: {message}")
@@ -428,13 +444,14 @@ def run(videos: list[Video], jobs: list[VmafJob], settings: Settings, parallel: 
     scheduler = JobScheduler(jobs, parallel, events, gpu_metrics_together=settings.gpu_metrics_together)
     if install_cancel is not None:
         install_cancel(scheduler.cancel)
-    # On a thread of its own, the main one only waiting for it in short
-    # steps: Python runs a signal's handler between the main thread's
-    # steps, and a run on the main thread sat in waits of its own -- Ctrl+C
-    # was answered 6 seconds later, when a frame pair happened to finish.
+    # The run goes on a thread of its own, and the main thread only waits
+    # for it in short steps. Don't run it on the main thread: Python runs a
+    # signal's handler between the main thread's steps, and the run waits
+    # in long steps of its own, so Ctrl+C was answered 6 seconds late.
     failure: list[BaseException] = []
 
     def work() -> None:
+        """Runs the jobs, keeping any error for the main thread."""
         try:
             scheduler.run()
         except BaseException as error:
@@ -488,10 +505,12 @@ def metric_summary(result: ComparisonResult, key: str) -> dict | None:
 
 
 def _crop(box) -> dict | None:
+    """A crop box as --json writes it, or None."""
     return None if box is None else {"x": box.x, "y": box.y, "width": box.w, "height": box.h}
 
 
 def _media(info: VideoInfo) -> dict:
+    """A video's media information as --json writes it."""
     return {"width": info.width, "height": info.height, "fps": info.fps, "codec": info.codec_name,
             "pixel_format": info.pix_fmt, "duration": info.duration}
 
@@ -534,6 +553,7 @@ def video_status(video: Video, cancelled: bool) -> str:
 
 
 def results_table(source: VideoInfo, videos: list[Video], cancelled: bool) -> str:
+    """The run as plain-text tables, printed unless the command says "--json -"."""
     lines = [f"Reference: {source.path.name} ({_media_text(source)})"]
     for video in videos:
         lines.append("")
@@ -610,12 +630,14 @@ def summary_table(videos: list[Video]) -> list[str]:
 
 
 def _value(number) -> float | None:
+    """`number` as a number, when it is given as text."""
     if isinstance(number, str):
         return float(number)
     return number
 
 
 def _media_text(info: VideoInfo) -> str:
+    """A video's media information on one line."""
     return (f"{info.width}x{info.height}, {info.fps:.3f} fps, {info.codec_name}, {info.pix_fmt}, "
             f"{format_hms(info.duration)}")
 
@@ -652,6 +674,7 @@ def _apply_settings(settings: Settings) -> None:
 
 
 def _ffmpeg_problem() -> str | None:
+    """Why FFmpeg cannot be used, or None when it can."""
     status = check_tools()
     if status.ok:
         return None
@@ -660,6 +683,7 @@ def _ffmpeg_problem() -> str | None:
 
 
 def compare(args: argparse.Namespace, *, out=None, err=None) -> int:
+    """The compare command: compares the test videos with the reference; returns the exit code."""
     out, err = out or sys.stdout, err or sys.stderr
     settings = Settings.load()
     _apply_settings(settings)
@@ -689,7 +713,9 @@ def compare(args: argparse.Namespace, *, out=None, err=None) -> int:
         parallel = args.parallel or settings.parallel_jobs
 
         def on_interrupt(cancel) -> None:
+            """Makes Ctrl+C, Ctrl+Break and a closed console cancel the run."""
             def handler(_signal, _frame) -> None:
+                """Cancels the run."""
                 progress.message("Cancelling...")
                 cancel()
             # Ctrl+C, and Ctrl+Break or a closed console window.
@@ -704,8 +730,8 @@ def compare(args: argparse.Namespace, *, out=None, err=None) -> int:
     written = True
     if args.csv is not None:
         written = write_csvs(videos, args.csv, progress)
-    # --json - is for a program to read: the JSON alone. A file is as well
-    # as the tables.
+    # "--json -" is for a program to read, so it prints the JSON alone.
+    # "--json FILE" writes the file, and the tables are printed as well.
     json_only = args.json_path is not None and str(args.json_path) == "-"
     if json_only:
         print(json.dumps(document, indent=2), file=out)
@@ -726,6 +752,8 @@ def compare(args: argparse.Namespace, *, out=None, err=None) -> int:
 
 
 def devices(_args: argparse.Namespace, *, out=None, err=None) -> int:
+    """The devices command: prints the FFmpeg version and where each metric
+    runs; returns the exit code."""
     out = out or sys.stdout
     settings = Settings.load()
     _apply_settings(settings)
@@ -768,6 +796,7 @@ def devices(_args: argparse.Namespace, *, out=None, err=None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Runs the command line; returns the exit code."""
     for stream in (sys.stdout, sys.stderr):  # a character the console lacks is not an error
         with contextlib.suppress(AttributeError, ValueError, OSError):
             stream.reconfigure(errors="replace")

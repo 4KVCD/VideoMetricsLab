@@ -1,23 +1,24 @@
 """The window's text in the user's language.
 
-The app opens in Windows' display language when it has a translation for it
--- Settings > Window > Language can choose another -- and in English
-otherwise. Only what the window shows is translated. The log, saved results,
-exported files and the self-test stay in English: a log is read by whoever is
-fixing a problem, and the files by other programs. So do metric names (VMAF,
-SSIMULACRA2, CVVDP...) and what FFmpeg itself says.
+The app opens in Windows' display language when it has a translation for
+it, and in English otherwise. Settings > Window > Language can choose
+another. Only what the window shows is translated. The log, saved results,
+exported files and the self-test stay in English: a log is read by whoever
+is fixing a problem, and the files by other programs. Metric names (VMAF,
+SSIMULACRA2, CVVDP...) and what FFmpeg itself says stay in English too.
 
-In the code, tr("Calculate metrics"): the English text is the key into
-translations/<code>.json, and is what shows when there is no translation.
-Placeholders are str.format fields, tr("{done} done", done=3); a literal
-brace in such a text is doubled. ntr() takes the form for a number by the
-language's plural rules. N_() marks English text kept as data (a label in a
-table of definitions) that is translated with tr() where it is shown.
+In the code, tr("Calculate metrics") translates a text. The English text is
+the key into translations/<code>.json, and is what shows when there is no
+translation. Placeholders are str.format fields, as in tr("{done} done",
+done=3), and a literal brace in such a text is doubled. ntr() picks the form
+for a number by the language's plural rules. N_() marks English text kept as
+data (a label in a table of definitions), which tr() translates where it is
+shown.
 
-The core modules speak English: their statuses and errors go to the log as
-they are. tr_message() translates such a message as the window shows it, when
-it has one of the shapes in MESSAGE_TEMPLATES; anything else -- FFmpeg's own
-words, a path -- stays as it came.
+The core modules speak English, and their statuses and errors go to the log
+as they are. tr_message() translates such a message where the window shows
+it, when it has one of the shapes in MESSAGE_TEMPLATES. Anything else, such
+as FFmpeg's own words or a path, stays as it came.
 """
 from __future__ import annotations
 
@@ -70,8 +71,8 @@ def N_(text: str) -> str:  # noqa: N802 -- gettext's name for it
 
 
 def language_for(ui_language: str) -> str:
-    """The translation for a language name as Windows gives it -- "de-DE",
-    "zh-Hant-TW", "pt-BR" -- or "en" when there is none.
+    """The translation for a language name as Windows gives it ("de-DE",
+    "zh-Hant-TW", "pt-BR"), or "en" when there is none.
 
     Chinese in Taiwan, Hong Kong or Macau, or written in Traditional
     characters, gets Traditional Chinese; any other Chinese, Simplified.
@@ -123,10 +124,13 @@ def set_language(code: str) -> str:
 
 
 def language() -> str:
+    """The code of the language the window is shown in, such as "en" or "de"."""
     return _language
 
 
 def _active() -> bool:
+    """Whether text is translated on this thread now: a language other than
+    English, and not inside in_english()."""
     return _language != "en" and not getattr(_local, "english", False)
 
 
@@ -191,10 +195,10 @@ def ntr(singular: str, plural: str, count: int, /, **values: object) -> str:
 
 
 # ---------------------------------------------------------------- core messages
-#: The shapes of the statuses and errors the core modules send that the
-#: window shows, as templates: "{name}" matches any text, which is itself
-#: translated when it is a message too. Keep in step with the messages'
-#: wording in vmaf_app.core; one that no longer matches is shown in English.
+#: The shapes of the core modules' statuses and errors that the window shows,
+#: as templates. "{name}" matches any text, which is itself translated when
+#: it is a message too. Keep these in step with the messages' wording in
+#: vmaf_app.core: a message that matches none is shown in English.
 MESSAGE_TEMPLATES: tuple[str, ...] = (
     # --- a video's steps on the run line ("distorted" shown as "test video")
     "Detecting black bars in source and test video…",
@@ -371,6 +375,8 @@ def _bare(text: str) -> str:
 
 
 def _pattern(template: str) -> re.Pattern[str]:
+    """A regular expression matching a message of the shape of `template`, with
+    a named group for each placeholder."""
     parts = re.split(r"\{(\w+)\}", _bare(template))
     regex = "".join(
         re.escape(part).replace(re.escape("…"), r"(?:…|\.\.\.)") if i % 2 == 0 else f"(?P<{part}>.+?)"
@@ -381,8 +387,9 @@ def _pattern(template: str) -> re.Pattern[str]:
 
 @functools.cache
 def _patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
-    """Most specific first -- the most fixed text -- so "Vship {metric}
-    failed: {error}" is tried before "{metrics} failed: {error}"."""
+    """The message templates as patterns, the most specific first (the one
+    with the most fixed text), so that "Vship {metric} failed: {error}" is
+    tried before "{metrics} failed: {error}"."""
     ordered = sorted(MESSAGE_TEMPLATES, key=lambda t: -len(re.sub(r"\{\w+\}", "", t)))
     return tuple((template, _pattern(template)) for template in ordered)
 
@@ -398,12 +405,13 @@ def tr_message(text: str) -> str:
 
 @functools.lru_cache(maxsize=1024)
 def _translate_line(line: str) -> str:
+    """One line of a core message in the window's language, or the line as it came."""
     if not line.strip():
         return line
     if line in _strings:
         return _strings[line]
-    # Matched without its closing "..." or full stop, which is put back in
-    # the translation's own form -- or left off, as the line had it.
+    # Matched without its closing "..." or full stop. The ending is put back
+    # in the translation's own form, or left off if the line had none.
     bare = _bare(line)
     ending = line[len(bare):]
     for template, pattern in _patterns():
