@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://4kvcd.github.io/VideoMetricsLab/sitemap.xml

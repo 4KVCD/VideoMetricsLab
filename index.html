@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VideoMetricsLab – video quality metrics on any GPU: VMAF, SSIMULACRA2, Butteraugli, PSNR, SSIM, XPSNR</title>
+<meta name="description" content="VideoMetricsLab is a free Windows app for measuring and comparing video quality: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR, accelerated on NVIDIA, AMD and Intel GPUs, with frame-exact A/B playback.">
+<link rel="canonical" href="https://4kvcd.github.io/VideoMetricsLab/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="VideoMetricsLab – video quality metrics on any GPU">
+<meta property="og:description" content="Measure and compare video encodes: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR on NVIDIA, AMD and Intel GPUs.">
+<meta property="og:url" content="https://4kvcd.github.io/VideoMetricsLab/">
+<meta property="og:image" content="https://4kvcd.github.io/VideoMetricsLab/img/02-metric-graphs.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "VideoMetricsLab",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Windows 10, Windows 11",
+  "softwareVersion": "2.0",
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+  "license": "https://opensource.org/licenses/MIT",
+  "url": "https://4kvcd.github.io/VideoMetricsLab/",
+  "downloadUrl": "https://github.com/4KVCD/VideoMetricsLab/releases/latest",
+  "codeRepository": "https://github.com/4KVCD/VideoMetricsLab",
+  "description": "A free Windows app for measuring and comparing video quality: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR, accelerated on NVIDIA, AMD and Intel GPUs."
+}
+</script>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --card: #f6f8fa; --line: #d1d9e0;
+  --accent: #0969da; --accent-fg: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --card: #151b23; --line: #3d444d;
+    --accent: #4493f8; --accent-fg: #0d1117;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 -apple-system, "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif; }
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 2.4rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; margin: 48px 0 12px; }
+h3 { font-size: 1.1rem; margin: 24px 0 6px; }
+p.lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 24px; }
+a { color: var(--accent); }
+.buttons { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 8px; }
+.button { display: inline-block; padding: 10px 20px; border-radius: 8px; font-weight: 600;
+  text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--card); }
+.button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.note { color: var(--muted); font-size: 0.9rem; }
+.news { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 32px 0; }
+.news h2 { margin: 0 0 8px; font-size: 1.2rem; }
+ul { padding-left: 1.3em; }
+li { margin: 4px 0; }
+figure { margin: 24px 0; }
+figure img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; display: block; }
+figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
+footer { border-top: 1px solid var(--line); margin-top: 56px; padding-top: 16px; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>VideoMetricsLab</h1>
+<p class="lead">Video quality metrics on any GPU, and frame-exact A/B comparison of your encodes.</p>
+
+<p>VideoMetricsLab is a free Windows app for measuring and comparing video quality. Add a source and any number
+of encodes, and it calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR in
+one run, accelerated on NVIDIA, AMD and Intel GPUs. Per-frame graphs show exactly where each encode falls behind,
+and frame-exact playback switches instantly between the source and each encode, so you can see the differences
+the scores point to. It's built for anyone tuning encoders, comparing codecs or settings, or checking a release
+before it ships.</p>
+
+<div class="buttons">
+  <a class="button primary" href="https://github.com/4KVCD/VideoMetricsLab/releases/latest">Download for Windows</a>
+  <a class="button" href="https://github.com/4KVCD/VideoMetricsLab">Source code on GitHub</a>
+</div>
+<p class="note">Windows 10 or 11 (x64). Needs FFmpeg 9 or newer with libvmaf, installed separately. Free and open
+source, under the MIT licence.</p>
+
+<section class="news">
+<h2>New in v2.0</h2>
+<p>v2.0 is a major performance update. VMAF, VMAF NEG and VMAF v1 now run on any GPU, the other metrics and
+Video Compare are several times faster, and the app uses far less memory. See the
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.0">release notes</a>.</p>
+</section>
+
+<h2>Features</h2>
+
+<h3>Metrics</h3>
+<ul>
+<li>VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.</li>
+<li>VMAF models for standard, phone, 4K and HFR viewing.</li>
+</ul>
+
+<h3>Fast on any GPU</h3>
+<ul>
+<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD and Intel GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF v1 up to <strong>17x</strong> faster.</li>
+<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on the GPU with Vship (CUDA, HIP or Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.</li>
+<li>PSNR, SSIM and XPSNR <strong>2.7x-11x</strong> faster, calculated in the app.</li>
+<li>GPU video decoding, with software decoding for formats the GPU can't handle, such as VVC.</li>
+</ul>
+
+<h3>Compare and inspect</h3>
+<ul>
+<li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR.</li>
+<li>Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.</li>
+<li>Bitrate by frame, second or GOP.</li>
+</ul>
+
+<h3>Workflow</h3>
+<ul>
+<li>Black bars and resolution mismatches handled automatically.</li>
+<li>Results saved and reloaded automatically.</li>
+<li>Drag and drop videos, sort and reorder the list, and a dark theme.</li>
+<li>A command line, <code>VideoMetricsLab-cli</code>, for scripts.</li>
+<li>Two test videos calculated in parallel on many-core CPUs.</li>
+</ul>
+
+<h2>Screenshots</h2>
+<figure>
+<img src="img/01-videos.png" width="3500" height="2013" loading="lazy" alt="VideoMetricsLab's Videos tab with H.264 and HEVC test encodes and their VMAF, PSNR, SSIM and XPSNR scores">
+<figcaption>Videos: configure each test encode, inspect its codec and bitrate, and calculate many metrics in one run.</figcaption>
+</figure>
+<figure>
+<img src="img/02-metric-graphs.png" width="3500" height="2013" loading="lazy" alt="Per-frame VMAF graph, statistics and per-frame delta for two test encodes">
+<figcaption>Metric graphs: per-frame curves and statistics, with both encodes' values and their difference at the same moment.</figcaption>
+</figure>
+<figure>
+<img src="img/03-video-compare.jpg" width="3500" height="2012" loading="lazy" alt="Frame-exact Video Compare view switching between the source and an encode">
+<figcaption>Video Compare: switch instantly between the source and each encode during playback, or step to an exact frame.</figcaption>
+</figure>
+<figure>
+<img src="img/04-bitrate-viewer.png" width="3500" height="2013" loading="lazy" alt="Bitrate Viewer showing two test encodes' bitrate by frame">
+<figcaption>Bitrate Viewer: bitrate by frame, second or GOP, without calculating any metric.</figcaption>
+</figure>
+
+<footer>
+VideoMetricsLab by 4KVCD ·
+<a href="https://github.com/4KVCD/VideoMetricsLab">GitHub</a> ·
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases">Releases</a> ·
+<a href="https://github.com/4KVCD/VideoMetricsLab/blob/master/CHANGELOG.md">Changelog</a> ·
+<a href="https://github.com/4KVCD/VideoMetricsLab/discussions">Discussions</a> ·
+MIT licence
+</footer>
+</main>
+</body>
+</html>
