@@ -47,6 +47,8 @@ def fields(text: str) -> list[tuple[str, str]]:
 
 
 def problems(code: str, catalog: dict, expected: tuple[set[str], dict[str, str]]) -> list[str]:
+    """What is wrong with the `code` catalog: texts missing, stale, empty, or
+    with other placeholders."""
     strings, plurals = expected
     found: list[str] = []
     given = catalog.get("strings", {})
@@ -73,6 +75,7 @@ def problems(code: str, catalog: dict, expected: tuple[set[str], dict[str, str]]
 
 
 def main(argv: list[str]) -> int:
+    """Prints the keys, or checks every catalog; returns the exit code."""
     expected = keys()
     if argv[:1] == ["keys"]:
         strings, plurals = expected

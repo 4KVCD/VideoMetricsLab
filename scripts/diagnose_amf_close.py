@@ -61,6 +61,7 @@ def score(reference: Path, distorted: Path, seconds: float) -> int:
 
 
 def main() -> int:
+    """Runs the comparison and reports whether it finished and how the decoders closed."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("reference", type=Path)
     parser.add_argument("distorted", type=Path)

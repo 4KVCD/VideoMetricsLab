@@ -61,6 +61,7 @@ PCI_VENDORS = {"intel": 0x8086, "amd": 0x1002}
 
 def clip(path: Path, encoder: list[str], pix_fmt: str, seconds: float = 2.0, size: str = "1280x720",
          extra: list[str] | None = None) -> Path:
+    """Encodes a test clip of testsrc2 with `encoder` into `path`."""
     # Captured: SVT-AV1 writes its settings whatever FFmpeg's log level is,
     # thirty lines into the report this prints.
     made = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
@@ -72,6 +73,7 @@ def clip(path: Path, encoder: list[str], pix_fmt: str, seconds: float = 2.0, siz
 
 
 def gpu_sums(info, plan, backend, frames=None):
+    """The checksum and time stamp of each picture the GPU decoder gives."""
     stream = nv.GpuFrameStream(info, plan, backend=backend)
     out = np.empty(plan.frame_bytes, dtype=np.uint8)
     sums, stamps = [], []
@@ -107,6 +109,7 @@ def cpu_sums(path, plan, frames=None):
 
 
 def check_pictures(path: Path, backend: str, crop: CropBox | None = None, seconds: float = 0.0) -> str:
+    """Checks that the GPU decoder gives the same pictures as FFmpeg; returns a report line."""
     info = probe_video(path)
     # The first `seconds` of it, as a count of pictures for both decodes.
     frames = max(1, round(seconds * info.fps)) if seconds > 0 and info.fps > 0 else None
@@ -142,6 +145,7 @@ def refused(path: Path, backend: str) -> str:
 
 
 def check_speed(path: Path, backend: str, frames: int = 600) -> str:
+    """Times the GPU decoder on `frames` pictures, with the CPU it uses; returns a report line."""
     info = probe_video(path)
     plan = nv.plan_decode(info, None)
     stream = nv.GpuFrameStream(info, plan, backend=backend)
@@ -149,6 +153,7 @@ def check_speed(path: Path, backend: str, frames: int = 600) -> str:
     me = psutil.Process()
 
     def cpu():
+        """The CPU seconds this process and its children have used."""
         total = sum(me.cpu_times()[:2])
         for child in me.children(recursive=True):
             with contextlib.suppress(psutil.Error):
@@ -183,6 +188,8 @@ def check_speed(path: Path, backend: str, frames: int = 600) -> str:
 
 
 def check_scores(source: Path, backend: str, work: Path) -> str:
+    """Checks that SSIMULACRA2 scores the same with the GPU decoder as with
+    FFmpeg; returns a report line."""
     from vmaf_app.core import perceptual_vship as vship
     from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
     from vmaf_app.core.models import CropMode, VmafOptions
@@ -209,7 +216,10 @@ def check_scores(source: Path, backend: str, work: Path) -> str:
     native_lines: list[str] = []
 
     class Capture(logging.Handler):
+        """Keeps the log lines that say a pass was decoded in the scoring process."""
+
         def emit(self, record: logging.LogRecord) -> None:
+            """Keeps the record if it says a pass was decoded in the scoring process."""
             if "in the scoring process" in record.getMessage():
                 native_lines.append(record.getMessage())
 
@@ -324,6 +334,7 @@ def scaled(info, plan, backend, frames):
 
 
 def check_scaling(path: Path, backend: str, frames: int = 240) -> list[str]:
+    """Checks the GPU decoder scaling down and up against FFmpeg; returns report lines."""
     from dataclasses import replace
 
     info = probe_video(path)
@@ -350,6 +361,7 @@ def check_scaling(path: Path, backend: str, frames: int = 240) -> list[str]:
 
 
 def main() -> None:
+    """Runs every check on each video named, or on test clips made here."""
     arguments = sys.argv[1:]
     seconds = 60.0
     if "--seconds" in arguments:

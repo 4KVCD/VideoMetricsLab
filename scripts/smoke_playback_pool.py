@@ -21,6 +21,7 @@ from vmaf_app.ui.video_compare_view import VideoCompareView
 
 
 def main():
+    """Plays the videos through the playback pool and reports what it saw."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("distorted", nargs="+", type=Path)
@@ -40,6 +41,7 @@ def main():
     source = probe_video(args.source)
 
     def crop(info):
+        """The crop to --crop-height for `info`, or None."""
         height = args.crop_height
         if height and height < info.height:
             return CropBox(info.width, height, 0, (info.height - height) // 2)
@@ -86,6 +88,7 @@ def main():
                     original_pull = pool._pull_sample
 
                     def stalled_pull(key, sink, original=original_pull):
+                        """Gives no test-video frame between 4 and 6 seconds in, to stall it."""
                         if key[0] == "distorted" and 4 < time.monotonic() - start < 6:
                             return None
                         return original(key, sink)

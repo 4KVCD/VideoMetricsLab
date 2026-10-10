@@ -14,14 +14,15 @@ import sys
 
 
 def _setup() -> None:
+    """Points GStreamer at the copies inside the bundle, before the app imports it."""
     bundle = getattr(sys, "_MEIPASS", None)
     if bundle is None:
         return  # running from source; the .pth has already done this
     # The GStreamer packages are shipped as data directories at the top of
     # the bundle. _MEIPASS is already on sys.path, so they import as normal
-    # packages and compute their own paths from __file__ -- pointing at the
-    # copies inside this bundle rather than at a machine that has GStreamer
-    # installed some other way.
+    # packages and compute their own paths from __file__. Those paths point
+    # at the copies inside this bundle, not at a GStreamer installed on the
+    # machine some other way.
     if bundle not in sys.path:
         sys.path.insert(0, bundle)
     try:
@@ -39,11 +40,10 @@ def _setup() -> None:
         return
     # A registry cached next to a previous install (or from the build
     # machine) makes GStreamer look for plugins at paths that do not exist
-    # here. Keep it beside the user's own data instead. Set outright: the
-    # setup above has always set it already -- to one in the shared temp
-    # folder, %TEMP%/gstreamer-1.0, which any app built on the same wheels
-    # rescans and rewrites for its own plugins -- so a setdefault here never
-    # took effect.
+    # here. Keep it beside the user's own data instead. Don't use
+    # setdefault: the setup above has already set it, to one in the shared
+    # temp folder %TEMP%/gstreamer-1.0, which any app built on the same
+    # wheels rescans and rewrites for its own plugins.
     os.environ["GST_REGISTRY_1_0"] = os.path.join(
         os.path.expanduser("~"), ".videometricslab", "gstreamer-registry.bin"
     )

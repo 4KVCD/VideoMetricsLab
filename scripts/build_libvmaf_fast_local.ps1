@@ -1,6 +1,6 @@
 # Builds libvmaf-fast (https://github.com/4KVCD/libvmaf-fast) from the latest
-# commit of a branch of its local clone -- the fast branch of
-# Documents\libvmaf-fast by default -- into vmaf_app/tools, where
+# commit of a branch of its local clone (the fast branch of
+# Documents\libvmaf-fast by default) into vmaf_app/tools, where
 # fetch_libvmaf_fast.ps1 puts a release:
 #   libvmaf/libvmaf.dll          libvmaf with CUDA
 #   vmaf_vulkan/vmaf_vulkan.dll  VMAF's features with Vulkan

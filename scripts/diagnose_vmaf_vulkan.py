@@ -66,6 +66,7 @@ DECOUPLE_PASS = 11  # adm_decouple (gain limit 100) scale 0
 
 
 def slot_name(slot: int) -> str:
+    """The name of the sum in `slot` of the scorer's results."""
     if slot == 0:
         return "motion: SAD"
     if slot < 37:
@@ -77,6 +78,7 @@ def slot_name(slot: int) -> str:
 
 
 def read_buffer(scorer, which: int, size: int) -> np.ndarray:
+    """Reads `size` bytes of the scorer's working buffer `which` as 32-bit words."""
     lib = scorer._lib
     lib.vv_read_buffer.restype = ctypes.c_int
     lib.vv_read_buffer.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint64]
@@ -87,11 +89,13 @@ def read_buffer(scorer, which: int, size: int) -> np.ndarray:
 
 
 def blocks(words: np.ndarray) -> list[str]:
+    """A short hash of each 256-word block of `words`."""
     return [hashlib.sha256(words[start:start + BLOCK_WORDS].tobytes()).hexdigest()[:10]
             for start in range(0, len(words), BLOCK_WORDS)]
 
 
 def full_sums(device: int, bits: int, variant: int = 0) -> list[list[int]]:
+    """The sums of each probe frame, scored on `device` at `bits` bits."""
     reference, distorted = vmaf_vulkan.probe_frames(bits)
     scorer = vmaf_vulkan.VulkanScorer(WIDTH, HEIGHT, bits, {}, device=device, decouple_variant=variant)
     try:
@@ -135,6 +139,7 @@ def after_passes(device: int, bits: int, count: int, variant: int = 0) -> tuple[
 
 
 def write_reference(device: int) -> None:
+    """Writes the reference sums and buffers from a GPU that passes the probe."""
     document = {}
     for bits in (8, 10):
         steps = []
@@ -158,6 +163,7 @@ def write_reference(device: int) -> None:
 
 
 def diagnose(device: int, name: str) -> bool:
+    """Compares `device` with the reference and prints what differs; returns whether all matched."""
     reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
     print(f"Vulkan VMAF diagnosis on GPU {device}: {name}")
     all_same = True
@@ -234,6 +240,7 @@ def diagnose(device: int, name: str) -> bool:
 
 
 def main() -> int:
+    """Diagnoses a GPU, or writes the reference with --write-reference."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--device", type=int, help="Vulkan's number of the GPU (default: the one the app would use)")
     parser.add_argument("--write-reference", action="store_true")

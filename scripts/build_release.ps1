@@ -42,7 +42,7 @@ try {
     # 1. The native libraries, built from this commit's source every time:
     #    the GPU HDR->SDR shader and the GPU frame decoders the GPU metrics
     #    read their frames from (NVIDIA's, Intel's and AMD's). The app runs
-    #    without them -- FFmpeg tone maps and decodes instead -- which is
+    #    without them (FFmpeg tone maps and decodes instead), which is
     #    exactly why a release missing one would look fine. They are not in
     #    git, so ones left from another commit would be stale; a release
     #    needs g++ (MinGW-w64) and builds them, or does not build at all.

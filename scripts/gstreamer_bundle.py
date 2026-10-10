@@ -5,11 +5,11 @@ this app reaches 95. It plays two videos through D3D11 and one
 soundtrack; it never encodes, streams, captions, or talks to a network. So
 the bundle is built from an allow-list of plugins, their DLL dependencies
 found by reading import tables, and the handful of files that imports cannot
-reveal -- not by copying the wheels and hoping.
+reveal. Copying the wheels whole would ship what the app never uses.
 
 Dependencies are computed, never listed by hand, so upgrading the wheels
-needs no edit here unless a plugin is renamed. The list of plugins IS hand
-maintained, on purpose: every entry says what the app uses it for.
+needs no edit here unless a plugin is renamed. The list of plugins is kept by
+hand on purpose: every entry says what the app uses it for.
 
 Nothing in the development installation is modified or deleted.
 """
@@ -95,8 +95,8 @@ KEEP_TOOLS = (
 #: Loaded by the app itself through ctypes: GStreamer's D3D11 library, by
 #: name (vmaf_app/core/locked_presentation.py), and dav1d, by its path in the
 #: gstreamer_plugins_libs package, which the software frame decoder decodes
-#: AV1 with (vmaf_app/core/gpu_frames.py) -- also GStreamer's dav1d plugin's
-#: today, kept should that go.
+#: AV1 with (vmaf_app/core/gpu_frames.py). GStreamer's dav1d plugin uses it
+#: too today; it is listed here in case that plugin is dropped.
 KEEP_LIBRARIES = ("gstd3d11-1.0-0.dll", "dav1d.dll")
 
 #: Copied whole: the gi bindings the app imports, and every typelib (3 MB
@@ -163,6 +163,7 @@ def dependency_closure(seeds: set[Path], binaries: list[Path], imports=pe_import
 
 
 def _tree_files(site: Path, tree: str) -> list[Path]:
+    """The files under `tree` in the site-packages folder `site`."""
     root = site / tree
     if not root.is_dir():
         return []
@@ -246,10 +247,12 @@ def collect(site: Path) -> tuple[list[tuple[str, str]], dict]:
 
 
 def _entry(site: Path, path: Path) -> dict:
+    """A file of the bundle as the report lists it: its path and size."""
     return {"path": path.relative_to(site).as_posix(), "bytes": path.stat().st_size}
 
 
 def main() -> None:
+    """Prints what the GStreamer bundle would contain."""
     parser = argparse.ArgumentParser(description="Show what the GStreamer bundle would contain.")
     parser.add_argument("--site", type=Path, default=Path(sysconfig.get_paths()["purelib"]))
     parser.add_argument("--json", action="store_true", help="the full report as JSON")

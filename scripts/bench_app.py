@@ -1,6 +1,6 @@
 """VideoMetricsLab's benchmark (docs/benchmark.md): an older release of the app
-against this one, in whole runs as the Run button makes them -- decoding and
-scoring -- on this PC.
+against this one, in whole runs as the Run button makes them (decoding and
+scoring), on this PC.
 
 Only what changed since v1.4 is measured, each cell one optimization:
 
@@ -91,16 +91,20 @@ HIDE_NVIDIA = {"CUDA_VISIBLE_DEVICES": "-1", "VK_LOADER_DRIVERS_DISABLE": "*nv-v
 
 
 def cell_id(cell: dict, video: str) -> str:
+    """The name of a benchmark cell for one video, as "group/name/video"."""
     return f"{cell['group']}/{cell['name']}/{video}"
 
 
 def file_name(cell_key: str) -> str:
+    """`cell_key` made safe to use as a file name."""
     return re.sub(r"[^A-Za-z0-9.-]+", "_", cell_key)
 
 
 # ----------------------------------------------------------------- job object
 
 class _Accounting(ctypes.Structure):
+    """JOBOBJECT_BASIC_ACCOUNTING_INFORMATION: a job object's CPU times."""
+
     _fields_ = [("TotalUserTime", ctypes.c_longlong), ("TotalKernelTime", ctypes.c_longlong),
                 ("ThisPeriodTotalUserTime", ctypes.c_longlong), ("ThisPeriodTotalKernelTime", ctypes.c_longlong),
                 ("TotalPageFaultCount", wintypes.DWORD), ("TotalProcesses", wintypes.DWORD),
@@ -108,6 +112,8 @@ class _Accounting(ctypes.Structure):
 
 
 class _BasicLimit(ctypes.Structure):
+    """JOBOBJECT_BASIC_LIMIT_INFORMATION, part of _ExtendedLimit."""
+
     _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
                 ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
                 ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
@@ -115,6 +121,8 @@ class _BasicLimit(ctypes.Structure):
 
 
 class _ExtendedLimit(ctypes.Structure):
+    """JOBOBJECT_EXTENDED_LIMIT_INFORMATION: a job object's peak memory."""
+
     _fields_ = [("BasicLimitInformation", _BasicLimit), ("IoInfo", ctypes.c_ulonglong * 6),
                 ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
                 ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
@@ -133,16 +141,19 @@ class Job:
             raise OSError(ctypes.get_last_error(), "the run could not be put in a job object")
 
     def _query(self, kind: int, info):
+        """Reads one kind of information about the job object into `info`."""
         if not self._k32.QueryInformationJobObject(wintypes.HANDLE(self.handle), kind, ctypes.byref(info),
                                                    ctypes.sizeof(info), None):
             raise OSError(ctypes.get_last_error(), "QueryInformationJobObject")
         return info
 
     def cpu_seconds(self) -> float:
+        """The CPU seconds used by every process in the job so far."""
         info = self._query(1, _Accounting())
         return (info.TotalUserTime + info.TotalKernelTime) / 1e7
 
     def peak_memory(self) -> int:
+        """The most memory the job used at once, in bytes."""
         return int(self._query(9, _ExtendedLimit()).PeakJobMemoryUsed)
 
 
@@ -216,15 +227,19 @@ def run_one(args) -> None:
     started = [0.0]
 
     def progress(_index, cur, total, _fps):
+        """Records the time, frames done and CPU seconds of a progress report."""
         timeline.append((time.perf_counter() - started[0], int(cur), int(total), job.cpu_seconds()))
 
     def finished(_index, result):
+        """Keeps the finished run's result."""
         results["result"] = result
 
     def failed(_index, message, tail):
+        """Records why the run failed."""
         failures.append({"message": message, "stderr": tail[-2000:]})
 
     def partly(_index, result, message, tail, why):
+        """Keeps the result of a run with some metrics failed, and why they failed."""
         results["result"] = result
         failures.append({"message": message, "stderr": tail[-2000:], "metrics": {k: str(v) for k, v in why.items()}})
 
@@ -283,10 +298,14 @@ def _at(timeline, frame: float):
 # ------------------------------------------------------------- the PC's state
 
 class _CounterValue(ctypes.Structure):
+    """PDH_FMT_COUNTERVALUE: one performance counter value."""
+
     _fields_ = [("CStatus", wintypes.DWORD), ("doubleValue", ctypes.c_double)]
 
 
 class _CounterItem(ctypes.Structure):
+    """PDH_FMT_COUNTERVALUE_ITEM_W: a counter instance's name and value."""
+
     _fields_ = [("szName", ctypes.c_wchar_p), ("FmtValue", _CounterValue)]
 
 
@@ -342,6 +361,7 @@ def _mine() -> set[int]:
 
 
 def _cpu_times() -> dict[int, tuple[str, float]]:
+    """Every process's name and CPU seconds so far, by process ID."""
     import psutil
     times = {}
     for p in psutil.process_iter(["name", "cpu_times"]):
@@ -357,8 +377,8 @@ _KERNEL = {"system idle process", "system", "registry", "memcompression", "memor
 
 def others_busy(engines: GpuEngines, before: dict, seconds: float) -> tuple[list[str], dict]:
     """Other processes that used a GPU engine or a CPU thread since `before`
-    (_cpu_times) -- an encoder another project runs here, say -- and the
-    CPU times now, for the next call."""
+    (_cpu_times), such as an encoder another project runs here, and the CPU
+    times now, for the next call."""
     mine, now, gpu = _mine(), _cpu_times(), engines.sample()
     busy = [f"{now.get(pid, ('?',))[0]} {pid} (GPU {use:.0f}%)" for pid, use in gpu.items()
             if pid not in mine and use > BUSY_GPU_PERCENT]
@@ -397,6 +417,7 @@ class Watch:
         self._thread.start()
 
     def _loop(self) -> None:
+        """Samples the other processes every 5 seconds until stopped."""
         before, last = _cpu_times(), set()
         while not self._stop.wait(5):
             busy, before = others_busy(self._engines, before, 5)
@@ -405,6 +426,7 @@ class Watch:
             last = names
 
     def stop(self) -> list[str]:
+        """Stops watching; returns the processes that disturbed the run."""
         self._stop.set()
         self._thread.join()
         return sorted(set(self.disturbed))
@@ -421,6 +443,7 @@ class VramSampler:
             stdout=self._file, stderr=subprocess.DEVNULL)
 
     def stop(self) -> tuple[int, int]:
+        """Stops sampling; returns the VRAM used at the start and at most, in MB."""
         self._process.terminate()
         self._process.wait(10)
         self._file.close()
@@ -440,6 +463,7 @@ def read_files(paths) -> None:
 # -------------------------------------------------------------------- driver
 
 def _version(checkout: Path) -> str:
+    """The app version of the checkout at `checkout`."""
     text = (checkout / "vmaf_app" / "__init__.py").read_text(encoding="utf-8")
     return re.search(r"__version__\s*=\s*[\"']([^\"']+)", text).group(1)
 
@@ -467,17 +491,20 @@ def _chosen(key: str, group: str, only: list[str]) -> bool:
 
 
 def _frames(cell: dict, rate: float | None) -> int:
+    """How many frames a run of `cell` scores: about TARGET_SECONDS at `rate`, within the limits."""
     fewest = FEWEST_CPU_FRAMES if cell.get("perceptual_cpu") else FEWEST_FRAMES
     wanted = rate * TARGET_SECONDS / 0.8 if rate else fewest  # the steady window is 80% of the frames
     return int(min(max(wanted, fewest), 230 * VIDEO_FPS))
 
 
 def bench(args) -> None:
+    """The bench command: runs every cell with both versions, and writes the results to --out."""
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     logfile = open(out / "bench.log", "a", encoding="utf-8")  # noqa: SIM115 -- the whole run's log
 
     def log(text: str) -> None:
+        """Prints `text` with the time, and adds it to the run log."""
         line = f"{time.strftime('%H:%M:%S')} {text}"
         print(line, flush=True)
         logfile.write(line + "\n")
@@ -637,6 +664,7 @@ def compare_scores(old: dict, new: dict) -> str:
 
 
 def main() -> None:
+    """Runs the bench, run or report command."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     many = sub.add_parser("bench", help="every cell, both versions")

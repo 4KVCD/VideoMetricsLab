@@ -43,6 +43,7 @@ NAMES = {column: name for name, column in FEATURES.items()}
 
 
 def cuda_features(scorer: vmaf_cuda.GpuScorer, count: int) -> np.ndarray:
+    """The features libvmaf CUDA calculated for each of `count` frames."""
     lib = vmaf_cuda._load()
     lib.vmaf_feature_score_at_index.restype = ctypes.c_int
     lib.vmaf_feature_score_at_index.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
@@ -58,6 +59,7 @@ def cuda_features(scorer: vmaf_cuda.GpuScorer, count: int) -> np.ndarray:
 
 
 def main() -> int:
+    """Scores a whole video pair with CUDA and Vulkan VMAF, and writes both to OUT."""
     parser = argparse.ArgumentParser()
     parser.add_argument("reference")
     parser.add_argument("distorted")

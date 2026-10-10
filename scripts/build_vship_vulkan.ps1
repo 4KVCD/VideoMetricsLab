@@ -1,5 +1,5 @@
 # Builds Vship's Vulkan library (vmaf_app/tools/vship/vulkan/libvship.dll)
-# from a pinned commit -- the v5.1.2 release's tag -- with the MinGW-w64 g++
+# from a pinned commit (the v5.1.2 release's tag) with the MinGW-w64 g++
 # that builds the D3D11 tone mapper (WinLibs, UCRT, POSIX threads).
 #
 # Built rather than taken from the release, as the bundle has been since
@@ -56,11 +56,12 @@ try {
         ($makefile | Select-String "^VSHIP_VERSION_$part=(\d+)").Matches[0].Groups[1].Value
     }
     # The Makefile's Vulkan flags. libstdc++, libgcc and winpthreads are linked
-    # in, so the DLL needs only vulkan-1.dll and Windows' own runtime. No link
-    # time in its header, and no image base of ld's choosing -- ld hashes the
-    # output file's path into it, so the same source built in another folder
-    # gave another file (Windows relocates the DLL wherever it loads it
-    # anyway): the same source gives the same file.
+    # in, so the DLL needs only vulkan-1.dll and Windows' own runtime. There
+    # is no link time in its header and no image base of ld's choosing, so
+    # the same source gives the same file. Don't let ld choose the image
+    # base: it hashes the output file's path into it, so a build in another
+    # folder gives another file. Windows relocates the DLL wherever it loads
+    # it anyway.
     Invoke-Checked 'Building libvship.dll' {
         g++ src/VshipLib.cpp `
             "-DVSHIP_VERSION_MAJOR=$($version[0])" "-DVSHIP_VERSION_MINOR=$($version[1])" `

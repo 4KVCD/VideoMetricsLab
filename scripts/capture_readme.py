@@ -24,6 +24,7 @@ from vmaf_app.ui.main_window import MainWindow
 
 
 def main() -> None:
+    """Takes the README screenshot of the Videos tab, with a temporary profile."""
     destination = Path(__file__).resolve().parents[1] / "docs" / "screenshot-videos.png"
     with tempfile.TemporaryDirectory(prefix="video-metrics-screenshot-") as temporary:
         folder = Path(temporary)

@@ -23,6 +23,7 @@ from vmaf_app.core import vmaf_cuda, vmaf_vulkan
 
 
 def timed(scorer, reference, distorted, frames: int, copy: bool = False) -> float:
+    """The frames per second `scorer` scores `frames` frame pairs at, after a few to warm up."""
     count = len(reference)
     try:
         for index in range(min(4, frames)):  # pipelines compiled, buffers touched
@@ -38,6 +39,7 @@ def timed(scorer, reference, distorted, frames: int, copy: bool = False) -> floa
 
 
 def main() -> int:
+    """Times Vulkan VMAF on each GPU, with videos or made-up frames."""
     parser = argparse.ArgumentParser()
     parser.add_argument("reference", nargs="?")
     parser.add_argument("distorted", nargs="?")
@@ -61,6 +63,7 @@ def main() -> int:
             continue
 
         def scorer(skip=0, device=device):
+            """A Vulkan VMAF scorer on `device`."""
             return vmaf_vulkan.VulkanScorer(width, height, arguments.bits, compare.MODELS, device=device.index,
                                             native_double=arguments.native and device.has_double, skip=skip)
 

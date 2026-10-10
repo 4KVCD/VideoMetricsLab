@@ -29,6 +29,7 @@ MODELS = Path(__file__).resolve().parents[1] / "vmaf_app" / "models"
 
 
 def model_path(name: str) -> Path:
+    """The bundled VMAF v1 model file called `name`."""
     matches = sorted(MODELS.glob(f"*/vmaf_v1.0.16_{name}.json"))
     if not matches:
         raise SystemExit(f"no bundled VMAF v1 model named {name}")
@@ -43,6 +44,8 @@ def cpu_run(model: Path, width: int, height: int, bits: int, reference, distorte
 
 
 def gpu_run(model: Path, width: int, height: int, bits: int, reference, distorted, step: int, device):
+    """Scores the frames with VMAF v1 on the GPU; returns the frames scored,
+    features, scores and time."""
     scorer = vmaf_v1_gpu.V1Scorer(width, height, bits, model, step, device=device)
     try:
         started = time.perf_counter()
@@ -58,6 +61,7 @@ def gpu_run(model: Path, width: int, height: int, bits: int, reference, distorte
 
 def compare(label: str, model: Path, width: int, height: int, bits: int, reference, distorted, step: int = 1,
             device: int | None = None, threads: int = 12) -> bool:
+    """Scores the frames with VMAF v1 on the CPU and the GPU, and prints whether they match."""
     count = min(len(reference), len(distorted))
     reference, distorted = reference[:count], distorted[:count]
     c_frames, c_values, c_scores, c_time = cpu_run(model, width, height, bits, reference, distorted, step, threads)
@@ -84,6 +88,7 @@ def compare(label: str, model: Path, width: int, height: int, bits: int, referen
 
 
 def matrix(device: int | None) -> bool:
+    """Compares the CPU and GPU on made-up frames for every model and a set of sizes."""
     same = True
     models = sorted(MODELS.glob("*/vmaf_v1.0.16_*.json"))
     sizes = [(640, 480, 8), (642, 362, 10), (1280, 720, 8), (1365, 768, 10), (1920, 1080, 8), (3840, 2160, 10)]
@@ -106,6 +111,7 @@ def matrix(device: int | None) -> bool:
 
 
 def main() -> int:
+    """Compares VMAF v1 on the CPU and the GPU for two videos or made-up frames."""
     parser = argparse.ArgumentParser()
     parser.add_argument("reference", nargs="?")
     parser.add_argument("distorted", nargs="?")

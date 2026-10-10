@@ -22,6 +22,7 @@ OUTPUT = ROOT / "native" / "amf_handover_spv.h"
 
 
 def main() -> int:
+    """Compiles the AMF shaders with slangc and writes them as a C header."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--slangc", required=True, type=Path)
     args = parser.parse_args()

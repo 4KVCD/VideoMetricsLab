@@ -14,8 +14,8 @@ compares the bundle with the development installation.
 
 Checks:
   1. every plugin GStreamer found lives inside the runtime under test;
-  2. exactly the allow-listed plugins loaded -- one that failed to load is a
-     missing dependency, an unexpected one means the policy leaked;
+  2. exactly the allow-listed plugins loaded: one that failed to load is a
+     missing dependency, and an unexpected one means the allow-list leaked;
   3. every element the app creates by name exists (REQUIRED_ELEMENTS);
   4. every codec the development installation could decode, the bundle can
      too (compared by the caps decoders accept), except the losses named in
@@ -59,6 +59,7 @@ ALLOWED_LOSSES: dict[str, str] = {
 
 # ----------------------------------------------------------------- the child
 def inspect_runtime(root: Path, required: list[str], media: list[str]) -> dict:
+    """What the GStreamer runtime at `root` has; run in the child process."""
     root = root.resolve()
     sys.path.insert(0, str(root))
     for key in list(os.environ):
@@ -111,6 +112,7 @@ def inspect_runtime(root: Path, required: list[str], media: list[str]) -> dict:
 
 
 def _structures(caps):
+    """The structures of `caps`."""
     return [caps.get_structure(i) for i in range(caps.get_size())]
 
 
@@ -154,6 +156,7 @@ def _probe(Gst, path: str, kind: str) -> dict:  # noqa: N803 - gi namespace
     branch_sink = branch.get_static_pad("sink")
 
     def on_pad_added(_decoder, pad):
+        """Links the decoder pad of the branch kind to the branch."""
         if pad.get_name().startswith(kind + "_") and not branch_sink.is_linked():
             pad.link(branch_sink)
 
@@ -177,6 +180,7 @@ def _probe(Gst, path: str, kind: str) -> dict:  # noqa: N803 - gi namespace
 
 
 def _caps_name(caps) -> str:
+    """The name of the first structure of `caps`, or ""."""
     return caps.get_structure(0).get_name() if caps is not None and caps.get_size() else ""
 
 
@@ -200,6 +204,7 @@ def _decoders_inside(Gst, element) -> list[str]:  # noqa: N803 - gi namespace
 
 # ---------------------------------------------------------------- the parent
 def snapshot(root: Path, required: list[str], media: list[str]) -> dict:
+    """Runs inspect_runtime on `root` in a clean child process; returns its report."""
     command = [sys.executable, "-S", str(Path(__file__).resolve()), "--child", str(root),
                "--require", json.dumps(required)]
     for path in media:
@@ -211,6 +216,7 @@ def snapshot(root: Path, required: list[str], media: list[str]) -> dict:
 
 
 def main() -> None:
+    """Checks the bundle against the development installation."""
     parser = argparse.ArgumentParser(description="Check a packaged GStreamer runtime against the app's needs.")
     parser.add_argument("--bundle", type=Path, help="the build's _internal directory")
     parser.add_argument("--media", action="append", default=[], metavar="FILE",

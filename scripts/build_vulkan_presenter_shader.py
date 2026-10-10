@@ -24,6 +24,7 @@ SHADERS = {"kVertexSpirv": ("vertex_main", "vertex"), "kFragmentSpirv": ("fragme
 
 
 def main() -> int:
+    """Compiles the Vulkan presenter shader with slangc and writes it as a C header."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--slangc", required=True, type=Path)
     args = parser.parse_args()

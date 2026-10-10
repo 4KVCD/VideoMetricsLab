@@ -1,8 +1,8 @@
 """Which of PySide6's files the Windows build ships.
 
-PyInstaller's Qt hooks bundle by category -- everything a QtGui application
-might conceivably load -- so a build that imports three Qt modules got a
-software OpenGL renderer, QtMultimedia's FFmpeg, the whole QML stack (behind
+PyInstaller's Qt hooks bundle by category: everything a QtGui application
+might load. So a build that imports three Qt modules gets a software OpenGL
+renderer, QtMultimedia's FFmpeg, the whole QML stack (behind
 one virtual-keyboard plugin), a PDF renderer, the network module with its
 TLS backends, four platform plugins and 96 translations: 110 MB, of which
 the app reaches 41.
@@ -50,10 +50,12 @@ QT_ROOTS = ("PySide6",)
 
 
 def _under(dest: str, root: str) -> bool:
+    """Whether the bundle path `dest` is under the folder `root`."""
     return PurePosixPath(dest.replace("\\", "/")).parts[:1] == (root,)
 
 
 def _relative(dest: str) -> PurePosixPath:
+    """The bundle path `dest` without its first folder."""
     return PurePosixPath(*PurePosixPath(dest.replace("\\", "/")).parts[1:])
 
 
@@ -66,6 +68,7 @@ def prune(binaries: list, datas: list, imports=pe_imports) -> tuple[list, list, 
     outside PySide6/ pass through untouched.
     """
     def is_qt(entry) -> bool:
+        """Whether the entry is one of PySide6's files."""
         return any(_under(entry[0], root) for root in QT_ROOTS)
 
     qt_binaries = [entry for entry in binaries if is_qt(entry)]
@@ -97,6 +100,7 @@ def prune(binaries: list, datas: list, imports=pe_imports) -> tuple[list, list, 
     kept_datas = [entry for entry in datas if entry not in dropped_datas]
 
     def size(entries) -> int:
+        """The size of the entries' files, in bytes."""
         return sum(Path(e[1]).stat().st_size for e in entries if Path(e[1]).is_file())
 
     kept_qt = [entry for entry in kept_binaries if is_qt(entry)] + [entry for entry in kept_datas if is_qt(entry)]

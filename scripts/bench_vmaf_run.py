@@ -28,6 +28,8 @@ from vmaf_app.core.vmaf_runner import run_vmaf
 
 
 def run(backend: str, source, distorted, options: VmafOptions, repeat: int):
+    """Runs VMAF on `backend` (cpu, cuda or vulkan:N) `repeat` times; returns
+    the fastest time and the result."""
     if backend == "cpu":
         options = VmafOptions(**{**options.__dict__, "vmaf_on_gpu": False})
     else:
@@ -44,6 +46,7 @@ def run(backend: str, source, distorted, options: VmafOptions, repeat: int):
 
 
 def main() -> int:
+    """Times a VMAF run of the two videos on each backend asked for."""
     parser = argparse.ArgumentParser()
     parser.add_argument("reference")
     parser.add_argument("distorted")

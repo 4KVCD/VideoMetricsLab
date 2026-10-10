@@ -83,6 +83,7 @@ def special(kind: str, width: int, height: int, bits: int, frames: int, seed: in
     yy, xx = np.mgrid[0:height, 0:width]
 
     def frame(picture):
+        """A frame of the made-up picture, clipped to the bit depth, with its chroma."""
         return bytearray(np.clip(picture, 0, peak).astype(dtype).tobytes() + chroma)
 
     reference, distorted = [], []
@@ -122,6 +123,7 @@ class _LumaScorer(vmaf_cuda.GpuScorer):
     uses the luma alone, so only that is copied here."""
 
     def _fill(self, picture, frame) -> None:
+        """Copies the luma plane of `frame` into the libvmaf picture."""
         offset, rows, row_bytes = self._planes[0]
         source = np.frombuffer(frame, dtype=np.uint8)
         target = np.ctypeslib.as_array(
@@ -130,6 +132,7 @@ class _LumaScorer(vmaf_cuda.GpuScorer):
 
 
 def cuda_run(width, height, bits, reference, distorted, step):
+    """Scores the frames with libvmaf CUDA; returns the features, scores and time."""
     scorer = _LumaScorer(width, height, bits, MODELS, step)
     try:
         started = time.perf_counter()
@@ -156,6 +159,7 @@ def cuda_run(width, height, bits, reference, distorted, step):
 
 
 def vulkan_run(width, height, bits, reference, distorted, step, device, native):
+    """Scores the frames with Vulkan VMAF; returns the features, scores and time."""
     scorer = vmaf_vulkan.VulkanScorer(width, height, bits, MODELS, step, device=device, native_double=native)
     try:
         started = time.perf_counter()
@@ -170,6 +174,7 @@ def vulkan_run(width, height, bits, reference, distorted, step, device, native):
 
 
 def compare(label, width, height, bits, reference, distorted, step=1, device=None, native=False) -> bool:
+    """Scores the frames with CUDA and Vulkan, and prints whether they match."""
     count = min(len(reference), len(distorted))
     reference, distorted = reference[:count], distorted[:count]
     c_frames, c_rows, c_scores, c_time = cuda_run(width, height, bits, reference, distorted, step)
@@ -222,6 +227,7 @@ def matrix(device: int | None) -> bool:
 
 
 def main() -> int:
+    """Compares Vulkan VMAF with libvmaf CUDA for two videos or made-up frames."""
     parser = argparse.ArgumentParser()
     parser.add_argument("reference", nargs="?")
     parser.add_argument("distorted", nargs="?")
