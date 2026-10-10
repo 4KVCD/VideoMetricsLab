@@ -3,18 +3,17 @@
 Qt's windows11 style draws the window in Windows' light or dark colours (or
 the ones Settings > Window > Theme asks for: apply_theme), and every widget
 that takes its colours from the palette follows. What the app colours itself
--- a muted hint, a failed score, a chart -- is named here once, with a value
-for each theme, rather than as a fixed colour that is right on one theme
-only: dark grey hints and black scores on a dark window, white charts in it
-(issue #5).
+(a muted hint, a failed score, a chart) is named here once, with a value for
+each theme, rather than as a fixed colour that is right on one theme only,
+such as dark grey hints and black scores on a dark window (issue #5).
 
 `color(name)` is the colour for the theme in use. A widget styled with
 `style(widget, "color: {muted};")` is styled again when the theme changes
 (`refresh`), as the palette's own colours are. Painted things (the charts,
 the table's cells) ask for their colours when they draw.
 
-Files the app writes -- an exported graph -- keep the light colours whatever
-the window shows: they are read elsewhere, and on paper.
+Files the app writes (an exported graph) keep the light colours whatever the
+window shows, because they are read elsewhere, and on paper.
 """
 from __future__ import annotations
 
@@ -58,6 +57,8 @@ _COLOURS: dict[str, tuple[str, str]] = {
 
 @dataclass(frozen=True)
 class ChartColours:
+    """The colours a chart is drawn in."""
+
     background: QColor
     text: QColor
     axis: QColor
@@ -87,6 +88,7 @@ def is_dark() -> bool:
 
 
 def color(name: str, dark: bool | None = None) -> QColor:
+    """A named colour for the theme in use (or for dark or light, if given)."""
     light_value, dark_value = _COLOURS[name]
     return QColor(dark_value if (is_dark() if dark is None else dark) else light_value)
 
@@ -99,10 +101,12 @@ def readable(series_colour: str) -> QColor:
 
 
 def chart_colours(dark: bool | None = None) -> ChartColours:
+    """The chart colours for the theme in use (or for dark or light, if given)."""
     return _CHART[is_dark() if dark is None else dark]
 
 
 def _values() -> dict[str, str]:
+    """Every named colour for the theme in use, by name."""
     dark = is_dark()
     return {name: (pair[1] if dark else pair[0]) for name, pair in _COLOURS.items()}
 

@@ -1,14 +1,14 @@
-"""Runs file writes off the UI thread.
+"""Runs file writes (saved results, exports) off the window's thread.
 
-A feature-length run is hundreds of thousands of frames, and serialising
-one is seconds of work: a cached result is ~9MB of JSON, and a CSV export
-of the same run is larger still. Doing that inside the handler that
-finishes a run froze the window solid -- no repaint, no drag, no cancel --
-at exactly the moment the user was watching for a result.
+A feature-length run has hundreds of thousands of frames, and writing one
+out takes seconds: a saved result is about 9 MB of JSON, and a CSV export of
+the same run is larger still. Done in the handler that finishes a run, it
+would freeze the window (no repainting, dragging or cancelling) at the very
+moment the user is watching for a result.
 
-Writes run on ONE thread rather than Qt's global pool, for two reasons:
-they stay in submission order, and they cannot starve anything else Qt is
-running in the background.
+The writes run on one thread rather than Qt's shared pool, for two
+reasons: they stay in the order they were submitted, and they cannot crowd
+out anything else Qt runs in the background.
 """
 from __future__ import annotations
 
@@ -55,6 +55,7 @@ def _resume_automatic_gc() -> bool:
 
 
 def _resume_automatic_gc_on_gui_thread() -> None:
+    """Turns automatic garbage collection back on, and does the collection it would have done, on the window's thread."""
     if _resume_automatic_gc():
         # Automatic collection would have selected generation zero. Do that
         # work now, on the thread that owns the application's Qt wrappers.
@@ -69,7 +70,7 @@ class FileWriteQueue(QObject):
     let the signals below carry the outcome back.
     """
 
-    #: (description, error message) -- one per failed write.
+    #: (description, error message), sent once per failed write.
     write_failed = Signal(str, str)
     #: Emitted when the last outstanding write finishes.
     became_idle = Signal()
@@ -91,10 +92,12 @@ class FileWriteQueue(QObject):
 
     @property
     def pending(self) -> int:
+        """How many writes have not been written yet."""
         with self._lock:
             return self._pending
 
     def submit(self, description: str, write: Callable[[], None]) -> None:
+        """Queues a write, to run after those already queued."""
         with self._lock:
             self._writes.append((description, write))
             self._pending += 1
@@ -103,19 +106,19 @@ class FileWriteQueue(QObject):
             if self._writing:
                 return
             self._writing = True
-        # A thread of its own, not a QThreadPool's: PySide makes the pool the
+        # A thread of its own, not a QThreadPool's. PySide makes the pool the
         # owner of each QRunnable started on it, and one that does not delete
-        # itself after running -- these mustn't, on the pool's thread -- was
-        # never released, nor the write it held with its result: every cached
-        # result and export, for as long as the app ran.
+        # itself after running (these must not, on the pool's thread) is never
+        # freed, nor is the write it holds with its result: every saved result
+        # and export would stay in memory for as long as the app ran.
         threading.Thread(target=self._write_all, name="File writes", daemon=True).start()
 
     def wait_until_idle(self, timeout_seconds: float = 30.0) -> bool:
         """Blocks until every submitted write has finished.
 
-        For shutdown -- closing the window while a cache write is in flight
-        would lose the result -- and for tests, which need the file to exist
-        before they can assert anything about it.
+        It is for shutdown, because closing the window during a write would
+        lose the result, and for tests, which need the file to exist before
+        they can check anything about it.
         """
         finished = self._idle.wait(timeout_seconds)
         if finished and QCoreApplication.instance() is not None:
@@ -128,6 +131,7 @@ class FileWriteQueue(QObject):
 
     # ---------------------------------------------- on the writing thread
     def _write_all(self) -> None:
+        """The writing thread: runs the queued writes in turn until there are none."""
         while True:
             with self._lock:
                 if not self._writes:
@@ -159,6 +163,7 @@ class FileWriteQueue(QObject):
 
     @Slot()
     def _finish_on_gui_thread(self) -> None:
+        """Finishes one write on the window's thread: drops it, and reports a failure."""
         with self._lock:
             write, description, error = self._written.popleft()
             self._unfinished -= 1

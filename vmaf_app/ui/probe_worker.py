@@ -1,10 +1,11 @@
-"""Probes newly added videos, and loads their cached results, off the UI
-thread.
+"""Probes newly added videos, and loads their saved results, off the
+window's thread.
 
-Both steps are slow enough to be felt: ffprobe is a subprocess launch
-(~70ms for a small file, more for a large one on a slow disk), and a cached
-result for a feature-length run is a ~9MB JSON parse (~140ms). Doing eight
-videos inline froze the window for a couple of seconds with no feedback.
+Both steps are slow enough to be felt: ffprobe is a process to start (about
+70 ms for a small file, more for a large one on a slow disk), and a saved
+result for a feature-length run is about 9 MB of JSON to read (about
+140 ms). Done on the window's thread, eight videos would freeze the window
+for a couple of seconds.
 """
 from __future__ import annotations
 
@@ -24,13 +25,13 @@ class ProbeWorker(QThread):
 
     # (path, VideoInfo or None, error message or "")
     probed = Signal(object, object, str)
-    # (path, ComparisonResult, label, cache key) -- only for videos with a
-    # cached result. The key lets the UI reject a result if the row's options
-    # changed while this background read was in flight.
+    # (path, ComparisonResult, label, cache key), only for videos with a
+    # saved result. The key lets the window refuse a result if the row's
+    # options changed while it was being read.
     cached_found = Signal(object, object, str, str)
     # (path, CVVDP scores saved for other displays as [(CvvdpSettings, JOD)],
-    # the CVVDP request parameters they were looked up for) -- for every
-    # video whose lookup includes CVVDP, so an empty list clears old ones.
+    # the CVVDP request parameters they were looked up for), for every video
+    # whose lookup includes CVVDP, so that an empty list clears old ones.
     other_cvvdp_found = Signal(object, object, object)
     finished_all = Signal()
 
@@ -60,10 +61,12 @@ class ProbeWorker(QThread):
         self._process = ProcessHandle()
 
     def cancel(self) -> None:
+        """Stops probing, ending ffprobe."""
         self._cancelled = True
         self._process.terminate()
 
     def run(self) -> None:
+        """Probes each file in turn (QThread.run)."""
         try:
             for path in self._paths:
                 if self._cancelled:

@@ -14,6 +14,8 @@ from vmaf_app.core.process_control import ProcessHandle
 
 
 class FrameExtractWorker(QThread):
+    """Extracts one frame of each side for Frame Compare, on a thread of its own."""
+
     # generation, side, the frame decoded here (a QImage, null if
     # unreadable): decoded by the window's thread, a 4K frame held it 64-104 ms
     frame_ready = Signal(int, str, object)
@@ -39,10 +41,12 @@ class FrameExtractWorker(QThread):
         self._process = ProcessHandle()
 
     def cancel(self) -> None:
+        """Stops the extraction, ending FFmpeg."""
         self._cancelled = True
         self._process.terminate()
 
     def run(self) -> None:
+        """Extracts each side's frame in turn (QThread.run)."""
         for side in self._sides:
             if self._cancelled:
                 return

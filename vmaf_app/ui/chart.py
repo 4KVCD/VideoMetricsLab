@@ -1,21 +1,21 @@
-"""A purpose-built line chart for per-frame metric curves.
+"""A line chart made for per-frame metric scores (ChartWidget).
 
-Replaces pyqtgraph, which was costing far more than this app needs:
+It is drawn by hand rather than with pyqtgraph, which costs far more than
+the app needs:
 
-- It re-renders full vector paths, so a feature-length run (hundreds of
-  thousands of points) could only keep up with an OpenGL viewport -- and the
-  first GL context alone costs ~174MB, with the NVIDIA driver spinning on
-  present so hover CPU scaled with window *area*.
-- Here the curve is reduced to one min/max pair per pixel column before it's
-  ever drawn, so draw cost depends on how wide the window is, not how long
-  the video is. That's cheap enough for plain raster painting.
-- The result is cached in a pixmap, so moving the crosshair repaints only
-  the couple of pixel columns that actually changed rather than presenting
-  a whole GPU surface.
+- pyqtgraph draws whole vector paths, so a feature-length run (hundreds of
+  thousands of points) keeps up only with an OpenGL viewport, whose first
+  context alone takes about 174 MB, and with NVIDIA's driver busy-waiting on
+  each present, the CPU cost of hovering grows with the window's area.
+- Here the line is reduced to one min/max pair per pixel column before it is
+  drawn, so the drawing cost depends on the window's width, not the video's
+  length. That is cheap enough for plain raster painting.
+- The drawing is kept in a pixmap, so moving the crosshair repaints only the
+  few pixel columns that changed.
 
-Measured against the pyqtgraph version on the same 3 x 144,000-point data in
-a 2400x1300 window: 34.7ms -> 1.5ms of CPU per hover, and the plot's share of
-memory down from ~259MB to ~49MB.
+On the same 3 x 144,000 points in a 2400x1300 window, hovering costs 1.5 ms
+of CPU instead of pyqtgraph's 34.7 ms, and the chart takes about 49 MB of
+memory instead of 259 MB.
 """
 from __future__ import annotations
 
@@ -43,6 +43,8 @@ _TARGET_TICKS = 8
 
 @dataclass
 class ChartSeries:
+    """One line: its times (seconds, ascending), its scores, its colour, and whether it is shown."""
+
     times: np.ndarray   # float64 seconds, ascending
     values: np.ndarray  # float32 scores, same length as times
     color: str
@@ -76,9 +78,9 @@ def _nice_value_step(span: float) -> float:
 class ChartWidget(QWidget):
     """Draws one metric for any number of series.
 
-    Knows nothing about which frame the cursor should snap to -- it reports
-    the raw time/value under the pointer and draws the crosshair wherever
-    it's told to, leaving the dip-snapping to the caller.
+    It knows nothing about which frame the cursor should snap to: it reports
+    the time and value under the pointer, and draws the crosshair wherever
+    it is told to, leaving snapping to dips to the caller.
     """
 
     hovered = Signal(float, float)   # (time under cursor, value under cursor)
@@ -105,10 +107,10 @@ class ChartWidget(QWidget):
         self.setMinimumSize(240, 140)
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WA_OpaquePaintEvent)  # we paint every pixel; skip Qt's pre-clear
-        # While the size keeps changing -- the window dragged by an edge --
-        # the last drawing is shown stretched, and the chart drawn again
-        # once the size has settled. Drawn at every size, a dozen two-hour
-        # series took 54 ms a step: 18 steps a second, 4 on a slower PC.
+        # While the size keeps changing (the window dragged by an edge), the
+        # last drawing is shown stretched, and the chart is drawn again once
+        # the size has settled. Drawn at every size, a dozen two-hour lines
+        # take 54 ms a step: 18 steps a second, or 4 on a slower PC.
         self._resize_settle = QTimer(self)
         self._resize_settle.setSingleShot(True)
         self._resize_settle.setInterval(100)
@@ -116,33 +118,39 @@ class ChartWidget(QWidget):
 
     # ------------------------------------------------------------------ data
     def set_series(self, key: int, series: ChartSeries) -> None:
+        """Adds or replaces a line."""
         self._series[key] = series
         self._invalidate(refit=True)
 
     def remove_series(self, *keys: int) -> None:
-        """The axes fitted again once, however many go."""
+        """Removes lines, fitting the axes again only once however many go."""
         removed = [key for key in keys if self._series.pop(key, None) is not None]
         if removed:
             self._invalidate(refit=True)
 
     def set_series_visible(self, key: int, visible: bool) -> None:
+        """Shows or hides a line."""
         series = self._series.get(key)
         if series is not None and series.visible != visible:
             series.visible = visible
             self._invalidate(refit=True)
 
     def clear(self) -> None:
+        """Removes every line."""
         self._series.clear()
         self._invalidate(refit=True)
 
     def has_data(self) -> bool:
+        """Whether any shown line has points."""
         return any(s.visible and len(s.times) for s in self._series.values())
 
     def _visible_series(self) -> list[ChartSeries]:
+        """The shown lines that have points."""
         return [s for s in self._series.values() if s.visible and len(s.times)]
 
     # ------------------------------------------------------------------ ranges
     def data_x_range(self) -> tuple[float, float]:
+        """The time range of the shown lines."""
         visible = self._visible_series()
         if not visible:
             return 0.0, 1.0
@@ -151,21 +159,25 @@ class ChartWidget(QWidget):
         return (lo, hi) if hi > lo else (lo, lo + 1.0)
 
     def x_range(self) -> tuple[float, float]:
+        """The time range in view: zoomed, or all of it."""
         return self._view_x if self._view_x is not None else self.data_x_range()
 
     def y_range(self) -> tuple[float, float]:
+        """The value range of the axis."""
         return self._y_range
 
     def reset_view(self) -> None:
+        """Shows all of the time range again."""
         self._view_x = None
         self._invalidate(refit=True)
         self.view_changed.emit()
 
     def _recompute_y_range(self) -> None:
-        # A series can be entirely NaN (a metric column present but with no
-        # value for any frame). nanmin/nanmax warn and return NaN for those,
-        # which would poison the axis into a NaN range and silently render a
-        # blank chart, so they're skipped rather than fed in.
+        """Fits the value axis to the shown lines."""
+        # A line can be all NaN (a metric's column with no value for any
+        # frame). nanmin and nanmax warn and return NaN for it, which would
+        # give the axis a NaN range and quietly draw a blank chart, so such
+        # lines are skipped.
         visible = [s for s in self._visible_series() if np.isfinite(s.values).any()]
         if not visible:
             self._y_range = (0.0, self.fixed_y_max or 1.0)
@@ -173,21 +185,22 @@ class ChartWidget(QWidget):
         lo = min(float(np.min(s.values[np.isfinite(s.values)])) for s in visible)
         hi = max(float(np.max(s.values[np.isfinite(s.values)])) for s in visible)
         if self.fixed_y_max is not None:
-            # Bounded scale (VMAF): use the metric ceiling when the scores fit,
-            # but grow the axis when a valid model (for example VMAF v1 4K/3H)
-            # can exceed it. Never clip real samples at the nominal ceiling.
+            # A bounded scale (VMAF): the metric's ceiling when the scores fit
+            # under it, but a higher axis when a model can go above it (VMAF
+            # v1 4K/3H, say). Real scores are never cut off at the ceiling.
             top = max(self.fixed_y_max, float(np.ceil(hi / 5.0) * 5.0))
             bottom = int(np.floor(lo / 5.0)) * 5
             bottom = min(bottom, top - 5)
             self._y_range = (float(bottom), top)
         else:
-            # Unbounded (dB, SSIM): pad slightly so the extremes aren't drawn
-            # exactly on the frame.
+            # Unbounded (decibels, SSIM): a little padding, so that the
+            # extremes are not drawn right on the frame.
             pad = (hi - lo) * 0.05 or max(abs(hi) * 0.01, 0.5)
             self._y_range = (lo - pad, hi + pad)
 
     # ------------------------------------------------------------------ geometry
     def plot_rect(self) -> QRect:
+        """Where the lines are drawn, inside the axes."""
         return QRect(
             _MARGIN_LEFT, _MARGIN_TOP,
             max(1, self.width() - _MARGIN_LEFT - _MARGIN_RIGHT),
@@ -195,6 +208,7 @@ class ChartWidget(QWidget):
         )
 
     def time_at(self, px: int) -> float:
+        """The time at a pixel column."""
         rect = self.plot_rect()
         x0, x1 = self.x_range()
         frac = (px - rect.left()) / max(1, rect.width())
@@ -208,19 +222,21 @@ class ChartWidget(QWidget):
         return 1.0 - value_fraction if self.invert_y else value_fraction
 
     def value_at(self, py: int) -> float:
+        """The value at a pixel row."""
         rect = self.plot_rect()
         y0, y1 = self._y_range
         frac = self._height_fraction((rect.bottom() - py) / max(1, rect.height()))
         return y0 + frac * (y1 - y0)
 
     def pixel_for_time(self, t: float) -> int:
+        """The pixel column of a time."""
         rect = self.plot_rect()
         x0, x1 = self.x_range()
         return rect.left() + round((t - x0) / max(1e-9, x1 - x0) * rect.width())
 
     def time_tick_labels(self) -> list[str]:
-        """The X-axis labels for the current view, in order -- the same
-        values drawn by _draw_axes."""
+        """The time axis's labels for the current view, in order: the same
+        ones _draw_axes draws."""
         x0, x1 = self.x_range()
         step = _nice_time_step(x1 - x0)
         tick = np.ceil(x0 / step) * step
@@ -231,8 +247,8 @@ class ChartWidget(QWidget):
         return labels
 
     def value_ticks(self, rect: QRect | None = None) -> list[tuple[int, str]]:
-        """The Y-axis gridlines for the current range: (pixel row, label),
-        lowest value first -- the same ones drawn by _draw_axes."""
+        """The value axis's grid lines for the current range, as (pixel row,
+        label), lowest value first: the same ones _draw_axes draws."""
         rect = rect or self.plot_rect()
         y0, y1 = self._y_range
         step = _nice_value_step(y1 - y0)
@@ -247,27 +263,31 @@ class ChartWidget(QWidget):
         return ticks
 
     def seconds_per_pixel(self) -> float:
+        """How many seconds one pixel column covers."""
         x0, x1 = self.x_range()
         return (x1 - x0) / max(1, self.plot_rect().width())
 
     # ------------------------------------------------------------------ painting
     def _invalidate(self, refit: bool = False) -> None:
+        """Draws the chart again, fitting the value axis first with refit."""
         if refit:
             self._recompute_y_range()
         self._cache = None
         self.update()
 
     def resizeEvent(self, event) -> None:
+        """Draws again once a resize settles, or afresh after a resize while hidden."""
         if self._cache is not None:
             if self.isVisible():
                 self._resize_settle.start()  # drawn again at the size it settles on (paintEvent)
             else:
-                # Resized hidden -- the window, on another tab -- it comes as
-                # it is shown: drawn afresh, not stretched for 100 ms.
+                # Resized while hidden (the window resized on another tab),
+                # it is drawn afresh when shown, not stretched for 100 ms.
                 self._cache = None
         super().resizeEvent(event)
 
     def changeEvent(self, event) -> None:
+        """Draws again in the new colours when the theme changes."""
         # The window's theme changed: drawn again in its colours.
         if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange, QEvent.StyleChange):
             self._cache = None
@@ -275,6 +295,7 @@ class ChartWidget(QWidget):
         super().changeEvent(event)
 
     def paintEvent(self, event) -> None:
+        """Copies the kept drawing to the screen, with the crosshair."""
         if not self._cache_matches_display():
             if self._cache is not None and self._resize_settle.isActive():
                 painter = QPainter(self)
@@ -283,10 +304,10 @@ class ChartWidget(QWidget):
                 return
             self._rebuild_cache()
         painter = QPainter(self)
-        # Only the damaged rect is blitted -- moving the crosshair repaints a
-        # couple of pixel columns, not the whole chart.
-        # Qt clips to the paint event. Draw at the logical origin so the
-        # high-DPI pixmap's source coordinates are not confused with DIP.
+        # Only the damaged area is copied, so moving the crosshair repaints a
+        # few pixel columns, not the whole chart. Qt clips to the paint
+        # event; drawing at the logical origin keeps the high-DPI pixmap's
+        # source coordinates from being taken for logical ones.
         painter.drawPixmap(0, 0, self._cache)
         if self._cursor_x is not None:
             painter.setPen(QPen(theme.chart_colours(self._cache_dark).crosshair, 1))
@@ -295,6 +316,7 @@ class ChartWidget(QWidget):
         painter.end()
 
     def _rebuild_cache(self) -> None:
+        """Draws the chart again into the kept pixmap."""
         self._cache_dark = theme.is_dark()
         self._cache = self._render(theme.chart_colours(self._cache_dark))
 
@@ -316,6 +338,7 @@ class ChartWidget(QWidget):
         return pixmap
 
     def _cache_matches_display(self) -> bool:
+        """Whether the kept drawing still fits the size, pixel ratio and theme."""
         ratio = self.devicePixelRatioF()
         # Drawn again when the window's theme changed since (theme.py).
         return (self._cache is not None
@@ -325,6 +348,7 @@ class ChartWidget(QWidget):
                 and self._cache.height() == ceil(self.height() * ratio))
 
     def _draw_axes(self, painter: QPainter, rect: QRect, colours: theme.ChartColours) -> None:
+        """Draws the grid, the axes' labels and the value axis's title."""
         x0, x1 = self.x_range()
         metrics = QFontMetrics(painter.font())
 
@@ -359,6 +383,7 @@ class ChartWidget(QWidget):
             painter.restore()
 
     def _draw_series(self, painter: QPainter, rect: QRect, series: ChartSeries) -> None:
+        """Draws one line: point by point when there are few, else as one min/max stroke per pixel column."""
         x0, x1 = self.x_range()
         y0, y1 = self._y_range
         times, values = series.times, series.values
@@ -375,6 +400,7 @@ class ChartWidget(QWidget):
         y_span = max(1e-9, y1 - y0)
 
         def to_py(v: np.ndarray) -> np.ndarray:
+            """The pixel rows of values."""
             frac = self._height_fraction((v - y0) / y_span)
             return rect.bottom() - frac * rect.height()
 
@@ -453,6 +479,7 @@ class ChartWidget(QWidget):
 
     # ------------------------------------------------------------------ input
     def mouseMoveEvent(self, event) -> None:
+        """Pans while dragging; otherwise reports the time and value under the pointer."""
         pos = event.position().toPoint()
         if self._pan_origin is not None and self._pan_view is not None:
             span = self._pan_view[1] - self._pan_view[0]
@@ -467,22 +494,26 @@ class ChartWidget(QWidget):
         self.hovered.emit(self.time_at(pos.x()), self.value_at(pos.y()))
 
     def leaveEvent(self, event) -> None:
+        """Reports that the pointer left."""
         self.left.emit()
         super().leaveEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        """Starts panning."""
         if event.button() == Qt.LeftButton:
             self._pan_origin = event.position().toPoint()
             self._pan_view = self.x_range()
             self.setCursor(Qt.ClosedHandCursor)
 
     def mouseReleaseEvent(self, event) -> None:
+        """Stops panning."""
         if event.button() == Qt.LeftButton:
             self._pan_origin = None
             self._pan_view = None
             self.unsetCursor()
 
     def mouseDoubleClickEvent(self, event) -> None:
+        """Shows all of the time range again."""
         self.reset_view()
 
     def wheelEvent(self, event) -> None:

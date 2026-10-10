@@ -1,7 +1,10 @@
-"""Bounded independent FFmpeg streams for a rolling comparison neighbourhood.
+"""Decodes Video Compare's videos with FFmpeg when native playback is not
+used: one worker per video (StreamDecodeWorker), the selected test video and
+its neighbours.
 
-Workers decode ahead by only three frames. The consumer owns one media clock;
-workers never run their own playback clocks or pass image bytes through signals.
+Each worker decodes at most three frames ahead. The view keeps the one
+playback clock; the workers have no clocks of their own, and never send
+picture bytes through signals.
 """
 from __future__ import annotations
 
@@ -36,6 +39,8 @@ def _read_into(pipe, buffer) -> int:
 
 
 class StreamDecodeWorker(QThread):
+    """Decodes one video of Video Compare with FFmpeg into frames for the view, on a thread of its own, a few frames ahead."""
+
     ready = Signal(str)
     failed = Signal(str)
 
@@ -58,12 +63,14 @@ class StreamDecodeWorker(QThread):
         self.attempt_errors = []
 
     def cancel(self):
+        """Stops decoding."""
         with self._condition:
             self._cancelled = True
             self._condition.notify_all()
-        # Ended from a thread of its own: finding FFmpeg's process tree
-        # (proc.process_tree) took 20-60 ms on the window's thread, for each
-        # decoder a seek stopped -- four, when three test videos decode.
+        # Ended from a thread of its own, because finding FFmpeg's process
+        # tree (proc.process_tree) takes 20-60 ms, which on the window's
+        # thread would add up for each decoder a seek stops (four, when three
+        # test videos are decoded).
         threading.Thread(target=self._handle.terminate, name="decoder-stop", daemon=True).start()
 
     def drain_through(self, frame):
@@ -87,16 +94,19 @@ class StreamDecodeWorker(QThread):
                 self._spare.append(payload)
 
     def _buffer(self):
+        """A frame buffer: a spare one, or a new one."""
         with self._condition:
             if self._spare:
                 return self._spare.pop()
         return bytearray(self._frame_bytes)
 
     def latest_frame_number(self):
+        """The number of the newest decoded frame, or None."""
         with self._condition:
             return self._frames[-1][0] if self._frames else None
 
     def _put(self, frame, payload):
+        """Queues a decoded frame, waiting while three are queued. Returns False if cancelled."""
         with self._condition:
             while len(self._frames) >= 3 and not self._cancelled:
                 self._condition.wait()
@@ -106,6 +116,7 @@ class StreamDecodeWorker(QThread):
             return True
 
     def run(self):
+        """Decodes frames, trying the GPU first and falling back step by step (QThread.run)."""
         from vmaf_app.core.video_playback import playback_dimensions
 
         width, height = playback_dimensions(self.comparison, self.maximum)
@@ -142,6 +153,7 @@ class StreamDecodeWorker(QThread):
                     return
 
                 def drain(pipe=process.stderr, tail=tail):
+                    """Keeps the end of FFmpeg's error output."""
                     for line in iter(pipe.readline, b""):
                         tail.append(line)
 

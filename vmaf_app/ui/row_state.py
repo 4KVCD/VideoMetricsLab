@@ -1,9 +1,10 @@
-"""How a test-video row's analysis stands: the phrase on its file name.
+"""How a test-video row's analysis stands: the phrase shown on its file
+name.
 
-The states were English strings, set in one place and compared in others
--- "Failed", "Reading...", a state that starts with "Finished" -- so a
-reworded state quietly stopped matching. Each is a member here; its value
-is the English text, marked for translation (N_) and shown with tr().
+Each state is a member here, rather than an English string set in one place
+and compared in others, where rewording it would quietly stop it matching.
+A member's value is the English text, marked for translation (N_) and shown
+with tr().
 """
 from __future__ import annotations
 
@@ -13,6 +14,8 @@ from vmaf_app.i18n import N_
 
 
 class RowState(StrEnum):
+    """The states a test-video row can be in."""
+
     # Set while something happens to the row (RowData.analysis_status).
     READING = N_("Reading...")
     QUEUED = N_("Queued")
@@ -34,4 +37,6 @@ class RowState(StrEnum):
 
     @property
     def finished_not_shown(self) -> bool:
+        """Whether the run finished but its result is not shown, because the
+        row's source or settings have changed since."""
         return self in (RowState.FOR_PREVIOUS_SOURCE, RowState.FOR_PREVIOUS_SETTINGS)

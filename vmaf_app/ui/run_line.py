@@ -85,12 +85,14 @@ def metric_units(snapshots) -> list[MetricUnit]:
         fps = float(task.get("fps") or 0.0)
 
         def finished(keys, place, task=task, done_keys=done_keys):
+            """Adds the units for a task's finished metrics: done or failed."""
             for kept, outcome in ((tuple(key for key in keys if key in done_keys), "done"),
                                   (tuple(key for key in keys if key not in done_keys), "failed")):
                 if kept:
                     units.append(MetricUnit(place, kept, outcome, task))
 
         def under_way(keys, place, task=task, state=state, current=current, total=total, fps=fps):
+            """Adds the unit for metrics still being calculated."""
             units.append(MetricUnit(place, keys, state, task, current, total, 1, fps))
 
         if task.get("lane") == "cpu" or cpu_keys:
@@ -167,6 +169,7 @@ def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAc
                 order[unit.place].append(key)
 
     def head(unit: MetricUnit) -> str:
+        """The start of a unit's text, such as "GPU metric 1 of 2: SSIMULACRA2"."""
         numbers = sorted(order[unit.place].index(key) + 1 for key in unit.keys)
         labels = ", ".join(metric_definition(order[unit.place][number - 1]).label for number in numbers)
         return tr("{kind} {numbers} of {count}: {labels}", kind=tr(_PLACE_NAMES[unit.place]),
@@ -284,11 +287,13 @@ def decoder_text(plans: dict[str, HwAccelPlan], *, source_only: bool) -> str:
     metrics) / GPU (GPU metrics)".
     """
     def where(plan: HwAccelPlan) -> dict[str, str]:
+        """Where each video is decoded in one plan: "GPU" or "CPU"."""
         return {"source": "GPU" if plan.source else "CPU", "distorted": "GPU" if plan.distorted else "CPU"}
 
     by_half = {half: where(plan) for half, plan in plans.items()}
 
     def side(name: str) -> str:
+        """Where one video is decoded, by task when the tasks differ."""
         found = {half: sides[name] for half, sides in by_half.items()}
         if len(set(found.values())) == 1:
             return next(iter(found.values()))

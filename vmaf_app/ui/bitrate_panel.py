@@ -1,4 +1,6 @@
-"""Independent packet-level bitrate viewer with frame/second/GOP plots."""
+"""The Bitrate tab (BitratePanel): a list of videos, each read packet by
+packet, with graphs of the bitrate per frame, per second or per group of
+pictures. It works on its own, apart from the Videos tab."""
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -51,6 +53,8 @@ _COLORS = [
 
 @dataclass
 class BitrateEntry:
+    """One file in the Bitrate tab: its path, colour, details, packets, whether it is used, its status, and its graphs worked out so far."""
+
     path: Path
     color: str
     identity: object = field(default_factory=object)
@@ -62,6 +66,7 @@ class BitrateEntry:
 
 
 def _path_key(path: Path) -> str:
+    """A file's key in the list: its full path, ignoring case."""
     try:
         value = str(path.resolve())
     except OSError:
@@ -70,6 +75,7 @@ def _path_key(path: Path) -> str:
 
 
 def _rate_text(kbps: float) -> str:
+    """A bitrate as shown: in kb/s, or Mb/s from 1000 kb/s."""
     if kbps >= 10_000:
         return tr("{rate:.2f} Mb/s", rate=kbps / 1000)
     if kbps >= 1000:
@@ -78,7 +84,8 @@ def _rate_text(kbps: float) -> str:
 
 
 class BitratePanel(QWidget):
-    """Owns files and analysis independently of the VMAF Videos tab."""
+    """The Bitrate tab. It keeps its own files and analysis, apart from the
+    Videos tab."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -185,6 +192,7 @@ class BitratePanel(QWidget):
         *,
         analyze: bool = False,
     ) -> None:
+        """Adds files to the list (each once), and analyzes the new ones with analyze."""
         infos = infos or {}
         added_keys: list[str] = []
         for path_value in paths:
@@ -209,13 +217,16 @@ class BitratePanel(QWidget):
             self._queue_keys(added_keys)
 
     def add_and_analyze(self, infos: list[VideoInfo]) -> None:
+        """Adds probed videos and analyzes them."""
         by_path = {info.path: info for info in infos}
         self.add_files(list(by_path), by_path, analyze=True)
 
     def live_workers(self) -> list[BitrateWorker]:
+        """The scan running now, if any."""
         return [self._worker] if self._worker is not None and self._worker.isRunning() else []
 
     def cancel(self) -> None:
+        """Stops the analysis, keeping finished results."""
         for key in self._pending:
             if key in self._entries:
                 self._entries[key].status = N_("Stopped")
@@ -229,20 +240,24 @@ class BitratePanel(QWidget):
 
     # --------------------------------------------------------------- file list
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Accepts a drag of files."""
         if event.mimeData().hasUrls() and any(url.isLocalFile() for url in event.mimeData().urls()):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent) -> None:
+        """Adds the dropped files."""
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
         self.add_files(paths)
         event.acceptProposedAction()
 
     def _on_add_files(self) -> None:
+        """Asks for files to add."""
         paths, _filter = QFileDialog.getOpenFileNames(self, tr("Add videos for bitrate analysis"))
         if paths:
             self.add_files([Path(path) for path in paths])
 
     def _on_remove_selected(self) -> None:
+        """Removes the selected files."""
         rows = sorted({index.row() for index in self.table.selectedIndexes()}, reverse=True)
         keys = list(self._entries)
         for row in rows:
@@ -254,12 +269,14 @@ class BitratePanel(QWidget):
         self._refresh_plot()
 
     def _on_calculate_or_stop(self) -> None:
+        """The Calculate/Stop button."""
         if self._worker is not None:
             self.cancel()
         else:
             self._on_analyze_checked()
 
     def _on_analyze_checked(self) -> None:
+        """Analyzes the checked files, asking first whether to recalculate those with results."""
         if self._worker is not None:
             return
         keys = [key for key, entry in self._entries.items() if entry.enabled]
@@ -279,6 +296,7 @@ class BitratePanel(QWidget):
             self._queue_keys(keys)
 
     def _queue_keys(self, keys: list[str]) -> None:
+        """Queues files for analysis, and starts it if none is running."""
         if self._stopping:
             return
         for key in keys:
@@ -290,6 +308,7 @@ class BitratePanel(QWidget):
         self._start_pending()
 
     def _start_pending(self) -> None:
+        """Starts a scan of the queued files, if none is running."""
         if self._worker is not None:
             return
         jobs = []
@@ -314,6 +333,7 @@ class BitratePanel(QWidget):
         worker.start()
 
     def _on_file_started(self, path: Path) -> None:
+        """Marks a file as being analyzed."""
         if self._stopping:
             return
         entry = self._entries.get(_path_key(path))
@@ -324,6 +344,7 @@ class BitratePanel(QWidget):
             self._refresh_table_values()
 
     def _on_progress(self, path: Path, done: int, total: int) -> None:
+        """Shows a file's progress."""
         if self._stopping:
             return
         self.progress.setValue(min(99, round(done / max(1, total) * 100)))
@@ -335,6 +356,7 @@ class BitratePanel(QWidget):
                 self.table.item(row, _COL_STATUS).setText(tr(entry.status))
 
     def _on_analyzed(self, path: Path, info: VideoInfo, data: BitrateData) -> None:
+        """Keeps a file's packets and shows its results."""
         entry = self._entries.get(_path_key(path))
         if entry is None:
             return
@@ -347,6 +369,7 @@ class BitratePanel(QWidget):
         self._refresh_plot()
 
     def _on_failed(self, path: Path, error: str) -> None:
+        """Shows why a file could not be analyzed."""
         entry = self._entries.get(_path_key(path))
         if entry is None:
             return
@@ -357,6 +380,7 @@ class BitratePanel(QWidget):
         self.status_label.setText(tr("Could not analyze {name}: {error}", name=path.name, error=error))
 
     def _on_worker_finished(self, worker: BitrateWorker) -> None:
+        """Cleans up after a scan, and starts the next one if files are queued."""
         if worker is not self._worker:
             worker.deleteLater()
             return
@@ -383,12 +407,14 @@ class BitratePanel(QWidget):
 
     # --------------------------------------------------------------- table UI
     def _row_for_key(self, key: str) -> int:
+        """A file's table row, or -1."""
         try:
             return list(self._entries).index(key)
         except ValueError:
             return -1
 
     def _rebuild_table(self) -> None:
+        """Fills the table again, one row per file."""
         self._populating = True
         try:
             self.table.setRowCount(len(self._entries))
@@ -399,6 +425,7 @@ class BitratePanel(QWidget):
         self._update_buttons()
 
     def _refresh_table_values(self) -> None:
+        """Updates every row's values."""
         self._populating = True
         try:
             for row, entry in enumerate(self._entries.values()):
@@ -407,9 +434,9 @@ class BitratePanel(QWidget):
             self._populating = False
 
     def _cell(self, row: int, column: int) -> QTableWidgetItem:
-        """The row's item in `column`, put into the table the first time.
-        Only then: Qt refuses setItem for an item the table already holds,
-        with a warning -- nine to the log each time a row was updated."""
+        """Returns the row's item in `column`, putting it into the table only
+        the first time: Qt refuses setItem for an item the table already
+        holds, with a warning in the log each time."""
         item = self.table.item(row, column)
         if item is None:
             item = QTableWidgetItem()
@@ -417,6 +444,7 @@ class BitratePanel(QWidget):
         return item
 
     def _set_table_row(self, row: int, entry: BitrateEntry) -> None:
+        """Fills one row from its file."""
         if row < 0:
             return
         use = self._cell(row, _COL_USE)
@@ -444,6 +472,7 @@ class BitratePanel(QWidget):
                 item.setToolTip(str(entry.path))
 
     def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
+        """Shows or hides a file's line when its Use box is ticked."""
         if self._populating or item.column() != _COL_USE:
             return
         entries = list(self._entries.values())
@@ -452,6 +481,7 @@ class BitratePanel(QWidget):
             self._refresh_plot()
 
     def _update_buttons(self) -> None:
+        """Sets the buttons' text and whether they can be used."""
         running = self._worker is not None
         self.analyze_btn.setText(
             tr("Stopping…") if self._stopping else tr("Stop") if running else tr("Calculate bitrate")
@@ -466,6 +496,7 @@ class BitratePanel(QWidget):
 
     # ------------------------------------------------------------------- plot
     def _view_name(self) -> str:
+        """The graph chosen: "frame", "second" or "gop"."""
         if self.frame_radio.isChecked():
             return "frame"
         if self.gop_radio.isChecked():
@@ -473,6 +504,7 @@ class BitratePanel(QWidget):
         return "second"
 
     def _entry_plot(self, entry: BitrateEntry) -> BitratePlot | None:
+        """A file's line for the graph chosen, worked out once."""
         if entry.data is None:
             return None
         key = (self._view_name(), self.adjust_start_checkbox.isChecked())
@@ -482,6 +514,7 @@ class BitratePanel(QWidget):
         return entry.plots[key]
 
     def _refresh_plot(self) -> None:
+        """Draws the graph again with every used file's line."""
         self.chart.clear()
         self._current_plots.clear()
         axis_label = (
@@ -507,6 +540,7 @@ class BitratePanel(QWidget):
         self._update_buttons()
 
     def _on_hovered(self, time_value: float, _value: float) -> None:
+        """Shows each line's value at the time under the pointer."""
         self.chart.set_cursor_time(time_value)
         lines = [tr("Time: {time}", time=format_hms(time_value, decimals=3))]
         for entry, plot in self._current_plots.values():
@@ -522,6 +556,7 @@ class BitratePanel(QWidget):
         self.hover_label.setText("\n".join(lines))
 
     def _on_hover_left(self) -> None:
+        """Shows the hint again when the pointer leaves the graph."""
         self.chart.set_cursor_time(None)
         self.hover_label.setText(
             tr("Hover over the plot to inspect values. Scroll to zoom, drag to pan, "
@@ -529,6 +564,7 @@ class BitratePanel(QWidget):
         )
 
     def _on_export_png(self) -> None:
+        """Saves the graph as a PNG."""
         if not self.chart.has_data():
             QMessageBox.information(self, tr("No bitrate data"), tr("Analyze at least one video first."))
             return

@@ -1,15 +1,11 @@
-"""Frame-locked playback of the source against the test videos.
+"""Video Compare's playback view (VideoCompareView): the source against the
+test videos, frame by frame in step.
 
-A shared source and the selected encode, with the encodes beside it decoding
-ahead so that switching between test videos is instant. Where GStreamer can
-play them on the GPU, they play natively (LockedNativePool: D3D11, frame
-locked, one soundtrack); otherwise FFmpeg workers decode them
-(StreamDecodeWorker) and their frames are presented here, on one clock.
-
-This is the one playback view. It used to be two stacked by inheritance: a
-base that played one pair through a single GStreamer pipeline or one FFmpeg
-process, and a rolling view built on it that replaced how it decoded -- so
-the base's own decoding could no longer be reached.
+It plays the source and the selected test video, with the test videos beside
+it decoding ahead so that switching between them is instant. Where GStreamer
+can play them on the GPU, they play natively (LockedNativePool: frame-locked
+on the GPU, with one soundtrack). Otherwise FFmpeg workers decode them
+(StreamDecodeWorker), and their frames are shown here, on one clock.
 """
 from __future__ import annotations
 
@@ -44,16 +40,17 @@ from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom
 
 #: How often playback is looked after while frames are due (playing, a seek,
 #: another test video, decoders starting), and once paused on the frame
-#: wanted. At 10 ms throughout, a paused view cost 2-4% of a core.
+#: wanted. At 10 ms throughout, a paused view would cost 2-4% of a core.
 _BUSY_TICK_MS = 10
 _SETTLED_TICK_MS = 100
-#: How long FFmpeg's playback has to keep up before its soundtrack, stopped
-#: when the frames fell behind, starts again. Started again at the next
-#: frame, decoders slower than real time restarted it at every frame: 11
-#: times a second, the window's thread saturated and the sound in pieces.
+#: How long FFmpeg's playback must keep up before its soundtrack, stopped when
+#: the frames fell behind, starts again. Restarted at the next frame, decoders
+#: slower than real time would restart it at every frame (11 times a second),
+#: filling the window's thread and breaking the sound into pieces.
 _AUDIO_RESUME_SECONDS = 1.0
-#: How long a video file found on disk counts as there (can_play): it is
-#: asked at every frame played, 120 a second, and asked the disk as often.
+#: How long a video file found on disk counts as there (can_play). It is
+#: asked at every frame played, 120 times a second, which would ask the disk
+#: as often.
 _FOUND_FOR_S = 2.0
 #: When each video file was last found on disk (time.monotonic), by path.
 _FOUND: dict = {}
@@ -97,10 +94,12 @@ class _PairedFrameWidget(DragsZoomedFrame, QWidget):
         self._native_playback = False
 
     def set_native_playback(self, enabled: bool) -> None:
+        """Says whether native playback draws on it, which then covers all of it."""
         self._native_playback = bool(enabled)
         self.update()
 
     def paintEvent(self, _event) -> None:
+        """Paints it dark, unless native playback draws on it."""
         # While native playback owns it, the presenter's window covers all
         # of it, the bars beside a zoomed frame included.
         if self._native_playback:
@@ -108,9 +107,11 @@ class _PairedFrameWidget(DragsZoomedFrame, QWidget):
         QPainter(self).fillRect(self.rect(), QColor("#171717"))
 
     def _zoom_context(self):
+        """The view's zoom context (see VideoCompareView.zoom_context)."""
         return self.parentWidget().zoom_context()
 
     def _zoom_dragged(self) -> None:
+        """Tells the view the frame was dragged."""
         self.parentWidget().zoom_changed()
 
 
@@ -130,14 +131,15 @@ class _StreamSurface(_PairedFrameWidget):
         self._drawn = None
 
     def set_frame(self, payload, size):
-        """The frame it shows; the view repaints whichever surface is on
-        top (the other is covered, and was repainted at every frame too).
-        Its QImage is made when it is painted: the covered one's is not."""
+        """Sets the frame it shows. The view repaints only the surface on top
+        (the other is covered), and the QImage is made when it is painted,
+        so the covered surface makes none."""
         self._payload = payload
         self._side_width, self._height = size
         self._image = None
 
     def clear_frame(self):
+        """Shows no frame."""
         self._payload = None
         self._image = QImage()
         self.update()
@@ -147,10 +149,10 @@ class _StreamSurface(_PairedFrameWidget):
         return payload is self._payload
 
     def update_frame(self):
-        """Its new frame painted: where the last was drawn the same, only
-        that part. The bars beside it stay as painted -- filled again at
-        each frame, they took 0.2 ms of the window's thread, and were
-        flushed to the window with it."""
+        """Paints its new frame: only where the last one was drawn, when it
+        is drawn the same way. The bars beside it stay as painted; filling
+        them again at each frame would take 0.2 ms of the window's thread,
+        and send them to the screen again too."""
         drawn = self._drawn
         if drawn is not None and drawn[0] == self._drawn_key():
             self.update(drawn[1])
@@ -158,9 +160,11 @@ class _StreamSurface(_PairedFrameWidget):
             self.update()
 
     def _drawn_key(self):
+        """What decides where the frame is drawn: the surface's size and pixel ratio, and the frame's size."""
         return self.width(), self.height(), self.devicePixelRatioF(), self._side_width, self._height
 
     def _frame_image(self) -> QImage:
+        """The frame as a QImage, made once per frame."""
         if self._image is None:
             # RGBX, not RGBA: FFmpeg's alpha is always opaque, and a frame
             # that may be translucent is blended into the window, not copied.
@@ -169,6 +173,7 @@ class _StreamSurface(_PairedFrameWidget):
         return self._image
 
     def paintEvent(self, event):
+        """Draws the frame: fitted to the view, or where the zoom puts it, with dark bars around it."""
         if self._native_playback:
             return
         painter = QPainter(self)
@@ -183,11 +188,11 @@ class _StreamSurface(_PairedFrameWidget):
                 image.setDevicePixelRatio(1.0)
                 painter.drawImage(QRectF(place.x, place.y, place.width, place.height), image)
             return
-        # Fitted, on whole device pixels: a frame decoded at the view's size
-        # (VideoCompareView._wanted_maximum) is copied as it is, not scaled
-        # by the pixel or two its even size leaves, and only the bars beside
-        # it are filled: each a pixel into it, which the frame then covers,
-        # so that rounding leaves no gap.
+        # Fitted, on whole device pixels. A frame decoded at the view's size
+        # (VideoCompareView._wanted_maximum) is copied as it is, not scaled by
+        # the pixel or two its even size leaves, and only the bars beside it
+        # are filled. Each bar reaches a pixel into the frame, which the
+        # frame then covers, so that rounding leaves no gap.
         ratio = self.devicePixelRatioF()
         view_w, view_h = round(self.width() * ratio), round(self.height() * ratio)
         scale = min(view_w / self._side_width, view_h / self._height)
@@ -217,12 +222,13 @@ class _StreamSurface(_PairedFrameWidget):
 
 
 class VideoCompareView(QWidget):
-    """The source and the test videos, with bounded decode-ahead and instant
-    selection.
+    """Plays the source and the test videos, decoding a few frames ahead,
+    with instant switching between test videos.
 
-    FFmpeg workers are producers, not clocks. A frame is presented only when
-    both source and selected encode have that exact comparison frame number.
-    Neighbours advance on that same clock but never hold up the selected pair.
+    The FFmpeg workers only decode; they are not clocks. A frame is shown
+    only when both the source and the selected test video have that exact
+    frame number. The neighbours follow the same clock, but never hold up
+    the selected pair.
     """
 
     position_changed = Signal(int)
@@ -292,6 +298,7 @@ class VideoCompareView(QWidget):
         self._distorted_surface.hide()
 
     def resizeEvent(self, event):
+        """Fits the surfaces to the view, and decodes at the new size once the resize settles."""
         for surface in (self._source_surface, self._distorted_surface):
             surface.setGeometry(self.rect())
             surface.refresh_cursor()
@@ -302,32 +309,36 @@ class VideoCompareView(QWidget):
         super().resizeEvent(event)
 
     def event(self, event):
+        """Decodes at the new size after a move to a screen of another scaling."""
         # Moved to a screen of another scaling: other device pixels, as a resize.
         if event.type() == QEvent.DevicePixelRatioChange and self._pool_active:
             self._resize_timer.start()
         return super().event(event)
 
     def showEvent(self, event):
+        """Looks after playback again once on screen."""
         super().showEvent(event)
         self._on_screen = True
         if self._native_pool is not None or self._pool_active:
             self._wake()
 
     def hideEvent(self, event):
-        # Off screen -- another tab, the window minimized -- nothing is
-        # drawn, and the decoders wait with their queues full. Ticking on,
-        # the view cost 2-4% of a core for the rest of the session once
-        # Video Compare had been opened.
+        """Stops looking after playback while off screen."""
+        # Off screen (another tab, the window minimized), nothing is drawn,
+        # and the decoders wait with full queues. Ticking on, the view would
+        # cost 2-4% of a core for the rest of the session once Video Compare
+        # had been opened.
         self._on_screen = False
         self._pool_timer.stop()
         super().hideEvent(event)
 
     def _wake(self) -> None:
-        """Playback looked after every 10 ms again, from now: something is
-        due. Only on screen (showEvent wakes it there). Not isVisible(): a
-        minimized window's widgets stay visible to Qt, and minimizing hides
-        the panel after the view -- the panel then pauses it, which woke it
-        again. (Leaving the tab hides the panel first, then the view.)"""
+        """Looks after playback often again from now, because something is
+        due. Only on screen (showEvent wakes it there), judged by
+        _on_screen rather than isVisible(): a minimized window's widgets
+        stay visible to Qt, and minimizing hides the panel after the view,
+        so the panel's pause would wake it again. (Leaving the tab hides the
+        panel first, then the view.)"""
         busy = self._busy_tick_ms()
         if self._on_screen and not (self._pool_timer.isActive() and self._pool_timer.interval() == busy):
             # Not restarted when already ticking that fast: a slider dragged
@@ -336,15 +347,16 @@ class VideoCompareView(QWidget):
             self._pool_timer.start(busy)
 
     def _pace(self, settled: bool) -> None:
-        """Ticks slowed once paused on the frame wanted, busy otherwise."""
+        """Slows the ticks once paused on the frame wanted (`settled`), and
+        speeds them up otherwise."""
         interval = _SETTLED_TICK_MS if settled else self._busy_tick_ms()
         if self._pool_timer.interval() != interval:
             self._pool_timer.setInterval(interval)
 
     def _busy_tick_ms(self) -> int:
-        """Half a frame's time while playing (4 ms at 120 fps): at every
-        10 ms, a 120 fps video played natively showed 83 frames a second.
-        10 ms otherwise."""
+        """The busy tick: half a frame's time while playing (4 ms at
+        120 fps), and 10 ms otherwise. Ticking every 10 ms, a 120 fps video
+        played natively showed only 83 frames a second."""
         fps = self._series[0].fps if self._wanted_playing and self._series else 0
         return max(2, min(_BUSY_TICK_MS, int(500 / fps))) if fps > 0 else _BUSY_TICK_MS
 
@@ -360,12 +372,12 @@ class VideoCompareView(QWidget):
         return self._zoom.factor is None
 
     def zoom_context(self, frame=None):
-        """(zoom, view size, frame size, ratio) for a `frame`-pixel picture
-        of the pair -- the comparison's own size, as its metrics see it,
-        when not given -- at the comparison's scale: a source decoded at its
-        native size beside a smaller encode is drawn at the encode's size,
+        """Returns (zoom, view size, frame size, ratio) for a picture of the
+        pair `frame` pixels in size (by default the comparison's own size, as
+        its metrics see it), at the comparison's scale: a source decoded at
+        its own size beside a smaller encode is drawn at the encode's size,
         and one of another shape (its black bars kept) keeps its shape.
-        None when nothing is loaded."""
+        Returns None when nothing is loaded."""
         if self._comparison is None:
             return None
         reference = comparison_dimensions(self._comparison)
@@ -381,9 +393,9 @@ class VideoCompareView(QWidget):
         return None if context is None else self._zoom.placement(*context[1:])
 
     def native_view(self, sample):
-        """For LockedPresentation, a GPU frame zoomed: the part of it in
-        view (x, y, width, height in its pixels) and where that goes in the
-        window (device pixels). None when it fits the window."""
+        """For LockedPresentation, a zoomed GPU frame: returns the part of it
+        in view (x, y, width, height in its pixels) and where that goes in
+        the window (device pixels), or None when it fits the window."""
         if self._zoom.factor is None:
             return None
         structure = sample.get_caps().get_structure(0)
@@ -395,8 +407,9 @@ class VideoCompareView(QWidget):
         ratio = self.devicePixelRatioF()
         rectangle = (round(drawn.x * ratio), round(drawn.y * ratio),
                      max(1, round(drawn.width * ratio)), max(1, round(drawn.height * ratio)))
-        # Sized from the part in view, then placed: rounding each edge apart
-        # (round() takes halves to even) gave 4 rows where 5 were in view.
+        # Sized from the part in view, then placed. Rounding each edge on its
+        # own (round() takes halves to even) can give 4 rows where 5 are in
+        # view.
         width = max(1, min(size[0], round((right - left) * size[0])))
         height = max(1, min(size[1], round((bottom - top) * size[1])))
         crop = (min(round(left * size[0]), size[0] - width), min(round(top * size[1]), size[1] - height),
@@ -404,9 +417,9 @@ class VideoCompareView(QWidget):
         return crop, rectangle
 
     def zoom_changed(self) -> None:
-        """The zoom, or the part of the frame in view, changed: shown again.
-        Zoomed, FFmpeg's frames are decoded at the comparison's full size,
-        not the view's (_wanted_maximum)."""
+        """Shows the frame again after the zoom, or the part of the frame in
+        view, has changed. When zoomed, FFmpeg's frames are decoded at the
+        comparison's full size, not the view's (_wanted_maximum)."""
         if self._native_pool is not None:
             try:
                 self._native_pool.place()
@@ -421,20 +434,22 @@ class VideoCompareView(QWidget):
             surface.update()
 
     def _wanted_maximum(self):
-        """The size FFmpeg's frames are decoded at most, in device pixels:
-        fitted, the view's -- no more of a frame is ever shown, and FFmpeg
-        scales it better than painting does; zoomed, the comparison's own
-        (None). It was the screen's: 4K HDR played at 22-26 frames a second,
-        each 3840x2160 (33 MB) for a view of 2166x959 device pixels."""
+        """The largest size FFmpeg's frames are decoded at, in device pixels:
+        when fitted, the view's, because no more of a frame is ever shown and
+        FFmpeg scales better than painting does; when zoomed, the
+        comparison's own (None). Don't decode at the screen's size: 4K HDR
+        then plays at 22-26 frames a second, each 3840x2160 (33 MB) for a
+        view of 2166x959 device pixels."""
         if self._zoom.factor is not None:
             return None
         ratio = self.devicePixelRatioF()
         return max(2, round(self.width() * ratio)), max(2, round(self.height() * ratio))
 
     def _follow_decode_size(self) -> None:
-        """FFmpeg's frames decoded again when the size wanted gives any of
-        them another: fitted, the view's, once a resize settled (copied to
-        it as they are, not scaled by the painting); zoomed, their own."""
+        """Decodes FFmpeg's frames again when the size wanted gives any of
+        them a new size: when fitted, the view's, once a resize has settled
+        (so that they are copied as they are, not scaled by the painting);
+        when zoomed, their own."""
         if not self._pool_active:
             return
         wanted = self._wanted_maximum()
@@ -446,18 +461,19 @@ class VideoCompareView(QWidget):
             self._pool_maximum = wanted  # the same frames: they go on decoding
 
     def _decode_at_new_size(self) -> None:
-        """FFmpeg's decoders started again for frames of another size: the
-        frame on screen stays until theirs come -- 1.4-2 s on an RTX 5090,
-        for a Vulkan device and the seek -- where cleared, the view would be
-        dark for that time."""
+        """Starts FFmpeg's decoders again for frames of another size. The
+        frame on screen stays until theirs come (1.4-2 s on an RTX 5090, for
+        a Vulkan device and the seek); cleared, the view would be dark for
+        that long."""
         self._stop_decoder(keep_frame=True)
         self._stop_audio()
         self._start_ffmpeg(self._wanted_playing, self._pool_reason, keep_frame=True)
 
     def _decode_size_changes(self, maximum) -> bool:
-        """Whether decoding with `maximum` would give any of the pool's
-        videos other frame sizes: the source, the selected encode, and the
-        encodes decoded beside it, whose workers are kept for a switch."""
+        """Whether decoding with `maximum` would give any of the decoded
+        videos other frame sizes: the source, the selected test video, and
+        the test videos decoded beside it, whose workers are kept for a
+        switch."""
         if self._comparison is None or maximum == self._pool_maximum:
             return False
         decoded = [comparison for comparison, _side in self._desired.values()] or [
@@ -466,6 +482,7 @@ class VideoCompareView(QWidget):
                    for comparison in decoded)
 
     def closeEvent(self, event):
+        """Stops playback, and closes once every worker has stopped."""
         self.clear()
         if self.live_workers():
             event.ignore()
@@ -475,6 +492,7 @@ class VideoCompareView(QWidget):
 
     @staticmethod
     def can_play(comparison: FrameComparison) -> tuple[bool, str]:
+        """Whether the pair can be played, and if not, why."""
         if comparison.resample_target is not None:
             return (
                 False,
@@ -493,23 +511,28 @@ class VideoCompareView(QWidget):
 
     @property
     def is_playing(self) -> bool:
+        """Whether it is playing now."""
         return self._is_playing
 
     @property
     def playback_requested(self) -> bool:
+        """Whether playing was asked for (it may still be buffering)."""
         return self._wanted_playing
 
     @property
     def position(self) -> int:
+        """The position shown, in ms from the first frame."""
         if self._comparison is None or self._comparison.fps <= 0:
             return 0
         return round(self._frame / self._comparison.fps * 1000)
 
     def live_workers(self) -> list[QThread]:
+        """The decoders still running, those stopping included."""
         running = [worker for worker in self._retired_workers if worker.isRunning()]
         return list(dict.fromkeys([*running, *self._pool.values()]))
 
     def load(self, comparison, position_ms, *, playing=False, color_settings=None, series=None, source_native=True):
+        """Shows a comparison (one of `series`) at `position_ms`. A different test video of the same series keeps the decoders running. Returns False if it cannot be played."""
         available, reason = self.can_play(comparison)
         if not available:
             self.clear()
@@ -559,6 +582,7 @@ class VideoCompareView(QWidget):
         return True
 
     def clear(self) -> None:
+        """Stops playback and shows nothing."""
         self._wanted_playing = False
         self._is_playing = False
         self._comparison = None
@@ -568,6 +592,7 @@ class VideoCompareView(QWidget):
         self._series = []
 
     def set_position(self, position_ms: int) -> None:
+        """Seeks to `position_ms`."""
         if self._native_pool is not None:
             self._native_pool.seek(position_ms)
             self._frame = self._native_pool.frame
@@ -580,6 +605,7 @@ class VideoCompareView(QWidget):
         self._restart_decoder(realtime=self._wanted_playing)
 
     def set_playing(self, playing: bool) -> None:
+        """Plays or pauses."""
         playing = bool(playing)
         if self._native_pool is not None:
             self._native_pool.set_playing(playing)
@@ -601,8 +627,9 @@ class VideoCompareView(QWidget):
             return
         self._clock_frame = self._presented if not playing and self._presented >= 0 else self._target_frame()
         self._wanted_playing = self._is_playing = playing
-        # Said at once: said only as a frame was shown, it went on saying
-        # "Playing" when paused -- by minimizing the window, say.
+        # The status is updated at once. Updated only as a frame is shown, it
+        # would go on saying "Playing" when paused (by minimizing the window,
+        # say).
         self._pool_status()
         self._audio_due = False
         self._audio_resume_at = 0.0
@@ -615,15 +642,17 @@ class VideoCompareView(QWidget):
         self.playing_changed.emit(playing)
 
     def show_source(self, showing: bool) -> None:
+        """Shows the source's frame (True) or the test video's."""
         self._showing_source = bool(showing)
         if self._native_pool is not None:
             self._native_pool.show_source(showing)
         if self._pool_active:
             surface = self._source_surface if showing else self._distorted_surface
             surface.raise_()
-            surface.update()  # its frame is current; covered, it was not repainted
+            surface.update()  # its frame is current, but it was not repainted while covered
 
     def set_audio_enabled(self, enabled: bool) -> None:
+        """Turns the soundtrack on or off."""
         self._audio_enabled = bool(enabled)
         if self._native_pool is not None:
             self._native_pool.set_audio_enabled(enabled)
@@ -634,6 +663,7 @@ class VideoCompareView(QWidget):
             self._start_audio(self._frame)
 
     def set_color_settings(self, settings: PreviewColorSettings) -> None:
+        """Changes how HDR is shown, decoding again if it changed."""
         if settings == self._color_settings:
             return
         self._color_settings = settings
@@ -641,6 +671,7 @@ class VideoCompareView(QWidget):
             self._restart_decoder(realtime=self._wanted_playing)
 
     def _restart_decoder(self, *, realtime):
+        """Starts playback again from the current frame: natively where it can, else with FFmpeg."""
         if self._comparison is None:
             return
         self._generation += 1
@@ -668,6 +699,7 @@ class VideoCompareView(QWidget):
         self._start_ffmpeg(realtime, reason)
 
     def _start_ffmpeg(self, realtime, reason="", *, keep_frame=False):
+        """Starts playback with FFmpeg workers, saying why native playback is not used (`reason`)."""
         self._pool_reason = reason
         self._pool_maximum = self._wanted_maximum()
         self._pool_active = True
@@ -692,6 +724,7 @@ class VideoCompareView(QWidget):
         self.playing_changed.emit(realtime)
 
     def _status(self, text):
+        """Sends the status line, when it changed."""
         if text != self._last_status:
             self._last_status = text
             self.status_changed.emit(text)
@@ -707,8 +740,9 @@ class VideoCompareView(QWidget):
         return 1 + self._decoded_videos
 
     def set_decoded_videos(self, count: int) -> None:
-        """Applies immediately to whatever is playing: extra neighbours are
-        retired, missing ones started, the selected pair is never touched."""
+        """Sets how many test videos are kept decoding, at once for whatever
+        is playing: extra neighbours are stopped and missing ones started,
+        and the selected pair is never touched."""
         count = max(1, int(count))
         if count == self._decoded_videos:
             return
@@ -719,10 +753,12 @@ class VideoCompareView(QWidget):
             self._sync_pool()
 
     def _source_recipe(self):
+        """The source's playback comparison, at the series' frame rate."""
         return replace(source_playback_comparison(self._comparison, self._source_native),
                        fps=self._series[0].fps)
 
     def _sync_pool(self):
+        """Keeps the FFmpeg workers still wanted, stops the others and starts the missing ones."""
         if not self._pool_active:
             return
         source = self._source_recipe()
@@ -743,15 +779,16 @@ class VideoCompareView(QWidget):
         self._launch_missing()
 
     def _launch_missing(self):
+        """Starts the FFmpeg workers wanted but not running, within the decoder limit."""
         if not self._pool_active:
             return
-        # Retiring workers count too: rapid navigation may not transiently
-        # spawn one video decoder more than allowed while the old process is exiting.
+        # Workers still stopping count too, so that quick switching never
+        # runs one decoder more than allowed while an old process exits.
         occupied = sum(w.isRunning() for w in self._retired_workers) + len(self._pool)
-        # The pair on screen first: the encodes decoded beside it start once
-        # it has shown a frame (_tick calls this again). Started with it, two
-        # of them slowed its first frame at the tab's first opening from
-        # 1.1-1.3 s to 1.5-1.6.
+        # The pair on screen comes first: the test videos decoded beside it
+        # start once it has shown a frame (_tick calls this again). Started
+        # with it, two of them slowed its first frame at the tab's first
+        # opening from 1.1-1.3 s to 1.5-1.6 s.
         on_screen = None if self._presented >= 0 else (
             {key for key in self._desired if key[0] == "source"} | {("distorted", self._selected)})
         launched = False
@@ -779,28 +816,33 @@ class VideoCompareView(QWidget):
             self._pool_status()  # its count of streams
 
     def _stream_ready(self, key, worker, detail):
+        """Keeps a worker's description for the status line."""
         if self._pool.get(key) is worker:
             self._details[key] = detail
 
     def _stream_failed(self, key, worker, error):
+        """Reports that a worker's video could not play."""
         if self._pool.get(key) is worker:
             self._failures[key] = error
             self.status_changed.emit(f"Video {key} could not play: {error}")
 
     def _stream_finished(self, key, worker):
+        """Cleans up after a worker that ended, and starts any missing one."""
         self._retired_workers.discard(worker)
-        # Keep queued frames from a naturally completed short clip until
-        # consumed. Obsolete workers may be destroyed immediately.
+        # A worker that reached the end of a short clip keeps its queued
+        # frames until they are shown. A worker no longer wanted can go now.
         if self._pool.get(key) is not worker:
             worker.deleteLater()
         self._launch_missing()
 
     def _target_frame(self):
+        """The frame due now by the playback clock."""
         if self._clock_started is None or not self._wanted_playing:
             return self._clock_frame
         return self._clock_frame + int((time.monotonic() - self._clock_started) * self._series[0].fps)
 
     def _tick(self):
+        """Advances playback: natively, or by taking each worker's frames and showing the newest pair both videos have."""
         if (pool := self._native_pool) is not None:
             try:
                 position = pool.poll()
@@ -813,8 +855,9 @@ class VideoCompareView(QWidget):
                 self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · GStreamer D3D11 · {len(pool.entries)}/{self.decoder_limit} streams · {pool.description}")
                 self._check_end()
                 if self._wanted_playing and not pool.buffering and not pool.ended:
-                    # The next tick when the next frame is due, if ticking:
-                    # never started here, off screen (hideEvent).
+                    # The next tick when the next frame is due, if ticking at
+                    # all: it is never started here, while off screen
+                    # (hideEvent).
                     if self._pool_timer.isActive():
                         due = pool.next_tick_ms()
                         self._pool_timer.start(due if due is not None else self._busy_tick_ms())
@@ -831,8 +874,9 @@ class VideoCompareView(QWidget):
         target = self._target_frame()
         source_key = next((key for key in self._desired if key[0] == "source"), None)
         distorted_key = ("distorted", self._selected)
-        # Do not discard fast-stream frames while its partner is still
-        # decoding them. Backpressure holds that producer at three frames.
+        # Don't drop a faster video's frames while the other video is still
+        # decoding them. The worker's queue holds the faster one at three
+        # frames ahead.
         limits = []
         for key in (source_key, distorted_key):
             worker = self._pool.get(key)
@@ -846,8 +890,9 @@ class VideoCompareView(QWidget):
             due = paired_target if key in (source_key, distorted_key) else target
             for number, payload in worker.drain_through(due):
                 history[number] = payload
-            # Three past frames plus the worker's three future frames bound
-            # RAM regardless of movie duration or number of files in the list.
+            # Three past frames, plus the worker's three frames ahead, limit
+            # the memory used, whatever the video's length or the number of
+            # files in the list.
             for number in sorted(history)[:-3]:
                 payload = history.pop(number)
                 if not (self._source_surface.shows(payload) or self._distorted_surface.shows(payload)):
@@ -859,7 +904,7 @@ class VideoCompareView(QWidget):
             self._buffering = True
             if self._wanted_playing and target - max(0, self._presented) > 2:
                 # Starting (a seek, another test video) is not falling behind:
-                # the soundtrack starts with the first frame, as it always did.
+                # the soundtrack starts with the first frame.
                 if self._presented >= 0 and self._clock_started is not None:
                     self._fell_behind()
                 else:
@@ -872,8 +917,8 @@ class VideoCompareView(QWidget):
         frame = max(common)
         if frame == self._presented:
             if self._wanted_playing and target - frame > 2:
-                # Don't let audio run arbitrarily ahead during sustained
-                # starvation. Resume it with the frames, once they keep up.
+                # Don't let the sound run far ahead while frames keep failing
+                # to come. It starts again with the frames, once they keep up.
                 self._fell_behind()
                 self._buffering = True
             self._pace(not self._wanted_playing and frame >= target)
@@ -881,8 +926,8 @@ class VideoCompareView(QWidget):
         self._presented = frame
         fps = self._series[0].fps
         if self._wanted_playing and target - frame > 2:
-            # A decoder that cannot sustain real time must not create an
-            # ever-growing queue or let the comparison drift away from audio.
+            # A decoder slower than real time must not build an ever-growing
+            # queue, or let the pictures drift away from the sound.
             self._clock_frame = frame
             self._clock_started = time.monotonic()
             self._fell_behind()
@@ -913,17 +958,19 @@ class VideoCompareView(QWidget):
         self._status(f"{'Playing' if self._wanted_playing else 'Paused'} · {len(self._pool)}/{self.decoder_limit} streams · {detail}")
 
     def _check_end(self):
+        """Stops playing at the end of the shortest video."""
         counts = [item.frame_count / item.fps for item in self._series if item.frame_count > 0 and item.fps > 0]
         if counts and self._wanted_playing and self.position / 1000 >= min(counts) - 1 / self._series[0].fps:
             self.set_playing(False)
             self._status("Playback ended")
 
     def _start_audio(self, frame: int) -> None:
+        """Plays the source's soundtrack from a frame, with FFmpeg."""
         comparison = self._comparison
         if self._pool_active and self._series:
-            # Keep one soundtrack alive across visual switches: this is a
-            # visual comparison, and several soundtracks at once would mix.
-            # It is the source's, from the frame on screen.
+            # One soundtrack plays across switches between videos: this is a
+            # comparison of pictures, and several soundtracks at once would
+            # mix. It is the source's, from the frame on screen.
             comparison = self._series[0]
             frame = max(0, round(self._presented / self._series[0].fps * comparison.fps))
         if not self._audio_enabled or comparison is None:
@@ -944,22 +991,24 @@ class VideoCompareView(QWidget):
         self._audio_handle = handle
 
     def _fell_behind(self) -> None:
-        """The frames fell behind the clock: the soundtrack stops, and
+        """Stops the soundtrack because the frames fell behind the clock. It
         starts again only once they have kept up for a while."""
         self._stop_audio()
         self._audio_resume_at = time.monotonic() + _AUDIO_RESUME_SECONDS
 
     def _stop_audio(self) -> None:
+        """Stops the soundtrack."""
         process = self._audio_process
         handle = self._audio_handle
         self._audio_process = None
         self._audio_handle = None
         if process is not None:
-            # Ended from a thread of its own: listing its process tree,
-            # twice, held the window for 28 ms -- at each pause.
+            # Ended from a thread of its own, because listing its process tree
+            # twice would hold the window for 28 ms at each pause.
             threading.Thread(target=_end_audio, args=(process, handle), name="audio-stop", daemon=True).start()
 
     def _stop_decoder(self, *, keep_frame=False):
+        """Stops all decoding, and clears the frame shown unless keep_frame."""
         if self._native_pool is not None:
             self._native_pool.stop()
             self._native_pool = None

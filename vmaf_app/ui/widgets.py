@@ -1,8 +1,8 @@
-"""Reusable Qt widgets with no knowledge of this app's data or columns.
+"""Reusable Qt widgets that know nothing of the app's data or columns.
 
-Each exists because Qt's stock widget is subtly wrong for how this app uses
-it; keeping them here rather than in main_window.py keeps that module about
-*this app's* window and these about Qt.
+Each exists because Qt's own widget is slightly wrong for how the app uses
+it. Keeping them here rather than in main_window.py keeps that module about
+the app's window, and these about Qt.
 """
 from __future__ import annotations
 
@@ -25,13 +25,13 @@ _MIN_FILL_WIDTH = 60
 
 
 class CheckableHeaderView(QHeaderView):
-    """A horizontal header where chosen sections carry a checkbox, the way
-    FFMetrics' PSNR/SSIM/XPSNR columns do -- so which metrics get computed is
-    set right above the column the results land in, instead of hidden away in
-    a separate options panel.
+    """A horizontal header where chosen sections have a checkbox, as
+    FFMetrics' PSNR, SSIM and XPSNR columns do, so that which metrics are
+    calculated is set right above the column the results go in, rather than
+    in a separate options panel.
 
-    `checkable` maps section index -> initial checked state; sections absent
-    from it are drawn and behave as ordinary headers.
+    `checkable` maps a section's index to its first checked state. Sections
+    not in it are drawn and behave as ordinary headers.
     """
 
     sectionToggled = Signal(int, bool)
@@ -42,22 +42,26 @@ class CheckableHeaderView(QHeaderView):
         self.setSectionsClickable(True)
 
     def is_checked(self, section: int) -> bool:
+        """Whether a section's checkbox is checked."""
         return self._checked.get(section, False)
 
     def set_checked(self, section: int, value: bool) -> None:
-        """Sets a checkbox without emitting sectionToggled -- for syncing the
-        header to state that changed elsewhere, which must not loop back."""
+        """Sets a checkbox without sending sectionToggled, for bringing the
+        header in line with a change made elsewhere, which must not loop
+        back."""
         if section in self._checked and self._checked[section] != value:
             self._checked[section] = value
             self.updateSection(section)
 
     def _indicator_rect(self, rect) -> QRect:
+        """Where the checkbox goes in a section's rectangle: at its left, centred up and down."""
         size = self.style().pixelMetric(QStyle.PM_IndicatorWidth, None, self)
         return QRect(
             rect.x() + _INDICATOR_MARGIN, rect.y() + (rect.height() - size) // 2, size, size,
         )
 
     def paintSection(self, painter, rect, logicalIndex: int) -> None:
+        """Draws the section as usual, and its checkbox over it."""
         painter.save()
         super().paintSection(painter, rect, logicalIndex)
         painter.restore()
@@ -71,11 +75,12 @@ class CheckableHeaderView(QHeaderView):
         self.style().drawPrimitive(QStyle.PE_IndicatorCheckBox, opt, painter, self)
 
     def sectionSizeFromContents(self, logicalIndex):
+        """The section's size, with room for its checkbox."""
         size = super().sectionSizeFromContents(logicalIndex)
         if logicalIndex in self._checked:
-            # The native size hint knows only the centered text, not the
-            # checkbox we paint over its left edge. Reserve symmetric space
-            # so the label cannot overlap the indicator at its default width.
+            # Qt's size hint knows only the centred text, not the checkbox
+            # painted over its left edge. Room is added on both sides, so that
+            # at its default width the label cannot overlap the checkbox.
             indicator = self.style().pixelMetric(QStyle.PM_IndicatorWidth, None, self)
             size.setWidth(size.width() + 2 * (indicator + _INDICATOR_MARGIN))
         return size
@@ -83,8 +88,8 @@ class CheckableHeaderView(QHeaderView):
     def section_indicator_rect(self, section: int) -> QRect:
         """Where this section's checkbox is drawn, in viewport coordinates.
 
-        Same geometry paintSection uses, so what is clickable is exactly
-        what is visible.
+        It is the same geometry paintSection uses, so what can be clicked is
+        exactly what is seen.
         """
         return self._indicator_rect(QRect(
             self.sectionViewportPosition(section), 0,
@@ -92,6 +97,7 @@ class CheckableHeaderView(QHeaderView):
         ))
 
     def mousePressEvent(self, event) -> None:
+        """Toggles a checkbox clicked on; any other click is an ordinary header click."""
         pos = event.position().toPoint()
         index = self.logicalIndexAt(pos)
         if index in self._checked and self.section_indicator_rect(index).contains(pos):
@@ -100,19 +106,19 @@ class CheckableHeaderView(QHeaderView):
             self.sectionToggled.emit(index, self._checked[index])
             return
         # Anywhere else in the section is an ordinary header click: dragging
-        # the boundary to resize the column, or sorting. Toggling on the
-        # whole section meant the column could not be resized without also
-        # turning the metric on and off, and made every near-miss of the
-        # checkbox silently change what the next run would compute.
+        # the edge to resize the column, or sorting. Don't toggle on a click
+        # anywhere in the section: the column could then not be resized
+        # without turning the metric on or off, and every near miss of the
+        # checkbox would quietly change what the next run calculates.
         super().mousePressEvent(event)
 
 
 class FillColumnTable(QTableWidget):
-    """A QTableWidget where one column (`fill_column`) always expands to
-    fill whatever space is left over after the others, while STILL being
-    drag-resizable by the user -- Qt's own Stretch resize mode fills leftover
-    space too, but disables dragging for that column entirely, which doesn't
-    work when that's the one column users most want to resize (Path).
+    """A QTableWidget where one column (`fill_column`) always grows to fill
+    the space the others leave, while the user can still resize it by
+    dragging. Qt's own Stretch mode fills the space too, but stops the
+    column being dragged at all, which does not suit the one column users
+    most want to resize (Path).
     """
 
     #: Files dropped on the table from outside it (a file manager): their paths.
@@ -129,31 +135,34 @@ class FillColumnTable(QTableWidget):
         # ones dropped on.
         self.drops_allowed = True
         self._drop_line: int | None = None  # the row a dragged row would go before, while dragging
-        # What the drag over the table carries, found when it enters: a drag
-        # move comes with every mouse move, and finding it again then looked
-        # at every dragged file on disk each time (slow on a network drive).
+        # What the drag over the table carries, found once when it enters. A
+        # drag move comes with every mouse move, and finding it again then
+        # would look at every dragged file on disk each time (slow on a
+        # network drive).
         self._drag_kind: str | None = None
         self._fill_column = fill_column
         self._other_columns = other_columns
         self._recalculating = False
-        # Remembers a manual drag of the fill column past its "natural fill"
-        # width. Without this, any later resizeEvent (e.g. the window itself
-        # being resized) called _recalculate_fill_column() unconditionally
-        # and clamped the column straight back down to the leftover-space
-        # width, silently undoing the drag instead of letting it grow past
-        # the available room and produce a horizontal scrollbar.
+        # Remembers a manual drag of the fill column past the width that
+        # just fills the space. Without it, any later resize (the window's,
+        # say) would set the column straight back to that width, quietly
+        # undoing the drag instead of letting it grow past the room there is,
+        # with a horizontal scrollbar.
         self._fill_column_user_width: int | None = None
         self.horizontalHeader().sectionResized.connect(self._on_section_resized)
 
     def setHorizontalHeader(self, header) -> None:
-        # Swapping in a different header (e.g. the checkable metric header)
-        # drops the connection __init__ made to the *old* one, which
-        # silently disables the fill-column behaviour entirely -- the column
-        # simply stops responding to any other column being resized.
+        """Puts in another header, and connects it as __init__ connected the
+        first."""
+        # A new header (the checkable metric header, say) does not have the
+        # connection __init__ made to the old one. Without connecting it
+        # again, the fill column would stop following the other columns'
+        # resizing.
         super().setHorizontalHeader(header)
         header.sectionResized.connect(self._on_section_resized)
 
     def resizeEvent(self, event) -> None:
+        """Fits the fill column to the new width."""
         super().resizeEvent(event)
         self._recalculate_fill_column()
 
@@ -185,11 +194,13 @@ class FillColumnTable(QTableWidget):
         return row if y < middle else row + 1
 
     def _set_drop_line(self, row: int | None) -> None:
+        """Shows the line where dragged rows would go (None hides it)."""
         if row != self._drop_line:
             self._drop_line = row
             self.viewport().update()
 
     def dragEnterEvent(self, event) -> None:
+        """Accepts a drag of the table's own rows or of files, and notes which."""
         kind = self._drag_kind = self._drop_kind(event)
         if kind is None:
             event.ignore()
@@ -198,6 +209,7 @@ class FillColumnTable(QTableWidget):
         event.accept()
 
     def dragMoveEvent(self, event) -> None:
+        """Shows where dragged rows would go."""
         kind = self._drag_kind if self.drops_allowed else None
         if kind is None:
             self._set_drop_line(None)
@@ -208,11 +220,13 @@ class FillColumnTable(QTableWidget):
         event.accept()
 
     def dragLeaveEvent(self, event) -> None:
+        """Hides the drop line."""
         self._drag_kind = None
         self._set_drop_line(None)
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event) -> None:
+        """Reports dropped rows (rowsMoved) or files (filesDropped)."""
         self._set_drop_line(None)
         self._drag_kind = None
         kind = self._drop_kind(event)
@@ -222,9 +236,9 @@ class FillColumnTable(QTableWidget):
         if kind == "rows":
             rows = sorted(index.row() for index in self.selectionModel().selectedRows())
             target = self._insertion_row(event)
-            # Reported as a copy (a drag from this table offers both): on a
-            # move, Qt's drag would then delete the dragged rows itself. A
-            # drag offering only a move is turned down instead.
+            # Reported as a copy (a drag from this table offers both),
+            # because on a move, Qt's drag would delete the dragged rows
+            # itself. A drag that offers only a move is turned down.
             event.setDropAction(Qt.CopyAction)
             if event.dropAction() != Qt.CopyAction:
                 event.ignore()
@@ -238,6 +252,7 @@ class FillColumnTable(QTableWidget):
         self.filesDropped.emit(files)
 
     def paintEvent(self, event) -> None:
+        """Draws the table, and the drop line while rows are dragged."""
         super().paintEvent(event)
         if self._drop_line is None:
             return
@@ -254,6 +269,7 @@ class FillColumnTable(QTableWidget):
         painter.end()
 
     def _on_section_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
+        """Remembers a drag of the fill column, or fits it after another column was resized."""
         if self._recalculating:
             return
         if logical_index == self._fill_column:
@@ -262,6 +278,7 @@ class FillColumnTable(QTableWidget):
         self._recalculate_fill_column()
 
     def _recalculate_fill_column(self) -> None:
+        """Sets the fill column to the space the others leave, or to the width the user dragged it to if that is wider."""
         if self._recalculating:
             return
         other_total = sum(self.columnWidth(c) for c in self._other_columns)
@@ -281,10 +298,10 @@ class ElidedLabel(QLabel):
     """One line of text cut to the width it is given, ending in "\u2026",
     with the whole text in the tooltip when it is cut.
 
-    A plain QLabel asks for its text's full width, so one long line -- a
-    run line with a long file name, both halves' figures and the decode
-    plan -- set the window's minimum width, forcing it wider than the
-    screen on a smaller display. This one asks for no width at all.
+    A plain QLabel asks for its text's full width, so one long line (a run
+    line with a long file name, every task's figures and the decode plan)
+    would set the window's minimum width, forcing it wider than the screen
+    on a smaller display. This one asks for no width at all.
     """
 
     def __init__(self, parent=None) -> None:
@@ -294,29 +311,36 @@ class ElidedLabel(QLabel):
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
     def set_text(self, text: str, tooltip: str = "") -> None:
+        """Sets the text, and a tooltip to show with it."""
         self._full, self._tooltip = text, tooltip
         self._fit()
 
     def full_text(self) -> str:
+        """The whole text, before cutting."""
         return self._full
 
     def clear(self) -> None:
+        """Clears the text and the tooltip."""
         self._full = self._tooltip = ""
         super().clear()
         self.setToolTip("")
 
     def minimumSizeHint(self) -> QSize:
+        """Asks for no width at all, and the usual height."""
         return QSize(0, super().minimumSizeHint().height())
 
     def resizeEvent(self, event) -> None:
+        """Cuts the text again for the new width."""
         super().resizeEvent(event)
         self._fit()
 
     def showEvent(self, event) -> None:
+        """Cuts the text to the width it is shown at."""
         super().showEvent(event)
         self._fit()
 
     def _fit(self) -> None:
+        """Shows the text cut to the width there is, with the whole text in the tooltip when it is cut."""
         width = self.contentsRect().width()
         # Not cut until shown and laid out: before that the width is a
         # placeholder, not the room the line will have.
@@ -331,24 +355,26 @@ class QuietTabWidget(QTabWidget):
     """A QTabWidget that lays itself out again, and repaints, only when
     that can change something.
 
-    Qt's lays itself out again at every LayoutRequest and repaints the whole
-    of itself with it (QTabWidget::setUpLayout ends in update()). A label
-    on one of its pages sends one up whenever its text changes: setText
-    invalidates the layouts above it, and each, once redone, passes the
-    request on whether its size hints changed or not. A frame's time on
-    Video Compare repainted every control on the tab at every frame of
-    playback, 112 times a second, and a run's once-a-second lines
-    repainted the whole Videos tab twice a second.
+    Qt's QTabWidget lays itself out again at every LayoutRequest, and
+    repaints the whole of itself with it (QTabWidget::setUpLayout ends in
+    update()). A label on one of its pages sends one up whenever its text
+    changes: setText invalidates the layouts above it, and each, once
+    redone, passes the request on whether its size hints changed or not.
+    So a frame's time on Video Compare would repaint every control on the
+    tab at every frame of playback, 112 times a second, and a run's
+    once-a-second lines would repaint the whole Videos tab twice a second.
 
-    Its own layout depends on its size (resizeEvent lays it out anyway),
-    its tab bar's and corner widgets' sizes; what is above it, on its size
-    hints. A request that changes none of them is answered here."""
+    Its own layout depends on its size (resizeEvent lays it out anyway) and
+    on its tab bar's and corner widgets' sizes, and what is above it depends
+    on its size hints. A request that changes none of them is answered here,
+    without the layout and repaint."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._laid_out_for = None
 
     def event(self, event) -> bool:
+        """Answers a layout request that would change nothing, without laying out and repainting."""
         if event.type() == QEvent.LayoutRequest:
             corners = (self.cornerWidget(Qt.TopLeftCorner), self.cornerWidget(Qt.TopRightCorner))
             shape = (self.tabBar().sizeHint(), self.sizeHint(), self.minimumSizeHint(),

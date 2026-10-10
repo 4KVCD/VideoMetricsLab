@@ -1,4 +1,8 @@
-"""Pair GPU samples before a single renderer; never compare independent sinks."""
+"""Plays Video Compare natively (LockedNativePool): GStreamer decodes the
+source and the test videos on the GPU, and each test frame is paired with the
+source frame of the same number before the one presenter draws either, in
+time with the source's soundtrack. The frames are always paired here, never
+shown by separate sinks, so the two videos cannot drift apart."""
 from __future__ import annotations
 
 import math
@@ -12,31 +16,37 @@ from vmaf_app.core.locked_presentation import LockedPresentation, SingleSoundtra
 from vmaf_app.core.video_playback import neighbour_indices, source_playback_comparison
 from vmaf_app.ui.video_compare_view import _PairedFrameWidget
 
-#: How long playback may run behind its soundtrack, catching up with the
-#: sound playing on, before it stops the sound to wait for the decoders
-#: (LockedNativePool.poll). The window's thread, held up 55-60 ms every 15 s
-#: on the test PC, left the decoders waiting with their queues full; stopped
-#: and sought again each time, the sound broke off.
+#: How long playback may run behind its soundtrack, catching up while the
+#: sound plays on, before it stops the sound to wait for the decoders
+#: (LockedNativePool.poll). On the test PC the window's thread is held up
+#: 55-60 ms every 15 s, which leaves the decoders waiting with full queues;
+#: stopping and seeking the sound each time would make it break off.
 _CATCH_UP_S = 0.2
 
 
 class _StopNative(QThread):
+    """Stops a pipeline (or the presenter, or the sound) on a thread of its own, so that the window does not wait for its teardown."""
+
     def __init__(self, pipeline, parent):
         super().__init__(parent)
         self.pipeline = pipeline
 
     def run(self):
+        """Stops it (QThread.run)."""
         self.pipeline.stop()
 
     def cancel(self):
-        """Already stopping: allow teardown to finish, never terminate it.
+        """Does nothing: it is already stopping, and its teardown must finish.
 
-        The main window cancels all live workers during shutdown, including
-        this one. Interrupting D3D11 teardown could destroy live resources.
+        The window cancels every running worker when it closes, this one
+        included, and interrupting D3D11 teardown could destroy resources
+        still in use.
         """
 
 
 class LockedNativePool:
+    """Plays Video Compare natively: one GstComparePipeline per video (the source, and the selected test video with its neighbours), with each test frame paired with the source frame of the same number, timed by the source's soundtrack."""
+
     def __init__(self, view, series, selected, position_ms, settings, playing, source_native=True):
         self.gst, _ = _load_gstreamer()
         self.device = d3d11_device()
@@ -50,20 +60,22 @@ class LockedNativePool:
         self.frame = round(position_ms * self.fps / 1000)
         self.playing, self.ended, self.closed = playing, False, False
         self.buffering = True
-        #: Whether the pair wanted is the one on screen (poll, seek). Paused on
-        #: it nothing is buffering, though `buffering` stays set after a
-        #: seek made while paused: playing again waits for the sound's.
+        #: Whether the pair wanted is the one on screen (poll, seek). When
+        #: paused on it, nothing is buffering, although `buffering` stays set
+        #: after a seek made while paused, so that playing again waits for
+        #: the sound.
         self.shown = False
         #: Since when the frames shown have been behind the soundtrack (time.monotonic), or None.
         self.late_since = None
-        #: The soundtrack clock's value the last poll chose by (ms), None
-        #: without one, and when it was read (time.monotonic): next_tick_ms.
+        #: The soundtrack clock's reading (ms) that the last poll chose the
+        #: frame by, or None without one, and when it was read
+        #: (time.monotonic); see next_tick_ms.
         self._clock_ms, self._clock_at = None, 0.0
         self.showing_source = False
         self.entries, self.desired, self.frames, self.eos = {}, {}, {}, set()
         #: Each video's shading (GstComparePipeline.shading), kept when its
-        #: decoder goes: an encode chosen again before its decoder was back
-        #: was shown unshaded, HDR as SDR.
+        #: decoder goes, so that an encode chosen again before its decoder is
+        #: back is not shown unshaded (HDR as SDR).
         self.shadings = {}
         self.pair = None
         self.pair_index = None
@@ -87,11 +99,13 @@ class LockedNativePool:
             raise
 
     def _retire(self, pipeline, finished=None, *, decoder=True):
+        """Stops a pipeline, the presenter or the sound on a thread of its own, then calls finished. decoder says whether it counts against the decoder limit while stopping."""
         worker = _StopNative(pipeline, self.view)
         worker.counts_as_decoder = decoder
         self.view._retired_workers.add(worker)
 
         def done():
+            """Forgets the stopped worker."""
             self.view._retired_workers.discard(worker)
             if finished:
                 finished()
@@ -101,6 +115,7 @@ class LockedNativePool:
         worker.start()
 
     def sync(self, selected):
+        """Selects a test video: keeps the decoders still needed, stops the others and starts the missing ones."""
         self.selected = selected
         source = source_playback_comparison(self.series[selected], self.source_native)
         crop = source.source_crop
@@ -119,6 +134,7 @@ class LockedNativePool:
         self._choose_pair(self.frame)
 
     def launch_missing(self):
+        """Starts the decoders wanted but not running, within the decoder limit (counting those still stopping)."""
         occupied = len(self.entries) + sum(w.isRunning() and getattr(w, "counts_as_decoder", True)
                                           for w in self.view._retired_workers)
         for key, (comparison, side) in self.desired.items():
@@ -132,6 +148,7 @@ class LockedNativePool:
             occupied += 1
 
     def _choose_pair(self, target):
+        """Shows the newest frame pair of the source and the selected video due at frame target. Returns whether there is one."""
         source = self.frames.get(self.source_key, {})
         distorted = self.frames.get(("distorted", self.selected), {})
         common = source.keys() & distorted.keys()
@@ -149,9 +166,9 @@ class LockedNativePool:
         return True
 
     def _present(self, source):
-        """The pair's source frame (`source`) or its encode's: fitted to the
-        window, or where the zoom puts it, shaded as its video is
-        (GstComparePipeline.shading)."""
+        """Draws the pair's source frame (with `source`) or its test frame:
+        fitted to the window, or where the zoom puts it, and shaded as its
+        video is (GstComparePipeline.shading)."""
         sample = self.pair[0 if source else 1]
         shading = self.shadings.get(self.source_key if source else ("distorted", self.pair_index))
         view = self.view.native_view(sample)
@@ -163,21 +180,25 @@ class LockedNativePool:
             self.output.present(sample, view)
 
     def place(self):
-        """The zoom, or the part of the frame in view, changed."""
+        """Draws the frame again after the zoom, or the part of the frame in
+        view, has changed."""
         self.surface.refresh_cursor()
         if self.pair is not None and self.pair_index == self.selected:
             self._present(self.showing_source)
 
     def show_source(self, showing):
+        """Shows the source's frame (True) or the test video's."""
         self.showing_source = bool(showing)
         if self.pair is not None and self.pair_index == self.selected:
             self._present(self.showing_source)
 
     def set_audio_enabled(self, enabled):
+        """Turns the soundtrack on or off."""
         self.audio.set_enabled(enabled)
 
     def seek(self, position_ms):
-        """Reuse decoders and renderer; nearby paired samples need no video seek."""
+        """Seeks to `position_ms`, keeping the decoders and the presenter. A
+        decoder that already holds the frame wanted is not sought."""
         target = max(0, round(position_ms * self.fps / 1000))
         if target == self.frame:
             return
@@ -204,6 +225,7 @@ class LockedNativePool:
         self.buffering = not self.shown
 
     def set_playing(self, playing):
+        """Plays or pauses."""
         self.playing = bool(playing)
         self.anchor, self.anchor_frame = time.monotonic(), self.frame
         self.late_since = None
@@ -212,6 +234,7 @@ class LockedNativePool:
             self.audio_running = False
 
     def poll(self):
+        """Advances playback: reads each decoder's frames into its queue, shows the pair due by the soundtrack's clock, and stops the sound to wait whenever the frames fall behind. Returns the position shown (ms)."""
         self.output.poll()
         self.launch_missing()
         audio_ms = self.audio.poll()
@@ -225,7 +248,8 @@ class LockedNativePool:
                 target, clock_ms = round(audio_ms * self.fps / 1000), audio_ms
             else:
                 target = self.anchor_frame + int((time.monotonic() - self.anchor) * self.fps)
-        # The newest frame both videos shown have: the queues' floor below.
+        # The newest frame both videos shown have, which limits the queues'
+        # floor below.
         reach = min(max(self.frames.get(key, ()), default=self.frame)
                     for key in (self.source_key, ("distorted", self.selected)))
         for key, entry in self.entries.items():
@@ -244,28 +268,28 @@ class LockedNativePool:
             if update.ended:
                 self.eos.add(key)
             queue = self.frames[key]
-            # Two frames before the one shown -- or, playing, before the one
-            # about to be, as far as this queue and both videos shown have
-            # come -- kept for immediate S/arrow swaps (the pair shown holds
-            # its own). Counted from the frame shown while playing, the queue
-            # was still full of the past when the clock moved two frames on,
-            # and the frame due waited in the sink: one in five skipped at 120
-            # fps. Counted as far as this queue alone had come, a video
-            # decoded ahead of the other -- an encode decoded by the GPU, its
-            # 4K 10-bit H.264 source by the CPU -- dropped the frames the other
-            # had yet to reach: the pair waited for could never come, both
-            # queues full, and playback stalled for good.
+            # Keep two frames before the one shown (while playing, before the
+            # one about to be shown), for instant S and arrow-key swaps; the
+            # pair shown holds its own. While playing, the floor counts from
+            # the target: counted from the frame shown, the queue would still
+            # be full of past frames when the clock moved two frames on, and
+            # one frame in five would be skipped at 120 fps. The floor also
+            # stops at how far both videos shown have come: counted from this
+            # queue alone, a video decoded ahead of the other (an encode
+            # decoded by the GPU, its 4K 10-bit H.264 source by the CPU) would
+            # drop frames the other has yet to reach, so the pair waited for
+            # would never come, and playback would stall for good.
             floor = min(max(self.frame, target), max(queue, default=self.frame), reach) - 2
             for old in list(queue):
                 if old < floor:
                     del queue[old]
             sink = next(iter(player._sinks.values()))
-            # Two previous frames plus the current and two upcoming frames.
-            # Bound retained GPU surfaces while making +/- frame reversible.
-            # None while its seek is still to be made, on the Seeker's thread:
-            # its sink can still give frames from before it, which a seek
-            # back took for frames to come -- three of five places, a frame
-            # behind the sound until playback reached them again.
+            # Two previous frames, the current one and two upcoming ones: a
+            # limit on the GPU surfaces held, while a step back or forward
+            # stays instant. Nothing is pulled while the decoder's seek is
+            # still to be made (on the Seeker's thread), because its sink can
+            # still give frames from before the seek, which a seek back would
+            # take for frames to come.
             while len(queue) < 5 and not player.seeking:
                 sample = self._pull_sample(key, sink)
                 if sample is None:
@@ -276,9 +300,9 @@ class LockedNativePool:
                 frame = round(time_ns / self.gst.SECOND * self.fps)
                 if frame >= self.frame:
                     queue[frame] = sample
-        # Negotiation/preroll work above can take time on a newly selected
-        # decoder: then the audio clock is sampled again before the visible
-        # pair is chosen, not its pre-negotiation value used.
+        # The work above can take time with a newly selected decoder
+        # (negotiation and preroll), so the soundtrack's clock is read again
+        # before the pair is chosen, rather than using the earlier reading.
         if self.playing and not self.buffering and self.audio_running and time.monotonic() - polled_at > 0.002:
             audio_ms = self.audio.poll()
             if audio_ms is not None:
@@ -292,7 +316,7 @@ class LockedNativePool:
         behind = due - self.frame > 1 or (reading is not None and reading - self.position > 1000 / self.fps)
         if not behind:
             self.late_since = None
-        elif matched and not self.buffering:  # a moment to catch up in, the sound playing on
+        elif matched and not self.buffering:  # a moment to catch up, with the sound playing on
             now = time.monotonic()
             if self.late_since is None:
                 self.late_since = now
@@ -320,11 +344,12 @@ class LockedNativePool:
         return self.position
 
     def next_tick_ms(self) -> int | None:
-        """The next tick while playing, in ms: 1 ms after the frame after
-        the one shown is due -- chosen half a frame before its time, as poll
-        rounds the clock. Ticked every half frame instead, most ticks found
-        nothing to do: 250 a second at 120 fps, 100 at 24. None while that
-        frame is due and not decoded yet."""
+        """Returns how long to wait (ms) for the next tick while playing: 1 ms
+        after the next frame becomes due, which is half a frame before its
+        time, because poll rounds the clock. Ticking every half frame
+        instead, most ticks would find nothing to do (250 a second at
+        120 fps, 100 at 24). Returns None while that frame is due but not
+        decoded yet."""
         frame_ms = 1000 / self.fps
         if self._clock_ms is not None:
             wait = (self.frame + 0.5) * frame_ms - self._clock_ms - (time.monotonic() - self._clock_at) * 1000
@@ -335,11 +360,13 @@ class LockedNativePool:
         return min(math.ceil(wait) + 1, math.ceil(frame_ms))
 
     def _pull_sample(self, key, sink):
+        """Takes the next decoded frame from a sink without waiting, or None."""
         return sink.emit("try-pull-sample", 0)
 
     @property
     def description(self):
-        # Paused on the pair on screen, "Buffering" was said over a still frame.
+        """The status line for the view."""
+        # Paused on the pair on screen is not buffering, even after a seek.
         state = ("Buffering locked pair" if not self.shown or (self.buffering and self.playing)
                  else "Frame-locked GPU pair")
         audio = "source soundtrack" if not self.audio.failed else "audio unavailable"
@@ -350,10 +377,12 @@ class LockedNativePool:
         return f"{state} · {audio} · " + " · ".join(filter(None, [presenter, *details]))
 
     def resize(self):
+        """Fits the drawing surface to the view again."""
         self.surface.setGeometry(self.view.rect())
         self.place()
 
     def stop(self):
+        """Stops every decoder, the sound and the presenter, each on a thread of its own."""
         if self.closed:
             return
         self.closed = True

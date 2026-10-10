@@ -28,9 +28,11 @@ class CropDetectWorker(QThread):
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
+        """Stops the detection."""
         self._cancel.set()
 
     def _detect(self, info: VideoInfo) -> CropBox | None:
+        """One video's black-bar box, or None if it cannot be found."""
         try:
             return detect_crop(info, cancel_event=self._cancel)
         except CropDetectCancelled:
@@ -41,6 +43,7 @@ class CropDetectWorker(QThread):
             return None
 
     def run(self) -> None:
+        """Detects the boxes still missing, and sends them made to cover the same picture (QThread.run)."""
         try:
             both_missing = (
                 self._source_crop is _MISSING

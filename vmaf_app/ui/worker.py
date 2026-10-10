@@ -33,24 +33,31 @@ class VmafWorker(QThread):
         self.scheduler = JobScheduler(jobs, parallel_jobs, events, gpu_metrics_together=gpu_metrics_together)
 
     def run(self) -> None:
+        """Runs the jobs on this thread (QThread.run)."""
         self.scheduler.run()
 
     def cancel(self) -> None:
+        """Stops the run."""
         self.scheduler.cancel()
 
     def pause(self) -> None:
+        """Pauses the run."""
         self.scheduler.pause()
 
     def resume(self) -> None:
+        """Resumes the run."""
         self.scheduler.resume()
 
     @property
     def is_paused(self) -> bool:
+        """Whether the run is paused."""
         return self.scheduler.is_paused
 
     @property
     def parallel_jobs(self) -> int:
+        """How many videos' CPU metrics may run at once."""
         return self.scheduler.parallel_jobs
 
     def set_parallel_jobs(self, count: int) -> None:
+        """Changes how many videos' CPU metrics may run at once, during the run."""
         self.scheduler.set_parallel_jobs(count)

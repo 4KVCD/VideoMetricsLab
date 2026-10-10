@@ -12,6 +12,8 @@ from vmaf_app.core.process_control import ProcessHandle
 
 
 class BitrateWorker(QThread):
+    """Reads the packets of each video in turn for the Bitrate tab, on a thread of its own."""
+
     file_started = Signal(object)                 # path
     progress = Signal(object, int, int)           # path, packets, estimate
     analyzed = Signal(object, object, object)     # path, VideoInfo, BitrateData
@@ -28,10 +30,12 @@ class BitrateWorker(QThread):
         self._process = ProcessHandle()
 
     def cancel(self) -> None:
+        """Stops the scan, ending ffprobe."""
         self._cancelled = True
         self._process.terminate()
 
     def run(self) -> None:
+        """Scans each file in turn (QThread.run)."""
         for path, known_info in self._jobs:
             if self._cancelled:
                 return

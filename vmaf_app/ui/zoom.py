@@ -1,11 +1,12 @@
 """Video Compare's zoom: the frame fitted to the view, or at a size of its
 own, and which part of it is in view, moved by dragging it.
 
-One Zoom serves the tab's every view -- the still frames and both kinds of
-playback, FFmpeg's frames drawn here and GStreamer's on the GPU -- so a
-switch between the source and an encode, or between still and playing,
-keeps the same part of the picture at the same size. Sizes are the views'
-logical pixels; `ratio` is the screen's device pixels to one of those.
+One Zoom serves all of the tab's views (the still frames, and both kinds of
+playback: FFmpeg's frames drawn here and GStreamer's on the GPU), so that
+switching between the source and an encode, or between still and playing,
+keeps the same part of the picture at the same size. Sizes are in the
+views' logical pixels; `ratio` is the screen's device pixels per logical
+pixel.
 """
 from __future__ import annotations
 
@@ -109,19 +110,22 @@ class DragsZoomedFrame:
     """For a widget showing a frame through a Zoom: holding the left button
     down and moving drags a frame larger than the view, under a hand cursor.
 
-    The widget gives _zoom_context() -- (zoom, view size, frame size,
-    ratio), or None when it shows no frame -- and _zoom_dragged(), to show
-    the frame where it has moved to."""
+    The widget provides _zoom_context(), which returns (zoom, view size,
+    frame size, ratio), or None when it shows no frame, and _zoom_dragged(),
+    which shows the frame where it has moved to."""
 
     _drag_from = None
 
     def _zoom_context(self):
+        """(zoom, view size, frame size, ratio), or None when no frame is shown. Widgets provide it."""
         raise NotImplementedError
 
     def _zoom_dragged(self) -> None:
+        """Shows the frame where it has moved to. Widgets provide it."""
         raise NotImplementedError
 
     def _can_drag(self) -> bool:
+        """Whether the frame shown is larger than the view, so it can be dragged."""
         context = self._zoom_context()
         return context is not None and context[0].can_drag(*context[1:])
 
@@ -134,6 +138,7 @@ class DragsZoomedFrame:
                 self.unsetCursor()
 
     def mousePressEvent(self, event) -> None:
+        """Starts dragging the frame."""
         if event.button() == Qt.LeftButton and self._can_drag():
             self._drag_from = event.position()
             self.setCursor(Qt.ClosedHandCursor)
@@ -142,6 +147,7 @@ class DragsZoomedFrame:
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
+        """Moves the frame while it is being dragged."""
         if self._drag_from is None:
             super().mouseMoveEvent(event)
             return
@@ -154,6 +160,7 @@ class DragsZoomedFrame:
         event.accept()
 
     def mouseReleaseEvent(self, event) -> None:
+        """Stops dragging the frame."""
         if self._drag_from is not None and event.button() == Qt.LeftButton:
             self._drag_from = None
             self.refresh_cursor()
