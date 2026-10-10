@@ -301,7 +301,8 @@ class SequenceParameterSet:
 
 
 class PictureHeader(NamedTuple):
-    """What a picture header gives: the picture order count's parts, its parameter set, and whether other pictures refer to it."""
+    """What a picture header gives: the picture order count's parts, its
+    parameter set, and whether other pictures refer to it."""
 
     poc_lsb: int  # the low bits of the picture order count
     poc_msb_cycle: int | None  # the high part, where the header gives it
@@ -496,7 +497,8 @@ class FilmGrainTracker:
             self._remember_parameter_set(unit)
 
     def _remember_parameter_set(self, unit) -> None:
-        """Keeps a sequence or picture parameter set, which the picture headers that follow refer to."""
+        """Keeps a sequence or picture parameter set, which the picture headers
+        that follow refer to."""
         try:
             if nal_type(unit) == SPS_NUT:
                 sps_id, sps = parse_sps(nal_payload(unit))

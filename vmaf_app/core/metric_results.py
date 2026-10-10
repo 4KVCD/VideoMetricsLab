@@ -91,7 +91,8 @@ def current_ffmpeg_provenance(key: str, version: str, parameters: dict[str, JSON
 
 @dataclass(slots=True)
 class FrameMetricResult:
-    """A metric with a score per frame: the frame numbers, their times, the scores and the provenance."""
+    """A metric with a score per frame: the frame numbers, their times, the
+    scores and the provenance."""
 
     key: str
     frame: np.ndarray

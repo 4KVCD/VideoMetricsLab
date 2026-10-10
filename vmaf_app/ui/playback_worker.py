@@ -39,7 +39,8 @@ def _read_into(pipe, buffer) -> int:
 
 
 class StreamDecodeWorker(QThread):
-    """Decodes one video of Video Compare with FFmpeg into frames for the view, on a thread of its own, a few frames ahead."""
+    """Decodes one video of Video Compare with FFmpeg into frames for the view,
+    on a thread of its own, a few frames ahead."""
 
     ready = Signal(str)
     failed = Signal(str)

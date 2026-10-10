@@ -47,7 +47,8 @@ class FfmpegMetricBinding:
 
 @dataclass(frozen=True, slots=True)
 class MetricDefinition:
-    """A metric's details: its key, labels, number format, direction, averaging, score bands and backend."""
+    """A metric's details: its key, labels, number format, direction,
+    averaging, score bands and backend."""
 
     key: str
     label: str
@@ -70,7 +71,8 @@ class MetricDefinition:
     # These small display helpers keep the rules for precision and infinity
     # with the metric's details, rather than repeated in the window's panels.
     def format_value(self, value: float | None) -> str:
-        """A score as shown, at the metric's precision, with infinity as a sign and no value as a dash."""
+        """A score as shown, at the metric's precision, with infinity as a sign
+        and no value as a dash."""
         if value is None or not np.isfinite(value):
             if value is not None and np.isposinf(value):
                 return "∞"

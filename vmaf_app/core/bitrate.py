@@ -36,7 +36,8 @@ class BitrateCancelled(BitrateError):  # noqa: N818
 
 @dataclass(slots=True)
 class BitrateData:
-    """A video stream's packets: each one's time, duration, size in bytes, and whether it is a keyframe."""
+    """A video stream's packets: each one's time, duration, size in bytes, and
+    whether it is a keyframe."""
 
     path: Path
     times: np.ndarray
@@ -133,7 +134,8 @@ class BitratePlot:
 
 @dataclass(frozen=True, slots=True)
 class BitrateSummary:
-    """A video's average, lowest and highest bitrate, in kb/s (the lowest and highest per second)."""
+    """A video's average, lowest and highest bitrate, in kb/s (the lowest and
+    highest per second)."""
 
     average_kbps: float
     minimum_kbps: float

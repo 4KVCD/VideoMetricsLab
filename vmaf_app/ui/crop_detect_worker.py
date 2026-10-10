@@ -43,7 +43,8 @@ class CropDetectWorker(QThread):
             return None
 
     def run(self) -> None:
-        """Detects the boxes still missing, and sends them made to cover the same picture (QThread.run)."""
+        """Detects the boxes still missing, and sends them made to cover the
+        same picture (QThread.run)."""
         try:
             both_missing = (
                 self._source_crop is _MISSING

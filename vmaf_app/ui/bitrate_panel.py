@@ -53,7 +53,8 @@ _COLORS = [
 
 @dataclass
 class BitrateEntry:
-    """One file in the Bitrate tab: its path, colour, details, packets, whether it is used, its status, and its graphs worked out so far."""
+    """One file in the Bitrate tab: its path, colour, details, packets, whether
+    it is used, its status, and its graphs worked out so far."""
 
     path: Path
     color: str

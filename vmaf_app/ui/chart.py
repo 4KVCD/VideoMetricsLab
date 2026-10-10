@@ -383,7 +383,8 @@ class ChartWidget(QWidget):
             painter.restore()
 
     def _draw_series(self, painter: QPainter, rect: QRect, series: ChartSeries) -> None:
-        """Draws one line: point by point when there are few, else as one min/max stroke per pixel column."""
+        """Draws one line: point by point when there are few, else as one
+        min/max stroke per pixel column."""
         x0, x1 = self.x_range()
         y0, y1 = self._y_range
         times, values = series.times, series.values

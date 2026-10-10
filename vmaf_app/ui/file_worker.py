@@ -55,7 +55,8 @@ def _resume_automatic_gc() -> bool:
 
 
 def _resume_automatic_gc_on_gui_thread() -> None:
-    """Turns automatic garbage collection back on, and does the collection it would have done, on the window's thread."""
+    """Turns automatic garbage collection back on, and does the collection it
+    would have done, on the window's thread."""
     if _resume_automatic_gc():
         # Automatic collection would have selected generation zero. Do that
         # work now, on the thread that owns the application's Qt wrappers.

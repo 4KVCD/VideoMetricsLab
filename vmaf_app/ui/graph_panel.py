@@ -1,14 +1,12 @@
-"""The VMAF/PSNR/SSIM/XPSNR-vs-time comparison graph.
+"""The Graph tab (GraphPanel): each metric's score over time, for several
+runs at once.
 
-Supports overlaying multiple runs (e.g. several distorted encodes compared
-against the same or different sources) as separate colored curves, with a
-shared time-synced hover readout and a side-by-side stats comparison table.
-Each metric (VMAF, PSNR, SSIM, XPSNR) gets its own tab/plot -- they're
-different scales (0-100, dB, 0-1, dB) that don't belong on one axis -- while
-the series list and stats table at the top are shared across all of them,
-since it's the same set of runs either way.
-
-This is a QWidget, not a window: it is one page of the main window's tabs.
+Several runs (several encodes compared with the same or different sources,
+say) are drawn as lines of their own colours, with one hover readout for the
+same moment in all of them, and a statistics table comparing them. Each
+metric has a page of its own, because their scales differ (0-100, decibels,
+0-1) and do not belong on one axis, while the list of lines and the table at
+the top are shared by all of them, since it is the same set of runs.
 """
 from __future__ import annotations
 
@@ -64,12 +62,12 @@ _PALETTE = [
     "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD",
 ]
 
-# How many series the top panel shows before it starts scrolling -- past
-# this the list would crowd out the plot it's describing.
+# How many lines the list at the top shows before it scrolls. Any more would
+# crowd out the graph it describes.
 _VISIBLE_SERIES_ROWS = 4
 
-# How many "x steps" to search either side of the cursor for a point to lock
-# onto -- see the step calculation in _MetricPage._on_mouse_moved.
+# How many steps either side of the cursor to search for a point to snap to
+# (see the step worked out in _MetricPage._on_mouse_moved).
 _HOVER_SEARCH_STEPS = 5
 
 # Layout of the exported PNG (see GraphPanel.render_export_image).
@@ -87,21 +85,21 @@ _EXPORT_ROW_PADDING = 6
 #: metric's detail; then the remove button.
 _MEAN_COLUMNS = range(1, 1 + len(METRICS))
 
-#: Where an infinite XPSNR frame is drawn. It has to sit above every real
-#: score, or a pixel-identical frame plots BELOW frames that merely scored
-#: well and the curve dips exactly where quality is perfect -- which 100 dB
-#: did: four of six real 4K encodes had finite frames above it, one reaching
-#: 114.68 dB.
+#: Where an infinite XPSNR frame is drawn. It must sit above every real
+#: score, or an identical frame would be drawn below frames that only scored
+#: well, and the line would dip exactly where the quality is perfect. 100 dB
+#: is too low: four of six real 4K encodes had finite frames above it, one
+#: reaching 114.68 dB.
 #:
-#: 123 dB is where ffmpeg's own square-mean-root branch stops applying: a
+#: 123 dB is where FFmpeg's own square-mean-root formula stops applying: a
 #: frame whose total weighted squared error is exactly 1 scores
 #: 10*log10(W*H*max_error), which is 123.4 dB at 1080p 10-bit. That figure
-#: is resolution- and depth-dependent (111.3 at 1080p 8-bit, 129.4 at 4K
-#: 10-bit), so this is a fixed stand-in rather than a derived limit -- but it
-#: clears every value these metrics produce in practice.
+#: depends on the size and bit depth (111.3 at 1080p 8-bit, 129.4 at 4K
+#: 10-bit), so this is a fixed stand-in rather than a worked-out limit, but
+#: it is above every value these metrics give in practice.
 #:
-#: Display only. The stored arrays keep infinity, so statistics, hover
-#: readouts and exports are unaffected.
+#: It is for drawing only. The stored arrays keep infinity, so the
+#: statistics, the hover readout and exports are unaffected.
 _XPSNR_INFINITY_PLOT_DB = 123.0
 
 _XPSNR_INFINITY_NOTE = (
@@ -119,16 +117,20 @@ _CVVDP_NOTE = (
 def _is_reportable(value: float | None) -> bool:
     """Whether a metric value can be shown and differenced.
 
-    None means the run never computed this metric; NaN means it computed it
-    for the run but not for this frame. Both used to reach str.format, which
-    raised TypeError on None and printed "nan" for NaN -- and a delta taken
-    against either produced a meaningless number rather than no number.
+    None means the run never calculated this metric; NaN means it calculated
+    it for the run but not for this frame. Neither may reach str.format,
+    which raises TypeError on None and prints "nan" for NaN, and a
+    difference taken against either would give a meaningless number rather
+    than none.
     """
     return value is not None and not bool(np.isnan(value))
 
 
 @dataclass
 class SeriesEntry:
+    """One run on the graph: its result, label, colour, times and frame step,
+    whether it is shown, and its means."""
+
     result: ComparisonResult
     label: str
     color: str
@@ -136,10 +138,10 @@ class SeriesEntry:
     step: float  # typical time delta between consecutive points in this series
     visible: bool = True
     identity: object | None = None
-    #: Mean of every metric this run has, by key; None where it has none.
-    #: Held here rather than read from the metric pages because the stats
-    #: table shows all four at once while pages are built lazily -- three of
-    #: them may not exist yet, and building them just to read a mean would
+    #: The mean of every metric this run has, by key; None where it has none.
+    #: It is held here rather than read from the metric pages, because the
+    #: statistics table shows all the means at once, while the pages are
+    #: built only when first shown; building them just to read a mean would
     #: undo that.
     means: dict[str, float | None] = field(default_factory=dict)
     #: Frames scoring +inf, by metric key, where there are any: counted once
@@ -148,8 +150,8 @@ class SeriesEntry:
 
 
 def _identical_frame_counts(result: ComparisonResult) -> dict[str, int]:
-    """Each metric's frames scoring +inf -- mathematically identical to the
-    reference -- where it has any."""
+    """How many frames score +inf (identical to the source), by metric,
+    where a metric has any."""
     counts = {}
     for spec in METRICS:
         metric = result.frame_metric(spec.key)
@@ -192,14 +194,17 @@ _HOVER_PLACEHOLDER_LOWER_IS_BETTER = (
 
 
 def _worst_is_high(metric: MetricDefinition) -> bool:
+    """Whether a metric's worst frames are its highest scores."""
     return metric.direction is MetricDirection.LOWER_IS_BETTER
 
 
 @dataclass
 class _MetricCurve:
+    """One run's line on one metric's page: its statistics and its points."""
+
     stats: VmafStats
-    # Held once per add_run rather than re-derived on every hover move --
-    # that per-call work was a measured CPU bottleneck on a long run.
+    # Worked out once per add_run rather than at every hover move, which
+    # costs a lot of CPU on a long run.
     values: np.ndarray
     frames: np.ndarray
     times: np.ndarray
@@ -209,11 +214,11 @@ class _MetricCurve:
     # frames[i] / starts[i], plotted at the middle of that second, and the
     # readout names the second rather than a frame. None for frame metrics.
     starts: np.ndarray | None = None
-    # The series' other frame metrics that have any data, in display order:
-    # (definition, frame numbers, values, same axis). Shown after the "|" in
-    # the readout. "Same axis" -- the same frame numbers as this curve, the
-    # usual case -- means the hovered index is the other metric's index too;
-    # otherwise (a subsampled perceptual metric) the frame is looked up.
+    # The line's other frame metrics that have any data, in display order, as
+    # (definition, frame numbers, values, same frames). They are shown after
+    # the "|" in the readout. "Same frames" (the same frame numbers as this
+    # line, the usual case) means the hovered index is the other metric's
+    # index too; otherwise (a subsampled metric) the frame is looked up.
     others: tuple[tuple[MetricDefinition, np.ndarray, np.ndarray, bool], ...] = ()
 
 
@@ -223,11 +228,13 @@ _WIDEST_SAMPLE = -88.88
 
 
 def _value_at_frame(frames: np.ndarray, values: np.ndarray, frame: int) -> float | None:
-    """The value recorded for exactly `frame`, or None -- never a neighbour's.
+    """Returns the value recorded for exactly `frame`, or None; never a
+    neighbour's.
 
-    The needle has the array's own type: searching int32 frame numbers with a
-    Python int made numpy convert the whole array first, 0.2 ms a lookup on a
-    feature-length run -- 7 ms a mouse move with four series' columns.
+    The frame searched for has the array's own type: searching int32 frame
+    numbers with a Python int makes numpy convert the whole array first,
+    0.2 ms per lookup on a feature-length run, or 7 ms per mouse move with
+    four lines' columns.
     """
     idx = int(np.searchsorted(frames, frames.dtype.type(frame)))
     if idx >= len(frames) or int(frames[idx]) != frame:
@@ -261,9 +268,9 @@ class _MetricPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # A lower-is-better metric is drawn upside down -- 0 at the top -- so
-        # a better encode sits higher on every tab, and its bad frames hang
-        # down as dips the way VMAF's do.
+        # A lower-is-better metric is drawn upside down (0 at the top), so that
+        # a better encode sits higher on every page, and its bad frames hang
+        # down as dips, as VMAF's do.
         self.chart = ChartWidget(
             y_axis_label=tr("{axis_label} (lower is better)", axis_label=metric.axis_label) if _worst_is_high(metric) else metric.axis_label,
             fixed_y_max=metric.fixed_y_max, invert_y=_worst_is_high(metric),
@@ -307,8 +314,8 @@ class _MetricPage(QWidget):
         layout.addLayout(hover_row)
 
         self.chart.left.connect(self._on_pointer_left)
-        # chart.hovered is connected by GraphPanel -- the handler needs the
-        # shared series map that only the panel owns.
+        # GraphPanel connects chart.hovered, because the handler needs the
+        # shared map of lines that only the panel has.
 
     # ------------------------------------------------------------------ curves
     def set_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
@@ -318,9 +325,9 @@ class _MetricPage(QWidget):
         if self.definition.kind is MetricKind.SEQUENCE:
             self._set_timeline_curve(series_id, entry, color)
             return
-        # PSNR/SSIM/XPSNR are computed for a whole run or not at all -- it's
-        # a per-run option, never a per-frame one -- so the array is either
-        # present or None, and lines up index-for-index with entry.times.
+        # A metric is calculated for a whole run or not at all (it is chosen
+        # per run, never per frame), so the array is either there or None,
+        # and lines up index for index with entry.times.
         result = entry.result.frame_metric(self.definition.key)
         if result is None or len(result.values) == 0:
             self._update_no_data_label()
@@ -355,13 +362,13 @@ class _MetricPage(QWidget):
         self._fit_hover_label()
 
     def _set_timeline_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
-        """A per-video metric's timeline -- CVVDP's JOD for each second.
+        """Draws a whole-video metric's timeline: CVVDP's JOD for each second.
 
-        Each value describes a whole second, so it is plotted at the middle
-        of that second: hovering anywhere over the second then lands on it,
-        which plotting at its first frame did not (the cursor half a second
-        in picked the next second). The statistics are of the seconds; the
-        whole video's score is the stats table's CVVDP column.
+        Each value describes a whole second, so it is drawn at the middle of
+        that second, so that hovering anywhere over the second lands on it.
+        Drawn at its first frame, the cursor half a second in would pick the
+        next second. The statistics are of the seconds; the whole video's
+        score is in the statistics table's CVVDP column.
         """
         result = entry.result.sequence_metric(self.definition.key)
         if result is None or not result.has_timeline:
@@ -393,6 +400,7 @@ class _MetricPage(QWidget):
         self._fit_hover_label()
 
     def set_visible(self, series_id: int, visible: bool) -> None:
+        """Shows or hides a line."""
         curve = self._curves.get(series_id)
         if curve is None:
             return
@@ -401,19 +409,21 @@ class _MetricPage(QWidget):
         self._fit_hover_label()
 
     def _update_no_data_label(self) -> None:
+        """Shows the "no data" note when the page has no lines."""
         self.no_data_label.setVisible(not self._curves)
 
     def _on_pointer_left(self) -> None:
+        """Hides the crosshair."""
         self.chart.set_cursor_time(None)
 
     def _fit_hover_label(self) -> None:
-        """Sizes the readout to the widest/tallest text it can actually show.
+        """Sizes the readout to the widest and tallest text it can show.
 
-        A hardcoded size clipped real content: long encode names ran past the
-        old 560px cap mid-number, and the delta line -- the longest of the
-        lot -- lost its value entirely. The size still must not change per
-        hover (that relayout was the dominant hover cost), so it is derived
-        from the series set here and left alone while the mouse moves.
+        A fixed size would cut off real content: long encode names ran past
+        a 560-pixel limit mid-number, and the difference line, the longest of
+        all, lost its value entirely. The size still must not change at each
+        hover (laying out again is what hovering costs most), so it is worked
+        out from the lines here and left alone while the mouse moves.
         """
         self._refresh_readout_layout()
         fm = QFontMetrics(self.hover_label.font())
@@ -504,13 +514,14 @@ class _MetricPage(QWidget):
 
     @staticmethod
     def _field_width(metric: MetricDefinition) -> int:
+        """The width a readout column needs for this metric, from its widest value."""
         return len(f"{metric.label}={metric.value_format.format(_WIDEST_SAMPLE)}")
 
     def _refresh_readout_layout(self) -> None:
-        """Column widths and the column set, for the visible series. They
-        change only when a series is added, removed or hidden, so they are
-        worked out then -- here, from _fit_hover_label -- and each mouse move
-        just fills them in."""
+        """Works out the readout's columns and their widths, for the lines
+        shown. They change only when a line is added, removed or hidden, so
+        they are worked out then (here, from _fit_hover_label), and each
+        mouse move only fills them in."""
         self._series_width = self._series_readout_column_width()
         self._main_width = max(self._field_width(self.definition), len(f"no {self.definition.label}"))
         self._columns = [(metric, self._field_width(metric)) for metric in self._extra_columns()]
@@ -521,9 +532,9 @@ class _MetricPage(QWidget):
 
         Every field is padded to a width derived from the metric, never from
         the value, so the "|" and each column line up across series whatever
-        their names or scores. A series without a value for a column --
-        the metric not calculated for it, or not for this frame -- leaves
-        that column blank instead of shifting the rest along.
+        their names or scores. A line without a value for a column (the
+        metric not calculated for it, or not for this frame) leaves that
+        column blank instead of shifting the rest along.
         """
         main = (f"no {self.definition.label}" if value is None
                 else f"{self.definition.label}={self.definition.format_value(value)}")
@@ -556,6 +567,7 @@ class _MetricPage(QWidget):
         return tr("{series}  frame {frame:>6}   not in this run", series=f"{series:<{self._series_width}}", frame=frame)
 
     def _set_hover_text(self, text: str) -> None:
+        """Shows the readout, when it changed."""
         # Dragging across one frame's worth of pixels reports the same thing
         # every time; repainting it again is pure waste.
         if text != self._hover_text:
@@ -565,6 +577,7 @@ class _MetricPage(QWidget):
     # ------------------------------------------------------------------ hover
     @staticmethod
     def _nearest_index_by_time(times: np.ndarray, x: float) -> int:
+        """The index of the time nearest x."""
         idx = int(np.searchsorted(times, x, side="left"))
         if idx <= 0:
             return 0
@@ -577,18 +590,17 @@ class _MetricPage(QWidget):
     ) -> int:
         """Finds the frame to report for this series at the cursor.
 
-        Rather than the single nearest-in-time point (which makes a sharp,
-        narrow dip nearly impossible to land the cursor on), this looks at
-        every point within `half_window` of the cursor's time position and:
-        prefers the one closest in time that's at or below the cursor's Y
-        position -- so hovering anywhere near a dip "grabs" it; and falls
-        back to the single lowest-value point in that neighbourhood if
-        nothing there is at or below the cursor's Y. For a lower-is-better
-        metric (Butteraugli) all of this is mirrored: at or ABOVE the cursor,
-        falling back to the highest point -- the worst frame either way.
+        Rather than the one point nearest in time, which makes a sharp,
+        narrow dip nearly impossible to land on, it looks at every point
+        within `half_window` of the cursor's time. It prefers the one
+        nearest in time that is at or below the cursor's height, so that
+        hovering anywhere near a dip catches it, and otherwise takes the
+        lowest point nearby. For a lower-is-better metric (Butteraugli) all
+        of this is mirrored: at or above the cursor, or else the highest
+        point, which is the worst frame either way.
 
-        Vectorised: zoomed out over a long run this window spans thousands
-        of frames, and it runs on every mouse move.
+        It is done with numpy, because zoomed out over a long run the window
+        spans thousands of frames, and this runs at every mouse move.
         """
         times = curve.times
         lo = int(np.searchsorted(times, x - half_window, side="left"))
@@ -601,7 +613,7 @@ class _MetricPage(QWidget):
         window = values[lo:hi] * self._sign
         y = y * self._sign
         # NaN compares False against everything, so a missing value can never
-        # be picked as "at or below the cursor" -- that part needs no guard.
+        # be picked as "at or below the cursor", and needs no check here.
         at_or_below = np.flatnonzero(window <= y)
         if at_or_below.size:
             nearest = np.abs(times[lo:hi][at_or_below] - x).argmin()
@@ -659,7 +671,7 @@ class _MetricPage(QWidget):
             return best_below_time
         if fallback_time is not None:
             return fallback_time
-        return x  # nothing nearby in any series -- just use the raw cursor time
+        return x  # nothing nearby in any line, so the cursor's own time
 
     def on_hover(self, x: float, y: float, entries_by_id: dict[int, SeriesEntry]) -> None:
         """Cursor moved to time `x`, value `y`: pick the frame(s) to report
@@ -678,14 +690,14 @@ class _MetricPage(QWidget):
         found: list[tuple[str, float]] = []
 
         if self.definition.kind is MetricKind.SEQUENCE:
-            # A per-second curve: the second under the cursor. The dip snap
+            # A per-second line: the second under the cursor. Snapping to dips
             # searches five points either side, which is five frames on the
-            # other tabs but five whole seconds here -- it reported a dip at
-            # 14 s with the cursor at 10.5 s.
+            # other pages but five whole seconds here, and would report a dip
+            # at 14 s with the cursor at 10.5 s.
             picks = [(entry, curve, self._second_at(curve, x)) for entry, curve in visible]
         elif len(visible) > 1:
-            # Every series reports the SAME moment -- snapping each to its own
-            # nearest dip would compare different frames against each other.
+            # Every line reports the same moment: snapping each to its own
+            # nearest dip would compare different frames with each other.
             target_time = self._find_shared_hover_time(visible, x, y, x_per_pixel)
             picks = [(entry, curve, self._nearest_index_by_time(curve.times, target_time)) for entry, curve in visible]
         else:
@@ -722,9 +734,9 @@ class _MetricPage(QWidget):
     def show_frame(self, frame: int, entries_by_id: dict[int, SeriesEntry]) -> bool:
         """Reports every visible series at one exact frame number.
 
-        Unlike hovering -- which snaps to a nearby dip so a curve is easy to
-        land on -- this reports the frame asked for, so two runs can be
-        compared at a specific moment. Returns whether any series had it.
+        Unlike hovering, which snaps to a nearby dip so that a line is easy
+        to land on, this reports the frame asked for, so that two runs can
+        be compared at one moment. Returns whether any line had it.
         """
         visible = [
             (entries_by_id[sid], c)
@@ -750,7 +762,7 @@ class _MetricPage(QWidget):
             else:
                 idx = int(np.searchsorted(curve.frames, frame))
                 # A run can be shorter than another, or subsampled, so the frame
-                # may not exist in it -- that is reported rather than silently
+                # may not exist in it. That is said, rather than quietly
                 # showing a neighbouring frame's score.
                 if idx >= len(curve.frames) or int(curve.frames[idx]) != frame:
                     lines.append(self._readout_missing_frame(entry.label, frame))
@@ -793,12 +805,10 @@ class _MetricPage(QWidget):
 
 
 class GraphPanel(QWidget):
-    """The comparison graph, as a page of the main window's tab bar.
-
-    This used to be a separate top-level window. Living in a tab means the
-    series it holds survive switching away and back, there is no second
-    taskbar entry to manage, and the run that produced a curve is one click
-    from the curve itself.
+    """The Graph tab: one page per metric, the list of lines and the
+    statistics table. As a tab rather than a window of its own, its lines
+    stay when the user switches away and back, there is no second taskbar
+    entry, and the run behind a line is one click from it.
     """
 
     metric_changed = Signal(str)
@@ -902,12 +912,14 @@ class GraphPanel(QWidget):
         self._cap_panel_heights()
 
     def _build_page(self, metric: MetricDefinition) -> _MetricPage:
+        """Builds a metric's page."""
         page = _MetricPage(metric)
         page.chart.hovered.connect(lambda x, y, p=page: p.on_hover(x, y, self._entries))
         self._pages[metric.key] = page
         return page
 
     def _on_tab_changed(self, index: int) -> None:
+        """Builds a page when first shown, and updates the table and hint for it."""
         if index < 0:
             return
         metric = METRICS[index]
@@ -918,8 +930,8 @@ class GraphPanel(QWidget):
             self.tabs.insertTab(index, page, metric.label)
             self.tabs.setCurrentIndex(index)
             self.tabs.blockSignals(blocked)
-            # Backfill whatever's already loaded -- add_run() only pushed
-            # curves into pages that existed at the time.
+            # Fill in what is already loaded, because add_run() adds lines
+            # only to the pages that exist at the time.
             for sid, entry in self._entries.items():
                 page.set_curve(sid, entry, entry.color)
         if not self._selecting_available_metric:
@@ -930,10 +942,12 @@ class GraphPanel(QWidget):
         self._refresh_frame_range()
 
     def set_preferred_metric(self, key: str) -> None:
+        """Sets the metric to show when it has data."""
         self._preferred_metric = key if any(m.key == key for m in METRICS) else "vmaf"
         self._select_available_metric()
 
     def _update_metric_hint(self) -> None:
+        """Shows a note under the page: why the metric has no data, or how to read it."""
         metric = self._current_metric()
         available = any(e.result.has_metric(metric.key) for e in self._entries.values())
         self.metric_hint.setText("" if available else tr("{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.", label=metric.label))
@@ -946,6 +960,7 @@ class GraphPanel(QWidget):
             self.tabs.setTabToolTip(i, "" if any(e.result.has_metric(spec.key) for e in self._entries.values()) else tr("Not calculated"))
 
     def _select_available_metric(self) -> None:
+        """Shows the preferred metric if any run has it, else the first metric that has data."""
         available = [m.key for m in METRICS if any(e.result.has_metric(m.key) for e in self._entries.values())]
         key = self._preferred_metric if self._preferred_metric in available else next(iter(available), self._preferred_metric)
         self._selecting_available_metric = True
@@ -957,6 +972,7 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ UI setup
     def _build_action_bar(self) -> QWidget:
+        """The buttons under the graph: add results, export."""
         bar = QWidget()
         layout = QHBoxLayout(bar)
 
@@ -991,6 +1007,7 @@ class GraphPanel(QWidget):
         return bar
 
     def _on_frame_requested(self, frame: int) -> None:
+        """Shows every line's score at a frame typed in."""
         page = self._pages[self._current_metric().key]
         page.show_frame(int(frame), self._entries)
 
@@ -1021,6 +1038,7 @@ class GraphPanel(QWidget):
         )
 
     def _current_metric(self) -> MetricDefinition:
+        """The metric of the page shown."""
         return METRICS[self.tabs.currentIndex()] if self.tabs.currentIndex() >= 0 else METRICS[0]
 
     #: The statistics shown for the selected metric. "Mean" is deliberately
@@ -1040,11 +1058,11 @@ class GraphPanel(QWidget):
         """Columns: the series, every metric's mean, then the selected
         metric's full statistics.
 
-        The four means are always present because that is the comparison
-        actually being made -- which encode is better -- and it used to
-        require visiting four tabs and remembering numbers. The detail
-        follows one metric because there is no room for four of everything,
-        and because the deeper statistics are only asked about one at a time.
+        The means are always there, because they are the comparison being
+        made (which encode is better), which would otherwise take visiting
+        every page and remembering numbers. The details follow one metric,
+        because there is no room for all of them, and the deeper statistics
+        are looked at one metric at a time.
         """
         metric = self._current_metric()
         headers = [tr("Series")] + [m.label for m in METRICS] + self._detail_labels(metric)
@@ -1085,8 +1103,8 @@ class GraphPanel(QWidget):
         item = QTableWidgetItem(entry.label)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable)
         item.setCheckState(Qt.Checked if entry.visible else Qt.Unchecked)
-        # The swatch plays the legend's role -- it's drawn by the item itself
-        # rather than being a separate widget in a separate list.
+        # The colour swatch is the legend. The item draws it itself, rather
+        # than it being a separate widget in a separate list.
         swatch = QPixmap(12, 12)
         swatch.fill(QColor(entry.color))
         item.setData(Qt.DecorationRole, swatch)
@@ -1112,6 +1130,7 @@ class GraphPanel(QWidget):
         return item
 
     def _series_id_at_row(self, row: int) -> int | None:
+        """The line of a table row, or None."""
         item = self.stats_table.item(row, 0)
         sid = None if item is None else item.data(Qt.UserRole)
         return None if sid is None else int(sid)
@@ -1129,6 +1148,7 @@ class GraphPanel(QWidget):
             self.remove_run(series_id)
 
     def _on_stats_header_clicked(self, column: int) -> None:
+        """Shows a metric's details when its mean's header is clicked."""
         if column in _MEAN_COLUMNS:
             self._show_metric_detail(column - _MEAN_COLUMNS.start)
 
@@ -1144,6 +1164,7 @@ class GraphPanel(QWidget):
             self.tabs.setCurrentIndex(index)
 
     def _on_stats_item_changed(self, item: QTableWidgetItem) -> None:
+        """Shows or hides a line when its box in the table is ticked."""
         if self._populating_stats or item.column() != 0:
             return
         series_id = item.data(Qt.UserRole)
@@ -1156,6 +1177,7 @@ class GraphPanel(QWidget):
         self, result: ComparisonResult, label: str | None = None, *,
         identity: object | None = None, restore: bool = True,
     ) -> None:
+        """Adds a run's line, or updates it."""
         if self._add_series(result, label, identity, restore):
             self._series_changed()
 
@@ -1170,11 +1192,11 @@ class GraphPanel(QWidget):
 
     def _add_series(self, result: ComparisonResult, label: str | None, identity: object | None,
                     restore: bool) -> bool:
-        """Adds or updates a series; whether anything changed. A series
-        already showing this very result under this label is left alone:
-        the window replaces a result to change it, never edits it, and every
-        visit to the tab used to redraw each curve and the table again --
-        0.7 s with six two-hour videos."""
+        """Adds or updates a line, and returns whether anything changed. A
+        line already showing this very result under this label is left
+        alone: the window replaces a result to change it, never edits it,
+        and redrawing every line and the table at each visit to the tab
+        would take 0.7 s with six two-hour videos."""
         # Callers with real rows provide that row/run's stable identity, so
         # two separately loaded runs of the same distorted path can coexist.
         # Direct users retain the historical "one series per path" behavior.
@@ -1217,6 +1239,7 @@ class GraphPanel(QWidget):
         return True
 
     def _series_changed(self) -> None:
+        """Updates the page, table and frame range after lines changed."""
         self._select_available_metric()
         self._refresh_stats_table()
         self._refresh_frame_range()
@@ -1235,6 +1258,7 @@ class GraphPanel(QWidget):
         return False
 
     def remove_by_identity(self, identity: object) -> bool:
+        """Removes the line of a row. Returns whether there was one."""
         for series_id, entry in list(self._entries.items()):
             if entry.identity == identity:
                 self.remove_run(series_id, suppress=False)
@@ -1242,12 +1266,12 @@ class GraphPanel(QWidget):
         return False
 
     def remove_by_identities(self, identities: Iterable[object], paths: Iterable[Path] = ()) -> None:
-        """remove_by_identity for each -- and for one not found, remove_by_path
-        for the path beside it in `paths`: a series added by path, before rows
-        had identities -- with the table, the frame range and each page
-        brought up to date once. One at a time, a hundred series took the
-        table apart and built it again a hundred times, with every series
-        left: 1.9 s; three hundred, 12 s."""
+        """Removes several lines at once: remove_by_identity for each, or for
+        one not found, remove_by_path for the path beside it in `paths` (a
+        line added by path, before rows had identities). The table, the
+        frame range and each page are brought up to date once. Removed one
+        at a time, a hundred lines would rebuild the table a hundred times
+        (1.9 s), and three hundred would take 12 s."""
         identities = list(identities)
         by_identity = {entry.identity: series_id for series_id, entry in self._entries.items()}
         fallback = dict(zip(identities, paths, strict=False))
@@ -1262,6 +1286,7 @@ class GraphPanel(QWidget):
         self.remove_runs(chosen, suppress=False)
 
     def remove_run(self, series_id: int, *, suppress: bool = True) -> None:
+        """Removes one line."""
         self.remove_runs([series_id], suppress=suppress)
 
     def remove_runs(self, series_ids: Iterable[int], *, suppress: bool = True) -> None:
@@ -1292,6 +1317,7 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ interaction
     def _set_series_visible(self, series_id: int, visible: bool) -> None:
+        """Shows or hides a line on every page."""
         entry = self._entries.get(series_id)
         if entry is None or entry.visible == visible:
             return
@@ -1301,6 +1327,7 @@ class GraphPanel(QWidget):
 
     # ------------------------------------------------------------------ actions
     def _on_add_saved_run(self) -> None:
+        """Adds a saved run file's line."""
         path, _ = QFileDialog.getOpenFileName(self, tr("Open analysis results"), "", RESULT_FILE_FILTER)
         if not path:
             return
@@ -1351,14 +1378,15 @@ class GraphPanel(QWidget):
         return headers, rows
 
     def render_export_image(self) -> QPixmap:
-        """The chart plus enough context to identify it months later.
+        """Returns the chart, with enough around it to tell what it is
+        months later.
 
-        The bare chart pixmap is a set of unlabelled coloured lines: nothing
-        in it says which metric it is or which encode each curve belongs to,
-        which makes an exported PNG useless the moment it leaves the app. So
-        the title, a legend keyed by the curve colours, and the same summary
-        statistics shown in the app are composed around it -- rather than
-        screenshotting the panel, which would drag in the buttons too.
+        The bare chart is a set of unlabelled coloured lines: nothing in it
+        says which metric it is or which encode each line belongs to, which
+        makes an exported PNG useless once it leaves the app. So the title, a
+        legend keyed by the lines' colours, and the same statistics shown in
+        the app are drawn around it, rather than taking a picture of the
+        panel, which would include the buttons too.
         """
         metric = self._current_metric()
         chart = self._pages[metric.key].chart.render_to_pixmap()
@@ -1421,6 +1449,7 @@ class GraphPanel(QWidget):
     def _paint_export_table(
         self, painter, headers, rows, widths, top, row_height, cell_font, fm
     ) -> None:
+        """Draws the statistics table into the exported image."""
         if not rows:
             return
         header_font = QFont(cell_font)
@@ -1434,8 +1463,8 @@ class GraphPanel(QWidget):
             painter.drawText(x + _EXPORT_GAP, baseline, header)
             x += width
 
-        # Back to the unbolded cell font -- reconstructing it from the
-        # painter's current font would carry the header's bold over.
+        # Back to the plain cell font; making it from the painter's current
+        # font would carry the header's bold over.
         painter.setFont(cell_font)
         for index, (label, color, cells) in enumerate(rows, start=1):
             baseline = top + index * row_height + fm.ascent() + _EXPORT_ROW_PADDING // 2
@@ -1453,6 +1482,7 @@ class GraphPanel(QWidget):
                 x += width
 
     def _on_file_writes_idle(self) -> None:
+        """Says the export is done, and enables the button again."""
         self.export_csv_btn.setEnabled(True)
         if self._export_destination is not None:
             self.status_label.setText(tr("Export complete: {path}", path=self._export_destination))
@@ -1460,6 +1490,7 @@ class GraphPanel(QWidget):
             self._export_destination = None
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
+        """Says a write failed."""
         self.status_label.setText(tr("Could not {description}: {error}", description=description, error=error))
         self.status_label.show()
 
@@ -1468,22 +1499,24 @@ class GraphPanel(QWidget):
         return self._file_writes.wait_until_idle(timeout_seconds)
 
     def _on_export_png(self) -> None:
+        """Saves the graph as a PNG."""
         path, _ = QFileDialog.getSaveFileName(self, tr("Export graph"), f"{self._current_metric().key}_comparison.png", tr("PNG image (*.png)"))
         if not path:
             return
         self.render_export_image().save(path)
 
     def _on_export_csv(self) -> None:
+        """Writes each line's scores as CSV, off the window's thread."""
         if not self._entries:
             QMessageBox.information(self, tr("No data"), tr("There are no series to export."))
             return
         directory = QFileDialog.getExistingDirectory(self, tr("Choose export folder"))
         if not directory:
             return
-        # A CSV of a feature-length run is bigger than its cached JSON, and
-        # this writes one per series -- easily tens of seconds of a frozen
-        # window if it ran here. Only the export button is disabled while it
-        # runs; the graph stays usable.
+        # A CSV of a feature-length run is bigger than its saved JSON, and
+        # this writes one per line, which would freeze the window for tens
+        # of seconds if done here. Only the export button is disabled while
+        # it runs, and the graph stays usable.
         self.export_csv_btn.setEnabled(False)
         reserved: set[Path] = set()
         for entry in self._entries.values():
@@ -1499,6 +1532,7 @@ class GraphPanel(QWidget):
         )
 
     def save_run_for_later(self, result: ComparisonResult, label: str) -> None:
+        """Saves a result to a run file, off the window's thread."""
         path, _ = QFileDialog.getSaveFileName(
             self, tr("Save analysis results"), f"{label}{RESULT_SUFFIX}", tr("Analysis results (*{suffix})", suffix=RESULT_SUFFIX)
         )
@@ -1515,24 +1549,25 @@ class GraphPanel(QWidget):
         self._refresh_stats_table()
 
     def _refresh_stats_table(self) -> None:
+        """Fills the statistics table: a row per line, the means, and the
+        chosen metric's details."""
         self._populating_stats = True
         try:
             self._setup_stats_table()
             metric = self._current_metric()
             page = self._pages[metric.key]
-            # EVERY series gets a row, not just the visible ones: this table
-            # is the series list, so an unchecked series still needs its row
-            # to be checked again through. A series with no data for the
-            # current metric (XPSNR never computed, say) keeps its row too,
-            # with the statistic cells left blank.
+            # Every line gets a row, not just those shown: this table is the
+            # list of lines, so an unticked line still needs its row, to be
+            # ticked again. A line with no data for the current metric (XPSNR
+            # not calculated, say) keeps its row too, with blank cells.
             self.stats_table.setRowCount(len(self._entries))
             for row, (sid, entry) in enumerate(self._entries.items()):
                 self.stats_table.setItem(row, 0, self._series_name_item(entry))
                 self.stats_table.item(row, 0).setData(Qt.UserRole, sid)
 
                 # Every metric's mean, whether or not its page has been
-                # built -- the table is the comparison, and a lazily-built
-                # page must not decide what it can say.
+                # built: the table is the comparison, and a page not yet
+                # shown must not decide what it can say.
                 for col, spec in zip(_MEAN_COLUMNS, METRICS, strict=True):
                     mean = entry.means.get(spec.key)
                     item = self._number_item(
@@ -1563,9 +1598,9 @@ class GraphPanel(QWidget):
                 else:
                     s = curve.stats
                     # At the metric's own precision: SSIM's whole range is
-                    # 0-1, so VMAF's 2dp collapses most real differences
-                    # between encodes into an identical-looking row.
-                    # [1:] drops Mean -- it has its own column above.
+                    # 0-1, so VMAF's 2 decimals would hide most real
+                    # differences between encodes. [1:] leaves out the mean,
+                    # which has its own column above.
                     cells = [v for _, v in s.summary(metric.value_format)[1:]]
                     cells += [f"{t.percentage:.1f}%" for t in s.thresholds]
                 for col, val in enumerate(cells, start=detail_start):

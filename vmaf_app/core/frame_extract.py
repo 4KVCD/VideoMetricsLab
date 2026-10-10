@@ -169,7 +169,8 @@ def hdr_kind(info: VideoInfo) -> str | None:
 
 
 def _tone_map_filter(info: VideoInfo, settings: PreviewColorSettings) -> list[str]:
-    """The filters that convert a frame to 8-bit RGB for the display, mapping HDR to SDR where needed."""
+    """The filters that convert a frame to 8-bit RGB for the display, mapping
+    HDR to SDR where needed."""
     kind = hdr_kind(info)
     if settings.mode == PreviewColorMode.UNMANAGED:
         return ["format=rgb24"]

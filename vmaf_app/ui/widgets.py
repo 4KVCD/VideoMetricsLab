@@ -278,7 +278,8 @@ class FillColumnTable(QTableWidget):
         self._recalculate_fill_column()
 
     def _recalculate_fill_column(self) -> None:
-        """Sets the fill column to the space the others leave, or to the width the user dragged it to if that is wider."""
+        """Sets the fill column to the space the others leave, or to the width
+        the user dragged it to if that is wider."""
         if self._recalculating:
             return
         other_total = sum(self.columnWidth(c) for c in self._other_columns)
@@ -340,7 +341,8 @@ class ElidedLabel(QLabel):
         self._fit()
 
     def _fit(self) -> None:
-        """Shows the text cut to the width there is, with the whole text in the tooltip when it is cut."""
+        """Shows the text cut to the width there is, with the whole text in the
+        tooltip when it is cut."""
         width = self.contentsRect().width()
         # Not cut until shown and laid out: before that the width is a
         # placeholder, not the room the line will have.

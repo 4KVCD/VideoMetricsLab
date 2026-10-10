@@ -111,7 +111,8 @@ class CvvdpSettings:
     resize_to_display: bool = False
 
     def spec_parameters(self) -> tuple[tuple[str, object], ...]:
-        """The settings as a request's parameters: the display's identity, and whether frames fill it."""
+        """The settings as a request's parameters: the display's identity, and
+        whether frames fill it."""
         return (("display", self.display.identity()), ("resize_to_display", bool(self.resize_to_display)))
 
     def to_dict(self) -> dict:

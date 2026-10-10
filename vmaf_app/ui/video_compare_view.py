@@ -160,7 +160,8 @@ class _StreamSurface(_PairedFrameWidget):
             self.update()
 
     def _drawn_key(self):
-        """What decides where the frame is drawn: the surface's size and pixel ratio, and the frame's size."""
+        """What decides where the frame is drawn: the surface's size and pixel
+        ratio, and the frame's size."""
         return self.width(), self.height(), self.devicePixelRatioF(), self._side_width, self._height
 
     def _frame_image(self) -> QImage:
@@ -173,7 +174,8 @@ class _StreamSurface(_PairedFrameWidget):
         return self._image
 
     def paintEvent(self, event):
-        """Draws the frame: fitted to the view, or where the zoom puts it, with dark bars around it."""
+        """Draws the frame: fitted to the view, or where the zoom puts it, with
+        dark bars around it."""
         if self._native_playback:
             return
         painter = QPainter(self)
@@ -532,7 +534,9 @@ class VideoCompareView(QWidget):
         return list(dict.fromkeys([*running, *self._pool.values()]))
 
     def load(self, comparison, position_ms, *, playing=False, color_settings=None, series=None, source_native=True):
-        """Shows a comparison (one of `series`) at `position_ms`. A different test video of the same series keeps the decoders running. Returns False if it cannot be played."""
+        """Shows a comparison (one of `series`) at `position_ms`. A different
+        test video of the same series keeps the decoders running. Returns
+        False if it cannot be played."""
         available, reason = self.can_play(comparison)
         if not available:
             self.clear()
@@ -699,7 +703,8 @@ class VideoCompareView(QWidget):
         self._start_ffmpeg(realtime, reason)
 
     def _start_ffmpeg(self, realtime, reason="", *, keep_frame=False):
-        """Starts playback with FFmpeg workers, saying why native playback is not used (`reason`)."""
+        """Starts playback with FFmpeg workers, saying why native playback is
+        not used (`reason`)."""
         self._pool_reason = reason
         self._pool_maximum = self._wanted_maximum()
         self._pool_active = True
@@ -842,7 +847,8 @@ class VideoCompareView(QWidget):
         return self._clock_frame + int((time.monotonic() - self._clock_started) * self._series[0].fps)
 
     def _tick(self):
-        """Advances playback: natively, or by taking each worker's frames and showing the newest pair both videos have."""
+        """Advances playback: natively, or by taking each worker's frames and
+        showing the newest pair both videos have."""
         if (pool := self._native_pool) is not None:
             try:
                 position = pool.poll()

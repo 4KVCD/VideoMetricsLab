@@ -1,4 +1,6 @@
-"""Interactive source/distorted still-frame comparison tab."""
+"""The Video Compare tab (FrameComparePanel): the source and a test video,
+frame by frame, as still frames or played in step (VideoCompareView), with
+zoom, a seek bar, the frame's scores, and HDR display handling."""
 from __future__ import annotations
 
 import math
@@ -117,39 +119,47 @@ class FrameView(DragsZoomedFrame, QWidget):
         self._scaled: QPixmap | None = None
 
     def mousePressEvent(self, event) -> None:
+        """Takes the keyboard focus, for the keys that switch and step."""
         self.setFocus(Qt.MouseFocusReason)
         super().mousePressEvent(event)
 
     def set_message(self, message: str) -> None:
+        """Shows a message instead of a frame."""
         self._image = self._scaled = None
         self._label.setText(message)
         self._label.show()
         self.zoom_changed()
 
     def set_image(self, image: QImage) -> None:
+        """Shows a frame."""
         self._image, self._scaled = image, None
         self._label.hide()
         self.zoom_changed()
 
     def zoom_changed(self) -> None:
+        """Draws the frame again after the zoom changed."""
         self.refresh_cursor()
         self.update()
 
     def resizeEvent(self, event) -> None:
+        """Fits the message to the view."""
         self._label.setGeometry(self.rect())
         super().resizeEvent(event)
         self.refresh_cursor()
 
     def _zoom_context(self):
+        """(zoom, view size, frame size, ratio), or None with no frame."""
         if self._image is None or self._image.isNull():
             return None
         return (self.zoom, (self.width(), self.height()), (self._image.width(), self._image.height()),
                 self.devicePixelRatioF())
 
     def _zoom_dragged(self) -> None:
+        """Draws the frame where it was dragged to."""
         self.update()
 
     def paintEvent(self, _event) -> None:
+        """Draws the frame where the zoom puts it, scaled once per size."""
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#171717"))
         context = self._zoom_context()
@@ -277,12 +287,12 @@ class FrameComparePanel(QWidget):
         self.source_resolution_combo.currentIndexChanged.connect(self._on_source_resolution_changed)
         color_row.addWidget(QLabel(tr("Reference playback:")))
         color_row.addWidget(self.source_resolution_combo)
-        # This row set the window's least width: a drop-down is by default
-        # never narrower than its longest choice, and in Spanish, with a wide
-        # system font (Microsoft YaHei UI), the two took the window past the
-        # 1280 pixels it opens at (1298). They may now be squeezed -- their
-        # lists still open at full width -- and keep their size while there
-        # is room.
+        # This row would set the window's minimum width: a drop-down is by
+        # default never narrower than its longest choice, and in Spanish, with
+        # a wide system font (Microsoft YaHei UI), the two would push the
+        # window past the 1280 pixels it opens at (1298). So they may be
+        # squeezed (their lists still open at full width), and keep their
+        # size while there is room.
         for combo in (self.color_mode_combo, self.source_resolution_combo):
             full = combo.sizeHint().width()
             combo.setMinimumWidth(min(full, 170))
@@ -395,13 +405,14 @@ class FrameComparePanel(QWidget):
 
     # ------------------------------------------------------------ public API
     def set_runs(self, entries: list[FrameComparisonEntry]) -> None:
+        """Sets the comparisons to choose from, keeping the one shown if it is still there."""
         old_entry = self.current_entry
         old_identity = old_entry.identity if old_entry else None
         self._entries = [self._apply_auto_crop(entry) for entry in entries]
         self._generation += 1
         self._cancel_workers()
-        # A file that was missing or temporarily unreadable may have been
-        # restored since the previous synchronization; errors are retryable.
+        # A file that was missing or unreadable may have come back since the
+        # last update, so errors are cleared and tried again.
         self._errors.clear()
 
         current = next(
@@ -431,9 +442,9 @@ class FrameComparePanel(QWidget):
         elif self.isVisible():
             if self.is_video_mode:
                 current = self.current_entry
-                # Only when what is on screen changed: a result arriving for
-                # any video -- scores land several times while a run goes on --
-                # restarted the video being watched.
+                # Only when what is on screen changed. A result arrives for
+                # some video several times while a run goes on, which must
+                # not restart the video being watched.
                 if (old_entry is None or current.identity is not old_identity
                         or current.comparison != old_entry.comparison):
                     self._load_current_video()
@@ -442,18 +453,21 @@ class FrameComparePanel(QWidget):
 
     @property
     def current_entry(self) -> FrameComparisonEntry | None:
+        """The comparison shown, or None."""
         if not self._entries:
             return None
         return self._entries[self._current_index]
 
     @property
     def is_video_mode(self) -> bool:
+        """Whether the tab plays video rather than showing still frames."""
         # Real video pairs share one renderer for paused frames and playback.
         # Synthetic comparisons retain extraction automatically, not a user mode.
         entry = self.current_entry
         return entry is not None and VideoCompareView.can_play(entry.comparison)[0]
 
     def set_frame(self, frame: int) -> None:
+        """Shows frame `frame` (still, or seeks playback there)."""
         if not self._entries:
             return
         bounded = max(0, min(int(frame), self.frame_spin.maximum()))
@@ -472,6 +486,7 @@ class FrameComparePanel(QWidget):
             self._seek_timer.start()
 
     def cycle_distorted(self, direction: int) -> None:
+        """Shows the next (1) or previous (-1) test video."""
         if len(self._entries) < 2:
             return
         self._current_index = (self._current_index + direction) % len(self._entries)
@@ -486,6 +501,7 @@ class FrameComparePanel(QWidget):
             self._show_or_request()
 
     def live_workers(self) -> list:
+        """The workers still running: frame extraction, black-bar detection and playback."""
         workers = [worker for worker in self._workers if worker.isRunning()]
         workers.extend(worker for worker in self._crop_workers.values() if worker.isRunning())
         if self.video_view is not None:
@@ -503,17 +519,19 @@ class FrameComparePanel(QWidget):
 
     # -------------------------------------------------------------- lifecycle
     def closeEvent(self, event) -> None:
+        """Stops the workers, and closes once they have all ended."""
         self.cancel()
         if self.live_workers():
-            # Keep the QObject parent alive until decoder threads are reaped.
-            # This also covers a standalone panel closed before it was shown
-            # (which does not necessarily receive hideEvent).
+            # Keep the panel alive until the decoder threads have ended. This
+            # also covers a panel of its own closed before it was shown (which
+            # may get no hideEvent).
             event.ignore()
             QTimer.singleShot(20, self.close)
             return
         super().closeEvent(event)
 
     def showEvent(self, event) -> None:
+        """Watches the window's keys and moves, and shows the current comparison."""
         super().showEvent(event)
         if not self._window_filters_installed:
             top = self.window()
@@ -529,6 +547,7 @@ class FrameComparePanel(QWidget):
                 self._show_or_request()
 
     def hideEvent(self, event) -> None:
+        """Stops the workers and pauses playback."""
         self._seek_timer.stop()
         self._display_timer.stop()
         self._generation += 1
@@ -541,6 +560,8 @@ class FrameComparePanel(QWidget):
         super().hideEvent(event)
 
     def eventFilter(self, watched, event) -> bool:
+        """Handles the tab's keys anywhere in the window (S, Space, Left and
+        Right), and the window's moves between displays."""
         if watched is self.advanced_info_btn and event.type() == QEvent.ToolTip:
             self._show_advanced_info()
             return True
@@ -589,6 +610,7 @@ class FrameComparePanel(QWidget):
 
     # --------------------------------------------------------------- controls
     def _ensure_video_view(self) -> VideoCompareView:
+        """The playback view, made the first time it is needed."""
         if self.video_view is not None:
             return self.video_view
         view = VideoCompareView(self)
@@ -615,10 +637,12 @@ class FrameComparePanel(QWidget):
             self.video_view.set_decoded_videos(self._decoded_videos)
 
     def _on_source_resolution_changed(self, _index: int) -> None:
+        """Plays the source at the size chosen."""
         if self.is_video_mode:
             self._load_current_video()
 
     def _load_current_video(self, playing: bool | None = None) -> None:
+        """Plays the comparison shown, playing or paused as before unless `playing` says."""
         entry = self.current_entry
         if entry is None:
             if self.video_view is not None:
@@ -649,6 +673,7 @@ class FrameComparePanel(QWidget):
         self._update_enabled_state()
 
     def _on_play_clicked(self) -> None:
+        """Plays or pauses."""
         entry = self.current_entry
         if entry is None:
             return
@@ -660,10 +685,13 @@ class FrameComparePanel(QWidget):
         view.set_playing(not view.playback_requested)
 
     def _on_audio_toggled(self, enabled: bool) -> None:
+        """Turns the soundtrack on or off."""
         if self.video_view is not None:
             self.video_view.set_audio_enabled(enabled)
 
     def _on_video_position_changed(self, position_ms: int) -> None:
+        """Follows playback in the seek widgets: at once when paused, and on a
+        timer while playing."""
         entry = self.current_entry
         if entry is None or not self.is_video_mode or entry.comparison.fps <= 0:
             return
@@ -679,10 +707,10 @@ class FrameComparePanel(QWidget):
         self._show_video_position()
 
     def _show_video_position(self) -> None:
-        """The frame shown in the seek widgets and the frame line -- that
-        line alone: what is shown and its colour handling are the same at
-        every frame, and _update_color_status checked on disk that both
-        files still exist, at each one."""
+        """Shows the frame in the seek widgets and the frame line, and only
+        there: what is shown and its colour handling are the same at every
+        frame, and _update_color_status would check on disk, at each frame,
+        that both files still exist."""
         self._position_timer.stop()
         self._syncing_video_position = True
         try:
@@ -692,6 +720,7 @@ class FrameComparePanel(QWidget):
             self._syncing_video_position = False
 
     def _on_video_playing_changed(self, playing: bool) -> None:
+        """Shows Play or Pause."""
         if not playing and self._position_timer.isActive():
             self._show_video_position()  # the frame it stopped on, now
         self.play_btn.setText(tr("❚❚ Pause") if playing else tr("▶ Play"))
@@ -700,6 +729,7 @@ class FrameComparePanel(QWidget):
             self._update_color_status()
 
     def _on_video_status_changed(self, message: str) -> None:
+        """Shows playback's status, short."""
         self._video_status = message
         details = message.replace("distorted", "test")
         tooltip = "<p>" + "<br>".join(escape(tr_message(part)) for part in details.split(" · ")) + "</p>"
@@ -709,6 +739,7 @@ class FrameComparePanel(QWidget):
             self._update_color_status()
 
     def _on_video_selected(self, index: int) -> None:
+        """Shows the test video chosen in the list."""
         if not 0 <= index < len(self._entries) or index == self._current_index:
             return
         self._current_index = index
@@ -720,9 +751,11 @@ class FrameComparePanel(QWidget):
             self._show_or_request()
 
     def _on_zoom_chosen(self, index: int) -> None:
+        """Applies a zoom chosen from the list."""
         self._apply_zoom(self.zoom_combo.itemData(index))
 
     def _on_zoom_typed(self) -> None:
+        """Applies a zoom typed in."""
         text = self.zoom_combo.currentText()
         if text.strip() == tr("Fit to window"):
             self._apply_zoom(None)
@@ -744,6 +777,7 @@ class FrameComparePanel(QWidget):
                 self.video_view.zoom_changed()
 
     def _show_zoom(self) -> None:
+        """Shows the zoom in use in the zoom box."""
         factor = self.zoom.factor
         index = self.zoom_combo.findData(factor) if factor is None else next(
             (i for i in range(1, self.zoom_combo.count()) if self.zoom_combo.itemData(i) == factor), -1)
@@ -752,9 +786,11 @@ class FrameComparePanel(QWidget):
         self.zoom_combo.setEditText(tr("Fit to window") if factor is None else percent_text(factor))
 
     def _on_slider_changed(self, value: int) -> None:
+        """Shows the frame the slider points at."""
         self.set_frame(value)
 
     def _on_color_mode_changed(self, index: int) -> None:
+        """Applies the HDR handling chosen."""
         value = self.color_mode_combo.itemData(index)
         try:
             mode = PreviewColorMode(value)
@@ -773,6 +809,7 @@ class FrameComparePanel(QWidget):
             self._show_or_request()
 
     def _on_timestamp_committed(self) -> None:
+        """Shows the frame at the time typed in, or marks the box if it cannot be read."""
         entry = self.current_entry
         if entry is None:
             return
@@ -787,6 +824,7 @@ class FrameComparePanel(QWidget):
         self.set_frame(round(seconds * entry.comparison.fps))
 
     def _set_ranges(self, maximum: int) -> None:
+        """Sets the seek widgets' range to the last frame."""
         for widget in (self.frame_spin, self.timeline):
             blocked = widget.blockSignals(True)
             widget.setRange(0, maximum)
@@ -794,6 +832,7 @@ class FrameComparePanel(QWidget):
             widget.blockSignals(blocked)
 
     def _sync_seek_widgets(self) -> None:
+        """Shows the frame in the seek widgets."""
         for widget in (self.frame_spin, self.timeline):
             blocked = widget.blockSignals(True)
             widget.setValue(self._frame)
@@ -808,6 +847,7 @@ class FrameComparePanel(QWidget):
         self.timestamp_edit.blockSignals(blocked)
 
     def _update_enabled_state(self) -> None:
+        """Enables the controls that can be used now."""
         available = bool(self._entries)
         for widget in (
             self.video_combo, self.frame_spin, self.timestamp_edit, self.timeline,
@@ -826,6 +866,7 @@ class FrameComparePanel(QWidget):
         self.color_mode_combo.setEnabled(available)
 
     def _update_labels(self) -> None:
+        """Shows which video and frame are shown, and the colour handling."""
         entry = self.current_entry
         if entry is None:
             self.showing_label.setText(tr("No videos to compare"))
@@ -861,13 +902,15 @@ class FrameComparePanel(QWidget):
         self.detail_label.set_text("   ·   ".join(parts))
 
     def _show_advanced_info(self) -> None:
+        """Shows the playback details as a tooltip for longer."""
         button = self.advanced_info_btn
         QToolTip.showText(button.mapToGlobal(button.rect().bottomLeft()),
                           button.toolTip(), button, button.rect(), 30000)
 
     def _concise_playback_status(self) -> str:
-        # The views' status messages are English -- read here for their words
-        # -- and shown translated, piece by piece.
+        """Playback's status, short and translated, with the details left to Advanced info."""
+        # The views' status messages are in English, because they are read
+        # here for their words, and shown translated, piece by piece.
         message = self._video_status.replace("distorted", "test")
         # Errors stay visible; successful playback hides renderer diagnostics
         # in Advanced info, retaining only state and actual decoder choices.
@@ -904,6 +947,7 @@ class FrameComparePanel(QWidget):
         return tr("Metrics not calculated for this frame")
 
     def _color_settings(self) -> PreviewColorSettings:
+        """How HDR frames are converted for this display."""
         return PreviewColorSettings(
             mode=self._color_mode,
             display_hdr_enabled=self._display_hdr.hdr_enabled,
@@ -911,6 +955,7 @@ class FrameComparePanel(QWidget):
         )
 
     def _refresh_display_hdr(self) -> bool:
+        """Reads the display's HDR state again. Returns whether it changed."""
         try:
             window_handle = int(self.window().winId())
         except (RuntimeError, TypeError):
@@ -925,10 +970,12 @@ class FrameComparePanel(QWidget):
         return False
 
     def _on_display_maybe_changed(self) -> None:
+        """Shows the frame again if the display's HDR state changed."""
         if self.isVisible() and self._refresh_display_hdr():
             self._show_or_request()
 
     def _update_color_status(self) -> None:
+        """Says how the frame's colours are shown."""
         entry = self.current_entry
         if entry is None:
             return
@@ -998,6 +1045,7 @@ class FrameComparePanel(QWidget):
 
     # --------------------------------------------------------------- decoding
     def _cache_key(self, side: str) -> tuple | None:
+        """The key of a side's frame in the frame cache, or None."""
         entry = self.current_entry
         return (
             None if entry is None else
@@ -1005,11 +1053,13 @@ class FrameComparePanel(QWidget):
         )
 
     def _current_image(self) -> QImage | None:
+        """The frame shown, if extracted already."""
         side = "source" if self._showing_source else "distorted"
         key = self._cache_key(side)
         return None if key is None else self._cache.get(key)
 
     def _show_or_request(self) -> None:
+        """Shows the current frame, extracting it first if need be."""
         if self.is_video_mode:
             if self.video_view is not None:
                 self.video_view.set_color_settings(self._color_settings())
@@ -1043,6 +1093,7 @@ class FrameComparePanel(QWidget):
         self._seek_timer.start()
 
     def _request_current_frames(self) -> None:
+        """Extracts the current frame of each side not cached yet, the side shown first."""
         entry = self.current_entry
         if entry is None or not self.isVisible() or self.is_video_mode:
             return
@@ -1073,6 +1124,7 @@ class FrameComparePanel(QWidget):
 
     # ----------------------------------------------------------- auto-cropping
     def _apply_auto_crop(self, entry: FrameComparisonEntry) -> FrameComparisonEntry:
+        """The comparison with its detected black bars, once they are known."""
         if not entry.comparison.auto_crop_pending:
             return entry
         crops = self._auto_crops.get(entry.identity)
@@ -1095,9 +1147,9 @@ class FrameComparePanel(QWidget):
         they are: none on either side (each crop the whole frame), the size
         compared at unchanged, and neither side boxed while they were looked
         for (each already the shape it is shown at). Then the frames playing
-        are the ones the crops give, and loading the pair again restarted
+        are the ones the crops give, and loading the pair again would restart
         every decoder for nothing: 0.7-1.3 s of "Buffering locked pair" in
-        the middle of playback, wherever detection happened to finish."""
+        the middle of playback, wherever detection happens to finish."""
         size = comparison_dimensions(pending)
         if size != comparison_dimensions(cropped):
             return False
@@ -1110,6 +1162,7 @@ class FrameComparePanel(QWidget):
         return True
 
     def _ensure_auto_crop(self, entry: FrameComparisonEntry | None) -> None:
+        """Starts detecting a comparison's black bars, if not known or under way."""
         if entry is None or not entry.comparison.auto_crop_pending:
             return
         identity = entry.identity
@@ -1151,6 +1204,7 @@ class FrameComparePanel(QWidget):
 
     @staticmethod
     def _crop_file_key(path) -> tuple:
+        """A file's identity for remembering its black bars: path, size and time."""
         try:
             resolved = path.resolve()
             stat = resolved.stat()
@@ -1159,6 +1213,7 @@ class FrameComparePanel(QWidget):
             return (str(path),)
 
     def _on_auto_crop_ready(self, identity, worker, source_crop, distorted_crop) -> None:
+        """Keeps the detected black bars, and shows the comparison cropped."""
         self._auto_crops[identity] = (source_crop, distorted_crop)
         entry = next((item for item in self._entries if item.identity is identity), None)
         if entry is not None:
@@ -1186,6 +1241,7 @@ class FrameComparePanel(QWidget):
                 self._show_or_request()
 
     def _on_crop_worker_finished(self, worker: CropDetectWorker) -> None:
+        """Forgets a finished detection."""
         for identity, active in tuple(self._crop_workers.items()):
             if active is worker:
                 self._crop_workers.pop(identity, None)
@@ -1193,11 +1249,13 @@ class FrameComparePanel(QWidget):
         worker.deleteLater()
 
     def _cancel_crop_workers(self) -> None:
+        """Stops black-bar detection."""
         for worker in tuple(self._crop_workers.values()):
             if worker.isRunning():
                 worker.cancel()
 
     def _on_frame_ready(self, generation: int, side: str, image: QImage) -> None:
+        """Keeps an extracted frame in the cache, and shows it if it is the side shown."""
         if generation != self._generation:
             return
         if image.isNull():
@@ -1219,6 +1277,7 @@ class FrameComparePanel(QWidget):
             self.viewer.set_image(image)
 
     def _on_frame_failed(self, generation: int, side: str, error: str) -> None:
+        """Says why a frame could not be extracted."""
         if generation != self._generation:
             return
         key = self._cache_key(side)
@@ -1229,13 +1288,15 @@ class FrameComparePanel(QWidget):
             self.viewer.set_message(tr("Could not load frame:\n{error}", error=tr_message(error)))
 
     def _on_worker_finished(self, worker: FrameExtractWorker) -> None:
+        """Forgets a finished extraction."""
         self._workers.discard(worker)
         worker.deleteLater()
 
     def _cancel_workers(self) -> None:
-        # live_workers also includes playback and native teardown threads for
-        # close-event lifetime protection. Only extraction belongs to this
-        # cancellation scope; video_view.clear() owns playback shutdown.
+        """Stops frame extraction."""
+        # live_workers also lists playback's threads and native teardown's,
+        # so that closing waits for them, but only extraction is stopped
+        # here; video_view.clear() stops playback.
         for worker in tuple(self._workers):
             if worker.isRunning():
                 worker.cancel()

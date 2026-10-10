@@ -25,7 +25,8 @@ _CATCH_UP_S = 0.2
 
 
 class _StopNative(QThread):
-    """Stops a pipeline (or the presenter, or the sound) on a thread of its own, so that the window does not wait for its teardown."""
+    """Stops a pipeline (or the presenter, or the sound) on a thread of its
+    own, so that the window does not wait for its teardown."""
 
     def __init__(self, pipeline, parent):
         super().__init__(parent)
@@ -45,7 +46,10 @@ class _StopNative(QThread):
 
 
 class LockedNativePool:
-    """Plays Video Compare natively: one GstComparePipeline per video (the source, and the selected test video with its neighbours), with each test frame paired with the source frame of the same number, timed by the source's soundtrack."""
+    """Plays Video Compare natively: one GstComparePipeline per video (the
+    source, and the selected test video with its neighbours), with each test
+    frame paired with the source frame of the same number, timed by the
+    source's soundtrack."""
 
     def __init__(self, view, series, selected, position_ms, settings, playing, source_native=True):
         self.gst, _ = _load_gstreamer()
@@ -99,7 +103,9 @@ class LockedNativePool:
             raise
 
     def _retire(self, pipeline, finished=None, *, decoder=True):
-        """Stops a pipeline, the presenter or the sound on a thread of its own, then calls finished. decoder says whether it counts against the decoder limit while stopping."""
+        """Stops a pipeline, the presenter or the sound on a thread of its own,
+        then calls finished. decoder says whether it counts against the
+        decoder limit while stopping."""
         worker = _StopNative(pipeline, self.view)
         worker.counts_as_decoder = decoder
         self.view._retired_workers.add(worker)
@@ -115,7 +121,8 @@ class LockedNativePool:
         worker.start()
 
     def sync(self, selected):
-        """Selects a test video: keeps the decoders still needed, stops the others and starts the missing ones."""
+        """Selects a test video: keeps the decoders still needed, stops the
+        others and starts the missing ones."""
         self.selected = selected
         source = source_playback_comparison(self.series[selected], self.source_native)
         crop = source.source_crop
@@ -134,7 +141,8 @@ class LockedNativePool:
         self._choose_pair(self.frame)
 
     def launch_missing(self):
-        """Starts the decoders wanted but not running, within the decoder limit (counting those still stopping)."""
+        """Starts the decoders wanted but not running, within the decoder limit
+        (counting those still stopping)."""
         occupied = len(self.entries) + sum(w.isRunning() and getattr(w, "counts_as_decoder", True)
                                           for w in self.view._retired_workers)
         for key, (comparison, side) in self.desired.items():
@@ -148,7 +156,8 @@ class LockedNativePool:
             occupied += 1
 
     def _choose_pair(self, target):
-        """Shows the newest frame pair of the source and the selected video due at frame target. Returns whether there is one."""
+        """Shows the newest frame pair of the source and the selected video due
+        at frame target. Returns whether there is one."""
         source = self.frames.get(self.source_key, {})
         distorted = self.frames.get(("distorted", self.selected), {})
         common = source.keys() & distorted.keys()
@@ -234,7 +243,9 @@ class LockedNativePool:
             self.audio_running = False
 
     def poll(self):
-        """Advances playback: reads each decoder's frames into its queue, shows the pair due by the soundtrack's clock, and stops the sound to wait whenever the frames fall behind. Returns the position shown (ms)."""
+        """Advances playback: reads each decoder's frames into its queue, shows
+        the pair due by the soundtrack's clock, and stops the sound to wait
+        whenever the frames fall behind. Returns the position shown (ms)."""
         self.output.poll()
         self.launch_missing()
         audio_ms = self.audio.poll()

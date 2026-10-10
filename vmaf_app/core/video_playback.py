@@ -230,7 +230,8 @@ def _input_args(
     hwaccel: str | None,
     realtime: bool,
 ) -> list[str]:
-    """FFmpeg's options for one video: real-time reading, the start time, hardware decoding and the file."""
+    """FFmpeg's options for one video: real-time reading, the start time,
+    hardware decoding and the file."""
     args: list[str] = []
     if realtime:
         args += ["-readrate", "1"]

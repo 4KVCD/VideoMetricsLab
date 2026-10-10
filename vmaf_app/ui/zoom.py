@@ -117,7 +117,8 @@ class DragsZoomedFrame:
     _drag_from = None
 
     def _zoom_context(self):
-        """(zoom, view size, frame size, ratio), or None when no frame is shown. Widgets provide it."""
+        """(zoom, view size, frame size, ratio), or None when no frame is
+        shown. Widgets provide it."""
         raise NotImplementedError
 
     def _zoom_dragged(self) -> None:
