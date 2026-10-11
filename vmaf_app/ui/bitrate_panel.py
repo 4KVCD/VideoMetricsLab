@@ -42,13 +42,9 @@ from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui.bitrate_worker import BitrateWorker
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.formatting import media_info_string
+from vmaf_app.ui.series_colors import VideoColors
 
 _COL_USE, _COL_FILE, _COL_MEDIA, _COL_DURATION, _COL_FRAMES, _COL_AVG, _COL_MIN, _COL_MAX, _COL_STATUS = range(9)
-
-_COLORS = [
-    "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
-    "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD",
-]
 
 
 @dataclass
@@ -88,8 +84,9 @@ class BitratePanel(QWidget):
     """The Bitrate tab. It keeps its own files and analysis, apart from the
     Videos tab."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, colors: VideoColors | None = None) -> None:
         super().__init__(parent)
+        self._video_colors = colors if colors is not None else VideoColors()
         self.setAcceptDrops(True)
         self._entries: OrderedDict[str, BitrateEntry] = OrderedDict()
         self._pending: OrderedDict[str, None] = OrderedDict()
@@ -209,7 +206,7 @@ class BitratePanel(QWidget):
             self._entries[key] = BitrateEntry(
                 path=path,
                 info=info,
-                color=_COLORS[len(self._entries) % len(_COLORS)],
+                color=self._video_colors.for_path(path),
             )
             added_keys.append(key)
         self._rebuild_table()

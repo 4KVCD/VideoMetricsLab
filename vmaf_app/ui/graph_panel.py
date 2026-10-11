@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, MetricDirection, MetricKind
-from vmaf_app.core.models import ComparisonResult
+from vmaf_app.core.models import ComparisonResult, synthetic_scale_direction_variant_path
 from vmaf_app.core.run_io import (
     RESULT_FILE_FILTER,
     RESULT_SUFFIX,
@@ -50,6 +50,7 @@ from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui import theme
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
+from vmaf_app.ui.series_colors import PALETTE, VideoColors
 from vmaf_app.ui.widgets import QuietTabWidget
 
 #: Statistic cells. A monospaced family so digits share a width; the
@@ -57,10 +58,23 @@ from vmaf_app.ui.widgets import QuietTabWidget
 #: proportional face because the cells are right-aligned regardless.
 _NUMBER_FONT_FAMILY = "Consolas"
 
-_PALETTE = [
-    "#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2",
-    "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD",
-]
+# Compatibility for callers inspecting the established graph palette.
+_PALETTE = list(PALETTE)
+
+
+def _color_path(result: ComparisonResult) -> Path:
+    """Use the recorded video path, except for recognized synthetic runs.
+
+    Older/imported metadata may describe a different original location, so
+    do not let it override a normal run's explicitly recorded test path.
+    """
+    if result.resample_target is not None:
+        return result.source
+    if result.distorted_info is not None:
+        physical = result.distorted_info.path
+        if result.distorted == synthetic_scale_direction_variant_path(physical, result.scale_direction):
+            return physical
+    return result.distorted
 
 # How many lines the list at the top shows before it scrolls. Any more would
 # crowd out the graph it describes.
@@ -813,9 +827,9 @@ class GraphPanel(QWidget):
 
     metric_changed = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, colors: VideoColors | None = None):
         super().__init__(parent)
-
+        self._video_colors = colors if colors is not None else VideoColors()
         self._entries: dict[int, SeriesEntry] = {}
         self._suppressed_identities: set[object] = set()
         self._next_id = 0
@@ -1206,6 +1220,10 @@ class GraphPanel(QWidget):
                 return False
             self._suppressed_identities.discard(identity)
         label = label or Path(result.distorted).stem
+        # Resolution variants have synthetic result paths, but describe the
+        # same physical test video as the bitrate entry.
+        path = _color_path(result)
+        color = self._video_colors.for_path(path)
         times = result.frames.time
         step = float(times[-1] - times[0]) / (len(times) - 1) if len(times) > 1 else 1.0
 
@@ -1213,6 +1231,9 @@ class GraphPanel(QWidget):
             if existing.identity == identity:
                 if existing.result is result and existing.label == label:
                     return False
+                old_path = _color_path(existing.result)
+                if self._video_colors.path_key(old_path) != self._video_colors.path_key(path):
+                    existing.color = color
                 existing.result = result
                 existing.label = label
                 existing.times = times
@@ -1223,7 +1244,6 @@ class GraphPanel(QWidget):
                     page.set_curve(sid, existing, existing.color)
                 return True
 
-        color = _PALETTE[self._next_id % len(_PALETTE)]
         sid = self._next_id
         self._next_id += 1
 

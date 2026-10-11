@@ -129,6 +129,7 @@ from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.run_line import decoder_text, metric_line
+from vmaf_app.ui.series_colors import VideoColors
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable, QuietTabWidget
 from vmaf_app.ui.worker import VmafWorker
 
@@ -897,7 +898,8 @@ class MainWindow(QMainWindow):
         splitter.setSizes([380, 300, 120])
         self.tabs.addTab(videos_page, tr("Videos"))
 
-        self.graph_panel = GraphPanel()
+        video_colors = VideoColors()
+        self.graph_panel = GraphPanel(colors=video_colors)
         self.graph_panel.set_preferred_metric(self._settings.graph_metric)
         self.graph_panel.metric_changed.connect(self._on_graph_metric_changed)
         self.tabs.addTab(self.graph_panel, tr("Metric Graphs"))
@@ -913,7 +915,7 @@ class MainWindow(QMainWindow):
         )
         self.tabs.addTab(self.frame_compare_panel, tr("Video Compare"))
 
-        self.bitrate_panel = BitratePanel()
+        self.bitrate_panel = BitratePanel(colors=video_colors)
         self.tabs.addTab(self.bitrate_panel, tr("Bitrate Viewer"))
 
         self.tabs.addTab(self._build_settings_panel(), tr("Settings"))
