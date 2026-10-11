@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Вибрати колір відео",
+  "Click the color square to change this video's color in both graphs.": "Натисніть на кольоровий квадрат, щоб змінити колір цього відео на обох графіках.",
+  "Reset color": "Скинути колір",
   "Auto (analysis resolution)": "Авто (роздільність аналізу)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (звичайний перегляд)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / великий екран)",

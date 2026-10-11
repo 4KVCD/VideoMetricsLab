@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "동영상 색상 선택",
+  "Click the color square to change this video's color in both graphs.": "색상 사각형을 클릭하면 두 그래프에서 이 동영상의 색상을 변경할 수 있습니다.",
+  "Reset color": "색상 초기화",
   "Auto (analysis resolution)": "자동(분석 해상도)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1(표준 시청)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1(4K / 대화면 시청)",

@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Pilih warna video",
+  "Click the color square to change this video's color in both graphs.": "Klik kotak warna untuk mengubah warna video ini pada kedua grafik.",
+  "Reset color": "Atur ulang warna",
   "Auto (analysis resolution)": "Otomatis (resolusi analisis)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (tontonan standar)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / layar besar)",

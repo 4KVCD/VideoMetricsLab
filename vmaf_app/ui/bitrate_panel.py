@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -42,7 +42,7 @@ from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui.bitrate_worker import BitrateWorker
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.formatting import media_info_string
-from vmaf_app.ui.series_colors import VideoColors
+from vmaf_app.ui.series_colors import ColorSwatchDelegate, VideoColors
 
 _COL_USE, _COL_FILE, _COL_MEDIA, _COL_DURATION, _COL_FRAMES, _COL_AVG, _COL_MIN, _COL_MAX, _COL_STATUS = range(9)
 
@@ -87,6 +87,7 @@ class BitratePanel(QWidget):
     def __init__(self, parent=None, *, colors: VideoColors | None = None) -> None:
         super().__init__(parent)
         self._video_colors = colors if colors is not None else VideoColors()
+        self._video_colors.changed.connect(self._on_video_color_changed)
         self.setAcceptDrops(True)
         self._entries: OrderedDict[str, BitrateEntry] = OrderedDict()
         self._pending: OrderedDict[str, None] = OrderedDict()
@@ -112,6 +113,9 @@ class BitratePanel(QWidget):
         root.addLayout(file_controls)
 
         self.table = QTableWidget(0, 9)
+        swatches = ColorSwatchDelegate(self.table)
+        swatches.clicked.connect(self._choose_video_color)
+        self.table.setItemDelegateForColumn(_COL_USE, swatches)
         self.table.setHorizontalHeaderLabels([
             tr("Use"), tr("Video file"), tr("Media info"), tr("Duration"), tr("Frames"),
             tr("Average"), tr("Minimum"), tr("Maximum"), tr("Status"),
@@ -448,7 +452,10 @@ class BitratePanel(QWidget):
         use = self._cell(row, _COL_USE)
         use.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
         use.setCheckState(Qt.Checked if entry.enabled else Qt.Unchecked)
-        use.setBackground(QColor(entry.color))
+        swatch = QPixmap(12, 12)
+        swatch.fill(QColor(entry.color))
+        use.setData(Qt.DecorationRole, swatch)
+        use.setToolTip(tr("Click the color square to change this video's color in both graphs."))
         values = [
             entry.path.name,
             media_info_string(entry.info) if entry.info else "",
@@ -477,6 +484,26 @@ class BitratePanel(QWidget):
         if 0 <= item.row() < len(entries):
             entries[item.row()].enabled = item.checkState() == Qt.Checked
             self._refresh_plot()
+
+    def _choose_video_color(self, row: int) -> None:
+        entries = list(self._entries.values())
+        if 0 <= row < len(entries):
+            self._video_colors.choose(entries[row].path, self)
+
+    def _on_video_color_changed(self, path_key: str, color: str) -> None:
+        """Repaint colors only; keep packet data, cached plots and zoom."""
+        self._populating = True
+        try:
+            for row, entry in enumerate(self._entries.values()):
+                if self._video_colors.path_key(entry.path) != path_key:
+                    continue
+                entry.color = color
+                swatch = QPixmap(12, 12)
+                swatch.fill(QColor(color))
+                self._cell(row, _COL_USE).setData(Qt.DecorationRole, swatch)
+                self.chart.set_series_color(id(entry.identity), color)
+        finally:
+            self._populating = False
 
     def _update_buttons(self) -> None:
         """Sets the buttons' text and whether they can be used."""

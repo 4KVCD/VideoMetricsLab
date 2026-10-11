@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Elegir color del vídeo",
+  "Click the color square to change this video's color in both graphs.": "Haz clic en el cuadrado de color para cambiar el color de este vídeo en ambos gráficos.",
+  "Reset color": "Restablecer color",
   "Auto (analysis resolution)": "Automático (resolución de análisis)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (visualización estándar)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / pantalla grande)",

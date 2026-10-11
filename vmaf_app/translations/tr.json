@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Video rengini seç",
+  "Click the color square to change this video's color in both graphs.": "Bu videonun rengini her iki grafikte değiştirmek için renk karesine tıklayın.",
+  "Reset color": "Rengi sıfırla",
   "Auto (analysis resolution)": "Otomatik (analiz çözünürlüğü)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (standart izleme)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / büyük ekran)",

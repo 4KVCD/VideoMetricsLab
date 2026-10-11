@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Chọn màu video",
+  "Click the color square to change this video's color in both graphs.": "Nhấp vào ô màu để đổi màu của video này trên cả hai biểu đồ.",
+  "Reset color": "Đặt lại màu",
   "Auto (analysis resolution)": "Tự động (độ phân giải phân tích)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (xem thông thường)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / màn hình lớn)",

@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Videó színének kiválasztása",
+  "Click the color square to change this video's color in both graphs.": "Kattintson a színes négyzetre a videó színének módosításához mindkét grafikonon.",
+  "Reset color": "Szín visszaállítása",
   "Auto (analysis resolution)": "Automatikus (elemzési felbontás)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (normál nézés)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / nagy képernyő)",

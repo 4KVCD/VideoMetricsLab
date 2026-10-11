@@ -122,6 +122,13 @@ class ChartWidget(QWidget):
         self._series[key] = series
         self._invalidate(refit=True)
 
+    def set_series_color(self, key: int, color: str) -> None:
+        """Repaint a color change without scanning scores or resetting zoom."""
+        series = self._series.get(key)
+        if series is not None and series.color != color:
+            series.color = color
+            self._invalidate()
+
     def remove_series(self, *keys: int) -> None:
         """Removes lines, fitting the axes again only once however many go."""
         removed = [key for key in keys if self._series.pop(key, None) is not None]

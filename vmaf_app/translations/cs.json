@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "Vybrat barvu videa",
+  "Click the color square to change this video's color in both graphs.": "Kliknutím na barevný čtvereček změníte barvu tohoto videa v obou grafech.",
+  "Reset color": "Obnovit barvu",
   "Auto (analysis resolution)": "Automaticky (rozlišení analýzy)",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1 (běžné sledování)",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1 (4K / velká obrazovka)",

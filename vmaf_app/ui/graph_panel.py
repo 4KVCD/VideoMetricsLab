@@ -50,7 +50,7 @@ from vmaf_app.i18n import N_, ntr, tr
 from vmaf_app.ui import theme
 from vmaf_app.ui.chart import ChartSeries, ChartWidget
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.series_colors import PALETTE, VideoColors
+from vmaf_app.ui.series_colors import PALETTE, ColorSwatchDelegate, VideoColors
 from vmaf_app.ui.widgets import QuietTabWidget
 
 #: Statistic cells. A monospaced family so digits share a width; the
@@ -830,6 +830,7 @@ class GraphPanel(QWidget):
     def __init__(self, parent=None, *, colors: VideoColors | None = None):
         super().__init__(parent)
         self._video_colors = colors if colors is not None else VideoColors()
+        self._video_colors.changed.connect(self._on_video_color_changed)
         self._entries: dict[int, SeriesEntry] = {}
         self._suppressed_identities: set[object] = set()
         self._next_id = 0
@@ -861,6 +862,9 @@ class GraphPanel(QWidget):
         top_layout.addWidget(self.stats_hint)
 
         self.stats_table = QTableWidget()
+        swatches = ColorSwatchDelegate(self.stats_table)
+        swatches.clicked.connect(self._choose_video_color)
+        self.stats_table.setItemDelegateForColumn(0, swatches)
         self.stats_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.stats_table.itemChanged.connect(self._on_stats_item_changed)
         self.stats_table.cellClicked.connect(self._on_stats_cell_clicked)
@@ -1126,7 +1130,29 @@ class GraphPanel(QWidget):
         font.setBold(True)
         item.setFont(font)
         item.setForeground(theme.readable(entry.color))
+        item.setToolTip(tr("Click the color square to change this video's color in both graphs."))
         return item
+
+    def _choose_video_color(self, row: int) -> None:
+        sid = self._series_id_at_row(row)
+        if sid in self._entries:
+            self._video_colors.choose(_color_path(self._entries[sid].result), self)
+
+    def _on_video_color_changed(self, path_key: str, color: str) -> None:
+        """Recolor every run of this video, without rebuilding its statistics."""
+        self._populating_stats = True
+        try:
+            for row, (sid, entry) in enumerate(self._entries.items()):
+                if self._video_colors.path_key(_color_path(entry.result)) != path_key:
+                    continue
+                entry.color = color
+                for page in self._pages.values():
+                    page.chart.set_series_color(sid, color)
+                item = self._series_name_item(entry)
+                item.setData(Qt.UserRole, sid)
+                self.stats_table.setItem(row, 0, item)
+        finally:
+            self._populating_stats = False
 
     @staticmethod
     def _number_item(text: str) -> QTableWidgetItem:

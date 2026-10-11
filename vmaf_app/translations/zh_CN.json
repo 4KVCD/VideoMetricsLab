@@ -1,5 +1,8 @@
 {
  "strings": {
+  "Choose video color": "选择视频颜色",
+  "Click the color square to change this video's color in both graphs.": "点击色块可更改此视频在两个图表中的颜色。",
+  "Reset color": "重置颜色",
   "Auto (analysis resolution)": "自动（分析分辨率）",
   "VMAF v0.6.1 (standard viewing)": "VMAF v0.6.1（标准观看）",
   "VMAF 4K v0.6.1 (4K / large-screen viewing)": "VMAF 4K v0.6.1（4K / 大屏观看）",
