@@ -1626,10 +1626,11 @@ FAILED_PROBE_RETRY_SECONDS = 60.0
 #: What the probe chose: "cuda" or "vulkan", and Vulkan's GPU number.
 _backend: tuple[str, int | None] = ("cuda", None)
 #: Settings > GPU metrics > GPU backend, which VMAF follows as Vship does.
-#: "cuda" and "auto" use libvmaf's CUDA code where it runs (on an NVIDIA GPU)
-#: and Vulkan elsewhere; "vulkan" uses Vulkan on every GPU. "hip" is Vship's
-#: build for AMD; VMAF has no such build, so it uses Vulkan there, as with
-#: "auto".
+#: Every choice but "cuda" tries Vulkan first, on every GPU: it gives the same
+#: scores as libvmaf's CUDA code, and on an RTX 5090 scores 4K VMAF and NEG at
+#: 855 frames a second against official libvmaf CUDA's 177 (libvmaf-fast's
+#: benchmark, frames already in memory). "cuda" tries libvmaf's CUDA code
+#: first. "hip" is Vship's build for AMD; VMAF has no such build.
 _preference = "auto"
 
 
@@ -1647,7 +1648,7 @@ def set_gpu_backend(preference: str) -> None:
 
 def _backend_order(preference: str) -> tuple[str, ...]:
     """The backends to try, in order, for a GPU backend setting."""
-    return ("vulkan", "cuda") if preference == "vulkan" else ("cuda", "vulkan")
+    return ("cuda", "vulkan") if preference == "cuda" else ("vulkan", "cuda")
 
 
 def gpu_vmaf_available() -> tuple[bool, str]:

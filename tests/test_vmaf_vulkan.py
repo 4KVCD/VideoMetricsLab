@@ -30,10 +30,11 @@ def _probes(monkeypatch, vendors, cuda=(True, "libvmaf 1"), vulkan=(True, 0, "Vu
                         lambda function, **_: cuda if function is vmaf_cuda.probe else vulkan)
 
 
-def test_auto_takes_cuda_on_an_nvidia_gpu_and_vulkan_on_any_other(monkeypatch):
+def test_auto_takes_vulkan_on_every_gpu_and_cuda_only_when_chosen(monkeypatch):
     _probes(monkeypatch, [GpuVendor.NVIDIA])
-    assert vmaf_cuda._probe_once("auto") == ("cuda", None, "libvmaf 1 with CUDA")
-    assert vmaf_cuda._probe_once("cuda")[0] == "cuda"
+    assert vmaf_cuda._probe_once("auto") == ("vulkan", 0, "Vulkan on a GPU")
+    assert vmaf_cuda._probe_once("vulkan")[0] == "vulkan"
+    assert vmaf_cuda._probe_once("cuda") == ("cuda", None, "libvmaf 1 with CUDA")
     _probes(monkeypatch, [GpuVendor.INTEL], vulkan=(True, 1, "Vulkan on Intel(R) Graphics"))
     assert vmaf_cuda._probe_once("auto") == ("vulkan", 1, "Vulkan on Intel(R) Graphics")
     assert vmaf_cuda._probe_once("hip")[0] == "vulkan"  # Vship's AMD build: VMAF has none
@@ -41,11 +42,11 @@ def test_auto_takes_cuda_on_an_nvidia_gpu_and_vulkan_on_any_other(monkeypatch):
 
 def test_the_other_backend_is_tried_when_the_first_cannot_score(monkeypatch):
     _probes(monkeypatch, [GpuVendor.NVIDIA], cuda=(False, "CUDA failed to start"))
-    assert vmaf_cuda._probe_once("auto")[0] == "vulkan"
+    assert vmaf_cuda._probe_once("cuda")[0] == "vulkan"
     _probes(monkeypatch, [GpuVendor.NVIDIA], vulkan=(False, None, "its driver calculates VMAF wrongly"))
-    assert vmaf_cuda._probe_once("vulkan")[0] == "cuda"
+    assert vmaf_cuda._probe_once("auto")[0] == "cuda"
     _probes(monkeypatch, [GpuVendor.INTEL], vulkan=(False, None, "no Vulkan driver"))
-    assert vmaf_cuda._probe_once("auto") == (None, None, "no NVIDIA GPU; Vulkan: no Vulkan driver")
+    assert vmaf_cuda._probe_once("auto") == (None, None, "Vulkan: no Vulkan driver; no NVIDIA GPU")
 
 
 def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):

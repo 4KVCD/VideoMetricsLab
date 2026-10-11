@@ -37,11 +37,11 @@ back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU a
 because their implementations can produce different scores. These two metrics
 are opt-in and do not add processing to runs where they are unchecked.
 
-VMAF v0.6.1 and VMAF NEG are calculated on the GPU too: with a bundled libvmaf
-built with CUDA on an NVIDIA GPU (GeForce GTX 16 and RTX 20 series or newer),
-and with a Vulkan version of the same calculation on any other GPU, such as
-Intel's and AMD's, or on every GPU when Settings > GPU metrics > GPU backend is
-Vulkan. The two give the same scores to the last decimal. The choice is each
+VMAF v0.6.1 and VMAF NEG are calculated on the GPU too, with a Vulkan version
+of libvmaf's calculation on any GPU (NVIDIA's, AMD's and Intel's). When
+Settings > GPU metrics > GPU backend is CUDA, an NVIDIA GPU (GeForce GTX 16 and
+RTX 20 series or newer) uses a bundled libvmaf built with CUDA instead. The two
+give the same scores to the last decimal. The choice is each
 video's Performance > VMAF compute, GPU by default and greyed out
 at CPU without a GPU. A small integrated GPU can be slower at it than a fast
 CPU: choose CPU there. Like
