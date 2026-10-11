@@ -2,6 +2,11 @@
 
 ## v2.1 (in development)
 
+### Metric performance
+
+- VMAF v0.6.1 and VMAF NEG now use Vulkan on NVIDIA GPUs when the GPU backend is
+  Auto.
+
 ### New features
 
 - Added film grain synthesis for VVC encodes in Video Compare.
@@ -21,8 +26,9 @@ app uses far less memory.
 
 - Added Vulkan support for VMAF v1, so it now runs on any GPU (NVIDIA, AMD or
   Intel), up to **17x** faster than on the CPU.
-- Added Vulkan support for VMAF v0.6.1 and VMAF NEG on AMD and Intel GPUs,
-  **2.3x-2.7x** faster than on the CPU.
+- Added Vulkan support for VMAF v0.6.1 and VMAF NEG, so they now run on any GPU
+  (NVIDIA, AMD or Intel), **4.8x-6.4x** faster than Netflix's own CUDA code and
+  up to **28x** faster than on a 24-core CPU.
 - PSNR, SSIM and XPSNR are now calculated in the app with libvmaf-fast,
   **2.7x-11x** faster than with FFmpeg.
 - Added software decoding in the app for videos the GPU can't decode, such as
