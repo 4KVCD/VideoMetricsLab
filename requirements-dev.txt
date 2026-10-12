@@ -2,4 +2,5 @@
 pytest>=8.0
 pytest-xdist>=3.6
 ruff>=0.16.5
+mypy>=2.4
 pyinstaller>=6.10

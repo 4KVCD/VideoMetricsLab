@@ -23,10 +23,14 @@ choosing a Python version; Python 3.14.0 has an unresolved crash in our tests.
 ## Tests and style
 
 ```powershell
-.venv\Scripts\python.exe -m ruff check vmaf_app tests
+.venv\Scripts\python.exe -m ruff check vmaf_app tests scripts
+.venv\Scripts\python.exe -m mypy
 .venv\Scripts\python.exe -m pytest -q
 git diff --check
 ```
+
+mypy checks the modules not listed under `[[tool.mypy.overrides]]` in
+pyproject.toml. When a listed module passes, take it off the list.
 
 The tests run in parallel by default (pytest-xdist, one worker per core, at
 most 12; see `addopts` in pyproject.toml). Add `-n 0` to run serially, for

@@ -38,6 +38,8 @@ jobs:
       - name: Dependency consistency
         run: python -m pip check
       - name: Lint
-        run: python -m ruff check vmaf_app tests
+        run: python -m ruff check vmaf_app tests scripts
+      - name: Type check
+        run: python -m mypy
       - name: Tests
         run: python -X faulthandler -m pytest -q --packaging

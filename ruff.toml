@@ -1,4 +1,4 @@
-# Lint configuration. Run with:  ruff check vmaf_app tests
+# Lint configuration. Run with:  ruff check vmaf_app tests scripts
 line-length = 120
 target-version = "py311"
 
