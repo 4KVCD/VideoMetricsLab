@@ -177,7 +177,7 @@ def test_select_calculate_load_graph_and_compare_without_vmaf(qapp, real_pair, t
     for column in (COL_VMAF, COL_SSIM, COL_XPSNR):
         click_metric(win, row, column)
     assert win._rows[row].options.requested_metrics() == ("psnr",)
-    assert not win.model_combo.isEnabled()
+    assert not win.options_panel.model_combo.isEnabled()
     win._rows[row].options = options_for(("psnr",))
     result = run_vmaf(source, test, win._rows[row].options)
     win._job_rows = [win._rows[row]]

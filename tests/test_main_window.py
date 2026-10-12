@@ -149,7 +149,7 @@ def test_editing_with_multiple_rows_selected_applies_to_all_of_them(qapp):
     win.distorted_table.setRangeSelected(
         QTableWidgetSelectionRange(row_a, 0, row_b, win.distorted_table.columnCount() - 1), True,
     )
-    win.crop_combo.setCurrentIndex(1)
+    win.options_panel.crop_combo.setCurrentIndex(1)
 
     assert win._rows[row_a].options.crop_mode == CropMode.NONE
     assert win._rows[row_b].options.crop_mode == CropMode.NONE
@@ -171,7 +171,7 @@ def test_multi_row_edit_preserves_each_rows_unrelated_settings(qapp):
         True,
     )
 
-    win.crop_combo.setCurrentIndex(1)
+    win.options_panel.crop_combo.setCurrentIndex(1)
 
     assert win._rows[row_a].options.crop_mode == CropMode.NONE
     assert win._rows[row_b].options.crop_mode == CropMode.NONE
@@ -187,15 +187,15 @@ def test_selecting_a_row_loads_its_own_settings_into_the_panel(qapp):
     row_b = win._add_table_row(Path("b.mp4"))
 
     win.distorted_table.selectRow(row_a)
-    win.crop_combo.setCurrentIndex(1)  # row_a -> None
+    win.options_panel.crop_combo.setCurrentIndex(1)  # row_a -> None
     win.distorted_table.selectRow(row_b)
-    win.crop_combo.setCurrentIndex(0)  # row_b -> Auto (already default, but exercises the write path)
+    win.options_panel.crop_combo.setCurrentIndex(0)  # row_b -> Auto (already default, but exercises the write path)
 
     win.distorted_table.selectRow(row_a)
-    assert win.crop_combo.currentIndex() == 1  # panel reflects row_a's own stored setting, not row_b's
+    assert win.options_panel.crop_combo.currentIndex() == 1  # panel reflects row_a's own stored setting, not row_b's
 
     win.distorted_table.selectRow(row_b)
-    assert win.crop_combo.currentIndex() == 0
+    assert win.options_panel.crop_combo.currentIndex() == 0
 
 
 # ------------------------------------------------------------------ reopening the graph window
@@ -625,7 +625,7 @@ def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
     win._set_run_ui_active(True)
 
     assert all(not w.isEnabled() for w in win._file_action_widgets)
-    assert not win.options_box.isEnabled()
+    assert not win.options_panel.isEnabled()
     assert not win.tabs.isTabEnabled(TAB_SETTINGS)
     assert not win.run_btn.isEnabled()
     assert win.pause_btn.isEnabled()
@@ -633,7 +633,7 @@ def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
 
     win._set_run_ui_active(False)
     assert all(w.isEnabled() for w in win._file_action_widgets)
-    assert win.options_box.isEnabled()
+    assert win.options_panel.isEnabled()
     assert win.tabs.isTabEnabled(TAB_SETTINGS)
 
 
@@ -701,7 +701,7 @@ def test_changing_a_calculation_option_marks_an_existing_result_stale(qapp):
     win.distorted_table.selectRow(row)
     win._on_table_selection_changed()
 
-    win.subsample_spin.setValue(5)
+    win.options_panel.subsample_spin.setValue(5)
 
     assert win._rows[row].completed_run is None
 
@@ -718,11 +718,11 @@ def test_execution_only_option_change_keeps_an_existing_result(qapp, control):
     win._on_table_selection_changed()
 
     if control == "gpu":
-        win.gpu_checkbox.setChecked(not win.gpu_checkbox.isChecked())
+        win.options_panel.gpu_checkbox.setChecked(not win.options_panel.gpu_checkbox.isChecked())
     elif control == "threads":
-        win.threads_spin.setValue(7)
+        win.options_panel.threads_spin.setValue(7)
     else:
-        win.scale_algo_combo.setCurrentText("lanczos")
+        win.options_panel.scale_algo_combo.setCurrentText("lanczos")
         assert win._rows[row].options.scale_algorithm == "lanczos"
 
     assert win._rows[row].completed_run is completed
@@ -806,9 +806,9 @@ def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypat
 
     monkeypatch.setattr(main_window_module, "detected_gpu_vendors", lambda: [GpuVendor.NVIDIA])
     win = MainWindow()
-    combo = win.vmaf_backend_combo
+    combo = win.options_panel.vmaf_backend_combo
     assert [combo.itemText(i) for i in range(combo.count())] == ["GPU", "CPU"]
-    assert combo.currentText() == "GPU" and combo.isEnabledTo(win.options_box)
+    assert combo.currentText() == "GPU" and combo.isEnabledTo(win.options_panel)
     assert "VMAF v1: all four of its features on the GPU" in combo.toolTip()
 
     win._source_info = _fake_video_info("source.mp4")

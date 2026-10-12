@@ -28,13 +28,12 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, QSize, Qt, QTime, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -53,7 +52,6 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTableWidgetItem,
-    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -67,7 +65,6 @@ from vmaf_app.core import (
     update_check,
 )
 from vmaf_app.core.app_paths import user_data_dir
-from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
     CvvdpDisplay,
     CvvdpSettings,
@@ -94,7 +91,6 @@ from vmaf_app.core.models import (
     RESAMPLE_TARGET_CHOICES,
     CropBox,
     CropMode,
-    GpuVendor,
     ResampleTarget,
     ScaleDirection,
     VideoInfo,
@@ -122,6 +118,7 @@ from vmaf_app.ui.file_worker import FileWriteQueue
 from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string, preset_label
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
+from vmaf_app.ui.options_panel import MODEL_CHOICES, OptionsPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.run_line import decoder_text, metric_line
@@ -129,32 +126,6 @@ from vmaf_app.ui.series_colors import VideoColors
 from vmaf_app.ui.settings_panel import SettingsPanel
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable, QuietTabWidget, ScrollingPage
 from vmaf_app.ui.worker import VmafWorker
-
-# The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
-# own (_V1_MODEL_CHOICES).
-_MODEL_CHOICES = [
-    (N_("Auto (analysis resolution)"), AUTO_MODEL_CHOICE),
-    (N_("VMAF v0.6.1 (standard viewing)"), "version=vmaf_v0.6.1"),
-    (N_("VMAF 4K v0.6.1 (4K / large-screen viewing)"), "version=vmaf_4k_v0.6.1"),
-    (N_("Custom model file..."), CUSTOM_MODEL_CHOICE),
-]
-
-_V1_MODEL_CHOICES = [
-    (N_("Auto (analysis resolution)"), AUTO_MODEL_CHOICE),
-    (N_("VMAF v1 (1080p / 3H)"), builtin_choice("vmaf_v1_3d0h")),
-    (N_("VMAF v1 (1080p phone / 5H)"), builtin_choice("vmaf_v1_5d0h")),
-    (N_("VMAF v1 (4K / 1.5H)"), builtin_choice("vmaf_v1_1d5h_2160")),
-    (N_("VMAF v1 (4K / 3H, up to 110)"), builtin_choice("vmaf_v1_3d0h_2160")),
-    (N_("VMAF v1 HFR (1080p / 3H)"), builtin_choice("vmaf_v1_hfr_3d0h")),
-    (N_("VMAF v1 HFR (1080p phone / 5H)"), builtin_choice("vmaf_v1_hfr_5d0h")),
-    (N_("VMAF v1 HFR (4K / 1.5H)"), builtin_choice("vmaf_v1_hfr_1d5h_2160")),
-    (N_("VMAF v1 HFR (4K / 3H, up to 110)"), builtin_choice("vmaf_v1_hfr_3d0h_2160")),
-]
-
-_SCALE_ALGORITHMS = ["bicubic", "lanczos", "bilinear", "spline"]
-
-_GPU_VENDOR_BY_INDEX = {0: GpuVendor.AUTO, 1: GpuVendor.NVIDIA, 2: GpuVendor.INTEL, 3: GpuVendor.AMD}
-_GPU_VENDOR_INDEX = {v: k for k, v in _GPU_VENDOR_BY_INDEX.items()}
 
 (
     COL_CHECK,
@@ -683,7 +654,6 @@ class MainWindow(QMainWindow):
         if len(self._hidden_metrics) >= len(known):
             self._hidden_metrics.clear()  # a settings file that hides everything shows everything
         self._panel_target_rows: list[int] = []  # rows the panel currently edits
-        self._panel_custom_model_path: str | None = None  # staging for the panel's "Custom model" choice
         self._syncing_panel = False  # guards against write-back while populating the panel programmatically
         self._syncing_table = False  # ditto for the table's own metric tick boxes
 
@@ -885,7 +855,20 @@ class MainWindow(QMainWindow):
         # the video table gets the window's full width. It is the part that
         # grows with the number of encodes compared.
         splitter.addWidget(self._build_files_panel())
-        splitter.addWidget(self._build_options_panel())
+        # The GPUs here: the Options panel offers its GPU choices for them,
+        # and Settings > GPU metrics the Vship builds that run on them.
+        self._detected_gpu_vendors = detected_gpu_vendors()
+        self.options_panel = panel = OptionsPanel(self._detected_gpu_vendors)
+        panel.field_edited.connect(self._on_panel_field_edited)
+        panel.model_chosen.connect(self._on_model_changed)
+        panel.metric_backend_changed.connect(self._on_metric_backend_changed)
+        panel.cvvdp_preset_chosen.connect(self._on_cvvdp_preset_chosen)
+        panel.cvvdp_resize_toggled.connect(self._on_cvvdp_resize_toggled)
+        panel.cvvdp_add_requested.connect(self._on_cvvdp_add_preset)
+        panel.cvvdp_edit_requested.connect(self._on_cvvdp_edit_display)
+        panel.cvvdp_delete_requested.connect(self._on_cvvdp_delete_preset)
+        panel.scale_direction_chosen.connect(self._on_scale_direction_combo_changed)
+        splitter.addWidget(panel)
         splitter.addWidget(self._build_run_panel())
         splitter.setSizes([380, 300, 120])
         self.tabs.addTab(ScrollingPage(videos_page), tr("Videos"))
@@ -1212,289 +1195,6 @@ class MainWindow(QMainWindow):
         ]
 
         return files_box
-
-    def _build_options_panel(self) -> QWidget:
-        """Builds the Options panel, which edits the selected rows."""
-        # --- per-video options inspector (below the file table) ---
-        options_box = QGroupBox(tr("Options"))
-        options_layout = QVBoxLayout(options_box)
-        self.options_box = options_box
-
-        self.panel_target_label = QLabel("")
-        theme.style(self.panel_target_label, "color: {muted}; font-style: italic;")
-        self.panel_target_label.setWordWrap(True)
-        options_layout.addWidget(self.panel_target_label)
-
-        # The metrics are ticked in their own columns of the table, on the
-        # row they apply to, not in a box here. A box could only show the
-        # selected rows, so seeing what four rows were set to took four
-        # clicks.
-
-        form = QFormLayout()
-        performance_box = QGroupBox(tr("Performance"))
-        performance_form = QFormLayout(performance_box)
-        metric_options_box = QGroupBox(tr("Metric-specific settings"))
-        metric_options_form = QFormLayout(metric_options_box)
-        self.model_combo = QComboBox()
-        for name, _ in _MODEL_CHOICES:
-            self.model_combo.addItem(tr(name))
-        self.model_combo.currentIndexChanged.connect(self._on_model_changed)
-        self.model_combo.setToolTip(
-            tr("The VMAF v0.6.1 column's model. Auto picks the standard or the 4K "
-            "model from the size frames are compared at, after black bars are "
-            "removed and one video is scaled to the other.")
-        )
-        metric_options_form.addRow(tr("VMAF v0.6.1 model:"), self.model_combo)
-        self.model_v1_combo = QComboBox()
-        for name, _ in _V1_MODEL_CHOICES:
-            self.model_v1_combo.addItem(tr(name))
-        self.model_v1_combo.currentIndexChanged.connect(lambda _index: self._on_panel_field_edited("model_v1"))
-        self.model_v1_combo.setToolTip(
-            tr("The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto "
-            "picks the 1080p model at three screen heights, or the 4K model at "
-            "one and a half for 4K comparisons, as for VMAF v0.6.1.")
-        )
-        metric_options_form.addRow(tr("VMAF v1 model:"), self.model_v1_combo)
-
-        self.gpu_checkbox = QCheckBox(tr("Use GPU decoding"))
-        self.gpu_checkbox.setToolTip(
-            tr("Hardware-decodes the reference and the test video. Each is "
-            "decided separately, and either one falls back to the CPU on its "
-            "own if this GPU can't decode its format.")
-        )
-        self.gpu_checkbox.setChecked(True)
-        self.gpu_vendor_combo = QComboBox()
-        self.gpu_vendor_combo.addItems([tr("Auto-detect"), "NVIDIA", "Intel", "AMD"])
-        self.gpu_checkbox.stateChanged.connect(
-            lambda st: self.gpu_vendor_combo.setEnabled(bool(st))
-        )
-        self.gpu_checkbox.stateChanged.connect(
-            lambda _value: self._on_panel_field_edited("gpu")
-        )
-        self.gpu_vendor_combo.currentIndexChanged.connect(
-            lambda _value: self._on_panel_field_edited("gpu")
-        )
-        gpu_row = QHBoxLayout()
-        gpu_row.addWidget(self.gpu_checkbox)
-        gpu_row.addWidget(self.gpu_vendor_combo)
-        performance_form.addRow(tr("GPU decode:"), gpu_row)
-
-        # VMAF v0.6.1 and NEG: libvmaf has GPU code (CUDA) for their features,
-        # ported to Vulkan (vmaf_vulkan), which every GPU uses unless the GPU
-        # backend is CUDA. VMAF v1: all four of its features on the GPU, with
-        # Vulkan, where the engine supports the model's options (vmaf_v1_gpu).
-        self.vmaf_backend_combo = QComboBox()
-        self.vmaf_backend_combo.addItems(["GPU", "CPU"])
-        self.vmaf_backend_combo.setToolTip(
-            tr("With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU. VMAF v0.6.1 and NEG: with "
-            "Vulkan on every GPU, or with CUDA on an NVIDIA GPU when Settings > GPU metrics > GPU backend is "
-            "CUDA. Both give the same scores. VMAF v1: all four of its features on the GPU with "
-            "Vulkan; for a model whose options the GPU code does not support, its banding and colour features "
-            "(CAMBI, SpEED) on the CPU. "
-            "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to "
-            "within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If "
-            "the GPU calculation fails, they are calculated on the CPU instead.")
-        )
-        self.vmaf_backend_combo.currentIndexChanged.connect(
-            lambda _index: self._on_panel_field_edited("vmaf_on_gpu")
-        )
-        performance_form.addRow(tr("VMAF compute:"), self.vmaf_backend_combo)
-
-        self.ssimulacra2_backend_combo = QComboBox()
-        self.ssimulacra2_backend_combo.addItems(["GPU", "CPU"])
-        self.ssimulacra2_backend_combo.setToolTip(
-            tr("GPU uses Vship when a supported device is available. If GPU computation "
-            "cannot run, the metric automatically falls back to CPU. Choose CPU to "
-            "always use the bundled libjxl reference implementation.")
-        )
-        self.ssimulacra2_backend_combo.currentIndexChanged.connect(
-            lambda _index: self._on_metric_backend_changed("ssimulacra2")
-        )
-        performance_form.addRow(tr("SSIMULACRA2 compute:"), self.ssimulacra2_backend_combo)
-
-        self.butteraugli_backend_combo = QComboBox()
-        self.butteraugli_backend_combo.addItems(["GPU", "CPU"])
-        self.butteraugli_backend_combo.setToolTip(
-            tr("GPU uses Vship when a supported device is available. If GPU computation "
-            "cannot run, the metric automatically falls back to CPU. Choose CPU to "
-            "always use the bundled libjxl reference implementation.")
-        )
-        self.butteraugli_backend_combo.currentIndexChanged.connect(
-            lambda _index: self._on_metric_backend_changed("butteraugli")
-        )
-        performance_form.addRow(tr("Butteraugli compute:"), self.butteraugli_backend_combo)
-
-        # Kept for Settings > GPU metrics, which offers the Vship builds for
-        # the GPUs here (built after this panel).
-        self._detected_gpu_vendors = detected = detected_gpu_vendors()
-        # Without a GPU there is no choice: it shows CPU, which is where VMAF
-        # is calculated (see _write_panel_options).
-        self._vmaf_gpu_possible = bool(detected)
-        if not self._vmaf_gpu_possible:
-            self.vmaf_backend_combo.setEnabled(False)
-            self.vmaf_backend_combo.setToolTip(
-                tr("No GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU."))
-        if detected:
-            names = ", ".join(v.value.upper() for v in detected)
-            performance_form.addRow("", QLabel(tr("Detected GPU(s): {names}", names=names)))
-
-        self.crop_combo = QComboBox()
-        self.crop_combo.addItems([
-            tr("Auto-detect (recommended)"),
-            tr("None (use full frame)"),
-        ])
-        self.crop_combo.currentIndexChanged.connect(
-            lambda _value: self._on_panel_field_edited("crop_mode")
-        )
-        form.addRow(tr("Black-bar handling:"), self.crop_combo)
-
-        # The two groups sit side by side rather than stacked: the panel is
-        # full window width now, so stacking them left a lot of empty space
-        # to the right and pushed the file table up.
-        columns = QHBoxLayout()
-        basic_column = QGroupBox(tr("Video preparation (calculation only)"))
-        basic_column.setLayout(form)
-        columns.addWidget(basic_column, stretch=1)
-        options_layout.addLayout(columns)
-
-        adv_form = form
-
-        self.threads_spin = QSpinBox()
-        self.threads_spin.setRange(0, 128)
-        self.threads_spin.setValue(0)
-        self.threads_spin.setSpecialValueText(tr("Auto"))
-        self.threads_spin.valueChanged.connect(
-            lambda _value: self._on_panel_field_edited("n_threads")
-        )
-        performance_form.addRow(tr("libvmaf threads:"), self.threads_spin)
-        self.threads_spin.setToolTip(
-            tr("Controls VMAF, PSNR and SSIM extraction in libvmaf, not XPSNR "
-            "or video decoding.\n\nAuto uses every core, or half of them "
-            "for each video when two are calculated in parallel.")
-        )
-
-        self.subsample_spin = QSpinBox()
-        self.subsample_spin.setRange(1, 60)
-        self.subsample_spin.setValue(1)
-        self.subsample_spin.valueChanged.connect(
-            lambda _value: self._on_panel_field_edited("n_subsample")
-        )
-        metric_options_form.addRow(tr("libvmaf frame subsample:"), self.subsample_spin)
-        self.subsample_spin.setToolTip(tr("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain values at libvmaf's sampled frames."))
-
-        # CVVDP's display: a preset, the display itself, and whether the
-        # video is scaled to fill it (see vmaf_app.core.cvvdp).
-        self.cvvdp_preset_combo = QComboBox()
-        self.cvvdp_preset_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.cvvdp_preset_combo.setToolTip(
-            tr("The display CVVDP predicts visible differences on. The score depends on the "
-            "display as much as on the videos, so compare videos scored for the same one.\n\n"
-            "New videos start with the preset chosen in Settings. Saving a preset of your "
-            "own makes it that default.")
-        )
-        self.cvvdp_preset_combo.currentIndexChanged.connect(self._on_cvvdp_preset_chosen)
-        metric_options_form.addRow(tr("CVVDP display:"), self.cvvdp_preset_combo)
-        self.cvvdp_display_label = QLabel()
-        theme.style(self.cvvdp_display_label, "color: {muted};")
-        self.cvvdp_display_label.setWordWrap(True)
-        metric_options_form.addRow("", self.cvvdp_display_label)
-        cvvdp_buttons = QHBoxLayout()
-        self.cvvdp_add_btn = QPushButton(tr("Add preset..."))
-        self.cvvdp_add_btn.setToolTip(
-            tr("Make a new preset of your own, starting from the display shown here. "
-            "It becomes the display newly added videos start with; the selected "
-            "videos keep theirs until you choose it for them.")
-        )
-        self.cvvdp_add_btn.clicked.connect(self._on_cvvdp_add_preset)
-        self.cvvdp_edit_btn = QPushButton(tr("Edit display..."))
-        self.cvvdp_edit_btn.setToolTip(
-            tr("Change the display's size, distance, brightness, room light and more; "
-            "rename your preset or save the display as a new one.")
-        )
-        self.cvvdp_edit_btn.clicked.connect(self._on_cvvdp_edit_display)
-        self.cvvdp_delete_btn = QPushButton(tr("Delete preset"))
-        self.cvvdp_delete_btn.setToolTip(tr("Delete this preset of yours. Built-in presets cannot be deleted."))
-        self.cvvdp_delete_btn.clicked.connect(self._on_cvvdp_delete_preset)
-        for button in (self.cvvdp_add_btn, self.cvvdp_edit_btn, self.cvvdp_delete_btn):
-            cvvdp_buttons.addWidget(button)
-        cvvdp_buttons.addStretch(1)
-        metric_options_form.addRow("", cvvdp_buttons)
-        self.cvvdp_resize_check = QCheckBox(tr("Scale the video to fill the display"))
-        self.cvvdp_resize_check.setToolTip(
-            tr("Off (the official default): the video is shown pixel for pixel, so a 1080p "
-            "video covers a quarter of a 4K display. On: it is scaled, keeping its shape, "
-            "to fill the display.\n\nSet per video: choosing or saving a display preset "
-            "does not change it.")
-        )
-        # checkStateChanged, not toggled: a partly ticked box (a mixed
-        # selection) already counts as checked, so ticking it fully would not
-        # toggle anything.
-        self.cvvdp_resize_check.checkStateChanged.connect(
-            lambda state: None if state == Qt.PartiallyChecked
-            else self._on_cvvdp_resize_toggled(state == Qt.Checked)
-        )
-        metric_options_form.addRow("", self.cvvdp_resize_check)
-
-        self.duration_edit = QTimeEdit()
-        # In a right-to-left window (Arabic) QTimeEdit writes the sections
-        # backwards ("000.00:00:00"); times read left to right in every
-        # language. The direction must be set before the display format.
-        self.duration_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-        self.duration_edit.setDisplayFormat("HH:mm:ss.zzz")
-        self.duration_edit.setTime(QTime(0, 0, 0, 0))
-        self.duration_edit.timeChanged.connect(
-            lambda _value: self._on_panel_field_edited("duration_limit")
-        )
-        adv_form.addRow(tr("Duration limit (0 = full):"), self.duration_edit)
-
-        self.scale_algo_combo = QComboBox()
-        self.scale_algo_combo.addItems(_SCALE_ALGORITHMS)
-        self.scale_algo_combo.currentIndexChanged.connect(
-            lambda _value: self._on_panel_field_edited("scale_algorithm")
-        )
-        adv_form.addRow(tr("Scaling algorithm:"), self.scale_algo_combo)
-
-        self.scale_direction_combo = QComboBox()
-        self.scale_direction_combo.addItems([
-            tr("Source downscaled to test"),
-            tr("Test upscaled to source"),
-            tr("Test both (adds a comparison row)"),
-        ])
-        self.scale_direction_combo.setToolTip(
-            tr("When the two resolutions differ: either evaluate quality at the resolution actually\n"
-            "delivered (source scaled to match test -- the default), or as if the test\n"
-            "video were upscaled back to the reference's native resolution for playback.\n"
-            "\"Test both\" doesn't change this row -- it adds a second row for the same test\n"
-            "file using the other direction, so you can run and compare both.")
-        )
-        self.scale_direction_combo.currentIndexChanged.connect(self._on_scale_direction_combo_changed)
-        adv_form.addRow(tr("Resolution mismatch:"), self.scale_direction_combo)
-
-        metrics_hint = QLabel(
-            tr("Cropping and scaling here affect scores. Video Compare's tone mapping and "
-            "playback resolution are display-only settings and do not change calculated metrics.")
-        )
-        theme.style(metrics_hint, "color: {muted}; font-style: italic;")
-        metrics_hint.setWordWrap(True)
-        options_layout.addWidget(metrics_hint)
-
-        columns.addWidget(metric_options_box, stretch=1)
-        columns.addWidget(performance_box, stretch=1)
-        options_layout.addStretch(1)
-
-        # Room for longer words than English's. A field that does not fit
-        # beside its label goes under it, and a dropdown can be narrower than
-        # its longest entry, which it shows in full when opened. Without
-        # this, the German panel needs 1,590 px, more than the window's
-        # default 1,280, and is cut off at the right. In English nothing
-        # moves.
-        for layout in (form, performance_form, metric_options_form):
-            layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
-        for combo in options_box.findChildren(QComboBox):
-            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-            combo.setMinimumContentsLength(12)
-
-        return options_box
 
     def _build_run_panel(self) -> QWidget:
         """Builds the run buttons, the status line and the per-video progress lines."""
@@ -3071,19 +2771,13 @@ class MainWindow(QMainWindow):
         self._panel_target_rows = rows
 
         if not rows:
-            self.options_box.setEnabled(False)
-            self.panel_target_label.setText(
+            self.options_panel.setEnabled(False)
+            self.options_panel.target_label.setText(
                 tr("Select one or more videos in the table to view or edit their settings.")
             )
             self._syncing_panel = True
             try:
-                self._show_vmaf_backend(self._default_options.vmaf_on_gpu)
-                self.ssimulacra2_backend_combo.setCurrentIndex(
-                    0 if self._default_metric_backends["ssimulacra2"] == "gpu" else 1
-                )
-                self.butteraugli_backend_combo.setCurrentIndex(
-                    0 if self._default_metric_backends["butteraugli"] == "gpu" else 1
-                )
+                self.options_panel.show_backends(self._default_options.vmaf_on_gpu, self._default_metric_backends)
             finally:
                 self._syncing_panel = False
             return
@@ -3092,11 +2786,11 @@ class MainWindow(QMainWindow):
         # background work finishes as well as when the user clicks a row.
         # Don't enable the panel during a run: a change made there would be
         # attached to a result calculated with the previous settings.
-        self.options_box.setEnabled(not self._run_active)
+        self.options_panel.setEnabled(not self._run_active)
         if len(rows) == 1:
-            self.panel_target_label.setText(tr("Editing settings for: {name}", name=self._rows[rows[0]].path.name))
+            self.options_panel.target_label.setText(tr("Editing settings for: {name}", name=self._rows[rows[0]].path.name))
         else:
-            self.panel_target_label.setText(
+            self.options_panel.target_label.setText(
                 ntr("Editing settings for {count} selected video -- editing anything below applies to all of them.",
                     "Editing settings for {count} selected videos -- editing anything below applies to all of them.",
                     len(rows))
@@ -3108,43 +2802,12 @@ class MainWindow(QMainWindow):
         write-back handlers that would otherwise fire on every setValue()."""
         self._syncing_panel = True
         try:
-            model_index = next(
-                (i for i, (_, key) in enumerate(_MODEL_CHOICES) if key == opts.model_choice), 0
-            )
-            self.model_combo.setCurrentIndex(model_index)
-            self._panel_custom_model_path = opts.custom_model_path
-            self.model_v1_combo.setCurrentIndex(next(
-                (i for i, (_, key) in enumerate(_V1_MODEL_CHOICES) if key == opts.model_choice_v1), 0
-            ))
-
-            self.gpu_checkbox.setChecked(opts.gpu_decode)
-            self.gpu_vendor_combo.setCurrentIndex(_GPU_VENDOR_INDEX.get(opts.gpu_vendor, 0))
-            self.gpu_vendor_combo.setEnabled(opts.gpu_decode)
-
-            self._show_vmaf_backend(opts.vmaf_on_gpu)
             selected_backends = (
                 self._rows[self._panel_target_rows[0]].metric_backends
                 if self._panel_target_rows else self._default_metric_backends
             )
-            self.ssimulacra2_backend_combo.setCurrentIndex(
-                0 if selected_backends.get("ssimulacra2", "gpu") == "gpu" else 1
-            )
-            self.butteraugli_backend_combo.setCurrentIndex(
-                0 if selected_backends.get("butteraugli", "gpu") == "gpu" else 1
-            )
-
-            self.crop_combo.setCurrentIndex(0 if opts.crop_mode == CropMode.AUTO else 1)
-
-            self.threads_spin.setValue(opts.n_threads)
-            self.subsample_spin.setValue(opts.n_subsample)
-            algo_index = _SCALE_ALGORITHMS.index(opts.scale_algorithm) if opts.scale_algorithm in _SCALE_ALGORITHMS else 0
-            self.scale_algo_combo.setCurrentIndex(algo_index)
-            self.scale_direction_combo.setCurrentIndex(
-                1 if opts.scale_direction == ScaleDirection.DISTORTED_TO_SOURCE else 0
-            )
-
-            ms = round(opts.duration_limit * 1000)
-            self.duration_edit.setTime(QTime(0, 0, 0, 0).addMSecs(ms))
+            selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
+            self.options_panel.show_options(opts, selected_backends, selected_options)
 
             # Keep the global header shortcuts and selected-row inspector
             # consistent without firing their write-back signals.
@@ -3154,77 +2817,18 @@ class MainWindow(QMainWindow):
                     if self._panel_target_rows else self._default_metric_ticked(metric_column.column)
                 )
                 self.metric_header.set_checked(metric_column.column, enabled)
-            selected_options = [self._rows[r].options for r in self._panel_target_rows] or [opts]
-            self.model_combo.setEnabled(any(o.compute_vmaf for o in selected_options))
-            self.model_v1_combo.setEnabled(any(o.compute_vmaf_v1 for o in selected_options))
-            uses_libvmaf = any(o.compute_vmaf or o.compute_vmaf_neg or o.compute_vmaf_v1 or o.extra_features
-                               for o in selected_options)
-            self.threads_spin.setEnabled(uses_libvmaf)
-            # Also while it is above 1: CVVDP is unavailable then, and the
-            # way back to it must not be a disabled control.
-            self.subsample_spin.setEnabled(uses_libvmaf or any(o.n_subsample > 1 for o in selected_options))
-            self._show_cvvdp_settings(
+            self.options_panel.show_cvvdp(
                 [self._rows[r].cvvdp for r in self._panel_target_rows] or [self._default_cvvdp],
                 self._rows[self._panel_target_rows[0]].cvvdp_preset if self._panel_target_rows
                 else self._settings.cvvdp_default_preset,
+                self._settings.cvvdp_presets,
             )
         finally:
             self._syncing_panel = False
 
-    def _show_cvvdp_settings(self, selected: list[CvvdpSettings], preferred: str = "") -> None:
-        """Shows the selected rows' CVVDP settings in the Options panel: the
-        preset they match (or "Custom"), the display in one line, and the
-        resize box.
-
-        Rows that differ show as "Mixed" in the dropdown and a partly ticked
-        box. Showing only the first row's values made re-choosing the preset
-        it already had (or clicking the box) do nothing for the other rows,
-        or set them the wrong way round.
-        """
-        settings = selected[0]
-        mixed_display = len({repr(s.display.identity()) for s in selected}) > 1
-        mixed_resize = len({s.resize_to_display for s in selected}) > 1
-        combo = self.cvvdp_preset_combo
-        combo.blockSignals(True)
-        try:
-            combo.clear()
-            user_presets = self._settings.cvvdp_presets
-            for preset in cvvdp_presets(user_presets):
-                combo.addItem(preset_label(preset), preset.name)
-                combo.setItemData(
-                    combo.count() - 1, tr(preset.description) if preset.description else tr("Your saved preset."),
-                    Qt.ToolTipRole,
-                )
-            match = None if mixed_display else matching_preset(settings, user_presets, preferred)
-            if mixed_display:
-                combo.addItem(tr("Mixed (the selected videos use different displays)"), None)
-                combo.setCurrentIndex(combo.count() - 1)
-            elif match is None:
-                combo.addItem(tr("Custom (not saved as a preset)"), None)
-                combo.setCurrentIndex(combo.count() - 1)
-            else:
-                combo.setCurrentIndex(combo.findData(match.name))
-        finally:
-            combo.blockSignals(False)
-        self.cvvdp_delete_btn.setEnabled(match is not None and not match.builtin)
-        self.cvvdp_display_label.setText(
-            tr("The selected videos use different displays; choosing a preset sets them all.")
-            if mixed_display else settings.display.describe()
-        )
-        box = self.cvvdp_resize_check
-        box.blockSignals(True)
-        box.setTristate(mixed_resize)
-        box.setCheckState(Qt.PartiallyChecked if mixed_resize
-                          else Qt.Checked if settings.resize_to_display else Qt.Unchecked)
-        box.blockSignals(False)
-
-    def _show_vmaf_backend(self, on_gpu: bool) -> None:
-        """The VMAF GPU/CPU choice as a run would take it: CPU when there is
-        no GPU, whatever the video is set to."""
-        self.vmaf_backend_combo.setCurrentIndex(0 if on_gpu and self._vmaf_gpu_possible else 1)
-
     def _read_panel_options(self) -> VmafOptions:
-        """The options the panel shows, as VmafOptions."""
+        """The options the panel shows, as VmafOptions, with the metrics
+        ticked in the table's column headings."""
         extra_features = [
             metric.ffmpeg_binding.libvmaf_feature
             for metric in FRAME_METRICS
@@ -3232,35 +2836,12 @@ class MainWindow(QMainWindow):
             and metric.ffmpeg_binding.libvmaf_feature is not None
             and self.metric_header.is_checked(next(item.column for item in _METRIC_COLUMNS if item.key == metric.key))
         ]
-
-        vendor = _GPU_VENDOR_BY_INDEX[self.gpu_vendor_combo.currentIndex()] if self.gpu_checkbox.isChecked() else GpuVendor.NONE
-        crop_mode = CropMode.AUTO if self.crop_combo.currentIndex() == 0 else CropMode.NONE
-        duration_limit = QTime(0, 0, 0, 0).msecsTo(self.duration_edit.time()) / 1000.0
-        model_choice = _MODEL_CHOICES[self.model_combo.currentIndex()][1]
-        scale_direction = (
-            ScaleDirection.DISTORTED_TO_SOURCE if self.scale_direction_combo.currentIndex() == 1
-            else ScaleDirection.SOURCE_TO_DISTORTED
-        )
-
-        return VmafOptions(
-            model="",  # resolved per-job at run time via resolve_model(), once each row's distorted video is known
-            model_choice=model_choice,
-            model_choice_v1=_V1_MODEL_CHOICES[self.model_v1_combo.currentIndex()][1],
-            compute_vmaf_v1=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF_V1].column),
-            custom_model_path=self._panel_custom_model_path,
+        return self.options_panel.read_options(
             extra_features=extra_features,
-            n_threads=self.threads_spin.value(),
-            n_subsample=self.subsample_spin.value(),
-            scale_algorithm=self.scale_algo_combo.currentText(),
-            scale_direction=scale_direction,
-            compute_xpsnr=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_XPSNR].column),
             compute_vmaf=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF].column),
             compute_vmaf_neg=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF_NEG].column),
-            duration_limit=duration_limit,
-            gpu_decode=self.gpu_checkbox.isChecked(),
-            gpu_vendor=vendor,
-            vmaf_on_gpu=self.vmaf_backend_combo.currentIndex() == 0,
-            crop_mode=crop_mode,
+            compute_vmaf_v1=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_VMAF_V1].column),
+            compute_xpsnr=self.metric_header.is_checked(_METRIC_COLUMN_BY_INDEX[COL_XPSNR].column),
         )
 
     def _analysis_request(self, row_data: RowData, options: VmafOptions | None = None,
@@ -3667,13 +3248,7 @@ class MainWindow(QMainWindow):
         """Apply one standalone metric's compute preference without cache churn."""
         if self._syncing_panel:
             return
-        combo = {
-            "ssimulacra2": self.ssimulacra2_backend_combo,
-            "butteraugli": self.butteraugli_backend_combo,
-        }.get(metric_key)
-        if combo is None:
-            raise ValueError(f"Unknown standalone metric: {metric_key}")
-        backend = "gpu" if combo.currentIndex() == 0 else "cpu"
+        backend = self.options_panel.metric_backend(metric_key)
         self._default_metric_backends[metric_key] = backend
         for row in self._panel_target_rows:
             self._rows[row].metric_backends[metric_key] = backend
@@ -3750,7 +3325,7 @@ class MainWindow(QMainWindow):
         """Gives the selected rows the display of the CVVDP preset chosen."""
         if self._syncing_panel:
             return
-        name = self.cvvdp_preset_combo.itemData(index)
+        name = self.options_panel.cvvdp_preset_combo.itemData(index)
         preset = preset_named(name, self._settings.cvvdp_presets) if name else None
         if preset is not None:
             # The display only. "Scale the video to fill the display" is the
@@ -3870,7 +3445,7 @@ class MainWindow(QMainWindow):
 
     def _on_cvvdp_delete_preset(self) -> None:
         """Deletes the user's chosen CVVDP preset, after asking."""
-        name = self.cvvdp_preset_combo.currentData()
+        name = self.options_panel.cvvdp_preset_combo.currentData()
         preset = preset_named(name, self._settings.cvvdp_presets) if name else None
         if preset is None or preset.builtin:
             return
@@ -3909,12 +3484,12 @@ class MainWindow(QMainWindow):
         """Sets the selected rows' VMAF model, asking for the file of a custom one."""
         if self._syncing_panel:
             return
-        if _MODEL_CHOICES[index][1] == CUSTOM_MODEL_CHOICE:
+        if MODEL_CHOICES[index][1] == CUSTOM_MODEL_CHOICE:
             path, _ = QFileDialog.getOpenFileName(self, tr("Select VMAF model file (.json)"))
             if path:
-                self._panel_custom_model_path = path
+                self.options_panel.custom_model_path = path
             else:
-                self.model_combo.setCurrentIndex(0)  # reverts to Auto; re-enters this handler, then falls through below
+                self.options_panel.model_combo.setCurrentIndex(0)  # reverts to Auto; re-enters this handler, then falls through below
                 return
         self._on_panel_field_edited("model")
 
@@ -4105,7 +3680,7 @@ class MainWindow(QMainWindow):
         self.distorted_table.drops_allowed = not active
         self.distorted_table.setDragEnabled(not active)
         self.source_edit.setReadOnly(active)
-        self.options_box.setEnabled(not active and bool(self._panel_target_rows))
+        self.options_panel.setEnabled(not active and bool(self._panel_target_rows))
         self.tabs.setTabEnabled(TAB_SETTINGS, not active)
         self.run_btn.setEnabled(not active)
         self.pause_btn.setEnabled(active)

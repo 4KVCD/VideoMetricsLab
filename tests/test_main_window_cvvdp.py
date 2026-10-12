@@ -79,7 +79,7 @@ def test_choosing_another_display_drops_only_the_cvvdp_score(qapp):
     win, row, row_data = _window_with_row(cvvdp_score=9.5)
     _select(win, row)
     hdr = BUILTIN_PRESETS[2]
-    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData(hdr.name))
+    win.options_panel.cvvdp_preset_combo.setCurrentIndex(win.options_panel.cvvdp_preset_combo.findData(hdr.name))
     assert row_data.cvvdp == hdr.settings
     assert row_data.completed_run is not None
     assert row_data.completed_run.result.has_metric("vmaf")
@@ -247,7 +247,7 @@ def _two_rows_on_desk(monkeypatch):
     win._on_cvvdp_add_preset()
     win.distorted_table.selectAll()
     win._on_table_selection_changed()
-    win.cvvdp_preset_combo.setCurrentIndex(win.cvvdp_preset_combo.findData("Desk"))
+    win.options_panel.cvvdp_preset_combo.setCurrentIndex(win.options_panel.cvvdp_preset_combo.findData("Desk"))
     _select(win, first)
     return win, first_data, second_data
 
