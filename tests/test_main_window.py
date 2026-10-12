@@ -325,7 +325,7 @@ def test_clear_cache_never_deletes_unrelated_json_files(qapp, tmp_path, monkeypa
     )
 
     win = MainWindow()
-    win._on_clear_cache()
+    win.settings_panel.clear_saved_results()
     assert win._file_writes.wait_until_idle(10.0)
 
     assert not app_result.exists()
@@ -935,7 +935,7 @@ def test_clearing_the_cache_deletes_the_folder_the_dialog_named(qapp, tmp_path, 
     )
     release = _block_writes(win)
 
-    win._on_clear_cache()
+    win.settings_panel.clear_saved_results()
     result_cache.set_cache_dir_override(folder_b)
     release.set()
     assert win._file_writes.wait_until_idle(10.0)

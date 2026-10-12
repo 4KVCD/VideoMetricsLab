@@ -141,7 +141,7 @@ def _close_with(win, tmp_path, remember: bool):
     tests = [tmp_path / "a.mkv", tmp_path / "b.mkv"]
     for path in (reference, *tests):
         path.write_bytes(b"")
-    win.settings_remember_videos.setChecked(remember)
+    win.settings_panel.remember_videos.setChecked(remember)
     win._source_info = fake_video_info(reference)
     for path in tests:
         _add(win, str(path))

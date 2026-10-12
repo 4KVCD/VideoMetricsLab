@@ -57,3 +57,9 @@ def vmaf_band_colour(mean: float) -> QColor:
     if mean >= _FAIR_VMAF:
         return _COLOUR_FAIR
     return _COLOUR_POOR
+
+
+def preset_label(preset) -> str:
+    """A CVVDP preset's name as shown: a built-in one's translated, the
+    user's own as they wrote it. The name itself stays the identifier."""
+    return tr(preset.name) if preset.builtin else preset.name

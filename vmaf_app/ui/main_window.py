@@ -50,7 +50,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidgetItem,
@@ -59,20 +58,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from vmaf_app import APP_NAME, __version__, i18n
+from vmaf_app import APP_NAME, __version__
 from vmaf_app.core import (
-    app_log,
     gstreamer_playback,
     metric_cache,
     perceptual_vship,
     result_cache,
     update_check,
-    vmaf_gpu,
 )
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
 from vmaf_app.core.cvvdp import (
-    DEFAULT_PRESET,
     CvvdpDisplay,
     CvvdpSettings,
     default_settings,
@@ -123,13 +119,14 @@ from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
 from vmaf_app.ui import theme
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string
+from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string, preset_label
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.run_line import decoder_text, metric_line
 from vmaf_app.ui.series_colors import VideoColors
+from vmaf_app.ui.settings_panel import SettingsPanel
 from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable, QuietTabWidget, ScrollingPage
 from vmaf_app.ui.worker import VmafWorker
 
@@ -446,12 +443,6 @@ _CPU_PERCEPTUAL_WARNING_SECONDS = LONG_CPU_RUN_SECONDS
 _CPU_PERCEPTUAL_SECONDS_PER_MEGAPIXEL = {"ssimulacra2": 1.1 / 6.17, "butteraugli": 2.0 / 6.17}
 
 
-def _preset_label(preset) -> str:
-    """A CVVDP preset's name as shown: a built-in one's translated, the
-    user's own as they wrote it. The name itself stays the identifier."""
-    return tr(preset.name) if preset.builtin else preset.name
-
-
 def _rough_duration(seconds: float) -> str:
     """"about 3 days", "about 5 hours", "about 40 minutes"."""
     if seconds >= 2 * 86400:
@@ -558,9 +549,6 @@ class MainWindow(QMainWindow):
     # The remembered videos still there (reference, tests), found at
     # startup off the UI thread: _restore_open_videos.
     _open_videos_found = Signal(str, list)
-    # The saved results (generation, folder, comparisons, bytes), counted
-    # off the UI thread: _refresh_settings_status.
-    _cache_counted = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -570,8 +558,6 @@ class MainWindow(QMainWindow):
         # tool check or any row is added.
         self.update_found.connect(self._on_update_found)
         self._open_videos_found.connect(self._reopen_videos)
-        self._cache_counted.connect(self._show_cache_summary)
-        self._cache_count_generation = 0
         self._update_box: QMessageBox | None = None
         self._settings = Settings.load()
         _log.info(
@@ -679,7 +665,6 @@ class MainWindow(QMainWindow):
         # rebuilt every second (for the elapsed time) and on every progress
         # update, which would otherwise replace "Paused." within a second.
         self._run_hold = ""
-        self._cache_clear_result: list[int] | None = None
         # Set once the user has asked to close. Background work has been told
         # to stop, and the window closes itself once it has.
         self._closing = False
@@ -925,7 +910,11 @@ class MainWindow(QMainWindow):
         self.bitrate_panel = BitratePanel(colors=video_colors)
         self.tabs.addTab(ScrollingPage(self.bitrate_panel), tr("Bitrate Viewer"))
 
-        self.tabs.addTab(ScrollingPage(self._build_settings_panel()), tr("Settings"))
+        self.settings_panel = SettingsPanel(self._settings, self._file_writes, self._detected_gpu_vendors)
+        self.settings_panel.defaults_changed.connect(self._on_default_settings_changed)
+        self.settings_panel.decoded_videos_changed.connect(self.frame_compare_panel.set_decoded_videos)
+        self.settings_panel.ffmpeg_folder_changed.connect(self._on_ffmpeg_folder_changed)
+        self.tabs.addTab(ScrollingPage(self.settings_panel), tr("Settings"))
 
     # ------------------------------------------------------------------ settings tab
     def _options_from_settings(self) -> VmafOptions:
@@ -956,408 +945,16 @@ class MainWindow(QMainWindow):
         return default_settings(self._settings.cvvdp_presets, self._settings.cvvdp_default_preset)
 
 
-    def _build_settings_panel(self) -> QWidget:
-        """Builds the Settings tab."""
-        page = QWidget()
-        outer = QVBoxLayout(page)
-
-        tools_box = QGroupBox("ffmpeg")
-        tools_form = QFormLayout(tools_box)
-        self.settings_ffmpeg_edit = QLineEdit(self._settings.ffmpeg_dir)
-        self.settings_ffmpeg_edit.setPlaceholderText(tr("blank = search PATH"))
-        self.settings_ffmpeg_edit.editingFinished.connect(self._on_settings_edited)
-        browse_ffmpeg = QPushButton(tr("Browse..."))
-        browse_ffmpeg.clicked.connect(self._on_pick_ffmpeg_dir)
-        ffmpeg_row = QHBoxLayout()
-        ffmpeg_row.addWidget(self.settings_ffmpeg_edit, stretch=1)
-        ffmpeg_row.addWidget(browse_ffmpeg)
-        tools_form.addRow(tr("ffmpeg folder:"), ffmpeg_row)
-        self.settings_ffmpeg_status = QLabel()
-        tools_form.addRow("", self.settings_ffmpeg_status)
-        outer.addWidget(tools_box)
-
-        storage_box = QGroupBox(tr("Storage"))
-        storage_form = QFormLayout(storage_box)
-        self.settings_cache_edit = QLineEdit(self._settings.cache_dir)
-        self.settings_cache_edit.setPlaceholderText(tr("blank = shared user-profile folder"))
-        self.settings_cache_edit.editingFinished.connect(self._on_settings_edited)
-        browse_cache = QPushButton(tr("Browse..."))
-        browse_cache.clicked.connect(self._on_pick_cache_dir)
-        open_cache = QPushButton(tr("Open"))
-        open_cache.clicked.connect(self._on_open_cache_dir)
-        cache_row = QHBoxLayout()
-        cache_row.addWidget(self.settings_cache_edit, stretch=1)
-        cache_row.addWidget(browse_cache)
-        cache_row.addWidget(open_cache)
-        storage_form.addRow(tr("Saved results:"), cache_row)
-
-        self.settings_cache_summary = QLabel()
-        clear_cache = QPushButton(tr("Clear saved results"))
-        clear_cache.clicked.connect(self._on_clear_cache)
-        summary_row = QHBoxLayout()
-        summary_row.addWidget(self.settings_cache_summary, stretch=1)
-        summary_row.addWidget(clear_cache)
-        storage_form.addRow("", summary_row)
-
-        self.settings_export_edit = QLineEdit(self._settings.export_dir)
-        self.settings_export_edit.setPlaceholderText(tr("blank = ask each time"))
-        self.settings_export_edit.editingFinished.connect(self._on_settings_edited)
-        browse_export = QPushButton(tr("Browse..."))
-        browse_export.clicked.connect(self._on_pick_export_dir)
-        export_row = QHBoxLayout()
-        export_row.addWidget(self.settings_export_edit, stretch=1)
-        export_row.addWidget(browse_export)
-        storage_form.addRow(tr("Export folder:"), export_row)
-
-        self.settings_use_cache = QCheckBox(tr("Reuse a saved result when a video is added again"))
-        self.settings_use_cache.setChecked(self._settings.use_cache)
-        self.settings_use_cache.toggled.connect(self._on_settings_edited)
-        storage_form.addRow("", self.settings_use_cache)
-
-        # Where each session's log goes: runs, steps and every failure in
-        # full, kept after the window that showed them is closed.
-        self.settings_log_label = QLabel(str(app_log.log_dir()))
-        self.settings_log_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.settings_log_label.setToolTip(
-            tr("Each session's setup, every run and its steps, and every failure with its full text. "
-            "Send these files along when reporting a problem."))
-        open_logs = QPushButton(tr("Open"))
-        open_logs.clicked.connect(self._on_open_log_dir)
-        self.settings_export_log_btn = QPushButton(tr("Export log..."))
-        self.settings_export_log_btn.setToolTip(
-            tr("Save the log files as one .zip file, to attach when reporting a problem."))
-        self.settings_export_log_btn.clicked.connect(self._on_export_log)
-        self.settings_copy_log_btn = QPushButton(tr("Copy log"))
-        self.settings_copy_log_btn.setToolTip(
-            tr("Copy the latest session that calculated metrics to the clipboard, to paste into a post or chat."))
-        self.settings_copy_log_btn.clicked.connect(self._on_copy_log)
-        log_row = QHBoxLayout()
-        log_row.addWidget(self.settings_log_label, stretch=1)
-        log_row.addWidget(open_logs)
-        log_row.addWidget(self.settings_copy_log_btn)
-        log_row.addWidget(self.settings_export_log_btn)
-        storage_form.addRow(tr("Log files:"), log_row)
-        outer.addWidget(storage_box)
-
-        defaults_box = QGroupBox(tr("Defaults for newly added videos"))
-        defaults_layout = QVBoxLayout(defaults_box)
-        hint = QLabel(
-            tr("These are only a starting point -- each video's own settings are "
-            "edited in the Videos tab.")
-        )
-        theme.style(hint, "color: {muted}; font-style: italic;")
-        defaults_layout.addWidget(hint)
-        self.settings_default_gpu = QCheckBox(tr("Use GPU decoding"))
-        self.settings_default_gpu.setChecked(self._settings.default_gpu_decode)
-        self.settings_default_gpu.toggled.connect(self._on_settings_edited)
-        defaults_layout.addWidget(self.settings_default_gpu)
-
-        metrics_row = QHBoxLayout()
-        metrics_row.addWidget(QLabel(tr("Default metrics:")))
-        self.settings_default_psnr = QCheckBox("PSNR")
-        self.settings_default_vmaf = QCheckBox("VMAF v0.6.1")
-        self.settings_default_vmaf_v1 = QCheckBox("VMAF v1")
-        self.settings_default_vmaf_neg = QCheckBox("VMAF NEG")
-        self.settings_default_ssim = QCheckBox("SSIM")
-        self.settings_default_xpsnr = QCheckBox("XPSNR")
-        self.settings_default_ssimulacra2 = QCheckBox("SSIMULACRA2")
-        self.settings_default_butteraugli = QCheckBox("Butteraugli")
-        self.settings_default_cvvdp = QCheckBox("CVVDP")
-        for box, value in (
-            (self.settings_default_vmaf, self._settings.default_compute_vmaf),
-            (self.settings_default_vmaf_v1, self._settings.default_compute_vmaf_v1),
-            (self.settings_default_vmaf_neg, self._settings.default_compute_vmaf_neg),
-            (self.settings_default_psnr, self._settings.default_compute_psnr),
-            (self.settings_default_ssim, self._settings.default_compute_ssim),
-            (self.settings_default_xpsnr, self._settings.default_compute_xpsnr),
-            (self.settings_default_ssimulacra2, self._settings.default_compute_ssimulacra2),
-            (self.settings_default_butteraugli, self._settings.default_compute_butteraugli),
-            (self.settings_default_cvvdp, self._settings.default_compute_cvvdp),
-        ):
-            box.setChecked(value)
-            box.toggled.connect(self._on_settings_edited)
-            metrics_row.addWidget(box)
-        metrics_row.addStretch(1)
-        defaults_layout.addLayout(metrics_row)
-
-        cvvdp_row = QHBoxLayout()
-        cvvdp_row.addWidget(QLabel(tr("CVVDP display:")))
-        self.settings_cvvdp_default = QComboBox()
-        self.settings_cvvdp_default.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.settings_cvvdp_default.setToolTip(
-            tr("The display CVVDP models for newly added videos, whatever their format. "
-            "Saving a preset of your own in the Options panel makes it the default; "
-            "choose here to change that.")
-        )
-        self._fill_cvvdp_default_combo()
-        self.settings_cvvdp_default.currentIndexChanged.connect(self._on_settings_edited)
-        cvvdp_row.addWidget(self.settings_cvvdp_default)
-        cvvdp_row.addStretch(1)
-        defaults_layout.addLayout(cvvdp_row)
-        outer.addWidget(defaults_box)
-
-        gpu_box = QGroupBox(tr("GPU metrics"))
-        gpu_layout = QVBoxLayout(gpu_box)
-        # Which Vship build: Auto unless the user has a reason to pick one.
-        # Vulkan runs on any GPU. CUDA is offered with an NVIDIA GPU and HIP
-        # with an AMD one, or when already chosen, so that a GPU detection
-        # missed does not lose the choice.
-        self.settings_gpu_backend = QComboBox()
-        vendors = getattr(self, "_detected_gpu_vendors", [])
-        choices = [(tr("Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)"), "auto"),
-                   (tr("Vulkan (any GPU)"), "vulkan")]
-        if GpuVendor.NVIDIA in vendors or self._settings.gpu_backend == "cuda":
-            choices.append((tr("CUDA (NVIDIA)"), "cuda"))
-        if GpuVendor.AMD in vendors or self._settings.gpu_backend == "hip":
-            choices.append((tr("HIP (AMD)"), "hip"))
-        for label, backend in choices:
-            self.settings_gpu_backend.addItem(label, backend)
-        self.settings_gpu_backend.setCurrentIndex(max(0, self.settings_gpu_backend.findData(self._settings.gpu_backend)))
-        self.settings_gpu_backend.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.settings_gpu_backend.setToolTip(tr(
-            "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with "
-            "the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on "
-            "any GPU. If the chosen build cannot run here, the others are tried."))
-        self.settings_gpu_backend.currentIndexChanged.connect(self._on_settings_edited)
-        backend_row = QHBoxLayout()
-        backend_row.addWidget(QLabel(tr("GPU backend:")))
-        backend_row.addWidget(self.settings_gpu_backend)
-        backend_row.addStretch(1)
-        gpu_layout.addLayout(backend_row)
-        self.settings_gpu_together = QCheckBox(
-            tr("Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"))
-        self.settings_gpu_together.setToolTip(
-            tr("Each video is decoded once for all its GPU metrics instead of once for each. Where the "
-            "GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU "
-            "decodes -- it saves most of the decoding.\n\n"
-            "Very heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most "
-            "4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory "
-            "for example, is calculated again on its own.\n\nThe scores are the same either way. "
-            "Applies from the next run."))
-        self.settings_gpu_together.setChecked(self._settings.gpu_metrics_together)
-        self.settings_gpu_together.toggled.connect(self._on_settings_edited)
-        gpu_layout.addWidget(self.settings_gpu_together)
-        gpu_note = QLabel(
-            tr("Decodes each video once instead of once per metric: much less CPU work for 4K VVC. "
-            "Very heavy on GPU memory at 4K: about 7.3 GB for all three together."))
-        gpu_note.setWordWrap(True)
-        theme.style(gpu_note, "color: {muted};")
-        gpu_layout.addWidget(gpu_note)
-        outer.addWidget(gpu_box)
-
-        compare_box = QGroupBox(tr("Video Compare"))
-        compare_layout = QVBoxLayout(compare_box)
-        # A dropdown, not a spin box: 1 to 9 is one click away.
-        self.settings_decoded_videos = QComboBox()
-        for count in range(1, 10):
-            self.settings_decoded_videos.addItem(str(count), count)
-        self.settings_decoded_videos.setCurrentIndex(
-            max(0, self.settings_decoded_videos.findData(self._settings.compare_decoded_videos))
-        )
-        # As wide as its widest entry and no wider: a form row would
-        # otherwise stretch a one-digit dropdown across the window.
-        self.settings_decoded_videos.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.settings_decoded_videos.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.settings_decoded_videos.setToolTip(
-            tr("How many test videos keep decoding while one is shown, so the "
-            "left and right arrows switch to a video that is already running: "
-            "the selected one, then the one to its right, its left, the next "
-            "right, the next left, and so on. Each is a running GPU decoder "
-            "(about 250 MB of RAM for 4K), plus the source. Takes effect "
-            "immediately, even during playback.")
-        )
-        self.settings_decoded_videos.currentIndexChanged.connect(self._on_settings_edited)
-        # The dropdown first, at the left edge, with its label beside it, as
-        # the check boxes above sit. A form row would put the field wherever
-        # the label column ends.
-        decoded_row = QHBoxLayout()
-        decoded_row.addWidget(self.settings_decoded_videos)
-        decoded_row.addWidget(
-            QLabel(tr("Number of test videos decoded simultaneously for fast comparison switching"))
-        )
-        decoded_row.addStretch(1)
-        compare_layout.addLayout(decoded_row)
-        outer.addWidget(compare_box)
-
-        window_box = QGroupBox(tr("Window"))
-        window_layout = QVBoxLayout(window_box)
-        # Each language in its own name, so it can be found by someone who
-        # cannot read the one the window is in.
-        self.settings_language = QComboBox()
-        windows = i18n.windows_language()
-        self.settings_language.addItem(
-            tr("Same as Windows ({language})", language=i18n.LANGUAGES.get(windows, "English")), "")
-        for code, name in i18n.LANGUAGES.items():
-            self.settings_language.addItem(name, code)
-        self.settings_language.setCurrentIndex(max(0, self.settings_language.findData(self._settings.language)))
-        self.settings_language.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.settings_language.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.settings_language.setToolTip(tr(
-            "The language of the window. Takes effect when the app is next started. The log, saved results "
-            "and exported files stay in English."))
-        self.settings_language.currentIndexChanged.connect(self._on_settings_edited)
-        language_row = QHBoxLayout()
-        language_row.addWidget(QLabel(tr("Language:")))
-        language_row.addWidget(self.settings_language)
-        language_row.addStretch(1)
-        window_layout.addLayout(language_row)
-        # Light or dark, at once; "Same as Windows" also follows Windows
-        # changing while the app is open.
-        self.settings_theme = QComboBox()
-        for label, value in ((tr("Same as Windows"), ""), (tr("Light"), "light"), (tr("Dark"), "dark")):
-            self.settings_theme.addItem(label, value)
-        self.settings_theme.setCurrentIndex(max(0, self.settings_theme.findData(self._settings.theme)))
-        self.settings_theme.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.settings_theme.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.settings_theme.currentIndexChanged.connect(self._on_settings_edited)
-        theme_row = QHBoxLayout()
-        theme_row.addWidget(QLabel(tr("Theme:")))
-        theme_row.addWidget(self.settings_theme)
-        theme_row.addStretch(1)
-        window_layout.addLayout(theme_row)
-        self.settings_remember_size = QCheckBox(tr("Reopen at the size the window was last closed at"))
-        self.settings_remember_size.setChecked(self._settings.remember_window_size)
-        self.settings_remember_size.toggled.connect(self._on_settings_edited)
-        window_layout.addWidget(self.settings_remember_size)
-        self.settings_remember_videos = QCheckBox(tr("Reopen the videos that were open when the app was last closed"))
-        self.settings_remember_videos.setToolTip(tr(
-            "The reference and the test videos, those still there. Resolution tests are not reopened."))
-        self.settings_remember_videos.setChecked(self._settings.remember_videos)
-        self.settings_remember_videos.toggled.connect(self._on_settings_edited)
-        window_layout.addWidget(self.settings_remember_videos)
-        self.settings_check_updates = QCheckBox(tr("Check GitHub for a newer version when the app starts"))
-        self.settings_check_updates.setToolTip(
-            tr("Once, at startup, asks GitHub's public list of releases whether there is a newer one, "
-            "and says so only if there is. Nothing is sent but the request; GitHub sees your "
-            "address, as it would for any page."))
-        self.settings_check_updates.setChecked(self._settings.check_for_updates)
-        self.settings_check_updates.toggled.connect(self._on_settings_edited)
-        window_layout.addWidget(self.settings_check_updates)
-        outer.addWidget(window_box)
-
-        outer.addStretch(1)
-        self.settings_status = QLabel()
-        theme.style(self.settings_status, "color: {muted};")
-        outer.addWidget(self.settings_status)
-        return page  # its tools and saved results filled in when shown (_on_tab_changed)
-
-    def _refresh_settings_status(self) -> None:
-        """Reads the tools and the cache again, so that the Settings tab shows
-        what is there. Called when the tab is shown, when its folders change
-        and when the cache is cleared.
-
-        The saved results are counted on a thread of their own. Don't count
-        them on the window's thread: a thousand take 0.3 s, which held the
-        window at startup and at each tick box."""
-        tools = check_tools()
-        problems = tools.problems
-        ok = not problems
-        self.settings_ffmpeg_status.setText(
-            tr("ffmpeg {version} and ffprobe found.", version=format_version(tools.ffmpeg.version))
-            if ok else " ".join(tr_message(problem) for problem in problems)
-        )
-        theme.style(self.settings_ffmpeg_status, "color: {good};" if ok else "color: {failed};")
-
-        directory = result_cache.cache_dir()
-        self._cache_count_generation += 1
-        generation = self._cache_count_generation
-
-        def count() -> None:
-            """Counts the saved results, off the window's thread."""
-            comparisons, size_bytes = result_cache.cache_summary(directory)
-            with contextlib.suppress(RuntimeError):  # the window closed meanwhile
-                self._cache_counted.emit((generation, directory, comparisons, size_bytes))
-
-        threading.Thread(target=count, name="cache-count", daemon=True).start()
-
-    def _show_cache_summary(self, counted: tuple) -> None:
-        """Shows how many results are saved and their size, unless a newer count was asked for."""
-        generation, directory, count, size_bytes = counted
-        if generation != self._cache_count_generation:
-            return  # counted again since, perhaps in another folder
-        self.settings_cache_summary.setText(
-            ntr("{count} saved result, {size:.1f} MB in {directory}", "{count} saved results, {size:.1f} MB in {directory}",
-                count, size=size_bytes / 1048576, directory=directory)
-        )
-
-    def _on_settings_edited(self, *_args) -> None:
-        """Saves the Settings tab, and acts on a changed FFmpeg or cache folder."""
-        before_ffmpeg = self._settings.ffmpeg_dir
-        before_cache = self._settings.cache_dir
-        self._settings.ffmpeg_dir = self.settings_ffmpeg_edit.text()
-        self._settings.cache_dir = self.settings_cache_edit.text()
-        self._settings.export_dir = self.settings_export_edit.text()
-        self._settings.use_cache = self.settings_use_cache.isChecked()
-        self._settings.default_gpu_decode = self.settings_default_gpu.isChecked()
-        self._settings.default_compute_psnr = self.settings_default_psnr.isChecked()
-        self._settings.default_compute_vmaf = self.settings_default_vmaf.isChecked()
-        self._settings.default_compute_vmaf_neg = self.settings_default_vmaf_neg.isChecked()
-        self._settings.default_compute_vmaf_v1 = self.settings_default_vmaf_v1.isChecked()
-        self._settings.default_compute_ssim = self.settings_default_ssim.isChecked()
-        self._settings.default_compute_xpsnr = self.settings_default_xpsnr.isChecked()
-        self._settings.default_compute_ssimulacra2 = self.settings_default_ssimulacra2.isChecked()
-        self._settings.default_compute_butteraugli = self.settings_default_butteraugli.isChecked()
-        self._settings.default_compute_cvvdp = self.settings_default_cvvdp.isChecked()
-        chosen = self.settings_cvvdp_default.currentData()
-        self._settings.cvvdp_default_preset = "" if chosen in (None, DEFAULT_PRESET.name) else chosen
-        self._settings.compare_decoded_videos = int(self.settings_decoded_videos.currentData())
-        self.frame_compare_panel.set_decoded_videos(self._settings.compare_decoded_videos)
-        self._settings.remember_window_size = self.settings_remember_size.isChecked()
-        self._settings.remember_videos = self.settings_remember_videos.isChecked()
-        if not self._settings.remember_videos:
-            # Paths are kept only while asked for.
-            self._settings.remembered_reference = ""
-            self._settings.remembered_tests = []
-        self._settings.check_for_updates = self.settings_check_updates.isChecked()
-        language_before = self._settings.language
-        self._settings.language = self.settings_language.currentData() or ""
-        chosen_theme = self.settings_theme.currentData() or ""
-        if chosen_theme != self._settings.theme:
-            self._settings.theme = chosen_theme
-            theme.apply_theme(chosen_theme)  # at once; changeEvent follows
-        self._settings.gpu_metrics_together = self.settings_gpu_together.isChecked()
-        backend = self.settings_gpu_backend.currentData() or "auto"
-        if backend != self._settings.gpu_backend:
-            self._settings.gpu_backend = backend
-            # Probed again now, off the UI thread, for the next run and for
-            # what the table says about GPU metrics.
-            perceptual_vship.set_vship_backend(backend)
-            perceptual_vship.start_vship_probe()
-            vmaf_gpu.set_gpu_backend(backend)  # VMAF follows it: CUDA or Vulkan
-            vmaf_gpu.start_gpu_vmaf_probe()
-
-        if self._settings.cache_dir != before_cache:
-            result_cache.set_cache_dir_override(self._settings.cache_dir_path())
-
-        # Only the starting point for new rows; existing rows keep whatever
-        # they were given.
+    def _on_default_settings_changed(self) -> None:
+        """Takes the Settings tab's defaults for newly added videos. Rows
+        already in the table keep what they were given."""
         self._default_options = self._options_from_settings()
         self._default_extra_metric_keys = self._extra_metrics_from_settings()
         self._default_cvvdp = self._cvvdp_from_settings()
-        error = self._settings.save()
-        if self._settings.ffmpeg_dir != before_ffmpeg:
-            # After the save: the lookup reads the folder from the file.
-            ffmpeg_dir_changed()
-            self._check_ffmpeg(prompt=False)
-        self.settings_status.setText(
-            tr_message(error) if error else
-            tr("Settings saved. The new language shows when the app is next started.")
-            if self._settings.language != language_before else tr("Settings saved."))
-        if self._settings.ffmpeg_dir != before_ffmpeg or self._settings.cache_dir != before_cache:
-            self._refresh_settings_status()
 
-    def _fill_cvvdp_default_combo(self) -> None:
-        """Lists every CVVDP preset in Settings, the default selected."""
-        combo = self.settings_cvvdp_default
-        combo.blockSignals(True)
-        try:
-            combo.clear()
-            for preset in cvvdp_presets(self._settings.cvvdp_presets):
-                combo.addItem(_preset_label(preset), preset.name)
-            chosen = self._settings.cvvdp_default_preset or DEFAULT_PRESET.name
-            combo.setCurrentIndex(max(0, combo.findData(chosen)))
-        finally:
-            combo.blockSignals(False)
+    def _on_ffmpeg_folder_changed(self) -> None:
+        """Checks the tools again in the FFmpeg folder chosen in the Settings tab."""
+        self._check_ffmpeg(prompt=False)
 
     def _on_frame_color_mode_changed(self, mode: str) -> None:
         """Remembers the colour mode chosen in Video Compare."""
@@ -1365,44 +962,6 @@ class MainWindow(QMainWindow):
         error = self._settings.save()
         if error:
             self.status_label.setText(tr_message(error))
-
-    def _pick_directory(self, title: str, edit: QLineEdit) -> None:
-        """Lets the user pick a folder for `edit`, and saves it."""
-        directory = QFileDialog.getExistingDirectory(self, title, edit.text())
-        if directory:
-            edit.setText(directory)
-            self._on_settings_edited()
-
-    def _on_pick_ffmpeg_dir(self) -> None:
-        """Lets the user pick the folder of ffmpeg.exe."""
-        self._pick_directory(tr("Select the folder containing ffmpeg.exe"), self.settings_ffmpeg_edit)
-
-    def _on_pick_cache_dir(self) -> None:
-        """Lets the user pick the folder for saved results."""
-        self._pick_directory(tr("Where should saved results be kept?"), self.settings_cache_edit)
-
-    def _on_pick_export_dir(self) -> None:
-        """Lets the user pick the folder for exports."""
-        self._pick_directory(tr("Where should exports be written?"), self.settings_export_edit)
-
-    def _on_copy_log(self) -> None:
-        """Puts the part of the log worth sharing on the clipboard."""
-        try:
-            shared = app_log.log_text_to_share()
-        except OSError as error:
-            self.settings_status.setText(tr("Could not read the log: {error}", error=error))
-            return
-        if shared is None:
-            self.settings_status.setText(tr("There is no log to copy yet."))
-            return
-        text, shortened = shared
-        QApplication.clipboard().setText(text)
-        lines = text.count("\n") + 1
-        self.settings_status.setText(
-            ntr("Copied the log to the clipboard ({count} line, the middle left out -- Export log saves all of it).",
-                "Copied the log to the clipboard ({count} lines, the middle left out -- Export log saves all of it).",
-                lines) if shortened else
-            ntr("Copied the log to the clipboard ({count} line).", "Copied the log to the clipboard ({count} lines).", lines))
 
     def check_for_updates(self) -> None:
         """Asks GitHub for the latest release, off the window's thread. Called
@@ -1455,66 +1014,6 @@ class MainWindow(QMainWindow):
         box.finished.connect(answered)
         self._update_box = box
         box.open()
-
-    def _on_export_log(self) -> None:
-        """Saves the log files as one .zip wherever the user picks."""
-        start = Path(self._settings.export_dir) if self._settings.export_dir else Path.home() / "Documents"
-        name = f"{APP_NAME} log {time.strftime('%Y-%m-%d %H%M')}.zip"
-        path, _ = QFileDialog.getSaveFileName(self, tr("Export log"), str(start / name), tr("Zip archive (*.zip)"))
-        if not path:
-            return
-        try:
-            names = app_log.export_logs(Path(path))
-        except OSError as error:
-            self.settings_status.setText(tr("Could not export the log: {error}", error=error))
-            return
-        if not names:
-            self.settings_status.setText(tr("There is no log to export yet."))
-            return
-        _log.info("Log exported to %s", path)
-        self.settings_status.setText(tr("Log exported to {path}", path=path))
-
-    def _on_open_log_dir(self) -> None:
-        """Opens the log folder in the file manager."""
-        directory = app_log.log_dir()
-        directory.mkdir(parents=True, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory)))
-
-    def _on_open_cache_dir(self) -> None:
-        """Opens the saved-results folder in the file manager."""
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(result_cache.cache_dir())))
-
-    def _on_clear_cache(self) -> None:
-        """Deletes the saved results, after asking."""
-        directory = result_cache.cache_dir()
-        count, _size_bytes = result_cache.cache_summary(directory)
-        if count == 0 and self._file_writes.pending == 0:
-            self.settings_status.setText(tr("There are no saved results to clear."))
-            return
-        if self._cache_clear_result is not None:
-            self.settings_status.setText(tr("Saved results are already being cleared."))
-            return
-        confirm = QMessageBox.question(
-            self, tr("Clear saved results"),
-            tr("Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.", directory=directory),
-        )
-        if confirm != QMessageBox.Yes:
-            return
-        # Cache writes and deletion share the same serial queue. If a run
-        # just finished, its pending store therefore lands before clear_all
-        # rather than recreating an entry after the user cleared everything.
-        self._cache_clear_result = []
-        # `directory` is the folder the confirmation dialog just named. Don't
-        # look the folder up inside the queued task: if the cache setting
-        # changes before the task runs, it deletes a folder the user was never
-        # asked about.
-        self._file_writes.submit(
-            "clear saved results",
-            lambda: self._cache_clear_result.append(
-                result_cache.clear_all(directory)
-            ),
-        )
-        self.settings_status.setText(tr("Clearing saved results..."))
 
     def _build_files_panel(self) -> QWidget:
         """Builds the Videos box: the reference, the test-video table and its buttons."""
@@ -2145,7 +1644,7 @@ class MainWindow(QMainWindow):
 
         # Kept as the Settings tab's folder: the one place it is kept.
         self._settings.ffmpeg_dir = str(directory)
-        self.settings_ffmpeg_edit.setText(str(directory))
+        self.settings_panel.show_ffmpeg_folder(str(directory))
         if error := self._settings.save():
             self.status_label.setText(tr_message(error))
             return False
@@ -2656,7 +2155,7 @@ class MainWindow(QMainWindow):
         lines = []
         for settings, score in sorted(others, key=lambda item: -item[1]):
             preset = matching_preset(settings, self._settings.cvvdp_presets)
-            name = _preset_label(preset) if preset else tr("Custom ({display})", display=settings.display.describe())
+            name = preset_label(preset) if preset else tr("Custom ({display})", display=settings.display.describe())
             scaled = tr(", video scaled to fill it") if settings.resize_to_display else ""
             lines.append(tr("• {name}{scaled}: {score:.3f} JOD", name=name, scaled=scaled, score=score))
         return (tr("\n\nNo CVVDP score for this video's display yet. Saved for other displays "
@@ -2670,7 +2169,7 @@ class MainWindow(QMainWindow):
         return (
             tr("CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no visible difference, "
                 "and one JOD lower means 75% of viewers would pick the reference as better.\n\nFor the display "
-                "{preset}: {display}", preset=_preset_label(preset) if preset else tr("(custom)"), display=display)
+                "{preset}: {display}", preset=preset_label(preset) if preset else tr("(custom)"), display=display)
             + (tr(", video scaled to fill it") if row_data.cvvdp.resize_to_display else "")
             + tr(".\n\nThe JOD of each second is plotted in Metric Graphs.")
         )
@@ -3691,7 +3190,7 @@ class MainWindow(QMainWindow):
             combo.clear()
             user_presets = self._settings.cvvdp_presets
             for preset in cvvdp_presets(user_presets):
-                combo.addItem(_preset_label(preset), preset.name)
+                combo.addItem(preset_label(preset), preset.name)
                 combo.setItemData(
                     combo.count() - 1, tr(preset.description) if preset.description else tr("Your saved preset."),
                     Qt.ToolTipRole,
@@ -4020,11 +3519,7 @@ class MainWindow(QMainWindow):
             # session only, so metrics ticked there came back unticked
             # after a restart.
             setattr(self._settings, f"default_compute_{key}", checked)
-            box = getattr(self, f"settings_default_{key}", None)
-            if box is not None:
-                box.blockSignals(True)
-                box.setChecked(checked)
-                box.blockSignals(False)
+            self.settings_panel.show_default_metric(key, checked)
             if error := self._settings.save():
                 self.status_label.setText(tr_message(error))
         self._reload_cached_for_rows(rows)
@@ -4340,7 +3835,7 @@ class MainWindow(QMainWindow):
             self._settings.cvvdp_default_preset = name
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
-        self._fill_cvvdp_default_combo()
+        self.settings_panel.fill_cvvdp_default_combo()
         if apply_to_rows:
             self._apply_cvvdp(lambda old: replace(old, display=saved.display), preset_name=name)
         if others:
@@ -4390,7 +3885,7 @@ class MainWindow(QMainWindow):
             self._settings.cvvdp_default_preset = ""
         self._default_cvvdp = self._cvvdp_from_settings()
         error = self._settings.save()
-        self._fill_cvvdp_default_combo()
+        self.settings_panel.fill_cvvdp_default_combo()
         if self._panel_target_rows:
             self._write_panel_options(self._rows[self._panel_target_rows[0]].options)
         self.status_label.setText(tr_message(error) if error else tr('Deleted the CVVDP preset "{name}".', name=name))
@@ -5345,11 +4840,6 @@ class MainWindow(QMainWindow):
     def _on_file_writes_idle(self) -> None:
         """Enables saving again once the background writes are done."""
         self.save_btn.setEnabled(True)
-        if self._cache_clear_result is not None:
-            removed = sum(self._cache_clear_result)
-            self._cache_clear_result = None
-            self.settings_status.setText(ntr("Removed {count} saved result.", "Removed {count} saved results.", removed))
-            self._refresh_settings_status()
 
     def _on_file_write_failed(self, description: str, error: str) -> None:
         """Says on the status line that a background write failed."""
@@ -5378,7 +4868,7 @@ class MainWindow(QMainWindow):
         elif index == TAB_FRAME_COMPARE:
             self._sync_frame_compare()
         elif index == TAB_SETTINGS:
-            self._refresh_settings_status()
+            self.settings_panel.refresh_status()
 
     def _sync_graph(self) -> None:
         """Makes the graph show every completed row.

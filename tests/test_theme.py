@@ -37,11 +37,11 @@ def test_the_theme_setting_is_applied_at_once_and_kept(qapp, monkeypatch):
     monkeypatch.setattr(theme, "apply_theme", applied.append)
     win = MainWindow()
     try:
-        assert win.settings_theme.currentData() == ""  # same as Windows by default
-        win.settings_theme.setCurrentIndex(win.settings_theme.findData("dark"))
+        assert win.settings_panel.theme.currentData() == ""  # same as Windows by default
+        win.settings_panel.theme.setCurrentIndex(win.settings_panel.theme.findData("dark"))
         assert applied == ["dark"]
         assert Settings.load().theme == "dark"
-        win.settings_theme.setCurrentIndex(win.settings_theme.findData(""))
+        win.settings_panel.theme.setCurrentIndex(win.settings_panel.theme.findData(""))
         assert applied == ["dark", ""]
     finally:
         win.close()
