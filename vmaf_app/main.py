@@ -189,10 +189,10 @@ def self_test() -> SelfTestReport:
     else:
         report.warn(f"Vship GPU metrics unavailable; CPU fallback is enabled ({vship_reason})")
 
-    from vmaf_app.core import vmaf_cuda
+    from vmaf_app.core import vmaf_gpu
 
-    vmaf_cuda.set_gpu_backend(Settings.load().gpu_backend)
-    available, text = vmaf_cuda.gpu_vmaf_available()
+    vmaf_gpu.set_gpu_backend(Settings.load().gpu_backend)
+    available, text = vmaf_gpu.gpu_vmaf_available()
     if available:
         report.ok(f"VMAF on the GPU ({text})")
     else:
@@ -359,10 +359,10 @@ def main() -> int:
 
     set_vship_backend(Settings.load().gpu_backend)
     start_vship_probe()  # done by the time the first video is added
-    from vmaf_app.core import vmaf_cuda
+    from vmaf_app.core import vmaf_gpu
 
-    vmaf_cuda.set_gpu_backend(Settings.load().gpu_backend)
-    vmaf_cuda.start_gpu_vmaf_probe()
+    vmaf_gpu.set_gpu_backend(Settings.load().gpu_backend)
+    vmaf_gpu.start_gpu_vmaf_probe()
     from vmaf_app.core import vmaf_v1_gpu
 
     vmaf_v1_gpu.start_probe()

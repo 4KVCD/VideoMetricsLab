@@ -67,7 +67,7 @@ from vmaf_app.core import (
     perceptual_vship,
     result_cache,
     update_check,
-    vmaf_cuda,
+    vmaf_gpu,
 )
 from vmaf_app.core.app_paths import user_data_dir
 from vmaf_app.core.builtin_models import builtin_choice
@@ -1323,8 +1323,8 @@ class MainWindow(QMainWindow):
             # what the table says about GPU metrics.
             perceptual_vship.set_vship_backend(backend)
             perceptual_vship.start_vship_probe()
-            vmaf_cuda.set_gpu_backend(backend)  # VMAF follows it: CUDA or Vulkan
-            vmaf_cuda.start_gpu_vmaf_probe()
+            vmaf_gpu.set_gpu_backend(backend)  # VMAF follows it: CUDA or Vulkan
+            vmaf_gpu.start_gpu_vmaf_probe()
 
         if self._settings.cache_dir != before_cache:
             result_cache.set_cache_dir_override(self._settings.cache_dir_path())

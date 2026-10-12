@@ -1,5 +1,5 @@
 """Compares VMAF's features and scores from Vulkan (vmaf_app.core.vmaf_vulkan)
-with libvmaf's CUDA ones (vmaf_app.core.vmaf_cuda) on the same frames, frame
+with libvmaf's CUDA ones (vmaf_app.core.vmaf_gpu) on the same frames, frame
 by frame and bit by bit, and times both.
 
     python scripts/compare_vmaf_vulkan.py REFERENCE DISTORTED [--frames 48]
@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vmaf_app.core import vmaf_cuda, vmaf_vulkan
+from vmaf_app.core import libvmaf, vmaf_gpu, vmaf_vulkan
 
 MODELS = {"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg"}
 # libvmaf's feature names -> the Vulkan library's columns.
@@ -117,7 +117,7 @@ def special(kind: str, width: int, height: int, bits: int, frames: int, seed: in
     return reference, distorted
 
 
-class _LumaScorer(vmaf_cuda.GpuScorer):
+class _LumaScorer(vmaf_gpu.GpuScorer):
     """GpuScorer for any size: it copies the chroma as rows of (width + 1) / 2
     samples, which libvmaf's pictures do not hold for an odd width. VMAF
     uses the luma alone, so only that is copied here."""
@@ -141,7 +141,7 @@ def cuda_run(width, height, bits, reference, distorted, step):
             scorer.add(bytearray(ref), bytearray(dis))
         frames, scores = scorer.finish()
         elapsed = time.perf_counter() - started
-        lib = vmaf_cuda._load()
+        lib = libvmaf.load()
         lib.vmaf_feature_score_at_index.restype = ctypes.c_int
         lib.vmaf_feature_score_at_index.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
                                                     ctypes.POINTER(ctypes.c_double), ctypes.c_uint]

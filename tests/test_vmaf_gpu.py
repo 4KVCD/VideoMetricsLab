@@ -1,6 +1,6 @@
-"""VMAF on the GPU (vmaf_cuda), as far as it can be tested without a GPU --
+"""VMAF on the GPU (vmaf_gpu), as far as it can be tested without a GPU --
 GitHub's runner has none. The scores themselves were compared on an RTX
-5090 (see vmaf_cuda's docstring)."""
+5090 (see vmaf_gpu's docstring)."""
 import ctypes
 import faulthandler
 import logging
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from PySide6.QtCore import Qt
 
-from vmaf_app.core import gpu_frames, job_runner, vmaf_cuda
+from vmaf_app.core import gpu_frames, job_runner, libvmaf, vmaf_gpu
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import CropMode, FrameScores, VideoInfo, VmafOptions
@@ -32,12 +32,12 @@ def _info(path: str, width: int = 1920, height: int = 1080) -> VideoInfo:
 
 
 def test_only_vmaf_and_neg_with_a_built_in_model_go_to_the_gpu():
-    assert vmaf_cuda.gpu_models(True, True, "version=vmaf_v0.6.1") == {"vmaf": "vmaf_v0.6.1",
+    assert vmaf_gpu.gpu_models(True, True, "version=vmaf_v0.6.1") == {"vmaf": "vmaf_v0.6.1",
                                                                        "vmaf_neg": "vmaf_v0.6.1neg"}
-    assert vmaf_cuda.gpu_models(True, False, "version=vmaf_4k_v0.6.1") == {"vmaf": "vmaf_4k_v0.6.1"}
-    assert vmaf_cuda.gpu_models(False, True, "") == {"vmaf_neg": "vmaf_v0.6.1neg"}
-    assert vmaf_cuda.gpu_models(True, True, "path=my_model.json") is None  # a custom model: the CPU
-    assert vmaf_cuda.gpu_models(False, False, "version=vmaf_v0.6.1") is None
+    assert vmaf_gpu.gpu_models(True, False, "version=vmaf_4k_v0.6.1") == {"vmaf": "vmaf_4k_v0.6.1"}
+    assert vmaf_gpu.gpu_models(False, True, "") == {"vmaf_neg": "vmaf_v0.6.1neg"}
+    assert vmaf_gpu.gpu_models(True, True, "path=my_model.json") is None  # a custom model: the CPU
+    assert vmaf_gpu.gpu_models(False, False, "version=vmaf_v0.6.1") is None
 
 
 @pytest.mark.parametrize("pairing", ["number", "timestamp"])
@@ -71,7 +71,7 @@ def test_each_output_is_mapped_and_the_raw_ones_pass_every_frame_through(monkeyp
     cut = ["-enc_time_base", "filter", "-t"] if pairing == "number" else ["-t"]
     assert vr._build_ffmpeg_output_args("G", 30.0) == [
         "-lavfi", "G", "-progress", "pipe:1", "-nostats", *cut, "30.000", "-f", "null", "-"]
-    attempt = object.__new__(vmaf_cuda.GpuAttempt)
+    attempt = object.__new__(vmaf_gpu.GpuAttempt)
     attempt.paired = True  # by FFmpeg; test_vmaf_gpu_streams.py for the pairing in the app
     attempt.distorted, attempt.reference = SimpleNamespace(path="D"), SimpleNamespace(path="R")
     assert attempt.output_args(30.5) == [
@@ -83,7 +83,7 @@ def test_the_gpus_scores_are_the_runs_frame_scores():
     scores = vr._gpu_frame_scores((np.array([0, 2], dtype=np.int32), {"vmaf_neg": np.array([80.0, 81.0])}), 10.0)
     assert scores.frame.tolist() == [0, 2] and scores.time.tolist() == [0.0, 0.2]
     assert scores.values("vmaf_neg").tolist() == [80.0, 81.0]
-    with pytest.raises(vmaf_cuda.VmafGpuError, match="no frames"):
+    with pytest.raises(libvmaf.LibvmafError, match="no frames"):
         vr._gpu_frame_scores((np.array([], dtype=np.int32), {"vmaf": np.array([])}), 10.0)
 
 
@@ -105,7 +105,7 @@ def test_a_duration_limit_gives_the_raw_outputs_one_frame_more(monkeypatch):
         def finish(self, succeeded):
             return np.array([0, 1], dtype=np.int32), {"vmaf": np.array([90.0, 91.0])}
 
-    monkeypatch.setattr(vmaf_cuda, "GpuAttempt", Attempt)
+    monkeypatch.setattr(vmaf_gpu, "GpuAttempt", Attempt)
     monkeypatch.setattr(vr, "_run_ffmpeg", lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 0, "", ""))
     commands = []
     plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 64, 48, 8)
@@ -124,7 +124,7 @@ def _crashing_gpu_run(*_args, **_kwargs):
 
 
 def test_a_crash_in_libvmaf_ends_its_own_process_and_the_cpu_calculates_vmaf(monkeypatch, caplog):
-    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    monkeypatch.setattr(vmaf_gpu, "_probed", (True, "libvmaf"))
     monkeypatch.setattr(vr, "_score_on_gpu", _crashing_gpu_run)
     monkeypatch.setattr(vr, "_execute_run",
                         lambda *a, **k: FrameScores(np.array([0]), np.array([0.0]), vmaf=np.array([93.0])))
@@ -148,7 +148,7 @@ def _halves(keys, options=None, cached=None):
 
 
 def test_vmaf_from_its_own_run_joins_ffmpegs_other_metrics(monkeypatch):
-    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    monkeypatch.setattr(vmaf_gpu, "_probed", (True, "libvmaf"))
     calls = []
 
     def run_vmaf(source, distorted, options, **_kwargs):
@@ -175,7 +175,7 @@ def test_vmaf_from_its_own_run_joins_ffmpegs_other_metrics(monkeypatch):
 
 
 def test_frames_left_in_a_pipe_after_ffmpeg_ended_are_still_read():
-    reader = vmaf_cuda._PipeReader("test", 4)
+    reader = vmaf_gpu._PipeReader("test", 4)
     reader.start()
     with open(reader.path, "wb") as ffmpeg:
         ffmpeg.write(b"abcdefgh")  # two frames, and FFmpeg is gone before they are read
@@ -190,7 +190,7 @@ def test_frames_left_in_a_pipe_after_ffmpeg_ended_are_still_read():
 def test_a_video_set_to_cpu_has_its_vmaf_calculated_by_ffmpeg(monkeypatch):
     """Each video's own choice (Performance > VMAF compute),
     taken with its options when the run starts."""
-    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
+    monkeypatch.setattr(vmaf_gpu, "_probed", (True, "libvmaf"))
     monkeypatch.setattr(vr, "_run_on_gpu", lambda *a, **k: pytest.fail("set to CPU, but scored on the GPU"))
     monkeypatch.setattr(vr, "_execute_run",
                         lambda *a, **k: FrameScores(np.array([0]), np.array([0.0]), vmaf=np.array([93.0])))
@@ -329,11 +329,11 @@ class _FakeLibvmaf:
 def _scorer(monkeypatch, width: int, height: int, bit_depth: int, failing: str = "", **options):
     cuda = _FakeCuda(failing)
     lib = _FakeLibvmaf(width, height, 1 if bit_depth <= 8 else 2, cuda)
-    monkeypatch.setattr(vmaf_cuda, "_load", lambda: lib)
-    monkeypatch.setattr(vmaf_cuda, "_cuda", lambda: cuda)
+    monkeypatch.setattr(libvmaf, "load", lambda: lib)
+    monkeypatch.setattr(vmaf_gpu, "_cuda", lambda: cuda)
     try:
-        scorer = vmaf_cuda.GpuScorer(width, height, bit_depth, {"vmaf": "vmaf_v0.6.1"}, **options)
-    except vmaf_cuda.VmafGpuError:
+        scorer = vmaf_gpu.GpuScorer(width, height, bit_depth, {"vmaf": "vmaf_v0.6.1"}, **options)
+    except libvmaf.LibvmafError:
         scorer = None
     if scorer is not None:
         scorer._context = ctypes.c_void_p(1)  # as vmaf_init leaves it: close() closes libvmaf
@@ -449,6 +449,6 @@ def test_any_probe_failure_means_vmaf_is_calculated_on_the_cpu(monkeypatch):
 
     monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: [gpu.GpuVendor.NVIDIA])
     monkeypatch.setattr(isolated, "run_isolated", lambda *a, **k: (_ for _ in ()).throw(OSError("pipe broke")))
-    monkeypatch.setattr(vmaf_cuda, "_probed", None)
-    available, text = vmaf_cuda.gpu_vmaf_available()
+    monkeypatch.setattr(vmaf_gpu, "_probed", None)
+    available, text = vmaf_gpu.gpu_vmaf_available()
     assert not available and "pipe broke" in text

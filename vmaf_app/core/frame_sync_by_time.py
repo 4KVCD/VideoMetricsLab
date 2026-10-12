@@ -34,7 +34,7 @@ timestamps.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from decimal import Decimal
 from fractions import Fraction
 from typing import Generic, TypeVar
@@ -198,7 +198,7 @@ def frame_pairs(
 
 def decoded_pairs(test: GpuFrameStream, ref: GpuFrameStream, duration_limit: str | None,
                   check_cancel: Callable[[], None], release_test: Callable[[int], None],
-                  release_ref: Callable[[int], None]) -> Iterator[tuple[int, int]]:
+                  release_ref: Callable[[int], None]) -> Generator[tuple[int, int]]:
     """Yields the (test slot, source slot) pairs of two videos decoded in the
     app, paired by timestamp as FFmpeg's overlay pairs them (see
     frame_pairs). Pairs are given while the test frame's time from the first

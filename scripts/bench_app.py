@@ -174,7 +174,12 @@ def run_one(args) -> None:
 
     import numpy as np
 
-    from vmaf_app.core import perceptual_vship, vmaf_cuda
+    from vmaf_app.core import perceptual_vship
+
+    try:
+        from vmaf_app.core import vmaf_gpu
+    except ImportError:  # an older release, before vmaf_cuda was renamed vmaf_gpu
+        from vmaf_app.core import vmaf_cuda as vmaf_gpu
     from vmaf_app.core.cvvdp import default_settings
     from vmaf_app.core.ffmpeg_locate import check_tools, format_version
     from vmaf_app.core.ffprobe import probe_video
@@ -192,13 +197,13 @@ def run_one(args) -> None:
     # The app's start-up (main.main): the GPU backend and its probes, done
     # by the time a video is added -- here before the clock starts.
     perceptual_vship.set_vship_backend(settings.gpu_backend)
-    if hasattr(vmaf_cuda, "set_gpu_backend"):
-        vmaf_cuda.set_gpu_backend(settings.gpu_backend)
+    if hasattr(vmaf_gpu, "set_gpu_backend"):
+        vmaf_gpu.set_gpu_backend(settings.gpu_backend)
     tools = check_tools()
     out["ffmpeg"] = f"{format_version(tools.ffmpeg.version)} {tools.ffmpeg.path}" if tools.ffmpeg else None
     device, reason = perceptual_vship.detect_vship_device()
     out["probes"] = {"vship": str(device) if device is not None else f"none: {reason}",
-                     "gpu_vmaf": list(vmaf_cuda.gpu_vmaf_available())}
+                     "gpu_vmaf": list(vmaf_gpu.gpu_vmaf_available())}
     try:  # VMAF v1 on the GPU: since v2.0
         from vmaf_app.core import vmaf_v1_gpu
         out["probes"]["vmaf_v1_gpu"] = list(vmaf_v1_gpu.available())

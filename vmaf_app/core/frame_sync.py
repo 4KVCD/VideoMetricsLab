@@ -28,7 +28,7 @@ decoded_frame_pairs, follow that switch.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from decimal import ROUND_DOWN, Decimal
 from fractions import Fraction
 from typing import TYPE_CHECKING, TypeVar
@@ -142,7 +142,7 @@ def _microseconds(duration: str) -> int:
 
 def frame_pairs(test: Callable[[], T | None], source: Callable[[], U | None],
                 release_test: Callable[[T], None], release_source: Callable[[U], None],
-                limit: int | None = None) -> Iterator[tuple[T, U]]:
+                limit: int | None = None) -> Generator[tuple[T, U]]:
     """Yields the two videos' frames in pairs, each video's n-th frame with
     the other's, until either video ends or `limit` pairs have been given.
 
@@ -170,7 +170,7 @@ def frame_pairs(test: Callable[[], T | None], source: Callable[[], U | None],
 def decoded_frame_pairs(test: GpuFrameStream, ref: GpuFrameStream, distorted: VideoInfo,
                         duration_limit: str | None, check_cancel: Callable[[], None],
                         release_test: Callable[[int], None],
-                        release_ref: Callable[[int], None]) -> Iterator[tuple[int, int]]:
+                        release_ref: Callable[[int], None]) -> Generator[tuple[int, int]]:
     """Yields (test slot, source slot) pairs of two videos decoded in the app
     (both gpu_frames.GpuFrameStream, already started): frame N with frame N,
     as many as the duration limit (the FFmpeg outputs' -t, as text) keeps.

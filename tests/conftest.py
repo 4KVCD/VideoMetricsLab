@@ -115,10 +115,10 @@ def isolate_user_state(tmp_path, monkeypatch):
         monkeypatch.setattr(ctypes.windll.kernel32, "SetThreadExecutionState", lambda flags: 0x80000000)
     # VMAF on the GPU is off unless a test asks for it: GitHub's runner has
     # no GPU, so the suite runs as there wherever it runs.
-    from vmaf_app.core import vmaf_cuda
+    from vmaf_app.core import vmaf_gpu
 
-    monkeypatch.setattr(vmaf_cuda, "_probed", (False, "off in tests"))
-    monkeypatch.setattr(vmaf_cuda, "_probed_at", float("inf"))  # never retried (forget_failed_probe)
+    monkeypatch.setattr(vmaf_gpu, "_probed", (False, "off in tests"))
+    monkeypatch.setattr(vmaf_gpu, "_probed_at", float("inf"))  # never retried (forget_failed_probe)
     from vmaf_app.core import vmaf_v1_gpu
 
     monkeypatch.setattr(vmaf_v1_gpu, "_probed", (False, "off in tests"))

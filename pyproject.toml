@@ -41,7 +41,7 @@ module = [
     "vmaf_app.core.perceptual_vship",
     "vmaf_app.core.run_io",
     "vmaf_app.core.stats",
-    "vmaf_app.core.vmaf_cuda",
+    "vmaf_app.core.vmaf_gpu",
     "vmaf_app.core.vmaf_runner",
     "vmaf_app.core.vmaf_v1_gpu",
     "vmaf_app.core.vmaf_vulkan",

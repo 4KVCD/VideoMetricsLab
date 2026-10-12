@@ -4,14 +4,14 @@ tools/vmaf_vulkan/vmaf_vulkan.dll, a port of libvmaf's CUDA feature
 extractors to Vulkan compute shaders. It is built from libvmaf-fast's
 fast/vulkan folder, and comes from the same release as libvmaf.dll.
 
-The port gives the same feature values as libvmaf's CUDA code (vmaf_cuda),
+The port gives the same feature values as libvmaf's CUDA code (vmaf_gpu),
 to the last bit, on any GPU, because its shaders use integer arithmetic
 only. libvmaf itself then predicts the score from the features (the bundled
 libvmaf.dll, on the CPU, through vmaf_import_feature_score and
 vmaf_score_at_index), so a score is the same number whichever of the two
 calculated the features.
 
-VulkanScorer takes the same frames as vmaf_cuda.GpuScorer and returns the
+VulkanScorer takes the same frames as vmaf_gpu.GpuScorer and returns the
 same results. VMAF and VMAF NEG together cost little more than one of them,
 because the library calculates what the two share only once.
 """
@@ -26,13 +26,13 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import vmaf_cuda
+from vmaf_app.core import libvmaf
 
 _log = logging.getLogger(__name__)
 
 LIBRARY_PATH = Path(__file__).resolve().parents[1] / "tools" / "vmaf_vulkan" / "vmaf_vulkan.dll"
 #: The library a score records as having calculated it (its provenance).
-LIBRARY_BUILD = f"libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} (Vulkan)"
+LIBRARY_BUILD = f"libvmaf-fast {libvmaf.LIBVMAF_FAST_VERSION} (Vulkan)"
 
 #: Positions in the library's feature rows (vmaf_vulkan.cpp).
 _VIF, _ADM2, _MOTION2, _VIF_NEG, _ADM2_NEG, _MOTION = 0, 4, 5, 6, 10, 11
@@ -53,7 +53,7 @@ _NEG_MODELS = ("vmaf_v0.6.1neg", "vmaf_4k_v0.6.1neg")
 _TYPE_INTEGRATED, _TYPE_DISCRETE = 1, 2
 
 
-class VmafVulkanError(vmaf_cuda.VmafGpuError):
+class VmafVulkanError(libvmaf.LibvmafError):
     """VMAF could not be calculated with Vulkan, so the CPU calculates it."""
 
 
@@ -74,7 +74,7 @@ class VulkanDevice:
 _library: ctypes.CDLL | None = None
 
 
-def _load() -> ctypes.CDLL:
+def load() -> ctypes.CDLL:
     """vmaf_vulkan.dll, loaded once, with its functions declared."""
     global _library
     if _library is None:
@@ -107,7 +107,7 @@ def _load() -> ctypes.CDLL:
     return _library
 
 
-def _check(lib: ctypes.CDLL, error: int, what: str) -> None:
+def check(lib: ctypes.CDLL, error: int, what: str) -> None:
     """Raises VmafVulkanError with the engine's message if `error` is negative."""
     if error < 0:
         raise VmafVulkanError(f"{what} failed: {(lib.vv_error() or b'').decode(errors='replace')}")
@@ -115,12 +115,12 @@ def _check(lib: ctypes.CDLL, error: int, what: str) -> None:
 
 def devices() -> list[VulkanDevice]:
     """The GPUs Vulkan lists, in its order."""
-    lib = _load()
+    lib = load()
     found = []
     name = ctypes.create_string_buffer(256)
     vendor, kind, flags = ctypes.c_uint32(), ctypes.c_uint32(), ctypes.c_uint32()
     count = lib.vv_device(-1, None, 0, None, None, None)
-    _check(lib, count, "Listing the GPUs")
+    check(lib, count, "Listing the GPUs")
     for index in range(count):
         lib.vv_device(index, name, len(name), ctypes.byref(vendor), ctypes.byref(kind), ctypes.byref(flags))
         found.append(VulkanDevice(index, name.value.decode(errors="replace"), vendor.value, kind.value,
@@ -176,7 +176,7 @@ class SharedLumas:
             if hasattr(lib, "vv_shared_device"):
                 device, driver = ctypes.create_string_buffer(16), ctypes.create_string_buffer(16)
                 memory_type = ctypes.c_uint32()
-                _check(lib, lib.vv_shared_device(context, device, driver, ctypes.byref(memory_type)),
+                check(lib, lib.vv_shared_device(context, device, driver, ctypes.byref(memory_type)),
                        "Sharing Vulkan's memory")
                 exporter = SharedDevice(device.raw, driver.raw, memory_type.value)
             while lib.vv_export(context, len(self._imports), ctypes.byref(handle), ctypes.byref(size)) == 0:
@@ -201,7 +201,7 @@ class SharedLumas:
         address, the test plane's address, the bytes from one row to the
         next). vv_commit scores them once both are written."""
         slot, stride, plane = ctypes.c_int(), ctypes.c_uint32(), ctypes.c_uint32()
-        _check(self._lib, self._lib.vv_shared_next(self._context, ctypes.byref(slot), ctypes.byref(stride),
+        check(self._lib, self._lib.vv_shared_next(self._context, ctypes.byref(slot), ctypes.byref(stride),
                                                    ctypes.byref(plane)), "Scoring a frame")
         address = self._imports[slot.value][0]
         return address, address + plane.value, stride.value
@@ -233,8 +233,8 @@ class VulkanScorer:
         passes, and `decouple_variant` picks a variant of the adm_decouple
         shader."""
         self._shared: SharedLumas | None = None
-        self._lib = lib = _load()
-        self._vmaf = vmaf_cuda._load()
+        self._lib = lib = load()
+        self._vmaf = libvmaf.load()
         self._models = dict(models)
         self._step = max(1, n_subsample)
         self._count = 0
@@ -248,7 +248,7 @@ class VulkanScorer:
                  | ((pass_limit & 0xFF) << 20) | ((decouple_variant & 7) << 28))
         if shared is not None:
             flags |= SHARED_FLAG
-        _check(lib, lib.vv_create(ctypes.byref(self._context), device, width, height, bit_depth, flags),
+        check(lib, lib.vv_create(ctypes.byref(self._context), device, width, height, bit_depth, flags),
                "Starting Vulkan")
         if shared is not None:
             try:
@@ -270,7 +270,7 @@ class VulkanScorer:
             raise VmafVulkanError(f"frame {self._count} is shorter than its luma plane")
         ref = (ctypes.c_char * len(reference)).from_buffer(reference)
         dist = (ctypes.c_char * len(distorted)).from_buffer(distorted)
-        _check(self._lib, self._lib.vv_submit(self._context, ctypes.addressof(ref), self._luma_stride,
+        check(self._lib, self._lib.vv_submit(self._context, ctypes.addressof(ref), self._luma_stride,
                                               ctypes.addressof(dist), self._luma_stride, int(score)),
                f"Scoring frame {self._count}")
         self._count += 1
@@ -284,7 +284,7 @@ class VulkanScorer:
         (n_subsample) needs only the source plane, for motion."""
         score = self._count % self._step == 0
         ref, dist, stride = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_uint32()
-        _check(self._lib, self._lib.vv_staging(self._context, ctypes.byref(ref), ctypes.byref(dist),
+        check(self._lib, self._lib.vv_staging(self._context, ctypes.byref(ref), ctypes.byref(dist),
                                                ctypes.byref(stride)), f"Scoring frame {self._count}")
         for fill, address in ((reference, ref.value), (distorted, dist.value)) if score else ((reference, ref.value),):
             if stride.value == self._luma_stride:
@@ -296,7 +296,7 @@ class VulkanScorer:
                 target = np.ctypeslib.as_array(ctypes.cast(address, ctypes.POINTER(ctypes.c_uint8)),
                                                shape=(rows, stride.value))
                 target[:, :self._luma_stride] = packed.reshape(rows, self._luma_stride)
-        _check(self._lib, self._lib.vv_commit(self._context, int(score)), f"Scoring frame {self._count}")
+        check(self._lib, self._lib.vv_commit(self._context, int(score)), f"Scoring frame {self._count}")
         self._count += 1
 
     def add_shared(self, reference, distorted) -> None:
@@ -309,26 +309,26 @@ class VulkanScorer:
         reference(ref, pitch)
         if score:
             distorted(dist, pitch)
-        _check(self._lib, self._lib.vv_commit(self._context, int(score)), f"Scoring frame {self._count}")
+        check(self._lib, self._lib.vv_commit(self._context, int(score)), f"Scoring frame {self._count}")
         self._count += 1
 
     def features(self) -> tuple[np.ndarray, np.ndarray]:
         """Returns the frame numbers scored and their feature rows
         (FEATURE_COUNT numbers each). Call it once every frame has been
         given."""
-        _check(self._lib, self._lib.vv_flush(self._context), "Scoring")
+        check(self._lib, self._lib.vv_flush(self._context), "Scoring")
         frames = np.arange(0, self._count, self._step, dtype=np.int32)
         rows = np.zeros((len(frames), FEATURE_COUNT), dtype=np.float64)
         for slot, frame in enumerate(frames):
             row = rows[slot].ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-            _check(self._lib, self._lib.vv_features(self._context, int(frame), row), f"Reading frame {frame}")
+            check(self._lib, self._lib.vv_features(self._context, int(frame), row), f"Reading frame {frame}")
         return frames, rows
 
     def sums(self, frame: int) -> np.ndarray:
         """A frame's raw sums, for tests."""
         out = np.zeros(128, dtype=np.uint64)
         count = self._lib.vv_sums(self._context, frame, out.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64)), 128)
-        _check(self._lib, count, f"Reading frame {frame}")
+        check(self._lib, count, f"Reading frame {frame}")
         return out[:count]
 
     def finish(self) -> tuple[np.ndarray, dict[str, np.ndarray]]:
@@ -354,26 +354,26 @@ def predict(version: str, frames: np.ndarray, rows: np.ndarray) -> np.ndarray:
     """Returns a libvmaf model's scores for feature rows, predicted by
     libvmaf itself from the features given under the names its extractors
     would use."""
-    lib = vmaf_cuda._load()
+    lib = libvmaf.load()
     lib.vmaf_import_feature_score.restype = ctypes.c_int
     lib.vmaf_import_feature_score.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_double, ctypes.c_uint]
     context, model = ctypes.c_void_p(), ctypes.c_void_p()
-    configuration = vmaf_cuda._Configuration(vmaf_cuda._VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0)
-    vmaf_cuda._check(lib.vmaf_init(ctypes.byref(context), configuration), "Starting libvmaf")
+    configuration = libvmaf.Configuration(libvmaf.LOG_LEVEL_ERROR, 0, 1, 0, 0)
+    libvmaf.check(lib.vmaf_init(ctypes.byref(context), configuration), "Starting libvmaf")
     try:
-        config = vmaf_cuda._ModelConfig(b"vmaf", 0)
-        vmaf_cuda._check(lib.vmaf_model_load(ctypes.byref(model), ctypes.byref(config), version.encode()),
+        config = libvmaf.ModelConfig(b"vmaf", 0)
+        libvmaf.check(lib.vmaf_model_load(ctypes.byref(model), ctypes.byref(config), version.encode()),
                          f"Loading the {version} model")
         columns = _MODEL_FEATURES[version in _NEG_MODELS]
         for name, column in columns.items():
             encoded = name.encode()
             for frame, row in zip(frames, rows, strict=True):
-                vmaf_cuda._check(lib.vmaf_import_feature_score(context, encoded, float(row[column]), int(frame)),
+                libvmaf.check(lib.vmaf_import_feature_score(context, encoded, float(row[column]), int(frame)),
                                  f"Giving libvmaf frame {frame}")
         scores = np.empty(len(frames), dtype=np.float64)
         value = ctypes.c_double()
         for slot, frame in enumerate(frames):
-            vmaf_cuda._check(lib.vmaf_score_at_index(context, model, ctypes.byref(value), int(frame)),
+            libvmaf.check(lib.vmaf_score_at_index(context, model, ctypes.byref(value), int(frame)),
                              f"Predicting frame {frame}")
             scores[slot] = float(f"{value.value:.6f}")
         return scores
@@ -454,7 +454,7 @@ def probe() -> tuple[bool, int | None, str]:
     of its own."""
     if not LIBRARY_PATH.is_file():
         return False, None, "vmaf_vulkan.dll is not bundled"
-    if not vmaf_cuda.LIBRARY_PATH.is_file():
+    if not libvmaf.LIBRARY_PATH.is_file():
         return False, None, "libvmaf, which predicts the score, is not bundled"
     try:
         found = devices()
@@ -467,7 +467,7 @@ def probe() -> tuple[bool, int | None, str]:
             if probe_sums(device.index, bits) != expected:
                 return False, None, f"{device.name}'s driver calculates VMAF wrongly ({bits}-bit self-test)"
         return True, device.index, f"Vulkan on {device.name}"
-    except (OSError, vmaf_cuda.VmafGpuError) as error:
+    except (OSError, libvmaf.LibvmafError) as error:
         return False, None, str(error)
 
 
@@ -483,7 +483,7 @@ def score_decoded(
     scale_algorithm: str = "bicubic", on_progress=None, check_cancel=lambda: None, process_handle=None,
     device: int | None = None, decoder: str | None = None,
 ):
-    """The counterpart of vmaf_cuda.score_decoded with the Vulkan scorer.
+    """The counterpart of vmaf_gpu.score_decoded with the Vulkan scorer.
 
     Both videos are decoded in this process by the GPU's own decoder
     (gpu_frames), and cropped, scaled and widened there. They are paired as

@@ -24,7 +24,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vmaf_app.core import gpu_frames, vmaf_cuda, vmaf_vulkan
+from vmaf_app.core import gpu_frames, libvmaf, vmaf_gpu, vmaf_vulkan
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.frame_sync import decoded_frame_pairs
 from vmaf_app.core.gpu import plan_hwaccel
@@ -42,9 +42,9 @@ COLUMNS = sorted(set(FEATURES.values()))
 NAMES = {column: name for name, column in FEATURES.items()}
 
 
-def cuda_features(scorer: vmaf_cuda.GpuScorer, count: int) -> np.ndarray:
+def cuda_features(scorer: vmaf_gpu.GpuScorer, count: int) -> np.ndarray:
     """The features libvmaf CUDA calculated for each of `count` frames."""
-    lib = vmaf_cuda._load()
+    lib = libvmaf.load()
     lib.vmaf_feature_score_at_index.restype = ctypes.c_int
     lib.vmaf_feature_score_at_index.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
                                                 ctypes.POINTER(ctypes.c_double), ctypes.c_uint]
@@ -75,7 +75,7 @@ def main() -> int:
     source_crop, distorted_crop = _resolve_crops(source, distorted, options, None, hwaccel=hwaccel)
     width, height = analysis_dimensions(source, distorted, options, source_crop, distorted_crop)
     bit_depth = analysis_bit_depth(source, distorted)
-    models = vmaf_cuda.gpu_models(True, True, _auto_model_or(options, (width, height)))
+    models = vmaf_gpu.gpu_models(True, True, _auto_model_or(options, (width, height)))
     total = estimate_total_frames(distorted, options, source)
     print(f"{distorted.path.name} against {source.path.name}: {width}x{height} {bit_depth}-bit, crops "
           f"{source_crop} / {distorted_crop}, models {models}, about {total} frames", flush=True)
@@ -89,7 +89,7 @@ def main() -> int:
         plans.append(plan)
     test = gpu_frames.GpuFrameStream(distorted, plans[0], 0, pool=6)
     ref = gpu_frames.GpuFrameStream(source, plans[1], 0, pool=6)
-    cuda = vmaf_cuda.GpuScorer(width, height, bit_depth, models, 1, on_device=True)
+    cuda = vmaf_gpu.GpuScorer(width, height, bit_depth, models, 1, on_device=True)
     vulkan = vmaf_vulkan.VulkanScorer(width, height, bit_depth, models, 1, device=arguments.device)
     try:
         test.start()

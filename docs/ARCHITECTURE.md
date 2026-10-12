@@ -11,6 +11,7 @@ Qt at all. Native playback in core does load GI bindings.
 | --- | --- |
 | Media metadata and geometry | `core/ffprobe.py`, `geometry.py`, `crop_detect.py`, `model_select.py` |
 | Metric requests and execution | `core/analysis_request.py`, `ffmpeg_request.py`, `execution.py`, `vmaf_runner.py`, `job_runner.py` |
+| Metrics calculated in the app's own process | `core/libvmaf.py` (the bundled libvmaf), `libvmaf_cpu.py` (PSNR, SSIM, XPSNR), `vmaf_gpu.py`, `vmaf_vulkan.py`, `vmaf_v1_gpu.py` (VMAF on the GPU), `gpu_frames.py` (decoding) |
 | Metric registry and packed scores | `core/metrics.py`, `core/models.py` |
 | Results and persistence | `core/run_io.py`, `core/result_cache.py` |
 | Statistics and plotting | `core/stats.py`, `ui/graph_panel.py`, `chart.py` |
@@ -32,9 +33,9 @@ Qt at all. Native playback in core does load GI bindings.
    one efficient filtergraph for its requested metrics; XPSNR alone does not
    require a VMAF score. Where PSNR, SSIM and XPSNR are the run's only
    metrics (no VMAF on the CPU), the bundled libvmaf-fast scores them in a
-   process of its own (`vmaf_runner._run_cpu_metrics`, `vmaf_cuda.CpuScorer`),
+   process of its own (`vmaf_runner._run_cpu_metrics`, `libvmaf_cpu.CpuScorer`),
    on luma-only pictures from a pool of bounded size: decoded there when
-   nothing is scaled (`vmaf_cuda.score_decoded_cpu`) -- by the GPU's own
+   nothing is scaled (`libvmaf_cpu.score_decoded_cpu`) -- by the GPU's own
    decoder, or by the software decoder for a video FFmpeg would decode in
    software (`gpu_frames`, `vmaf_runner._decoders_here`) -- else from frames
    FFmpeg writes to pipes. XPSNR is libvmaf-fast's port of

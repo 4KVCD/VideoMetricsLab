@@ -21,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vmaf_app.core import vmaf_cuda, vmaf_v1_gpu, vmaf_vulkan
+from vmaf_app.core import vmaf_gpu, vmaf_v1_gpu, vmaf_vulkan
 from vmaf_app.core.ffprobe import probe_video
 from vmaf_app.core.models import VmafOptions
 from vmaf_app.core.vmaf_runner import run_vmaf
@@ -34,8 +34,8 @@ def run(backend: str, source, distorted, options: VmafOptions, repeat: int):
         options = VmafOptions(**{**options.__dict__, "vmaf_on_gpu": False})
     else:
         name, _, device = backend.partition(":")
-        vmaf_cuda._probed = (True, backend)
-        vmaf_cuda._backend = (name, int(device) if device else None)
+        vmaf_gpu._probed = (True, backend)
+        vmaf_gpu._backend = (name, int(device) if device else None)
         vmaf_v1_gpu._probed = (True, backend)  # VMAF v1's GPU half is Vulkan's with either
     best, result = float("inf"), None
     for _ in range(repeat):

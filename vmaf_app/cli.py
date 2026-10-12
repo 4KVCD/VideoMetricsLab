@@ -40,7 +40,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from vmaf_app import APP_NAME, __version__
-from vmaf_app.core import metric_cache, perceptual_vship, result_cache, vmaf_cuda
+from vmaf_app.core import libvmaf, metric_cache, perceptual_vship, result_cache, vmaf_gpu
 from vmaf_app.core.cvvdp import default_settings
 from vmaf_app.core.ffmpeg_locate import check_tools, format_version
 from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
@@ -670,7 +670,7 @@ def _apply_settings(settings: Settings) -> None:
     """What the window does with them as it starts; nothing is saved."""
     result_cache.set_cache_dir_override(settings.cache_dir_path())
     perceptual_vship.set_vship_backend(settings.gpu_backend)
-    vmaf_cuda.set_gpu_backend(settings.gpu_backend)
+    vmaf_gpu.set_gpu_backend(settings.gpu_backend)
 
 
 def _ffmpeg_problem() -> str | None:
@@ -775,9 +775,9 @@ def devices(_args: argparse.Namespace, *, out=None, err=None) -> int:
     else:
         lines.append(f"CVVDP: not available ({reason})")
         lines += [f"{metric_definition(key).label}: CPU (libjxl)" for key in ("ssimulacra2", "butteraugli")]
-    available, why = vmaf_cuda.gpu_vmaf_available()
+    available, why = vmaf_gpu.gpu_vmaf_available()
     if available:
-        backend, gpu = vmaf_cuda.gpu_vmaf_backend()
+        backend, gpu = vmaf_gpu.gpu_vmaf_backend()
         lines.append("VMAF v0.6.1, VMAF NEG: GPU ("
                      + ("libvmaf CUDA" if backend == "cuda" else f"Vulkan, GPU {gpu}") + ")")
     else:
@@ -787,7 +787,7 @@ def devices(_args: argparse.Namespace, *, out=None, err=None) -> int:
     with_gpu, what = vmaf_v1_gpu.available()
     lines.append(f"VMAF v1: {'GPU (' + what + ')' if with_gpu else 'CPU (' + what + ')'}")
     if vmaf_runner.cpu_metrics_in_app():
-        lines.append(f"PSNR, SSIM, XPSNR: CPU (libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} in the app; "
+        lines.append(f"PSNR, SSIM, XPSNR: CPU (libvmaf-fast {libvmaf.LIBVMAF_FAST_VERSION} in the app; "
                      "FFmpeg beside VMAF on the CPU)")
     else:
         lines.append("PSNR, SSIM, XPSNR: CPU (FFmpeg)")

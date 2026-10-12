@@ -146,11 +146,11 @@ def test_frames_are_released_once_the_next_pair_is_asked_for():
 
 
 def test_vmaf_from_pictures_decoded_here_is_vmaf_from_ffmpegs(tmp_path):
-    """vmaf_cuda.score_decoded against libvmaf on the GPU given FFmpeg's
+    """vmaf_gpu.score_decoded against libvmaf on the GPU given FFmpeg's
     decoded frames, as before: the same scores, frame for frame."""
-    from vmaf_app.core import vmaf_cuda
+    from vmaf_app.core import libvmaf, vmaf_gpu
 
-    if not vmaf_cuda.LIBRARY_PATH.is_file():
+    if not libvmaf.LIBRARY_PATH.is_file():
         pytest.skip("libvmaf with CUDA is not bundled")
     source = _coded_clip(tmp_path / "source.mkv", "h264", "yuv420p", seconds=1.0)
     test = tmp_path / "test.mkv"
@@ -160,14 +160,14 @@ def test_vmaf_from_pictures_decoded_here_is_vmaf_from_ffmpegs(tmp_path):
     if not _gpu_decodes(nv.plan_decode(source_info, None)):
         pytest.skip("no NVIDIA GPU decoder for this")
     models = {"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg"}
-    frames, scores = vmaf_cuda.score_decoded(source_info, test_info, None, None, width=640, height=360, bit_depth=8,
+    frames, scores = vmaf_gpu.score_decoded(source_info, test_info, None, None, width=640, height=360, bit_depth=8,
                                              models=models, n_subsample=1, duration_limit=None, total_frames=24)
 
     def raw(path):
         return subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-f", "rawvideo",
                                "-pix_fmt", "yuv420p", "pipe:1"], capture_output=True, check=True).stdout
 
-    scorer = vmaf_cuda.GpuScorer(640, 360, 8, models)
+    scorer = vmaf_gpu.GpuScorer(640, 360, 8, models)
     try:
         size = scorer.frame_bytes
         a, b = raw(source), raw(test)

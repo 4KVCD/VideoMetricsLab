@@ -337,9 +337,9 @@ def test_cancel_ends_the_run_and_exits_130_with_what_finished_saved(videos, monk
 # ------------------------------------------------------------------ devices
 
 def test_devices_says_what_calculates_each_metric(videos, monkeypatch, capsys):
-    from vmaf_app.core import vmaf_cuda, vmaf_v1_gpu
+    from vmaf_app.core import libvmaf, vmaf_gpu, vmaf_v1_gpu
 
-    monkeypatch.setattr(vmaf_cuda, "gpu_vmaf_available", lambda: (False, "no GPU in the tests"))
+    monkeypatch.setattr(vmaf_gpu, "gpu_vmaf_available", lambda: (False, "no GPU in the tests"))
     monkeypatch.setattr(vmaf_v1_gpu, "available", lambda: (False, "no GPU in the tests"))
     assert cli.main(["devices"]) == cli.EXIT_OK
     out = capsys.readouterr().out
@@ -351,7 +351,7 @@ def test_devices_says_what_calculates_each_metric(videos, monkeypatch, capsys):
     assert "PSNR, SSIM, XPSNR: CPU (FFmpeg)" in out  # the suite sends them to FFmpeg (conftest)
     monkeypatch.delenv("VML_CPU_METRICS")  # as the app runs
     assert cli.main(["devices"]) == cli.EXIT_OK
-    assert (f"PSNR, SSIM, XPSNR: CPU (libvmaf-fast {vmaf_cuda.LIBVMAF_FAST_VERSION} in the app;"
+    assert (f"PSNR, SSIM, XPSNR: CPU (libvmaf-fast {libvmaf.LIBVMAF_FAST_VERSION} in the app;"
             in capsys.readouterr().out)
 
 

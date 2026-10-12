@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vmaf_app.core import job_runner, vmaf_cuda, vmaf_v1_gpu, vmaf_vulkan
+from vmaf_app.core import job_runner, libvmaf, vmaf_gpu, vmaf_v1_gpu, vmaf_vulkan
 from vmaf_app.core.models import VideoInfo, VmafOptions
 
 MODELS = Path(vmaf_v1_gpu.__file__).resolve().parents[1] / "models"
@@ -51,22 +51,22 @@ def test_options_are_written_as_libvmafs_parser_reads_them():
 
 def test_vmaf_v1_goes_to_the_gpu_where_its_self_test_passed(monkeypatch, tmp_path):
     model = f"path={STANDARD}"
-    monkeypatch.setattr(vmaf_cuda, "_probed", (True, "libvmaf"))
-    assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1", compute_vmaf_v1=True, model_v1=model) == {
+    monkeypatch.setattr(vmaf_gpu, "_probed", (True, "libvmaf"))
+    assert vmaf_gpu.scores_on_gpu(True, False, "version=vmaf_v0.6.1", compute_vmaf_v1=True, model_v1=model) == {
         "vmaf": "vmaf_v0.6.1"}  # conftest: no GPU for VMAF v1
     monkeypatch.setattr(vmaf_v1_gpu, "_probed", (True, "Vulkan on a GPU"))
-    assert vmaf_cuda.scores_on_gpu(True, True, "version=vmaf_v0.6.1", compute_vmaf_v1=True, model_v1=model) == {
+    assert vmaf_gpu.scores_on_gpu(True, True, "version=vmaf_v0.6.1", compute_vmaf_v1=True, model_v1=model) == {
         "vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg", "vmaf_v1": model}
     # Its GPU half is Vulkan's: it needs no GPU that scores VMAF v0.6.1.
-    monkeypatch.setattr(vmaf_cuda, "_probed", (False, "no GPU"))
-    assert vmaf_cuda.scores_on_gpu(True, False, "version=vmaf_v0.6.1", compute_vmaf_v1=True, model_v1=model) == {
+    monkeypatch.setattr(vmaf_gpu, "_probed", (False, "no GPU"))
+    assert vmaf_gpu.scores_on_gpu(True, False, "version=vmaf_v0.6.1", compute_vmaf_v1=True, model_v1=model) == {
         "vmaf_v1": model}
-    assert vmaf_cuda.scores_on_gpu(False, False, "", compute_vmaf_v1=True, model_v1="") == {"vmaf_v1": ""}  # Auto
+    assert vmaf_gpu.scores_on_gpu(False, False, "", compute_vmaf_v1=True, model_v1="") == {"vmaf_v1": ""}  # Auto
     # The CPU's: the video set to CPU, more than 10 bits, an odd size, too small for SpEED, another model.
     for refused in ({"enabled": False}, {"bit_depth": 12}, {"size": (1921, 1080)}, {"size": (1920, 120)},
                     {"model_v1": f"path={_other_model(tmp_path)}"}):
         arguments = {"compute_vmaf_v1": True, "model_v1": model, **refused}
-        assert vmaf_cuda.scores_on_gpu(False, False, "", **arguments) is None, refused
+        assert vmaf_gpu.scores_on_gpu(False, False, "", **arguments) is None, refused
 
 
 def test_a_crashed_or_failed_probe_leaves_vmaf_v1_to_the_cpu(monkeypatch):
@@ -102,11 +102,11 @@ def test_the_self_test_frames_are_the_same_bytes_everywhere():
 def _usable_devices():
     try:
         return [device for device in vmaf_vulkan.devices() if device.usable and device.kind in (1, 2)]
-    except (OSError, vmaf_cuda.VmafGpuError):
+    except (OSError, libvmaf.LibvmafError):
         return []
 
 
-_DEVICES = _usable_devices() if vmaf_vulkan.LIBRARY_PATH.is_file() and vmaf_cuda.LIBRARY_PATH.is_file() else []
+_DEVICES = _usable_devices() if vmaf_vulkan.LIBRARY_PATH.is_file() and libvmaf.LIBRARY_PATH.is_file() else []
 needs_gpu = pytest.mark.skipif(not _DEVICES, reason="no GPU that Vulkan can calculate VMAF on")
 
 

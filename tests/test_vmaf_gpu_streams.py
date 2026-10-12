@@ -1,4 +1,4 @@
-"""VMAF on the GPU from FFmpeg's frames, paired in the app (vmaf_cuda's
+"""VMAF on the GPU from FFmpeg's frames, paired in the app (vmaf_gpu's
 _StreamReader and GpuAttempt, vmaf_runner's FFmpeg for each video): what can
 be tested without a GPU or FFmpeg, by writing to the pipes as FFmpeg does."""
 import subprocess
@@ -7,7 +7,7 @@ from fractions import Fraction
 
 import pytest
 
-from vmaf_app.core import vmaf_cuda
+from vmaf_app.core import libvmaf, vmaf_gpu
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.vmaf_runner import Cancelled
 
@@ -29,7 +29,7 @@ def _pulled(reader):
 
 
 def test_a_video_comes_as_its_frames():
-    reader = vmaf_cuda._StreamReader("test", 6)
+    reader = vmaf_gpu._StreamReader("test", 6)
     reader.start()
     writer = threading.Thread(target=_write, args=(reader, [b"abcdef", b"ghijkl", b"mnopqr"]))
     writer.start()
@@ -41,7 +41,7 @@ def test_a_video_comes_as_its_frames():
 
 
 def test_frames_that_end_inside_one_are_an_error_not_a_short_video():
-    reader = vmaf_cuda._StreamReader("test", 6)
+    reader = vmaf_gpu._StreamReader("test", 6)
     reader.start()
     writer = threading.Thread(target=_write, args=(reader, [b"abcdef"]), kwargs={"tail": b"FRAME\nxyz"})
     writer.start()
@@ -50,7 +50,7 @@ def test_frames_that_end_inside_one_are_an_error_not_a_short_video():
     reader.release(frame)
     writer.join(5)
     reader.ffmpeg_ended()
-    with pytest.raises(vmaf_cuda.VmafGpuError, match="ended"):
+    with pytest.raises(libvmaf.LibvmafError, match="ended"):
         reader.pull()
 
 
@@ -73,8 +73,8 @@ class _Scorer:
 def test_the_attempt_pairs_frame_n_of_one_video_with_frame_n_of_the_other(monkeypatch):
     """As libvmaf's filter pairs the two videos' numbered frames
     (frame_sync); the source's extra frame at the end is read and dropped."""
-    monkeypatch.setattr(vmaf_cuda, "GpuScorer", _Scorer)
-    attempt = vmaf_cuda.GpuAttempt(2, 2, 8, {"vmaf": "vmaf_v0.6.1"}, 1, paired=False)
+    monkeypatch.setattr(vmaf_gpu, "GpuScorer", _Scorer)
+    attempt = vmaf_gpu.GpuAttempt(2, 2, 8, {"vmaf": "vmaf_v0.6.1"}, 1, paired=False)
     test = [b"t0....", b"t1....", b"t2...."]
     source = [b"s0....", b"s1....", b"s2....", b"s3...."]
     writers = [threading.Thread(target=_write, args=(attempt.distorted, test)),
@@ -106,7 +106,7 @@ def _write_timed(reader, frames, time_base="1/1000", stamps=None):
 
 
 def test_pairing_by_timestamp_a_video_comes_as_its_frames_and_their_timestamps():
-    reader = vmaf_cuda._TimedStreamReader("test", 6)
+    reader = vmaf_gpu._TimedStreamReader("test", 6)
     reader.start()
     writer = threading.Thread(target=_write_timed,
                               args=(reader, [b"abcdef", b"ghijkl", b"mnopqr"], "1001/24000", [0, 1, 3]))
@@ -129,8 +129,8 @@ def test_pairing_by_timestamp_the_attempt_pairs_as_libvmafs_filter_would(monkeyp
     (frame_sync_by_time); the source's extra frame at the end is read and
     dropped."""
     monkeypatch.setenv("VML_FRAME_PAIRING", "timestamp")
-    monkeypatch.setattr(vmaf_cuda, "GpuScorer", _Scorer)
-    attempt = vmaf_cuda.GpuAttempt(2, 2, 8, {"vmaf": "vmaf_v0.6.1"}, 1, paired=False)
+    monkeypatch.setattr(vmaf_gpu, "GpuScorer", _Scorer)
+    attempt = vmaf_gpu.GpuAttempt(2, 2, 8, {"vmaf": "vmaf_v0.6.1"}, 1, paired=False)
     test = [b"t0....", b"t1....", b"t2...."]
     source = [b"s0....", b"s1....", b"s2....", b"s3...."]
     writers = [threading.Thread(target=_write_timed, args=(attempt.distorted, test, "1/1000", [0, 42, 83])),

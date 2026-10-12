@@ -542,6 +542,15 @@ def decoder_pair(decoder: str | tuple[str, str]) -> tuple[str, str]:
     return (decoder, decoder) if isinstance(decoder, str) else (decoder[0], decoder[1])
 
 
+#: The CUDA device that GPU VMAF and the decoders run on: CUDA's first
+#: device, which in CUDA's default order (CUDA_DEVICE_ORDER=FASTEST_FIRST) is
+#: the fastest NVIDIA GPU. FFmpeg's -hwaccel cuda takes the same device, and
+#: so does Vship's CUDA build (the first discrete GPU it lists, see
+#: perceptual_vship._probe_vship_device), so on a PC with two NVIDIA GPUs every
+#: GPU metric and decode runs on the same card. The app offers no choice of GPU.
+CUDA_DEVICE = 0
+
+
 def device_of(backend: str, gpu: int) -> int:
     """The device a decoder is opened on: `gpu` for NVIDIA's (a CUDA device
     number), and 0 for the others, which find their GPU themselves (or need

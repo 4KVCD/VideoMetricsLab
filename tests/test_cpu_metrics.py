@@ -1,5 +1,5 @@
 """PSNR, SSIM and XPSNR by the bundled libvmaf's CPU extractors in the app
-(vmaf_cuda.CpuScorer, vmaf_runner._run_cpu_metrics), in place of FFmpeg's
+(libvmaf_cpu.CpuScorer, vmaf_runner._run_cpu_metrics), in place of FFmpeg's
 libvmaf and xpsnr filters: the same scores, and FFmpeg's filters again
 whenever the app's way fails. The scorer runs for real -- libvmaf's CPU code
 needs no GPU."""
@@ -10,14 +10,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vmaf_app.core import vmaf_cuda
+from vmaf_app.core import libvmaf, libvmaf_cpu, vmaf_gpu
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import FrameScores, VideoInfo, VmafOptions
 
-needs_libvmaf = pytest.mark.skipif(not vmaf_cuda.LIBRARY_PATH.is_file(), reason="libvmaf.dll is not bundled")
-needs_xpsnr = pytest.mark.skipif(not (vmaf_cuda.LIBRARY_PATH.is_file() and vmaf_cuda.cpu_scores_xpsnr()),
+needs_libvmaf = pytest.mark.skipif(not libvmaf.LIBRARY_PATH.is_file(), reason="libvmaf.dll is not bundled")
+needs_xpsnr = pytest.mark.skipif(not (libvmaf.LIBRARY_PATH.is_file() and libvmaf_cpu.cpu_scores_xpsnr()),
                                  reason="the bundled libvmaf-fast has no XPSNR")
 
 
@@ -68,7 +68,7 @@ def test_the_scorers_psnr_and_ssim_are_ffmpegs_libvmafs(tmp_path_factory, subtes
     FFmpeg rounds up and libvmaf down)."""
     def check(width, height, bits, tmp_path):
         reference, distorted = _frames(width, height, bits, 5, 1), _frames(width, height, bits, 5, 2)
-        scorer = vmaf_cuda.CpuScorer(width, height, bits, ("psnr", "ssim"), threads=4)
+        scorer = libvmaf_cpu.CpuScorer(width, height, bits, ("psnr", "ssim"), threads=4)
         try:
             assert scorer.frame_bytes == len(reference[0])
             for ref, dist in zip(reference, distorted, strict=True):
@@ -111,7 +111,7 @@ def test_the_scorers_xpsnr_is_ffmpegs(tmp_path, width, height, bits, rate):
     temporal activity reads the frames before); PSNR beside it, from XPSNR's
     own squared errors, FFmpeg's libvmaf's to its six."""
     reference, distorted = _frames(width, height, bits, 5, 5), _frames(width, height, bits, 5, 6)
-    scorer = vmaf_cuda.CpuScorer(width, height, bits, ("psnr", "xpsnr"), threads=4, frame_rate=rate)
+    scorer = libvmaf_cpu.CpuScorer(width, height, bits, ("psnr", "xpsnr"), threads=4, frame_rate=rate)
     try:
         for ref, dist in zip(reference, distorted, strict=True):
             scorer.add(ref, dist)
@@ -126,7 +126,7 @@ def test_the_scorers_xpsnr_is_ffmpegs(tmp_path, width, height, bits, rate):
 @needs_libvmaf
 def test_every_n_subsample_th_frame_is_scored(tmp_path):
     reference, distorted = _frames(320, 240, 8, 7, 3), _frames(320, 240, 8, 7, 4)
-    scorer = vmaf_cuda.CpuScorer(320, 240, 8, ("ssim",), n_subsample=3)
+    scorer = libvmaf_cpu.CpuScorer(320, 240, 8, ("ssim",), n_subsample=3)
     try:
         for ref, dist in zip(reference, distorted, strict=True):
             scorer.add(ref, dist)
@@ -144,7 +144,7 @@ def test_every_n_subsample_th_frame_is_scored(tmp_path):
 @pytest.fixture
 def app_scores(monkeypatch):
     monkeypatch.delenv(vr.CPU_METRICS_VARIABLE, raising=False)
-    monkeypatch.setattr(vmaf_cuda, "pairs_in_app", lambda: True)
+    monkeypatch.setattr(vmaf_gpu, "pairs_in_app", lambda: True)
 
 
 @needs_libvmaf
@@ -177,11 +177,11 @@ def test_xpsnrs_frame_rate_is_ffmpegs_where_that_is_known(subtests):
 
 
 def test_xpsnr_is_the_apps_only_where_it_is_ffmpegs_to_the_bit(monkeypatch):
-    monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: True)
+    monkeypatch.setattr(libvmaf_cpu, "cpu_scores_xpsnr", lambda: True)
     assert vr._xpsnr_in_app(1920, 1080, 10) and vr._xpsnr_in_app(1279, 719, 12)
     assert not vr._xpsnr_in_app(2561, 1440, 10)  # FFmpeg's filter reads beyond an odd picture
     assert not vr._xpsnr_in_app(1920, 1080, 16)
-    monkeypatch.setattr(vmaf_cuda, "cpu_scores_xpsnr", lambda: False)  # a libvmaf-fast without it
+    monkeypatch.setattr(libvmaf_cpu, "cpu_scores_xpsnr", lambda: False)  # a libvmaf-fast without it
     assert not vr._xpsnr_in_app(1920, 1080, 10)
 
 
@@ -237,7 +237,7 @@ def test_a_failure_in_the_app_leaves_them_to_ffmpegs_filter(monkeypatch):
     statuses = []
 
     def isolated(*_args, **_kwargs):
-        raise vmaf_cuda.VmafGpuError("libvmaf crashed")
+        raise libvmaf.LibvmafError("libvmaf crashed")
 
     frames, _calls = _run(monkeypatch, isolated, on_status=statuses.append)
     assert frames is None

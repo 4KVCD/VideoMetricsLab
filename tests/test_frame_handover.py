@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vmaf_app.core import gpu_frames, vmaf_cuda, vmaf_v1_gpu, vmaf_vulkan
+from vmaf_app.core import gpu_frames, libvmaf, vmaf_v1_gpu, vmaf_vulkan
 from vmaf_app.core.ffmpeg_locate import ffmpeg_path
 from vmaf_app.core.ffprobe import probe_video
 
@@ -35,7 +35,7 @@ def _nvidia_decodes(info, bits: int) -> bool:
         plan = gpu_frames.plan_decode(info, None, shift=6 if bits > 8 else 0)
         return gpu_frames.decoder_supports(0, plan, "nvidia")[0] and any(
             device.vendor == 0x10DE and device.usable for device in vmaf_vulkan.devices())
-    except (OSError, vmaf_cuda.VmafGpuError, gpu_frames.GpuDecodeUnavailableError):
+    except (OSError, libvmaf.LibvmafError, gpu_frames.GpuDecodeUnavailableError):
         return False
 
 
@@ -157,7 +157,7 @@ def _amd_gives_textures(info, bits: int) -> bool:
         plan = gpu_frames.plan_decode(info, None, shift=6 if bits > 8 else 0)
         return gpu_frames.decoder_supports(0, plan, "amd")[0] and any(
             device.vendor == 0x1002 and device.usable for device in vmaf_vulkan.devices())
-    except (OSError, vmaf_cuda.VmafGpuError, gpu_frames.GpuDecodeUnavailableError):
+    except (OSError, libvmaf.LibvmafError, gpu_frames.GpuDecodeUnavailableError):
         return False
 
 

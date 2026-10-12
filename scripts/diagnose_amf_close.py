@@ -40,7 +40,7 @@ def score(reference: Path, distorted: Path, seconds: float) -> int:
     """One run, in this process (and the scoring process it starts)."""
     import numpy as np
 
-    from vmaf_app.core import vmaf_cuda, vmaf_vulkan
+    from vmaf_app.core import vmaf_gpu, vmaf_vulkan
     from vmaf_app.core.ffprobe import probe_video
     from vmaf_app.core.models import GpuVendor, VmafOptions
     from vmaf_app.core.vmaf_runner import run_vmaf
@@ -50,8 +50,8 @@ def score(reference: Path, distorted: Path, seconds: float) -> int:
     if device is None:
         print("RESULT no GPU that Vulkan can calculate VMAF on")
         return 2
-    vmaf_cuda._probed = (True, f"vulkan:{device.index}")
-    vmaf_cuda._backend = ("vulkan", device.index)
+    vmaf_gpu._probed = (True, f"vulkan:{device.index}")
+    vmaf_gpu._backend = ("vulkan", device.index)
     options = VmafOptions(compute_vmaf=True, compute_vmaf_neg=True, duration_limit=seconds, gpu_decode=True,
                           gpu_vendor=GpuVendor.AMD)
     result = run_vmaf(probe_video(reference), probe_video(distorted), options)

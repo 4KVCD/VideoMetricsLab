@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import compare_vmaf_vulkan as compare
 
-from vmaf_app.core import vmaf_cuda, vmaf_vulkan
+from vmaf_app.core import libvmaf, vmaf_gpu, vmaf_vulkan
 
 
 def timed(scorer, reference, distorted, frames: int, copy: bool = False) -> float:
@@ -73,11 +73,11 @@ def main() -> int:
                 rate = timed(scorer(skip), reference, distorted, arguments.frames)
                 line += f"; {label} {1000 / rate:.2f} ms"
         print(line)
-    if not arguments.no_cuda and vmaf_cuda.LIBRARY_PATH.is_file():
+    if not arguments.no_cuda and libvmaf.LIBRARY_PATH.is_file():
         try:
-            cuda = vmaf_cuda.GpuScorer(width, height, arguments.bits, compare.MODELS)
+            cuda = vmaf_gpu.GpuScorer(width, height, arguments.bits, compare.MODELS)
             print(f"  CUDA (libvmaf): {timed(cuda, reference, distorted, arguments.frames, copy=True):.1f} fps")
-        except (OSError, vmaf_cuda.VmafGpuError) as error:
+        except (OSError, libvmaf.LibvmafError) as error:
             print(f"  CUDA (libvmaf): unavailable ({error})")
     return 0
 

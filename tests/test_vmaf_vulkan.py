@@ -9,7 +9,7 @@ import subprocess
 import numpy as np
 import pytest
 
-from vmaf_app.core import vmaf_cuda, vmaf_vulkan
+from vmaf_app.core import libvmaf, vmaf_gpu, vmaf_vulkan
 from vmaf_app.core import vmaf_runner as vr
 from vmaf_app.core.gpu import HwAccelPlan
 from vmaf_app.core.models import GpuVendor, VmafOptions
@@ -27,26 +27,26 @@ def _probes(monkeypatch, vendors, cuda=(True, "libvmaf 1"), vulkan=(True, 0, "Vu
 
     monkeypatch.setattr(gpu, "detected_gpu_vendors", lambda: vendors)
     monkeypatch.setattr(isolated, "run_isolated",
-                        lambda function, **_: cuda if function is vmaf_cuda.probe else vulkan)
+                        lambda function, **_: cuda if function is vmaf_gpu.probe else vulkan)
 
 
 def test_auto_takes_vulkan_on_every_gpu_and_cuda_only_when_chosen(monkeypatch):
     _probes(monkeypatch, [GpuVendor.NVIDIA])
-    assert vmaf_cuda._probe_once("auto") == ("vulkan", 0, "Vulkan on a GPU")
-    assert vmaf_cuda._probe_once("vulkan")[0] == "vulkan"
-    assert vmaf_cuda._probe_once("cuda") == ("cuda", None, "libvmaf 1 with CUDA")
+    assert vmaf_gpu._probe_once("auto") == ("vulkan", 0, "Vulkan on a GPU")
+    assert vmaf_gpu._probe_once("vulkan")[0] == "vulkan"
+    assert vmaf_gpu._probe_once("cuda") == ("cuda", None, "libvmaf 1 with CUDA")
     _probes(monkeypatch, [GpuVendor.INTEL], vulkan=(True, 1, "Vulkan on Intel(R) Graphics"))
-    assert vmaf_cuda._probe_once("auto") == ("vulkan", 1, "Vulkan on Intel(R) Graphics")
-    assert vmaf_cuda._probe_once("hip")[0] == "vulkan"  # Vship's AMD build: VMAF has none
+    assert vmaf_gpu._probe_once("auto") == ("vulkan", 1, "Vulkan on Intel(R) Graphics")
+    assert vmaf_gpu._probe_once("hip")[0] == "vulkan"  # Vship's AMD build: VMAF has none
 
 
 def test_the_other_backend_is_tried_when_the_first_cannot_score(monkeypatch):
     _probes(monkeypatch, [GpuVendor.NVIDIA], cuda=(False, "CUDA failed to start"))
-    assert vmaf_cuda._probe_once("cuda")[0] == "vulkan"
+    assert vmaf_gpu._probe_once("cuda")[0] == "vulkan"
     _probes(monkeypatch, [GpuVendor.NVIDIA], vulkan=(False, None, "its driver calculates VMAF wrongly"))
-    assert vmaf_cuda._probe_once("auto")[0] == "cuda"
+    assert vmaf_gpu._probe_once("auto")[0] == "cuda"
     _probes(monkeypatch, [GpuVendor.INTEL], vulkan=(False, None, "no Vulkan driver"))
-    assert vmaf_cuda._probe_once("auto") == (None, None, "Vulkan: no Vulkan driver; no NVIDIA GPU")
+    assert vmaf_gpu._probe_once("auto") == (None, None, "Vulkan: no Vulkan driver; no NVIDIA GPU")
 
 
 def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):
@@ -62,7 +62,7 @@ def test_a_run_feeds_the_backend_and_gpu_the_plan_names(monkeypatch):
         def finish(self, succeeded):
             return np.array([0, 1], dtype=np.int32), {"vmaf": np.array([90.0, 91.0])}
 
-    monkeypatch.setattr(vmaf_cuda, "GpuAttempt", Attempt)
+    monkeypatch.setattr(vmaf_gpu, "GpuAttempt", Attempt)
     monkeypatch.setattr(vr, "_run_ffmpeg", lambda cmd, *a, **k: subprocess.CompletedProcess(cmd, 0, "", ""))
     plan = vr._GpuPlan({"vmaf": "vmaf_v0.6.1"}, 64, 48, 8, "vulkan", 1)
     vr._execute_run(lambda *args: ["ffmpeg"], options=VmafOptions(), fps=24.0, total_frames=10,
@@ -95,7 +95,7 @@ def test_a_gpu_run_decodes_in_its_own_process_where_the_gpus_decoder_can(subtest
             taken.append(f"vulkan {'/'.join(decoder)}")
             return np.array([0], dtype=np.int32), {"vmaf": np.array([90.0])}
 
-        monkeypatch.setattr(vmaf_cuda, "score_decoded", cuda_decoded)
+        monkeypatch.setattr(vmaf_gpu, "score_decoded", cuda_decoded)
         monkeypatch.setattr(vmaf_vulkan, "score_decoded", vulkan_decoded)
         monkeypatch.setattr(vr, "_execute_run", lambda *a, **k: taken.append("pipes") or "pipes")
         info = VideoInfo(Path("a.mkv"), 64, 48, 24.0, 1.0, 24, "hevc", pix_fmt="yuv420p")
@@ -146,7 +146,7 @@ def test_the_probe_frames_are_the_same_bytes_everywhere():
 def _usable_devices():
     try:
         return [device for device in vmaf_vulkan.devices() if device.usable and device.kind in (1, 2)]
-    except (OSError, vmaf_cuda.VmafGpuError):
+    except (OSError, libvmaf.LibvmafError):
         return []
 
 
@@ -181,12 +181,12 @@ def test_a_frame_that_is_not_scored_still_counts_for_the_next_frames_motion():
 
 
 def _cuda_features(reference, distorted, bits):
-    scorer = vmaf_cuda.GpuScorer(*vmaf_vulkan._PROBE_SIZE, bits, MODELS)
+    scorer = vmaf_gpu.GpuScorer(*vmaf_vulkan._PROBE_SIZE, bits, MODELS)
     try:
         for ref, dis in zip(reference, distorted, strict=True):
             scorer.add(bytearray(ref), bytearray(dis))
         frames, scores = scorer.finish()
-        lib = vmaf_cuda._load()
+        lib = libvmaf.load()
         lib.vmaf_feature_score_at_index.restype = ctypes.c_int
         lib.vmaf_feature_score_at_index.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
                                                     ctypes.POINTER(ctypes.c_double), ctypes.c_uint]
@@ -204,12 +204,12 @@ def _cuda_features(reference, distorted, bits):
 
 
 def _cuda_runs() -> bool:
-    if not _DEVICES or not vmaf_cuda.LIBRARY_PATH.is_file() or not any(d.vendor == 0x10DE for d in _DEVICES):
+    if not _DEVICES or not libvmaf.LIBRARY_PATH.is_file() or not any(d.vendor == 0x10DE for d in _DEVICES):
         return False
     from vmaf_app.core.isolated import IsolatedCrashError, run_isolated
 
     try:
-        return run_isolated(vmaf_cuda.probe, what="libvmaf's GPU probe")[0]
+        return run_isolated(vmaf_gpu.probe, what="libvmaf's GPU probe")[0]
     except IsolatedCrashError:
         return False
 

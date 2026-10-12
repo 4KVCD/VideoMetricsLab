@@ -26,7 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from vmaf_app.core import frame_sync, vmaf_cuda
+from vmaf_app.core import frame_sync, vmaf_gpu
 from vmaf_app.core.app_log import RUN_START
 from vmaf_app.core.cvvdp import CvvdpSettings
 from vmaf_app.core.execution import ExecutionPlan, MetricTask, build_execution_plan
@@ -373,7 +373,7 @@ class JobScheduler:
         # A check of the GPU that failed a while ago is made again (on this
         # thread, as each video is planned), because the failure may have
         # passed.
-        vmaf_cuda.forget_failed_probe()
+        vmaf_gpu.forget_failed_probe()
         runs: list[JobRun] = []
         for index, job in enumerate(self.jobs):
             try:
@@ -621,7 +621,7 @@ class JobRun:
             keys = {spec.key for spec in vmaf}
             on_gpu = None
             if task.backend_id == "ffmpeg" and vmaf and options.resample_test is None:
-                on_gpu = vmaf_cuda.scores_on_gpu(
+                on_gpu = vmaf_gpu.scores_on_gpu(
                     "vmaf" in keys, "vmaf_neg" in keys, options.model, options.vmaf_on_gpu,
                     analysis_bit_depth(self.job.source_info, self.job.distorted_info), size=size,
                     compute_vmaf_v1="vmaf_v1" in keys, model_v1=options.model_v1)

@@ -255,7 +255,7 @@ class VmafOptions:
     # gpu.plan_hwaccel), and each falls back to software decoding on its own.
     gpu_decode: bool = True
     gpu_vendor: GpuVendor = GpuVendor.AUTO
-    # Calculate VMAF v0.6.1 and VMAF NEG on the GPU (vmaf_cuda, vmaf_vulkan),
+    # Calculate VMAF v0.6.1 and VMAF NEG on the GPU (vmaf_gpu, vmaf_vulkan),
     # and VMAF v1 with it (vmaf_v1_gpu), when a GPU can be used; else on the
     # CPU. Like gpu_decode, this changes only how scores are calculated: the
     # two agree to within a thousandth of a point per frame, so it is not
