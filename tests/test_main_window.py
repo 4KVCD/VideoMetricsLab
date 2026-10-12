@@ -809,7 +809,7 @@ def test_vmaf_compute_is_each_videos_choice_and_keeps_its_scores(qapp, monkeypat
     combo = win.vmaf_backend_combo
     assert [combo.itemText(i) for i in range(combo.count())] == ["GPU", "CPU"]
     assert combo.currentText() == "GPU" and combo.isEnabledTo(win.options_box)
-    assert "VMAF v1: its detail and motion features on the GPU" in combo.toolTip()
+    assert "VMAF v1: all four of its features on the GPU" in combo.toolTip()
 
     win._source_info = _fake_video_info("source.mp4")
     row = win._add_table_row(Path("a.mp4"))

@@ -1781,15 +1781,17 @@ class MainWindow(QMainWindow):
         performance_form.addRow(tr("GPU decode:"), gpu_row)
 
         # VMAF v0.6.1 and NEG: libvmaf has GPU code (CUDA) for their features,
-        # ported to Vulkan for other GPUs (vmaf_vulkan). VMAF v1: two of its
-        # four features on the GPU, with Vulkan (vmaf_v1_gpu).
+        # ported to Vulkan (vmaf_vulkan), which every GPU uses unless the GPU
+        # backend is CUDA. VMAF v1: all four of its features on the GPU, with
+        # Vulkan, where the engine supports the model's options (vmaf_v1_gpu).
         self.vmaf_backend_combo = QComboBox()
         self.vmaf_backend_combo.addItems(["GPU", "CPU"])
         self.vmaf_backend_combo.setToolTip(
             tr("With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU. VMAF v0.6.1 and NEG: with "
-            "CUDA on an NVIDIA GPU and with Vulkan on any other, or on every GPU when Settings > GPU metrics > GPU "
-            "backend is Vulkan. Both give the same scores. VMAF v1: its detail and motion features on the GPU "
-            "with Vulkan, its banding and colour features (CAMBI, SpEED) on the CPU, so it gains less speed. "
+            "Vulkan on every GPU, or with CUDA on an NVIDIA GPU when Settings > GPU metrics > GPU backend is "
+            "CUDA. Both give the same scores. VMAF v1: all four of its features on the GPU with "
+            "Vulkan; for a model whose options the GPU code does not support, its banding and colour features "
+            "(CAMBI, SpEED) on the CPU. "
             "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to "
             "within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If "
             "the GPU calculation fails, they are calculated on the CPU instead.")

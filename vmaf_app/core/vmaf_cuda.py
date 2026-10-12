@@ -1,14 +1,15 @@
 """VMAF and VMAF NEG on the GPU.
 
-On an NVIDIA GPU, the scores come from libvmaf's CUDA feature extractors
-(VIF, ADM and motion) in the bundled tools/libvmaf/libvmaf.dll. That library
-is built from libvmaf-fast (github.com/4KVCD/libvmaf-fast), a fork of libvmaf
-with the fixes to its CUDA code merged. scripts/fetch_libvmaf_fast.ps1
-installs a release of it, and scripts/build_libvmaf_fast_local.ps1 installs
-a build of its latest commit while the app is being developed. On any other
-GPU, or when Settings > GPU metrics > GPU backend is Vulkan, the scores come
-from the port of those extractors to Vulkan (vmaf_vulkan), which gives the
-same scores. What is said below about libvmaf holds for both.
+On every GPU, NVIDIA's included, the scores come from the port of libvmaf's
+CUDA feature extractors (VIF, ADM and motion) to Vulkan (vmaf_vulkan), which
+gives the same scores. When Settings > GPU metrics > GPU backend is CUDA, or
+Vulkan cannot run, an NVIDIA GPU uses those CUDA extractors themselves, in
+the bundled tools/libvmaf/libvmaf.dll. That library is built from
+libvmaf-fast (github.com/4KVCD/libvmaf-fast), a fork of libvmaf with the
+fixes to its CUDA code merged. scripts/fetch_libvmaf_fast.ps1 installs a
+release of it, and scripts/build_libvmaf_fast_local.ps1 installs a build of
+its latest commit while the app is being developed. What is said below about
+libvmaf holds for both.
 
 This module scores only VMAF and NEG. VMAF v1 on the GPU is vmaf_v1_gpu's.
 PSNR, SSIM and XPSNR have no GPU code, so they are scored on the CPU, by

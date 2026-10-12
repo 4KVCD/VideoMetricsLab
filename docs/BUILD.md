@@ -180,9 +180,10 @@ case anyone overrides that.
   its own: the same `vmaf_vulkan.dll` has a VMAF v1 mode, which follows
   libvmaf's CPU code for ADM3 and motion3 (`integer_adm.c`,
   `integer_motion.c`) and gives its values bit for bit on any GPU, NVIDIA's
-  included; CAMBI and SpEED are calculated by the CPU extractors of the
-  libvmaf above, on its thread pool, and the same libvmaf predicts the score
-  from the four. Check it with `python scripts/compare_vmaf_v1.py --matrix`.
+  included. CAMBI and SpEED are calculated on the GPU too, bit for bit as
+  libvmaf's CPU code, where the engine supports the model's options for them;
+  otherwise by the CPU extractors of the libvmaf above, on its thread pool.
+  The same libvmaf predicts the score from the four. Check it with `python scripts/compare_vmaf_v1.py --matrix`.
 - **Pictures without a CPU copy** (NVIDIA): `nvdec_frames.dll` and
   `vmaf_vulkan.dll` share GPU memory. The Vulkan library exports the buffers it
   takes each frame pair's luma planes from (`vv_export`, Vulkan's
