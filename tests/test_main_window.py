@@ -1468,3 +1468,55 @@ def test_the_window_works_in_another_language(qapp, tmp_path, monkeypatch):
         win.close()
     finally:
         i18n.set_language("en")
+
+
+def test_no_tab_is_squeezed_in_the_smallest_window_with_large_text(qapp):
+    """Issue #6: with large text, the window could be made smaller than a
+    tab needed, and Qt then squeezed its rows into each other. Every tab's
+    content now keeps the room it needs, scrolling where it must."""
+    from PySide6.QtWidgets import QScrollArea
+
+    usual = qapp.font()
+    large = qapp.font()
+    large.setPointSizeF(usual.pointSizeF() * 1.5)
+    qapp.setFont(large)
+    try:
+        win = MainWindow()
+        win.resize(win.minimumSize())
+        win.show()
+        for index in range(win.tabs.count()):
+            win.tabs.setCurrentIndex(index)
+            qapp.processEvents()
+            page = win.tabs.widget(index)
+            content = page.widget() if isinstance(page, QScrollArea) else page
+            needed, given = content.minimumSizeHint(), content.size()
+            assert given.width() >= needed.width() and given.height() >= needed.height(), win.tabs.tabText(index)
+        win.close()
+    finally:
+        qapp.setFont(usual)
+
+
+def test_a_control_given_the_focus_is_scrolled_into_view(qapp):
+    """Tab from the tab bar into a scrolled-down Settings tab shows the
+    field it lands on, not a page still scrolled to its bottom."""
+    from PySide6.QtTest import QTest
+
+    from vmaf_app.ui.main_window import TAB_SETTINGS
+
+    win = MainWindow()
+    win.resize(win.minimumSize())
+    win.show()
+    win.activateWindow()
+    win.tabs.setCurrentIndex(TAB_SETTINGS)
+    qapp.processEvents()
+    area = win.tabs.widget(TAB_SETTINGS)
+    area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
+    assert area.verticalScrollBar().maximum() > 0  # the page is taller than the window here
+    win.tabs.tabBar().setFocus()
+    QTest.keyClick(win.tabs.tabBar(), Qt.Key_Tab)
+    qapp.processEvents()
+    focused = qapp.focusWidget()
+    assert area.widget().isAncestorOf(focused)
+    top = focused.mapTo(area.viewport(), focused.rect().topLeft()).y()
+    assert top >= 0 and top + focused.height() <= area.viewport().height()
+    win.close()

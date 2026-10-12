@@ -11,13 +11,17 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
     QHeaderView,
     QLabel,
+    QScrollArea,
     QSizePolicy,
     QStyle,
     QStyleOptionButton,
     QTableWidget,
     QTabWidget,
+    QWidget,
 )
 
 _INDICATOR_MARGIN = 4
@@ -386,3 +390,42 @@ class QuietTabWidget(QTabWidget):
             self._laid_out_for = shape
         return super().event(event)
 
+
+class ScrollingPage(QScrollArea):
+    """A page in a scroll area, to be a tab of its own.
+
+    While the window is large enough, the page fills the tab exactly as it
+    would without the scroll area. When the window is smaller than the page
+    needs, which large text or a small screen makes likely, the tab scrolls.
+    Without it, the window's minimum size would have to grow to the page's,
+    beyond what a small screen has; set lower, Qt squeezes the page's rows
+    into each other and clips their text (issue #6).
+    """
+
+    def __init__(self, page: QWidget) -> None:
+        super().__init__()
+        self.setWidget(page)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        # Not a stop of its own when Tab moves through the controls.
+        self.setFocusPolicy(Qt.NoFocus)
+        # Transparent, so the tab's own pane shows behind the page as before.
+        # setWidget makes the page paint itself in the window colour: grey
+        # (#f3f3f3) on the white pane in Windows 11's light style.
+        page.setAutoFillBackground(False)
+        self.viewport().setAutoFillBackground(False)
+        QApplication.instance().focusChanged.connect(self._show_focus)
+
+    def _show_focus(self, _old, new) -> None:
+        """Scrolls a control of the page that takes the focus into view.
+
+        Qt does this itself only when Tab moves between the page's own
+        controls, not when the focus comes in from the tab bar. The whole
+        control is shown, with no margin around it, so a click on a control
+        near an edge does not make the page jump. Don't use
+        ensureWidgetVisible: for a text field it shows only the text cursor.
+        """
+        page = self.widget()
+        if new is not None and page is not None and page.isAncestorOf(new):
+            centre = new.mapTo(page, new.rect().center())
+            self.ensureVisible(centre.x(), centre.y(), new.width() // 2, new.height() // 2)

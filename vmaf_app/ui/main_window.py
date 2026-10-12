@@ -28,7 +28,7 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, Qt, QTime, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, QSize, Qt, QTime, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -130,7 +130,7 @@ from vmaf_app.ui.probe_worker import ProbeWorker
 from vmaf_app.ui.row_state import RowState
 from vmaf_app.ui.run_line import decoder_text, metric_line
 from vmaf_app.ui.series_colors import VideoColors
-from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable, QuietTabWidget
+from vmaf_app.ui.widgets import CheckableHeaderView, ElidedLabel, FillColumnTable, QuietTabWidget, ScrollingPage
 from vmaf_app.ui.worker import VmafWorker
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
@@ -598,7 +598,6 @@ class MainWindow(QMainWindow):
             self.resize(self._settings.window_width, self._settings.window_height)
         else:
             self.resize(1280, 800)
-        self.setMinimumSize(1050, 650)
 
         self._source_info: VideoInfo | None = None
         self._rows: list[RowData] = []
@@ -704,6 +703,10 @@ class MainWindow(QMainWindow):
         self._syncing_table = False  # ditto for the table's own metric tick boxes
 
         self._build_ui()
+        # At least 1050x650, and never smaller than the window's contents
+        # need. The tabs that scroll need little; Video Compare, which does
+        # not, needs more than 1050x650 with text twice the usual size.
+        self.setMinimumSize(QSize(1050, 650).expandedTo(self.minimumSizeHint()))
         self._theme_refresh_due = False  # see changeEvent
         self._theme_applied: tuple | None = None  # the theme _apply_theme_colours last coloured for
         # Light or dark changed (Settings, or Windows when following it).
@@ -881,6 +884,10 @@ class MainWindow(QMainWindow):
         # made it, its series survive switching away and back, and there is
         # no second taskbar entry. Video Compare and the separate Bitrate
         # Viewer sit between Metric Graphs and Settings.
+        # Each tab but Video Compare scrolls when the window is too small
+        # for it (see ScrollingPage). Video Compare draws its video into a
+        # native window, which does not belong in a scroll area; the
+        # window's minimum size is made large enough for it instead.
         self.tabs = QuietTabWidget()
         root.addWidget(self.tabs, stretch=1)
 
@@ -896,13 +903,13 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._build_options_panel())
         splitter.addWidget(self._build_run_panel())
         splitter.setSizes([380, 300, 120])
-        self.tabs.addTab(videos_page, tr("Videos"))
+        self.tabs.addTab(ScrollingPage(videos_page), tr("Videos"))
 
         video_colors = VideoColors()
         self.graph_panel = GraphPanel(colors=video_colors)
         self.graph_panel.set_preferred_metric(self._settings.graph_metric)
         self.graph_panel.metric_changed.connect(self._on_graph_metric_changed)
-        self.tabs.addTab(self.graph_panel, tr("Metric Graphs"))
+        self.tabs.addTab(ScrollingPage(self.graph_panel), tr("Metric Graphs"))
         # Opening the tab fills it; there is no button to press.
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -916,9 +923,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.frame_compare_panel, tr("Video Compare"))
 
         self.bitrate_panel = BitratePanel(colors=video_colors)
-        self.tabs.addTab(self.bitrate_panel, tr("Bitrate Viewer"))
+        self.tabs.addTab(ScrollingPage(self.bitrate_panel), tr("Bitrate Viewer"))
 
-        self.tabs.addTab(self._build_settings_panel(), tr("Settings"))
+        self.tabs.addTab(ScrollingPage(self._build_settings_panel()), tr("Settings"))
 
     # ------------------------------------------------------------------ settings tab
     def _options_from_settings(self) -> VmafOptions:
