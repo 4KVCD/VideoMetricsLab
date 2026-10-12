@@ -39,7 +39,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from pathlib import Path
@@ -2017,11 +2017,74 @@ def run_vship_task(
     not started: it is reported as failed with the reason, before any GPU
     work.
     """
-    refused = {}
-    if any((device.backend, device.vendor, spec.key) in GPU_PIXEL_LIMITS for spec in specs):
-        size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)[0]
+    task = _VshipTask(
+        source, distorted, request, specs, device, source_crop, distorted_crop,
+        on_progress=on_progress, on_status=on_status, cancel_event=cancel_event, process_handle=process_handle,
+        on_pass_done=on_pass_done, together=together, on_pass=on_pass,
+    )
+    return task.run()
+
+
+class _VshipTask:
+    """Scores one task's Vship metrics, in one pass or several (see
+    run_vship_task, which makes one)."""
+
+    def __init__(
+        self, source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
+        specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
+        source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+        on_progress: Callable[[int, int, float], None] | None,
+        on_status: Callable[[str], None] | None,
+        cancel_event: threading.Event | None,
+        process_handle: ProcessHandle | None,
+        on_pass_done: Callable[[PerceptualTaskOutput], None] | None,
+        together: bool,
+        on_pass: Callable[[int, int, tuple[str, ...]], None] | None,
+    ) -> None:
+        """Keeps the task's arguments; run() scores it."""
+        self.source, self.distorted, self.request, self.specs, self.device = source, distorted, request, specs, device
+        self.source_crop, self.distorted_crop = source_crop, distorted_crop
+        self.on_progress, self.on_status, self.cancel_event = on_progress, on_status, cancel_event
+        self.process_handle, self.on_pass_done, self.together, self.on_pass = (
+            process_handle, on_pass_done, together, on_pass)
+        # What the passes made so far.
+        self.metrics = MetricResultSet()
+        self.failures: dict[str, str] = {}
+        self.errors: list[BaseException] = []
+        self.frames = 0
+        # How far each pass run so far got, in its own progress units. The
+        # task's progress is one count across every pass, with a retry's
+        # after the passes before it. Otherwise the task would go from 100%
+        # back to 0% when a metric that failed in the shared pass is
+        # calculated again, and its time left would be that retry's alone.
+        self.reached: list[int] = []
+
+    def run(self) -> PerceptualTaskOutput:
+        """Scores the task (see run_vship_task)."""
+        refused = self._refused_for_size()
+        if refused:
+            return self._run_without(refused)
+        self._wait_for_gpu()
+        try:
+            if len(self.specs) <= 1:
+                if self.on_pass is not None:
+                    self.on_pass(1, 1, tuple(spec.key for spec in self.specs))
+                return self._run_pass(self.specs, self.on_progress)
+            return self._run_passes()
+        finally:
+            _gpu_pass.release()
+
+    def _refused_for_size(self) -> dict[str, str]:
+        """The metrics this GPU does not calculate at the size compared at
+        (GPU_PIXEL_LIMITS), each with the reason."""
+        device, specs = self.device, self.specs
+        if not any((device.backend, device.vendor, spec.key) in GPU_PIXEL_LIMITS for spec in specs):
+            return {}
+        size = _scaled_sizes(self.source, self.distorted, self.request.recipe, self.source_crop,
+                             self.distorted_crop)[0]
 
         def computed(spec: MetricRequestSpec) -> tuple[int, int]:
+            """The size `spec` is calculated at."""
             # CVVDP set to fill the display is calculated at the display's
             # size, so a 1080p comparison on the default 4K display would
             # otherwise get through at the size that hangs Intel's GPU.
@@ -2029,19 +2092,22 @@ def run_vship_task(
                 return size
             return cvvdp_computed_size(size, CvvdpSettings.from_spec_parameters(spec.parameters))
 
-        refused = {spec.key: reason for spec in specs
-                   if (reason := size_refusal(device, spec.key, size, computed(spec)))}
-    if refused:
+        return {spec.key: reason for spec in specs if (reason := size_refusal(device, spec.key, size, computed(spec)))}
+
+    def _run_without(self, refused: dict[str, str]) -> PerceptualTaskOutput:
+        """Scores the metrics not `refused`, which are reported as failed
+        with their reasons."""
         for key, reason in refused.items():
             _log.warning("%s not started: %s", metric_definition(key).label, reason)
-        specs = tuple(spec for spec in specs if spec.key not in refused)
+        specs = tuple(spec for spec in self.specs if spec.key not in refused)
         if not specs:
             raise VshipPassesFailedError(next(iter(refused.values())), refused)
         try:
             output = run_vship_task(
-                source, distorted, request, specs, device, source_crop, distorted_crop,
-                on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
-                process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass)
+                self.source, self.distorted, self.request, specs, self.device, self.source_crop,
+                self.distorted_crop, on_progress=self.on_progress, on_status=self.on_status,
+                cancel_event=self.cancel_event, process_handle=self.process_handle,
+                on_pass_done=self.on_pass_done, together=self.together, on_pass=self.on_pass)
         except (PerceptualCancelled, ComparisonCutShortError):
             raise
         except Exception as error:
@@ -2050,103 +2116,102 @@ def run_vship_task(
             reasons = getattr(error, "failures", None) or {spec.key: str(error) for spec in specs}
             raise VshipPassesFailedError(str(error), {**reasons, **refused}) from error
         return replace(output, failures={**output.failures, **refused})
-    if not _gpu_pass.acquire(blocking=False):
-        if on_status:
-            on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
+
+    def _wait_for_gpu(self) -> None:
+        """Waits until no other Vship pass is running, and takes the GPU."""
+        if _gpu_pass.acquire(blocking=False):
+            return
+        if self.on_status:
+            self.on_status(Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT))
         while not _gpu_pass.acquire(timeout=0.1):
-            if cancel_event is not None and cancel_event.is_set():
+            if self.cancel_event is not None and self.cancel_event.is_set():
                 raise PerceptualCancelled("Cancelled by user")
-    try:
-        if len(specs) <= 1:
-            if on_pass is not None:
-                on_pass(1, 1, tuple(spec.key for spec in specs))
-            return _run_vship_pass(
-                source, distorted, request, specs, device, source_crop, distorted_crop,
-                on_progress=on_progress, on_status=on_status,
-                cancel_event=cancel_event, process_handle=process_handle,
-            )
-        metrics = MetricResultSet()
-        failures: dict[str, str] = {}
-        errors: list[BaseException] = []
-        frames = 0
-        # How far each pass run so far got, in its own progress units. The
-        # task's progress is one count across every pass, with a retry's
-        # after the passes before it. Otherwise the task would go from 100%
-        # back to 0% when a metric that failed in the shared pass is
-        # calculated again, and its time left would be that retry's alone.
-        reached: list[int] = []
 
-        def pass_progress(slot: int, done: int, left: int) -> Callable[[int, int, float], None]:
-            """Reports a pass's progress as the task's: after `done` units of
-            the passes before it, with `left` passes of its length to go,
-            this one included (they score the same frames)."""
-            def progress(current: int, total: int, fps: float) -> None:
-                reached[slot] = current
-                on_progress(done + current, done + left * total, fps)
-            return progress
+    def _run_pass(self, specs: tuple[MetricRequestSpec, ...],
+                  progress: Callable[[int, int, float], None] | None) -> PerceptualTaskOutput:
+        """One Vship pass scoring `specs`."""
+        return _run_vship_pass(
+            self.source, self.distorted, self.request, specs, self.device, self.source_crop, self.distorted_crop,
+            on_progress=progress, on_status=self.on_status,
+            cancel_event=self.cancel_event, process_handle=self.process_handle,
+        )
 
-        def run_passes(passes: list[tuple[MetricRequestSpec, ...]], first: int, count: int) -> None:
-            """Runs `passes` as passes first + 1 onwards of `count`."""
-            nonlocal frames
-            for offset, group in enumerate(passes):
-                number = first + offset
-                labels = " + ".join(metric_definition(spec.key).label for spec in group)
-                if on_status and count > 1:
-                    on_status(Status(f"GPU metric {number + 1}/{count}: {labels}", kind=GPU_PASS_STATUS))
-                if on_pass is not None:
-                    on_pass(number + 1, count, tuple(spec.key for spec in group))
-                reached.append(0)
-                progress = (pass_progress(len(reached) - 1, sum(reached), count - number)
-                            if on_progress is not None else None)
-                try:
-                    output = _run_vship_pass(
-                        source, distorted, request, group, device, source_crop, distorted_crop,
-                        on_progress=progress, on_status=on_status,
-                        cancel_event=cancel_event, process_handle=process_handle,
-                    )
-                except (PerceptualCancelled, ComparisonCutShortError):
-                    # A video that ends early is cut short for every metric.
-                    # It is the file's fault, the same in each pass and on the CPU.
-                    raise
-                except Exception as error:
-                    if cancel_event is not None and cancel_event.is_set():
-                        raise PerceptualCancelled("Cancelled by user") from error
-                    _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, count, labels, error)
-                    errors.append(error)
-                    failures.update(dict.fromkeys((spec.key for spec in group), str(error)))
-                    continue
-                for key in output.metrics:
-                    metrics.add(output.metrics.get(key))
-                failures.update(output.failures)
-                frames = max(frames, output.compared_frame_count)
-                if on_pass_done is not None and output.metrics:
-                    on_pass_done(output)
-
-        passes = vship_passes(specs, together)
-        run_passes(passes, 0, len(passes))
-        shared = [spec for group in passes if len(group) > 1 for spec in group if spec.key in failures]
+    def _run_passes(self) -> PerceptualTaskOutput:
+        """Scores the metrics in the passes vship_passes groups them into,
+        then each metric that failed in a shared pass in a pass of its own."""
+        passes = vship_passes(self.specs, self.together)
+        self._run_groups(passes, 0, len(passes))
+        shared = [spec for group in passes if len(group) > 1 for spec in group if spec.key in self.failures]
         if shared:
-            labels = " and ".join(metric_definition(spec.key).label for spec in shared)
-            _log.warning("%s failed in the GPU pass shared with the other metrics; calculating %s in a "
-                         "pass of %s own", labels, *(("it", "its") if len(shared) == 1 else ("them", "their")))
-            if on_status:
-                on_status(f"{labels} failed in the shared GPU pass; calculating "
-                          f"{'it' if len(shared) == 1 else 'each'} in a pass of its own…")
-            for spec in shared:
-                del failures[spec.key]
-            failed_before = list(errors)
-            errors.clear()
-            # Numbered after the passes before them ("GPU metric 2/2" after a
-            # shared pass), so that the window counts the shared pass as done.
-            run_passes([(spec,) for spec in shared], len(passes), len(passes) + len(shared))
-            errors.extend(failed_before)  # the retries' own errors first
-        if not metrics:
-            if not errors:
+            self._retry_alone(shared, len(passes))
+        if not self.metrics:
+            if not self.errors:
                 raise VshipUnavailableError("Vship produced no scores.")
-            raise VshipPassesFailedError(str(errors[0]), failures) from errors[0]
-        return PerceptualTaskOutput(metrics, source_crop, distorted_crop, frames, failures)
-    finally:
-        _gpu_pass.release()
+            raise VshipPassesFailedError(str(self.errors[0]), self.failures) from self.errors[0]
+        return PerceptualTaskOutput(self.metrics, self.source_crop, self.distorted_crop, self.frames, self.failures)
+
+    def _retry_alone(self, shared: list[MetricRequestSpec], passes_before: int) -> None:
+        """Scores each metric that failed in a shared pass in a pass of its
+        own, numbered after the `passes_before` passes."""
+        labels = " and ".join(metric_definition(spec.key).label for spec in shared)
+        _log.warning("%s failed in the GPU pass shared with the other metrics; calculating %s in a "
+                     "pass of %s own", labels, *(("it", "its") if len(shared) == 1 else ("them", "their")))
+        if self.on_status:
+            self.on_status(f"{labels} failed in the shared GPU pass; calculating "
+                           f"{'it' if len(shared) == 1 else 'each'} in a pass of its own…")
+        for spec in shared:
+            del self.failures[spec.key]
+        failed_before = list(self.errors)
+        self.errors.clear()
+        # Numbered after the passes before them ("GPU metric 2/2" after a
+        # shared pass), so that the window counts the shared pass as done.
+        self._run_groups([(spec,) for spec in shared], passes_before, passes_before + len(shared))
+        self.errors.extend(failed_before)  # the retries' own errors first
+
+    def _run_groups(self, passes: list[tuple[MetricRequestSpec, ...]], first: int, count: int) -> None:
+        """Runs `passes` as passes first + 1 onwards of `count`, keeping
+        each one's scores, or its error as each of its metrics' failure."""
+        for offset, group in enumerate(passes):
+            number = first + offset
+            labels = " + ".join(metric_definition(spec.key).label for spec in group)
+            if self.on_status and count > 1:
+                self.on_status(Status(f"GPU metric {number + 1}/{count}: {labels}", kind=GPU_PASS_STATUS))
+            if self.on_pass is not None:
+                self.on_pass(number + 1, count, tuple(spec.key for spec in group))
+            self.reached.append(0)
+            progress = (self._pass_progress(len(self.reached) - 1, sum(self.reached), count - number)
+                        if self.on_progress is not None else None)
+            try:
+                output = self._run_pass(group, progress)
+            except (PerceptualCancelled, ComparisonCutShortError):
+                # A video that ends early is cut short for every metric.
+                # It is the file's fault, the same in each pass and on the CPU.
+                raise
+            except Exception as error:
+                if self.cancel_event is not None and self.cancel_event.is_set():
+                    raise PerceptualCancelled("Cancelled by user") from error
+                _log.error("GPU metric %d/%d (%s) failed: %s", number + 1, count, labels, error)
+                self.errors.append(error)
+                self.failures.update(dict.fromkeys((spec.key for spec in group), str(error)))
+                continue
+            for key in output.metrics:
+                self.metrics.add(output.metrics.get(key))
+            self.failures.update(output.failures)
+            self.frames = max(self.frames, output.compared_frame_count)
+            if self.on_pass_done is not None and output.metrics:
+                self.on_pass_done(output)
+
+    def _pass_progress(self, slot: int, done: int, left: int) -> Callable[[int, int, float], None]:
+        """Reports a pass's progress as the task's: after `done` units of the
+        passes before it, with `left` passes of its length to go, this one
+        included (they score the same frames)."""
+        on_progress = self.on_progress
+        assert on_progress is not None  # only asked for when there is one
+
+        def progress(current: int, total: int, fps: float) -> None:
+            self.reached[slot] = current
+            on_progress(done + current, done + left * total, fps)
+        return progress
 
 
 def _run_vship_pass(
@@ -2238,296 +2303,407 @@ def _score_vship_pass_with(
     """_score_vship_pass's single attempt: `native` decodes in this process
     where it can, and `every_source_frame` takes every source frame when
     pairing by timestamp."""
-    if not specs or any(spec.backend_id != BACKEND_ID or spec.key not in _METRICS for spec in specs):
-        raise ValueError("Vship task requires supported perceptual metric specs")
-    if request.recipe.resample_test is not None:
-        raise VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.")
-    _validate_pair(source, distorted, request.recipe)
-    if cancel_event is not None and cancel_event.is_set():
-        raise PerceptualCancelled("Cancelled by user")
+    vship_pass = _VshipPass(
+        source, distorted, request, specs, device, source_crop, distorted_crop, native=native,
+        on_progress=on_progress, on_status=on_status, cancel_event=cancel_event, process_handle=process_handle,
+        every_source_frame=every_source_frame,
+    )
+    return vship_pass.run()
 
-    lib = _library(device)
 
-    # Decoding follows the row's GPU decode setting, per video and per codec:
-    # NVDEC for HEVC, AV1 and H.264 on NVIDIA, and software where the GPU
-    # has no decoder (VVC) or where FFmpeg's hardware decoding does not give
-    # the video's own pictures (gpu.pick_decode: 4:2:2, 4:4:4, 12-bit, an
-    # odd size, 10-bit H.264 on Intel and AMD). Otherwise hardware decoding
-    # is bit-exact, so it changes only the speed.
-    vendor = request.execution.gpu_vendor if request.execution.gpu_decode else GpuVendor.NONE
+@dataclass(frozen=True)
+class _VideoPlan:
+    """How one video of a Vship pass is decoded and handed to Vship."""
 
-    def decoder_of(info: VideoInfo) -> str | None:
-        """The -hwaccel FFmpeg decodes the video with, or None for software."""
-        return pick_decode(vendor, info.codec_name, info.pix_fmt, info.width, info.height)
+    info: VideoInfo
+    crop: CropBox | None
+    side: str  # "source" or "distorted", as HwAccelPlan names them
+    label: str  # "reference" or "test video", for messages
+    hwaccel: str | None  # how FFmpeg would decode it; None for software
+    passthrough: tuple[_ImageFormat, str] | None  # see _passthrough_format
+    image_format: _ImageFormat
+    size: tuple[int, int]  # the size it is compared at
+    color: _Colorspace
+    frame_bytes: int
+    plane_sizes: tuple[int, int, int]
+    strides: _I64_3
 
-    src_hwaccel, dist_hwaccel = decoder_of(source), decoder_of(distorted)
-    src_passthrough = _passthrough_format(source, src_hwaccel)
-    dist_passthrough = _passthrough_format(distorted, dist_hwaccel)
-    src_format = src_passthrough[0] if src_passthrough else _image_format(source, device.version)
-    dist_format = dist_passthrough[0] if dist_passthrough else _image_format(distorted, device.version)
-    src_size, dist_size = _scaled_sizes(source, distorted, request.recipe, source_crop, distorted_crop)
-    src_color = _vship_colorspace(source, src_format, *src_size)
-    dist_color = _vship_colorspace(distorted, dist_format, *dist_size)
-    src_layout = src_format.frame_layout(*src_size)
-    dist_layout = dist_format.frame_layout(*dist_size)
-    src_frame_bytes, src_plane_sizes, src_strides, _ = src_layout
-    dist_frame_bytes, dist_plane_sizes, dist_strides, _ = dist_layout
 
-    step = specs[0].coverage.step if specs[0].coverage is not None else 1
-    if any((spec.coverage.step if spec.coverage is not None else 1) != step for spec in specs):
-        raise VshipUnavailableError("Perceptual metrics in one task must use the same frame coverage.")
-    cvvdp_spec = next((spec for spec in specs if spec.key == "cvvdp"), None)
-    frame_specs = tuple(spec for spec in specs if spec.key != "cvvdp")
-    if cvvdp_spec is not None and step != 1:
-        raise VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.")
-    # Where each video is decoded, reported as FFmpeg's runs report it, so
-    # that the window's run line can show "Decoder: Source: GPU, test video:
-    # CPU" for a video with only GPU metrics too.
-    decode = {"source": src_hwaccel, "distorted": dist_hwaccel}
-    decode_lock = threading.Lock()
+class _VshipPass:
+    """One pass of Vship's metrics over a pair of videos: both videos are
+    decoded once, their frames are paired, and each pair is handed to every
+    metric's lanes (threads of their own) and then given back to its
+    decoder.
 
-    def decoded_in_software(side: str) -> Callable[[], None]:
-        """The callback that reports `side` falling back to software decoding."""
-        def report() -> None:
-            with decode_lock:  # the two inputs' threads can both fall back
-                decode[side] = None
-                if on_status:
-                    on_status(Status.decoding(
-                        f"GPU decode failed for the {'test video' if side == 'distorted' else side}, "
-                        "decoding it in software", HwAccelPlan(**decode)))
-        return report
+    A pair's two decoder slots are counted: a slot goes back to its stream
+    once the pairing and every metric are done with it. When pairing by
+    timestamp, one source frame can be in more than one pair.
+    """
 
-    streams: list[_FrameStream | _NativeFrameStream] = []
-    lanes: list[_MetricLane | _CvvdpLane] = []
-    cvvdp_lane: _CvvdpLane | None = None
-    started = time.perf_counter()
-    scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in frame_specs}
-    abort = threading.Event()
-    pending: dict[int, list[int]] = {}  # frame index -> [metrics left, source slot, test slot]
-    #: For each stream (source, test): slot -> how many hold it. A slot goes
-    #: back to its stream once the pairing and every pair it is in are done
-    #: with it (when pairing by timestamp, a source frame can be in more than
-    #: one pair).
-    held: tuple[dict[int, int], dict[int, int]] = ({}, {})
-    pending_lock = threading.Lock()
-    # Pairing by frame number, both videos' frames are numbered at the test
-    # video's frame rate (frame_sync) and both are cut at the duration limit,
-    # so they keep the same frames. Pairing by timestamp, only the test video
-    # is cut.
-    by_time = by_timestamp()
-    numbering_rate = frame_rate(distorted)
-    duration_limit = f"{request.recipe.duration_limit:.6f}" if request.recipe.duration_limit > 0 else None
-    expected_frames = min(source.estimated_frame_count, distorted.estimated_frame_count)
-    if by_time and request.recipe.duration_limit > 0:
-        expected_frames = min(expected_frames, max(1, math.ceil(request.recipe.duration_limit * source.fps)))
-    elif duration_limit is not None:
-        expected_frames = min(expected_frames, max(1, frames_within(duration_limit, numbering_rate)))
-    expected_samples = max(1, math.ceil(expected_frames / step))
-    total_units = expected_samples * step
+    def __init__(
+        self, source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
+        specs: tuple[MetricRequestSpec, ...], device: VshipDevice,
+        source_crop: CropBox | None, distorted_crop: CropBox | None, *,
+        native: bool,
+        on_progress: Callable[[int, int, float], None] | None,
+        on_status: Callable[[str], None] | None,
+        cancel_event: threading.Event | None,
+        process_handle: ProcessHandle | None,
+        every_source_frame: bool,
+    ) -> None:
+        """Checks the request and plans the pass; run() makes it. Raises
+        VshipUnavailableError for a request Vship cannot score."""
+        if not specs or any(spec.backend_id != BACKEND_ID or spec.key not in _METRICS for spec in specs):
+            raise ValueError("Vship task requires supported perceptual metric specs")
+        if request.recipe.resample_test is not None:
+            raise VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.")
+        _validate_pair(source, distorted, request.recipe)
+        if cancel_event is not None and cancel_event.is_set():
+            raise PerceptualCancelled("Cancelled by user")
+        self.source, self.distorted, self.request, self.specs, self.device = source, distorted, request, specs, device
+        self.native, self.process_handle = native, process_handle
+        self.on_progress, self.on_status, self.cancel_event = on_progress, on_status, cancel_event
+        self.lib = _library(device)
+        self.videos = self._plan_videos(source_crop, distorted_crop)
 
-    def commands(info: VideoInfo, crop: CropBox | None, target: tuple[int, int],
-                 hwaccel: str | None, pixel_format: str, every: int, cut: bool) -> list[list[str]]:
+        self.step = specs[0].coverage.step if specs[0].coverage is not None else 1
+        if any((spec.coverage.step if spec.coverage is not None else 1) != self.step for spec in specs):
+            raise VshipUnavailableError("Perceptual metrics in one task must use the same frame coverage.")
+        self.cvvdp_spec = next((spec for spec in specs if spec.key == "cvvdp"), None)
+        self.frame_specs = tuple(spec for spec in specs if spec.key != "cvvdp")
+        if self.cvvdp_spec is not None and self.step != 1:
+            raise VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.")
+
+        # Where each video is decoded, reported as FFmpeg's runs report it, so
+        # that the window's run line can show "Decoder: Source: GPU, test video:
+        # CPU" for a video with only GPU metrics too.
+        self.decode = {video.side: video.hwaccel for video in self.videos}
+        self.decode_lock = threading.Lock()
+
+        # Pairing by frame number, both videos' frames are numbered at the test
+        # video's frame rate (frame_sync) and both are cut at the duration limit,
+        # so they keep the same frames. Pairing by timestamp, only the test video
+        # is cut.
+        self.by_time = by_timestamp()
+        self.numbering_rate = frame_rate(distorted)
+        limit = request.recipe.duration_limit
+        self.duration_limit = f"{limit:.6f}" if limit > 0 else None
+        expected = min(source.estimated_frame_count, distorted.estimated_frame_count)
+        if self.by_time and limit > 0:
+            expected = min(expected, max(1, math.ceil(limit * source.fps)))
+        elif self.duration_limit is not None:
+            expected = min(expected, max(1, frames_within(self.duration_limit, self.numbering_rate)))
+        self.expected_frames = expected
+        self.total_units = max(1, math.ceil(expected / self.step)) * self.step
+
+        # Each test frame gives one pair, as in libvmaf: every step-th frame, up
+        # to the duration limit. When pairing by timestamp, the source gives the
+        # frames among which frame_pairs finds each test frame's pair, by time.
+        # So it is never cut at the limit, and it is subsampled as the test video
+        # is while the two line up (_FramesApartError). A source without a frame
+        # rate gives every frame.
+        self.every_source_frame = self.by_time and (every_source_frame or source.fps <= 0)
+        self.check_apart = self.by_time and self.step > 1 and not self.every_source_frame
+
+        self.streams: list[_FrameStream | _NativeFrameStream] = []
+        self.lanes: list[_MetricLane | _CvvdpLane] = []
+        self.lanes_by_metric: dict[str, list[_MetricLane]] = {}
+        self.cvvdp_lane: _CvvdpLane | None = None
+        self.scores: dict[str, _ScoreArray] = {spec.key: _ScoreArray() for spec in self.frame_specs}
+        self.abort = threading.Event()
+        self.slots_lock = threading.Lock()
+        #: Each pair being scored: frame index -> [metrics left, source slot, test slot].
+        self.pending: dict[int, list[int]] = {}
+        #: For each stream (source, test): slot -> how many hold it.
+        self.held: tuple[dict[int, int], dict[int, int]] = ({}, {})
+
+    def _plan_videos(self, source_crop: CropBox | None,
+                     distorted_crop: CropBox | None) -> tuple[_VideoPlan, _VideoPlan]:
+        """How each video is decoded, sized and laid out for Vship.
+
+        Decoding follows the row's GPU decode setting, per video and per codec:
+        NVDEC for HEVC, AV1 and H.264 on NVIDIA, and software where the GPU
+        has no decoder (VVC) or where FFmpeg's hardware decoding does not give
+        the video's own pictures (gpu.pick_decode: 4:2:2, 4:4:4, 12-bit, an
+        odd size, 10-bit H.264 on Intel and AMD). Otherwise hardware decoding
+        is bit-exact, so it changes only the speed."""
+        execution, recipe = self.request.execution, self.request.recipe
+        vendor = execution.gpu_vendor if execution.gpu_decode else GpuVendor.NONE
+        sizes = _scaled_sizes(self.source, self.distorted, recipe, source_crop, distorted_crop)
+        plans = []
+        for info, crop, size, side, label in ((self.source, source_crop, sizes[0], "source", "reference"),
+                                             (self.distorted, distorted_crop, sizes[1], "distorted", "test video")):
+            hwaccel = pick_decode(vendor, info.codec_name, info.pix_fmt, info.width, info.height)
+            passthrough = _passthrough_format(info, hwaccel)
+            image_format = passthrough[0] if passthrough else _image_format(info, self.device.version)
+            frame_bytes, plane_sizes, strides, _ = image_format.frame_layout(*size)
+            plans.append(_VideoPlan(info, crop, side, label, hwaccel, passthrough, image_format, size,
+                                    _vship_colorspace(info, image_format, *size), frame_bytes, plane_sizes, strides))
+        return plans[0], plans[1]
+
+    def _labels(self) -> str:
+        """The pass's metrics, as the log names them."""
+        return ", ".join(metric_definition(spec.key).label for spec in self.specs)
+
+    # ------------------------------------------------------------------ the pass
+
+    def run(self) -> PerceptualTaskOutput:
+        """Makes the pass and returns its scores. A metric whose lanes fail
+        is reported in the output's failures while the others keep their
+        scores; the pass fails only when every metric does."""
+        started = time.perf_counter()
+        try:
+            # One at a time, so that if the test video's buffers cannot be
+            # allocated, the source's stream is already in `streams` and the
+            # finally block below frees it.
+            for video in self.videos:
+                self.streams.append(self._open_stream(video))
+            if self.on_status:
+                self.on_status(Status.decoding(f"Vship GPU ({self.device.name}): calculating {self._labels()}",
+                                               HwAccelPlan(**self.decode)))
+            for stream in self.streams:
+                stream.start()
+            self._start_lanes()
+            frames, rate = self._feed_pairs()
+            self._stop_lanes()
+            return self._finish(frames, rate, started)
+        except (PerceptualCancelled, ComparisonCutShortError, gpu_frames.GpuDecodeFailedError, _FramesApartError):
+            # A video cut short is the file's fault, not the GPU's: the CPU would
+            # stop as short. A failed GPU decode is made again through FFmpeg, and
+            # a subsampled pass whose frames do not line up is made again with
+            # every source frame (_score_vship_pass).
+            raise
+        except VshipUnavailableError as error:
+            _log.error("Vship pass (%s) failed: %s", self._labels(), error, exc_info=error)
+            raise
+        except Exception as error:
+            _log.error("Vship pass (%s) failed", self._labels(), exc_info=error)
+            raise VshipUnavailableError(f"Vship GPU calculation failed: {error}") from error
+        finally:
+            # Lanes first: they read the pinned frames the streams own, so the
+            # streams may only free that memory once no lane can touch it.
+            self.abort.set()
+            self._stop_lanes()
+            for stream in self.streams:
+                stream.close()
+
+    def _open_stream(self, video: _VideoPlan) -> _FrameStream | _NativeFrameStream:
+        """One video's frame stream: decoded in this process where it can
+        be, by the same GPU decoder FFmpeg would use, else by FFmpeg."""
+        cut = video.side == "distorted" or not self.by_time
+        every = 1 if video.side == "source" and self.every_source_frame else self.step
+        backend = _decoded_here(video.hwaccel, self.device) if self.native else None
+        if backend is not None:
+            decoder = _native_decoder(video.info, video.crop, video.size, video.image_format, video.frame_bytes,
+                                      self.device.gpu_id, self.process_handle, video.label, backend,
+                                      self.request.recipe.scale_algorithm)
+            if decoder is not None:
+                if self.by_time:
+                    limit = self.duration_limit if cut else None
+                else:
+                    limit = frames_within(self.duration_limit, self.numbering_rate)
+                try:
+                    return _NativeFrameStream(self.lib, video.frame_bytes, decoder, every, limit, video.label,
+                                              self.device.gpu_id, self.by_time)
+                except BaseException:
+                    decoder.close()
+                    raise
+        split = None
+        if video.passthrough is not None:
+            dtype = np.uint16 if video.image_format.sample != _VSHIP_ENUMS[8] else np.uint8
+            split = (video.plane_sizes[0], video.plane_sizes[1], dtype)
+        pixel_format = video.passthrough[1] if video.passthrough else video.image_format.pixel_format
+        return _FrameStream(self.lib, video.frame_bytes, self._ffmpeg_commands(video, pixel_format, every, cut),
+                            self.process_handle, video.label, split, self._decoded_in_software(video.side),
+                            self.device.gpu_id, self.by_time)
+
+    def _ffmpeg_commands(self, video: _VideoPlan, pixel_format: str, every: int, cut: bool) -> list[list[str]]:
         """The FFmpeg commands to try for one video: with hardware decoding
         first if it has any, then in software."""
         # The software retry sends the same layout as the hardware attempt,
         # because Vship's handlers are set up for one layout per video.
         attempts = []
-        for accel in ([hwaccel, None] if hwaccel else [None]):
+        for accel in ([video.hwaccel, None] if video.hwaccel else [None]):
             filter_chain = _filter_chain(
-                info, crop, target, pixel_format, every,
-                request.recipe.scale_algorithm, accel, None if by_time else numbering_rate,
+                video.info, video.crop, video.size, pixel_format, every,
+                self.request.recipe.scale_algorithm, accel, None if self.by_time else self.numbering_rate,
             )
             command = [
                 ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-nostdin",
                 *hwaccel_args(accel),
-                "-i", str(info.path.resolve()), "-map", f"0:{VIDEO_STREAM}", "-an", "-sn", "-dn",
+                "-i", str(video.info.path.resolve()), "-map", f"0:{VIDEO_STREAM}", "-an", "-sn", "-dn",
                 "-vf", filter_chain,
             ]
             if cut:
-                command += duration_args(duration_limit)
+                command += duration_args(self.duration_limit)
             command += ["-fps_mode", "passthrough", *_piped_as(pixel_format)]
             attempts.append(command)
         return attempts
 
-    # Each test frame gives one pair, as in libvmaf: every step-th frame, up
-    # to the duration limit. When pairing by timestamp, the source gives the
-    # frames among which frame_pairs finds each test frame's pair, by time.
-    # So it is never cut at the limit, and it is subsampled as the test video
-    # is while the two line up (_FramesApartError). A source without a frame
-    # rate gives every frame.
-    every_source_frame = by_time and (every_source_frame or source.fps <= 0)
-    check_apart = by_time and step > 1 and not every_source_frame
-    try:
-        def stream(info, crop, size, hwaccel, image_format, passthrough, frame_bytes, plane_sizes, label, side):
-            """Makes one video's frame stream: decoded in this process where
-            it can be, else by FFmpeg."""
-            cut = side == "distorted" or not by_time
-            every = 1 if side == "source" and every_source_frame else step
-            # Decoded here, by the same GPU decoder FFmpeg would use.
-            backend = _decoded_here(hwaccel, device) if native else None
-            if backend is not None:
-                decoder = _native_decoder(info, crop, size, image_format, frame_bytes, device.gpu_id,
-                                          process_handle, label, backend, request.recipe.scale_algorithm)
-                if decoder is not None:
-                    if by_time:
-                        limit = duration_limit if cut else None
-                    else:
-                        limit = frames_within(duration_limit, numbering_rate)
-                    try:
-                        return _NativeFrameStream(lib, frame_bytes, decoder, every, limit, label, device.gpu_id,
-                                                  by_time)
-                    except BaseException:
-                        decoder.close()
-                        raise
-            split = None
-            if passthrough is not None:
-                dtype = np.uint16 if image_format.sample != _VSHIP_ENUMS[8] else np.uint8
-                split = (plane_sizes[0], plane_sizes[1], dtype)
-            pixel_format = passthrough[1] if passthrough else image_format.pixel_format
-            return _FrameStream(lib, frame_bytes, commands(info, crop, size, hwaccel, pixel_format, every, cut),
-                                process_handle, label, split, decoded_in_software(side), device.gpu_id, by_time)
+    def _decoded_in_software(self, side: str) -> Callable[[], None]:
+        """The callback that reports `side` falling back to software decoding."""
+        def report() -> None:
+            with self.decode_lock:  # the two inputs' threads can both fall back
+                self.decode[side] = None
+                if self.on_status:
+                    self.on_status(Status.decoding(
+                        f"GPU decode failed for the {'test video' if side == 'distorted' else side}, "
+                        "decoding it in software", HwAccelPlan(**self.decode)))
+        return report
 
-        # Appended one at a time, so that if the test video's buffers cannot
-        # be allocated, the source's stream is already in `streams` and the
-        # finally block below frees it.
-        streams.append(stream(source, source_crop, src_size, src_hwaccel, src_format, src_passthrough,
-                              src_frame_bytes, src_plane_sizes, "reference", "source"))
-        streams.append(stream(distorted, distorted_crop, dist_size, dist_hwaccel, dist_format,
-                              dist_passthrough, dist_frame_bytes, dist_plane_sizes, "test video", "distorted"))
-        if on_status:
-            labels = ", ".join(metric_definition(spec.key).label for spec in specs)
-            on_status(Status.decoding(f"Vship GPU ({device.name}): calculating {labels}", HwAccelPlan(**decode)))
-        for stream in streams:
-            stream.start()
-        source_stream, distorted_stream = streams
-        source_planes = [buffer.planes(src_format, src_plane_sizes) for buffer in source_stream.buffers]
-        distorted_planes = [buffer.planes(dist_format, dist_plane_sizes) for buffer in distorted_stream.buffers]
-
-        def drop(side: int, slot: int) -> None:
-            """One holder of stream `side`'s `slot` is done with it."""
-            with pending_lock:
-                holders = held[side][slot] - 1
-                if holders:
-                    held[side][slot] = holders
-                    return
-                del held[side][slot]
-            streams[side].release(slot)
-
-        def finished(index: int) -> None:
-            """One metric is done with pair `index`; the last one gives its
-            slots back."""
-            with pending_lock:
-                entry = pending[index]
-                entry[0] -= 1
-                if entry[0]:
-                    return
-                del pending[index]
-            drop(0, entry[1])
-            drop(1, entry[2])
-
-        def frames_of(side: int) -> Callable[[], int | None]:
-            """Returns frame_pairs' source of stream `side`'s frames: each call
-            gives the next frame's slot, held for the pairing, or None at the
-            stream's end."""
-            stream = streams[side]
-
-            def next_frame() -> int | None:
-                slot = stream.next(cancel_event)
-                if slot == _EOF:
-                    return None
-                with pending_lock:
-                    held[side][slot] = held[side].get(slot, 0) + 1
-                return slot
-            return next_frame
-
-        def puller(side: int, first: int) -> Callable[[], tuple[int, int] | None]:
-            """Returns frame_sync_by_time.frame_pairs' source of stream
-            `side`'s frames, starting with `first` (already taken, for its
-            time base)."""
-            stream, waiting = streams[side], [first]
-
-            def pull() -> tuple[int, int] | None:
-                slot = waiting.pop() if waiting else stream.next(cancel_event)
-                if slot == _EOF:
-                    return None
-                with pending_lock:
-                    held[side][slot] = held[side].get(slot, 0) + 1
-                return slot, stream.pts[slot]
-            return pull
-
-        by_metric: dict[str, list[_MetricLane]] = {}
-        if cvvdp_spec is not None:
-            cvvdp_lane = _CvvdpLane(
-                device, src_color, dist_color, CvvdpSettings.from_spec_parameters(cvvdp_spec.parameters),
-                source.fps, source_planes, distorted_planes, src_strides, dist_strides, finished, abort,
+    def _start_lanes(self) -> None:
+        """Starts CVVDP's lane, if it is asked for, and each frame metric's
+        lanes, on the planes of the streams' buffers."""
+        source, distorted = self.videos
+        source_stream, distorted_stream = self.streams
+        source_planes = [buffer.planes(source.image_format, source.plane_sizes) for buffer in source_stream.buffers]
+        distorted_planes = [buffer.planes(distorted.image_format, distorted.plane_sizes)
+                            for buffer in distorted_stream.buffers]
+        if self.cvvdp_spec is not None:
+            self.cvvdp_lane = _CvvdpLane(
+                self.device, source.color, distorted.color,
+                CvvdpSettings.from_spec_parameters(self.cvvdp_spec.parameters), self.source.fps,
+                source_planes, distorted_planes, source.strides, distorted.strides, self._pair_done, self.abort,
             )
-            lanes.append(cvvdp_lane)
-        for spec in frame_specs:
-            by_metric[spec.key] = [
-                _MetricLane(device, spec.key, src_color, dist_color, source_planes, distorted_planes,
-                            src_strides, dist_strides, scores[spec.key], finished, abort)
+            self.lanes.append(self.cvvdp_lane)
+        for spec in self.frame_specs:
+            self.lanes_by_metric[spec.key] = [
+                _MetricLane(self.device, spec.key, source.color, distorted.color, source_planes, distorted_planes,
+                            source.strides, distorted.strides, self.scores[spec.key], self._pair_done, self.abort)
                 for _ in range(_LANES_PER_METRIC)
             ]
-            lanes.extend(by_metric[spec.key])
-        for lane in lanes:
+            self.lanes.extend(self.lanes_by_metric[spec.key])
+        for lane in self.lanes:
             lane.start()
 
-        def lane_errors() -> dict[str, BaseException]:
-            """Returns each failed metric's first error. One failed lane fails
-            its metric, because the other lane's frames alone would leave
-            holes."""
-            errors = {key: next((lane.error for lane in metric_lanes if lane.error is not None), None)
-                      for key, metric_lanes in by_metric.items()}
-            if cvvdp_lane is not None:
-                errors["cvvdp"] = cvvdp_lane.error
-            return {key: error for key, error in errors.items() if error is not None}
+    def _stop_lanes(self) -> None:
+        """Stops every lane and waits for it."""
+        for lane in self.lanes:
+            lane.stop()
+        for lane in self.lanes:
+            lane.join()
 
-        def timed_pairs() -> Iterator[tuple[int, int]]:
-            """Yields the (test slot, source slot) pairs when pairing by
-            timestamp: each test frame with the source frame that libvmaf
-            pairs it with by timestamp (frame_sync_by_time). The comparison is
-            the frames both videos have (shortest=1), so it ends with the test
-            video, or at its first frame after the source's end."""
-            first_source = source_stream.next(cancel_event)
-            first_test = distorted_stream.next(cancel_event)
-            if _EOF in (first_source, first_test):
-                for stream, slot in ((source_stream, first_source), (distorted_stream, first_test)):
-                    if slot != _EOF:
-                        stream.release(slot)
+    def _lane_errors(self) -> dict[str, BaseException]:
+        """Each failed metric's first error. One failed lane fails its metric,
+        because the other lane's frames alone would leave holes."""
+        errors = {key: next((lane.error for lane in lanes if lane.error is not None), None)
+                  for key, lanes in self.lanes_by_metric.items()}
+        if self.cvvdp_lane is not None:
+            errors["cvvdp"] = self.cvvdp_lane.error
+        return {key: error for key, error in errors.items() if error is not None}
+
+    # ------------------------------------------------------------------ decoder slots
+
+    def _hold(self, side: int, slot: int) -> None:
+        """One more holder of stream `side`'s `slot`."""
+        with self.slots_lock:
+            self.held[side][slot] = self.held[side].get(slot, 0) + 1
+
+    def _drop(self, side: int, slot: int) -> None:
+        """One holder of stream `side`'s `slot` is done with it; the last one
+        gives it back to the stream."""
+        with self.slots_lock:
+            holders = self.held[side][slot] - 1
+            if holders:
+                self.held[side][slot] = holders
                 return
-            test_base, source_base = distorted_stream.time_base, source_stream.time_base
-            source_start = source_stream.pts[first_source]
-            pairs = frame_sync_by_time.frame_pairs(puller(1, first_test), puller(0, first_source), test_base,
-                                                   source_base, lambda slot: drop(1, slot), lambda slot: drop(0, slot))
-            try:
-                for distorted_slot, source_slot, when in pairs:
-                    if source_slot is None:
-                        raise VshipUnavailableError("The source has no frame at the test video's first.")
-                    if check_apart:
-                        test_time = when * test_base
-                        apart = test_time - (source_stream.pts[source_slot] - source_start) * source_base
-                        if abs(apart) * Fraction(source.fps) > _APART_FRAMES:
-                            raise _FramesApartError(
-                                f"the test frame at {float(test_time):.3f} s is {float(apart) * 1000:.1f} ms from "
-                                f"the nearest of the source frames sampled with it (one in {step})")
-                    yield distorted_slot, source_slot
-            finally:
-                pairs.close()
+            del self.held[side][slot]
+        self.streams[side].release(slot)
 
+    def _pair_done(self, index: int) -> None:
+        """One metric is done with pair `index`; the last one drops its slots."""
+        with self.slots_lock:
+            entry = self.pending[index]
+            entry[0] -= 1
+            if entry[0]:
+                return
+            del self.pending[index]
+        self._drop(0, entry[1])
+        self._drop(1, entry[2])
+
+    def _frames_of(self, side: int) -> Callable[[], int | None]:
+        """frame_pairs' source of stream `side`'s frames: each call gives the
+        next frame's slot, held for the pairing, or None at the stream's end."""
+        stream = self.streams[side]
+
+        def next_frame() -> int | None:
+            slot = stream.next(self.cancel_event)
+            if slot == _EOF:
+                return None
+            self._hold(side, slot)
+            return slot
+        return next_frame
+
+    def _timed_frames_of(self, side: int, first: int) -> Callable[[], tuple[int, int] | None]:
+        """frame_sync_by_time.frame_pairs' source of stream `side`'s frames,
+        starting with `first` (already taken, for its time base): each call
+        gives the next frame's slot and timestamp, or None at the end."""
+        stream, waiting = self.streams[side], [first]
+
+        def pull() -> tuple[int, int] | None:
+            slot = waiting.pop() if waiting else stream.next(self.cancel_event)
+            if slot == _EOF:
+                return None
+            self._hold(side, slot)
+            return slot, stream.pts[slot]
+        return pull
+
+    # ------------------------------------------------------------------ pairing
+
+    def _pairs(self) -> Generator[tuple[int, int]]:
+        """The (test slot, source slot) pairs: each test frame with the
+        source frame of the same number, as every metric pairs them
+        (frame_sync), until either video ends; or by timestamp. The longer
+        video's reader is stopped when the streams close."""
+        if self.by_time:
+            return self._timed_pairs()
+        return frame_pairs(self._frames_of(1), self._frames_of(0), lambda slot: self._drop(1, slot),
+                           lambda slot: self._drop(0, slot))
+
+    def _timed_pairs(self) -> Generator[tuple[int, int]]:
+        """Yields the (test slot, source slot) pairs when pairing by
+        timestamp: each test frame with the source frame that libvmaf pairs
+        it with by timestamp (frame_sync_by_time). The comparison is the
+        frames both videos have (shortest=1), so it ends with the test video,
+        or at its first frame after the source's end."""
+        source_stream, distorted_stream = self.streams
+        first_source = source_stream.next(self.cancel_event)
+        first_test = distorted_stream.next(self.cancel_event)
+        if _EOF in (first_source, first_test):
+            for stream, slot in ((source_stream, first_source), (distorted_stream, first_test)):
+                if slot != _EOF:
+                    stream.release(slot)
+            return
+        test_base, source_base = distorted_stream.time_base, source_stream.time_base
+        source_start = source_stream.pts[first_source]
+        pairs = frame_sync_by_time.frame_pairs(
+            self._timed_frames_of(1, first_test), self._timed_frames_of(0, first_source), test_base, source_base,
+            lambda slot: self._drop(1, slot), lambda slot: self._drop(0, slot))
+        try:
+            for distorted_slot, source_slot, when in pairs:
+                if source_slot is None:
+                    raise VshipUnavailableError("The source has no frame at the test video's first.")
+                if self.check_apart:
+                    test_time = when * test_base
+                    apart = test_time - (source_stream.pts[source_slot] - source_start) * source_base
+                    if abs(apart) * Fraction(self.source.fps) > _APART_FRAMES:
+                        raise _FramesApartError(
+                            f"the test frame at {float(test_time):.3f} s is {float(apart) * 1000:.1f} ms from "
+                            f"the nearest of the source frames sampled with it (one in {self.step})")
+                yield distorted_slot, source_slot
+        finally:
+            pairs.close()
+
+    def _feed_pairs(self) -> tuple[int, _PassRate]:
+        """Hands every pair to each metric's lanes; returns how many pairs,
+        and the pass's rate."""
         frame = 0
-        rate = _PassRate(step)
-        # Each test frame is paired with the source frame of the same number,
-        # as every metric pairs them (frame_sync), until either video ends;
-        # or by timestamp (timed_pairs). The longer video's reader is stopped
-        # when the streams close.
-        if by_time:
-            pairs = timed_pairs()
-        else:
-            pairs = frame_pairs(frames_of(1), frames_of(0), lambda slot: drop(1, slot), lambda slot: drop(0, slot))
+        rate = _PassRate(self.step)
+        pairs = self._pairs()
         try:
             for distorted_slot, source_slot in pairs:
-                errors = lane_errors()
-                if len(errors) == len(specs):
+                errors = self._lane_errors()
+                if len(errors) == len(self.specs):
                     # Nothing left to score: stop now rather than decode
                     # the rest of the video (a film took ~30 minutes to
                     # report a CVVDP handler that had failed to start).
@@ -2536,37 +2712,59 @@ def _score_vship_pass_with(
                 # so the ring never fills with slots that nobody will give
                 # back, and the check above ends the pass once no metric is
                 # left.
-                with pending_lock:
-                    pending[frame] = [len(specs), source_slot, distorted_slot]
-                    held[0][source_slot] += 1
-                    held[1][distorted_slot] += 1
-                for spec in frame_specs:
-                    scores[spec.key].reserve(frame)
-                for spec in frame_specs:
-                    by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put((frame, source_slot, distorted_slot))
-                if cvvdp_lane is not None:
-                    cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
+                with self.slots_lock:
+                    self.pending[frame] = [len(self.specs), source_slot, distorted_slot]
+                    self.held[0][source_slot] += 1
+                    self.held[1][distorted_slot] += 1
+                for spec in self.frame_specs:
+                    self.scores[spec.key].reserve(frame)
+                for spec in self.frame_specs:
+                    self.lanes_by_metric[spec.key][frame % _LANES_PER_METRIC].jobs.put(
+                        (frame, source_slot, distorted_slot))
+                if self.cvvdp_lane is not None:
+                    self.cvvdp_lane.jobs.put((frame, source_slot, distorted_slot))
                 frame += 1
-                if on_progress:
-                    on_progress(min(frame * step, total_units), total_units, rate.frames_per_second(frame))
+                if self.on_progress:
+                    self.on_progress(min(frame * self.step, self.total_units), self.total_units,
+                                     rate.frames_per_second(frame))
         finally:
             pairs.close()  # hands back the frames the pairing holds
-        for lane in lanes:
-            lane.stop()
-        for lane in lanes:
-            lane.join()
-        if frame == 0:
+        return frame, rate
+
+    # ------------------------------------------------------------------ results
+
+    def _finish(self, frames: int, rate: _PassRate, started: float) -> PerceptualTaskOutput:
+        """Checks the pass and returns its scores."""
+        step = self.step
+        if frames == 0:
             raise VshipUnavailableError("FFmpeg produced no frame pairs for Vship.")
-        if (short := short_comparison(expected_frames, frame * step, source.fps, step)) is not None:
+        if (short := short_comparison(self.expected_frames, frames * step, self.source.fps, step)) is not None:
             raise ComparisonCutShortError(short)
         # A metric whose handler failed (out of GPU memory on a smaller card,
         # say) is reported on its own, and the others keep their scores.
-        errors = lane_errors()
-        if len(errors) == len(specs):
+        errors = self._lane_errors()
+        if len(errors) == len(self.specs):
             raise next(iter(errors.values()))
         metric_failures = {key: str(error) for key, error in errors.items()}
+        results = self._results(frames, metric_failures)
 
-        frame_numbers = np.arange(frame, dtype=np.int32) * step
+        elapsed = max(time.perf_counter() - started, 1e-6)
+        _log.info("Vship pass (%s) on %s: %d frame pairs in %.1f s, %.1f pairs/s",
+                  self._labels(), self.device.name, frames, elapsed, frames / elapsed)
+        for key, error in errors.items():
+            _log.error("Vship %s failed in its pass: %s", metric_definition(key).label, error, exc_info=error)
+        if self.on_progress:
+            # A pass too short to time from its first frame is timed over its
+            # whole length instead.
+            self.on_progress(frames * step, frames * step,
+                             rate.frames_per_second(frames) or frames * step / elapsed)
+        return PerceptualTaskOutput(results, self.videos[0].crop, self.videos[1].crop, frames * step, metric_failures)
+
+    def _results(self, frames: int, metric_failures: dict[str, str]) -> MetricResultSet:
+        """Each metric's scores that did not fail: per frame, and CVVDP's per
+        second of video."""
+        device, source = self.device, self.source
+        frame_numbers = np.arange(frames, dtype=np.int32) * self.step
         times = frame_numbers.astype(np.float64) / max(source.fps, 1.0)
         results = MetricResultSet()
         parameters = {
@@ -2574,18 +2772,18 @@ def _score_vship_pass_with(
             "gpu_name": device.name,
             "input": "ffmpeg frames (hardware-decoded NV12/P010 split into planes); "
                      "native range/transfer and primaries",
-            "coverage_step": step,
+            "coverage_step": self.step,
             "butteraugli_norm": "3-norm",
             # How the videos' colour tags were read (_vship_colorspace). The
             # cache recalculates GPU scores from v1.2, which have none.
             "color_tags": VSHIP_COLOR_TAGS,
         }
-        for spec in frame_specs:
+        for spec in self.frame_specs:
             if spec.key in metric_failures:
                 continue
             results.add(FrameMetricResult(
                 spec.key, frame_numbers, times,
-                scores[spec.key].values(frame),
+                self.scores[spec.key].values(frames),
                 MetricProvenance(
                     implementation=f"Vship/{spec.key}",
                     implementation_version=f"Vship {device.version}",
@@ -2594,20 +2792,21 @@ def _score_vship_pass_with(
                     parameters=parameters,
                 ),
             ))
-        if cvvdp_lane is not None and cvvdp_lane.error is None:
-            windows = cvvdp_lane.windows
+        if self.cvvdp_lane is not None and self.cvvdp_lane.error is None and self.cvvdp_spec is not None:
+            windows = self.cvvdp_lane.windows
             first = np.array([start for start, _count, _jod in windows], dtype=np.int32)
+            cvvdp_parameters = dict(self.cvvdp_spec.parameters)
             results.add(SequenceMetricResult(
                 "cvvdp", pool_cvvdp_windows(windows),
                 MetricProvenance(
                     implementation="Vship/cvvdp",
                     implementation_version=f"Vship {device.version}",
                     compute_backend="gpu",
-                    implementation_compatibility_id=cvvdp_spec.implementation_compatibility_id,
+                    implementation_compatibility_id=self.cvvdp_spec.implementation_compatibility_id,
                     parameters={
                         "gpu_backend": device.backend, "gpu_name": device.name,
-                        "display": dict(cvvdp_spec.parameters)["display"],
-                        "resize_to_display": dict(cvvdp_spec.parameters)["resize_to_display"],
+                        "display": cvvdp_parameters["display"],
+                        "resize_to_display": cvvdp_parameters["resize_to_display"],
                         "timeline": "JOD of each second of video",
                         "color_tags": VSHIP_COLOR_TAGS,
                     },
@@ -2615,41 +2814,7 @@ def _score_vship_pass_with(
                 frame=first, time=first.astype(np.float64) / max(source.fps, 1.0),
                 values=[jod for _start, _count, jod in windows],
             ))
-        elapsed = max(time.perf_counter() - started, 1e-6)
-        _log.info("Vship pass (%s) on %s: %d frame pairs in %.1f s, %.1f pairs/s",
-                  ", ".join(metric_definition(spec.key).label for spec in specs), device.name, frame, elapsed,
-                  frame / elapsed)
-        for key, error in errors.items():
-            _log.error("Vship %s failed in its pass: %s", metric_definition(key).label, error, exc_info=error)
-        if on_progress:
-            # A pass too short to time from its first frame is timed over its
-            # whole length instead.
-            on_progress(frame * step, frame * step, rate.frames_per_second(frame) or frame * step / elapsed)
-        return PerceptualTaskOutput(results, source_crop, distorted_crop, frame * step, metric_failures)
-    except (PerceptualCancelled, ComparisonCutShortError, gpu_frames.GpuDecodeFailedError, _FramesApartError):
-        # A video cut short is the file's fault, not the GPU's: the CPU would
-        # stop as short. A failed GPU decode is made again through FFmpeg, and
-        # a subsampled pass whose frames do not line up is made again with
-        # every source frame (_score_vship_pass).
-        raise
-    except VshipUnavailableError as error:
-        _log.error("Vship pass (%s) failed: %s", ", ".join(metric_definition(spec.key).label for spec in specs),
-                   error, exc_info=error)
-        raise
-    except Exception as error:
-        _log.error("Vship pass (%s) failed", ", ".join(metric_definition(spec.key).label for spec in specs),
-                   exc_info=error)
-        raise VshipUnavailableError(f"Vship GPU calculation failed: {error}") from error
-    finally:
-        # Lanes first: they read the pinned frames the streams own, so the
-        # streams may only free that memory once no lane can touch it.
-        abort.set()
-        for lane in lanes:
-            lane.stop()
-        for lane in lanes:
-            lane.join()
-        for stream in streams:
-            stream.close()
+        return results
 
 
 def apply_vship_cpu_fallback(
@@ -2683,27 +2848,119 @@ def apply_vship_cpu_fallback(
     (reported in the output's `failures`), and the other metrics are scored
     as they would have been without it.
     """
-    from vmaf_app.core import perceptual_cpu
-    from vmaf_app.core.perceptual_cpu import _resolve_crops
+    routing = _MetricRouting(
+        source, distorted, request, specs, on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
+        process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass, on_cpu=on_cpu,
+        concurrent_cpu_tasks=concurrent_cpu_tasks,
+    )
+    return routing.run()
 
-    def run_perceptual_task(*args, **kwargs) -> PerceptualTaskOutput:
-        """perceptual_cpu.run_perceptual_task with this task's CPU share."""
-        return perceptual_cpu.run_perceptual_task(*args, concurrent_tasks=concurrent_cpu_tasks, **kwargs)
 
-    def backend(spec: MetricRequestSpec) -> str:
+class _MetricRouting:
+    """Calculates a task's SSIMULACRA2, Butteraugli and CVVDP each where it
+    is set to run, and moves a metric from the GPU to the CPU when the GPU
+    cannot calculate it (see apply_vship_cpu_fallback, which makes one)."""
+
+    def __init__(
+        self, source: VideoInfo, distorted: VideoInfo, request: AnalysisRequest,
+        specs: tuple[MetricRequestSpec, ...], *,
+        on_progress: Callable[[int, int, float], None] | None,
+        on_status: Callable[[str], None] | None,
+        cancel_event: threading.Event | None,
+        process_handle: ProcessHandle | None,
+        on_pass_done: Callable[[PerceptualTaskOutput], None] | None,
+        together: bool,
+        on_pass: Callable[[int, int, tuple[str, ...]], None] | None,
+        on_cpu: Callable[[tuple[str, ...]], None] | None,
+        concurrent_cpu_tasks: int,
+    ) -> None:
+        """Sorts the metrics by where they are set to run."""
+        self.source, self.distorted, self.request, self.specs = source, distorted, request, specs
+        self.on_progress, self.on_status, self.cancel_event = on_progress, on_status, cancel_event
+        self.process_handle, self.on_pass_done, self.together = process_handle, on_pass_done, together
+        self.on_pass, self.on_cpu, self.concurrent_cpu_tasks = on_pass, on_cpu, concurrent_cpu_tasks
+        self.cpu_specs = tuple(spec for spec in specs if self._backend(spec) == "cpu")
+        self.gpu_specs = tuple(spec for spec in specs if self._backend(spec) == "gpu")
+        if len(self.cpu_specs) + len(self.gpu_specs) != len(specs):
+            raise ValueError("perceptual metric backend must be either GPU or CPU")
+        self.gpu_only = tuple(spec for spec in self.gpu_specs if spec.key in GPU_ONLY_METRICS)
+        # What may be retried on the CPU if the GPU cannot be used.
+        self.retryable = tuple(spec for spec in specs if spec.key not in GPU_ONLY_METRICS)
+
+    def _backend(self, spec: MetricRequestSpec) -> str:
         """Where a metric is set to run: "gpu" or "cpu"."""
-        return "gpu" if spec.key in GPU_ONLY_METRICS else request.execution.perceptual_backend(spec.key)
+        return "gpu" if spec.key in GPU_ONLY_METRICS else self.request.execution.perceptual_backend(spec.key)
 
-    cpu_specs = tuple(spec for spec in specs if backend(spec) == "cpu")
-    gpu_specs = tuple(spec for spec in specs if backend(spec) == "gpu")
-    if len(cpu_specs) + len(gpu_specs) != len(specs):
-        raise ValueError("perceptual metric backend must be either GPU or CPU")
-    gpu_only = tuple(spec for spec in gpu_specs if spec.key in GPU_ONLY_METRICS)
-    # What may be retried on the CPU if the GPU cannot be used.
-    retryable = tuple(spec for spec in specs if spec.key not in GPU_ONLY_METRICS)
+    def run(self) -> PerceptualTaskOutput:
+        """Calculates the metrics (see apply_vship_cpu_fallback)."""
+        # An explicit CPU selection must not probe Vship or touch a compute GPU.
+        if not self.gpu_specs:
+            return self._on_cpu(self.cpu_specs)
 
-    def gpu_only_failed(reason: str, error: BaseException | None = None, *,
-                        no_gpu: bool = True, reasons: dict[str, str] | None = None) -> dict[str, str]:
+        forget_failed_vship_probe()
+        device, reason = detect_vship_device()
+        if device is None:
+            return self._without_gpu(reason)
+
+        self._move_wrongly_scored(device)
+        if not self.gpu_specs:
+            return self._on_cpu(self.cpu_specs)
+
+        from vmaf_app.core.perceptual_cpu import _resolve_crops
+
+        crops = _resolve_crops(
+            self.source, self.distorted, self.request.recipe, self.cancel_event, self.process_handle,
+            self.on_status,
+        )
+        try:
+            gpu_output = run_vship_task(
+                self.source, self.distorted, self.request, self.gpu_specs, device, *crops,
+                on_progress=self.on_progress, on_status=self.on_status, cancel_event=self.cancel_event,
+                process_handle=self.process_handle, on_pass_done=self.on_pass_done, together=self.together,
+                on_pass=self.on_pass,
+            )
+        except (PerceptualCancelled, ComparisonCutShortError):
+            # Don't retry a video cut short (one that ends early) on the CPU: it
+            # would stop as short, after hours instead of the GPU's minutes.
+            raise
+        except Exception as error:
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise PerceptualCancelled("Cancelled by user") from error
+            return self._after_gpu_failure(error, crops)
+        return self._after_gpu(gpu_output, crops)
+
+    # ------------------------------------------------------------------ the CPU
+
+    def _run_on_cpu(self, specs: tuple[MetricRequestSpec, ...],
+                    crops: tuple[CropBox | None, CropBox | None] | None = None) -> PerceptualTaskOutput:
+        """perceptual_cpu.run_perceptual_task for `specs`, with this task's
+        CPU share, and the black bars already found if there are `crops`."""
+        from vmaf_app.core import perceptual_cpu
+
+        extra = {} if crops is None else {"resolved_crops": crops}
+        return perceptual_cpu.run_perceptual_task(
+            self.source, self.distorted, self.request, specs,
+            on_progress=self.on_progress, on_status=self.on_status,
+            cancel_event=self.cancel_event, process_handle=self.process_handle,
+            concurrent_tasks=self.concurrent_cpu_tasks, **extra,
+        )
+
+    def _announce_cpu(self, handed: tuple[MetricRequestSpec, ...]) -> None:
+        """Reports the metrics the CPU is about to calculate (on_cpu)."""
+        if self.on_cpu is not None and handed:
+            self.on_cpu(tuple(spec.key for spec in handed))
+
+    def _on_cpu(self, specs: tuple[MetricRequestSpec, ...], failures: dict[str, str] | None = None,
+                crops: tuple[CropBox | None, CropBox | None] | None = None) -> PerceptualTaskOutput:
+        """Calculates `specs` on the CPU, with `failures` added to the output."""
+        self._announce_cpu(specs)
+        output = self._run_on_cpu(specs, crops)
+        return replace(output, failures={**output.failures, **failures}) if failures else output
+
+    # ------------------------------------------------------------------ when the GPU cannot
+
+    def _gpu_only_failed(self, reason: str, error: BaseException | None = None, *,
+                         no_gpu: bool = True, reasons: dict[str, str] | None = None) -> dict[str, str]:
         """Returns the failures of the GPU-only metrics, or raises them if
         nothing else was asked for. `no_gpu` means no usable GPU was found.
         Otherwise the GPU pass itself failed, possibly for a reason that has
@@ -2716,80 +2973,44 @@ def apply_vship_cpu_fallback(
             return (f"{label} needs a GPU that Vship can use, and could not use one: {own}"
                     if no_gpu else f"{label} could not be calculated: {own}")
 
-        messages = {spec.key: message(spec) for spec in gpu_only}
-        if not retryable:
+        messages = {spec.key: message(spec) for spec in self.gpu_only}
+        if not self.retryable:
             raise PerceptualRunError("\n".join(messages.values())) from error
         return messages
 
-    def with_failures(output: PerceptualTaskOutput, failures: dict[str, str]) -> PerceptualTaskOutput:
-        """`output` with `failures` added."""
-        return replace(output, failures={**output.failures, **failures}) if failures else output
+    def _without_gpu(self, reason: str) -> PerceptualTaskOutput:
+        """Calculates on the CPU what can be, when no usable GPU was found."""
+        failures = self._gpu_only_failed(reason) if self.gpu_only else {}
+        if self.on_status:
+            self.on_status(f"Vship GPU unavailable ({reason}); using CPU reference metrics…")
+        return self._on_cpu(self.retryable, failures)
 
-    def to_cpu(handed: tuple[MetricRequestSpec, ...]) -> None:
-        """Reports the metrics the CPU is about to calculate (on_cpu)."""
-        if on_cpu is not None and handed:
-            on_cpu(tuple(spec.key for spec in handed))
-
-    # An explicit CPU selection must not probe Vship or touch a compute GPU.
-    if not gpu_specs:
-        to_cpu(cpu_specs)
-        return run_perceptual_task(
-            source, distorted, request, cpu_specs,
-            on_progress=on_progress, on_status=on_status,
-            cancel_event=cancel_event, process_handle=process_handle,
-        )
-
-    forget_failed_vship_probe()
-    device, reason = detect_vship_device()
-    if device is None:
-        failures = gpu_only_failed(reason) if gpu_only else {}
-        if on_status:
-            on_status(f"Vship GPU unavailable ({reason}); using CPU reference metrics…")
-        to_cpu(retryable)
-        return with_failures(run_perceptual_task(
-            source, distorted, request, retryable,
-            on_progress=on_progress, on_status=on_status,
-            cancel_event=cancel_event, process_handle=process_handle,
-        ), failures)
-
-    # A metric this build scores wrongly goes to the CPU, planned like a CPU
-    # choice. As on a PC with no GPU for it, the Videos tab asks before a
-    # long CPU run (MainWindow._confirm_long_cpu_perceptual).
-    wrong = tuple(spec for spec in gpu_specs if not scores_correctly(device, spec.key))
-    if wrong:
+    def _move_wrongly_scored(self, device: VshipDevice) -> None:
+        """Moves to the CPU each metric this build of Vship scores wrongly on
+        `device`, planned like a CPU choice. As on a PC with no GPU for it,
+        the Videos tab asks before a long CPU run
+        (MainWindow._confirm_long_cpu_perceptual)."""
+        wrong = tuple(spec for spec in self.gpu_specs if not scores_correctly(device, spec.key))
+        if not wrong:
+            return
         _log.info("%s on the CPU: Vship's %s build scores it wrongly on %s",
                   " and ".join(metric_definition(spec.key).label for spec in wrong), backend_label(device.backend),
                   device.name)
-        gpu_specs = tuple(spec for spec in gpu_specs if spec not in wrong)
-        cpu_specs = cpu_specs + wrong
-        if not gpu_specs:
-            to_cpu(cpu_specs)
-            return run_perceptual_task(
-                source, distorted, request, cpu_specs,
-                on_progress=on_progress, on_status=on_status,
-                cancel_event=cancel_event, process_handle=process_handle,
-            )
+        self.gpu_specs = tuple(spec for spec in self.gpu_specs if spec not in wrong)
+        self.cpu_specs = self.cpu_specs + wrong
 
-    crops = _resolve_crops(
-        source, distorted, request.recipe, cancel_event, process_handle, on_status,
-    )
-    try:
-        gpu_output = run_vship_task(
-            source, distorted, request, gpu_specs, device, *crops,
-            on_progress=on_progress, on_status=on_status, cancel_event=cancel_event,
-            process_handle=process_handle, on_pass_done=on_pass_done, together=together, on_pass=on_pass,
-        )
-    except (PerceptualCancelled, ComparisonCutShortError):
-        # Don't retry a video cut short (one that ends early) on the CPU: it
-        # would stop as short, after hours instead of the GPU's minutes.
-        raise
-    except Exception as error:
-        if cancel_event is not None and cancel_event.is_set():
-            raise PerceptualCancelled("Cancelled by user") from error
-        failures = (gpu_only_failed(str(error), error, no_gpu=False,
-                                    reasons=getattr(error, "failures", None)) if gpu_only else {})
-        gpu_retry = tuple(spec for spec in gpu_specs if spec.key not in GPU_ONLY_METRICS)
-        if gpu_retry and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
+    def _too_long_for_cpu(self) -> bool:
+        """Whether the comparison is too long to move to the CPU unasked."""
+        return compared_seconds(self.source, self.distorted, self.request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS
+
+    def _after_gpu_failure(self, error: Exception,
+                           crops: tuple[CropBox | None, CropBox | None]) -> PerceptualTaskOutput:
+        """Calculates every metric that can be on the CPU after the GPU task
+        failed, unless the video is too long to do that unasked."""
+        failures = (self._gpu_only_failed(str(error), error, no_gpu=False,
+                                          reasons=getattr(error, "failures", None)) if self.gpu_only else {})
+        gpu_retry = tuple(spec for spec in self.gpu_specs if spec.key not in GPU_ONLY_METRICS)
+        if gpu_retry and self._too_long_for_cpu():
             # Nobody agreed to a CPU run of this length: the Videos tab asks
             # before one, but a GPU failure during a run cannot. Falling back
             # without asking would mean days of CPU work and terabytes of
@@ -2804,88 +3025,92 @@ def apply_vship_cpu_fallback(
                 f"Choose CPU for {labels} to calculate it on the CPU anyway."
                 + "".join(f"\n{message}" for message in dict.fromkeys(failures.values()))
             ) from error
-        if on_status:
-            on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
-        to_cpu(retryable)
+        if self.on_status:
+            self.on_status(f"Vship GPU compute failed ({error}); using CPU reference metrics…")
         # After a GPU failure, all metrics run together on the CPU, so that
         # the frames are extracted only once and the result stays whole.
-        return with_failures(run_perceptual_task(
-            source, distorted, request, retryable,
-            on_progress=on_progress, on_status=on_status,
-            cancel_event=cancel_event, process_handle=process_handle,
-            resolved_crops=crops,
-        ), failures)
+        return self._on_cpu(self.retryable, failures, crops)
 
-    # A metric that failed on the GPU while the others finished is retried
-    # on the CPU on the same terms as a failed pass: only for videos up to
-    # ten minutes, which nobody has to agree to.
-    failures = dict(gpu_output.failures)
-    gpu_failed = tuple(spec for spec in gpu_specs if spec.key in failures and spec.key not in GPU_ONLY_METRICS)
-    if gpu_failed and compared_seconds(source, distorted, request.recipe.duration_limit) > LONG_CPU_RUN_SECONDS:
-        for spec in gpu_failed:
-            failures[spec.key] = (
-                f"GPU scoring failed ({failures[spec.key]}). It was not retried on the CPU, which would "
-                "take hours to days for a video over 10 minutes. Choose CPU for "
-                f"{metric_definition(spec.key).label} to calculate it on the CPU anyway."
-            )
-        gpu_failed = ()
-    # Kept for the message if the CPU retry fails too: the GPU failure is
-    # the first cause, and without it a GPU user would be sent to fix a CPU
-    # tool.
-    gpu_reasons = {spec.key: failures.pop(spec.key) for spec in gpu_failed}
-    cpu_specs = cpu_specs + gpu_failed
-    if not cpu_specs:
-        return replace(gpu_output, failures=failures) if failures != gpu_output.failures else gpu_output
-    to_cpu(cpu_specs)
+    # ------------------------------------------------------------------ after the GPU task
 
-    if on_status:
-        if gpu_failed:
-            labels = " and ".join(metric_definition(spec.key).label for spec in gpu_failed)
-            on_status(f"{labels} failed on the GPU; calculating it on the CPU…")
-        else:
-            on_status("Calculating selected perceptual metric(s) on CPU…")
+    def _after_gpu(self, gpu_output: PerceptualTaskOutput,
+                   crops: tuple[CropBox | None, CropBox | None]) -> PerceptualTaskOutput:
+        """Calculates the CPU's metrics once the GPU task is done, with any
+        metric that failed on the GPU, and combines the two."""
+        # A metric that failed on the GPU while the others finished is retried
+        # on the CPU on the same terms as a failed pass: only for videos up to
+        # ten minutes, which nobody has to agree to.
+        failures = dict(gpu_output.failures)
+        gpu_failed = tuple(spec for spec in self.gpu_specs
+                           if spec.key in failures and spec.key not in GPU_ONLY_METRICS)
+        if gpu_failed and self._too_long_for_cpu():
+            for spec in gpu_failed:
+                failures[spec.key] = (
+                    f"GPU scoring failed ({failures[spec.key]}). It was not retried on the CPU, which would "
+                    "take hours to days for a video over 10 minutes. Choose CPU for "
+                    f"{metric_definition(spec.key).label} to calculate it on the CPU anyway."
+                )
+            gpu_failed = ()
+        # Kept for the message if the CPU retry fails too: the GPU failure is
+        # the first cause, and without it a GPU user would be sent to fix a CPU
+        # tool.
+        gpu_reasons = {spec.key: failures.pop(spec.key) for spec in gpu_failed}
+        cpu_specs = self.cpu_specs + gpu_failed
+        if not cpu_specs:
+            return replace(gpu_output, failures=failures) if failures != gpu_output.failures else gpu_output
+        self._announce_cpu(cpu_specs)
 
-    def failed_on_cpu(key: str, reason: str) -> str:
-        """A CPU failure's message, with the GPU failure first if there was one."""
-        if key in gpu_reasons:
-            return f"GPU scoring failed ({gpu_reasons[key]}); the CPU retry failed too: {reason}"
-        return reason
+        if self.on_status:
+            if gpu_failed:
+                labels = " and ".join(metric_definition(spec.key).label for spec in gpu_failed)
+                self.on_status(f"{labels} failed on the GPU; calculating it on the CPU…")
+            else:
+                self.on_status("Calculating selected perceptual metric(s) on CPU…")
 
-    # The GPU pass has finished, so a CPU failure from here on fails only the
-    # CPU metrics, and does not throw away what the GPU scored (a finished
-    # CVVDP pass lost to a missing libjxl tool, say).
-    try:
-        cpu_output = run_perceptual_task(
-            source, distorted, request, cpu_specs,
-            on_progress=on_progress,  # a stage of its own, from 0 (on_cpu)
-            on_status=on_status, cancel_event=cancel_event,
-            process_handle=process_handle, resolved_crops=crops,
-        )
-    except PerceptualCancelled:
-        raise
-    except Exception as error:
-        if cancel_event is not None and cancel_event.is_set():
-            raise PerceptualCancelled("Cancelled by user") from error
-        if not gpu_output.metrics:
-            if gpu_reasons:
-                raise PerceptualRunError(failed_on_cpu(cpu_specs[-1].key, str(error))) from error
+        def failed_on_cpu(key: str, reason: str) -> str:
+            """A CPU failure's message, with the GPU failure first if there was one."""
+            if key in gpu_reasons:
+                return f"GPU scoring failed ({gpu_reasons[key]}); the CPU retry failed too: {reason}"
+            return reason
+
+        # The GPU pass has finished, so a CPU failure from here on fails only the
+        # CPU metrics, and does not throw away what the GPU scored (a finished
+        # CVVDP pass lost to a missing libjxl tool, say). The progress from here
+        # is a stage of its own, from 0 (on_cpu).
+        try:
+            cpu_output = self._run_on_cpu(cpu_specs, crops)
+        except PerceptualCancelled:
             raise
-        failures.update({spec.key: failed_on_cpu(spec.key, str(error)) for spec in cpu_specs})
-        return replace(gpu_output, failures=failures)
-    # Each metric keeps its own frames. Vship and the CPU tools can end a
-    # frame apart (each stops where the shorter video's pictures do), and the
-    # cache and the window take each metric's own frames, so a difference
-    # must not throw the CPU's finished scores away.
-    combined = MetricResultSet()
-    for spec in specs:
-        if spec.key in failures:
-            continue
-        value = gpu_output.metrics.get(spec.key) or cpu_output.metrics.get(spec.key)
-        if value is None:
-            raise PerceptualRunError(f"Selected backend did not produce {spec.key}.")
-        assert value is not None
-        combined.add(value)
-    return PerceptualTaskOutput(
-        combined, gpu_output.source_crop, gpu_output.distorted_crop,
-        max(gpu_output.compared_frame_count, cpu_output.compared_frame_count), failures,
-    )
+        except Exception as error:
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise PerceptualCancelled("Cancelled by user") from error
+            if not gpu_output.metrics:
+                if gpu_reasons:
+                    raise PerceptualRunError(failed_on_cpu(cpu_specs[-1].key, str(error))) from error
+                raise
+            failures.update({spec.key: failed_on_cpu(spec.key, str(error)) for spec in cpu_specs})
+            return replace(gpu_output, failures=failures)
+        return self._combined(gpu_output, cpu_output, failures)
+
+    def _combined(self, gpu_output: PerceptualTaskOutput, cpu_output: PerceptualTaskOutput,
+                  failures: dict[str, str]) -> PerceptualTaskOutput:
+        """The GPU's and the CPU's scores as one output.
+
+        Each metric keeps its own frames. Vship and the CPU tools can end a
+        frame apart (each stops where the shorter video's pictures do), and
+        the cache and the window take each metric's own frames, so a
+        difference must not throw the CPU's finished scores away."""
+        combined = MetricResultSet()
+        for spec in self.specs:
+            if spec.key in failures:
+                continue
+            value = gpu_output.metrics.get(spec.key) or cpu_output.metrics.get(spec.key)
+            if value is None:
+                raise PerceptualRunError(f"Selected backend did not produce {spec.key}.")
+            combined.add(value)
+        return PerceptualTaskOutput(
+            combined, gpu_output.source_crop, gpu_output.distorted_crop,
+            max(gpu_output.compared_frame_count, cpu_output.compared_frame_count), failures,
+        )
+
+
