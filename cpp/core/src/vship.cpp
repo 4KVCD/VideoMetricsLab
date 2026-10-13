@@ -24,6 +24,14 @@ namespace vml {
 
 namespace {
 
+// Whether the app bundles Vship's builds for this system: for Windows only,
+// so far.
+#ifdef _WIN32
+constexpr bool vship_bundled = true;
+#else
+constexpr bool vship_bundled = false;
+#endif
+
 // Vship's builds, bundled in tools/vship/<folder>.
 const std::map<std::string, std::string, std::less<>> build_folders{
     {"cuda", "nvidia"}, {"hip", "amd"}, {"vulkan", "vulkan"}};
@@ -489,10 +497,11 @@ std::optional<std::string> size_refusal(const VshipDevice& device, const std::st
 }
 
 std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(const std::string& choice) {
-#ifndef _WIN32
-    static_cast<void>(choice);
-    return {std::nullopt, "Vship GPU acceleration is only bundled for Windows."};
-#else
+    // The rest is built on every system all the same, so that it stays
+    // ready for the builds of the others.
+    if constexpr (!vship_bundled) {
+        return {std::nullopt, "Vship GPU acceleration is only bundled for Windows."};
+    }
     std::vector<std::string> failures;
     for (const std::string& backend : probe_order(choice)) {
         const std::string label = backend_label(backend);
@@ -570,7 +579,6 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(const std:
         reasons += (reasons.empty() ? "" : "; ") + failure;
     }
     return {std::nullopt, reasons.empty() ? "No GPU that Vship can use was found." : reasons};
-#endif
 }
 
 nlohmann::json vship_device_json(const VshipDevice& device) {
