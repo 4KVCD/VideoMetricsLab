@@ -64,9 +64,10 @@ The presenters and the window join as they are ported.
 --help`), and reads them as its argparse parser does. So far it compares on
 the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
 PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
-NEG and v1 on the GPU with Vulkan, the app's default; and scores PSNR, SSIM
-and XPSNR in the app, with its libvmaf's own extractors, as the Python app
-does. With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on
+NEG and v1 on the GPU, the app's default, with Vulkan or, where the GPU
+backend setting says CUDA or Vulkan cannot, with libvmaf's CUDA code on an
+NVIDIA GPU; and scores PSNR, SSIM and XPSNR in the app, with its libvmaf's
+own extractors, as the Python app does. With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on
 the CPU, and the two run at once, as the Python app runs a video's tasks.
 For VMAF on the GPU and PSNR, SSIM and XPSNR in the app it decodes the
 videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
@@ -81,8 +82,8 @@ software is decoded by FFmpeg.) That work runs in a process of its own (the
 program again, with `--vml-isolated`), so that a crash in libvmaf or the
 GPU's driver ends that process and not the run: FFmpeg's filters then
 calculate the scores on the CPU, as in the Python app. For a run it cannot
-do yet (libvmaf's CUDA code, the perceptual metrics), it says what it cannot
-do and exits with code 2, rather than giving other answers than the Python
+do yet (the perceptual metrics), it says what it cannot do and exits with
+code 2, rather than giving other answers than the Python
 app. It neither reads nor saves the app's saved scores yet, and calculates
 every score.
 

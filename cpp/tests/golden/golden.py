@@ -11,8 +11,8 @@ Three commands:
     golden.py compare DIR_A DIR_B [--digits N]
                                        holds two runs' results to each other
 
-Each case runs with a fresh profile (no settings, no saved scores) and keeps
-the app's exit code, its output (the tables), its --json results and its
+Each case runs with a fresh profile (no saved scores, and no settings but
+the case's own "settings") and keeps the app's exit code, its output (the tables), its --json results and its
 --csv per-frame scores. `compare` asks for the same exit codes, the same
 tables, the same CSV files character for character, and the same JSON
 results: exactly, or with --digits N, numbers to N significant digits (for
@@ -96,7 +96,12 @@ def run_cases(out: Path, app: Path | None, names: list[str]) -> int:
         options = [*case["args"], "--json", str(folder / "results.json"), "--csv", str(folder / "csv"), "-q"]
         command = ([str(app)] if app else [sys.executable, "-c", PYTHON_CLI]) + ["compare", *videos, *options]
         with tempfile.TemporaryDirectory(prefix="vml-golden-profile-") as profile:
-            # A fresh home: no settings, no saved scores, no black bars kept.
+            # A fresh home: no saved scores, no black bars kept, and no
+            # settings but the case's own, in both apps' settings.json.
+            if "settings" in case:
+                data = Path(profile) / ".videometricslab"
+                data.mkdir()
+                (data / "settings.json").write_text(json.dumps(case["settings"]), encoding="utf-8")
             environment = {**os.environ, "USERPROFILE": profile, "HOME": profile, "PYTHONUTF8": "1",
                            **case.get("environment", {})}
             started = time.perf_counter()

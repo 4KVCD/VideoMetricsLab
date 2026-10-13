@@ -34,6 +34,7 @@
 #include "vml/gpu_vmaf.h"
 #include "vml/libvmaf.h"
 #include "vml/pair_scorer.h"
+#include "vml/vmaf_cuda.h"
 #include "vml/vmaf_vulkan.h"
 #include "vml/video.h"
 
@@ -131,15 +132,18 @@ V1Reference v1_cpu_reference(const std::filesystem::path& model, int width, int 
 VulkanProbeFrames v1_probe_frames(int bits, int count = 4);
 inline constexpr int v1_probe_width = 960, v1_probe_height = 720;
 
-// Feeds the same frames to a run's GPU scorers: the Vulkan engine's for
-// VMAF v0.6.1 and NEG, and V1Scorer for VMAF v1 (the Python app's
-// MultiScorer).
+// Feeds the same frames to a run's GPU scorers: the Vulkan engine's or
+// libvmaf's CUDA code for VMAF v0.6.1 and NEG, and V1Scorer for VMAF v1
+// (the Python app's MultiScorer).
 class MultiScorer : public PairScorer {
 public:
     // `models` as gpu_models gives them, VMAF v1's entry ("vmaf_v1") with
-    // its model's "path=<file>". `shared` as V1Scorer's.
+    // its model's "path=<file>". VMAF v0.6.1 and NEG are scored by
+    // `backend`: "vulkan" on Vulkan's GPU `device` (nothing: the best), or
+    // "cuda" by libvmaf's CUDA code, with VMAF v1 on the best GPU. `shared`
+    // as V1Scorer's.
     MultiScorer(int width, int height, int bit_depth, const GpuModels& models, int n_subsample,
-                std::optional<int> device, GpuFrameStream* shared = nullptr);
+                const std::string& backend, std::optional<int> device, GpuFrameStream* shared = nullptr);
     ~MultiScorer() override;
 
     std::size_t frame_bytes() const override;
@@ -154,7 +158,9 @@ public:
     PairScores finish() override;
 
 private:
-    std::unique_ptr<VulkanScorer> vmaf_;
+    // VMAF v0.6.1's and NEG's, one or neither.
+    std::unique_ptr<VulkanScorer> vulkan_;
+    std::unique_ptr<CudaScorer> cuda_;
     std::unique_ptr<V1Scorer> v1_;
 };
 

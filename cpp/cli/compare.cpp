@@ -360,12 +360,6 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
     if (on_gpu == tasks.end()) {
         return std::nullopt;
     }
-    // VMAF v1 runs on Vulkan, whatever scores VMAF v0.6.1 and NEG.
-    const bool v1_alone = on_gpu->metric_keys == std::vector<std::string>{"vmaf_v1"};
-    if (!v1_alone && gpu_vmaf_backend().backend != "vulkan") {
-        return "VMAF on the GPU with libvmaf's CUDA code (the GPU backend setting is CUDA, or Vulkan cannot score "
-               "VMAF on this GPU)";
-    }
     if (by_timestamp()) {
         return "VMAF on the GPU with frames paired by timestamp (VML_FRAME_PAIRING)";
     }

@@ -1,10 +1,11 @@
 // VMAF and VMAF NEG on the GPU: which runs score them there (VMAF v1 with
 // them, vmaf_v1_gpu.h), the check of the GPU, and the frames' way to the
-// Vulkan scorer, from one FFmpeg per video or from the app's own decoders,
+// scorer (the Vulkan engine, vmaf_vulkan.h, or libvmaf's CUDA code,
+// vmaf_cuda.h), from one FFmpeg per video or from the app's own decoders,
 // paired frame N with frame N. A port of the parts of
 // vmaf_app/core/vmaf_gpu.py and vmaf_vulkan.py the C++ app has so far. Not
-// yet: libvmaf's CUDA code, frames paired by timestamp (VML_FRAME_PAIRING)
-// and FFmpeg pairing them (VML_VMAF_PIPES=canvas).
+// yet: frames paired by timestamp (VML_FRAME_PAIRING) and FFmpeg pairing
+// them (VML_VMAF_PIPES=canvas).
 #pragma once
 
 #include <cstddef>
@@ -40,18 +41,20 @@ GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string
 // tried first. The GPU is checked again when it changes that.
 void set_gpu_backend(const std::string& preference);
 
-// What scores VMAF on this PC's GPU, as the Python app's probe finds it.
+// What scores VMAF on this PC's GPU, as the Python app's probe finds it:
+// each backend in the order the GPU backend setting gives (Vulkan first,
+// unless it is "cuda"), the first that scores VMAF here.
 struct GpuVmafBackend {
-    // "vulkan" when Vulkan scores it here; "cuda" when the Python app would
-    // try libvmaf's CUDA code (an NVIDIA GPU, with CUDA first or Vulkan
-    // failing), which this app does not have yet; "" when the CPU scores it.
+    // "vulkan" for the Vulkan engine, "cuda" for libvmaf's CUDA code (on an
+    // NVIDIA GPU), "" when the CPU scores VMAF.
     std::string backend;
     std::optional<int> device;  // Vulkan's number for the GPU
     std::string text;           // what scores it ("Vulkan on ..."), or why the GPU does not
 };
 
-// The GPU's answer, found once (in this process: the Python app checks in a
-// process of its own) and kept.
+// The GPU's answer, found once and kept. Each backend is checked in a
+// process of its own where a program to run it is set (isolated.h), as the
+// Python app checks it.
 GpuVmafBackend gpu_vmaf_backend();
 
 // The models a run scores on the GPU (gpu_models), or none when its VMAF is
@@ -72,11 +75,13 @@ struct GpuPlan {
     int width = 0;     // the size and depth frames are compared at
     int height = 0;
     int bit_depth = 8;
-    // Vulkan's number for the GPU; -1 for the best one, for VMAF v1 alone
-    // where VMAF v0.6.1 would not be scored on the GPU.
+    // Vulkan's number for the GPU; -1 for the best one, for VMAF v1 where
+    // the Vulkan engine does not score VMAF v0.6.1.
     int device = 0;
-    // "vulkan", or "cpu" for PSNR, SSIM and XPSNR with libvmaf's CPU
-    // extractors (libvmaf_cpu.h), which take their frames the same way.
+    // What scores VMAF v0.6.1 and NEG: "vulkan" or "cuda" (VMAF v1 is
+    // Vulkan's on every GPU); or "cpu" for PSNR, SSIM and XPSNR with
+    // libvmaf's CPU extractors (libvmaf_cpu.h), which take their frames the
+    // same way.
     std::string backend = "vulkan";
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
@@ -148,7 +153,7 @@ private:
 // The app's side of one FFmpeg attempt: the pipes FFmpeg writes the two
 // videos' frames to, and the thread that pairs them, frame N with frame N
 // until either video ends, and has the plan's scorer score each pair: the
-// Vulkan engine, or libvmaf's CPU extractors.
+// Vulkan engine, libvmaf's CUDA code, or libvmaf's CPU extractors.
 class GpuAttempt {
 public:
     // Throws LibvmafError (VmafVulkanError) when the scorer cannot start,
@@ -181,12 +186,15 @@ private:
 // scaled and widened by the decoders, and paired frame N with frame N as
 // far as `duration_limit` (-t's text, or nothing) keeps them. `decoders`
 // are the source's and the test video's (decoders_here); `ffmpeg` copies
-// their packets out of their containers. With NVIDIA's decoder for both,
-// each luma plane stays on the GPU, copied into the memory the engine reads
-// it from; otherwise the decoder writes it into the memory the engine
-// copies to the GPU. Throws GpuDecodeUnavailableError before the first
-// picture when the app cannot decode a video, GpuDecodeFailedError after
-// it, VmafVulkanError, and Cancelled.
+// their packets out of their containers. The plan's backend scores them:
+// the Vulkan engine, or libvmaf's CUDA code, which takes only NVIDIA's
+// decoder's pictures and the software decoder's. NVIDIA's pictures stay on
+// the GPU, each luma plane copied into the memory the scorer reads it from
+// (for the Vulkan engine, with NVIDIA's decoder for both videos);
+// otherwise the decoder writes it into the memory the scorer copies to the
+// GPU. Throws GpuDecodeUnavailableError before the first picture when the
+// app cannot decode a video, GpuDecodeFailedError after it, LibvmafError
+// (VmafVulkanError), and Cancelled.
 PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,

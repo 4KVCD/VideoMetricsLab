@@ -16,6 +16,7 @@
 #include "vml/platform/console.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vmaf_vulkan.h"
 
@@ -195,6 +196,9 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
                       {"text", probe.text}};
         } else if (task == "vmaf-v1-probe") {
             const V1Probe probe = probe_v1();
+            result = {{"available", probe.available}, {"text", probe.text}};
+        } else if (task == "cuda-probe") {
+            const CudaProbe probe = probe_cuda();
             result = {{"available", probe.available}, {"text", probe.text}};
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());

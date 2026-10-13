@@ -39,6 +39,19 @@ DynamicLibrary::DynamicLibrary(const std::filesystem::path& path) : path_(path),
     }
 }
 
+DynamicLibrary DynamicLibrary::system(const std::string& name) {
+    DynamicLibrary library;
+    library.path_ = path_from_text(name);
+    library.path_text_ = name;
+    // Only from the system folder, where a driver installs it: not from the
+    // app's folder, the current folder or the PATH.
+    library.handle_ = LoadLibraryExW(widen(name).c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (library.handle_ == nullptr) {
+        throw LibraryError(name + " could not be loaded: " + message_for(GetLastError()));
+    }
+    return library;
+}
+
 DynamicLibrary::~DynamicLibrary() {
     if (handle_ != nullptr) {
         FreeLibrary(static_cast<HMODULE>(handle_));

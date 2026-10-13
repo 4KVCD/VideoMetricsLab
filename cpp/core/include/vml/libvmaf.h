@@ -11,6 +11,7 @@
 
 #include <libvmaf/feature.h>
 #include <libvmaf/libvmaf.h>
+#include <libvmaf/libvmaf_cuda.h>
 
 #include <filesystem>
 #include <span>
@@ -32,6 +33,10 @@ public:
 
 // Throws LibvmafError if a libvmaf call returned an error, saying what failed.
 void check_libvmaf(int error, const std::string& what);
+
+// A score kept to 6 decimals, as libvmaf's JSON log keeps it and the Python
+// app keeps every score it reads from libvmaf: float(f"{value:.6f}").
+double to_6_decimals(double value);
 
 // The bundled library and the functions of it the app calls.
 struct Libvmaf {
@@ -61,6 +66,13 @@ struct Libvmaf {
     decltype(&::vmaf_use_features_from_model) use_features_from_model;
     decltype(&::vmaf_write_output) write_output;
     decltype(&::vmaf_picture_alloc) picture_alloc;
+    // Its CUDA code, for VMAF and NEG with CUDA (vmaf_cuda.h), each nullptr
+    // in a build without it: the CUDA state, imported into a context, and
+    // the context's pictures in GPU memory.
+    decltype(&::vmaf_cuda_state_init) cuda_state_init = nullptr;
+    decltype(&::vmaf_cuda_import_state) cuda_import_state = nullptr;
+    decltype(&::vmaf_cuda_preallocate_pictures) cuda_preallocate_pictures = nullptr;
+    decltype(&::vmaf_cuda_fetch_preallocated_picture) cuda_fetch_preallocated_picture = nullptr;
 };
 
 // Where the bundled library is, with its build record.

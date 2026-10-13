@@ -33,6 +33,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/time_format.h"
+#include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
 
 namespace vml {
@@ -915,16 +916,22 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
 // have used, or by the software decoder for a video FFmpeg would decode in
 // software. The frames are the same, without FFmpeg's decoding and the CPU
 // copies and pipes behind it. Otherwise, or when that decoding fails after
-// it has started, FFmpeg decodes them. (With libvmaf's CUDA code, which the
-// C++ app does not have yet, the Python app decodes here for VMAF only with
-// NVIDIA's decoder and the software decoder.)
+// it has started, FFmpeg decodes them. libvmaf's CUDA code takes only
+// NVIDIA's decoder's pictures and the software decoder's, so with it VMAF
+// and NEG without VMAF v1 are decoded here only by those.
 ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                         const VmafOptions& options, const std::optional<CropBox>& source_crop,
                         const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
                         long long total_frames, const HardwareDecoding& decoding,
                         const ProgressCallback& on_progress, const StatusCallback& on_status,
                         const CancelToken& cancel) {
-    if (const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding)) {
+    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
+    const auto cuda_takes = [](const std::string& decoder) {
+        return decoder == "nvidia" || decoder == software_decoder;
+    };
+    const std::vector<std::string> keys = plan_keys(plan);
+    if (decoders && (plan.backend != "cuda" || std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end() ||
+                     (cuda_takes(decoders->first) && cuda_takes(decoders->second)))) {
         try {
             return score_decoded_here(environment, source, distorted, options, source_crop, distorted_crop, plan,
                                       fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
@@ -1696,20 +1703,20 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     }
     std::optional<ParsedScores> scores;
     std::set<std::string, std::less<>> gpu_keys;
+    std::string gpu_backend = "cuda";
     if (!gpu.empty()) {
+        // VMAF v0.6.1 and NEG are scored by what the GPU's check found: the
+        // Vulkan engine on its GPU, or libvmaf's CUDA code. VMAF v1 runs on
+        // Vulkan, on the best GPU unless the engine scores VMAF v0.6.1 here;
+        // alone, where neither scores it, it goes as with CUDA (the Python
+        // app's default backend).
         const GpuVmafBackend backend = gpu_vmaf_backend();
-        // VMAF v1 runs on Vulkan, on the best GPU when VMAF v0.6.1 is not
-        // scored on the GPU here.
-        const bool v1_alone =
-            std::all_of(gpu.begin(), gpu.end(), [](const auto& entry) { return entry.first == "vmaf_v1"; });
-        if (!v1_alone && (backend.backend != "vulkan" || !backend.device)) {
-            // The command line refuses such a run before it starts.
-            throw VmafRunError("VMAF on the GPU with libvmaf's CUDA code is not in the C++ app yet");
-        }
-        const int device = backend.backend == "vulkan" && backend.device ? *backend.device : -1;
-        scores = run_on_gpu(environment, source, distorted, options, source_crop, distorted_crop,
-                            GpuPlan{gpu, width, height, depth, device}, distorted.fps, total_frames, decoding,
-                            on_progress, on_status, cancel);
+        GpuPlan plan{gpu, width, height, depth};
+        plan.backend = backend.backend == "vulkan" ? "vulkan" : "cuda";
+        plan.device = backend.backend == "vulkan" && backend.device ? *backend.device : -1;
+        gpu_backend = plan.backend;
+        scores = run_on_gpu(environment, source, distorted, options, source_crop, distorted_crop, plan,
+                            distorted.fps, total_frames, decoding, on_progress, on_status, cancel);
         if (scores) {
             for (const auto& [key, version] : gpu) {
                 gpu_keys.insert(key);
@@ -1777,10 +1784,15 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         }
         if (gpu_keys.contains(key)) {
             // The same request as FFmpeg's libvmaf (the scores agree to
-            // within 4e-5), made on the GPU by the bundled build.
-            provenance.implementation = "libvmaf/vulkan";
+            // within 4e-5), made on the GPU by the bundled build: by its
+            // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
+            // every GPU.
+            const std::string backend = key == "vmaf_v1" ? "vulkan" : gpu_backend;
+            provenance.implementation = "libvmaf/" + backend;
             provenance.compute_backend = "gpu";
-            provenance.implementation_version = key == "vmaf_v1" ? v1_library_build() : vulkan_library_build();
+            provenance.implementation_version = key == "vmaf_v1"        ? v1_library_build()
+                                                : backend == "vulkan" ? vulkan_library_build()
+                                                                      : cuda_library_build();
         }
         result.metric_results.add(
             FrameMetricResult{key, scores->frame, scores->time, scores->metrics.at(key), std::move(provenance)});

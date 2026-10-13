@@ -18,6 +18,20 @@ DynamicLibrary::DynamicLibrary(const std::filesystem::path& path) : path_(path),
     }
 }
 
+DynamicLibrary DynamicLibrary::system(const std::string& name) {
+    DynamicLibrary library;
+    library.path_ = path_from_text(name);
+    library.path_text_ = name;
+    // A name without a folder: the system's loader looks for it in its usual
+    // places.
+    library.handle_ = dlopen(name.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (library.handle_ == nullptr) {
+        const char* why = dlerror();
+        throw LibraryError(name + " could not be loaded: " + (why != nullptr ? why : "unknown error"));
+    }
+    return library;
+}
+
 DynamicLibrary::~DynamicLibrary() {
     if (handle_ != nullptr) {
         dlclose(handle_);

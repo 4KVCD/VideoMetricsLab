@@ -17,6 +17,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
+#include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
 
 namespace vml {
@@ -132,6 +133,21 @@ VulkanProbe probe_vulkan_apart() {
     }
 }
 
+// libvmaf's CUDA probe, in a process of its own where a program to run it is
+// set (the Python app's run_isolated(probe)).
+CudaProbe probe_cuda_apart() {
+    if (!isolation_program()) {
+        return probe_cuda();
+    }
+    try {
+        const nlohmann::json result =
+            run_isolated("cuda-probe", "libvmaf's GPU probe", nlohmann::json::object(), {}, CancelToken());
+        return {result.at("available").get<bool>(), result.at("text").get<std::string>()};
+    } catch (const IsolatedCrashError& error) {
+        return {false, error.what()};
+    }
+}
+
 GpuVmafBackend probe_backends(const std::string& preference) {
     std::string reasons;
     const auto add_reason = [&reasons](const std::string& reason) {
@@ -147,7 +163,12 @@ GpuVmafBackend probe_backends(const std::string& preference) {
                     add_reason("no NVIDIA GPU");
                     continue;
                 }
-                return {"cuda", std::nullopt, "libvmaf's CUDA code, which the C++ app does not have yet"};
+                const CudaProbe probe = probe_cuda_apart();
+                if (probe.available) {
+                    return {"cuda", std::nullopt, probe.text + " with CUDA"};
+                }
+                add_reason("CUDA: " + probe.text);
+                continue;
             }
             const VulkanProbe probe = probe_vulkan_apart();
             if (probe.available) {
@@ -413,7 +434,10 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
     } else if (std::any_of(plan.models.begin(), plan.models.end(),
                            [](const auto& model) { return model.first == "vmaf_v1"; })) {
         s.scorer = std::make_unique<MultiScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
+                                                 plan.backend,
                                                  plan.device >= 0 ? std::optional(plan.device) : std::nullopt);
+    } else if (plan.backend == "cuda") {
+        s.scorer = std::make_unique<CudaScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample);
     } else {
         s.scorer = std::make_unique<VulkanScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
                                                   plan.device);
@@ -497,6 +521,54 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;
 }
 
+namespace {
+
+// score_decoded with libvmaf's CUDA code (the Python app's
+// vmaf_gpu.score_decoded), for the decoders' `plans` (the test video's
+// first): NVIDIA's pictures are copied on the GPU into libvmaf's, and the
+// software decoder's are written into the memory they are uploaded from.
+PairScores score_decoded_cuda(const VideoInfo& source, const VideoInfo& distorted,
+                              const std::vector<DecodePlan>& plans, const GpuPlan& plan, int n_subsample,
+                              const std::optional<std::string>& duration_limit, long long total_frames,
+                              const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
+                              const std::string& ffprobe,
+                              const std::function<void(long long, long long, double)>& on_progress,
+                              const CancelToken& cancel) {
+    const auto& [source_backend, test_backend] = decoders;
+    // Declared before the decoders, so that they close first and their
+    // threads stop before libvmaf closes; made after them. Both are the
+    // Python app's order: NVIDIA's decoder sets the GPU's CUDA context, in
+    // which libvmaf works too, to sleep while it waits rather than spin.
+    std::optional<CudaScorer> scorer;
+    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
+    GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);
+    scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
+                   source_backend == "nvidia" && test_backend == "nvidia");
+    // A decoded picture as the scorer takes it.
+    const auto side = [](GpuFrameStream& stream, int slot) {
+        CudaScorer::Decoded decoded;
+        if (stream.backend() == "nvidia") {  // copied on the GPU
+            decoded.copy = [&stream, slot](std::uint64_t address, std::int64_t pitch) {
+                stream.copy_luma(slot, address, pitch);
+            };
+        } else {  // into the upload's memory
+            decoded.write = [&stream, slot](std::uint8_t* plane) { stream.download(slot, plane); };
+        }
+        return decoded;
+    };
+    test.start();
+    reference.start();
+    score_frame_pairs(
+        test, reference, distorted, duration_limit, total_frames,
+        [&](int test_slot, int reference_slot) {
+            scorer->add_decoded(side(reference, reference_slot), side(test, test_slot));
+        },
+        on_progress, cancel);
+    return scorer->finish();
+}
+
+}  // namespace
+
 PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
@@ -506,16 +578,30 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::string& ffprobe,
                          const std::function<void(long long, long long, double)>& on_progress,
                          const CancelToken& cancel) {
-    const std::vector<VulkanDevice> found = vulkan_devices();
-    const auto chosen =
-        std::find_if(found.begin(), found.end(), [&](const VulkanDevice& device) { return device.index == plan.device; });
-    if (chosen == found.end()) {
-        throw VmafVulkanError("no GPU that Vulkan can calculate VMAF on");
-    }
     const auto& [source_backend, test_backend] = decoders;
+    const bool cuda = plan.backend == "cuda";
+    std::string gpu;  // its name, for messages
+    if (cuda) {
+        // libvmaf's CUDA code takes NVIDIA's pictures on the GPU and uploads
+        // the software decoder's.
+        for (const std::string& library : {source_backend, test_backend}) {
+            if (library != "nvidia" && library != software_decoder) {
+                throw GpuDecodeUnavailableError("libvmaf's CUDA code takes NVIDIA's and the software decoder's");
+            }
+        }
+        gpu = "NVIDIA's GPU";
+    } else {
+        const std::vector<VulkanDevice> found = vulkan_devices();
+        const auto chosen = std::find_if(found.begin(), found.end(),
+                                         [&](const VulkanDevice& device) { return device.index == plan.device; });
+        if (chosen == found.end()) {
+            throw VmafVulkanError("no GPU that Vulkan can calculate VMAF on");
+        }
+        gpu = chosen->name;
+    }
     for (const std::string& library : {source_backend, test_backend}) {
         if (library.empty() || !decoder_available(library)) {
-            throw GpuDecodeUnavailableError("no decoder library for " + chosen->name);
+            throw GpuDecodeUnavailableError("no decoder library for " + gpu);
         }
     }
     // Each video's plan, the test video's first: its luma alone, at the size
@@ -538,6 +624,10 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                                    (plan.bit_depth > 8 ? 2 : 1);
     if (std::any_of(plans.begin(), plans.end(), [&](const DecodePlan& p) { return p.frame_bytes() != luma_bytes; })) {
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
+    }
+    if (cuda) {
+        return score_decoded_cuda(source, distorted, plans, plan, n_subsample, duration_limit, total_frames,
+                                  decoders, ffmpeg, ffprobe, on_progress, cancel);
     }
     GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
     GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);

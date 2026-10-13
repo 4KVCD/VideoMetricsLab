@@ -27,6 +27,13 @@ public:
     // its usual rules. Throws LibraryError when it cannot be loaded, saying
     // why.
     explicit DynamicLibrary(const std::filesystem::path& path);
+
+    // Loads a library the system has, by its file name: from Windows' system
+    // folder (System32), or wherever the system's loader finds it on Linux
+    // and macOS. For a driver's library, such as NVIDIA's CUDA driver
+    // (nvcuda.dll, libcuda.so.1). Throws LibraryError as the constructor does.
+    static DynamicLibrary system(const std::string& name);
+
     ~DynamicLibrary();
     DynamicLibrary(DynamicLibrary&& other) noexcept;
     DynamicLibrary& operator=(DynamicLibrary&& other) noexcept;
@@ -54,6 +61,8 @@ public:
     void* native_handle() const { return handle_; }
 
 private:
+    DynamicLibrary() = default;
+
     std::filesystem::path path_;
     std::string path_text_;  // for messages
     void* handle_ = nullptr;

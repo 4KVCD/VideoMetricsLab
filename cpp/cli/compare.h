@@ -2,10 +2,10 @@
 // Python app's command line compares them (vmaf_app/cli.py).
 //
 // So far the C++ version calculates FFmpeg's metrics: VMAF v0.6.1, NEG and
-// v1 with FFmpeg's libvmaf, VMAF, NEG and v1 on the GPU with Vulkan, and
-// PSNR, SSIM and XPSNR in the app or with FFmpeg's filters, a video's VMAF
-// on the GPU beside its other metrics on the CPU. What it cannot do yet
-// (SSIMULACRA2, Butteraugli, CVVDP, --cvvdp-display, libvmaf's CUDA code)
+// v1 with FFmpeg's libvmaf, VMAF, NEG and v1 on the GPU with Vulkan or
+// libvmaf's CUDA code, and PSNR, SSIM and XPSNR in the app or with FFmpeg's
+// filters, a video's VMAF on the GPU beside its other metrics on the CPU.
+// What it cannot do yet (SSIMULACRA2, Butteraugli, CVVDP, --cvvdp-display)
 // it says, and exits with code 2, rather than giving other answers than the
 // Python app would. It neither reads nor saves the
 // app's saved scores yet: it calculates every score, as the Python app does

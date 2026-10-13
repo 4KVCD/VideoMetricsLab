@@ -91,9 +91,6 @@ struct LibvmafHandles {
     }
 };
 
-// A model's scores kept to 6 decimals, as libvmaf's JSON log keeps them.
-double to_6_decimals(double value) { return python_float(format_fixed(value, 6)).value_or(value); }
-
 // An option's value as libvmaf's option parser reads it (the Python app's
 // _text): Python's str() of it, with true and false as libvmaf takes them.
 std::string option_text(const Options& value) {
@@ -964,7 +961,7 @@ VulkanProbeFrames v1_probe_frames(int bits, int count) {
 // --------------------------------------------------------------- MultiScorer
 
 MultiScorer::MultiScorer(int width, int height, int bit_depth, const GpuModels& models, int n_subsample,
-                         std::optional<int> device, GpuFrameStream* shared) {
+                         const std::string& backend, std::optional<int> device, GpuFrameStream* shared) {
     GpuModels vmaf_models;
     std::optional<std::string> v1_model;
     for (const auto& [key, model] : models) {
@@ -974,39 +971,53 @@ MultiScorer::MultiScorer(int width, int height, int bit_depth, const GpuModels& 
             vmaf_models.emplace_back(key, model);
         }
     }
+    const bool vulkan = backend == "vulkan";
     if (!vmaf_models.empty()) {
-        vmaf_ = std::make_unique<VulkanScorer>(width, height, bit_depth, vmaf_models, n_subsample, device, shared);
+        if (vulkan) {
+            vulkan_ =
+                std::make_unique<VulkanScorer>(width, height, bit_depth, vmaf_models, n_subsample, device, shared);
+        } else {
+            cuda_ = std::make_unique<CudaScorer>(width, height, bit_depth, vmaf_models, n_subsample, shared != nullptr);
+        }
     }
     if (v1_model) {
         const std::string_view file = std::string_view(*v1_model).starts_with("path=")
                                           ? std::string_view(*v1_model).substr(5)
                                           : std::string_view(*v1_model);
-        v1_ = std::make_unique<V1Scorer>(width, height, bit_depth, platform::path_from_text(file), n_subsample, device,
-                                         std::nullopt, "vmaf_v1", shared);
+        v1_ = std::make_unique<V1Scorer>(width, height, bit_depth, platform::path_from_text(file), n_subsample,
+                                         vulkan ? device : std::nullopt, std::nullopt, "vmaf_v1", shared);
     }
-    if (!vmaf_ && !v1_) {
+    if (!vulkan_ && !cuda_ && !v1_) {
         throw std::invalid_argument("no model to score");
     }
 }
 
 MultiScorer::~MultiScorer() = default;
 
-std::size_t MultiScorer::frame_bytes() const { return vmaf_ ? vmaf_->frame_bytes() : v1_->frame_bytes(); }
+std::size_t MultiScorer::frame_bytes() const {
+    return vulkan_ ? vulkan_->frame_bytes() : cuda_ ? cuda_->frame_bytes() : v1_->frame_bytes();
+}
 
 void MultiScorer::add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) {
-    if (vmaf_) {
-        vmaf_->add(reference, distorted);
-    }
-    if (v1_) {
-        v1_->add(reference, distorted);
+    for (PairScorer* scorer : {static_cast<PairScorer*>(vulkan_.get()), static_cast<PairScorer*>(cuda_.get()),
+                               static_cast<PairScorer*>(v1_.get())}) {
+        if (scorer != nullptr) {
+            scorer->add(reference, distorted);
+        }
     }
 }
 
 void MultiScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
-    if (vmaf_) {  // VMAF v0.6.1 and NEG read only the luma planes, copied on the GPU
-        vmaf_->add_shared(
-            [&](std::uint64_t address, std::int64_t pitch) { reference.copy_luma(reference_slot, address, pitch); },
-            [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); });
+    // VMAF v0.6.1 and NEG read only the luma planes, copied on the GPU.
+    const auto copy_reference = [&](std::uint64_t address, std::int64_t pitch) {
+        reference.copy_luma(reference_slot, address, pitch);
+    };
+    const auto copy_test = [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); };
+    if (vulkan_) {
+        vulkan_->add_shared(copy_reference, copy_test);
+    }
+    if (cuda_) {
+        cuda_->add_decoded({.copy = copy_reference, .write = {}}, {.copy = copy_test, .write = {}});
     }
     if (v1_) {
         v1_->add_decoded(reference, reference_slot, test, test_slot);
@@ -1016,7 +1027,8 @@ void MultiScorer::add_decoded(GpuFrameStream& reference, int reference_slot, Gpu
 PairScores MultiScorer::finish() {
     PairScores result;
     bool first = true;
-    for (PairScorer* scorer : {static_cast<PairScorer*>(vmaf_.get()), static_cast<PairScorer*>(v1_.get())}) {
+    for (PairScorer* scorer : {static_cast<PairScorer*>(vulkan_.get()), static_cast<PairScorer*>(cuda_.get()),
+                               static_cast<PairScorer*>(v1_.get())}) {
         if (scorer == nullptr) {
             continue;
         }
@@ -1072,14 +1084,15 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     bool on_gpu = false;
     if (source_backend == "nvidia" && test_backend == "nvidia") {
         try {
-            scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, device, &test);
+            scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
+                           &test);
             on_gpu = true;
         } catch (const LibvmafError&) {
             // The frames go through system memory instead.
         }
     }
     if (!scorer) {
-        scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, device);
+        scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device);
     }
     if (std::any_of(plans.begin(), plans.end(),
                     [&](const DecodePlan& decoded) { return decoded.frame_bytes() != scorer->frame_bytes(); })) {

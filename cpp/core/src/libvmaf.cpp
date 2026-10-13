@@ -31,9 +31,6 @@ struct ContextAndModel {
     }
 };
 
-// A score kept to 6 decimals, as the Python app keeps it: float(f"{v:.6f}").
-double to_6_decimals(double value) { return python_float(format_fixed(value, 6)).value_or(value); }
-
 // A model's scores for frames, predicted by libvmaf from `features`, the
 // model loaded by `load` (which gets the model's handle to set and its
 // configuration, and returns libvmaf's answer). `model_name` is for
@@ -91,6 +88,8 @@ void check_libvmaf(int error, const std::string& what) {
     }
 }
 
+double to_6_decimals(double value) { return python_float(format_fixed(value, 6)).value_or(value); }
+
 Libvmaf::Libvmaf(const std::filesystem::path& path)
     : library(path),
       version(library.function<decltype(version)>("vmaf_version")),
@@ -120,6 +119,12 @@ Libvmaf::Libvmaf(const std::filesystem::path& path)
         throw LibvmafError(platform::path_text(path) +
                            " is older than the libvmaf-fast the app was built with (it has no vmaf_picture_convert)");
     }
+    cuda_state_init = reinterpret_cast<decltype(cuda_state_init)>(library.find("vmaf_cuda_state_init"));
+    cuda_import_state = reinterpret_cast<decltype(cuda_import_state)>(library.find("vmaf_cuda_import_state"));
+    cuda_preallocate_pictures =
+        reinterpret_cast<decltype(cuda_preallocate_pictures)>(library.find("vmaf_cuda_preallocate_pictures"));
+    cuda_fetch_preallocated_picture = reinterpret_cast<decltype(cuda_fetch_preallocated_picture)>(
+        library.find("vmaf_cuda_fetch_preallocated_picture"));
 }
 
 std::filesystem::path libvmaf_folder() { return resource_folder() / "tools" / "libvmaf"; }
