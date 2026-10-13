@@ -1,8 +1,14 @@
 // Text between the app's UTF-8 and Windows' UTF-16.
 #pragma once
 
+// <windows.h> without what the app does not use, and without its min and
+// max macros (MinGW's C++ headers may have set these already).
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 
 #include <string>

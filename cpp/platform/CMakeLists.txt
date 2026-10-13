@@ -3,6 +3,7 @@
 add_library(vml_platform src/process.cpp)
 if(WIN32)
     target_sources(vml_platform PRIVATE src/process_windows.cpp src/system_windows.cpp)
+    target_link_libraries(vml_platform PRIVATE dxgi)  # the GPUs' vendor IDs
 else()
     target_sources(vml_platform PRIVATE src/process_posix.cpp src/system_posix.cpp)
 endif()

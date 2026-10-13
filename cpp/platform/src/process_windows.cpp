@@ -13,10 +13,6 @@
 // end of output that never comes.
 #include "vml/platform/process.h"
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-
 #include <condition_variable>
 #include <mutex>
 #include <thread>

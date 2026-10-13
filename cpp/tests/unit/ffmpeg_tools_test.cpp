@@ -27,7 +27,12 @@ TEST(FfmpegTools, ReadsTheVersionAsThePythonAppDoes) {
 
 // An FFmpeg older than 9 cannot be used; one with no version number can.
 TEST(FfmpegTools, AnFfmpegOlderThan9IsAProblem) {
-    ToolsStatus status{{"ffmpeg", "ffmpeg", true, std::vector<int>{8, 1}}, {"ffprobe", "ffprobe", true}};
+    ToolsStatus status;
+    status.ffmpeg.name = "ffmpeg";
+    status.ffmpeg.runnable = true;
+    status.ffmpeg.version = std::vector<int>{8, 1};
+    status.ffprobe.name = "ffprobe";
+    status.ffprobe.runnable = true;
     ASSERT_EQ(status.problems().size(), 1u);
     EXPECT_EQ(status.problems().front(), "ffmpeg 8.1 is too old -- version 9 or newer is required.");
     status.ffmpeg.version = std::vector<int>{9, 0, 1};

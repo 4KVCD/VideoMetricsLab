@@ -13,6 +13,7 @@ namespace vml {
 
 namespace {
 
+#ifdef _WIN32
 // Whether `name` matches `pattern`, whose only wildcard is "*" (any run of
 // characters), ignoring case as Windows does.
 bool matches(std::string_view name, std::string_view pattern) {
@@ -45,6 +46,7 @@ std::vector<std::filesystem::path> matching_folders(const std::filesystem::path&
     std::sort(found.begin(), found.end());
     return found;
 }
+#endif
 
 // The common install folders to look in (Windows): winget's FFmpeg
 // packages, then C:\ffmpeg\bin and C:\Program Files\ffmpeg\bin.
@@ -144,7 +146,9 @@ std::vector<std::string> ToolsStatus::problems() const {
 }
 
 ToolStatus check_tool(std::string_view name, const Settings& settings) {
-    ToolStatus status{std::string(name), find_tool(name, settings)};
+    ToolStatus status;
+    status.name = name;
+    status.path = find_tool(name, settings);
     platform::ProcessOutput output;
     try {
         output = platform::run_program({status.path, "-version"}, std::chrono::seconds(15));

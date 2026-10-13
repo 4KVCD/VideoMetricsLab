@@ -1,18 +1,13 @@
 // The system on Windows.
 #include "vml/platform/system.h"
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
+#include "text_windows.h"  // before <dxgi.h>: it sets <windows.h> up
+
 #include <dxgi.h>
-#include <windows.h>
 
 #include <algorithm>
 #include <cwctype>
 #include <thread>
-
-#include "text_windows.h"
-
-#pragma comment(lib, "dxgi.lib")
 
 namespace vml::platform {
 
