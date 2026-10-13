@@ -20,9 +20,11 @@ long long rescale(long long value, Rational from, Rational to) {
     if (value >= 0) {
         return static_cast<long long>(multiply_add_divide(static_cast<unsigned long long>(value), b, c / 2, c));
     }
-    // The magnitude's, negated: halves away from zero on both sides.
+    // The magnitude's, negated: halves away from zero on both sides. It is
+    // negated as an unsigned number, as av_rescale_rnd negates it: the
+    // result can be INT64_MIN itself, whose sign a long long cannot flip.
     const unsigned long long magnitude = static_cast<unsigned long long>(-(value + 1)) + 1;
-    return -static_cast<long long>(multiply_add_divide(magnitude, b, c / 2, c));
+    return static_cast<long long>(0ULL - multiply_add_divide(magnitude, b, c / 2, c));
 }
 
 long long duration_in(const std::string& text, Rational time_base) {
