@@ -2,13 +2,24 @@
 # (reference/make_reference.py), so a test that passes says the C++ code
 # gives the Python app's answers.
 add_executable(vml_tests
+    unit/ffmpeg_tools_test.cpp
+    unit/ffprobe_test.cpp
     unit/metrics_test.cpp
     unit/number_format_test.cpp
+    unit/process_test.cpp
+    unit/settings_test.cpp
     unit/stats_test.cpp
     unit/reference.cpp
 )
 target_link_libraries(vml_tests PRIVATE vml_core vml_compile_options nlohmann_json gtest gtest_main)
-target_compile_definitions(vml_tests PRIVATE VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference")
+target_compile_definitions(vml_tests PRIVATE
+    VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
+    VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>")
+
+# A program for the process tests to start: it echoes, fails, or sleeps.
+add_executable(vml_test_child unit/test_child.cpp)
+target_link_libraries(vml_test_child PRIVATE vml_compile_options)
+add_dependencies(vml_tests vml_test_child)
 
 include(GoogleTest)
 gtest_discover_tests(vml_tests)

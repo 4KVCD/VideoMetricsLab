@@ -1,0 +1,201 @@
+#include "vml/python_text.h"
+
+#include <cctype>
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+
+namespace vml {
+
+namespace {
+
+bool is_digit(char c) { return c >= '0' && c <= '9'; }
+
+std::string_view strip(std::string_view text) {
+    const auto is_space = [](char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'; };
+    while (!text.empty() && is_space(text.front())) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && is_space(text.back())) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
+// `text` without its underscores, or nothing if one is not between two
+// digits (Python's rule for numbers written with underscores).
+std::optional<std::string> without_underscores(std::string_view text) {
+    std::string kept;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '_') {
+            if (i == 0 || i + 1 == text.size() || !is_digit(text[i - 1]) || !is_digit(text[i + 1])) {
+                return std::nullopt;
+            }
+            continue;
+        }
+        kept += text[i];
+    }
+    return kept;
+}
+
+bool equals_ignoring_case(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Whether `text` is a decimal number as Python's float() reads one:
+// digits with an optional point (or a point and digits), then an optional
+// exponent; the sign already taken off.
+bool is_decimal_number(std::string_view text) {
+    std::size_t i = 0;
+    std::size_t digits = 0;
+    while (i < text.size() && is_digit(text[i])) {
+        ++i;
+        ++digits;
+    }
+    if (i < text.size() && text[i] == '.') {
+        ++i;
+        while (i < text.size() && is_digit(text[i])) {
+            ++i;
+            ++digits;
+        }
+    }
+    if (digits == 0) {
+        return false;
+    }
+    if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
+        ++i;
+        if (i < text.size() && (text[i] == '+' || text[i] == '-')) {
+            ++i;
+        }
+        const std::size_t exponent_start = i;
+        while (i < text.size() && is_digit(text[i])) {
+            ++i;
+        }
+        if (i == exponent_start) {
+            return false;
+        }
+    }
+    return i == text.size();
+}
+
+}  // namespace
+
+std::optional<double> python_float(std::string_view text) {
+    const std::optional<std::string> cleaned = without_underscores(strip(text));
+    if (!cleaned || cleaned->empty()) {
+        return std::nullopt;
+    }
+    std::string_view number = *cleaned;
+    double sign = 1.0;
+    if (number.front() == '+' || number.front() == '-') {
+        sign = number.front() == '-' ? -1.0 : 1.0;
+        number.remove_prefix(1);
+    }
+    if (equals_ignoring_case(number, "inf") || equals_ignoring_case(number, "infinity")) {
+        return sign * std::numeric_limits<double>::infinity();
+    }
+    if (equals_ignoring_case(number, "nan")) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (!is_decimal_number(number)) {
+        return std::nullopt;
+    }
+    // strtod reads the decimal text to the nearest double, as Python does.
+    const std::string terminated(number);
+    return sign * std::strtod(terminated.c_str(), nullptr);
+}
+
+std::optional<long long> python_int(std::string_view text) {
+    const std::optional<std::string> cleaned = without_underscores(strip(text));
+    if (!cleaned || cleaned->empty()) {
+        return std::nullopt;
+    }
+    std::string_view number = *cleaned;
+    bool negative = false;
+    if (number.front() == '+' || number.front() == '-') {
+        negative = number.front() == '-';
+        number.remove_prefix(1);
+    }
+    if (number.empty()) {
+        return std::nullopt;
+    }
+    unsigned long long value = 0;
+    constexpr unsigned long long limit = static_cast<unsigned long long>(std::numeric_limits<long long>::max());
+    for (const char c : number) {
+        if (!is_digit(c)) {
+            return std::nullopt;
+        }
+        const auto digit = static_cast<unsigned long long>(c - '0');
+        if (value > (limit - digit) / 10) {
+            return std::nullopt;  // Python would give a bigger number; none of ours is
+        }
+        value = value * 10 + digit;
+    }
+    const auto signed_value = static_cast<long long>(value);
+    return negative ? -signed_value : signed_value;
+}
+
+std::string replace_invalid_utf8(std::string_view text) {
+    constexpr std::string_view replacement = "\xEF\xBF\xBD";  // U+FFFD
+    std::string result;
+    result.reserve(text.size());
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const auto lead = static_cast<unsigned char>(text[i]);
+        if (lead < 0x80) {
+            result += text[i++];
+            continue;
+        }
+        // The length of the sequence the lead byte starts, and the range its
+        // second byte must be in (which rules out overlong forms, surrogates
+        // and numbers past U+10FFFF).
+        std::size_t length = 0;
+        unsigned char low = 0x80;
+        unsigned char high = 0xBF;
+        if (lead >= 0xC2 && lead <= 0xDF) {
+            length = 2;
+        } else if (lead >= 0xE0 && lead <= 0xEF) {
+            length = 3;
+            low = lead == 0xE0 ? 0xA0 : 0x80;
+            high = lead == 0xED ? 0x9F : 0xBF;
+        } else if (lead >= 0xF0 && lead <= 0xF4) {
+            length = 4;
+            low = lead == 0xF0 ? 0x90 : 0x80;
+            high = lead == 0xF4 ? 0x8F : 0xBF;
+        }
+        if (length == 0) {  // not a lead byte at all
+            result += replacement;
+            ++i;
+            continue;
+        }
+        // The longest well-formed beginning of the sequence; a sequence cut
+        // short becomes one U+FFFD, as Python decodes it.
+        std::size_t good = 1;
+        while (good < length && i + good < text.size()) {
+            const auto byte = static_cast<unsigned char>(text[i + good]);
+            const unsigned char from = good == 1 ? low : 0x80;
+            const unsigned char to = good == 1 ? high : 0xBF;
+            if (byte < from || byte > to) {
+                break;
+            }
+            ++good;
+        }
+        if (good == length) {
+            result.append(text.substr(i, length));
+        } else {
+            result += replacement;
+        }
+        i += good;
+    }
+    return result;
+}
+
+}  // namespace vml

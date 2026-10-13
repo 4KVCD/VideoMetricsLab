@@ -1,0 +1,70 @@
+{
+ "cases": [
+  {
+   "output": "ffmpeg version 9.0.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+   "version": [
+    9,
+    0,
+    1
+   ],
+   "text": "9.0.1"
+  },
+  {
+   "output": "ffprobe version n7.1 Copyright (c) 2007-2024 the FFmpeg developers",
+   "version": [
+    7,
+    1
+   ],
+   "text": "7.1"
+  },
+  {
+   "output": "ffmpeg version 8.0 Copyright",
+   "version": [
+    8,
+    0
+   ],
+   "text": "8.0"
+  },
+  {
+   "output": "ffmpeg version 10.2.3.4 Copyright",
+   "version": [
+    10,
+    2,
+    3
+   ],
+   "text": "10.2.3"
+  },
+  {
+   "output": "ffmpeg version N-113411-g1234567 Copyright",
+   "version": null,
+   "text": "unknown"
+  },
+  {
+   "output": "not a version at all",
+   "version": null,
+   "text": "unknown"
+  },
+  {
+   "output": "",
+   "version": null,
+   "text": "unknown"
+  },
+  {
+   "output": "xffmpeg version 9.0",
+   "version": null,
+   "text": "unknown"
+  },
+  {
+   "output": "FFMPEG VERSION 9.0",
+   "version": null,
+   "text": "unknown"
+  },
+  {
+   "output": "ffmpeg version 9.",
+   "version": [
+    9
+   ],
+   "text": "9"
+  }
+ ]
+}

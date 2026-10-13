@@ -30,6 +30,7 @@ endif()
 add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json SYSTEM INTERFACE third_party/nlohmann/include)
 
+add_subdirectory(platform)
 add_subdirectory(core)
 
 if(VML_BUILD_TESTS)
