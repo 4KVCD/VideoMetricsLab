@@ -16,6 +16,7 @@
 #include "vml/platform/console.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/temp_files.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vship.h"
 #include "vml/vship_run.h"
@@ -46,7 +47,7 @@ public:
         std::random_device random;
         for (int attempt = 0; attempt < 100; ++attempt) {
             std::filesystem::path candidate =
-                std::filesystem::temp_directory_path() / ("vml_isolated_" + std::to_string(random()));
+                std::filesystem::temp_directory_path() / (temp_prefix("vml-isolated-") + std::to_string(random()));
             std::error_code error;
             if (std::filesystem::create_directory(candidate, error)) {
                 path_ = candidate;

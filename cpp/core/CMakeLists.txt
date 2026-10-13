@@ -32,6 +32,7 @@ add_library(vml_core
     src/settings.cpp
     src/sha256.cpp
     src/stats.cpp
+    src/temp_files.cpp
     src/time_format.cpp
     src/video.cpp
     src/vship.cpp

@@ -33,6 +33,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/run_json.h"
+#include "vml/temp_files.h"
 #include "vml/time_format.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
@@ -247,7 +248,7 @@ public:
         std::random_device random;
         for (int attempt = 0; attempt < 100; ++attempt) {
             std::filesystem::path candidate =
-                std::filesystem::temp_directory_path() / (prefix + std::to_string(random()));
+                std::filesystem::temp_directory_path() / (temp_prefix(prefix) + std::to_string(random()));
             std::error_code error;
             if (std::filesystem::create_directory(candidate, error)) {
                 path_ = candidate;

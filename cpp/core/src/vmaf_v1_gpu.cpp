@@ -19,6 +19,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/temp_files.h"
 
 namespace vml {
 
@@ -325,7 +326,7 @@ void score_probe_pictures(const Libvmaf& library, VmafContext* context) {
 std::vector<std::string> output_names(const Libvmaf& library, VmafContext* context) {
     std::random_device random;
     const std::filesystem::path file =
-        std::filesystem::temp_directory_path() / ("vml-vmaf-v1-" + std::to_string(random()) + ".json");
+        std::filesystem::temp_directory_path() / (temp_prefix("vml-vmaf-v1-") + std::to_string(random()) + ".json");
     std::ofstream(file, std::ios::binary).close();  // made first, so that its short name can be found
     struct Removed {
         std::filesystem::path path;

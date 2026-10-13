@@ -29,6 +29,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/stats.h"
+#include "vml/temp_files.h"
 
 namespace vml {
 
@@ -406,8 +407,8 @@ public:
     PictureFolder() {
         std::random_device random;
         for (int attempt = 0; attempt < 100; ++attempt) {
-            std::filesystem::path candidate =
-                std::filesystem::temp_directory_path() / ("videometricslab-perceptual-" + std::to_string(random()));
+            std::filesystem::path candidate = std::filesystem::temp_directory_path() /
+                                              (temp_prefix("videometricslab-perceptual-") + std::to_string(random()));
             std::error_code error;
             if (std::filesystem::create_directory(candidate, error)) {
                 path_ = candidate;

@@ -34,6 +34,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/run_json.h"
+#include "vml/temp_files.h"
 
 namespace vml {
 
@@ -386,7 +387,7 @@ public:
         std::random_device random;
         for (int attempt = 0; attempt < 100; ++attempt) {
             const std::filesystem::path candidate =
-                folder / ("vml-vship-pts-" + std::to_string(random()) + ".txt");
+                folder / (temp_prefix("vml-vship-pts-") + std::to_string(random()) + ".txt");
             std::error_code error;
             if (!std::filesystem::exists(candidate, error) && std::ofstream(candidate, std::ios::binary)) {
                 path_ = candidate;

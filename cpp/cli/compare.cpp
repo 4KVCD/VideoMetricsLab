@@ -5,6 +5,7 @@
 #include <cctype>
 #include <chrono>
 #include <fstream>
+#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -32,6 +33,7 @@
 #include "vml/python_text.h"
 #include "vml/run_line.h"
 #include "vml/settings.h"
+#include "vml/temp_files.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
 #include "vml/vship_run.h"
@@ -854,6 +856,15 @@ int compare(const CompareArguments& arguments) {
     if (!jobs.empty()) {
         const Clock::time_point started = Clock::now();
         *running = true;
+        // What runs ended outright (End task, a crash) left in the temporary
+        // folder goes while this one runs; waited for as the block ends.
+        const std::future<void> leftovers = std::async(std::launch::async, [] {
+            std::error_code error;
+            const std::filesystem::path folder = std::filesystem::temp_directory_path(error);
+            if (!error) {
+                remove_leftovers(folder);
+            }
+        });
         // Which decoders this FFmpeg and these GPUs have is only asked when a
         // video may be decoded on the GPU.
         const bool gpu_decode =

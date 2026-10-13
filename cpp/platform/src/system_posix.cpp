@@ -1,6 +1,7 @@
 // The system on Linux and macOS.
 #include "vml/platform/system.h"
 
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #ifdef __APPLE__
@@ -8,6 +9,7 @@
 #include <mach/mach.h>
 #endif
 
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -104,6 +106,15 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
 void crash_quietly() {}  // a crash shows no dialog here
 
 void end_process_now(int exit_code) { _exit(exit_code); }
+
+int process_id() { return static_cast<int>(getpid()); }
+
+bool process_running(int pid) {
+    if (pid <= 0) {
+        return pid == 0;  // as psutil counts it
+    }
+    return kill(pid, 0) == 0 || errno == EPERM;  // EPERM: it runs, but is not ours to signal
+}
 
 void close_native_handle(void* handle) { close(static_cast<int>(reinterpret_cast<std::intptr_t>(handle))); }
 

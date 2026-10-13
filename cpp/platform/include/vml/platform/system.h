@@ -28,6 +28,13 @@ void crash_quietly();
 // forever, which a normal exit could wait on.
 [[noreturn]] void end_process_now(int exit_code);
 
+// This process's id.
+int process_id();
+
+// Whether a process with id `pid` is running, as psutil's pid_exists says:
+// one that runs but may not be looked at counts, and so does 0.
+bool process_running(int pid);
+
 // Closes a handle a library gave this process to pass on, such as the Vulkan
 // engine's GPU memory exported for a decoder to import: a HANDLE on Windows,
 // a file descriptor elsewhere.

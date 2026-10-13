@@ -146,6 +146,23 @@ void end_process_now(int exit_code) {
     std::_Exit(exit_code);  // not reached
 }
 
+int process_id() { return static_cast<int>(GetCurrentProcessId()); }
+
+bool process_running(int pid) {
+    if (pid <= 0) {
+        return pid == 0;  // the System Idle Process
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
+    if (process == nullptr) {
+        return GetLastError() == ERROR_ACCESS_DENIED;  // it runs, but is not ours to look at
+    }
+    // A process that has ended can still be opened while a handle to it is
+    // open somewhere.
+    const bool running = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+    CloseHandle(process);
+    return running;
+}
+
 void close_native_handle(void* handle) {
     if (handle != nullptr) {
         CloseHandle(handle);
