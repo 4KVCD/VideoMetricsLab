@@ -20,6 +20,7 @@ from vmaf_app.core.vmaf_runner import (
     _build_resample_test_filtergraph,
     _fallback_ladder,
     analysis_pix_fmt,
+    estimate_total_frames,
     validate_display_geometry,
 )
 
@@ -91,6 +92,16 @@ def test_duration_limit_adds_output_side_t_flag():
     t_idx = cmd.index("-t")
     assert t_idx > lavfi_idx
     assert cmd[t_idx + 1] == "30.000"
+
+
+def test_the_frame_count_under_a_duration_limit_is_the_frames_it_keeps():
+    """The frames that start before the limit, as -t keeps them: 32.5 frames
+    at 120 fps keep frames 0-32 (round() gave 32)."""
+    video = _info("t.mkv", 1920, 1080)
+    video.fps = 120.0
+    assert estimate_total_frames(video, VmafOptions(duration_limit=32.5 / 120)) == 33
+    assert estimate_total_frames(video, VmafOptions(duration_limit=0.25)) == 30
+    assert estimate_total_frames(video, VmafOptions(duration_limit=60.0)) == 300  # the video's own length
 
 
 def test_libvmaf_options_include_model_threads_subsample_and_features():

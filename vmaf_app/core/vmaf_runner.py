@@ -32,7 +32,14 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
 from vmaf_app.core.frame_coverage import short_comparison
-from vmaf_app.core.frame_sync import by_timestamp, duration_args, frame_rate, framesync_opts, pairing_filters
+from vmaf_app.core.frame_sync import (
+    by_timestamp,
+    duration_args,
+    frame_rate,
+    frames_within,
+    framesync_opts,
+    pairing_filters,
+)
 from vmaf_app.core.geometry import (
     analysis_dimensions,
     content_size,
@@ -842,7 +849,11 @@ def estimate_total_frames(
     if other_info is not None:
         frame_count = min(frame_count, other_info.estimated_frame_count)
     if options.duration_limit > 0:
-        frame_count = min(frame_count, round(options.duration_limit * reference_info.fps))
+        # The frames the -t limit keeps (duration_args), counted as the
+        # run counts them; round(limit * fps) was a frame short when the
+        # limit fell less than half a frame after a frame's start.
+        kept = frames_within(f"{options.duration_limit:.3f}", frame_rate(reference_info))
+        frame_count = min(frame_count, kept or 0)
     return frame_count
 
 
