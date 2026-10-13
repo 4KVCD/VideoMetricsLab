@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <cstdio>
 #include <functional>
 #include <map>
 #include <set>
@@ -231,9 +230,10 @@ std::string repr(const std::string& text) {
         } else if (c == '\r') {
             quoted += "\\r";
         } else if (byte < 0x20 || byte == 0x7F) {
-            char escaped[8];
-            std::snprintf(escaped, sizeof escaped, "\\x%02x", byte);
-            quoted += escaped;
+            constexpr char digits[] = "0123456789abcdef";
+            quoted += "\\x";
+            quoted += digits[byte >> 4];
+            quoted += digits[byte & 0xF];
         } else {
             quoted += c;
         }

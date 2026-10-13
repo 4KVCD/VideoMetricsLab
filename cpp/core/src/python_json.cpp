@@ -1,7 +1,6 @@
 #include "vml/python_json.h"
 
 #include <cmath>
-#include <cstdio>
 
 #include "vml/number_format.h"
 
@@ -9,10 +8,14 @@ namespace vml {
 
 namespace {
 
+// \uXXXX for a code point up to U+FFFF, in lower-case hex as Python writes
+// it.
 void append_escape(std::string& out, unsigned code) {
-    char text[8];
-    std::snprintf(text, sizeof text, "\\u%04x", code);  // lower-case hex, as Python writes it
-    out += text;
+    constexpr char digits[] = "0123456789abcdef";
+    out += "\\u";
+    for (int shift = 12; shift >= 0; shift -= 4) {
+        out += digits[(code >> shift) & 0xF];
+    }
 }
 
 // The length of the well-formed UTF-8 sequence at `at`, or 0 if there is

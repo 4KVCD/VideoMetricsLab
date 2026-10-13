@@ -658,6 +658,7 @@ ARGUMENT_CASES = [
     ["compare", "ref.mkv", "a.mkv", "--cvvdp-display", "-phone"],
     ["compare", "ref.mkv", "a.mkv", "--cvvdp-display", "-6-inch phone"],
     ["compare", "ref.mkv", "a.mkv", "--scaler", "it's"],
+    ["compare", "ref.mkv", "a.mkv", "--scaler", "tab\there\x01"],
     ["compare", "réf.mkv", "ä.mkv", "--cvvdp-display", "écran"],
 ]
 

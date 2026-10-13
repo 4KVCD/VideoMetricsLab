@@ -1841,6 +1841,19 @@
   {
    "argv": [
     "compare",
+    "ref.mkv",
+    "a.mkv",
+    "--scaler",
+    "tab\there\u0001"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --scaler: invalid choice: 'tab\\there\\x01' (choose from bicubic, bilinear, lanczos, spline)\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
     "r\u00e9f.mkv",
     "\u00e4.mkv",
     "--cvvdp-display",
