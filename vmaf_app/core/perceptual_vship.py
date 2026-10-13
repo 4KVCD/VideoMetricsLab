@@ -46,7 +46,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import frame_sync_by_time, gpu_frames
+from vmaf_app.core import frame_sync_by_time, gpu_frames, temp_files
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.colour import UnsupportedColourError, video_colour
@@ -1236,7 +1236,7 @@ class _FrameStream:
         pairing by timestamp. Returns (frames, exit code, error output)."""
         if not self._timestamps:
             return self._decode_with(command, None)
-        descriptor, name = tempfile.mkstemp(prefix="vml-vship-pts-", suffix=".txt")
+        descriptor, name = tempfile.mkstemp(prefix=temp_files.prefix("vml-vship-pts-"), suffix=".txt")
         os.close(descriptor)
         stamps_path = Path(name)
         try:

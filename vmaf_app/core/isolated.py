@@ -50,7 +50,7 @@ from pathlib import Path
 
 import psutil
 
-from vmaf_app.core import proc
+from vmaf_app.core import proc, temp_files
 
 _log = logging.getLogger(__name__)
 
@@ -212,7 +212,7 @@ def _child_folder() -> Path | None:
     temporary files and its crash report. None if the temporary folder
     cannot be written to: the child then runs without either."""
     try:
-        return Path(tempfile.mkdtemp(prefix=f"vml-isolated-{os.getpid()}-"))
+        return Path(tempfile.mkdtemp(prefix=temp_files.prefix("vml-isolated-")))
     except OSError:
         return None
 

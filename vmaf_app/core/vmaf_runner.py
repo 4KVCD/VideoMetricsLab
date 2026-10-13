@@ -29,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import gpu_frames, libvmaf, libvmaf_cpu, vmaf_gpu, vmaf_v1_gpu, vmaf_vulkan
+from vmaf_app.core import gpu_frames, libvmaf, libvmaf_cpu, temp_files, vmaf_gpu, vmaf_v1_gpu, vmaf_vulkan
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.crop_detect import CropDetectCancelled, common_picture, detect_crop, detect_pair
 from vmaf_app.core.ffmpeg_locate import VIDEO_STREAM, check_tools, ffmpeg_path, format_version
@@ -1191,7 +1191,7 @@ def _execute_run(
     """
     if not options.requested_metrics():
         raise VmafRunError("Select at least one metric to calculate.")
-    with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir_str:
+    with tempfile.TemporaryDirectory(prefix=temp_files.prefix(tmp_prefix)) as tmpdir_str:
         tmpdir = Path(tmpdir_str)
         log_path = tmpdir / "vmaf_log.json"
         xpsnr_log_path = tmpdir / "xpsnr_log.txt" if options.compute_xpsnr else None

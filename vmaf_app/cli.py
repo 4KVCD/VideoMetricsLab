@@ -42,7 +42,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from vmaf_app import APP_NAME, __version__
-from vmaf_app.core import libvmaf, metric_cache, perceptual_vship, result_cache, vmaf_gpu
+from vmaf_app.core import libvmaf, metric_cache, perceptual_vship, result_cache, temp_files, vmaf_gpu
 from vmaf_app.core.colour import UNTAGGED
 from vmaf_app.core.cvvdp import DEFAULT_PRESET, CvvdpSettings, preset_named
 from vmaf_app.core.cvvdp import presets as cvvdp_presets
@@ -927,6 +927,9 @@ def compare(args: argparse.Namespace, *, out=None, err=None) -> int:
     cancelled = False
     started = time.monotonic()
     if jobs:
+        # What runs ended outright left behind (End task, a crash) goes
+        # while this one starts.
+        temp_files.start_removing_leftovers()
         parallel = args.parallel or settings.parallel_jobs
 
         def on_interrupt(cancel) -> None:

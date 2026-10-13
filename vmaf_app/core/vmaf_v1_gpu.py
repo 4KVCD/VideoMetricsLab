@@ -48,7 +48,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import libvmaf, vmaf_gpu, vmaf_vulkan
+from vmaf_app.core import libvmaf, temp_files, vmaf_gpu, vmaf_vulkan
 
 _log = logging.getLogger(__name__)
 
@@ -244,7 +244,7 @@ def _use_cpu_features(lib: ctypes.CDLL, context: ctypes.c_void_p, options: dict[
 def _output_names(lib: ctypes.CDLL, context: ctypes.c_void_p) -> list[str]:
     """Returns the names of the features a context has scores for. libvmaf
     has no call that lists them, so they are read from its JSON output."""
-    handle, path = tempfile.mkstemp(prefix="vml-vmaf-v1-", suffix=".json")
+    handle, path = tempfile.mkstemp(prefix=temp_files.prefix("vml-vmaf-v1-"), suffix=".json")
     os.close(handle)
     try:
         libvmaf.check(lib.vmaf_write_output(context, libvmaf.path_bytes(path), _VMAF_OUTPUT_FORMAT_JSON),
