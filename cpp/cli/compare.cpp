@@ -408,8 +408,9 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
 // What this C++ version cannot do yet of a video's VMAF on the GPU (a task
 // of its own, plan_tasks), or nothing.
 std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
-    const auto on_gpu = std::find_if(tasks.begin(), tasks.end(), [](const MetricTask& task) { return task.on_gpu(); });
-    if (on_gpu == tasks.end()) {
+    // VMAF's task alone: Vship's, in the GPU's queue too, pairs its frames
+    // itself whatever VML_VMAF_PIPES says.
+    if (std::none_of(tasks.begin(), tasks.end(), [](const MetricTask& task) { return task.backend == gpu_vmaf_task; })) {
         return std::nullopt;
     }
     if (by_timestamp()) {

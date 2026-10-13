@@ -93,6 +93,8 @@
     { "name": "vship-ffmpeg-software-decode", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
       "args": ["-m", "butteraugli", "--no-gpu-decode", "--frames", "60"],
       "environment": { "VML_SOFTWARE_DECODE": "ffmpeg" } },
+    { "name": "vship-with-vmaf-pipes-canvas", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "ssimulacra2", "--frames", "30"], "environment": { "VML_VMAF_PIPES": "canvas" } },
     { "name": "perceptual-cpu-4k", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
       "args": ["-m", "ssimulacra2,butteraugli", "--cpu", "--frames", "12"] },
     { "name": "scaled-to-test", "reference": "videoq_src.mp4", "tests": ["videoq_1080p_h265.mkv"],
