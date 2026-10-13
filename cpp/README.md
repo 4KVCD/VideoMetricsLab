@@ -68,8 +68,10 @@ PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
 NEG and v1 on the GPU, the app's default, with Vulkan or, where the GPU
 backend setting says CUDA or Vulkan cannot, with libvmaf's CUDA code on an
 NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
-extractors, as the Python app does; and scores SSIMULACRA2 and Butteraugli
-on the GPU with Vship, in a pass each or (Settings > GPU metrics) in one.
+extractors, as the Python app does; and scores SSIMULACRA2, Butteraugli and
+CVVDP on the GPU with Vship, in a pass each or (Settings > GPU metrics) in
+one, CVVDP on the display preset Settings chooses or on each
+`--cvvdp-display`.
 With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on the
 CPU, and the two run at once, as the Python app runs a video's tasks; so
 are Vship's metrics, in the GPU's queue after VMAF. For VMAF and Vship's
@@ -88,9 +90,9 @@ or the GPU's driver ends that process and not the run: FFmpeg's filters
 then calculate VMAF and the others on the CPU, as in the Python app (the
 Python app's CPU tools for SSIMULACRA2 and Butteraugli are not in the C++
 app yet, so a Vship metric whose GPU pass fails is reported as failed). For
-a run it cannot do yet (CVVDP, and SSIMULACRA2 and Butteraugli on the CPU),
-it says what it cannot do and exits with code 2, rather than giving other
-answers than the Python app. It neither reads nor saves the app's saved
+a run it cannot do yet (SSIMULACRA2 and Butteraugli on the CPU, and Vship's
+metrics with frames paired by timestamp), it says what it cannot do and
+exits with code 2, rather than giving other answers than the Python app. It neither reads nor saves the app's saved
 scores yet, and calculates every score.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg

@@ -8,7 +8,8 @@ frame_sync.py, geometry.py, model_select.py), FFmpeg's commands for a run
 videos in the app (gpu_frames.py, vmaf_runner.py), VMAF predicted from
 features by the bundled libvmaf and scored with the Vulkan engine
 (vmaf_vulkan.py), Vship's view of a video and its colours
-(perceptual_vship.py, colour.py), the line that says how far a video is
+(perceptual_vship.py, colour.py), CVVDP's displays and the pooling of its
+seconds (cvvdp.py, perceptual_vship.py), the line that says how far a video is
 (ui/run_line.py), its command line's reading of arguments and patterns
 (cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
 that Vulkan scores VMAF on.
@@ -1315,7 +1316,87 @@ def vship_cases() -> dict:
             "sizes": sizes, "refusals": refusals}
 
 
+def cvvdp_cases() -> dict:
+    """CVVDP's displays (cvvdp.py): the built-in presets and the user's as
+    Settings holds them (malformed ones skipped), each display's identity
+    and its JSON for Vship, a request's settings read back, the size CVVDP
+    is calculated at (perceptual_vship.cvvdp_computed_size), and the whole
+    video's JOD pooled from its seconds (pool_cvvdp_windows)."""
+    from vmaf_app.core import cvvdp
+    from vmaf_app.core.perceptual_vship import cvvdp_computed_size, pool_cvvdp_windows
+
+    def described(preset) -> dict:
+        return {"name": preset.name, "builtin": preset.builtin, "identity": preset.settings.display.identity(),
+                "resize_to_display": preset.settings.resize_to_display,
+                "vship_json": cvvdp.vship_display_json(preset.settings.display)}
+
+    tv = {"name": "Living room TV", "settings": {
+        "display": {"width": 3840, "height": 2160, "diagonal_inches": 55.5, "viewing_distance_m": 2.25,
+                    "peak_luminance": 750, "contrast": 5000, "ambient_lux": 30.123456, "reflectivity": 0.0123456789,
+                    "exposure": 1.5, "hdr": True},
+        "resize_to_display": True}}
+    user_lists = [
+        [],
+        [tv],
+        [{"name": "defaults", "settings": {}},
+         {"name": 7, "settings": {"display": {"hdr": 1}}},
+         {"name": 2.5, "settings": {"display": {"width": 1920.7, "height": 1080, "unknown": "left out"}}},
+         {"name": None, "settings": {"display": {"hdr": "yes"}, "resize_to_display": "no"}},
+         {"name": True, "settings": {"display": {"hdr": 0}, "resize_to_display": []}},
+         {"name": "no settings"},
+         {"settings": {}},
+         {"name": "text width", "settings": {"display": {"width": "3840"}}},
+         {"name": "true width", "settings": {"display": {"width": True}}},
+         {"name": "null width", "settings": {"display": {"width": None}}},
+         {"name": "tiny", "settings": {"display": {"width": 8}}},
+         {"name": "no distance", "settings": {"display": {"viewing_distance_m": 0}}},
+         {"name": "negative light", "settings": {"display": {"ambient_lux": -1}}},
+         {"name": "a mirror", "settings": {"display": {"reflectivity": 1}}},
+         {"name": "list settings", "settings": [1]},
+         {"name": "null display", "settings": {"display": None}},
+         {"name": "30-inch 4K monitor, office", "settings": {"display": {"peak_luminance": 400}}}],
+    ]
+    names = ("30-inch 4K monitor, office", "6-inch phone", "Living room TV", "defaults", "7", "2.5", "None",
+             "True", "tiny", "missing", "")
+    preset_lists = [{"saved": json.dumps(saved),
+                     "presets": [described(preset) for preset in cvvdp.presets(saved)],
+                     "named": {name: None if (preset := cvvdp.preset_named(name, saved)) is None
+                               else described(preset) for name in names}}
+                    for saved in user_lists]
+
+    read_back = []
+    for preset in cvvdp.presets([tv]):
+        for resize in (False, True):
+            parameters = cvvdp.CvvdpSettings(preset.settings.display, resize).spec_parameters()
+            back = cvvdp.CvvdpSettings.from_spec_parameters(parameters)
+            read_back.append({"parameters": dict(parameters), "identity": back.display.identity(),
+                              "resize_to_display": back.resize_to_display,
+                              "vship_json": cvvdp.vship_display_json(back.display)})
+
+    sizes = []
+    for size in ((1920, 1080), (3840, 2160), (1280, 536), (720, 576), (4096, 2160), (7680, 4320), (4, 3), (4, 5)):
+        for width, height in ((3840, 2160), (1920, 1080), (2400, 1080), (18, 100)):
+            for resize in (False, True):
+                settings = cvvdp.CvvdpSettings(cvvdp.CvvdpDisplay(width=width, height=height), resize)
+                sizes.append({"size": list(size), "display": [width, height], "resize_to_display": resize,
+                              "computed": list(cvvdp_computed_size(size, settings))})
+
+    rng = random.Random(20261013)
+    pools = [{"windows": [[0, 1, exact(9.5)]], "jod": exact(pool_cvvdp_windows([(0, 1, 9.5)]))}]
+    for case in range(60):
+        windows, first = [], 0
+        for _ in range(rng.randint(1, 8)):
+            frames = rng.choice((1, 1, 2, 24, 25, 30, 60, 120)) if case % 5 else 1
+            jod = rng.choice((10.0, 9.9999, rng.uniform(0, 10), rng.uniform(9.5, 10), rng.uniform(-2, 10.5)))
+            windows.append((first, frames, jod))
+            first += frames
+        pools.append({"windows": [[start, frames, exact(jod)] for start, frames, jod in windows],
+                      "jod": exact(pool_cvvdp_windows(windows))})
+    return {"preset_lists": preset_lists, "read_back": read_back, "sizes": sizes, "pools": pools}
+
+
 if __name__ == "__main__":
+    write("cvvdp.json", cvvdp_cases())
     write("vship.json", vship_cases())
     write("decoding.json", decoding_cases())
     write("vulkan.json", vulkan_cases())

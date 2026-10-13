@@ -1,15 +1,16 @@
-// SSIMULACRA2 and Butteraugli scored on the GPU by Vship (vship.h), as the
-// Python app scores them (the rest of vmaf_app/core/perceptual_vship.py):
-// each video's frames are decoded, cropped, sampled and scaled into a ring
-// of Vship's pinned memory, by a decoder of the app's in the pass's process
-// where one takes the video (gpu_frames.h), else by FFmpeg; each frame pair
-// is handed to every metric's handlers, two per metric on threads of their
-// own; a pass scores one or more metrics over both videos, in a process of
-// its own; and a task's metrics are scored in one pass or several.
+// SSIMULACRA2, Butteraugli and CVVDP scored on the GPU by Vship (vship.h),
+// as the Python app scores them (the rest of
+// vmaf_app/core/perceptual_vship.py): each video's frames are decoded,
+// cropped, sampled and scaled into a ring of Vship's pinned memory, by a
+// decoder of the app's in the pass's process where one takes the video
+// (gpu_frames.h), else by FFmpeg; each frame pair is handed to every
+// metric's handlers, two per metric on threads of their own, and CVVDP's
+// one, which takes the pairs in order; a pass scores one or more metrics
+// over both videos, in a process of its own; and a task's metrics are
+// scored in one pass or several.
 //
-// Not yet: CVVDP, frames paired by timestamp, and the CPU calculating
-// SSIMULACRA2 and Butteraugli where the GPU cannot (the command line
-// refuses such a run before it starts).
+// Not yet: frames paired by timestamp, and the CPU calculating SSIMULACRA2
+// and Butteraugli (the command line refuses such a run before it starts).
 #pragma once
 
 #include <nlohmann/json.hpp>
@@ -22,6 +23,7 @@
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/cvvdp.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/perceptual.h"
 #include "vml/vship.h"
@@ -38,8 +40,9 @@ inline constexpr std::string_view perceptual_cpu_task = "perceptual_cpu";
 bool is_perceptual_metric(std::string_view key);
 
 // What a perceptual task is given: the two videos, the run's options (black
-// bars, scaling, the duration limit, frame subsampling, decoding), and
-// where SSIMULACRA2 and Butteraugli are each set to run.
+// bars, scaling, the duration limit, frame subsampling, decoding), where
+// SSIMULACRA2 and Butteraugli are each set to run, and the display CVVDP
+// models.
 struct PerceptualRequest {
     RunEnvironment environment;
     VideoInfo source;
@@ -47,6 +50,7 @@ struct PerceptualRequest {
     VmafOptions options;
     // "gpu" or "cpu" for SSIMULACRA2 and Butteraugli; "gpu" where not given.
     std::map<std::string, std::string, std::less<>> backends;
+    CvvdpSettings cvvdp;
 
     // Where `key` is set to run: CVVDP on the GPU only (its official CPU
     // implementation needs PyTorch, almost 1 GB, and takes seconds per 4K
@@ -85,7 +89,8 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
 // run (the Python app's apply_vship_cpu_fallback): on the GPU through
 // Vship, each in a pass of its own, or with `together` in one pass. A
 // metric that fails while the others finish is in the output's failures;
-// when every pass fails, the first error is thrown. Throws Cancelled,
+// when every pass fails, the PerceptualRunError thrown says why, CVVDP's
+// own reason apart, as it runs on the GPU only. Throws Cancelled,
 // ComparisonCutShortError (a video ends long before its stated length),
 // PerceptualRunError, and CropDetectError.
 PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,

@@ -9,11 +9,11 @@
 
 namespace vml {
 
-// `value` as Python's json.dumps(value, indent=2) writes it: keys in their
-// order, two spaces of indent, ", " and ": " separators, every character
-// past ASCII as \uXXXX (surrogate pairs past U+FFFF), floats as Python's
-// repr() writes them, and NaN and infinities as Python writes them (NaN,
-// Infinity, -Infinity), although JSON has none.
-std::string python_json_dumps(const nlohmann::ordered_json& value);
+// `value` as Python's json.dumps(value, indent=indent) writes it: keys in
+// their order, `indent` spaces a level, every character past ASCII as
+// \uXXXX (surrogate pairs past U+FFFF), floats as Python's repr() writes
+// them, and NaN and infinities as Python writes them (NaN, Infinity,
+// -Infinity), although JSON has none.
+std::string python_json_dumps(const nlohmann::ordered_json& value, int indent = 2);
 
 }  // namespace vml

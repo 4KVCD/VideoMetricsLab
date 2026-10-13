@@ -125,12 +125,35 @@ struct ScoreSsimulacra2 {
     double score = 0.0;
 };
 
+// The display is JSON text, with the key it is defined under (cvvdp.h's
+// vship_display_json); the frame rate is part of the score, as CVVDP models
+// how the eye integrates over time.
+struct InitCvvdp {
+    int structType = init_cvvdp;
+    Colorspace src_colorspace;
+    Colorspace dis_colorspace;
+    float fps = 0.0f;
+    bool resizeToDisplay = false;
+    const char* model_key_cstr = nullptr;
+    const char* model_config_json_cstr = nullptr;
+    int gpu_id = 0;
+};
+
 // dstp nullptr: no distortion map.
 struct ScoreButteraugli {
     int structType = score_butteraugli;
     double normQ = 0.0;
     double norm3 = 0.0;
     double norminf = 0.0;
+    void* dstp = nullptr;
+    std::int64_t dststride = 0;
+};
+
+// The JOD of the frames since the handler's score was last reset. dstp
+// nullptr: no distortion map.
+struct ScoreCvvdp {
+    int structType = score_cvvdp;
+    double score = 0.0;
     void* dstp = nullptr;
     std::int64_t dststride = 0;
 };

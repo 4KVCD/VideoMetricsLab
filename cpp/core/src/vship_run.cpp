@@ -3,15 +3,18 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <cstring>
 #include <deque>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <system_error>
 #include <thread>
 
 #include "vml/ffmpeg_tools.h"
@@ -569,37 +572,33 @@ struct LaneJob {
 
 using Planes = std::vector<std::array<const std::uint8_t*, 3>>;  // each slot's planes
 
-// One Vship handler for one metric, on its own thread (the Python app's
-// _MetricLane). Frame pairs are dealt to a metric's lanes in turn; each lane
-// writes its score by frame index, so the order they finish in does not
-// matter. A lane whose handler fails keeps handing its frames back
-// unscored, so that the other metrics can finish.
-class MetricLane {
-public:
-    MetricLane(const VshipLibrary& library, const VshipDevice& device, std::string key,
-               const vship_api::Colorspace& source, const vship_api::Colorspace& distorted,
-               const Planes& source_planes, const Planes& distorted_planes,
-               const std::array<std::int64_t, 3>& source_strides, const std::array<std::int64_t, 3>& distorted_strides,
-               ScoreArray& scores, std::function<void(long long)> finished, const std::atomic<bool>& abort)
-        : library_(library),
-          device_(device),
-          key_(std::move(key)),
-          source_(source),
-          distorted_(distorted),
-          source_planes_(source_planes),
-          distorted_planes_(distorted_planes),
-          source_strides_(source_strides),
-          distorted_strides_(distorted_strides),
-          scores_(scores),
-          finished_(std::move(finished)),
-          abort_(abort) {}
+// What a lane scores with: Vship's library and GPU, each video's colour
+// space, the planes and strides of the streams' ring slots, whom to tell
+// once it is done with a pair, and the pass's abort flag.
+struct LaneSetup {
+    const VshipLibrary& library;
+    const VshipDevice& device;
+    vship_api::Colorspace source;
+    vship_api::Colorspace distorted;
+    const Planes& source_planes;
+    const Planes& distorted_planes;
+    std::array<std::int64_t, 3> source_strides;
+    std::array<std::int64_t, 3> distorted_strides;
+    std::function<void(long long)> finished;  // given a pair's index
+    const std::atomic<bool>& abort;
+};
 
-    ~MetricLane() {
-        stop();
-        join();
-    }
-    MetricLane(const MetricLane&) = delete;
-    MetricLane& operator=(const MetricLane&) = delete;
+// One Vship handler on a thread of its own, scoring the pairs it is given.
+// A lane whose handler fails keeps handing its pairs back unscored, so that
+// the other metrics can finish.
+class Lane {
+public:
+    explicit Lane(LaneSetup setup) : setup_(std::move(setup)) {}
+    // Each kind of lane stops and joins its thread as it is destroyed: the
+    // thread runs that kind's run().
+    virtual ~Lane() = default;
+    Lane(const Lane&) = delete;
+    Lane& operator=(const Lane&) = delete;
 
     void start() {
         thread_ = std::thread([this] { run(); });
@@ -617,21 +616,55 @@ public:
         }
     }
 
-    const std::string& key() const { return key_; }
-
     // The handler's failure, if it failed.
     std::exception_ptr error() const {
         const std::lock_guard lock(error_mutex_);
         return error_;
     }
 
-private:
+protected:
     void fail(std::exception_ptr error) {
         const std::lock_guard lock(error_mutex_);
         error_ = std::move(error);
     }
 
-    void run() {
+    // The pair's planes, in the order Vship reads them.
+    const std::uint8_t* const* source_planes(const LaneJob& job) const {
+        return setup_.source_planes[static_cast<std::size_t>(job.source_slot)].data();
+    }
+    const std::uint8_t* const* distorted_planes(const LaneJob& job) const {
+        return setup_.distorted_planes[static_cast<std::size_t>(job.distorted_slot)].data();
+    }
+
+    virtual void run() = 0;
+
+    const LaneSetup setup_;
+    Channel<std::optional<LaneJob>> jobs_;
+
+private:
+    mutable std::mutex error_mutex_;
+    std::exception_ptr error_;
+    std::thread thread_;
+};
+
+// One of SSIMULACRA2's or Butteraugli's handlers (the Python app's
+// _MetricLane). Frame pairs are dealt to a metric's lanes in turn; each lane
+// writes its score by frame index, so the order they finish in does not
+// matter.
+class MetricLane : public Lane {
+public:
+    MetricLane(LaneSetup setup, std::string key, ScoreArray& scores)
+        : Lane(std::move(setup)), key_(std::move(key)), scores_(scores) {}
+
+    ~MetricLane() override {
+        stop();
+        join();
+    }
+
+    const std::string& key() const { return key_; }
+
+private:
+    void run() override {
         void* handler = nullptr;
         try {
             handler = make_handler();
@@ -640,7 +673,7 @@ private:
         }
         while (true) {
             const std::optional<LaneJob> job = jobs_.get();
-            if (!job || abort_) {
+            if (!job || setup_.abort) {
                 break;
             }
             if (!error()) {
@@ -650,10 +683,10 @@ private:
                     fail(std::current_exception());
                 }
             }
-            finished_(job->index);
+            setup_.finished(job->index);
         }
         if (handler != nullptr) {
-            library_.free_handler(handler);
+            setup_.library.free_handler(handler);
         }
     }
 
@@ -663,48 +696,47 @@ private:
         int error = 0;
         if (key_ == "ssimulacra2") {
             vship_api::InitSsimulacra2 init;
-            init.src_colorspace = source_;
-            init.dis_colorspace = distorted_;
-            init.gpu_id = device_.gpu_id;
-            error = library_.init_handler(&handler, &init);
+            init.src_colorspace = setup_.source;
+            init.dis_colorspace = setup_.distorted;
+            init.gpu_id = setup_.device.gpu_id;
+            error = setup_.library.init_handler(&handler, &init);
         } else {
             // Vship's defaults (doc/BUTTERAUGLI.md): the 2-norm, reported
             // beside the 3-norm the app shows, for a 203-nit display.
             vship_api::InitButteraugli init;
-            init.src_colorspace = source_;
-            init.dis_colorspace = distorted_;
+            init.src_colorspace = setup_.source;
+            init.dis_colorspace = setup_.distorted;
             init.Qnorm = 2;
             init.intensity_multiplier = 203.0f;
-            init.gpu_id = device_.gpu_id;
-            error = library_.init_handler(&handler, &init);
+            init.gpu_id = setup_.device.gpu_id;
+            error = setup_.library.init_handler(&handler, &init);
         }
         if (error != 0) {
-            throw VshipUnavailableError("Could not initialize Vship " + key_ + ": " + library_.message(std::nullopt));
+            throw VshipUnavailableError("Could not initialize Vship " + key_ + ": " +
+                                        setup_.library.message(std::nullopt));
         }
         return handler;
     }
 
     // Scores one frame pair with the handler.
     double compute(void* handler, const LaneJob& job) {
+        const VshipLibrary& library = setup_.library;
         const std::string label = key_ == "ssimulacra2" ? "SSIMULACRA2" : "Butteraugli";
-        const std::array<const std::uint8_t*, 3>& source = source_planes_[static_cast<std::size_t>(job.source_slot)];
-        const std::array<const std::uint8_t*, 3>& distorted =
-            distorted_planes_[static_cast<std::size_t>(job.distorted_slot)];
         double value = 0.0;
         int error = 0;
         if (key_ == "ssimulacra2") {
             vship_api::ScoreSsimulacra2 score;
-            error = library_.compute_handler(handler, &score, source.data(), distorted.data(), source_strides_.data(),
-                                             distorted_strides_.data());
+            error = library.compute_handler(handler, &score, source_planes(job), distorted_planes(job),
+                                            setup_.source_strides.data(), setup_.distorted_strides.data());
             value = score.score;
         } else {
             vship_api::ScoreButteraugli score;  // dstp nullptr: no distortion map
-            error = library_.compute_handler(handler, &score, source.data(), distorted.data(), source_strides_.data(),
-                                             distorted_strides_.data());
+            error = library.compute_handler(handler, &score, source_planes(job), distorted_planes(job),
+                                            setup_.source_strides.data(), setup_.distorted_strides.data());
             value = score.norm3;
         }
         if (error != 0) {
-            throw VshipUnavailableError("Vship " + label + " failed: " + library_.handler_error(handler, error));
+            throw VshipUnavailableError("Vship " + label + " failed: " + library.handler_error(handler, error));
         }
         if (!std::isfinite(value)) {
             throw VshipUnavailableError("Vship " + label + " returned a non-finite value.");
@@ -712,22 +744,137 @@ private:
         return value;
     }
 
-    const VshipLibrary& library_;
-    const VshipDevice& device_;
     std::string key_;
-    vship_api::Colorspace source_;
-    vship_api::Colorspace distorted_;
-    const Planes& source_planes_;
-    const Planes& distorted_planes_;
-    std::array<std::int64_t, 3> source_strides_;
-    std::array<std::int64_t, 3> distorted_strides_;
     ScoreArray& scores_;
-    std::function<void(long long)> finished_;
-    const std::atomic<bool>& abort_;
-    Channel<std::optional<LaneJob>> jobs_;
-    mutable std::mutex error_mutex_;
-    std::exception_ptr error_;
-    std::thread thread_;
+};
+
+// Python's format(value, "g"): six significant digits, in exponent form for
+// very large and very small numbers.
+std::string format_g(double value) {
+    if (std::isnan(value)) {
+        return "nan";
+    }
+    std::array<char, 32> text{};
+    const auto [end, error] =
+        std::to_chars(text.data(), text.data() + text.size(), value, std::chars_format::general, 6);
+    return error == std::errc() ? std::string(text.data(), end) : python_repr(value);
+}
+
+// CVVDP's one handler, fed every frame pair in order (the Python app's
+// _CvvdpLane). CVVDP judges each frame together with the ones before it, so
+// its pairs cannot be dealt in turn to two handlers. Its score is reset at
+// each new second of video, which gives each second's JOD (the timeline),
+// and the whole video's JOD is pooled from those seconds
+// (pool_cvvdp_windows).
+class CvvdpLane : public Lane {
+public:
+    CvvdpLane(LaneSetup setup, CvvdpSettings settings, double fps)
+        : Lane(std::move(setup)), settings_(std::move(settings)), fps_(fps) {}
+
+    ~CvvdpLane() override {
+        stop();
+        join();
+    }
+
+    // Each second scored, once the lane has stopped.
+    const std::vector<CvvdpWindow>& windows() const { return windows_; }
+
+private:
+    void run() override {
+        void* handler = nullptr;
+        try {
+            handler = make_handler();
+        } catch (...) {
+            fail(std::current_exception());
+        }
+        long long start = 0;
+        long long count = 0;
+        long long second = 0;
+        double jod = std::nan("");
+        while (true) {
+            const std::optional<LaneJob> job = jobs_.get();
+            if (!job || setup_.abort) {
+                break;
+            }
+            if (!error()) {
+                try {
+                    const auto this_second = static_cast<long long>(static_cast<double>(job->index) / fps_);
+                    if (count != 0 && this_second != second) {
+                        windows_.push_back({start, count, jod});
+                        reset(handler);
+                        start = job->index;
+                        count = 0;
+                    }
+                    second = this_second;
+                    jod = compute(handler, *job);
+                    ++count;
+                } catch (...) {
+                    fail(std::current_exception());
+                }
+            }
+            setup_.finished(job->index);
+        }
+        if (!error() && count != 0) {
+            windows_.push_back({start, count, jod});
+        }
+        if (handler != nullptr) {
+            setup_.library.free_handler(handler);
+        }
+    }
+
+    // A Vship handler for CVVDP, with the display model and the frame rate.
+    void* make_handler() {
+        if (!(std::isfinite(fps_) && fps_ > 0)) {
+            // CVVDP models how the eye integrates over time, so the frame
+            // rate is part of the score, and must not be quietly replaced by
+            // a guess.
+            throw VshipUnavailableError("CVVDP needs the video's frame rate, and none was found (it was read as " +
+                                        format_g(fps_) + " fps).");
+        }
+        // The display as JSON text, which Vship reads itself when it starts
+        // with "{". Not a file: Vship opens one with a narrow-character path,
+        // which fails for a Windows user name outside the ANSI code page.
+        const std::string config = vship_display_json(settings_.display);
+        vship_api::InitCvvdp init;
+        init.src_colorspace = setup_.source;
+        init.dis_colorspace = setup_.distorted;
+        init.fps = static_cast<float>(fps_);
+        init.resizeToDisplay = settings_.resize_to_display;
+        init.model_key_cstr = vship_model_key;
+        init.model_config_json_cstr = config.c_str();
+        init.gpu_id = setup_.device.gpu_id;
+        void* handler = nullptr;
+        if (setup_.library.init_handler(&handler, &init) != 0) {
+            throw VshipUnavailableError("Could not initialize Vship CVVDP: " + setup_.library.message(std::nullopt));
+        }
+        return handler;
+    }
+
+    // Scores the next frame pair: the JOD of the frames since the last reset.
+    double compute(void* handler, const LaneJob& job) {
+        const VshipLibrary& library = setup_.library;
+        vship_api::ScoreCvvdp score;  // dstp nullptr: no distortion map
+        const int error = library.compute_handler(handler, &score, source_planes(job), distorted_planes(job),
+                                                  setup_.source_strides.data(), setup_.distorted_strides.data());
+        if (error != 0) {
+            throw VshipUnavailableError("Vship CVVDP failed: " + library.handler_error(handler, error));
+        }
+        if (!std::isfinite(score.score)) {
+            throw VshipUnavailableError("Vship CVVDP returned a non-finite value.");
+        }
+        return score.score;
+    }
+
+    // Starts a new second: clears the score's sum, not the handler's history.
+    void reset(void* handler) {
+        if (const int error = setup_.library.reset_score(handler); error != 0) {
+            throw VshipUnavailableError("Vship CVVDP failed: " + setup_.library.handler_error(handler, error));
+        }
+    }
+
+    CvvdpSettings settings_;
+    double fps_;
+    std::vector<CvvdpWindow> windows_;
 };
 
 // A pass's frame rate for its progress reports, timed from its first frame
@@ -802,10 +949,8 @@ public:
           cancel_(cancel),
           library_(vship_library(plan.device)),
           decode_(plan.decoding) {
-        for (const std::string& key : plan.keys) {
-            if (key != "ssimulacra2" && key != "butteraugli") {
-                throw VshipUnavailableError(label_of(key) + " on the GPU is not in the C++ app yet.");
-            }
+        if (plan.keys.empty() || !std::all_of(plan.keys.begin(), plan.keys.end(), is_perceptual_metric)) {
+            throw std::invalid_argument("A Vship pass scores SSIMULACRA2, Butteraugli and CVVDP only.");
         }
         if (by_timestamp()) {
             throw VshipUnavailableError("Vship with frames paired by timestamp is not in the C++ app yet.");
@@ -818,6 +963,18 @@ public:
             if (request.step_of(key) != step_) {
                 throw VshipUnavailableError("Perceptual metrics in one task must use the same frame coverage.");
             }
+        }
+        for (const std::string& key : plan.keys) {
+            if (key == "cvvdp") {
+                // The display as a saved score says it was scored on: its
+                // identity's rounded values.
+                cvvdp_ = CvvdpSettings::from_parameters(nlohmann::json(request.cvvdp.parameters()));
+            } else {
+                frame_keys_.push_back(key);
+            }
+        }
+        if (cvvdp_ && step_ != 1) {
+            throw VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.");
         }
         // Both videos' frames are numbered at the test video's frame rate
         // (frame_sync.h) and both are cut at the duration limit, so they
@@ -833,7 +990,7 @@ public:
             expected_frames_ = std::min(expected_frames_, std::max(1LL, *frames_within(duration_limit_, numbering_rate_)));
         }
         total_units_ = std::max(1LL, (expected_frames_ + step_ - 1) / step_) * step_;
-        for (const std::string& key : plan.keys) {
+        for (const std::string& key : frame_keys_) {
             scores_.emplace(key, std::make_unique<ScoreArray>());
         }
     }
@@ -919,6 +1076,7 @@ private:
         abort_ = true;
         stop_lanes();
         lanes_.clear();
+        cvvdp_lane_.reset();
         for (const std::unique_ptr<FrameRing>& stream : streams_) {
             stream->close();
         }
@@ -1039,7 +1197,8 @@ private:
         }
     }
 
-    // Starts each metric's lanes, on the planes of the streams' buffers.
+    // Starts CVVDP's lane, if it is asked for, and each frame metric's lanes,
+    // on the planes of the streams' buffers.
     void start_lanes() {
         const VideoPlan& source = videos_[0];
         const VideoPlan& distorted = videos_[1];
@@ -1049,33 +1208,59 @@ private:
         for (const std::unique_ptr<PinnedBuffer>& buffer : streams_[1]->buffers()) {
             distorted_planes_.push_back(buffer->planes(distorted.image, distorted.layout.plane_bytes));
         }
-        for (const std::string& key : plan_.keys) {
+        const auto setup = [&] {
+            return LaneSetup{library_,
+                             plan_.device,
+                             source.colour,
+                             distorted.colour,
+                             source_planes_,
+                             distorted_planes_,
+                             source.layout.strides,
+                             distorted.layout.strides,
+                             [this](long long index) { pair_done(index); },
+                             abort_};
+        };
+        if (cvvdp_) {
+            cvvdp_lane_ = std::make_unique<CvvdpLane>(setup(), *cvvdp_, request_.source.fps);
+        }
+        for (const std::string& key : frame_keys_) {
             for (std::size_t lane = 0; lane < lanes_per_metric; ++lane) {
-                lanes_.push_back(std::make_unique<MetricLane>(
-                    library_, plan_.device, key, source.colour, distorted.colour, source_planes_, distorted_planes_,
-                    source.layout.strides, distorted.layout.strides, *scores_.at(key),
-                    [this](long long index) { pair_done(index); }, abort_));
+                lanes_.push_back(std::make_unique<MetricLane>(setup(), key, *scores_.at(key)));
             }
         }
-        for (const std::unique_ptr<MetricLane>& lane : lanes_) {
+        for (Lane* lane : every_lane()) {
             lane->start();
         }
     }
 
-    void stop_lanes() {
-        for (const std::unique_ptr<MetricLane>& lane : lanes_) {
-            lane->stop();
+    // CVVDP's lane, if it has one, then the frame metrics'.
+    std::vector<Lane*> every_lane() const {
+        std::vector<Lane*> found;
+        if (cvvdp_lane_) {
+            found.push_back(cvvdp_lane_.get());
         }
         for (const std::unique_ptr<MetricLane>& lane : lanes_) {
+            found.push_back(lane.get());
+        }
+        return found;
+    }
+
+    void stop_lanes() {
+        const std::vector<Lane*> lanes = every_lane();
+        for (Lane* lane : lanes) {
+            lane->stop();
+        }
+        for (Lane* lane : lanes) {
             lane->join();
         }
     }
 
-    // Each failed metric's first error. One failed lane fails its metric,
-    // because the other lane's frames alone would leave holes.
+    // Each failed metric's first error: the frame metrics', then CVVDP's.
+    // One failed lane fails its metric, because the other lane's frames
+    // alone would leave holes.
     std::vector<std::pair<std::string, std::exception_ptr>> lane_errors() const {
         std::vector<std::pair<std::string, std::exception_ptr>> errors;
-        for (const std::string& key : plan_.keys) {
+        for (const std::string& key : frame_keys_) {
             for (const std::unique_ptr<MetricLane>& lane : lanes_) {
                 if (lane->key() == key) {
                     if (std::exception_ptr error = lane->error()) {
@@ -1083,6 +1268,11 @@ private:
                         break;
                     }
                 }
+            }
+        }
+        if (cvvdp_lane_) {
+            if (std::exception_ptr error = cvvdp_lane_->error()) {
+                errors.emplace_back("cvvdp", error);
             }
         }
         return errors;
@@ -1166,13 +1356,17 @@ private:
                     ++held_[0][source_slot];
                     ++held_[1][distorted_slot];
                 }
-                for (const std::string& key : plan_.keys) {
+                for (const std::string& key : frame_keys_) {
                     scores_.at(key)->reserve(frame);
                 }
-                // Each metric's lanes are dealt pairs in turn.
-                for (std::size_t metric = 0; metric < plan_.keys.size(); ++metric) {
+                // Each frame metric's lanes are dealt pairs in turn; CVVDP's
+                // one takes every pair.
+                for (std::size_t metric = 0; metric < frame_keys_.size(); ++metric) {
                     lanes_[metric * lanes_per_metric + static_cast<std::size_t>(frame) % lanes_per_metric]->give(
                         {frame, source_slot, distorted_slot});
+                }
+                if (cvvdp_lane_) {
+                    cvvdp_lane_->give({frame, source_slot, distorted_slot});
                 }
                 ++frame;
                 report_progress(std::min(frame * step_, total_units_), rate.frames_per_second(frame));
@@ -1242,7 +1436,8 @@ private:
         return output;
     }
 
-    // Each metric's scores that did not fail, per frame.
+    // Each metric's scores that did not fail: per frame, and CVVDP's per
+    // second of video.
     MetricResultSet results(long long frames, const PerceptualFailures& failures) const {
         const VshipDevice& device = plan_.device;
         std::vector<int> frame_numbers;
@@ -1265,7 +1460,7 @@ private:
             {"color_tags", nlohmann::json(vship_color_tags).dump()},
         };
         MetricResultSet found;
-        for (const std::string& key : plan_.keys) {
+        for (const std::string& key : frame_keys_) {
             if (failure_of(failures, key) != nullptr) {
                 continue;
             }
@@ -1274,7 +1469,36 @@ private:
             found.add(FrameMetricResult{key, frame_numbers, times, scores_.at(key)->values(frames),
                                         std::move(provenance)});
         }
+        if (cvvdp_lane_ && !cvvdp_lane_->error()) {
+            found.add(cvvdp_result());
+        }
         return found;
+    }
+
+    // CVVDP's score, with each second's JOD at the second's first frame.
+    SequenceMetricResult cvvdp_result() const {
+        const VshipDevice& device = plan_.device;
+        const std::vector<CvvdpWindow>& windows = cvvdp_lane_->windows();
+        SequenceMetricResult result;
+        result.key = "cvvdp";
+        result.score = pool_cvvdp_windows(windows);
+        result.provenance = {"Vship/cvvdp",
+                             "Vship " + device.version,
+                             "gpu",
+                             "cvvdp-vship-gpu-v1",
+                             {{"gpu_backend", nlohmann::json(device.backend).dump()},
+                              {"gpu_name", nlohmann::json(device.name).dump()},
+                              {"display", cvvdp_->display.identity().dump()},
+                              {"resize_to_display", nlohmann::json(cvvdp_->resize_to_display).dump()},
+                              {"timeline", nlohmann::json("JOD of each second of video").dump()},
+                              {"color_tags", nlohmann::json(vship_color_tags).dump()}}};
+        for (const CvvdpWindow& window : windows) {
+            result.frame.push_back(static_cast<int>(window.first));
+            result.time.push_back(static_cast<double>(static_cast<int>(window.first)) /
+                                  std::max(request_.source.fps, 1.0));
+            result.values.push_back(static_cast<float>(window.jod));
+        }
+        return result;
     }
 
     // How the videos' colour tags were read, as the GPU scores record it (the
@@ -1291,6 +1515,8 @@ private:
     const VshipLibrary& library_;
     std::array<VideoPlan, 2> videos_;
     int step_ = 1;
+    std::vector<std::string> frame_keys_;  // the metrics scored per frame: all but CVVDP
+    std::optional<CvvdpSettings> cvvdp_;   // with CVVDP, the display it models
     Rational numbering_rate_;
     std::optional<std::string> duration_limit_;
     long long expected_frames_ = 0;
@@ -1300,7 +1526,8 @@ private:
     std::vector<std::unique_ptr<FrameRing>> streams_;  // the source's, then the test video's
     Planes source_planes_;
     Planes distorted_planes_;
-    std::vector<std::unique_ptr<MetricLane>> lanes_;  // each metric's, in turn
+    std::vector<std::unique_ptr<MetricLane>> lanes_;  // each frame metric's, in turn
+    std::unique_ptr<CvvdpLane> cvvdp_lane_;
     std::map<std::string, std::unique_ptr<ScoreArray>, std::less<>> scores_;
     std::atomic<bool> abort_{false};
     std::mutex slots_mutex_;
@@ -1338,6 +1565,7 @@ nlohmann::json request_json(const PerceptualRequest& request, const PassPlan& pl
             {"distorted", video_json(request.distorted)},
             {"options", options_json(request.options)},
             {"backends", request.backends},
+            {"cvvdp", request.cvvdp.parameters()},
             {"keys", plan.keys},
             {"device", vship_device_json(plan.device)},
             {"source_crop", crop_json(plan.source_crop)},
@@ -1347,23 +1575,47 @@ nlohmann::json request_json(const PerceptualRequest& request, const PassPlan& pl
               {"distorted", plan.decoding.distorted ? nlohmann::json(*plan.decoding.distorted) : nlohmann::json()}}}};
 }
 
-// The pass's output, with its frame metrics' numbers in `folder`'s
-// perceptual_scores_file (too many for a message).
+// A metric's frames, times and values into the scores file.
+void write_numbers(std::ofstream& file, const std::vector<int>& frame, const std::vector<double>& time,
+                   const std::vector<float>& values) {
+    file.write(reinterpret_cast<const char*>(frame.data()), static_cast<std::streamsize>(frame.size() * sizeof(int)));
+    file.write(reinterpret_cast<const char*>(time.data()), static_cast<std::streamsize>(time.size() * sizeof(double)));
+    file.write(reinterpret_cast<const char*>(values.data()),
+               static_cast<std::streamsize>(values.size() * sizeof(float)));
+}
+
+// `count` frames, times and values back from the scores file.
+void read_numbers(std::ifstream& file, std::size_t count, std::vector<int>& frame, std::vector<double>& time,
+                  std::vector<float>& values) {
+    frame.resize(count);
+    time.resize(count);
+    values.resize(count);
+    file.read(reinterpret_cast<char*>(frame.data()), static_cast<std::streamsize>(count * sizeof(int)));
+    file.read(reinterpret_cast<char*>(time.data()), static_cast<std::streamsize>(count * sizeof(double)));
+    file.read(reinterpret_cast<char*>(values.data()), static_cast<std::streamsize>(count * sizeof(float)));
+}
+
+// The pass's output, with its metrics' numbers in `folder`'s
+// perceptual_scores_file (too many for a message): each frame metric's, and
+// CVVDP's timeline followed by its score (8 bytes: exact, and a NaN
+// survives, which JSON's numbers would not).
 nlohmann::json output_json(const PerceptualTaskOutput& output, const std::filesystem::path& folder) {
     nlohmann::json metrics = nlohmann::json::array();
     std::ofstream file(folder / perceptual_scores_file, std::ios::binary);
     for (const std::string& key : output.metrics.keys()) {
-        const FrameMetricResult* result = output.metrics.frame(key);
-        if (result == nullptr) {
-            throw std::logic_error("only per-frame scores cross from a Vship pass");
+        if (const FrameMetricResult* result = output.metrics.frame(key)) {
+            metrics.push_back(
+                {{"key", key}, {"count", result->frame.size()}, {"provenance", provenance_json(result->provenance)}});
+            write_numbers(file, result->frame, result->time, result->values);
+            continue;
         }
-        metrics.push_back({{"key", key}, {"count", result->frame.size()}, {"provenance", provenance_json(result->provenance)}});
-        file.write(reinterpret_cast<const char*>(result->frame.data()),
-                   static_cast<std::streamsize>(result->frame.size() * sizeof(int)));
-        file.write(reinterpret_cast<const char*>(result->time.data()),
-                   static_cast<std::streamsize>(result->time.size() * sizeof(double)));
-        file.write(reinterpret_cast<const char*>(result->values.data()),
-                   static_cast<std::streamsize>(result->values.size() * sizeof(float)));
+        const SequenceMetricResult& result = *output.metrics.sequence(key);
+        metrics.push_back({{"key", key},
+                           {"count", result.values.size()},
+                           {"sequence", true},
+                           {"provenance", provenance_json(result.provenance)}});
+        write_numbers(file, result.frame, result.time, result.values);
+        file.write(reinterpret_cast<const char*>(&result.score), sizeof result.score);
     }
     if (!file) {
         throw std::runtime_error("The scores could not be written.");
@@ -1380,12 +1632,19 @@ PerceptualTaskOutput output_from(const nlohmann::json& result, const std::filesy
     std::ifstream file(folder / perceptual_scores_file, std::ios::binary);
     for (const nlohmann::json& metric : result.at("metrics")) {
         const auto count = metric.at("count").get<std::size_t>();
-        FrameMetricResult found{metric.at("key").get<std::string>(), std::vector<int>(count),
-                                std::vector<double>(count), std::vector<float>(count),
-                                provenance_from(metric.at("provenance"))};
-        file.read(reinterpret_cast<char*>(found.frame.data()), static_cast<std::streamsize>(count * sizeof(int)));
-        file.read(reinterpret_cast<char*>(found.time.data()), static_cast<std::streamsize>(count * sizeof(double)));
-        file.read(reinterpret_cast<char*>(found.values.data()), static_cast<std::streamsize>(count * sizeof(float)));
+        if (metric.value("sequence", false)) {
+            SequenceMetricResult found;
+            found.key = metric.at("key").get<std::string>();
+            found.provenance = provenance_from(metric.at("provenance"));
+            read_numbers(file, count, found.frame, found.time, found.values);
+            file.read(reinterpret_cast<char*>(&found.score), sizeof found.score);
+            output.metrics.add(std::move(found));
+            continue;
+        }
+        FrameMetricResult found;
+        found.key = metric.at("key").get<std::string>();
+        found.provenance = provenance_from(metric.at("provenance"));
+        read_numbers(file, count, found.frame, found.time, found.values);
         output.metrics.add(std::move(found));
     }
     if (!file) {
@@ -1514,7 +1773,14 @@ private:
                 .first;
         PerceptualFailures refused;
         for (const std::string& key : keys_) {
-            if (const std::optional<std::string> reason = size_refusal(device_, key, size)) {
+            // CVVDP set to fill the display is calculated at the display's
+            // size, so a 1080p comparison on a 4K display would otherwise get
+            // through at the size that hangs Intel's GPU.
+            const std::optional<std::pair<int, int>> computed =
+                key == "cvvdp" ? std::optional(cvvdp_computed_size(
+                                     size, CvvdpSettings::from_parameters(nlohmann::json(request_.cvvdp.parameters()))))
+                               : std::nullopt;
+            if (const std::optional<std::string> reason = size_refusal(device_, key, size, computed)) {
                 set_failure(refused, key, *reason);
             }
         }
@@ -1778,9 +2044,17 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
     if (!on_cpu.empty()) {
         throw PerceptualRunError(labels_of(on_cpu, " and ") + " on the CPU is not in the C++ app yet.");
     }
+    // CVVDP runs on the GPU only, and fails on its own where the GPU cannot
+    // calculate it; the Python app calculates the others on the CPU.
+    std::vector<std::string> retryable;
+    std::copy_if(on_gpu.begin(), on_gpu.end(), std::back_inserter(retryable),
+                 [](const std::string& key) { return key != "cvvdp"; });
     const auto [device, no_device] = detect_vship_device();
     if (!device) {
-        throw PerceptualRunError(labels_of(on_gpu, " and ") +
+        if (retryable.empty()) {
+            throw PerceptualRunError("CVVDP needs a GPU that Vship can use, and could not use one: " + no_device);
+        }
+        throw PerceptualRunError(labels_of(retryable, " and ") +
                                  " on the CPU, without a GPU that Vship can use (" + no_device +
                                  "), is not in the C++ app yet.");
     }
@@ -1800,7 +2074,19 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
         if (cancel.cancelled()) {
             throw Cancelled();
         }
-        // The Python app calculates the metrics on the CPU after a GPU
+        // CVVDP fails with its own reason, which says nothing of the CPU (the
+        // Python app's _gpu_only_failed).
+        std::string cvvdp_failure;
+        if (retryable.size() != on_gpu.size()) {
+            const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
+            const std::string* own = passes != nullptr ? failure_of(passes->failures(), "cvvdp") : nullptr;
+            cvvdp_failure = "CVVDP could not be calculated: " + (own != nullptr ? *own : std::string(error.what()));
+        }
+        if (retryable.empty()) {
+            throw PerceptualRunError(cvvdp_failure);
+        }
+        const std::string cvvdp_line = cvvdp_failure.empty() ? "" : "\n" + cvvdp_failure;
+        // The Python app calculates the other metrics on the CPU after a GPU
         // failure, for a video up to ten minutes long.
         const bool too_long = compared_seconds(request.source, request.distorted, request.options.duration_limit) >
                               long_cpu_run_seconds;
@@ -1808,16 +2094,21 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
             throw PerceptualRunError("GPU scoring failed (" + std::string(error.what()) +
                                      "). It was not retried on the CPU, which would take hours to days for a video "
                                      "over 10 minutes. Choose CPU for " +
-                                     labels_of(on_gpu, " and ") + " to calculate it on the CPU anyway.");
+                                     labels_of(retryable, " and ") + " to calculate it on the CPU anyway." +
+                                     cvvdp_line);
         }
         throw PerceptualRunError("GPU scoring failed (" + std::string(error.what()) +
-                                 "); calculating it on the CPU instead is not in the C++ app yet.");
+                                 "); calculating it on the CPU instead is not in the C++ app yet." + cvvdp_line);
     }
     // A metric that failed on the GPU while the others finished is retried
     // on the CPU in the Python app, for a video up to ten minutes long.
+    // CVVDP, which runs on the GPU only, keeps its own reason.
     const bool too_long =
         compared_seconds(request.source, request.distorted, request.options.duration_limit) > long_cpu_run_seconds;
     for (auto& [key, reason] : output.failures) {
+        if (key == "cvvdp") {
+            continue;
+        }
         reason = too_long ? "GPU scoring failed (" + reason +
                                 "). It was not retried on the CPU, which would take hours to days for a video "
                                 "over 10 minutes. Choose CPU for " +
@@ -1836,6 +2127,7 @@ nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesys
     perceptual.distorted = video_from(request.at("distorted"));
     perceptual.options = options_from(request.at("options"));
     request.at("backends").get_to(perceptual.backends);
+    perceptual.cvvdp = CvvdpSettings::from_parameters(request.at("cvvdp"));
     PassPlan plan;
     request.at("keys").get_to(plan.keys);
     plan.device = vship_device_from(request.at("device")).value();

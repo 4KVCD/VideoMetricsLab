@@ -83,6 +83,7 @@ struct VmafJob {
     std::vector<std::string> metric_keys;  // the metrics to calculate
     std::vector<MetricTask> tasks;         // which calculate them (plan_tasks)
     PerceptualBackends perceptual_backends;
+    CvvdpSettings cvvdp;  // the display CVVDP models
 };
 
 // The state of one of a video's tasks, for its run line (run_line.h).

@@ -219,4 +219,31 @@ std::string_view python_strip(std::string_view text) {
     return text;
 }
 
+std::string python_string_repr(std::string_view text) {
+    const bool double_quotes = text.find('\'') != std::string_view::npos && text.find('"') == std::string_view::npos;
+    const char quote = double_quotes ? '"' : '\'';
+    std::string quoted(1, quote);
+    for (const char c : text) {
+        const auto byte = static_cast<unsigned char>(c);
+        if (c == quote || c == '\\') {
+            quoted += '\\';
+            quoted += c;
+        } else if (c == '\t') {
+            quoted += "\\t";
+        } else if (c == '\n') {
+            quoted += "\\n";
+        } else if (c == '\r') {
+            quoted += "\\r";
+        } else if (byte < 0x20 || byte == 0x7F) {
+            constexpr char digits[] = "0123456789abcdef";
+            quoted += "\\x";
+            quoted += digits[byte >> 4];
+            quoted += digits[byte & 0xF];
+        } else {
+            quoted += c;
+        }
+    }
+    return quoted + quote;
+}
+
 }  // namespace vml

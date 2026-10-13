@@ -3,6 +3,7 @@
 # says the C++ code gives the Python app's answers.
 add_executable(vml_tests
     unit/cli_test.cpp
+    unit/cvvdp_test.cpp
     unit/decisions_test.cpp
     unit/ffmpeg_run_test.cpp
     unit/ffmpeg_tools_test.cpp

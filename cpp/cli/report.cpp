@@ -160,6 +160,50 @@ void add_table(std::vector<std::string>& lines, const std::vector<std::vector<st
     }
 }
 
+// A table row for CVVDP on each of the video's other displays; why there
+// is none goes to `lines`.
+void add_other_display_rows(const TestVideo& video, std::vector<std::vector<std::string>>& rows,
+                            std::vector<std::string>& lines) {
+    const MetricDefinition& definition = metric_definition("cvvdp");
+    for (const TestVideo& other : video.other_displays) {
+        const std::optional<Json> summary = other.result ? metric_summary(*other.result, "cvvdp") : std::nullopt;
+        if (!summary) {
+            const std::string reason = !other.error.empty() ? other.error
+                                       : !other.failures.empty() && !other.failures.front().second.empty()
+                                           ? other.failures.front().second
+                                           : "not calculated";
+            lines.push_back("  CVVDP on " + python_string_repr(other.display) + " failed: " + reason);
+            continue;
+        }
+        rows.push_back({std::string(definition.label) + " (" + other.display + ")",
+                        definition.format_value(value_of(summary->at("score"))), "", "", "", "",
+                        upper(summary->at("computed_on").get<std::string>())});
+    }
+}
+
+// CVVDP on one display, as --json lists each display's: the display, and
+// its score or why there is none.
+Json display_entry(const TestVideo& target) {
+    const std::optional<Json> summary = target.result ? metric_summary(*target.result, "cvvdp") : std::nullopt;
+    Json entry{{"display", target.display}, {"score", summary ? summary->at("score") : Json(nullptr)}};
+    if (target.result) {
+        entry["from_saved_scores"] = target.from_cache;
+    }
+    std::string reason = target.error;
+    if (reason.empty()) {
+        const auto cvvdp = std::find_if(target.failures.begin(), target.failures.end(),
+                                        [](const auto& failure) { return failure.first == "cvvdp"; });
+        reason = cvvdp != target.failures.end() ? cvvdp->second : "";
+    }
+    if (reason.empty() && !target.failures.empty()) {
+        reason = target.failures.front().second;
+    }
+    if (!reason.empty()) {
+        entry["error"] = reason;
+    }
+    return entry;
+}
+
 // Several videos side by side: one line each, every metric's score.
 // Nothing for a single video.
 void add_summary(std::vector<std::string>& lines, const std::vector<TestVideo>& videos,
@@ -208,6 +252,8 @@ void add_summary(std::vector<std::string>& lines, const std::vector<TestVideo>& 
 
 std::string TestVideo::name() const { return name_of(path); }
 
+std::string TestVideo::label() const { return for_display_only ? name() + " (CVVDP on " + display + ")" : name(); }
+
 std::vector<Summaries> summarize(const std::vector<TestVideo>& videos) {
     std::vector<Summaries> all;
     for (const TestVideo& video : videos) {
@@ -231,7 +277,11 @@ std::string video_status(const TestVideo& video, bool cancelled) {
             ++have;
         }
     }
-    if (!video.metrics.empty() && have == video.metrics.size() && video.failures.empty()) {
+    const bool others_scored =
+        std::all_of(video.other_displays.begin(), video.other_displays.end(), [](const TestVideo& other) {
+            return other.result && other.result->has_metric("cvvdp") && other.failures.empty();
+        });
+    if (!video.metrics.empty() && have == video.metrics.size() && video.failures.empty() && others_scored) {
         return "ok";
     }
     if (cancelled && video.error.empty() && video.failures.empty()) {
@@ -281,12 +331,17 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
             };
             const std::string on = upper(summary.at("computed_on").get<std::string>());
             if (!summary.contains("frames")) {  // one score for the video
-                rows.push_back({std::string(definition.label), show("score"), "", "", "", "", on});
+                // With several displays, each CVVDP row names its own.
+                const std::string label = video.other_displays.empty()
+                                              ? std::string(definition.label)
+                                              : std::string(definition.label) + " (" + video.display + ")";
+                rows.push_back({label, show("score"), "", "", "", "", on});
                 continue;
             }
             rows.push_back({std::string(definition.label), show("score"), show("median"), show("min"), show("max"),
                             show("worst_1_percent") + " (" + summary.at("worst_is").get<std::string>() + ")", on});
         }
+        add_other_display_rows(video, rows, lines);
         if (!rows.empty()) {
             rows.insert(rows.begin(), {"Metric", "Mean", "Median", "Min", "Max", "1% worst", "On"});
             add_table(lines, rows, true);
@@ -346,6 +401,16 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
                 }
             }
             entry["metrics"] = scored;
+        }
+        if (!video.display.empty()) {
+            entry["cvvdp_display"] = video.display;
+        }
+        if (!video.other_displays.empty()) {
+            Json displays = Json::array({display_entry(video)});
+            for (const TestVideo& other : video.other_displays) {
+                displays.push_back(display_entry(other));
+            }
+            entry["cvvdp_displays"] = displays;
         }
         document["videos"].push_back(entry);
     }

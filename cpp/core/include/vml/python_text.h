@@ -33,4 +33,10 @@ std::string ascii_lower(std::string_view text);
 // Unicode's other spaces off; nothing here needs that.
 std::string_view python_strip(std::string_view text);
 
+// Python's repr() of a string, as messages quote names and values: in
+// single quotes, or double quotes for text with a single quote and no
+// double one, ASCII control characters escaped. Characters past ASCII are
+// kept, as repr() keeps the printable ones.
+std::string python_string_repr(std::string_view text);
+
 }  // namespace vml

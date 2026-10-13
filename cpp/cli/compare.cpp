@@ -15,6 +15,7 @@
 #include "report.h"
 #include "vml/cancel.h"
 #include "vml/crop_detect.h"
+#include "vml/cvvdp.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
@@ -306,6 +307,56 @@ PerceptualBackends perceptual_backends(const CompareArguments& arguments, const 
     return chosen;
 }
 
+// A display CVVDP models, by its preset's name.
+using CvvdpDisplayChoice = std::pair<std::string, CvvdpSettings>;
+
+// The CVVDP displays to score on: those --cvvdp-display names, each once in
+// the order given, else the app's default. Throws std::invalid_argument for
+// a name that is no preset.
+std::vector<CvvdpDisplayChoice> cvvdp_displays(const CompareArguments& arguments, const Settings& settings) {
+    // A preset is a display; scaling to fill it starts off, as for a video
+    // added to the window.
+    if (arguments.cvvdp_displays.empty()) {
+        const std::optional<CvvdpPreset> preset =
+            cvvdp_preset_named(settings.cvvdp_default_preset, settings.cvvdp_presets_json);
+        const CvvdpPreset& chosen = preset ? *preset : builtin_cvvdp_presets().front();
+        return {{chosen.name, CvvdpSettings{chosen.settings.display}}};
+    }
+    std::vector<CvvdpDisplayChoice> displays;
+    std::set<std::string> named;
+    for (const std::string& name : arguments.cvvdp_displays) {
+        if (!named.insert(name).second) {
+            continue;
+        }
+        const std::optional<CvvdpPreset> preset = cvvdp_preset_named(name, settings.cvvdp_presets_json);
+        if (!preset) {
+            std::string names;
+            for (const CvvdpPreset& known : cvvdp_presets(settings.cvvdp_presets_json)) {
+                names += (names.empty() ? "" : ", ") + python_string_repr(known.name);
+            }
+            throw std::invalid_argument("No CVVDP display preset is called " + python_string_repr(name) +
+                                        ". The presets: " + names + ".");
+        }
+        displays.emplace_back(preset->name, CvvdpSettings{preset->settings.display});
+    }
+    return displays;
+}
+
+// The note for HDR video whose CVVDP modelled the app's default display,
+// which is SDR, or nothing.
+std::optional<std::string> sdr_display_note(const CompareArguments& arguments, const VideoInfo& source,
+                                            const TestVideo& video, const CvvdpDisplayChoice& display) {
+    const std::string transfer = ascii_lower(source.color_transfer);
+    if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") == video.metrics.end() ||
+        !arguments.cvvdp_displays.empty() || display.second.display.hdr ||
+        (transfer != "smpte2084" && transfer != "arib-std-b67")) {
+        return std::nullopt;
+    }
+    return "the video is HDR, and CVVDP modelled the app's default display, " + python_string_repr(display.first) +
+           ", which is SDR. --cvvdp-display " + python_string_repr("30-inch 4K HDR monitor, dim room") +
+           " (or another HDR preset) models an HDR one.";
+}
+
 // What a video added to the window starts with ticked, less the metrics its
 // Metrics... picker hides (they are not calculated there).
 std::vector<std::string> default_metrics(const Settings& settings) {
@@ -349,18 +400,14 @@ std::vector<std::string> default_metrics(const Settings& settings) {
 // nothing.
 std::optional<std::string> not_yet(const CompareArguments& arguments, const Settings& settings,
                                    const std::vector<std::string>& asked) {
-    std::string others;
+    // Vship's metrics that would be calculated: CVVDP is left out, with a
+    // note, where it cannot be (compare's preparation).
     std::vector<std::string> perceptual;
     for (const std::string& key : asked) {
-        const MetricDefinition& definition = metric_definition(key);
-        if (key == "ssimulacra2" || key == "butteraugli") {
+        if (key == "ssimulacra2" || key == "butteraugli" ||
+            (key == "cvvdp" && arguments.subsample <= 1 && detect_vship_device().first)) {
             perceptual.push_back(key);
-        } else if (!definition.ffmpeg_binding) {
-            others += (others.empty() ? "" : ", ") + std::string(definition.label);
         }
-    }
-    if (!others.empty()) {
-        return others + " (only FFmpeg's metrics, SSIMULACRA2 and Butteraugli so far)";
     }
     if (!perceptual.empty()) {
         // SSIMULACRA2 and Butteraugli on the GPU only, so far: the Python app
@@ -371,7 +418,7 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
         std::string on_cpu;
         for (const std::string& key : perceptual) {
             labels += (labels.empty() ? "" : " and ") + std::string(metric_definition(key).label);
-            if (backends.at(key) == "cpu") {
+            if (key != "cvvdp" && backends.at(key) == "cpu") {
                 on_cpu += (on_cpu.empty() ? "" : " and ") + std::string(metric_definition(key).label);
             }
         }
@@ -398,9 +445,6 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
     if (cpu_metrics && (!vmaf || (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) &&
         ascii_lower(platform::environment_variable("VML_VMAF_PIPES").value_or("")) == "canvas") {
         return "PSNR, SSIM or XPSNR with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)";
-    }
-    if (!arguments.cvvdp_displays.empty()) {
-        return "--cvvdp-display";
     }
     return std::nullopt;
 }
@@ -509,24 +553,21 @@ private:
 // ------------------------------------------------------------------- the run
 
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
-// some of its metrics failed, in its TestVideo (`video_of_job` says which
-// video each job is), and showing the run's progress, as the Python app's
-// command line does (cli.run).
-void run(const RunEnvironment& environment, std::vector<TestVideo>& videos, const std::vector<VmafJob>& jobs,
-         const std::vector<std::size_t>& video_of_job, int parallel, bool gpu_metrics_together, Progress& progress,
-         const CancelToken& cancel) {
-    const auto video = [&videos, &video_of_job](std::size_t index) -> TestVideo& {
-        return videos[video_of_job[index]];
-    };
+// some of its metrics failed, in its TestVideo (`targets` holds each job's),
+// and showing the run's progress, as the Python app's command line does
+// (cli.run).
+void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targets, const std::vector<VmafJob>& jobs,
+         int parallel, bool gpu_metrics_together, Progress& progress, const CancelToken& cancel) {
+    const auto video = [&targets](std::size_t index) -> TestVideo& { return *targets[index]; };
     RunEvents events;
-    events.job_started = [&](std::size_t index) { progress.message(video(index).name() + ": started"); };
+    events.job_started = [&](std::size_t index) { progress.message(video(index).label() + ": started"); };
     events.task_progress = [&](std::size_t index, const std::vector<TaskSnapshot>& tasks) {
         std::string line;
         for (const std::string& part : metric_line(tasks, false)) {
             line += (line.empty() ? "" : "; ") + part;
         }
         if (!line.empty()) {
-            progress.job(index, video(index).name() + ": " + line);
+            progress.job(index, video(index).label() + ": " + line);
         }
     };
     // A video's result so far is kept when one of its tasks finishes while
@@ -534,18 +575,18 @@ void run(const RunEnvironment& environment, std::vector<TestVideo>& videos, cons
     events.result_updated = [&](std::size_t index, const ComparisonResult& result) { video(index).result = result; };
     events.job_finished = [&](std::size_t index, const ComparisonResult& result) {
         video(index).result = result;
-        progress.message(video(index).name() + ": done");
+        progress.message(video(index).label() + ": done");
     };
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
-        progress.message(video(index).name() + ": FAILED: " + message);
+        progress.message(video(index).label() + ": FAILED: " + message);
     };
     events.job_partially_failed = [&](std::size_t index, const ComparisonResult& result, const std::string& message,
                                       const std::string& /*stderr_tail*/, const MetricFailures& failures) {
         TestVideo& target = video(index);
         target.result = result;
         target.failures = failures.empty() ? MetricFailures{{"", message}} : failures;
-        progress.message(target.name() + ": some metrics FAILED: " + message);
+        progress.message(target.label() + ": some metrics FAILED: " + message);
     };
     run_jobs(
         jobs, parallel, events,
@@ -557,7 +598,7 @@ void run(const RunEnvironment& environment, std::vector<TestVideo>& videos, cons
         [&environment](const VmafJob& job, const std::vector<std::string>& keys, bool together,
                        const PerceptualHooks& hooks, const CancelToken& token) {
             const PerceptualRequest request{environment, job.source_info, job.distorted_info, job.options,
-                                            job.perceptual_backends};
+                                            job.perceptual_backends, job.cvvdp};
             return run_perceptual_task(request, keys, together, hooks, token);
         },
         gpu_metrics_together, environment.cores, cancel);
@@ -695,6 +736,13 @@ int compare(const CompareArguments& arguments) {
         print_error(ffmpeg_problem(tools));
         return exit_usage;
     }
+    std::vector<CvvdpDisplayChoice> displays;
+    try {
+        displays = cvvdp_displays(arguments, settings);
+    } catch (const std::invalid_argument& error) {
+        print_error(error.what());
+        return exit_usage;
+    }
     const std::vector<std::string> asked = arguments.metrics.value_or(default_metrics(settings));
     if (const std::optional<std::string> missing = not_yet(arguments, settings, asked)) {
         print_error("The C++ command line cannot do this yet: " + *missing + ".");
@@ -727,7 +775,8 @@ int compare(const CompareArguments& arguments) {
     const PerceptualBackends backends = perceptual_backends(arguments, settings);
     std::vector<TestVideo> videos;
     std::vector<VmafJob> jobs;
-    std::vector<std::size_t> video_of_job;
+    // Each job's video: its index, and for CVVDP on a further display, which.
+    std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos;
     for (const std::filesystem::path& path : expand_tests(arguments.tests, python_path(arguments.reference))) {
         if (cancel.cancelled()) {
             return exit_cancelled;
@@ -741,6 +790,17 @@ int compare(const CompareArguments& arguments) {
             continue;
         }
         video.metrics = asked;
+        if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end()) {
+            const char* reason =
+                arguments.subsample > 1 ? "CVVDP needs every frame: it is not calculated with --subsample above 1"
+                : !detect_vship_device().first
+                    ? "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found"
+                    : nullptr;
+            if (reason != nullptr) {
+                std::erase(video.metrics, "cvvdp");
+                video.notes.emplace_back(reason);
+            }
+        }
         if (video.metrics.empty()) {
             video.error = "none of the metrics asked for can be calculated for it";
             continue;
@@ -758,6 +818,9 @@ int compare(const CompareArguments& arguments) {
                 }
             }
         }
+        if (const std::optional<std::string> note = sdr_display_note(arguments, source, video, displays.front())) {
+            video.notes.push_back(*note);
+        }
         try {
             video.options = row_options(arguments, settings, video.metrics, *video.info);
             validate_video_pair(source, *video.info, video.options);
@@ -769,9 +832,28 @@ int compare(const CompareArguments& arguments) {
                 print_error("The C++ command line cannot do this yet: " + *missing + ".");
                 return exit_usage;
             }
-            jobs.push_back(
-                VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks), backends});
-            video_of_job.push_back(videos.size() - 1);
+            const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
+            if (cvvdp) {
+                video.display = displays.front().first;
+            }
+            jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks),
+                                   backends, displays.front().second});
+            job_videos.emplace_back(videos.size() - 1, std::nullopt);
+            // CVVDP on each further display: a comparison of its own, of
+            // CVVDP alone.
+            for (std::size_t display = 1; cvvdp && display < displays.size(); ++display) {
+                TestVideo& other = video.other_displays.emplace_back();
+                other.path = video.path;
+                other.info = video.info;
+                other.metrics = {"cvvdp"};
+                other.display = displays[display].first;
+                other.for_display_only = true;
+                other.options = row_options(arguments, settings, other.metrics, *video.info);
+                jobs.push_back(VmafJob{source, *video.info, other.options, video.path, other.metrics,
+                                       plan_tasks(source, *video.info, other.options, other.metrics, backends),
+                                       backends, displays[display].second});
+                job_videos.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
+            }
         } catch (const std::exception& error) {
             video.error = error.what();
             if (video.error.starts_with("Durations do not match")) {
@@ -795,6 +877,13 @@ int compare(const CompareArguments& arguments) {
         }
     }
 
+    // Each job's video, now that the lists no longer grow.
+    std::vector<TestVideo*> job_targets;
+    for (const auto& [index, display] : job_videos) {
+        TestVideo& video = videos[index];
+        job_targets.push_back(display ? &video.other_displays[*display] : &video);
+    }
+
     bool cancelled = false;
     if (!jobs.empty()) {
         const Clock::time_point started = Clock::now();
@@ -807,7 +896,7 @@ int compare(const CompareArguments& arguments) {
                                          gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path)
                                                     : DecodingCapabilities{},
                                          platform::logical_cores()};
-        run(environment, videos, jobs, video_of_job, arguments.parallel.value_or(settings.parallel_jobs),
+        run(environment, job_targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
             settings.gpu_metrics_together, *progress, cancel);
         progress->done();
         cancelled = cancel.cancelled();

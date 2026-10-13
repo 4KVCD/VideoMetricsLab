@@ -213,34 +213,6 @@ struct Parser {
     }
 };
 
-// Python's repr() of a string, as argparse's messages quote values.
-std::string repr(const std::string& text) {
-    const bool double_quotes = text.find('\'') != std::string::npos && text.find('"') == std::string::npos;
-    const char quote = double_quotes ? '"' : '\'';
-    std::string quoted(1, quote);
-    for (const char c : text) {
-        const auto byte = static_cast<unsigned char>(c);
-        if (c == quote || c == '\\') {
-            quoted += '\\';
-            quoted += c;
-        } else if (c == '\t') {
-            quoted += "\\t";
-        } else if (c == '\n') {
-            quoted += "\\n";
-        } else if (c == '\r') {
-            quoted += "\\r";
-        } else if (byte < 0x20 || byte == 0x7F) {
-            constexpr char digits[] = "0123456789abcdef";
-            quoted += "\\x";
-            quoted += digits[byte >> 4];
-            quoted += digits[byte & 0xF];
-        } else {
-            quoted += c;
-        }
-    }
-    return quoted + quote;
-}
-
 // One reading of an option string (argparse's option tuple): its action
 // (nullptr: no such option), the option string it was read as, and an
 // argument given in the same string.
@@ -447,7 +419,7 @@ std::vector<std::string> parse_known(const Parser& parser, const std::vector<std
             // A flag with more after it: -qv is -q -v.
             if (tuple.option_string[1] == '-' || argument.empty() || (tuple.separator && !tuple.separator->empty()) ||
                 argument[0] == '-') {
-                throw ArgumentError{"argument " + action.name() + ": ignored explicit argument " + repr(argument)};
+                throw ArgumentError{"argument " + action.name() + ": ignored explicit argument " + python_string_repr(argument)};
             }
             taken.emplace_back(&action, std::vector<std::string>{});
             const std::string next = std::string("-") + argument[0];
@@ -596,7 +568,7 @@ std::vector<std::string> metric_list(const std::string& text) {
 double positive_float(const std::string& text) {
     const std::optional<double> value = python_float(text);
     if (!value) {
-        throw ArgumentError{"invalid parse value: " + repr(text)};
+        throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
     }
     if (!(*value > 0) || !std::isfinite(*value)) {
         throw ArgumentError{"must be above 0"};
@@ -607,7 +579,7 @@ double positive_float(const std::string& text) {
 long long positive_int(const std::string& text) {
     const std::optional<long long> value = python_int(text);
     if (!value) {
-        throw ArgumentError{"invalid parse value: " + repr(text)};
+        throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
     }
     if (*value <= 0) {
         throw ArgumentError{"must be above 0"};
@@ -621,7 +593,7 @@ std::string choice(const std::string& value, const std::vector<std::string>& cho
         for (const std::string& c : choices) {
             listed += (listed.empty() ? "" : ", ") + c;
         }
-        throw ArgumentError{"invalid choice: " + repr(value) + " (choose from " + listed + ")"};
+        throw ArgumentError{"invalid choice: " + python_string_repr(value) + " (choose from " + listed + ")"};
     }
     return value;
 }
@@ -692,7 +664,7 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    const std::optional<long long> number = python_int(value);
                    if (!number) {
-                       throw ArgumentError{"invalid int value: " + repr(value)};
+                       throw ArgumentError{"invalid int value: " + python_string_repr(value)};
                    }
                    parsed.parallel = static_cast<int>(std::stoi(choice(std::to_string(*number), {"1", "2"})));
                }),

@@ -1,0 +1,4187 @@
+{
+ "preset_lists": [
+  {
+   "saved": "[]",
+   "presets": [
+    {
+     "name": "30-inch 4K monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "24-inch 1080p monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 24.0,
+      "viewing_distance_m": 0.6,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.6,\n  \"diagonal_size_inches\": 24.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K HDR monitor, dim room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 1500.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 10.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 10.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K HDR monitor, dark room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 1500.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 0.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 0.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 1000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 1000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 1000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 2000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 2000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 2000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 4000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 4000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 4000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "6-inch phone",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       2400,
+       1080
+      ],
+      "diagonal_inches": 6.0,
+      "viewing_distance_m": 0.4,
+      "peak_luminance": 500.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    }
+   ],
+   "named": {
+    "30-inch 4K monitor, office": {
+     "name": "30-inch 4K monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "6-inch phone": {
+     "name": "6-inch phone",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       2400,
+       1080
+      ],
+      "diagonal_inches": 6.0,
+      "viewing_distance_m": 0.4,
+      "peak_luminance": 500.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "Living room TV": null,
+    "defaults": null,
+    "7": null,
+    "2.5": null,
+    "None": null,
+    "True": null,
+    "tiny": null,
+    "missing": null,
+    "": null
+   }
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "presets": [
+    {
+     "name": "30-inch 4K monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "24-inch 1080p monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 24.0,
+      "viewing_distance_m": 0.6,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.6,\n  \"diagonal_size_inches\": 24.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K HDR monitor, dim room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 1500.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 10.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 10.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K HDR monitor, dark room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 1500.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 0.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 0.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 1000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 1000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 1000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 2000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 2000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 2000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 4000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 4000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 4000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "6-inch phone",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       2400,
+       1080
+      ],
+      "diagonal_inches": 6.0,
+      "viewing_distance_m": 0.4,
+      "peak_luminance": 500.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "Living room TV",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 55.5,
+      "viewing_distance_m": 2.25,
+      "peak_luminance": 750.0,
+      "contrast": 5000.0,
+      "ambient_lux": 30.1235,
+      "reflectivity": 0.012346,
+      "exposure": 1.5,
+      "hdr": true
+     },
+     "resize_to_display": true,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 2.25,\n  \"diagonal_size_inches\": 55.5,\n  \"max_luminance\": 750.0,\n  \"contrast\": 5000.0,\n  \"E_ambient\": 30.123456,\n  \"k_refl\": 0.0123456789,\n  \"exposure\": 1.5,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    }
+   ],
+   "named": {
+    "30-inch 4K monitor, office": {
+     "name": "30-inch 4K monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "6-inch phone": {
+     "name": "6-inch phone",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       2400,
+       1080
+      ],
+      "diagonal_inches": 6.0,
+      "viewing_distance_m": 0.4,
+      "peak_luminance": 500.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "Living room TV": {
+     "name": "Living room TV",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 55.5,
+      "viewing_distance_m": 2.25,
+      "peak_luminance": 750.0,
+      "contrast": 5000.0,
+      "ambient_lux": 30.1235,
+      "reflectivity": 0.012346,
+      "exposure": 1.5,
+      "hdr": true
+     },
+     "resize_to_display": true,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 2.25,\n  \"diagonal_size_inches\": 55.5,\n  \"max_luminance\": 750.0,\n  \"contrast\": 5000.0,\n  \"E_ambient\": 30.123456,\n  \"k_refl\": 0.0123456789,\n  \"exposure\": 1.5,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "defaults": null,
+    "7": null,
+    "2.5": null,
+    "None": null,
+    "True": null,
+    "tiny": null,
+    "missing": null,
+    "": null
+   }
+  },
+  {
+   "saved": "[{\"name\": \"defaults\", \"settings\": {}}, {\"name\": 7, \"settings\": {\"display\": {\"hdr\": 1}}}, {\"name\": 2.5, \"settings\": {\"display\": {\"width\": 1920.7, \"height\": 1080, \"unknown\": \"left out\"}}}, {\"name\": null, \"settings\": {\"display\": {\"hdr\": \"yes\"}, \"resize_to_display\": \"no\"}}, {\"name\": true, \"settings\": {\"display\": {\"hdr\": 0}, \"resize_to_display\": []}}, {\"name\": \"no settings\"}, {\"settings\": {}}, {\"name\": \"text width\", \"settings\": {\"display\": {\"width\": \"3840\"}}}, {\"name\": \"true width\", \"settings\": {\"display\": {\"width\": true}}}, {\"name\": \"null width\", \"settings\": {\"display\": {\"width\": null}}}, {\"name\": \"tiny\", \"settings\": {\"display\": {\"width\": 8}}}, {\"name\": \"no distance\", \"settings\": {\"display\": {\"viewing_distance_m\": 0}}}, {\"name\": \"negative light\", \"settings\": {\"display\": {\"ambient_lux\": -1}}}, {\"name\": \"a mirror\", \"settings\": {\"display\": {\"reflectivity\": 1}}}, {\"name\": \"list settings\", \"settings\": [1]}, {\"name\": \"null display\", \"settings\": {\"display\": null}}, {\"name\": \"30-inch 4K monitor, office\", \"settings\": {\"display\": {\"peak_luminance\": 400}}}]",
+   "presets": [
+    {
+     "name": "30-inch 4K monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "24-inch 1080p monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 24.0,
+      "viewing_distance_m": 0.6,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.6,\n  \"diagonal_size_inches\": 24.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K HDR monitor, dim room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 1500.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 10.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 10.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K HDR monitor, dark room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 1500.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 0.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 0.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 1000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 1000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 1000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 2000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 2000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 2000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "65-inch 4K HDR TV, 4000 nits, living room",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 65.0,
+      "viewing_distance_m": 1.98,
+      "peak_luminance": 4000.0,
+      "contrast": 1000000.0,
+      "ambient_lux": 5.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 4000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "6-inch phone",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       2400,
+       1080
+      ],
+      "diagonal_inches": 6.0,
+      "viewing_distance_m": 0.4,
+      "peak_luminance": 500.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "defaults",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "7",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "2.5",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "None",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": true,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "True",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "30-inch 4K monitor, office",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 400.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 400.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    }
+   ],
+   "named": {
+    "30-inch 4K monitor, office": {
+     "name": "30-inch 4K monitor, office",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "6-inch phone": {
+     "name": "6-inch phone",
+     "builtin": true,
+     "identity": {
+      "resolution": [
+       2400,
+       1080
+      ],
+      "diagonal_inches": 6.0,
+      "viewing_distance_m": 0.4,
+      "peak_luminance": 500.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "Living room TV": null,
+    "defaults": {
+     "name": "defaults",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "7": {
+     "name": "7",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "2.5": {
+     "name": "2.5",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "None": {
+     "name": "None",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": true,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "True": {
+     "name": "True",
+     "builtin": false,
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    "tiny": null,
+    "missing": null,
+    "": null
+   }
+  }
+ ],
+ "read_back": [
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 30.0,
+     "viewing_distance_m": 0.7472,
+     "peak_luminance": 200.0,
+     "contrast": 1000.0,
+     "ambient_lux": 250.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": false
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 30.0,
+    "viewing_distance_m": 0.7472,
+    "peak_luminance": 200.0,
+    "contrast": 1000.0,
+    "ambient_lux": 250.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": false
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 30.0,
+     "viewing_distance_m": 0.7472,
+     "peak_luminance": 200.0,
+     "contrast": 1000.0,
+     "ambient_lux": 250.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": false
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 30.0,
+    "viewing_distance_m": 0.7472,
+    "peak_luminance": 200.0,
+    "contrast": 1000.0,
+    "ambient_lux": 250.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": false
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      1920,
+      1080
+     ],
+     "diagonal_inches": 24.0,
+     "viewing_distance_m": 0.6,
+     "peak_luminance": 200.0,
+     "contrast": 1000.0,
+     "ambient_lux": 250.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": false
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     1920,
+     1080
+    ],
+    "diagonal_inches": 24.0,
+    "viewing_distance_m": 0.6,
+    "peak_luminance": 200.0,
+    "contrast": 1000.0,
+    "ambient_lux": 250.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": false
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.6,\n  \"diagonal_size_inches\": 24.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      1920,
+      1080
+     ],
+     "diagonal_inches": 24.0,
+     "viewing_distance_m": 0.6,
+     "peak_luminance": 200.0,
+     "contrast": 1000.0,
+     "ambient_lux": 250.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": false
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     1920,
+     1080
+    ],
+    "diagonal_inches": 24.0,
+    "viewing_distance_m": 0.6,
+    "peak_luminance": 200.0,
+    "contrast": 1000.0,
+    "ambient_lux": 250.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": false
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   1920,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.6,\n  \"diagonal_size_inches\": 24.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 30.0,
+     "viewing_distance_m": 0.7472,
+     "peak_luminance": 1500.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 10.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 30.0,
+    "viewing_distance_m": 0.7472,
+    "peak_luminance": 1500.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 10.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 10.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 30.0,
+     "viewing_distance_m": 0.7472,
+     "peak_luminance": 1500.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 10.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 30.0,
+    "viewing_distance_m": 0.7472,
+    "peak_luminance": 1500.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 10.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 10.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 30.0,
+     "viewing_distance_m": 0.7472,
+     "peak_luminance": 1500.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 0.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 30.0,
+    "viewing_distance_m": 0.7472,
+    "peak_luminance": 1500.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 0.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 0.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 30.0,
+     "viewing_distance_m": 0.7472,
+     "peak_luminance": 1500.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 0.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 30.0,
+    "viewing_distance_m": 0.7472,
+    "peak_luminance": 1500.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 0.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 1500.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 0.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 65.0,
+     "viewing_distance_m": 1.98,
+     "peak_luminance": 1000.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 5.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 65.0,
+    "viewing_distance_m": 1.98,
+    "peak_luminance": 1000.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 5.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 1000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 65.0,
+     "viewing_distance_m": 1.98,
+     "peak_luminance": 1000.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 5.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 65.0,
+    "viewing_distance_m": 1.98,
+    "peak_luminance": 1000.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 5.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 1000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 65.0,
+     "viewing_distance_m": 1.98,
+     "peak_luminance": 2000.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 5.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 65.0,
+    "viewing_distance_m": 1.98,
+    "peak_luminance": 2000.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 5.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 2000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 65.0,
+     "viewing_distance_m": 1.98,
+     "peak_luminance": 2000.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 5.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 65.0,
+    "viewing_distance_m": 1.98,
+    "peak_luminance": 2000.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 5.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 2000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 65.0,
+     "viewing_distance_m": 1.98,
+     "peak_luminance": 4000.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 5.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 65.0,
+    "viewing_distance_m": 1.98,
+    "peak_luminance": 4000.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 5.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 4000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 65.0,
+     "viewing_distance_m": 1.98,
+     "peak_luminance": 4000.0,
+     "contrast": 1000000.0,
+     "ambient_lux": 5.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": true
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 65.0,
+    "viewing_distance_m": 1.98,
+    "peak_luminance": 4000.0,
+    "contrast": 1000000.0,
+    "ambient_lux": 5.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": true
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 1.98,\n  \"diagonal_size_inches\": 65.0,\n  \"max_luminance\": 4000.0,\n  \"contrast\": 1000000.0,\n  \"E_ambient\": 5.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      2400,
+      1080
+     ],
+     "diagonal_inches": 6.0,
+     "viewing_distance_m": 0.4,
+     "peak_luminance": 500.0,
+     "contrast": 1000.0,
+     "ambient_lux": 250.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": false
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     2400,
+     1080
+    ],
+    "diagonal_inches": 6.0,
+    "viewing_distance_m": 0.4,
+    "peak_luminance": 500.0,
+    "contrast": 1000.0,
+    "ambient_lux": 250.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": false
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      2400,
+      1080
+     ],
+     "diagonal_inches": 6.0,
+     "viewing_distance_m": 0.4,
+     "peak_luminance": 500.0,
+     "contrast": 1000.0,
+     "ambient_lux": 250.0,
+     "reflectivity": 0.005,
+     "exposure": 1.0,
+     "hdr": false
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     2400,
+     1080
+    ],
+    "diagonal_inches": 6.0,
+    "viewing_distance_m": 0.4,
+    "peak_luminance": 500.0,
+    "contrast": 1000.0,
+    "ambient_lux": 250.0,
+    "reflectivity": 0.005,
+    "exposure": 1.0,
+    "hdr": false
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   2400,\n   1080\n  ],\n  \"viewing_distance_meters\": 0.4,\n  \"diagonal_size_inches\": 6.0,\n  \"max_luminance\": 500.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 55.5,
+     "viewing_distance_m": 2.25,
+     "peak_luminance": 750.0,
+     "contrast": 5000.0,
+     "ambient_lux": 30.1235,
+     "reflectivity": 0.012346,
+     "exposure": 1.5,
+     "hdr": true
+    },
+    "resize_to_display": false
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 55.5,
+    "viewing_distance_m": 2.25,
+    "peak_luminance": 750.0,
+    "contrast": 5000.0,
+    "ambient_lux": 30.1235,
+    "reflectivity": 0.012346,
+    "exposure": 1.5,
+    "hdr": true
+   },
+   "resize_to_display": false,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 2.25,\n  \"diagonal_size_inches\": 55.5,\n  \"max_luminance\": 750.0,\n  \"contrast\": 5000.0,\n  \"E_ambient\": 30.1235,\n  \"k_refl\": 0.012346,\n  \"exposure\": 1.5,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  },
+  {
+   "parameters": {
+    "display": {
+     "resolution": [
+      3840,
+      2160
+     ],
+     "diagonal_inches": 55.5,
+     "viewing_distance_m": 2.25,
+     "peak_luminance": 750.0,
+     "contrast": 5000.0,
+     "ambient_lux": 30.1235,
+     "reflectivity": 0.012346,
+     "exposure": 1.5,
+     "hdr": true
+    },
+    "resize_to_display": true
+   },
+   "identity": {
+    "resolution": [
+     3840,
+     2160
+    ],
+    "diagonal_inches": 55.5,
+    "viewing_distance_m": 2.25,
+    "peak_luminance": 750.0,
+    "contrast": 5000.0,
+    "ambient_lux": 30.1235,
+    "reflectivity": 0.012346,
+    "exposure": 1.5,
+    "hdr": true
+   },
+   "resize_to_display": true,
+   "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"HDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 2.25,\n  \"diagonal_size_inches\": 55.5,\n  \"max_luminance\": 750.0,\n  \"contrast\": 5000.0,\n  \"E_ambient\": 30.1235,\n  \"k_refl\": 0.012346,\n  \"exposure\": 1.5,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+  }
+ ],
+ "sizes": [
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    1920,
+    1080
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1920,
+    1080
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    3840,
+    2160
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    3840,
+    2160
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1280,
+    536
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    3840,
+    1608
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1280,
+    536
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1920,
+    804
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1280,
+    536
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    2400,
+    1005
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    1280,
+    536
+   ]
+  },
+  {
+   "size": [
+    1280,
+    536
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1280,
+    536
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    720,
+    576
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    2700,
+    2160
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    720,
+    576
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1350,
+    1080
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    720,
+    576
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1350,
+    1080
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    720,
+    576
+   ]
+  },
+  {
+   "size": [
+    720,
+    576
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    720,
+    576
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4096,
+    2160
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    4096,
+    2160
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    7680,
+    4320
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    7680,
+    4320
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    3
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    2880,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    3
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1440,
+    1080
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    3
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1440,
+    1080
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    3
+   ]
+  },
+  {
+   "size": [
+    4,
+    3
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    18,
+    14
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    5
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    3840,
+    2160
+   ],
+   "resize_to_display": true,
+   "computed": [
+    1728,
+    2160
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    5
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    1920,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    864,
+    1080
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    5
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    2400,
+    1080
+   ],
+   "resize_to_display": true,
+   "computed": [
+    864,
+    1080
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": false,
+   "computed": [
+    4,
+    5
+   ]
+  },
+  {
+   "size": [
+    4,
+    5
+   ],
+   "display": [
+    18,
+    100
+   ],
+   "resize_to_display": true,
+   "computed": [
+    18,
+    22
+   ]
+  }
+ ],
+ "pools": [
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.3000000000000p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.ef0550b7f6a2ep+0"
+    ],
+    [
+     1,
+     1,
+     "0x1.724e6e19d3f20p+2"
+    ],
+    [
+     2,
+     1,
+     "0x1.ecdc57e0de794p-1"
+    ],
+    [
+     3,
+     1,
+     "0x1.c55e188569f4ep+2"
+    ],
+    [
+     4,
+     1,
+     "0x1.33ffb2a13334ap+3"
+    ],
+    [
+     5,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     6,
+     1,
+     "0x1.3e3608ad37959p+3"
+    ],
+    [
+     7,
+     1,
+     "0x1.3ac386deadcf2p+3"
+    ]
+   ],
+   "jod": "0x1.fb2a9b086db88p+0"
+  },
+  {
+   "windows": [
+    [
+     0,
+     120,
+     "0x1.13f9c924a490ep+2"
+    ],
+    [
+     120,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     121,
+     1,
+     "0x1.372ad97356769p+3"
+    ],
+    [
+     122,
+     120,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     242,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     302,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     303,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     327,
+     30,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.a4c2c804034f0p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     120,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.4000000000000p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.20a33909e7d25p+3"
+    ],
+    [
+     1,
+     30,
+     "0x1.29736956b3f81p+2"
+    ],
+    [
+     31,
+     24,
+     "0x1.428e06a13cf7ap+1"
+    ],
+    [
+     55,
+     25,
+     "0x1.bef2767122c14p+2"
+    ],
+    [
+     80,
+     30,
+     "0x1.7955618d94bacp+2"
+    ],
+    [
+     110,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     134,
+     24,
+     "0x1.25337e8567ac7p+1"
+    ]
+   ],
+   "jod": "0x1.2b461df41f964p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     25,
+     30,
+     "0x1.c83b2adf02a3cp+1"
+    ]
+   ],
+   "jod": "0x1.494ccdddbd47cp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.648476814b898p+2"
+    ],
+    [
+     1,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     2,
+     1,
+     "0x1.3e95fac7d87d8p+3"
+    ],
+    [
+     3,
+     1,
+     "-0x1.32d7217aa1100p-4"
+    ],
+    [
+     4,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     5,
+     1,
+     "0x1.db5c16d93e5dcp+1"
+    ],
+    [
+     6,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.b8201c3b3e7d0p+0"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     60,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     120,
+     2,
+     "0x1.3e1202c8350e4p+3"
+    ]
+   ],
+   "jod": "0x1.3fb6fe0c882d7p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.34ddf904536d0p+3"
+    ],
+    [
+     2,
+     120,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     122,
+     1,
+     "0x1.3bf956ec84dc9p+3"
+    ],
+    [
+     123,
+     1,
+     "-0x1.ac2d3b8859141p+0"
+    ]
+   ],
+   "jod": "0x1.fbc5be11b2f8dp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     25,
+     30,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.3fff729c2ba5bp+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.21054c3a89b0ap+2"
+    ],
+    [
+     2,
+     120,
+     "0x1.3e988268bc9acp+1"
+    ],
+    [
+     122,
+     25,
+     "0x1.221dbc9a1f9b8p+2"
+    ],
+    [
+     147,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     207,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     267,
+     120,
+     "0x1.3e1a3f78cc8bbp+3"
+    ],
+    [
+     387,
+     2,
+     "0x1.a4f98de0363a5p+2"
+    ]
+   ],
+   "jod": "0x1.5b28969b25e7ep+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "-0x1.1b154d6b797a8p+0"
+    ],
+    [
+     1,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     2,
+     1,
+     "0x1.9eadb522604f8p+1"
+    ],
+    [
+     3,
+     1,
+     "0x1.82cd51efd4b8cp+0"
+    ],
+    [
+     4,
+     1,
+     "0x1.bdfdc55ee5502p+2"
+    ],
+    [
+     5,
+     1,
+     "0x1.3600ba135fcccp+3"
+    ],
+    [
+     6,
+     1,
+     "0x1.7e7098f123d0ep+2"
+    ]
+   ],
+   "jod": "-0x1.08dd1a0d1d8f0p-1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.25569e3501c1dp+2"
+    ]
+   ],
+   "jod": "0x1.25569e3501c1ap+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     30,
+     "0x1.33af9308aaf5fp+3"
+    ],
+    [
+     30,
+     60,
+     "0x1.0e21c1800a42cp+3"
+    ]
+   ],
+   "jod": "0x1.163b2018d7d31p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3ccbe51da662ep+3"
+    ],
+    [
+     1,
+     2,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     3,
+     1,
+     "0x1.209da0c319044p+1"
+    ]
+   ],
+   "jod": "0x1.9d87eba0675b8p+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3ebc6a48bff1cp+3"
+    ],
+    [
+     1,
+     30,
+     "-0x1.c7be9a5b12430p-1"
+    ]
+   ],
+   "jod": "-0x1.735b897caf020p-1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.61cf0d613e650p-1"
+    ],
+    [
+     1,
+     1,
+     "0x1.35ba026eb3c01p+3"
+    ],
+    [
+     2,
+     1,
+     "0x1.a2b046bd47570p+2"
+    ],
+    [
+     3,
+     1,
+     "0x1.4aa6a39b2cbbap+3"
+    ],
+    [
+     4,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     5,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.731088b4d1f70p+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.d22faa0f6e610p-3"
+    ],
+    [
+     1,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     2,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     62,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     63,
+     1,
+     "0x1.9953aedd7b2f8p+2"
+    ],
+    [
+     64,
+     2,
+     "0x1.3a41815080a83p+3"
+    ],
+    [
+     66,
+     2,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     68,
+     24,
+     "0x1.3608060d3c70ep+3"
+    ]
+   ],
+   "jod": "0x1.f9d8d1a1cda2bp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.1b5ebe116b3f1p+0"
+    ],
+    [
+     1,
+     120,
+     "0x1.269435902d65cp+2"
+    ],
+    [
+     121,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     145,
+     24,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     169,
+     120,
+     "0x1.8656e8a4170e4p+1"
+    ],
+    [
+     289,
+     1,
+     "0x1.1313a51c83760p+1"
+    ]
+   ],
+   "jod": "0x1.0af3d59486c27p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.3fff2e48e8a72p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     25,
+     "0x1.89d8e916ddecep+2"
+    ],
+    [
+     25,
+     30,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     55,
+     30,
+     "0x1.378e6a89995cap+3"
+    ],
+    [
+     85,
+     1,
+     "0x1.1e8385a22e90bp+3"
+    ],
+    [
+     86,
+     30,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     116,
+     60,
+     "0x1.f6332bf4c041dp+2"
+    ],
+    [
+     176,
+     30,
+     "0x1.3242c6b958b25p+3"
+    ],
+    [
+     206,
+     120,
+     "0x1.a417b20df56a0p+2"
+    ]
+   ],
+   "jod": "0x1.db8e0eec35502p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.719a683d6af46p+2"
+    ],
+    [
+     2,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     3,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     4,
+     1,
+     "0x1.b13b37245183fp+2"
+    ],
+    [
+     5,
+     1,
+     "0x1.22a57d4dffe21p+3"
+    ],
+    [
+     6,
+     1,
+     "0x1.3577cef4e5330p+3"
+    ],
+    [
+     7,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.aac68909da5f0p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.96aeb3f800d52p+1"
+    ],
+    [
+     2,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     27,
+     2,
+     "0x1.4a18f38b21308p+3"
+    ],
+    [
+     29,
+     30,
+     "0x1.0dc6162389889p+2"
+    ],
+    [
+     59,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     119,
+     1,
+     "0x1.1385e536664aep+3"
+    ],
+    [
+     120,
+     25,
+     "0x1.308725563398dp+3"
+    ],
+    [
+     145,
+     1,
+     "0x1.3ffd8154c46e8p+3"
+    ]
+   ],
+   "jod": "0x1.c6517701e46ecp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     2,
+     1,
+     "-0x1.4c39a1b1e473dp+0"
+    ]
+   ],
+   "jod": "-0x1.4994ab913d878p+0"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "0x1.55477b27da314p+0"
+    ],
+    [
+     60,
+     120,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     180,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     181,
+     60,
+     "0x1.3fb1564b79016p+3"
+    ],
+    [
+     241,
+     30,
+     "-0x1.7f4f4382fef27p+0"
+    ],
+    [
+     271,
+     1,
+     "0x1.3a37b9021fd4cp+3"
+    ],
+    [
+     272,
+     25,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.1b1b725e50af4p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.201a2bdfde3a0p+0"
+    ],
+    [
+     1,
+     1,
+     "0x1.94352f6cdb404p+0"
+    ],
+    [
+     2,
+     60,
+     "0x1.bdf39918be9acp+0"
+    ],
+    [
+     62,
+     1,
+     "0x1.8f2ccc430f718p+0"
+    ],
+    [
+     63,
+     30,
+     "0x1.39a1d4c71eb03p+3"
+    ]
+   ],
+   "jod": "0x1.634087a79a936p+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.314c50fc95812p+3"
+    ]
+   ],
+   "jod": "0x1.314c50fc95812p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3a86b8294197ap+3"
+    ],
+    [
+     1,
+     60,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     61,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     86,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     111,
+     25,
+     "0x1.acb0f39164578p+1"
+    ],
+    [
+     136,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     137,
+     1,
+     "0x1.150339c1f19d7p+0"
+    ]
+   ],
+   "jod": "0x1.aca8e0708e510p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     60,
+     30,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     90,
+     120,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     210,
+     120,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     330,
+     30,
+     "0x1.ec4f7a02f0776p+2"
+    ],
+    [
+     360,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     384,
+     60,
+     "0x1.3d4bd496c47aap+3"
+    ],
+    [
+     444,
+     2,
+     "0x1.0aa67ed6e9249p+2"
+    ]
+   ],
+   "jod": "0x1.26a869f005141p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.128b4e0030ab1p+3"
+    ]
+   ],
+   "jod": "0x1.128b4e0030ab1p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     1,
+     25,
+     "0x1.3d49bd8c09b94p+3"
+    ],
+    [
+     26,
+     2,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     28,
+     1,
+     "0x1.1d158e2f66c70p-1"
+    ],
+    [
+     29,
+     1,
+     "0x1.626e25fc89600p-2"
+    ],
+    [
+     30,
+     2,
+     "0x1.4686d209d8280p-5"
+    ]
+   ],
+   "jod": "0x1.3bf6d3c839106p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     2,
+     1,
+     "0x1.da042eeffa516p+1"
+    ],
+    [
+     3,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     4,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     5,
+     1,
+     "0x1.375908fb21945p+3"
+    ]
+   ],
+   "jod": "0x1.5c2cfe49d1103p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     30,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     30,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     31,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     55,
+     24,
+     "0x1.3620508e1d4a4p+3"
+    ],
+    [
+     79,
+     1,
+     "0x1.34572d3474996p+3"
+    ]
+   ],
+   "jod": "0x1.39e9975741d11p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     25,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     25,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     49,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     50,
+     60,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     110,
+     2,
+     "-0x1.aff1ba5106650p+0"
+    ]
+   ],
+   "jod": "0x1.067c48346f6bfp+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "0x1.8d6bb321a7da9p+2"
+    ],
+    [
+     60,
+     1,
+     "0x1.1e94eb7ad3850p-3"
+    ],
+    [
+     61,
+     30,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     91,
+     120,
+     "0x1.3e1a82e9a12b8p+3"
+    ],
+    [
+     211,
+     24,
+     "0x1.3a5673c8f2f6bp+3"
+    ],
+    [
+     235,
+     120,
+     "0x1.5bee15d0f12c6p+1"
+    ],
+    [
+     355,
+     2,
+     "0x1.95eff35bda8ccp+1"
+    ]
+   ],
+   "jod": "0x1.503bdc09a853dp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "0x1.e1437dddd7c4ep+2"
+    ],
+    [
+     60,
+     60,
+     "0x1.444582d998fbep+1"
+    ],
+    [
+     120,
+     60,
+     "0x1.7ec771c1f7523p+2"
+    ]
+   ],
+   "jod": "0x1.3586745015a57p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.5e720682c43cep+1"
+    ],
+    [
+     2,
+     1,
+     "0x1.8a654c854f1a6p+1"
+    ]
+   ],
+   "jod": "0x1.be3222888a980p-3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     2,
+     30,
+     "0x1.19a9f8c572dc3p+2"
+    ],
+    [
+     32,
+     2,
+     "0x1.1529a6ab74983p+3"
+    ],
+    [
+     34,
+     2,
+     "0x1.336eee8da1446p+2"
+    ]
+   ],
+   "jod": "0x1.2dc65e5013ab1p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     24,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     24,
+     24,
+     "0x1.a104419ecd0fcp+2"
+    ]
+   ],
+   "jod": "0x1.de77680a15788p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.36cab6f70f2c3p+3"
+    ],
+    [
+     1,
+     60,
+     "0x1.014adea1e0876p+2"
+    ],
+    [
+     61,
+     25,
+     "0x1.3bff6b0b3f488p+3"
+    ],
+    [
+     86,
+     120,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     206,
+     24,
+     "0x1.9e59ca7886767p+2"
+    ],
+    [
+     230,
+     25,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.b170d749936b4p+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     1,
+     2,
+     "0x1.4bef605806ef0p+0"
+    ]
+   ],
+   "jod": "0x1.656f1d10f7f94p+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.3fff2e48e8a72p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.35cf6b1dd1052p+3"
+    ]
+   ],
+   "jod": "0x1.35cf6b1dd1052p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "-0x1.07ecde445ea78p-1"
+    ],
+    [
+     60,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     84,
+     1,
+     "0x1.3740ba583d4acp+3"
+    ],
+    [
+     85,
+     1,
+     "0x1.cf6b42829c0d0p-1"
+    ],
+    [
+     86,
+     1,
+     "0x1.2cf66f1cae5fdp+3"
+    ],
+    [
+     87,
+     1,
+     "0x1.14a7f94fd32abp+1"
+    ]
+   ],
+   "jod": "0x1.e452bf0df9840p-1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     30,
+     "-0x1.8e892be76e500p+0"
+    ],
+    [
+     30,
+     24,
+     "0x1.155ace6215a08p-3"
+    ],
+    [
+     54,
+     1,
+     "0x1.37c69602c0a26p+3"
+    ],
+    [
+     55,
+     1,
+     "0x1.34574fff40f74p+3"
+    ],
+    [
+     56,
+     60,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.337cd97a0c53cp+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     24,
+     2,
+     "0x1.33b88f07312f3p+3"
+    ]
+   ],
+   "jod": "0x1.3c468721cdc17p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.373e76b4e1d78p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.991f4784a69ccp+1"
+    ],
+    [
+     2,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     3,
+     1,
+     "0x1.31a1664ebe038p+3"
+    ]
+   ],
+   "jod": "0x1.02c0db4764d5cp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     24,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.4000000000000p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "-0x1.97bd039ae76bap+0"
+    ],
+    [
+     60,
+     60,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     120,
+     1,
+     "0x1.3f6989ad10b40p+0"
+    ],
+    [
+     121,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     122,
+     25,
+     "0x1.35dfe799c4098p-2"
+    ],
+    [
+     147,
+     2,
+     "0x1.f90a2ba5fc735p+2"
+    ],
+    [
+     149,
+     30,
+     "0x1.a5ae0e64a731ap+1"
+    ]
+   ],
+   "jod": "0x1.ab58aff3ffc10p+0"
+  },
+  {
+   "windows": [
+    [
+     0,
+     60,
+     "0x1.379308234f80bp+2"
+    ],
+    [
+     60,
+     120,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     180,
+     2,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     182,
+     1,
+     "0x1.393080552726bp+3"
+    ],
+    [
+     183,
+     1,
+     "0x1.31eac68e427a8p+3"
+    ],
+    [
+     184,
+     30,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     214,
+     120,
+     "0x1.373a672aaa9d6p+3"
+    ]
+   ],
+   "jod": "0x1.ebee800048ebbp+2"
+  },
+  {
+   "windows": [
+    [
+     0,
+     25,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.4000000000000p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.25cef41b42c57p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     2,
+     1,
+     "0x1.3e69bce39a58bp+3"
+    ]
+   ],
+   "jod": "0x1.25cd942b9a555p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     24,
+     "0x1.2a78ce296929bp+3"
+    ],
+    [
+     24,
+     120,
+     "0x1.1bf857202e438p+3"
+    ],
+    [
+     144,
+     24,
+     "0x1.0e7f091b0d1e4p+3"
+    ],
+    [
+     168,
+     24,
+     "0x1.958ee5ce4ba04p+2"
+    ],
+    [
+     192,
+     60,
+     "0x1.12deebddda27bp+3"
+    ]
+   ],
+   "jod": "0x1.0b131c0bf25d0p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     2,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     2,
+     24,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.3fffc5d5e146fp+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     1,
+     2,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     3,
+     2,
+     "-0x1.883b96a577327p+0"
+    ],
+    [
+     5,
+     25,
+     "0x1.d188bcbd7dacap+1"
+    ],
+    [
+     30,
+     2,
+     "0x1.8747d9b30dc43p+2"
+    ],
+    [
+     32,
+     1,
+     "0x1.3270af5623968p+3"
+    ],
+    [
+     33,
+     60,
+     "0x1.c83ca00c72a1ap+1"
+    ]
+   ],
+   "jod": "0x1.cbfd5ca0acf7cp+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.0fc1a9cf4ac39p+3"
+    ],
+    [
+     1,
+     2,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.0fccf48f76d8cp+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.30e7e4dd13169p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     2,
+     1,
+     "0x1.3ca09757131b8p+3"
+    ],
+    [
+     3,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     4,
+     1,
+     "0x1.c9cf83bd724c8p+2"
+    ],
+    [
+     5,
+     1,
+     "0x1.37e9de54ab954p+3"
+    ],
+    [
+     6,
+     1,
+     "0x1.f4de0dc718c8cp-2"
+    ]
+   ],
+   "jod": "0x1.af266dc45a998p+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.c5631ce83d499p+2"
+    ],
+    [
+     1,
+     25,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     26,
+     30,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     56,
+     120,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     176,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.33c295c5d23d6p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     24,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     24,
+     2,
+     "0x1.37d6d25d8e269p+3"
+    ],
+    [
+     26,
+     120,
+     "0x1.e8c5be9c97b9dp+2"
+    ],
+    [
+     146,
+     60,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     206,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     231,
+     1,
+     "0x1.3367939481ecfp+3"
+    ],
+    [
+     232,
+     60,
+     "0x1.4000000000000p+3"
+    ]
+   ],
+   "jod": "0x1.0dfbcb8216a24p+3"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.d23046a17d7b0p-2"
+    ],
+    [
+     2,
+     30,
+     "0x1.39a032e2b791bp+3"
+    ],
+    [
+     32,
+     24,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     56,
+     120,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     176,
+     120,
+     "0x1.1eaa63df6ad94p-1"
+    ],
+    [
+     296,
+     25,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.fa5900b4b7b12p+1"
+  },
+  {
+   "windows": [
+    [
+     0,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     1,
+     1,
+     "0x1.3a60d09f8ceb9p+2"
+    ],
+    [
+     2,
+     120,
+     "0x1.4000000000000p+3"
+    ],
+    [
+     122,
+     1,
+     "0x1.3fff2e48e8a72p+3"
+    ],
+    [
+     123,
+     120,
+     "0x1.3fff2e48e8a72p+3"
+    ]
+   ],
+   "jod": "0x1.2aee501b9f7cdp+3"
+  }
+ ]
+}

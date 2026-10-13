@@ -109,9 +109,9 @@ void write_string(std::string& out, const std::string& text) {
     out += '"';
 }
 
-void write_value(std::string& out, const nlohmann::ordered_json& value, int depth) {
-    const std::string inner(static_cast<std::size_t>(2 * (depth + 1)), ' ');
-    const std::string outer(static_cast<std::size_t>(2 * depth), ' ');
+void write_value(std::string& out, const nlohmann::ordered_json& value, int indent, int depth) {
+    const std::string inner(static_cast<std::size_t>(indent * (depth + 1)), ' ');
+    const std::string outer(static_cast<std::size_t>(indent * depth), ' ');
     switch (value.type()) {
         case nlohmann::ordered_json::value_t::object: {
             if (value.empty()) {
@@ -126,7 +126,7 @@ void write_value(std::string& out, const nlohmann::ordered_json& value, int dept
                 out += inner;
                 write_string(out, item.key());
                 out += ": ";
-                write_value(out, item.value(), depth + 1);
+                write_value(out, item.value(), indent, depth + 1);
             }
             out += "\n" + outer + "}";
             return;
@@ -142,7 +142,7 @@ void write_value(std::string& out, const nlohmann::ordered_json& value, int dept
                 out += first ? "" : ",\n";
                 first = false;
                 out += inner;
-                write_value(out, item, depth + 1);
+                write_value(out, item, indent, depth + 1);
             }
             out += "\n" + outer + "]";
             return;
@@ -177,9 +177,9 @@ void write_value(std::string& out, const nlohmann::ordered_json& value, int dept
 
 }  // namespace
 
-std::string python_json_dumps(const nlohmann::ordered_json& value) {
+std::string python_json_dumps(const nlohmann::ordered_json& value, int indent) {
     std::string out;
-    write_value(out, value, 0);
+    write_value(out, value, indent, 0);
     return out;
 }
 
