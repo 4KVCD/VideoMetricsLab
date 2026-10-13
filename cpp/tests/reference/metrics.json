@@ -1,0 +1,782 @@
+{
+ "metrics": [
+  {
+   "key": "vmaf",
+   "label": "VMAF v0.6.1",
+   "short_label": "VMAF v0.6.1",
+   "table_header": "VMAF v0.6.1",
+   "axis_label": "VMAF v0.6.1",
+   "value_format": "{:.2f}",
+   "value_suffix": "",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": "0x1.9000000000000p+6",
+   "thresholds": [
+    [
+     ">",
+     "0x1.7c00000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.6800000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.5400000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.5400000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.4000000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.1800000000000p+6"
+    ]
+   ],
+   "bool_option": "compute_vmaf",
+   "libvmaf_feature": null,
+   "backend_id": null,
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.00"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.00"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.50"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.99"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.35"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.25"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.00"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.68"
+    }
+   ]
+  },
+  {
+   "key": "vmaf_neg",
+   "label": "VMAF NEG",
+   "short_label": "VMAF NEG",
+   "table_header": "VMAF NEG",
+   "axis_label": "VMAF NEG",
+   "value_format": "{:.2f}",
+   "value_suffix": "",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": "0x1.9000000000000p+6",
+   "thresholds": [
+    [
+     ">",
+     "0x1.7c00000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.6800000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.5400000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.5400000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.4000000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.1800000000000p+6"
+    ]
+   ],
+   "bool_option": "compute_vmaf_neg",
+   "libvmaf_feature": null,
+   "backend_id": null,
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.00"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.00"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.50"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.99"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.35"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.25"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.00"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.68"
+    }
+   ]
+  },
+  {
+   "key": "vmaf_v1",
+   "label": "VMAF v1",
+   "short_label": "VMAF v1",
+   "table_header": "VMAF v1",
+   "axis_label": "VMAF v1",
+   "value_format": "{:.2f}",
+   "value_suffix": "",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": null,
+   "thresholds": [
+    [
+     ">",
+     "0x1.7c00000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.6800000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.5400000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.5400000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.4000000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.1800000000000p+6"
+    ]
+   ],
+   "bool_option": "compute_vmaf_v1",
+   "libvmaf_feature": null,
+   "backend_id": null,
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.00"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.00"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.50"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.99"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.35"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.25"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.00"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.68"
+    }
+   ]
+  },
+  {
+   "key": "psnr",
+   "label": "PSNR",
+   "short_label": "PSNR",
+   "table_header": "PSNR (dB)",
+   "axis_label": "PSNR (dB)",
+   "value_format": "{:.2f}",
+   "value_suffix": " dB",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": null,
+   "thresholds": [
+    [
+     ">",
+     "0x1.4800000000000p+5"
+    ],
+    [
+     ">",
+     "0x1.3000000000000p+5"
+    ],
+    [
+     ">",
+     "0x1.1800000000000p+5"
+    ],
+    [
+     "<",
+     "0x1.1800000000000p+5"
+    ],
+    [
+     "<",
+     "0x1.1000000000000p+5"
+    ],
+    [
+     "<",
+     "0x1.0000000000000p+5"
+    ]
+   ],
+   "bool_option": null,
+   "libvmaf_feature": "name=psnr",
+   "backend_id": null,
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.00"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.00"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.50"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.99"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.35"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.25"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.00"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.68"
+    }
+   ]
+  },
+  {
+   "key": "ssim",
+   "label": "SSIM",
+   "short_label": "SSIM",
+   "table_header": "SSIM",
+   "axis_label": "SSIM",
+   "value_format": "{:.4f}",
+   "value_suffix": "",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": null,
+   "thresholds": [
+    [
+     ">",
+     "0x1.fae147ae147aep-1"
+    ],
+    [
+     ">",
+     "0x1.f5c28f5c28f5cp-1"
+    ],
+    [
+     ">",
+     "0x1.f0a3d70a3d70ap-1"
+    ],
+    [
+     "<",
+     "0x1.f0a3d70a3d70ap-1"
+    ],
+    [
+     "<",
+     "0x1.eb851eb851eb8p-1"
+    ],
+    [
+     "<",
+     "0x1.e666666666666p-1"
+    ]
+   ],
+   "bool_option": null,
+   "libvmaf_feature": "name=float_ssim",
+   "backend_id": null,
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.0000"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.0000"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.5000"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.9877"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.3520"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.2500"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.0000"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.6780"
+    }
+   ]
+  },
+  {
+   "key": "xpsnr",
+   "label": "XPSNR",
+   "short_label": "XPSNR",
+   "table_header": "XPSNR (dB)",
+   "axis_label": "XPSNR (dB)",
+   "value_format": "{:.2f}",
+   "value_suffix": " dB",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "square_mean_root",
+   "fixed_y_max": null,
+   "thresholds": [
+    [
+     ">",
+     "0x1.3000000000000p+5"
+    ],
+    [
+     ">",
+     "0x1.1800000000000p+5"
+    ],
+    [
+     ">",
+     "0x1.0800000000000p+5"
+    ],
+    [
+     "<",
+     "0x1.0800000000000p+5"
+    ],
+    [
+     "<",
+     "0x1.e000000000000p+4"
+    ],
+    [
+     "<",
+     "0x1.b000000000000p+4"
+    ]
+   ],
+   "bool_option": "compute_xpsnr",
+   "libvmaf_feature": null,
+   "backend_id": null,
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.00"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.00"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.50"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.99"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.35"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.25"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.00"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.68"
+    }
+   ]
+  },
+  {
+   "key": "ssimulacra2",
+   "label": "SSIMULACRA2",
+   "short_label": "SSIMULACRA2",
+   "table_header": "SSIMULACRA2",
+   "axis_label": "SSIMULACRA2",
+   "value_format": "{:.2f}",
+   "value_suffix": "",
+   "kind": "frame",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": "0x1.9000000000000p+6",
+   "thresholds": [
+    [
+     ">",
+     "0x1.6800000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.4000000000000p+6"
+    ],
+    [
+     ">",
+     "0x1.1800000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.1800000000000p+6"
+    ],
+    [
+     "<",
+     "0x1.9000000000000p+5"
+    ],
+    [
+     "<",
+     "0x1.e000000000000p+4"
+    ]
+   ],
+   "bool_option": null,
+   "libvmaf_feature": null,
+   "backend_id": "perceptual",
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.00"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.00"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.50"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.99"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.35"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.25"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.00"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.68"
+    }
+   ]
+  },
+  {
+   "key": "butteraugli",
+   "label": "Butteraugli",
+   "short_label": "Butteraugli",
+   "table_header": "Butteraugli",
+   "axis_label": "Butteraugli",
+   "value_format": "{:.4f}",
+   "value_suffix": "",
+   "kind": "frame",
+   "direction": "lower_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": null,
+   "thresholds": [],
+   "bool_option": null,
+   "libvmaf_feature": null,
+   "backend_id": "perceptual",
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.0000"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.0000"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.5000"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.9877"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.3520"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.2500"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.0000"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.6780"
+    }
+   ]
+  },
+  {
+   "key": "cvvdp",
+   "label": "CVVDP",
+   "short_label": "CVVDP",
+   "table_header": "CVVDP",
+   "axis_label": "CVVDP (JOD)",
+   "value_format": "{:.3f}",
+   "value_suffix": "",
+   "kind": "sequence",
+   "direction": "higher_is_better",
+   "aggregation": "arithmetic",
+   "fixed_y_max": "0x1.4000000000000p+3",
+   "thresholds": [],
+   "bool_option": null,
+   "libvmaf_feature": null,
+   "backend_id": "perceptual",
+   "format_value": [
+    {
+     "value": null,
+     "text": "\u2014"
+    },
+    {
+     "value": "nan",
+     "text": "\u2014"
+    },
+    {
+     "value": "inf",
+     "text": "\u221e"
+    },
+    {
+     "value": "-inf",
+     "text": "\u2212\u221e"
+    },
+    {
+     "value": "0x0.0p+0",
+     "text": "0.000"
+    },
+    {
+     "value": "-0x0.0p+0",
+     "text": "-0.000"
+    },
+    {
+     "value": "0x1.7a00000000000p+6",
+     "text": "94.500"
+    },
+    {
+     "value": "0x1.f9ad42c3c9eedp-1",
+     "text": "0.988"
+    },
+    {
+     "value": "0x1.6ad0dcfcc5b8ep+5",
+     "text": "45.352"
+    },
+    {
+     "value": "-0x1.4000000000000p+0",
+     "text": "-1.250"
+    },
+    {
+     "value": "0x1.12e0be826d695p-30",
+     "text": "0.000"
+    },
+    {
+     "value": "0x1.81cd6c8b43958p+13",
+     "text": "12345.678"
+    }
+   ]
+  }
+ ]
+}

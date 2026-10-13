@@ -1,0 +1,46 @@
+name: C++ port
+
+# Builds the C++ port and runs its tests on Windows, Linux and macOS. The
+# Linux sanitizer job finds memory errors and undefined behaviour that the
+# other builds can pass over.
+on:
+  push:
+    branches: [cpp-port]
+  pull_request:
+    paths: ['cpp/**', '.github/workflows/cpp.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows (MSVC), os: windows-latest, configure: windows, build: windows-release }
+          - { name: Linux (GCC 11), os: ubuntu-22.04, configure: linux, build: linux-release }
+          - { name: Linux (GCC 13), os: ubuntu-24.04, configure: linux, build: linux-release }
+          - { name: Linux sanitizers, os: ubuntu-24.04, configure: linux-sanitizers, build: linux-sanitizers-debug }
+          - { name: macOS (Apple Clang), os: macos-15, configure: macos, build: macos-release }
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Configure
+        run: cmake --preset ${{ matrix.configure }}
+      - name: Build
+        run: cmake --build --preset ${{ matrix.build }}
+      - name: Test
+        run: ctest --preset ${{ matrix.build }}
