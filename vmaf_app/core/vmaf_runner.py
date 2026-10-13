@@ -11,6 +11,7 @@ the GPU fails.
 """
 from __future__ import annotations
 
+import collections
 import contextlib
 import functools
 import json
@@ -576,6 +577,11 @@ def _build_resample_test_filtergraph(
 _PROGRESS_FRAME_RE = re.compile(r"frame=(\d+)")
 _PROGRESS_FPS_RE = re.compile(r"fps=\s*([\d.]+)")
 
+#: How many of FFmpeg's last error lines a run keeps: more than the 25 its
+#: messages show. All of them grew without end over a long film when FFmpeg
+#: warned on every frame (200,000 such lines held 40 MB).
+_STDERR_LINES_KEPT = 100
+
 
 def _build_ffmpeg_cmd(
     distorted_path: Path, source_path: Path, filtergraph: str,
@@ -754,12 +760,11 @@ def _run_ffmpeg(
     # the thread was never created.
     stderr_thread: threading.Thread | None = None
     try:
-        stderr_lines: list[str] = []
+        stderr_lines: collections.deque[str] = collections.deque(maxlen=_STDERR_LINES_KEPT)
 
         def _drain_stderr():
             assert proc.stderr is not None
-            for line in proc.stderr:
-                stderr_lines.append(line)
+            stderr_lines.extend(proc.stderr)
 
         stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
         stderr_thread.start()

@@ -583,3 +583,21 @@ def test_a_test_video_stamped_a_millisecond_early_is_still_compared_frame_for_fr
     jittered = run_vmaf(source_info, probe_video(early), options)
     for key in ("vmaf", "psnr", "xpsnr"):
         assert np.array_equal(np.asarray(jittered.frames.values(key)), np.asarray(clean.frames.values(key))), key
+
+
+def test_a_runs_error_output_keeps_its_end_however_long(tmp_path):
+    """Only the end of FFmpeg's error output is shown (its last 25 lines),
+    but every line was kept: an FFmpeg that warns on every frame of a long
+    film grew it without end (200,000 lines held 40 MB). Its last lines are
+    kept, and no more."""
+    from tests.factories import STDLIB_PYTHON
+    from vmaf_app.core import vmaf_runner
+
+    program = ("import sys\n"
+               "for n in range(5000):\n"
+               "    sys.stderr.write(f'a warning on frame {n}\\n')\n"
+               "sys.stderr.write('the last line\\n')\n")
+    result = vmaf_runner._run_ffmpeg([STDLIB_PYTHON, "-S", "-c", program], 1, None, None, tmp_path)
+    lines = result.stderr.splitlines()
+    assert lines[-2:] == ["a warning on frame 4999", "the last line"]
+    assert len(lines) == 100  # its last 100 lines
