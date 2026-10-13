@@ -3,6 +3,7 @@
 # gives the Python app's answers.
 add_executable(vml_tests
     unit/decisions_test.cpp
+    unit/ffmpeg_run_test.cpp
     unit/ffmpeg_tools_test.cpp
     unit/ffprobe_test.cpp
     unit/metrics_test.cpp

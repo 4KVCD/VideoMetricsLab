@@ -1,6 +1,7 @@
 // The system on Linux and macOS.
 #include "vml/platform/system.h"
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cstdlib>
@@ -45,6 +46,19 @@ unsigned logical_cores() {
 }
 
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
+
+std::optional<long long> modified_ns(const std::filesystem::path& file) {
+    struct stat status {};
+    if (stat(file.c_str(), &status) != 0) {
+        return std::nullopt;
+    }
+#ifdef __APPLE__
+    const timespec& written = status.st_mtimespec;
+#else
+    const timespec& written = status.st_mtim;
+#endif
+    return static_cast<long long>(written.tv_sec) * 1'000'000'000LL + written.tv_nsec;
+}
 
 std::string path_text(const std::filesystem::path& path) { return path.string(); }
 

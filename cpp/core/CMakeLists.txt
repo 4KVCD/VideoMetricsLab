@@ -1,6 +1,8 @@
 # vml_core: the engine. No Qt and no operating-system headers, so the same
 # code runs under the command line and the window on every system.
 add_library(vml_core
+    src/crop_detect.cpp
+    src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
     src/frame_sync.cpp
@@ -11,8 +13,10 @@ add_library(vml_core
     src/number_format.cpp
     src/options.cpp
     src/python_text.cpp
+    src/results.cpp
     src/settings.cpp
     src/stats.cpp
+    src/time_format.cpp
     src/video.cpp
 )
 target_include_directories(vml_core PUBLIC include)

@@ -98,6 +98,18 @@ std::vector<unsigned> gpu_vendor_ids() {
     return vendors;
 }
 
+std::optional<long long> modified_ns(const std::filesystem::path& file) {
+    WIN32_FILE_ATTRIBUTE_DATA attributes{};
+    if (!GetFileAttributesExW(file.c_str(), GetFileExInfoStandard, &attributes)) {
+        return std::nullopt;
+    }
+    // A FILETIME counts 100 ns since 1601; 116444736000000000 of them come
+    // before 1970.
+    const long long since_1601 = (static_cast<long long>(attributes.ftLastWriteTime.dwHighDateTime) << 32) |
+                                 attributes.ftLastWriteTime.dwLowDateTime;
+    return (since_1601 - 116444736000000000LL) * 100;
+}
+
 std::string path_text(const std::filesystem::path& path) { return narrow(path.native()); }
 
 std::filesystem::path path_from_text(std::string_view utf8) { return std::filesystem::path(widen(utf8)); }

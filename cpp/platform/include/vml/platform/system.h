@@ -33,6 +33,10 @@ unsigned logical_cores();
 // elsewhere): 0x10DE NVIDIA, 0x1002 and 0x1022 AMD, 0x8086 Intel.
 std::vector<unsigned> gpu_vendor_ids();
 
+// When a file was last written, in nanoseconds since 1970 (Python's
+// st_mtime_ns), or nothing when it cannot be read.
+std::optional<long long> modified_ns(const std::filesystem::path& file);
+
 // A path as UTF-8 text, and back; the app keeps paths as UTF-8.
 std::string path_text(const std::filesystem::path& path);
 std::filesystem::path path_from_text(std::string_view utf8);

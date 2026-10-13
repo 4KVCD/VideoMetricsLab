@@ -440,12 +440,154 @@ def decision_cases() -> dict:
               for size in ((1920, 1080), (3840, 2160), (3840, 1600), (2560, 2160))]
     resolutions = [{"size": [w, h], "model": model_for_resolution(w, h)}
                    for w, h in ((3839, 2159), (3840, 1), (1, 2160), (1920, 1080))]
+    from vmaf_app.core.crop_detect import common_picture
+    from vmaf_app.core.models import CropBox
+
+    def box(values):
+        return None if values is None else CropBox(*values)
+
+    shared = []
+    for source_size, test_size, source_box, test_box in (
+            ((1920, 1080), (1920, 1080), (1920, 800, 0, 140), (1920, 802, 0, 138)),
+            ((3840, 2160), (1920, 1080), (3840, 1600, 0, 280), (1920, 798, 0, 142)),
+            ((3840, 2160), (1920, 1080), (3840, 1608, 0, 276), (1920, 804, 0, 138)),
+            ((1920, 1080), (1440, 1080), (1920, 800, 0, 140), (1440, 800, 0, 140)),
+            ((1920, 1080), (1920, 1080), (1918, 1080, 2, 0), (1916, 1078, 0, 2)),
+            ((1920, 1080), (1920, 1080), (800, 1080, 0, 0), (800, 1080, 1100, 0)),
+            ((1920, 1080), (1920, 1080), None, (1920, 800, 0, 140)),
+            ((853, 480), (1706, 960), (851, 357, 1, 61), (1702, 714, 2, 122))):
+        source = video(width=source_size[0], height=source_size[1])
+        test = video(width=test_size[0], height=test_size[1])
+        made = common_picture(source, test, box(source_box), box(test_box))
+        shared.append({"source": list(source_size), "test": list(test_size), "source_box": source_box,
+                       "test_box": test_box,
+                       "shared": [None if b is None else [b.w, b.h, b.x, b.y] for b in made]})
     return {"pixel_formats": pixel_formats, "analysis": analysis, "decode": decode, "hwaccel_args": hwaccel_args,
             "fractions": fractions, "pairing": pairing, "within": within, "pairs": pairs, "shapes": shapes,
-            "compared": compared, "models": models, "resolutions": resolutions}
+            "compared": compared, "models": models, "resolutions": resolutions, "common_picture": shared}
+
+
+# --------------------------------------------------------------- FFmpeg runs
+
+def run_cases() -> dict:
+    """FFmpeg's filter graph and command for a comparison on the CPU
+    (vmaf_runner._build_filtergraph and _build_ffmpeg_cmd), over video
+    pairs, crops, decode plans, metrics, scaling, limits and both ways of
+    pairing; and libvmaf's log and XPSNR's stats file read back
+    (_parse_log). The command's program and input paths are written as
+    <ffmpeg>, <test> and <source>, which differ between PCs."""
+    from fractions import Fraction  # noqa: F401  (frame_sync needs it imported)
+
+    from vmaf_app.core import frame_sync, vmaf_runner
+    from vmaf_app.core.gpu import HwAccelPlan
+    from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo, VmafOptions
+
+    def video(name: str, width: int, height: int, pix_fmt: str, fps: float) -> VideoInfo:
+        return VideoInfo(path=Path(name), width=width, height=height, fps=fps, duration=10.0, nb_frames=0,
+                         codec_name="hevc", pix_fmt=pix_fmt)
+
+    pairs = {
+        "4k against 1080p": (video("source.mp4", 3840, 2160, "yuv420p10le", 120.0),
+                             video("test.mkv", 1920, 1080, "yuv420p10le", 120.0)),
+        "same size, 8 against 10 bits": (video("source.mkv", 1920, 1080, "yuv420p", 24000 / 1001),
+                                          video("test.mkv", 1920, 1080, "yuv420p10le", 24000 / 1001)),
+    }
+    crops = {"none": (None, None), "letterbox": (CropBox(3840, 1608, 0, 276), CropBox(1920, 804, 0, 138))}
+    plans = {"software": HwAccelPlan(), "cuda": HwAccelPlan("cuda", "cuda"), "cuda source": HwAccelPlan(source="cuda"),
+             "qsv": HwAccelPlan("qsv", "qsv"), "d3d11va test": HwAccelPlan(distorted="d3d11va")}
+    v1_model = Path(__file__).resolve().parents[3] / "vmaf_app" / "models" / "vmaf_v1.0.16" / "vmaf_v1.0.16_3d0h.json"
+    choices = {
+        "vmaf": dict(compute_vmaf=True),
+        "vmaf, neg": dict(compute_vmaf=True, compute_vmaf_neg=True),
+        "vmaf, v1": dict(compute_vmaf=True, compute_vmaf_v1=True, model_v1=f"path={v1_model}"),
+        "vmaf, psnr, ssim": dict(compute_vmaf=True, extra_features=["name=psnr", "name=float_ssim"]),
+        "vmaf, xpsnr": dict(compute_vmaf=True, compute_xpsnr=True),
+        "all": dict(compute_vmaf=True, compute_vmaf_neg=True, compute_xpsnr=True,
+                    extra_features=["name=psnr", "name=float_ssim"]),
+        "psnr, xpsnr": dict(compute_vmaf=False, compute_xpsnr=True, extra_features=["name=psnr"]),
+        "xpsnr": dict(compute_vmaf=False, compute_xpsnr=True),
+        "neg alone": dict(compute_vmaf=False, compute_vmaf_neg=True),
+    }
+    settings = {
+        "plain": dict(n_threads=12),
+        "subsample, lanczos, upscale": dict(n_threads=8, n_subsample=3, scale_algorithm="lanczos",
+                                            scale_direction=ScaleDirection.DISTORTED_TO_SOURCE),
+        "limit": dict(n_threads=24, duration_limit=1.0),
+        "auto threads": dict(n_threads=0),
+    }
+    cases = []
+    real_pairing = os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
+    try:
+        for pairing in ("", "timestamp"):
+            os.environ[frame_sync.PAIRING_VARIABLE] = pairing
+            for pair_name, (source, test) in pairs.items():
+                for crop_name, (source_crop, test_crop) in crops.items():
+                    if crop_name == "letterbox" and pair_name != "4k against 1080p":
+                        continue
+                    for plan_name, plan in plans.items():
+                        for choice_name, choice in choices.items():
+                            for setting_name, setting in settings.items():
+                                if pairing and (plan_name != "cuda" or setting_name == "auto threads"):
+                                    continue  # the other way of pairing changes only the frame filters and -t
+                                options = VmafOptions(**choice, **setting)
+                                xpsnr_log = Path("xpsnr_log.txt") if options.compute_xpsnr else None
+                                model = "version=vmaf_v0.6.1" if options.compute_vmaf else ""
+                                graph = vmaf_runner._build_filtergraph(
+                                    source, test, options, source_crop, test_crop, plan, Path("vmaf_log.json"),
+                                    model=model, xpsnr_log_path=xpsnr_log)
+                                command = vmaf_runner._build_ffmpeg_cmd(test.path, source.path, graph, plan,
+                                                                       options.duration_limit)
+                                command[0] = "<ffmpeg>"
+                                command = ["<test>" if part == str(test.path.resolve()) else
+                                           "<source>" if part == str(source.path.resolve()) else part
+                                           for part in command]
+                                cases.append({
+                                    "name": f"{pairing or 'frame number'}; {pair_name}; {crop_name}; {plan_name}; "
+                                            f"{choice_name}; {setting_name}",
+                                    "pairing": pairing, "pair": pair_name, "crop": crop_name, "plan": plan_name,
+                                    "choice": choice_name, "setting": setting_name, "model": model,
+                                    "cores": os.cpu_count(), "command": command})
+    finally:
+        os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
+        if real_pairing is not None:
+            os.environ[frame_sync.PAIRING_VARIABLE] = real_pairing
+
+    def frame(number: int, **metrics) -> dict:
+        return {"frameNum": number, "metrics": metrics}
+
+    logs = {
+        "every metric": {"frames": [frame(0, vmaf=99.356133, vmaf_neg=94.537025, vmaf_v1=97.85, psnr_y=56.146637,
+                                          float_ssim=0.999746),
+                                    frame(1, vmaf=0.0, vmaf_neg=93.1, vmaf_v1=94.8, psnr_y=0.0, float_ssim=0.0),
+                                    frame(2, vmaf=98.5, psnr=50.25, ssim=0.98)]},
+        "holes": {"frames": [frame(0, vmaf=99.0), frame(3, integer_motion=1.0), {"metrics": {"vmaf": 97.0}},
+                             frame(7, vmaf=96.25, psnr_y=44.5)]},
+        "none": {"frames": []},
+    }
+    xpsnr_logs = {"none": None,
+                  "some": "n:    1  XPSNR y: 61.6992  XPSNR u: 63.1  XPSNR v: 64.2\n"
+                          "n:    2  XPSNR y: inf  XPSNR u: inf  XPSNR v: inf\n"
+                          "n:    4  XPSNR Y: 45.25\nnot a line\n"}
+    parsed = []
+    with tempfile.TemporaryDirectory() as folder:
+        for log_name, log in logs.items():
+            for xpsnr_name, xpsnr_text in xpsnr_logs.items():
+                log_path = Path(folder) / "vmaf_log.json"
+                log_path.write_text(json.dumps(log), encoding="utf-8")
+                xpsnr_path = None
+                if xpsnr_text is not None:
+                    xpsnr_path = Path(folder) / "xpsnr_log.txt"
+                    xpsnr_path.write_text(xpsnr_text, encoding="utf-8")
+                frames = vmaf_runner._parse_log(log_path, 24000 / 1001, xpsnr_path)
+                parsed.append({
+                    "name": f"{log_name}, xpsnr {xpsnr_name}", "log": json.dumps(log), "xpsnr_log": xpsnr_text,
+                    "frames": [int(n) for n in frames.frame], "times": [exact(t) for t in frames.time],
+                    "metrics": {key: [exact(v) for v in frames.values(key)] for key in frames.metric_keys}})
+    return {"commands": cases, "logs": parsed, "log_fps": exact(24000 / 1001)}
 
 
 if __name__ == "__main__":
+    write("runs.json", run_cases())
     write("decisions.json", decision_cases())
     write("number_format.json", number_format_cases())
     write("metrics.json", metric_cases())

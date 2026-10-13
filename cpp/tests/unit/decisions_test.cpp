@@ -9,6 +9,7 @@
 #include <string>
 
 #include "reference.h"
+#include "vml/crop_detect.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
@@ -175,6 +176,27 @@ TEST(Decisions, ShapesAndComparedSizesAreThePythonAppsOwn) {
         const Size size = compared_dimensions(source, test, direction);
         EXPECT_EQ(size.first, item["size"][0].get<int>()) << item.dump();
         EXPECT_EQ(size.second, item["size"][1].get<int>()) << item.dump();
+    }
+}
+
+TEST(Decisions, BlackBarBoxesCoverTheSamePictureAsThePythonAppMakesThem) {
+    ASSERT_FALSE(decisions()["common_picture"].empty());
+    const auto box = [](const Json& values) {
+        return values.is_null() ? std::nullopt
+                                : std::optional<CropBox>(CropBox{values[0].get<int>(), values[1].get<int>(),
+                                                                 values[2].get<int>(), values[3].get<int>()});
+    };
+    for (const Json& item : decisions()["common_picture"]) {
+        VideoInfo source;
+        source.width = item["source"][0].get<int>();
+        source.height = item["source"][1].get<int>();
+        VideoInfo test;
+        test.width = item["test"][0].get<int>();
+        test.height = item["test"][1].get<int>();
+        const auto [shared_source, shared_test] =
+            common_picture(source, test, box(item["source_box"]), box(item["test_box"]));
+        EXPECT_EQ(shared_source, box(item["shared"][0])) << item.dump();
+        EXPECT_EQ(shared_test, box(item["shared"][1])) << item.dump();
     }
 }
 
