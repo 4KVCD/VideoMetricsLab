@@ -10,11 +10,21 @@
 ### New features
 
 - Added film grain synthesis for VVC encodes in Video Compare.
+- Added a colour picker for each video's line in Metric Graphs and Bitrate Viewer.
+- Command line: added `--frames N` to compare only the first N frames, for a short encode of a longer reference.
+- Command line: added `--colour` for videos without colour tags, such as HDR10 in .y4m files, and a warning when colours are guessed.
+- Command line: added `--cvvdp-display` to choose the display CVVDP models; repeat it to score on several displays.
 
 ### Other changes
 
 - Every metric now pairs the two videos' frames by frame number, on the CPU and
   the GPU alike.
+
+### Bug fixes
+
+- Fixed a video's colour changing between Metric Graphs and Bitrate Viewer, or after it was removed and added again.
+- Fixed "frames compared" being one frame short with some duration limits.
+- Fixed the Settings tab's rows overlapping on high-DPI screens or in a small window; tabs now scroll instead (#6).
 
 ## v2.0
 
