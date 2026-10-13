@@ -6,8 +6,12 @@
 #include <dxgi.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cwctype>
 #include <thread>
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#endif
 
 namespace vml::platform {
 
@@ -110,6 +114,32 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
     const long long since_1601 = (static_cast<long long>(attributes.ftLastWriteTime.dwHighDateTime) << 32) |
                                  attributes.ftLastWriteTime.dwLowDateTime;
     return (since_1601 - 116444736000000000LL) * 100;
+}
+
+void crash_quietly() {
+    SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+#ifdef _MSC_VER
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);  // abort() without its message box
+#ifdef _DEBUG
+    // A debug build's failed checks go to standard error, not to a dialog.
+    for (const int report : {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT}) {
+        _CrtSetReportMode(report, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(report, _CRTDBG_FILE_STDERR);
+    }
+#endif
+#endif
+}
+
+std::filesystem::path executable_path() {
+    std::wstring path(MAX_PATH, L'\0');
+    while (true) {
+        const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (length < path.size()) {
+            path.resize(length);
+            return std::filesystem::path(path);
+        }
+        path.resize(path.size() * 2);  // it was cut short
+    }
 }
 
 std::string path_text(const std::filesystem::path& path) { return narrow(path.native()); }

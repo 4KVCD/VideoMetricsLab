@@ -14,6 +14,15 @@ namespace vml::platform {
 // Windows, HOME elsewhere.
 std::filesystem::path home_directory();
 
+// This program's own file, to start it again (for work done in a process
+// of its own).
+std::filesystem::path executable_path();
+
+// Makes a crash end this process at once, without the system's dialog
+// waiting on the user's screen (Windows), for a process whose crash its
+// parent reports.
+void crash_quietly();
+
 // An environment variable's value, or nothing when it is not set.
 std::optional<std::string> environment_variable(std::string_view name);
 

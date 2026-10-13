@@ -10,6 +10,7 @@ add_library(vml_core
     src/geometry.cpp
     src/gpu_vmaf.cpp
     src/hardware_decoding.cpp
+    src/isolated.cpp
     src/libvmaf.cpp
     src/metrics.cpp
     src/model_select.cpp

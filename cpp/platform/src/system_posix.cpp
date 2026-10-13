@@ -3,8 +3,13 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <thread>
 
 namespace vml::platform {
@@ -66,6 +71,24 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
     const timespec& written = status.st_mtim;
 #endif
     return static_cast<long long>(written.tv_sec) * 1'000'000'000LL + written.tv_nsec;
+}
+
+void crash_quietly() {}  // a crash shows no dialog here
+
+std::filesystem::path executable_path() {
+#ifdef __APPLE__
+    std::uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string path(size, '\0');
+    if (_NSGetExecutablePath(path.data(), &size) != 0) {
+        return {};
+    }
+    path.resize(std::strlen(path.c_str()));
+    return std::filesystem::weakly_canonical(path);
+#else
+    std::error_code error;
+    return std::filesystem::read_symlink("/proc/self/exe", error);
+#endif
 }
 
 std::string path_text(const std::filesystem::path& path) { return path.string(); }

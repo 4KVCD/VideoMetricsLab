@@ -23,6 +23,7 @@
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/isolated.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -827,9 +828,152 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     return scores;
 }
 
-// VMAF and NEG on the GPU (execute_gpu_run), one GPU pass at a time.
-// Nothing when it fails, for any reason but Cancel: the run is then made
-// again with VMAF on the CPU, as on a PC without a GPU that scores it.
+// ------------------------------------------- the GPU's run in a process of its own
+
+// What a run is given, as text for the GPU's process of its own (whose
+// numbers keep every digit: JSON's doubles are written to the last bit).
+nlohmann::json video_json(const VideoInfo& info) {
+    return {{"path", platform::path_text(info.path)},
+            {"width", info.width},
+            {"height", info.height},
+            {"fps", info.fps},
+            {"duration", info.duration},
+            {"nb_frames", info.nb_frames},
+            {"codec_name", info.codec_name},
+            {"sar", info.sar},
+            {"pix_fmt", info.pix_fmt},
+            {"bit_rate", info.bit_rate},
+            {"bit_rate_whole_file", info.bit_rate_whole_file},
+            {"nominal_fps", info.nominal_fps},
+            {"average_fps", info.average_fps},
+            {"color_range", info.color_range},
+            {"color_space", info.color_space},
+            {"color_transfer", info.color_transfer},
+            {"color_primaries", info.color_primaries},
+            {"chroma_location", info.chroma_location},
+            {"format_name", info.format_name},
+            {"start_offset", info.start_offset}};
+}
+
+VideoInfo video_from(const nlohmann::json& text) {
+    VideoInfo info;
+    info.path = platform::path_from_text(text.at("path").get<std::string>());
+    text.at("width").get_to(info.width);
+    text.at("height").get_to(info.height);
+    text.at("fps").get_to(info.fps);
+    text.at("duration").get_to(info.duration);
+    text.at("nb_frames").get_to(info.nb_frames);
+    text.at("codec_name").get_to(info.codec_name);
+    text.at("sar").get_to(info.sar);
+    text.at("pix_fmt").get_to(info.pix_fmt);
+    text.at("bit_rate").get_to(info.bit_rate);
+    text.at("bit_rate_whole_file").get_to(info.bit_rate_whole_file);
+    text.at("nominal_fps").get_to(info.nominal_fps);
+    text.at("average_fps").get_to(info.average_fps);
+    text.at("color_range").get_to(info.color_range);
+    text.at("color_space").get_to(info.color_space);
+    text.at("color_transfer").get_to(info.color_transfer);
+    text.at("color_primaries").get_to(info.color_primaries);
+    text.at("chroma_location").get_to(info.chroma_location);
+    text.at("format_name").get_to(info.format_name);
+    text.at("start_offset").get_to(info.start_offset);
+    return info;
+}
+
+nlohmann::json options_json(const VmafOptions& options) {
+    return {{"model", options.model},
+            {"model_choice", options.model_choice},
+            {"custom_model_path", options.custom_model_path},
+            {"extra_features", options.extra_features},
+            {"n_threads", options.n_threads},
+            {"n_subsample", options.n_subsample},
+            {"scale_algorithm", options.scale_algorithm},
+            {"scale_direction", static_cast<int>(options.scale_direction)},
+            {"compute_xpsnr", options.compute_xpsnr},
+            {"compute_vmaf", options.compute_vmaf},
+            {"compute_vmaf_neg", options.compute_vmaf_neg},
+            {"compute_vmaf_v1", options.compute_vmaf_v1},
+            {"model_choice_v1", options.model_choice_v1},
+            {"model_v1", options.model_v1},
+            {"duration_limit", options.duration_limit},
+            {"gpu_decode", options.gpu_decode},
+            {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
+            {"vmaf_on_gpu", options.vmaf_on_gpu},
+            {"crop_mode", static_cast<int>(options.crop_mode)}};
+}
+
+VmafOptions options_from(const nlohmann::json& text) {
+    VmafOptions options;
+    text.at("model").get_to(options.model);
+    text.at("model_choice").get_to(options.model_choice);
+    text.at("custom_model_path").get_to(options.custom_model_path);
+    text.at("extra_features").get_to(options.extra_features);
+    text.at("n_threads").get_to(options.n_threads);
+    text.at("n_subsample").get_to(options.n_subsample);
+    text.at("scale_algorithm").get_to(options.scale_algorithm);
+    options.scale_direction = static_cast<ScaleDirection>(text.at("scale_direction").get<int>());
+    text.at("compute_xpsnr").get_to(options.compute_xpsnr);
+    text.at("compute_vmaf").get_to(options.compute_vmaf);
+    text.at("compute_vmaf_neg").get_to(options.compute_vmaf_neg);
+    text.at("compute_vmaf_v1").get_to(options.compute_vmaf_v1);
+    text.at("model_choice_v1").get_to(options.model_choice_v1);
+    text.at("model_v1").get_to(options.model_v1);
+    text.at("duration_limit").get_to(options.duration_limit);
+    text.at("gpu_decode").get_to(options.gpu_decode);
+    options.gpu_vendor = static_cast<GpuVendor>(text.at("gpu_vendor").get<int>());
+    text.at("vmaf_on_gpu").get_to(options.vmaf_on_gpu);
+    options.crop_mode = static_cast<CropMode>(text.at("crop_mode").get<int>());
+    return options;
+}
+
+nlohmann::json crop_json(const std::optional<CropBox>& crop) {
+    return crop ? nlohmann::json{{"w", crop->w}, {"h", crop->h}, {"x", crop->x}, {"y", crop->y}} : nlohmann::json();
+}
+
+std::optional<CropBox> crop_from(const nlohmann::json& text) {
+    if (text.is_null()) {
+        return std::nullopt;
+    }
+    return CropBox{text.at("w").get<int>(), text.at("h").get<int>(), text.at("x").get<int>(), text.at("y").get<int>()};
+}
+
+nlohmann::json hwaccel_json(const std::optional<std::string>& hwaccel) {
+    return hwaccel ? nlohmann::json(*hwaccel) : nlohmann::json();
+}
+
+std::optional<std::string> hwaccel_from(const nlohmann::json& text) {
+    return text.is_null() ? std::nullopt : std::optional(text.get<std::string>());
+}
+
+// The scores the GPU's process leaves for its parent: the frame numbers,
+// then each metric's values in `order`, as this PC stores them.
+constexpr const char* scores_file = "scores.bin";
+
+ParsedScores read_scores(const nlohmann::json& result, const std::filesystem::path& folder, double fps) {
+    ParsedScores scores;
+    const auto count = result.at("frames").get<std::size_t>();
+    scores.order = result.at("order").get<std::vector<std::string>>();
+    std::ifstream file(folder / scores_file, std::ios::binary);
+    scores.frame.resize(count);
+    file.read(reinterpret_cast<char*>(scores.frame.data()), static_cast<std::streamsize>(count * sizeof(int)));
+    for (const std::string& key : scores.order) {
+        std::vector<float>& values = scores.metrics[key];
+        values.resize(count);
+        file.read(reinterpret_cast<char*>(values.data()), static_cast<std::streamsize>(count * sizeof(float)));
+    }
+    if (!file) {
+        throw std::runtime_error("The GPU's scores could not be read back.");
+    }
+    scores.time = times_of(scores.frame, fps);
+    return scores;
+}
+
+// VMAF and NEG on the GPU (execute_gpu_run), one GPU pass at a time, in a
+// process of its own where a program to run it is set, so that a crash in
+// the GPU's code or its driver ends that process and not the run (the
+// Python app's run_isolated(_score_on_gpu, what="libvmaf")). Nothing when
+// it fails, for any reason but Cancel: the run is then made again with VMAF
+// on the CPU, as on a PC without a GPU that scores it.
 std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
                                        const VideoInfo& distorted, const VmafOptions& options,
                                        const std::optional<CropBox>& source_crop,
@@ -847,8 +991,47 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
         }
     }
     try {
-        return execute_gpu_run(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
-                               total_frames, decoding, on_progress, on_status, cancel);
+        if (!isolation_program()) {
+            return execute_gpu_run(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                                   total_frames, decoding, on_progress, on_status, cancel);
+        }
+        nlohmann::json models = nlohmann::json::array();
+        for (const auto& [key, version] : plan.models) {
+            models.push_back({key, version});
+        }
+        const nlohmann::json request{
+            {"ffmpeg", environment.ffmpeg},
+            {"source", video_json(source)},
+            {"distorted", video_json(distorted)},
+            {"options", options_json(options)},
+            {"source_crop", crop_json(source_crop)},
+            {"distorted_crop", crop_json(distorted_crop)},
+            {"plan",
+             {{"models", models},
+              {"width", plan.width},
+              {"height", plan.height},
+              {"bit_depth", plan.bit_depth},
+              {"device", plan.device}}},
+            {"fps", fps},
+            {"total_frames", total_frames},
+            {"decoding", {{"source", hwaccel_json(decoding.source)}, {"distorted", hwaccel_json(decoding.distorted)}}}};
+        ParsedScores scores;
+        run_isolated(
+            "gpu-run", "libvmaf", request,
+            [&](const nlohmann::json& message) {
+                if (message.contains("progress") && on_progress) {
+                    const nlohmann::json& counts = message["progress"];
+                    on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
+                } else if (message.contains("status") && on_status) {
+                    const nlohmann::json& status = message["status"];
+                    on_status({status.at("text").get<std::string>(), static_cast<StatusKind>(status.at("kind").get<int>())});
+                }
+            },
+            cancel,
+            [&](const nlohmann::json& result, const std::filesystem::path& folder) {
+                scores = read_scores(result, folder, fps);
+            });
+        return scores;
     } catch (const Cancelled&) {
         throw;
     } catch (const std::exception& error) {
@@ -969,6 +1152,46 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
     const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
     command.insert(command.end(), outputs.begin(), outputs.end());
     return command;
+}
+
+nlohmann::json gpu_run_task(const nlohmann::json& request, const std::filesystem::path& folder) {
+    RunEnvironment environment;
+    environment.ffmpeg = request.at("ffmpeg").get<std::string>();
+    const nlohmann::json& plan_text = request.at("plan");
+    GpuPlan plan;
+    for (const nlohmann::json& model : plan_text.at("models")) {
+        plan.models.emplace_back(model.at(0).get<std::string>(), model.at(1).get<std::string>());
+    }
+    plan_text.at("width").get_to(plan.width);
+    plan_text.at("height").get_to(plan.height);
+    plan_text.at("bit_depth").get_to(plan.bit_depth);
+    plan_text.at("device").get_to(plan.device);
+    const nlohmann::json& decoding = request.at("decoding");
+    const ParsedScores scores = execute_gpu_run(
+        environment, video_from(request.at("source")), video_from(request.at("distorted")),
+        options_from(request.at("options")), crop_from(request.at("source_crop")),
+        crop_from(request.at("distorted_crop")), plan, request.at("fps").get<double>(),
+        request.at("total_frames").get<long long>(),
+        HardwareDecoding{hwaccel_from(decoding.at("source")), hwaccel_from(decoding.at("distorted"))},
+        [](long long done, long long whole, double fps) {
+            send_isolated_message({{"progress", {done, whole, fps}}});
+        },
+        [](const RunStatus& status) {
+            send_isolated_message({{"status", {{"text", status.text}, {"kind", static_cast<int>(status.kind)}}}});
+        },
+        CancelToken());  // the parent cancels by ending this process
+    std::ofstream file(folder / scores_file, std::ios::binary);
+    file.write(reinterpret_cast<const char*>(scores.frame.data()),
+               static_cast<std::streamsize>(scores.frame.size() * sizeof(int)));
+    for (const std::string& key : scores.order) {
+        const std::vector<float>& values = scores.metrics.at(key);
+        file.write(reinterpret_cast<const char*>(values.data()),
+                   static_cast<std::streamsize>(values.size() * sizeof(float)));
+    }
+    if (!file) {
+        throw std::runtime_error("The GPU's scores could not be written.");
+    }
+    return {{"frames", scores.frame.size()}, {"order", scores.order}};
 }
 
 std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source, const VideoInfo& distorted,

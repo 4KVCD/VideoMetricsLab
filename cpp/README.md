@@ -66,7 +66,10 @@ The decoders, the presenters and the window join as they are ported.
 the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
 PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`), and scores
 VMAF and NEG on the GPU with Vulkan, the app's default, each video decoded
-by an FFmpeg of its own. For a run it cannot do yet (VMAF v1 or PSNR, SSIM
+by an FFmpeg of its own. The GPU's work runs in a process of its own (the
+program again, with `--vml-isolated`), so that a crash in the GPU's driver
+ends that process and the CPU calculates VMAF instead, as in the Python
+app. For a run it cannot do yet (VMAF v1 or PSNR, SSIM
 and XPSNR with VMAF on the GPU, libvmaf's CUDA code, the perceptual
 metrics), it says what it cannot do and exits with code 2, rather than
 giving other answers than the Python app. It neither reads nor saves the

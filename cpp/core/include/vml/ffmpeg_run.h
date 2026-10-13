@@ -7,6 +7,8 @@
 // the logs.
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -123,12 +125,19 @@ std::vector<std::vector<std::string>> build_stream_commands(
 FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
                               const std::optional<std::filesystem::path>& xpsnr_log);
 
+// The child's side of VMAF on the GPU in a process of its own (isolated.h):
+// scores the run `request` describes, sending its progress and statuses,
+// leaves the scores in a file in `folder`, and returns what the parent
+// needs to read them.
+nlohmann::json gpu_run_task(const nlohmann::json& request, const std::filesystem::path& folder);
+
 // Compares two videos and returns the result, with every requested metric's
 // scores: VMAF and NEG on the GPU when they are the run's only metrics and
 // the GPU can score them (scores_on_gpu), with FFmpeg's metric filters
-// otherwise or when that fails. Throws VmafRunError when the run fails, and
-// Cancelled. `result_distorted_path` is the path the result carries for the
-// test video (by default, its own).
+// otherwise or when that fails. The GPU's part runs in a process of its own
+// where a program to run it is set (isolated.h). Throws VmafRunError when
+// the run fails, and Cancelled. `result_distorted_path` is the path the
+// result carries for the test video (by default, its own).
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,

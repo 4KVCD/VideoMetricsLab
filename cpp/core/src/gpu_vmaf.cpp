@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "vml/frame_sync.h"
+#include "vml/isolated.h"
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
@@ -105,25 +106,53 @@ std::vector<std::string> backend_order(const std::string& preference) {
     return preference == "cuda" ? std::vector<std::string>{"cuda", "vulkan"} : std::vector<std::string>{"vulkan", "cuda"};
 }
 
+// The Vulkan probe, in a process of its own where a program to run it is
+// set (the Python app's run_isolated(vmaf_vulkan.probe)): a driver that
+// crashes on the probe ends that process, and the GPU is taken as unable.
+VulkanProbe probe_vulkan_apart() {
+    if (!isolation_program()) {
+        return probe_vulkan();
+    }
+    try {
+        const nlohmann::json result =
+            run_isolated("vulkan-probe", "the Vulkan VMAF probe", nlohmann::json::object(), {}, CancelToken());
+        VulkanProbe probe;
+        result.at("available").get_to(probe.available);
+        if (!result.at("device").is_null()) {
+            probe.device = result.at("device").get<int>();
+        }
+        result.at("text").get_to(probe.text);
+        return probe;
+    } catch (const IsolatedCrashError& error) {
+        return {false, std::nullopt, error.what()};
+    }
+}
+
 GpuVmafBackend probe_backends(const std::string& preference) {
     std::string reasons;
     const auto add_reason = [&reasons](const std::string& reason) {
         reasons += (reasons.empty() ? "" : "; ") + reason;
     };
     for (const std::string& backend : backend_order(preference)) {
-        if (backend == "cuda") {
-            const std::vector<unsigned> vendors = platform::gpu_vendor_ids();
-            if (std::find(vendors.begin(), vendors.end(), nvidia) == vendors.end()) {
-                add_reason("no NVIDIA GPU");
-                continue;
+        // Any failure means "not on this GPU": one that escaped would fail
+        // every video's setup instead of VMAF being calculated on the CPU.
+        try {
+            if (backend == "cuda") {
+                const std::vector<unsigned> vendors = platform::gpu_vendor_ids();
+                if (std::find(vendors.begin(), vendors.end(), nvidia) == vendors.end()) {
+                    add_reason("no NVIDIA GPU");
+                    continue;
+                }
+                return {"cuda", std::nullopt, "libvmaf's CUDA code, which the C++ app does not have yet"};
             }
-            return {"cuda", std::nullopt, "libvmaf's CUDA code, which the C++ app does not have yet"};
+            const VulkanProbe probe = probe_vulkan_apart();
+            if (probe.available) {
+                return {"vulkan", probe.device, probe.text};
+            }
+            add_reason("Vulkan: " + probe.text);
+        } catch (const std::exception& error) {
+            add_reason(backend + ": the GPU probe failed: " + error.what());
         }
-        const VulkanProbe probe = probe_vulkan();
-        if (probe.available) {
-            return {"vulkan", probe.device, probe.text};
-        }
-        add_reason("Vulkan: " + probe.text);
     }
     return {"", std::nullopt, reasons};
 }
