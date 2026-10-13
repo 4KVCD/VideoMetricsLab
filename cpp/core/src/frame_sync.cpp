@@ -13,10 +13,13 @@ namespace {
 
 using Whole = unsigned long long;
 
-// `a * b`, rounded up after dividing by `c`, exactly: the product of two
-// 64-bit numbers can need 128 bits (a long limit at a frame rate with a big
-// numerator), so it is formed in two halves and divided bit by bit.
-Whole multiply_divide_up(Whole a, Whole b, Whole c) {
+// Whether a * b <= limit, without forming a * b (a > 0).
+bool product_at_most(Whole a, Whole b, Whole limit) { return b <= limit / a; }
+
+}  // namespace
+
+unsigned long long multiply_add_divide(unsigned long long a, unsigned long long b, unsigned long long add,
+                                       unsigned long long c) {
     // The 128-bit product, from the four 32-bit partial products.
     const Whole a_low = a & 0xFFFFFFFFULL;
     const Whole a_high = a >> 32;
@@ -28,6 +31,10 @@ Whole multiply_divide_up(Whole a, Whole b, Whole c) {
     const Whole middle = (low_low >> 32) + (high_low & 0xFFFFFFFFULL) + (low_high & 0xFFFFFFFFULL);
     Whole high = a_high * b_high + (high_low >> 32) + (low_high >> 32) + (middle >> 32);
     Whole low = (middle << 32) | (low_low & 0xFFFFFFFFULL);
+    low += add;
+    if (low < add) {
+        ++high;  // the carry
+    }
     // Long division of high:low by c, one bit at a time.
     Whole quotient = 0;
     Whole remainder = 0;
@@ -40,19 +47,14 @@ Whole multiply_divide_up(Whole a, Whole b, Whole c) {
             if (bit < 64) {
                 quotient |= Whole{1} << bit;
             } else {
-                throw std::overflow_error("a frame count beyond 64 bits");
+                throw std::overflow_error("a number beyond 64 bits");
             }
         }
     }
-    return quotient + (remainder != 0 ? 1 : 0);
+    return quotient;
 }
 
-// Whether a * b <= limit, without forming a * b (a > 0).
-bool product_at_most(Whole a, Whole b, Whole limit) { return b <= limit / a; }
-
-// A duration as -t takes it ("30.042") in whole microseconds, read as FFmpeg
-// reads it: exactly, with any digits past the sixth decimal dropped.
-long long microseconds(const std::string& duration) {
+long long duration_microseconds(const std::string& duration) {
     long long whole = 0;
     long long fraction = 0;
     int fraction_digits = 0;
@@ -74,8 +76,6 @@ long long microseconds(const std::string& duration) {
     }
     return whole * 1'000'000 + fraction;
 }
-
-}  // namespace
 
 bool by_timestamp() {
     std::string value = platform::environment_variable(pairing_variable).value_or("");
@@ -181,12 +181,13 @@ std::optional<long long> frames_within(const std::optional<std::string>& duratio
     }
     // Frame N is kept while N * 1000000 / rate < the limit, to the
     // microsecond: the count is limit * rate / 1000000, rounded up.
-    const long long limit_us = microseconds(*duration_limit);
+    const long long limit_us = duration_microseconds(*duration_limit);
     if (limit_us <= 0) {
         return 0;
     }
-    return static_cast<long long>(multiply_divide_up(static_cast<Whole>(limit_us), static_cast<Whole>(rate.numerator),
-                                                     1'000'000ULL * static_cast<Whole>(rate.denominator)));
+    const Whole per_second = 1'000'000ULL * static_cast<Whole>(rate.denominator);
+    return static_cast<long long>(multiply_add_divide(static_cast<Whole>(limit_us),
+                                                      static_cast<Whole>(rate.numerator), per_second - 1, per_second));
 }
 
 }  // namespace vml

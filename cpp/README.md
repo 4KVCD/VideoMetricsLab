@@ -28,7 +28,7 @@ on every such GPU.
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (52 runs covering the ways the app
+other: it runs the cases in `cases.json` (62 runs covering the ways the app
 scores videos) with either app, each with a fresh profile (and the case's
 own settings, where it has any), and compares the exit codes, the tables,
 the per-frame CSV files character for character, and the JSON results. The
@@ -90,10 +90,10 @@ or the GPU's driver ends that process and not the run: FFmpeg's filters
 then calculate VMAF and the others on the CPU, as in the Python app (the
 Python app's CPU tools for SSIMULACRA2 and Butteraugli are not in the C++
 app yet, so a Vship metric whose GPU pass fails is reported as failed). For
-a run it cannot do yet (SSIMULACRA2 and Butteraugli on the CPU, and Vship's
-metrics with frames paired by timestamp), it says what it cannot do and
-exits with code 2, rather than giving other answers than the Python app. It neither reads nor saves the app's saved
-scores yet, and calculates every score.
+a run it cannot do yet (SSIMULACRA2 and Butteraugli on the CPU), it says
+what it cannot do and exits with code 2, rather than giving other answers
+than the Python app. It neither reads nor saves the app's saved scores yet,
+and calculates every score.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu

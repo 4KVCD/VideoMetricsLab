@@ -11,12 +11,14 @@
 #include <exception>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <regex>
 #include <system_error>
 #include <thread>
 
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
+#include "vml/frame_sync_by_time.h"
 #include "vml/model_select.h"
 #include "vml/platform/library.h"
 #include "vml/platform/pipe.h"
@@ -492,6 +494,27 @@ public:
         platform::InboundPipe::touch(listing_pipe_.path());  // releases a listing thread still waiting for FFmpeg
     }
 
+    // The packets' time base, once the listing has said it: nothing when it
+    // ended without saying it, or after a minute. Throws Cancelled.
+    std::optional<Rational> wait_time_base(const CancelToken& cancel) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        std::unique_lock lock(mutex_);
+        while (!time_base_ && !listing_ended_ && std::chrono::steady_clock::now() < deadline) {
+            if (!listed_.wait_for(lock, std::chrono::milliseconds(100),
+                                  [this] { return time_base_.has_value() || listing_ended_; })) {
+                // As in next(): FFmpeg may have ended without opening the
+                // listing's pipe.
+                lock.unlock();
+                cancel.throw_if_cancelled();
+                if (ffmpeg_ && ffmpeg_->wait_for(std::chrono::milliseconds(0))) {
+                    platform::InboundPipe::touch(listing_pipe_.path());
+                }
+                lock.lock();
+            }
+        }
+        return time_base_;
+    }
+
 private:
     struct Listed {
         long long pts;
@@ -538,7 +561,8 @@ private:
     void take_listing_line(std::string_view line, std::optional<long long>& last_dts) {
         line = python_strip(line);
         if (line.starts_with('#')) {
-            return;  // the listing's header
+            take_header_line(line);
+            return;
         }
         std::vector<std::string_view> fields;
         for (std::size_t start = 0;;) {
@@ -578,6 +602,26 @@ private:
         const Listed listed{listing_int(fields[2]), listing_int(fields[4]), flags};
         const std::lock_guard lock(mutex_);
         listing_.push_back(listed);
+        listed_.notify_all();
+    }
+
+    // A line of the listing's header: "#tb 0: 1/1000" says the time base of
+    // the packets' timestamps.
+    void take_header_line(std::string_view line) {
+        static const std::regex time_base_line(R"(#tb 0: (\d+)/(\d+))");
+        std::match_results<std::string_view::const_iterator> match;
+        if (!std::regex_search(line.begin(), line.end(), match, time_base_line,
+                               std::regex_constants::match_continuous)) {
+            return;
+        }
+        const std::optional<long long> numerator = python_int(match.str(1));
+        const std::optional<long long> denominator = python_int(match.str(2));
+        if (!numerator || !denominator || *denominator == 0) {
+            throw GpuDecodeFailedError("FFmpeg reported a time base of " + match.str(1) + "/" + match.str(2));
+        }
+        const long long divisor = std::gcd(*numerator, *denominator);
+        const std::lock_guard lock(mutex_);
+        time_base_ = Rational{*numerator / divisor, *denominator / divisor};
         listed_.notify_all();
     }
 
@@ -639,6 +683,7 @@ private:
     std::condition_variable listed_;
     std::deque<Listed> listing_;
     bool listing_ended_ = false;
+    std::optional<Rational> time_base_;  // once the listing's header has said it
     std::exception_ptr listing_error_;
     std::vector<std::string> error_lines_;
     std::optional<std::string> timestamp_warning_;
@@ -1083,6 +1128,14 @@ void GpuFrameStream::release(int slot) {
     }
 }
 
+Rational GpuFrameStream::time_base(const CancelToken& cancel) {
+    const std::optional<Rational> found = state_->reader->wait_time_base(cancel);
+    if (!found) {
+        throw GpuDecodeFailedError("FFmpeg did not report the stream's time base");
+    }
+    return *found;
+}
+
 void GpuFrameStream::download(int slot, void* host) {
     State& state = *state_;
     if (state.library->download(state.handle, slot, host) != 0) {
@@ -1200,6 +1253,10 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Vi
                        const std::function<void(int, int)>& score,
                        const std::function<void(long long, long long, double)>& on_progress,
                        const CancelToken& cancel) {
+    if (by_timestamp()) {
+        score_timed_pairs(test, reference, duration_limit, total_frames, score, on_progress, cancel);
+        return;
+    }
     const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
     const auto started = std::chrono::steady_clock::now();
     auto reported = started;

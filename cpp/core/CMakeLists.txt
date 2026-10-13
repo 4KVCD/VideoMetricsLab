@@ -9,6 +9,7 @@ add_library(vml_core
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
     src/frame_sync.cpp
+    src/frame_sync_by_time.cpp
     src/geometry.cpp
     src/gpu_frames.cpp
     src/gpu_vmaf.cpp

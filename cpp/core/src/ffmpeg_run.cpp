@@ -1528,6 +1528,12 @@ std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source,
                                                         const HardwareDecoding& decoding) {
     const VideoChains chains = video_chains(source, distorted, options, source_crop, distorted_crop, decoding, false);
     const std::string input = "[0:" + std::string(video_stream) + "]";  // each FFmpeg has its video alone
+    if (by_timestamp()) {
+        // A copy of the frames, which costs nothing, for FFmpeg to list their
+        // timestamps (timed_gpu_output_args).
+        return {input + joined(chains.test, ",") + ",split=2[vmaf_dist][vmaf_dist_ts]",
+                input + joined(chains.source, ",") + ",split=2[vmaf_ref][vmaf_ref_ts]"};
+    }
     return {input + joined(chains.test, ",") + "[vmaf_dist]", input + joined(chains.source, ",") + "[vmaf_ref]"};
 }
 

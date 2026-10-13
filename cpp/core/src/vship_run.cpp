@@ -11,14 +11,18 @@
 #include <deque>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <optional>
+#include <random>
 #include <system_error>
 #include <thread>
 
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
+#include "vml/frame_sync_by_time.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
@@ -98,6 +102,14 @@ std::string labels_of(const std::vector<std::string>& keys, const std::string& s
     }
     return labels;
 }
+
+// Thrown only when pairing by timestamp: a subsampled pass whose source
+// frames do not line up with the test video's (VshipPass::check_lined_up),
+// which is then made again with every source frame.
+class FramesApartError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 // An exception's message.
 std::string message_of(const std::exception_ptr& error) {
@@ -220,33 +232,199 @@ public:
     // Gives a slot back once Vship is done with it.
     void release(int slot) { free_.put(slot); }
 
+    // When pairing by timestamp, the timestamp of a slot next() handed out,
+    // and the time base it is in.
+    long long pts(int slot) const { return pts_[static_cast<std::size_t>(slot)]; }
+    Rational time_base() const { return time_base_.value(); }
+
 protected:
     struct Filled {
         int slot = end_of_video;
         std::exception_ptr error;  // the filling thread's, handed over instead of a slot
     };
 
+    // Notes a slot's timestamp before the slot is handed over, and the time
+    // base with the first one (it does not change).
+    void stamp(int slot, long long pts, Rational time_base) {
+        pts_[static_cast<std::size_t>(slot)] = pts;
+        if (!time_base_) {
+            time_base_ = time_base;
+        }
+    }
+
     std::vector<std::unique_ptr<PinnedBuffer>> buffers_;
     Channel<int> free_;
     Channel<Filled> filled_;
     std::thread thread_;
+
+private:
+    std::array<long long, ring_slots> pts_{};
+    std::optional<Rational> time_base_;
+};
+
+// The timestamp lines one FFmpeg writes as it sends frames (-stats_enc_pre),
+// one line a frame read (the Python app's _Timestamps). A frame's line is
+// written and flushed before the frame, so it is in the file once the frame
+// has been read; the only wait is for a line caught part-way through.
+class Timestamps {
+public:
+    Timestamps(std::filesystem::path path, platform::ChildProcess& process, std::string label)
+        : path_(std::move(path)), process_(process), label_(std::move(label)) {}
+
+    // The next frame's timestamp, in time_base().
+    long long next() {
+        std::optional<std::chrono::steady_clock::time_point> deadline;
+        while (true) {
+            if (const std::size_t newline = pending_.find('\n'); newline != std::string::npos) {
+                const std::string line = pending_.substr(0, newline);
+                pending_.erase(0, newline + 1);
+                return parse(line);
+            }
+            if (!file_.is_open()) {
+                file_.open(path_, std::ios::binary);
+            }
+            if (file_.is_open()) {
+                std::array<char, 4096> chunk{};
+                file_.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+                const std::streamsize count = file_.gcount();
+                file_.clear();  // after its end, so that what FFmpeg writes next is read
+                if (count > 0) {
+                    pending_.append(chunk.data(), static_cast<std::size_t>(count));
+                    continue;
+                }
+            }
+            const bool ended = process_.wait_for(std::chrono::milliseconds(0));
+            const auto now = std::chrono::steady_clock::now();
+            if (!deadline) {
+                deadline = now + std::chrono::seconds(10);
+            }
+            if (ended || now >= *deadline) {
+                throw missing();
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+
+    Rational time_base() const { return time_base_.value(); }
+
+private:
+    // The pass's failure for a frame without a usable timestamp.
+    VshipUnavailableError missing() const {
+        return VshipUnavailableError("FFmpeg did not give the timestamp of a " + label_ + " frame.");
+    }
+
+    // A line's timestamp and time base ("123 1/1000"), the time base checked
+    // against the first line's.
+    long long parse(std::string_view line) {
+        std::vector<std::string_view> words;
+        for (std::size_t at = 0; at < line.size();) {
+            const std::size_t start = line.find_first_not_of(" \t\r\n\v\f", at);
+            if (start == std::string_view::npos) {
+                break;
+            }
+            const std::size_t end = std::min(line.find_first_of(" \t\r\n\v\f", start), line.size());
+            words.push_back(line.substr(start, end - start));
+            at = end;
+        }
+        if (words.size() != 2) {
+            throw missing();
+        }
+        const std::optional<long long> pts = python_int(words[0]);
+        const std::size_t slash = words[1].find('/');
+        const std::optional<long long> numerator = python_int(words[1].substr(0, slash));
+        const std::optional<long long> denominator =
+            slash == std::string_view::npos ? std::optional(1LL) : python_int(words[1].substr(slash + 1));
+        if (!pts || !numerator || !denominator || *denominator == 0) {
+            throw missing();
+        }
+        long long top = *numerator;
+        long long bottom = *denominator;
+        if (bottom < 0) {
+            top = -top;
+            bottom = -bottom;
+        }
+        if (*pts == std::numeric_limits<long long>::min() || top <= 0) {  // AV_NOPTS_VALUE, or no time base
+            throw missing();
+        }
+        const long long divisor = std::gcd(top, bottom);
+        const Rational time_base{top / divisor, bottom / divisor};
+        if (!time_base_) {
+            time_base_ = time_base;
+        } else if (time_base != *time_base_) {
+            throw missing();  // its time base changed
+        }
+        return *pts;
+    }
+
+    std::filesystem::path path_;
+    platform::ChildProcess& process_;
+    std::string label_;
+    std::ifstream file_;
+    std::string pending_;
+    std::optional<Rational> time_base_;
+};
+
+// `command`, whose last argument is its output, made to also write each piped
+// frame's timestamp to `path`: the picture's timestamp as it leaves the
+// filter chain, in the chain's time base (-enc_time_base filter), which is
+// the timestamp libvmaf's frame sync is given at the end of the same chain.
+// Not the decoder's: a file that stores no presentation times (H.264 with
+// B-frames in AVI) has none, as FFmpeg works its frames' times out after
+// decoding.
+std::vector<std::string> with_timestamps(std::vector<std::string> command, const std::filesystem::path& path) {
+    command.insert(command.end() - 1, {"-enc_time_base", "filter", "-stats_enc_pre", platform::path_text(path),
+                                       "-stats_enc_pre_fmt", "{pts} {tb}"});
+    return command;
+}
+
+// A new, empty file in `folder` for one FFmpeg's timestamps, deleted with
+// this.
+class TimestampsFile {
+public:
+    explicit TimestampsFile(const std::filesystem::path& folder) {
+        std::random_device random;
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            const std::filesystem::path candidate =
+                folder / ("vml-vship-pts-" + std::to_string(random()) + ".txt");
+            std::error_code error;
+            if (!std::filesystem::exists(candidate, error) && std::ofstream(candidate, std::ios::binary)) {
+                path_ = candidate;
+                return;
+            }
+        }
+        throw VshipUnavailableError("A file for FFmpeg's timestamps could not be made.");
+    }
+    ~TimestampsFile() {
+        std::error_code ignored;
+        std::filesystem::remove(path_, ignored);
+    }
+    TimestampsFile(const TimestampsFile&) = delete;
+    TimestampsFile& operator=(const TimestampsFile&) = delete;
+    const std::filesystem::path& path() const { return path_; }
+
+private:
+    std::filesystem::path path_;
 };
 
 // One video decoded by FFmpeg, feeding a ring (the Python app's
 // _FrameStream): a thread reads FFmpeg's frames into free slots. If hardware
 // decoding fails before giving a frame, the same pictures are decoded in
 // software instead (the next command), and `on_software` is called first.
+// With `timestamps`, each frame's timestamp is read too, for pairing by
+// timestamp, from a file FFmpeg writes in `scratch_folder`.
 class FrameStream : public FrameRing {
 public:
     FrameStream(const VshipLibrary& library, std::size_t frame_bytes, std::vector<std::vector<std::string>> commands,
                 std::string label, std::optional<InterleavedChroma> split, std::function<void()> on_software,
-                int gpu_id)
+                int gpu_id, bool timestamps, std::filesystem::path scratch_folder)
         : FrameRing(library, frame_bytes, gpu_id),
           frame_bytes_(frame_bytes),
           commands_(std::move(commands)),
           label_(std::move(label)),
           split_(split),
-          on_software_(std::move(on_software)) {
+          on_software_(std::move(on_software)),
+          timestamps_(timestamps),
+          scratch_folder_(std::move(scratch_folder)) {
         if (split_) {
             staging_.resize(2 * split_->plane);
         }
@@ -302,9 +480,19 @@ private:
         }
     }
 
-    // Runs one FFmpeg command into the ring: the frames it gave, its exit
-    // code, and the end of its error output.
+    // Runs one FFmpeg command into the ring, with a file of its timestamps
+    // when pairing by timestamp: the frames it gave, its exit code, and the
+    // end of its error output.
     std::tuple<long long, int, std::string> decode(const std::vector<std::string>& command) {
+        if (!timestamps_) {
+            return decode_with(command, nullptr);
+        }
+        const TimestampsFile stamps_file(scratch_folder_);
+        return decode_with(with_timestamps(command, stamps_file.path()), &stamps_file.path());
+    }
+
+    std::tuple<long long, int, std::string> decode_with(const std::vector<std::string>& command,
+                                                        const std::filesystem::path* stamps_path) {
         platform::ProcessOptions options;
         options.output_pipe_bytes = frame_pipe_bytes;
         std::optional<platform::ChildProcess> process;
@@ -319,6 +507,10 @@ private:
             if (stopping_) {
                 process->terminate();
             }
+        }
+        std::optional<Timestamps> stamps;
+        if (stamps_path != nullptr) {
+            stamps.emplace(*stamps_path, *process, label_);
         }
         long long frames = 0;
         const bool y4m = std::find(command.begin(), command.end(), "yuv4mpegpipe") != command.end();
@@ -337,6 +529,15 @@ private:
                 }
                 const std::size_t received = fill(*process, slot);
                 if (received == frame_bytes_) {
+                    if (stamps) {
+                        try {
+                            const long long pts = stamps->next();
+                            stamp(slot, pts, stamps->time_base());
+                        } catch (...) {
+                            free_.put(slot);
+                            throw;
+                        }
+                    }
                     filled_.put({slot, nullptr});
                     ++frames;
                     continue;
@@ -442,6 +643,8 @@ private:
     std::string label_;
     std::optional<InterleavedChroma> split_;
     std::function<void()> on_software_;
+    bool timestamps_;
+    std::filesystem::path scratch_folder_;
     std::vector<std::uint8_t> staging_;
     std::atomic<bool> stopping_{false};
     std::mutex process_mutex_;
@@ -454,13 +657,24 @@ private:
 // straight into a free slot, copied there by the GPU from NVIDIA's decoder,
 // or by the CPU from the others. FFmpeg's chain numbers the frames, keeps
 // every `step`-th, and its -t keeps the first `limit` numbered ones (none:
-// all). A decoding failure after the start is thrown from next() as
-// GpuDecodeFailedError, and the pass is then made again through FFmpeg.
+// all). When pairing by timestamp (`by_time`), its select keeps every
+// step-th picture, setpts starts their times at 0, and -t (`time_limit`'s
+// text) is FFmpeg's trim filter: a picture is kept while its time is below
+// the limit in the stream's time base, and the output ends at the first
+// that is not (the Python app's _TimedFrameSelection). A decoding failure
+// after the start is thrown from next() as GpuDecodeFailedError, and the
+// pass is then made again through FFmpeg.
 class NativeFrameStream : public FrameRing {
 public:
     NativeFrameStream(const VshipLibrary& library, std::size_t frame_bytes, std::unique_ptr<GpuFrameStream> decoder,
-                      int step, std::optional<long long> limit, int gpu_id)
-        : FrameRing(library, frame_bytes, gpu_id), decoder_(std::move(decoder)), step_(step), limit_(limit) {}
+                      int step, std::optional<long long> limit, bool by_time, std::optional<std::string> time_limit,
+                      int gpu_id)
+        : FrameRing(library, frame_bytes, gpu_id),
+          decoder_(std::move(decoder)),
+          step_(step),
+          limit_(limit),
+          by_time_(by_time),
+          time_limit_(std::move(time_limit)) {}
 
     ~NativeFrameStream() override { close(); }
 
@@ -480,6 +694,30 @@ public:
     }
 
 private:
+    // What FFmpeg's chain does with a decoded picture.
+    enum class Taken { piped, skipped, ended };
+
+    // The selection of the picture numbered `at`, stamped `pts`.
+    Taken select(long long at, long long pts) {
+        if (!by_time_) {
+            if (limit_ && at >= *limit_) {
+                return Taken::ended;
+            }
+            return at % step_ == 0 ? Taken::piped : Taken::skipped;
+        }
+        if (at % step_ != 0) {
+            return Taken::skipped;
+        }
+        if (!first_pts_) {
+            first_pts_ = pts;
+            decoder_time_base_ = decoder_->time_base(stop_);
+            if (time_limit_) {
+                time_limit_ticks_ = duration_in(*time_limit_, *decoder_time_base_);
+            }
+        }
+        return time_limit_ticks_ && pts - *first_pts_ >= *time_limit_ticks_ ? Taken::ended : Taken::piped;
+    }
+
     // The copying thread: copies each selected picture into a free slot.
     void run() {
         try {
@@ -489,12 +727,12 @@ private:
                 if (!picture) {
                     break;  // the end, checked
                 }
-                const long long at = number++;
-                if (limit_ && at >= *limit_) {
+                const Taken taken = select(number++, picture->pts);
+                if (taken == Taken::ended) {
                     decoder_->release(picture->slot);  // the output ends here
                     break;
                 }
-                if (at % step_ != 0) {
+                if (taken == Taken::skipped) {
                     decoder_->release(picture->slot);
                     continue;
                 }
@@ -510,6 +748,9 @@ private:
                     throw;
                 }
                 decoder_->release(picture->slot);
+                if (by_time_) {
+                    stamp(slot, picture->pts, *decoder_time_base_);
+                }
                 filled_.put({slot, nullptr});
             }
             filled_.put({end_of_video, nullptr});
@@ -521,6 +762,13 @@ private:
     std::unique_ptr<GpuFrameStream> decoder_;
     int step_;
     std::optional<long long> limit_;
+    bool by_time_;
+    std::optional<std::string> time_limit_;
+    // By timestamp: the first piped picture's timestamp, the stream's time
+    // base, and the limit in it.
+    std::optional<long long> first_pts_;
+    std::optional<Rational> decoder_time_base_;
+    std::optional<long long> time_limit_ticks_;
     std::atomic<bool> stopping_{false};
     CancelToken stop_;  // set by close()
 };
@@ -928,6 +1176,10 @@ struct PassPlan {
     std::optional<CropBox> source_crop;
     std::optional<CropBox> distorted_crop;
     HardwareDecoding decoding;
+    // Where the pass's own files go: the folder of its process's task, which
+    // the run removes whatever becomes of the process; or, in the run's
+    // process, the system's temporary folder.
+    std::filesystem::path scratch_folder = std::filesystem::temp_directory_path();
 };
 
 // One pass of Vship's metrics over a pair of videos (the Python app's
@@ -938,9 +1190,10 @@ struct PassPlan {
 class VshipPass {
 public:
     // `native` decodes a video in this process where a decoder of the app's
-    // takes it.
-    VshipPass(const PerceptualRequest& request, const PassPlan& plan, bool native, const ProgressCallback& on_progress,
-              const StatusCallback& on_status, const CancelToken& cancel)
+    // takes it; `every_source_frame`, when pairing by timestamp, takes every
+    // source frame.
+    VshipPass(const PerceptualRequest& request, const PassPlan& plan, bool native, bool every_source_frame,
+              const ProgressCallback& on_progress, const StatusCallback& on_status, const CancelToken& cancel)
         : request_(request),
           plan_(plan),
           native_(native),
@@ -951,9 +1204,6 @@ public:
           decode_(plan.decoding) {
         if (plan.keys.empty() || !std::all_of(plan.keys.begin(), plan.keys.end(), is_perceptual_metric)) {
             throw std::invalid_argument("A Vship pass scores SSIMULACRA2, Butteraugli and CVVDP only.");
-        }
-        if (by_timestamp()) {
-            throw VshipUnavailableError("Vship with frames paired by timestamp is not in the C++ app yet.");
         }
         validate_pair(request.source, request.distorted, request.options.duration_limit);
         cancel.throw_if_cancelled();
@@ -976,9 +1226,11 @@ public:
         if (cvvdp_ && step_ != 1) {
             throw VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.");
         }
-        // Both videos' frames are numbered at the test video's frame rate
-        // (frame_sync.h) and both are cut at the duration limit, so they
-        // keep the same frames.
+        // Pairing by frame number, both videos' frames are numbered at the
+        // test video's frame rate (frame_sync.h) and both are cut at the
+        // duration limit, so they keep the same frames. Pairing by
+        // timestamp, only the test video is cut.
+        by_time_ = by_timestamp();
         numbering_rate_ = frame_rate(request.distorted);
         const double limit = request.options.duration_limit;
         if (limit > 0) {
@@ -986,10 +1238,20 @@ public:
         }
         expected_frames_ =
             std::min(request.source.estimated_frame_count(), request.distorted.estimated_frame_count());
-        if (duration_limit_) {
+        if (by_time_ && limit > 0) {
+            expected_frames_ = std::min(
+                expected_frames_, std::max(1LL, static_cast<long long>(std::ceil(limit * request.source.fps))));
+        } else if (duration_limit_) {
             expected_frames_ = std::min(expected_frames_, std::max(1LL, *frames_within(duration_limit_, numbering_rate_)));
         }
         total_units_ = std::max(1LL, (expected_frames_ + step_ - 1) / step_) * step_;
+        // Pairing by timestamp, the source gives the frames among which each
+        // test frame's pair is found by time. So it is never cut at the
+        // limit, and it is subsampled as the test video is while the two
+        // line up (FramesApartError). A source without a frame rate gives
+        // every frame.
+        every_source_frame_ = by_time_ && (every_source_frame || request.source.fps <= 0);
+        check_apart_ = by_time_ && step_ > 1 && !every_source_frame_;
         for (const std::string& key : frame_keys_) {
             scores_.emplace(key, std::make_unique<ScoreArray>());
         }
@@ -1014,6 +1276,9 @@ public:
             throw;
         } catch (const GpuDecodeFailedError&) {
             close();  // made again with FFmpeg decoding (score_vship_pass)
+            throw;
+        } catch (const FramesApartError&) {
+            close();  // made again with every source frame (score_vship_pass)
             throw;
         } catch (const VshipUnavailableError&) {
             close();
@@ -1132,14 +1397,19 @@ private:
     }
 
     // One video's frame stream: decoded in this process where it can be, by
-    // the decoder FFmpeg would use, else by FFmpeg.
+    // the decoder FFmpeg would use, else by FFmpeg. Pairing by timestamp,
+    // only the test video is cut at the limit, and the source may give every
+    // frame.
     std::unique_ptr<FrameRing> open_stream(const VideoPlan& video) {
+        const bool cut = video.side == "distorted" || !by_time_;
+        const int every = video.side == "source" && every_source_frame_ ? 1 : step_;
         if (native_) {
             if (const std::optional<std::string> backend = decoded_here(video.hwaccel)) {
                 if (std::unique_ptr<GpuFrameStream> decoder = native_decoder(video, *backend)) {
-                    return std::make_unique<NativeFrameStream>(library_, video.layout.frame_bytes, std::move(decoder),
-                                                               step_, frames_within(duration_limit_, numbering_rate_),
-                                                               plan_.device.gpu_id);
+                    return std::make_unique<NativeFrameStream>(
+                        library_, video.layout.frame_bytes, std::move(decoder), every,
+                        by_time_ ? std::nullopt : frames_within(duration_limit_, numbering_rate_), by_time_,
+                        by_time_ && cut ? duration_limit_ : std::nullopt, plan_.device.gpu_id);
                 }
             }
         }
@@ -1150,15 +1420,18 @@ private:
         const std::string pixel_format = video.passthrough ? video.passthrough->second : video.image.pixel_format;
         const std::string side = video.side;
         return std::make_unique<FrameStream>(library_, video.layout.frame_bytes,
-                                             ffmpeg_commands(video, pixel_format), video.label, split,
-                                             [this, side] { decoded_in_software(side); }, plan_.device.gpu_id);
+                                             ffmpeg_commands(video, pixel_format, every, cut), video.label, split,
+                                             [this, side] { decoded_in_software(side); }, plan_.device.gpu_id,
+                                             by_time_, plan_.scratch_folder);
     }
 
-    // The FFmpeg commands to try for one video: with hardware decoding first
-    // if it has any, then in software. The software retry sends the same
-    // layout as the hardware attempt, because Vship's handlers are set up for
-    // one layout per video.
-    std::vector<std::vector<std::string>> ffmpeg_commands(const VideoPlan& video, const std::string& pixel_format) {
+    // The FFmpeg commands to try for one video, keeping every `every`-th
+    // frame, cut at the duration limit when `cut`: with hardware decoding
+    // first if it has any, then in software. The software retry sends the
+    // same layout as the hardware attempt, because Vship's handlers are set
+    // up for one layout per video.
+    std::vector<std::vector<std::string>> ffmpeg_commands(const VideoPlan& video, const std::string& pixel_format,
+                                                          int every, bool cut) {
         std::vector<std::optional<std::string>> attempts{video.hwaccel};
         if (video.hwaccel) {
             attempts.emplace_back(std::nullopt);
@@ -1166,16 +1439,19 @@ private:
         std::vector<std::vector<std::string>> commands;
         for (const std::optional<std::string>& accel : attempts) {
             const std::string chain =
-                vship_filter_chain(video.info, video.crop, video.size, pixel_format, step_,
-                                   request_.options.scale_algorithm, accel, numbering_rate_);
+                vship_filter_chain(video.info, video.crop, video.size, pixel_format, every,
+                                   request_.options.scale_algorithm, accel,
+                                   by_time_ ? std::nullopt : std::optional(numbering_rate_));
             std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel", "error",
                                              "-nostdin"};
             const std::vector<std::string> decode = hwaccel_args(accel);
             command.insert(command.end(), decode.begin(), decode.end());
             command.insert(command.end(), {"-i", input_path(video.info.path), "-map",
                                            "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
-            const std::vector<std::string> cut = duration_args(duration_limit_);
-            command.insert(command.end(), cut.begin(), cut.end());
+            if (cut) {
+                const std::vector<std::string> args = duration_args(duration_limit_);
+                command.insert(command.end(), args.begin(), args.end());
+            }
             command.insert(command.end(), {"-fps_mode", "passthrough"});
             const std::vector<std::string> piped = vship_piped_as(pixel_format);
             command.insert(command.end(), piped.begin(), piped.end());
@@ -1325,12 +1601,48 @@ private:
         return slot;
     }
 
+    // Hands pair `frame` to each metric's lanes, which hold its slots until
+    // they are done with them.
+    void give_pair(long long frame, int source_slot, int distorted_slot, PassRate& rate) {
+        const auto metrics = static_cast<int>(plan_.keys.size());
+        const std::vector<std::pair<std::string, std::exception_ptr>> errors = lane_errors();
+        if (static_cast<int>(errors.size()) == metrics) {
+            // Nothing left to score: stop now rather than decode the rest of
+            // the video.
+            std::rethrow_exception(errors.front().second);
+        }
+        // No abort here: a failed lane keeps handing its frames back, so the
+        // ring never fills with slots nobody gives back.
+        {
+            const std::lock_guard lock(slots_mutex_);
+            pending_[frame] = {metrics, source_slot, distorted_slot};
+            ++held_[0][source_slot];
+            ++held_[1][distorted_slot];
+        }
+        for (const std::string& key : frame_keys_) {
+            scores_.at(key)->reserve(frame);
+        }
+        // Each frame metric's lanes are dealt pairs in turn; CVVDP's one
+        // takes every pair.
+        for (std::size_t metric = 0; metric < frame_keys_.size(); ++metric) {
+            lanes_[metric * lanes_per_metric + static_cast<std::size_t>(frame) % lanes_per_metric]->give(
+                {frame, source_slot, distorted_slot});
+        }
+        if (cvvdp_lane_) {
+            cvvdp_lane_->give({frame, source_slot, distorted_slot});
+        }
+        report_progress(std::min((frame + 1) * step_, total_units_), rate.frames_per_second(frame + 1));
+    }
+
     // Hands every pair to each metric's lanes: each test frame with the
     // source frame of the same number, as every metric pairs them
-    // (frame_sync), until either video ends. Returns how many pairs.
+    // (frame_sync), until either video ends; or by timestamp. Returns how
+    // many pairs.
     long long feed_pairs(PassRate& rate) {
+        if (by_time_) {
+            return feed_timed_pairs(rate);
+        }
         long long frame = 0;
-        const auto metrics = static_cast<int>(plan_.keys.size());
         while (true) {
             const int distorted_slot = next_frame(1);
             if (distorted_slot == end_of_video) {
@@ -1342,34 +1654,8 @@ private:
                 break;
             }
             try {
-                const std::vector<std::pair<std::string, std::exception_ptr>> errors = lane_errors();
-                if (static_cast<int>(errors.size()) == metrics) {
-                    // Nothing left to score: stop now rather than decode the
-                    // rest of the video.
-                    std::rethrow_exception(errors.front().second);
-                }
-                // No abort here: a failed lane keeps handing its frames back,
-                // so the ring never fills with slots nobody gives back.
-                {
-                    const std::lock_guard lock(slots_mutex_);
-                    pending_[frame] = {metrics, source_slot, distorted_slot};
-                    ++held_[0][source_slot];
-                    ++held_[1][distorted_slot];
-                }
-                for (const std::string& key : frame_keys_) {
-                    scores_.at(key)->reserve(frame);
-                }
-                // Each frame metric's lanes are dealt pairs in turn; CVVDP's
-                // one takes every pair.
-                for (std::size_t metric = 0; metric < frame_keys_.size(); ++metric) {
-                    lanes_[metric * lanes_per_metric + static_cast<std::size_t>(frame) % lanes_per_metric]->give(
-                        {frame, source_slot, distorted_slot});
-                }
-                if (cvvdp_lane_) {
-                    cvvdp_lane_->give({frame, source_slot, distorted_slot});
-                }
+                give_pair(frame, source_slot, distorted_slot, rate);
                 ++frame;
-                report_progress(std::min(frame * step_, total_units_), rate.frames_per_second(frame));
             } catch (...) {
                 drop(1, distorted_slot);
                 drop(0, source_slot);
@@ -1380,6 +1666,81 @@ private:
             drop(0, source_slot);
         }
         return frame;
+    }
+
+    // feed_pairs when pairing by timestamp: each test frame with the source
+    // frame libvmaf pairs it with by timestamp (frame_sync_by_time.h). The
+    // comparison is the frames both videos have, so it ends with the test
+    // video, or at its first frame after the source's end. A source frame
+    // can go to several pairs; the pairing holds a frame until no later pair
+    // can use it.
+    long long feed_timed_pairs(PassRate& rate) {
+        FrameRing& source = *streams_[0];
+        FrameRing& test = *streams_[1];
+        // Each video's first frame, for its time base.
+        const int first_source = source.next(cancel_);
+        const int first_test = test.next(cancel_);
+        if (first_source == end_of_video || first_test == end_of_video) {
+            if (first_source != end_of_video) {
+                source.release(first_source);
+            }
+            if (first_test != end_of_video) {
+                test.release(first_test);
+            }
+            return 0;
+        }
+        const Rational test_base = test.time_base();
+        const Rational source_base = source.time_base();
+        const long long source_start = source.pts(first_source);
+        // Each video's next frame, held for the pairing, starting with the
+        // one already taken.
+        const auto puller = [this](std::size_t side, int first) {
+            return [this, side, waiting = std::optional<int>(first)]() mutable -> std::optional<TimedPairs::Frame> {
+                const int slot = waiting ? *waiting : streams_[side]->next(cancel_);
+                waiting.reset();
+                if (slot == end_of_video) {
+                    return std::nullopt;
+                }
+                hold(side, slot);
+                return TimedPairs::Frame{slot, streams_[side]->pts(slot)};
+            };
+        };
+        TimedPairs pairs(puller(1, first_test), puller(0, first_source), test_base, source_base,
+                         [this](int slot) { drop(1, slot); }, [this](int slot) { drop(0, slot); });
+        long long frame = 0;
+        while (const std::optional<TimedPairs::Pair> pair = pairs.next()) {
+            if (!pair->source) {
+                throw VshipUnavailableError("The source has no frame at the test video's first.");
+            }
+            if (check_apart_) {
+                check_lined_up(pair->time, test_base, source.pts(*pair->source) - source_start, source_base);
+            }
+            give_pair(frame, *pair->source, pair->test, rate);
+            ++frame;
+        }
+        return frame;
+    }
+
+    // With frame subsampling, the source gives only every step-th frame, as
+    // the test video does, and while the two videos' frames line up, those
+    // are the frames the test video's are paired with. A pair further apart
+    // than a quarter of a frame (any other source frame is then at least
+    // three quarters of a frame away) shows that they do not: throws
+    // FramesApartError, and the pass is made again with every source frame.
+    // In doubles, where the Python app takes exact fractions: the two can
+    // differ only within a rounding of a quarter of a frame.
+    void check_lined_up(long long test_ticks, Rational test_base, long long source_ticks, Rational source_base) const {
+        const double test_time =
+            static_cast<double>(test_ticks) * static_cast<double>(test_base.numerator) / test_base.denominator;
+        const double source_time = static_cast<double>(source_ticks) * static_cast<double>(source_base.numerator) /
+                                   source_base.denominator;
+        const double apart = test_time - source_time;
+        if (std::abs(apart) * request_.source.fps > 0.25) {
+            throw FramesApartError("the test frame at " + format_fixed(test_time, 3) + " s is " +
+                                   format_fixed(apart * 1000, 1) +
+                                   " ms from the nearest of the source frames sampled with it (one in " +
+                                   std::to_string(step_) + ")");
+        }
     }
 
     // Passes the pass's progress on, at most every tenth of a second besides
@@ -1517,6 +1878,9 @@ private:
     int step_ = 1;
     std::vector<std::string> frame_keys_;  // the metrics scored per frame: all but CVVDP
     std::optional<CvvdpSettings> cvvdp_;   // with CVVDP, the display it models
+    bool by_time_ = false;                 // frames paired by timestamp
+    bool every_source_frame_ = false;      // by timestamp: the source's every frame, subsampled or not
+    bool check_apart_ = false;             // by timestamp, subsampled: whether the pairs line up
     Rational numbering_rate_;
     std::optional<std::string> duration_limit_;
     long long expected_frames_ = 0;
@@ -1660,14 +2024,17 @@ PerceptualTaskOutput output_from(const nlohmann::json& result, const std::filesy
 // One pass in this process (the Python app's _score_vship_pass), with the
 // videos that a decoder of the app's takes decoded here. If that decoding
 // fails after it has started (a damaged stream, pictures that do not match
-// the packets), the pass is made again with FFmpeg decoding.
+// the packets), the pass is made again with FFmpeg decoding. When pairing
+// by timestamp, a subsampled pass whose frames do not line up with the
+// source's (FramesApartError) is made again with every source frame.
 PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const PassPlan& plan,
                                       const ProgressCallback& on_progress, const StatusCallback& on_status,
                                       const CancelToken& cancel) {
     bool native = true;
+    bool every_source_frame = false;
     while (true) {
         try {
-            return VshipPass(request, plan, native, on_progress, on_status, cancel).run();
+            return VshipPass(request, plan, native, every_source_frame, on_progress, on_status, cancel).run();
         } catch (const GpuDecodeFailedError& error) {
             if (!native) {
                 throw VshipUnavailableError(error.what());
@@ -1676,6 +2043,11 @@ PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const Pa
                 on_status({decoding_failed_status(error)});
             }
             native = false;
+        } catch (const FramesApartError& error) {
+            if (every_source_frame) {
+                throw VshipUnavailableError(error.what());
+            }
+            every_source_frame = true;
         }
     }
 }
@@ -2139,6 +2511,9 @@ nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesys
     plan.decoding.distorted = decoding.at("distorted").is_null()
                                   ? std::nullopt
                                   : std::optional(decoding.at("distorted").get<std::string>());
+    // The task's folder, which the run removes even when this process is
+    // ended (Ctrl+C reaches it too): no file of FFmpeg's timestamps is left.
+    plan.scratch_folder = folder;
     try {
         const PerceptualTaskOutput output = score_vship_pass(
             perceptual, plan,

@@ -64,4 +64,16 @@ std::vector<std::string> duration_args(const std::optional<std::string>& duratio
 // time is below it. Nothing when there is no limit.
 std::optional<long long> frames_within(const std::optional<std::string>& duration_limit, Rational rate);
 
+// A duration as -t takes it ("30.042") in whole microseconds, read as FFmpeg
+// reads it: exactly, with any digits past the sixth decimal dropped. Throws
+// std::invalid_argument for text that is not one.
+long long duration_microseconds(const std::string& duration);
+
+// (a * b + add) / c, rounded down, exactly: the product of two 64-bit
+// numbers can need 128 bits (a long limit at a frame rate with a big
+// numerator), so it is formed in two halves and divided bit by bit. Throws
+// std::overflow_error for a result beyond 64 bits.
+unsigned long long multiply_add_divide(unsigned long long a, unsigned long long b, unsigned long long add,
+                                       unsigned long long c);
+
 }  // namespace vml

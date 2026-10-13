@@ -7,10 +7,11 @@
 // metric's handlers, two per metric on threads of their own, and CVVDP's
 // one, which takes the pairs in order; a pass scores one or more metrics
 // over both videos, in a process of its own; and a task's metrics are
-// scored in one pass or several.
+// scored in one pass or several. Frames are paired frame N with frame N, or
+// by timestamp (frame_sync_by_time.h) when VML_FRAME_PAIRING says so.
 //
-// Not yet: frames paired by timestamp, and the CPU calculating SSIMULACRA2
-// and Butteraugli (the command line refuses such a run before it starts).
+// Not yet: the CPU calculating SSIMULACRA2 and Butteraugli (the command line
+// refuses such a run before it starts).
 #pragma once
 
 #include <nlohmann/json.hpp>

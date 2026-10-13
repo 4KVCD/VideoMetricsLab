@@ -7,8 +7,8 @@
 // filters, a video's VMAF on the GPU beside its other metrics on the CPU;
 // and SSIMULACRA2, Butteraugli and CVVDP (on each --cvvdp-display) on the
 // GPU with Vship. What it cannot do yet (SSIMULACRA2 and Butteraugli on the
-// CPU, Vship's metrics with frames paired by timestamp) it says, and exits
-// with code 2, rather than giving other answers than the Python app would.
+// CPU) it says, and exits with code 2, rather than giving other answers than
+// the Python app would.
 // It neither reads nor saves the app's saved scores yet: it calculates
 // every score, as the Python app does with --recalculate, and keeps none.
 #pragma once

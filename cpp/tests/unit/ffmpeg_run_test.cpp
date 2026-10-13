@@ -139,14 +139,18 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
     ASSERT_FALSE(reference["gpu_commands"].empty());
     for (const Json& item : reference["gpu_commands"]) {
         SCOPED_TRACE(item["name"].get<std::string>());
+        set_pairing(item["pairing"].get<std::string>());
         const auto [source, test] = pair_named(item["pair"].get<std::string>());
         const auto [source_crop, test_crop] = crops_named(item["crop"].get<std::string>());
         const HardwareDecoding plan = plan_named(item["plan"].get<std::string>());
         const VmafOptions options = options_named("vmaf, neg", item["setting"].get<std::string>());
+        const double limit = test::reference_number(item["limit"]).value();
         std::vector<std::vector<std::string>> commands = build_stream_commands(
             "<ffmpeg>", test.path, source.path,
             build_stream_graphs(source, test, options, source_crop, test_crop, plan), plan,
-            gpu_output_args(test::reference_number(item["limit"]).value(), "<test pipe>", "<source pipe>"));
+            by_timestamp()
+                ? timed_gpu_output_args(limit, "<test pipe>", "<test pipe>-times", "<source pipe>", "<source pipe>-times")
+                : gpu_output_args(limit, "<test pipe>", "<source pipe>"));
         for (std::vector<std::string>& command : commands) {
             for (std::string& part : command) {
                 if (part == platform::path_text(std::filesystem::absolute(test.path))) {
@@ -158,6 +162,7 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
         }
         EXPECT_EQ(commands, item["commands"].get<std::vector<std::vector<std::string>>>());
     }
+    set_pairing("");
 }
 
 TEST(FfmpegRun, ReadsLibvmafsLogAsThePythonAppDoes) {

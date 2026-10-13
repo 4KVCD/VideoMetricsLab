@@ -8,15 +8,20 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <mutex>
+#include <numeric>
+#include <regex>
 #include <thread>
 
 #include "vml/frame_sync.h"
+#include "vml/frame_sync_by_time.h"
 #include "vml/gpu_frames.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf_cpu.h"
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
 
@@ -265,14 +270,36 @@ std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(do
     return {output("vmaf_dist", test_pipe), output("vmaf_ref", source_pipe)};
 }
 
+std::pair<std::vector<std::string>, std::vector<std::string>> timed_gpu_output_args(
+    double duration_limit, const std::string& test_pipe, const std::string& test_listing,
+    const std::string& source_pipe, const std::string& source_listing) {
+    const auto output = [duration_limit](const std::string& label, const std::string& pipe,
+                                         const std::string& listing, double past) {
+        const std::vector<std::string> cut =
+            duration_limit > 0 ? std::vector<std::string>{"-t", format_fixed(duration_limit + past, 3)}
+                               : std::vector<std::string>{};
+        std::vector<std::string> args{"-map", "[" + label + "]", "-fps_mode", "passthrough"};
+        args.insert(args.end(), cut.begin(), cut.end());
+        args.insert(args.end(), {"-flush_packets", "1", "-f", "yuv4mpegpipe", "-strict", "-1", pipe, "-map",
+                                 "[" + label + "_ts]", "-fps_mode", "passthrough", "-enc_time_base", "filter"});
+        args.insert(args.end(), cut.begin(), cut.end());
+        args.insert(args.end(), {"-c:v", "wrapped_avframe", "-flush_packets", "1", "-f", "framecrc", listing});
+        return args;
+    };
+    return {output("vmaf_dist", test_pipe, test_listing, 0.0), output("vmaf_ref", source_pipe, source_listing, 1.0)};
+}
+
 // ------------------------------------------------------------- StreamReader
 
 struct StreamReader::State {
-    State(std::string_view name, std::size_t frame_bytes)
+    State(std::string_view name, std::size_t frame_bytes, bool timed)
         : pipe(name, pipe_bytes), frame_bytes(frame_bytes), buffers(read_ahead + 1) {
         for (std::vector<std::uint8_t>& buffer : buffers) {
             buffer.resize(frame_bytes);
             free.put(&buffer);
+        }
+        if (timed) {
+            listing.emplace(std::string(name) + "-times", 64 * 1024);
         }
     }
 
@@ -288,22 +315,152 @@ struct StreamReader::State {
     std::atomic<bool> finished{false};   // the reading thread has ended
     std::exception_ptr error;            // set before the final nullptr in pixels
     std::thread thread;
+
+    // A timed reader's listing of the frames' timestamps, and its thread.
+    std::optional<platform::InboundPipe> listing;
+    std::thread listing_thread;
+    std::atomic<bool> listing_connected{false};
+    std::mutex listing_mutex;  // guards what follows
+    std::condition_variable listing_signal;
+    std::deque<long long> stamps;  // the timestamps of the frames not pulled yet
+    std::optional<Rational> time_base;
+    bool listing_ended = false;
+    std::exception_ptr listing_error;
 };
 
-StreamReader::StreamReader(std::string_view name, std::size_t frame_bytes)
-    : state_(std::make_unique<State>(name, frame_bytes)) {}
+StreamReader::StreamReader(std::string_view name, std::size_t frame_bytes, bool timed)
+    : state_(std::make_unique<State>(name, frame_bytes, timed)) {}
 
 StreamReader::~StreamReader() {
-    if (state_->thread.joinable()) {
+    if (state_->thread.joinable() || state_->listing_thread.joinable()) {
         stop();
-        state_->thread.join();
+    }
+    for (std::thread* thread : {&state_->thread, &state_->listing_thread}) {
+        if (thread->joinable()) {
+            thread->join();
+        }
     }
 }
 
 const std::string& StreamReader::path() const { return state_->pipe.path(); }
 
+const std::string& StreamReader::listing_path() const { return state_->listing.value().path(); }
+
 void StreamReader::start() {
     state_->thread = std::thread([this] { read_frames(); });
+    if (state_->listing) {
+        state_->listing_thread = std::thread([this] { read_listing(); });
+    }
+}
+
+// The listing's thread: reads the time base and each frame's timestamp from
+// FFmpeg's framecrc listing.
+void StreamReader::read_listing() {
+    State& s = *state_;
+    try {
+        s.listing->connect();
+        s.listing_connected = true;
+        std::string unread;
+        std::vector<char> chunk(64 * 1024);
+        while (true) {
+            const std::size_t count = s.listing->read(chunk.data(), chunk.size());
+            unread.append(chunk.data(), count);
+            std::size_t start = 0;
+            for (std::size_t end = unread.find('\n'); end != std::string::npos; end = unread.find('\n', start)) {
+                take_listing_line(std::string_view(unread).substr(start, end - start));
+                start = end + 1;
+            }
+            unread.erase(0, start);
+            if (count == 0) {
+                if (!unread.empty()) {
+                    take_listing_line(unread);  // a last line without its line ending
+                }
+                break;
+            }
+        }
+    } catch (...) {
+        const std::lock_guard lock(s.listing_mutex);
+        s.listing_error = std::current_exception();
+    }
+    s.listing->close();
+    const std::lock_guard lock(s.listing_mutex);
+    s.listing_ended = true;
+    s.listing_signal.notify_all();
+}
+
+// One line of the listing: its header's time base ("#tb 0: 1/1000"), or a
+// frame's "stream, dts, pts, duration, size, crc".
+void StreamReader::take_listing_line(std::string_view line) {
+    State& s = *state_;
+    line = python_strip(line);
+    if (line.starts_with('#')) {
+        static const std::regex time_base_line(R"(#tb 0: (\d+)/(\d+))");
+        std::match_results<std::string_view::const_iterator> match;
+        if (std::regex_search(line.begin(), line.end(), match, time_base_line,
+                              std::regex_constants::match_continuous)) {
+            const std::optional<long long> numerator = python_int(match.str(1));
+            const std::optional<long long> denominator = python_int(match.str(2));
+            if (!numerator || !denominator || *denominator == 0) {
+                throw LibvmafError("FFmpeg reported a time base of " + match.str(1) + "/" + match.str(2));
+            }
+            const long long divisor = std::gcd(*numerator, *denominator);
+            const std::lock_guard lock(s.listing_mutex);
+            s.time_base = Rational{*numerator / divisor, *denominator / divisor};
+            s.listing_signal.notify_all();
+        }
+        return;
+    }
+    std::vector<std::string_view> fields;
+    for (std::size_t start = 0;;) {
+        const std::size_t comma = line.find(',', start);
+        fields.push_back(python_strip(line.substr(start, comma == std::string_view::npos ? comma : comma - start)));
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+    if (fields.size() < 6 || fields[0].empty() ||
+        !std::all_of(fields[0].begin(), fields[0].end(), [](char c) { return c >= '0' && c <= '9'; })) {
+        return;
+    }
+    const std::optional<long long> pts = python_int(fields[2]);
+    if (!pts) {
+        throw LibvmafError("FFmpeg listed a frame with a timestamp of " + std::string(fields[2]));
+    }
+    const std::lock_guard lock(s.listing_mutex);
+    s.stamps.push_back(*pts);
+    s.listing_signal.notify_all();
+}
+
+std::optional<StreamReader::TimedFrame> StreamReader::pull_timed() {
+    State& s = *state_;
+    std::vector<std::uint8_t>* frame = pull();
+    if (frame == nullptr) {
+        return std::nullopt;
+    }
+    std::unique_lock lock(s.listing_mutex);
+    s.listing_signal.wait(lock, [&s] { return !s.stamps.empty() || s.listing_ended; });
+    if (s.stamps.empty()) {
+        lock.unlock();
+        release(frame);
+        throw LibvmafError("FFmpeg gave a frame without its timestamp");
+    }
+    const long long pts = s.stamps.front();
+    s.stamps.pop_front();
+    return TimedFrame{static_cast<int>(frame - s.buffers.data()), pts};
+}
+
+std::vector<std::uint8_t>& StreamReader::buffer(int number) {
+    return state_->buffers.at(static_cast<std::size_t>(number));
+}
+
+void StreamReader::release(int number) { release(&buffer(number)); }
+
+Rational StreamReader::wait_time_base() {
+    State& s = *state_;
+    std::unique_lock lock(s.listing_mutex);
+    s.listing_signal.wait(lock, [&s] { return s.time_base.has_value() || s.listing_ended; });
+    return s.time_base.value_or(Rational{1, 1000});
 }
 
 void StreamReader::read_frames() {
@@ -394,6 +551,18 @@ void StreamReader::ffmpeg_ended() {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    const auto listing_over = [&s] {
+        const std::lock_guard lock(s.listing_mutex);
+        return s.listing_ended;
+    };
+    for (int attempt = 0; attempt < 200 && s.listing_thread.joinable() && !s.listing_connected && !listing_over();
+         ++attempt) {
+        platform::InboundPipe::touch(s.listing->path());
+        if (s.listing_connected || listing_over()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
 }
 
 void StreamReader::stop() {
@@ -403,11 +572,17 @@ void StreamReader::stop() {
 }
 
 void StreamReader::join() {
-    if (state_->thread.joinable()) {
-        state_->thread.join();
+    State& s = *state_;
+    for (std::thread* thread : {&s.listing_thread, &s.thread}) {
+        if (thread->joinable()) {
+            thread->join();
+        }
     }
-    if (state_->error) {
-        std::rethrow_exception(state_->error);
+    if (s.error) {
+        std::rethrow_exception(s.error);
+    }
+    if (s.listing_error) {
+        std::rethrow_exception(s.listing_error);
     }
 }
 
@@ -415,6 +590,9 @@ void StreamReader::join() {
 
 struct GpuAttempt::State {
     std::unique_ptr<PairScorer> scorer;
+    // Whether frames are paired by timestamp (by_timestamp), decided once so
+    // that the readers, FFmpeg's outputs and the pairing agree.
+    bool by_time = by_timestamp();
     std::unique_ptr<StreamReader> distorted;
     std::unique_ptr<StreamReader> reference;
     std::thread feeder;
@@ -442,8 +620,8 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
         s.scorer = std::make_unique<VulkanScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
                                                   plan.device);
     }
-    s.distorted = std::make_unique<StreamReader>("distorted", s.scorer->frame_bytes());
-    s.reference = std::make_unique<StreamReader>("reference", s.scorer->frame_bytes());
+    s.distorted = std::make_unique<StreamReader>("distorted", s.scorer->frame_bytes(), s.by_time);
+    s.reference = std::make_unique<StreamReader>("reference", s.scorer->frame_bytes(), s.by_time);
     s.distorted->start();
     s.reference->start();
     s.feeder = std::thread([this] { feed(); });
@@ -457,7 +635,66 @@ GpuAttempt::~GpuAttempt() {
 }
 
 std::pair<std::vector<std::string>, std::vector<std::string>> GpuAttempt::output_args(double duration_limit) const {
-    return gpu_output_args(duration_limit, state_->distorted->path(), state_->reference->path());
+    const State& s = *state_;
+    if (s.by_time) {
+        return timed_gpu_output_args(duration_limit, s.distorted->path(), s.distorted->listing_path(),
+                                     s.reference->path(), s.reference->listing_path());
+    }
+    return gpu_output_args(duration_limit, s.distorted->path(), s.reference->path());
+}
+
+// The pairs by timestamp, as libvmaf's filter would pair them
+// (frame_sync_by_time.h): a source frame can be scored with several test
+// frames.
+void GpuAttempt::feed_timed() {
+    State& s = *state_;
+    StreamReader& test = *s.distorted;
+    StreamReader& source = *s.reference;
+    const auto puller = [](StreamReader& reader) {
+        return [&reader]() -> std::optional<TimedPairs::Frame> {
+            const std::optional<StreamReader::TimedFrame> frame = reader.pull_timed();
+            if (!frame) {
+                return std::nullopt;
+            }
+            return TimedPairs::Frame{frame->buffer, frame->pts};
+        };
+    };
+    TimedPairs pairs(puller(test), puller(source), test.wait_time_base(), source.wait_time_base(),
+                     [&test](int buffer) { test.release(buffer); }, [&source](int buffer) { source.release(buffer); });
+    while (const std::optional<TimedPairs::Pair> pair = pairs.next()) {
+        if (!pair->source) {
+            throw LibvmafError("the source has no frame for the test video's first");
+        }
+        s.scorer->add(source.buffer(*pair->source), test.buffer(pair->test));
+    }
+}
+
+// Frame N of the test video with frame N of the source, until either video
+// ends (frame_sync.frame_pairs).
+void GpuAttempt::feed_numbered() {
+    State& s = *state_;
+    StreamReader& test = *s.distorted;
+    StreamReader& source = *s.reference;
+    while (true) {
+        std::vector<std::uint8_t>* test_frame = test.pull();
+        if (test_frame == nullptr) {
+            break;
+        }
+        std::vector<std::uint8_t>* source_frame = source.pull();
+        if (source_frame == nullptr) {
+            test.release(test_frame);
+            break;
+        }
+        try {
+            s.scorer->add(*source_frame, *test_frame);
+        } catch (...) {
+            test.release(test_frame);
+            source.release(source_frame);
+            throw;
+        }
+        test.release(test_frame);
+        source.release(source_frame);
+    }
 }
 
 void GpuAttempt::feed() {
@@ -465,27 +702,10 @@ void GpuAttempt::feed() {
     try {
         StreamReader& test = *s.distorted;
         StreamReader& source = *s.reference;
-        // Frame N of the test video with frame N of the source, until either
-        // video ends (frame_sync.frame_pairs).
-        while (true) {
-            std::vector<std::uint8_t>* test_frame = test.pull();
-            if (test_frame == nullptr) {
-                break;
-            }
-            std::vector<std::uint8_t>* source_frame = source.pull();
-            if (source_frame == nullptr) {
-                test.release(test_frame);
-                break;
-            }
-            try {
-                s.scorer->add(*source_frame, *test_frame);
-            } catch (...) {
-                test.release(test_frame);
-                source.release(source_frame);
-                throw;
-            }
-            test.release(test_frame);
-            source.release(source_frame);
+        if (s.by_time) {
+            feed_timed();
+        } else {
+            feed_numbered();
         }
         test.drop_rest();
         source.drop_rest();

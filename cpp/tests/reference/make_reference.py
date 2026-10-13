@@ -9,7 +9,8 @@ videos in the app (gpu_frames.py, vmaf_runner.py), VMAF predicted from
 features by the bundled libvmaf and scored with the Vulkan engine
 (vmaf_vulkan.py), Vship's view of a video and its colours
 (perceptual_vship.py, colour.py), CVVDP's displays and the pooling of its
-seconds (cvvdp.py, perceptual_vship.py), the line that says how far a video is
+seconds (cvvdp.py, perceptual_vship.py), the pairing of frames by
+timestamp (frame_sync_by_time.py), the line that says how far a video is
 (ui/run_line.py), its command line's reading of arguments and patterns
 (cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
 that Vulkan scores VMAF on.
@@ -568,30 +569,39 @@ def run_cases() -> dict:
                                     "cores": os.cpu_count(), "command": command})
         # VMAF on the GPU, each video decoded by an FFmpeg of its own whose
         # frames the app pairs (vmaf_gpu.GpuAttempt): the two commands, the
-        # outputs' pipes written as <test pipe> and <source pipe>.
-        os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
-        attempt = SimpleNamespace(paired=False, _by_time=False, distorted=SimpleNamespace(path="<test pipe>"),
-                                  reference=SimpleNamespace(path="<source pipe>"))
-        for pair_name, (source, test) in pairs.items():
-            for crop_name, (source_crop, test_crop) in crops.items():
-                if crop_name == "letterbox" and pair_name != "4k against 1080p":
-                    continue
-                for plan_name, plan in plans.items():
-                    for setting_name in ("plain", "subsample, lanczos, upscale", "limit"):
-                        options = VmafOptions(compute_vmaf=True, compute_vmaf_neg=True, **settings[setting_name])
-                        graphs = vmaf_runner._build_filtergraph(
-                            source, test, options, source_crop, test_crop, plan, Path("vmaf_log.json"),
-                            gpu_vmaf=True, gpu_paired=False)
-                        # As vmaf_runner._execute_run: one frame past the limit.
-                        limit = options.duration_limit + 1 / test.fps if options.duration_limit > 0 else 0.0
-                        commands = vmaf_runner._build_stream_cmds(
-                            test.path, source.path, graphs, plan, vmaf_gpu.GpuAttempt.output_args(attempt, limit))
-                        commands = [["<ffmpeg>"] + ["<test>" if part == str(test.path.resolve()) else
-                                                    "<source>" if part == str(source.path.resolve()) else part
-                                                    for part in command[1:]] for command in commands]
-                        gpu_cases.append({"name": f"{pair_name}; {crop_name}; {plan_name}; {setting_name}",
-                                          "pair": pair_name, "crop": crop_name, "plan": plan_name,
-                                          "setting": setting_name, "limit": exact(limit), "commands": commands})
+        # outputs' pipes written as <test pipe> and <source pipe>, and when
+        # pairing by timestamp the listings' as <test pipe>-times and
+        # <source pipe>-times.
+        for pairing in ("", "timestamp"):
+            os.environ[frame_sync.PAIRING_VARIABLE] = pairing
+            attempt = SimpleNamespace(
+                paired=False, _by_time=bool(pairing),
+                distorted=SimpleNamespace(path="<test pipe>", listing_path="<test pipe>-times"),
+                reference=SimpleNamespace(path="<source pipe>", listing_path="<source pipe>-times"))
+            attempt._timed_output_args = lambda limit, attempt=attempt: vmaf_gpu.GpuAttempt._timed_output_args(
+                attempt, limit)
+            for pair_name, (source, test) in pairs.items():
+                for crop_name, (source_crop, test_crop) in crops.items():
+                    if crop_name == "letterbox" and pair_name != "4k against 1080p":
+                        continue
+                    for plan_name, plan in plans.items():
+                        for setting_name in ("plain", "subsample, lanczos, upscale", "limit"):
+                            options = VmafOptions(compute_vmaf=True, compute_vmaf_neg=True, **settings[setting_name])
+                            graphs = vmaf_runner._build_filtergraph(
+                                source, test, options, source_crop, test_crop, plan, Path("vmaf_log.json"),
+                                gpu_vmaf=True, gpu_paired=False)
+                            # As vmaf_runner._execute_run: one frame past the limit.
+                            limit = options.duration_limit + 1 / test.fps if options.duration_limit > 0 else 0.0
+                            commands = vmaf_runner._build_stream_cmds(
+                                test.path, source.path, graphs, plan, vmaf_gpu.GpuAttempt.output_args(attempt, limit))
+                            commands = [["<ffmpeg>"] + ["<test>" if part == str(test.path.resolve()) else
+                                                        "<source>" if part == str(source.path.resolve()) else part
+                                                        for part in command[1:]] for command in commands]
+                            gpu_cases.append({
+                                "name": f"{pairing or 'frame number'}; {pair_name}; {crop_name}; {plan_name}; "
+                                        f"{setting_name}",
+                                "pairing": pairing, "pair": pair_name, "crop": crop_name, "plan": plan_name,
+                                "setting": setting_name, "limit": exact(limit), "commands": commands})
     finally:
         os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
         if real_pairing is not None:
@@ -1395,7 +1405,105 @@ def cvvdp_cases() -> dict:
     return {"preset_lists": preset_lists, "read_back": read_back, "sizes": sizes, "pools": pools}
 
 
+def timed_pairing_cases() -> dict:
+    """Pairing by timestamp (frame_sync_by_time.py, which Python's tests hold
+    to FFmpeg's own pairing): av_rescale_q's rounding (rescale), -t in a time
+    base (duration_in), and for many patterns of timestamps each pair and
+    each frame's release, in order, as decoded_pairs takes them."""
+    from fractions import Fraction
+
+    from vmaf_app.core import frame_sync_by_time as by_time
+
+    def base(value: Fraction) -> list[int]:
+        return [value.numerator, value.denominator]
+
+    bases = (Fraction(1, 1000), Fraction(1, 90000), Fraction(1, 24000), Fraction(1001, 24000), Fraction(1),
+             Fraction(1, 2), Fraction(1, 1_000_000), Fraction(1, 120), Fraction(1, 12800), Fraction(1, 2**31 - 1),
+             Fraction(2**31 - 1, 7))
+    rng = random.Random(20261013)
+    values = [0, 1, -1, 3, -3, 5, 41, 1001, 2**40, -(2**40), 2**62, -(2**62), 9 * 10**15,
+              *(rng.randrange(-(2**62), 2**62) for _ in range(6))]
+    rescales = []
+    for value in values:
+        for source in bases:
+            for target in bases:
+                result = by_time.rescale(value, source, target)
+                if -(2**63) <= result < 2**63:  # the C++ app's numbers are 64-bit
+                    rescales.append([value, base(source), base(target), result])
+
+    durations = [[text, base(time_base), by_time.duration_in(text, time_base)]
+                 for text in ("1.000", "1.008", "1.043", "30.042", "0", "0.5", "7200", "1.0000004", "86400.123456789",
+                              "3")
+                 for time_base in bases[:9]]
+
+    def stamps(count: int, at) -> list[int]:
+        return [int(at(n)) for n in range(count)]
+
+    ms, tb90k, tb24k = Fraction(1, 1000), Fraction(1, 90000), Fraction(1, 24000)
+    patterns = [
+        ("same rate", stamps(48, lambda n: n * 42), ms, stamps(48, lambda n: n * 42), ms, None),
+        ("test video shorter", stamps(47, lambda n: n * 42), ms, stamps(48, lambda n: n * 42), ms, None),
+        ("source shorter", stamps(48, lambda n: n * 42), ms, stamps(46, lambda n: n * 42), ms, None),
+        ("test frames a millisecond early", stamps(48, lambda n: n * 42 - (n % 3 == 1)), ms,
+         stamps(48, lambda n: n * 42), ms, None),
+        ("test frames a millisecond late", stamps(48, lambda n: n * 42 + (n % 4 == 1)), ms,
+         stamps(48, lambda n: n * 42), ms, None),
+        ("24 against 25 fps", stamps(48, lambda n: n * 1000 / 24), ms, stamps(50, lambda n: n * 40), ms, None),
+        ("25 against 24 fps", stamps(50, lambda n: n * 40), ms, stamps(48, lambda n: n * 1000 / 24), ms, None),
+        ("30 against 60 fps", stamps(30, lambda n: n * 1000 / 30), ms, stamps(60, lambda n: n * 1000 / 60), ms, None),
+        ("60 against 30 fps", stamps(60, lambda n: n * 1000 / 60), ms, stamps(30, lambda n: n * 1000 / 30), ms, None),
+        ("ties halfway", stamps(30, lambda n: n * 40 + 20), ms, stamps(31, lambda n: n * 40), ms, None),
+        ("test video has gaps", stamps(40, lambda n: n * 42 + 84 * (n > 10) + 42 * (n > 25)), ms,
+         stamps(48, lambda n: n * 42), ms, None),
+        ("source has gaps", stamps(48, lambda n: n * 42), ms, stamps(44, lambda n: n * 42 + 126 * (n > 5)), ms, None),
+        ("variable rate both", stamps(45, lambda n: n * 40 + (n * 7) % 13), ms,
+         stamps(45, lambda n: n * 41 + (n * 5) % 11), ms, None),
+        ("mp4 source, other time base", stamps(48, lambda n: n * 42), ms, stamps(48, lambda n: n * 3754), tb90k, None),
+        ("mp4 test video, 1/24000", stamps(48, lambda n: n * 1001), tb24k, stamps(48, lambda n: n * 42), ms, None),
+        ("23.976 fps from two clocks", stamps(240, lambda n: n * 1001), tb24k,
+         stamps(240, lambda n: round(n * 1001 / 24)), ms, None),
+        ("23.976 fps from two clocks, source first", stamps(240, lambda n: round(n * 1001 / 24)), ms,
+         stamps(240, lambda n: n * 1001), tb24k, None),
+        ("limit on a frame", stamps(48, lambda n: n * 42), ms, stamps(48, lambda n: n * 42), ms, "1.008"),
+        ("limit between frames", stamps(48, lambda n: n * 42), ms, stamps(48, lambda n: n * 42), ms, "1.000"),
+        ("limit, other time base", stamps(48, lambda n: n * 1001), tb24k, stamps(48, lambda n: n * 42), ms, "1.043"),
+        ("timestamps not starting at 0", stamps(48, lambda n: 1000 + n * 42), ms,
+         stamps(48, lambda n: 7_000_000 + n * 3754), tb90k, None),
+        ("no source frames", stamps(10, lambda n: n * 42), ms, [], ms, None),
+        ("no test frames", [], ms, stamps(10, lambda n: n * 42), ms, None),
+        ("one source frame", stamps(10, lambda n: n * 42), ms, [0], ms, None),
+        ("release order", [0, 42, 83, 125], ms, [0, 30, 50, 84], ms, None),
+    ]
+    for case in range(16):  # timestamps with jitter, at rates of their own
+        test_step, source_step = rng.choice((40, 41, 42, 33, 17)), rng.choice((40, 41, 42, 33, 17, 84))
+        test = sorted({n * test_step + rng.randint(-2, 2) for n in range(rng.randint(20, 60))})
+        source = sorted({n * source_step + rng.randint(-2, 2) for n in range(rng.randint(20, 60))})
+        limit = rng.choice((None, None, "0.5", "1.0004"))
+        patterns.append((f"jitter {case}", test, ms, source, rng.choice((ms, Fraction(1, 2000))), limit))
+
+    pairings = []
+    for name, test_pts, test_base, source_pts, source_base, limit in patterns:
+        events = []
+        test_frames, source_frames = iter(enumerate(test_pts)), iter(enumerate(source_pts))
+        stop = by_time.duration_in(limit, test_base) if limit else None
+        pairs = by_time.frame_pairs(lambda frames=test_frames: next(frames, None),
+                                    lambda frames=source_frames: next(frames, None), test_base, source_base,
+                                    lambda frame, events=events: events.append(["release test", frame]),
+                                    lambda frame, events=events: events.append(["release source", frame]))
+        try:
+            for test, source, when in pairs:
+                if stop is not None and when >= stop:
+                    break
+                events.append(["pair", test, source, when])
+        finally:
+            pairs.close()
+        pairings.append({"name": name, "test": test_pts, "test_base": base(test_base), "source": source_pts,
+                         "source_base": base(source_base), "limit": limit, "events": events})
+    return {"rescales": rescales, "durations": durations, "pairings": pairings}
+
+
 if __name__ == "__main__":
+    write("timed_pairing.json", timed_pairing_cases())
     write("cvvdp.json", cvvdp_cases())
     write("vship.json", vship_cases())
     write("decoding.json", decoding_cases())

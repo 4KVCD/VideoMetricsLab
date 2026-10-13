@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/frame_sync.h"
 #include "vml/hardware_decoding.h"
 #include "vml/video.h"
 
@@ -233,6 +234,12 @@ public:
     // Gives a slot back to the decoder once its picture has been copied.
     void release(int slot);
 
+    // The time base of the pictures' timestamps, once FFmpeg has reported it
+    // (before the first packet), for pairing by timestamp. Waits up to a
+    // minute. Throws GpuDecodeFailedError when FFmpeg gave none, and
+    // Cancelled.
+    Rational time_base(const CancelToken& cancel);
+
     // Copies the slot's picture, planes packed, to `host` (frame_bytes()
     // of the plan long).
     void download(int slot, void* host);
@@ -294,7 +301,9 @@ void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth);
 // `duration_limit` (-t's text) keeps frames at the test video's rate.
 // `score` is called with each pair's slots (the test video's, then the
 // source's), which are given back to the decoders once it returns. Progress
-// goes to `on_progress` every quarter of a second.
+// goes to `on_progress` every quarter of a second. When frames are paired by
+// timestamp (by_timestamp), frame_sync_by_time.h's score_timed_pairs pairs
+// them instead.
 void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const VideoInfo& distorted,
                        const std::optional<std::string>& duration_limit, long long total_frames,
                        const std::function<void(int, int)>& score,

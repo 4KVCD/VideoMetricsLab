@@ -400,33 +400,28 @@ std::vector<std::string> default_metrics(const Settings& settings) {
 // nothing.
 std::optional<std::string> not_yet(const CompareArguments& arguments, const Settings& settings,
                                    const std::vector<std::string>& asked) {
-    // Vship's metrics that would be calculated: CVVDP is left out, with a
-    // note, where it cannot be (compare's preparation).
+    // SSIMULACRA2 and Butteraugli on the GPU only, so far: the Python app
+    // calculates them on the CPU when they are set to it, and where no GPU
+    // can. (CVVDP runs on the GPU only, and is left out with a note where it
+    // cannot be calculated: compare's preparation.)
     std::vector<std::string> perceptual;
     for (const std::string& key : asked) {
-        if (key == "ssimulacra2" || key == "butteraugli" ||
-            (key == "cvvdp" && arguments.subsample <= 1 && detect_vship_device().first)) {
+        if (key == "ssimulacra2" || key == "butteraugli") {
             perceptual.push_back(key);
         }
     }
     if (!perceptual.empty()) {
-        // SSIMULACRA2 and Butteraugli on the GPU only, so far: the Python app
-        // calculates them on the CPU when they are set to it, and where no
-        // GPU can.
         const PerceptualBackends backends = perceptual_backends(arguments, settings);
         std::string labels;
         std::string on_cpu;
         for (const std::string& key : perceptual) {
             labels += (labels.empty() ? "" : " and ") + std::string(metric_definition(key).label);
-            if (key != "cvvdp" && backends.at(key) == "cpu") {
+            if (backends.at(key) == "cpu") {
                 on_cpu += (on_cpu.empty() ? "" : " and ") + std::string(metric_definition(key).label);
             }
         }
         if (!on_cpu.empty()) {
             return on_cpu + " on the CPU";
-        }
-        if (by_timestamp()) {
-            return labels + " with frames paired by timestamp (VML_FRAME_PAIRING)";
         }
         if (const auto [device, reason] = detect_vship_device(); !device) {
             return labels + " on the CPU, where no GPU can calculate them (" + reason + ")";
@@ -456,9 +451,6 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
     // itself whatever VML_VMAF_PIPES says.
     if (std::none_of(tasks.begin(), tasks.end(), [](const MetricTask& task) { return task.backend == gpu_vmaf_task; })) {
         return std::nullopt;
-    }
-    if (by_timestamp()) {
-        return "VMAF on the GPU with frames paired by timestamp (VML_FRAME_PAIRING)";
     }
     if (ascii_lower(platform::environment_variable("VML_VMAF_PIPES").value_or("")) == "canvas") {
         return "VMAF on the GPU with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)";
