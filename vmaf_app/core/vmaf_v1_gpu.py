@@ -440,7 +440,12 @@ class V1Scorer:
             if self._cpu_features:
                 workers = threads if threads is not None else max(2, min(16, (os.cpu_count() or 4) - 2))
                 configuration = libvmaf.Configuration(libvmaf.LOG_LEVEL_ERROR, workers, 1, 0, 0)
-                libvmaf.check(lib.vmaf_init(ctypes.byref(self._cpu), configuration), "Starting libvmaf")
+                # Kept only once started: when vmaf_init fails, it has freed
+                # the context it made but left the pointer to it set, which
+                # close() would free a second time.
+                context = ctypes.c_void_p()
+                libvmaf.check(lib.vmaf_init(ctypes.byref(context), configuration), "Starting libvmaf")
+                self._cpu = context
                 _use_cpu_features(lib, self._cpu, options, self._on_gpu)
                 pictures = libvmaf.PictureConfiguration(
                     libvmaf.PictureParameters(width, height, bit_depth, libvmaf.PIX_FMT_YUV420P),

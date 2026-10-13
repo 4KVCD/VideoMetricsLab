@@ -97,6 +97,38 @@ def test_the_self_test_frames_are_the_same_bytes_everywhere():
         assert len({hashlib.sha256(bytes(frame)).digest() for frame in reference + distorted}) == 8
 
 
+def test_a_libvmaf_that_failed_to_start_is_not_closed(monkeypatch):
+    """When vmaf_init fails, libvmaf has freed the context it made but left
+    the pointer to it set: closing it would free it a second time. With
+    stand-ins for libvmaf and the Vulkan engine, so no GPU is needed."""
+    closed = []
+
+    class Engine:
+        def vv_create_v1(self, gpu, *_arguments):
+            gpu._obj.value = 0x1000
+            return 0
+
+        def vv_destroy(self, _gpu):
+            pass
+
+    class Libvmaf:
+        def vmaf_init(self, context, _configuration):
+            context._obj.value = 0x2000  # made, then freed by the failure
+            return -12  # -ENOMEM: a thread pool, say, could not be made
+
+        def vmaf_close(self, context):
+            closed.append(context.value)
+
+    monkeypatch.setattr(vmaf_v1_gpu, "_vulkan", Engine)
+    monkeypatch.setattr(vmaf_v1_gpu, "_libvmaf", Libvmaf)
+    # The names libvmaf gives the features, found once per model by running
+    # it, which the stand-in cannot.
+    monkeypatch.setitem(vmaf_v1_gpu._NAMES, str(STANDARD.resolve()), ({}, {}))
+    with pytest.raises(libvmaf.LibvmafError, match="Starting libvmaf"):
+        vmaf_v1_gpu.V1Scorer(1920, 1080, 8, STANDARD, device=0)
+    assert closed == []
+
+
 # ------------------------------------------------------- on a PC with a GPU
 
 def _usable_devices():
