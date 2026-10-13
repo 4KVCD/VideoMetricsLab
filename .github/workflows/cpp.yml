@@ -22,7 +22,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: Windows (MSVC), os: windows-latest, configure: windows, build: windows-release }
+          # Visual Studio 2022: the compiler Qt 6.12 supports on Windows, and the
+          # windows preset's (newer runner images have only Visual Studio 2026).
+          - { name: Windows (MSVC 2022), os: windows-2022, configure: windows, build: windows-release }
           - { name: Linux (GCC 11), os: ubuntu-22.04, configure: linux, build: linux-release }
           - { name: Linux (GCC 13), os: ubuntu-24.04, configure: linux, build: linux-release }
           - { name: Linux sanitizers, os: ubuntu-24.04, configure: linux-sanitizers, build: linux-sanitizers-debug }

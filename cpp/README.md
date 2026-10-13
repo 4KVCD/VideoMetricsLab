@@ -44,7 +44,7 @@ iterator, so run them too; on Linux, the sanitizer preset does that job.
 
 | System | Needs | Commands (from `cpp`) |
 | --- | --- | --- |
-| Windows | Visual Studio 2022 or its Build Tools, CMake 3.25+ | `cmake --preset windows`, `cmake --build --preset windows-release`, `ctest --preset windows-release` |
+| Windows | Visual Studio 2022 or its Build Tools (the compiler Qt 6.12 supports), CMake 3.25+ | `cmake --preset windows`, `cmake --build --preset windows-release`, `ctest --preset windows-release` |
 | Linux | GCC 11+, CMake 3.25+, Ninja | the same with `linux` and `linux-release`; `linux-sanitizers` and `linux-sanitizers-debug` add AddressSanitizer and UndefinedBehaviorSanitizer |
 | macOS | Xcode 15+, CMake 3.25+, Ninja | the same with `macos` and `macos-release` |
 
