@@ -789,13 +789,14 @@ double butteraugli_norm3(const std::filesystem::path& distortion_map) {
         size.push_back(lines[1].substr(word, word_end - word));
         at = word_end;
     }
-    const std::optional<long long> width = size.size() == 2 ? python_int(size[0]) : std::nullopt;
-    const std::optional<long long> height = size.size() == 2 ? python_int(size[1]) : std::nullopt;
+    // -1 for a size that is not a whole number.
+    const long long width = size.size() == 2 ? python_int(size[0]).value_or(-1) : -1;
+    const long long height = size.size() == 2 ? python_int(size[1]).value_or(-1) : -1;
     const std::optional<double> scale = python_float(lines[2]);
-    if (!width || !height || !scale || *width < 0 || *height < 0 || *width > (1LL << 20) || *height > (1LL << 20)) {
+    if (!scale || width < 0 || height < 0 || width > (1LL << 20) || height > (1LL << 20)) {
         throw std::runtime_error("the distortion map's header is not a PFM's");
     }
-    const auto count = static_cast<std::size_t>(*width * *height);
+    const auto count = static_cast<std::size_t>(width * height);
     const std::string_view values = std::string_view(data).substr(start);
     if (values.size() < count * 4) {
         throw std::runtime_error("the distortion map is cut short");
