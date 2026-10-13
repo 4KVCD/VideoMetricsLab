@@ -1,7 +1,8 @@
 // Comparing two videos: with FFmpeg's own metric filters, libvmaf (VMAF
 // v0.6.1, NEG and v1, PSNR, SSIM) and xpsnr, on the CPU; or with VMAF and
-// NEG scored on the GPU by the Vulkan engine from FFmpeg's frames
-// (gpu_vmaf.h), and FFmpeg's filters taking over if that fails. A port of
+// NEG scored on the GPU by the Vulkan engine (gpu_vmaf.h), from frames the
+// app decodes itself (gpu_frames.h) or FFmpeg's, and FFmpeg's filters
+// taking over if that fails. A port of
 // vmaf_app/core/vmaf_runner.py: the same checks, the same filter graphs and
 // commands, the same fallback from GPU decoding, and the same reading of
 // the logs.
@@ -65,6 +66,7 @@ inline constexpr std::string_view vmaf_gpu_failed = "VMAF on the GPU failed";
 struct RunEnvironment {
     std::string ffmpeg;          // the program
     std::string ffmpeg_version;  // "9.0.1", or "unknown"
+    std::string ffprobe;         // the program, which reads a stream's configuration for the app's decoders
     DecodingCapabilities decoding;
     unsigned cores = 1;          // libvmaf's threads for "Auto"
 };

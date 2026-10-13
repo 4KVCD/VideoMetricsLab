@@ -13,11 +13,14 @@
 // end of output that never comes.
 #include "vml/platform/process.h"
 
+#include <algorithm>
 #include <condition_variable>
+#include <cstring>
 #include <mutex>
 #include <thread>
 #include <utility>
 
+#include "error_lines.h"
 #include "text_windows.h"
 
 namespace vml::platform {
@@ -98,11 +101,12 @@ struct Pipe {
     Handle write;
 };
 
-Pipe make_pipe() {
+// `bytes` is how much it holds; 0 is the system's size.
+Pipe make_pipe(std::size_t bytes = 0) {
     SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     HANDLE read = nullptr;
     HANDLE write = nullptr;
-    if (!CreatePipe(&read, &write, &inheritable, 0)) {
+    if (!CreatePipe(&read, &write, &inheritable, static_cast<DWORD>(std::min<std::size_t>(bytes, 1u << 30)))) {
         fail("a pipe could not be made");
     }
     Pipe pipe{Handle(read), Handle(write)};
@@ -157,7 +161,7 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     if (arguments.empty()) {
         throw ProcessError("no program to start");
     }
-    Pipe output = make_pipe();
+    Pipe output = make_pipe(options.output_pipe_bytes);
     Pipe error = make_pipe();
     SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     Handle input(CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &inheritable, OPEN_EXISTING,
@@ -214,13 +218,16 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     output.write.reset();
     error.write.reset();
     state->output = std::move(output.read);
-    state->error_reader = std::thread([raw = state.get(), pipe = std::move(error.read)]() {
+    state->error_reader = std::thread([raw = state.get(), pipe = std::move(error.read),
+                                       lines = ErrorLines(options.on_error_line)]() mutable {
         char buffer[4096];
         DWORD count = 0;
         while (ReadFile(pipe.get(), buffer, sizeof buffer, &count, nullptr) && count > 0) {
+            lines.add(std::string_view(buffer, count));
             const std::lock_guard lock(raw->error_mutex);
             keep_error_tail(raw->error_text, std::string_view(buffer, count));
         }
+        lines.finish();
         const std::lock_guard lock(raw->error_mutex);
         raw->error_ended = true;
         raw->error_ended_signal.notify_all();
@@ -258,6 +265,28 @@ std::optional<std::string> ChildProcess::read_line() {
             state_->output_ended = true;
         }
     }
+}
+
+std::size_t ChildProcess::read(void* into, std::size_t bytes) {
+    if (bytes == 0) {
+        return 0;
+    }
+    if (!state_->unread.empty()) {  // what read_line read ahead
+        const std::size_t count = std::min(bytes, state_->unread.size());
+        std::memcpy(into, state_->unread.data(), count);
+        state_->unread.erase(0, count);
+        return count;
+    }
+    if (state_->output_ended) {
+        return 0;
+    }
+    DWORD count = 0;
+    const DWORD wanted = static_cast<DWORD>(std::min<std::size_t>(bytes, 1u << 30));
+    if (ReadFile(state_->output.get(), into, wanted, &count, nullptr) && count > 0) {
+        return count;
+    }
+    state_->output_ended = true;
+    return 0;
 }
 
 int ChildProcess::wait() {

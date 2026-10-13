@@ -1,14 +1,15 @@
 // VMAF and VMAF NEG on the GPU: which runs score them there, the check of
-// the GPU, and the frames' way from FFmpeg to the Vulkan scorer. A port of
-// the parts of vmaf_app/core/vmaf_gpu.py the C++ app has so far: the Vulkan
-// backend, fed by one FFmpeg per video whose frames the app pairs itself,
-// frame N with frame N. Not yet: libvmaf's CUDA code, VMAF v1 on the GPU,
-// the videos decoded in the app, frames paired by timestamp
-// (VML_FRAME_PAIRING) and FFmpeg pairing them (VML_VMAF_PIPES=canvas).
+// the GPU, and the frames' way to the Vulkan scorer, from one FFmpeg per
+// video or from the app's own decoders, paired frame N with frame N. A port
+// of the parts of vmaf_app/core/vmaf_gpu.py and vmaf_vulkan.py the C++ app
+// has so far. Not yet: libvmaf's CUDA code, VMAF v1 on the GPU, frames
+// paired by timestamp (VML_FRAME_PAIRING) and FFmpeg pairing them
+// (VML_VMAF_PIPES=canvas).
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -17,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include "vml/cancel.h"
+#include "vml/video.h"
 #include "vml/vmaf_vulkan.h"
 
 namespace vml {
@@ -156,5 +159,26 @@ private:
     struct State;
     std::unique_ptr<State> state_;
 };
+
+// VMAF and NEG with both videos decoded in this process (gpu_frames.h)
+// instead of by FFmpeg: the frames GpuAttempt's FFmpegs would give, cropped,
+// scaled and widened by the decoders, and paired frame N with frame N as
+// far as `duration_limit` (-t's text, or nothing) keeps them. `decoders`
+// are the source's and the test video's (decoders_here); `ffmpeg` copies
+// their packets out of their containers. With NVIDIA's decoder for both,
+// each luma plane stays on the GPU, copied into the memory the engine reads
+// it from; otherwise the decoder writes it into the memory the engine
+// copies to the GPU. Throws GpuDecodeUnavailableError before the first
+// picture when the app cannot decode a video, GpuDecodeFailedError after
+// it, VmafVulkanError, and Cancelled.
+VulkanScorer::Scores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
+                                   const std::optional<CropBox>& source_crop,
+                                   const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
+                                   int n_subsample, const std::optional<std::string>& duration_limit,
+                                   long long total_frames, const std::string& scale_algorithm,
+                                   const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
+                                   const std::string& ffprobe,
+                                   const std::function<void(long long, long long, double)>& on_progress,
+                                   const CancelToken& cancel);
 
 }  // namespace vml

@@ -12,12 +12,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <condition_variable>
 #include <cstring>
 #include <mutex>
 #include <thread>
 #include <utility>
+
+#include "error_lines.h"
 
 extern char** environ;
 
@@ -137,6 +140,12 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     }
     Pipe output = make_pipe();
     Pipe error = make_pipe();
+#ifdef F_SETPIPE_SZ
+    if (options.output_pipe_bytes > 0) {  // Linux: asked for; a size past the system's limit is refused
+        const std::size_t bytes = std::min<std::size_t>(options.output_pipe_bytes, 1u << 30);
+        fcntl(output.write.get(), F_SETPIPE_SZ, static_cast<int>(bytes));
+    }
+#endif
 
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
@@ -172,15 +181,19 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     output.write.reset();
     error.write.reset();
     state->output = std::move(output.read);
-    state->error_reader = std::thread([raw = state.get(), pipe = std::move(error.read)]() {
+    state->error_reader = std::thread([raw = state.get(), pipe = std::move(error.read),
+                                       lines = ErrorLines(options.on_error_line)]() mutable {
         char buffer[4096];
         ssize_t count = 0;
-        while ((count = read(pipe.get(), buffer, sizeof buffer)) > 0 || (count < 0 && errno == EINTR)) {
+        while ((count = ::read(pipe.get(), buffer, sizeof buffer)) > 0 || (count < 0 && errno == EINTR)) {
             if (count > 0) {
+                const std::string_view written(buffer, static_cast<std::size_t>(count));
+                lines.add(written);
                 const std::lock_guard lock(raw->error_mutex);
-                keep_error_tail(raw->error_text, std::string_view(buffer, static_cast<std::size_t>(count)));
+                keep_error_tail(raw->error_text, written);
             }
         }
+        lines.finish();
         const std::lock_guard lock(raw->error_mutex);
         raw->error_ended = true;
         raw->error_ended_signal.notify_all();
@@ -211,13 +224,35 @@ std::optional<std::string> ChildProcess::read_line() {
             return std::exchange(state_->unread, std::string());
         }
         char buffer[4096];
-        const ssize_t count = read(state_->output.get(), buffer, sizeof buffer);
+        const ssize_t count = ::read(state_->output.get(), buffer, sizeof buffer);
         if (count > 0) {
             state_->unread.append(buffer, static_cast<std::size_t>(count));
         } else if (count == 0 || errno != EINTR) {
             state_->output_ended = true;
         }
     }
+}
+
+std::size_t ChildProcess::read(void* into, std::size_t bytes) {
+    if (bytes == 0) {
+        return 0;
+    }
+    if (!state_->unread.empty()) {  // what read_line read ahead
+        const std::size_t count = std::min(bytes, state_->unread.size());
+        std::memcpy(into, state_->unread.data(), count);
+        state_->unread.erase(0, count);
+        return count;
+    }
+    while (!state_->output_ended) {
+        const ssize_t count = ::read(state_->output.get(), into, bytes);
+        if (count > 0) {
+            return static_cast<std::size_t>(count);
+        }
+        if (count == 0 || errno != EINTR) {
+            state_->output_ended = true;
+        }
+    }
+    return 0;
 }
 
 int ChildProcess::wait() {

@@ -130,6 +130,17 @@ void crash_quietly() {
 #endif
 }
 
+void end_process_now(int exit_code) {
+    TerminateProcess(GetCurrentProcess(), static_cast<UINT>(exit_code));
+    std::_Exit(exit_code);  // not reached
+}
+
+void close_native_handle(void* handle) {
+    if (handle != nullptr) {
+        CloseHandle(handle);
+    }
+}
+
 std::filesystem::path executable_path() {
     std::wstring path(MAX_PATH, L'\0');
     while (true) {

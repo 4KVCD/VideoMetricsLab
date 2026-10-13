@@ -817,7 +817,7 @@ int compare(const CompareArguments& arguments) {
         // video may be decoded on the GPU.
         const bool gpu_decode =
             std::any_of(jobs.begin(), jobs.end(), [](const Job& job) { return job.options.gpu_decode; });
-        const RunEnvironment environment{tools.ffmpeg.path, format_version(tools.ffmpeg.version),
+        const RunEnvironment environment{tools.ffmpeg.path, format_version(tools.ffmpeg.version), tools.ffprobe.path,
                                          gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path)
                                                     : DecodingCapabilities{},
                                          platform::logical_cores()};

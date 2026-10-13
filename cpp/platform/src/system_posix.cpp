@@ -75,6 +75,10 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
 
 void crash_quietly() {}  // a crash shows no dialog here
 
+void end_process_now(int exit_code) { _exit(exit_code); }
+
+void close_native_handle(void* handle) { close(static_cast<int>(reinterpret_cast<std::intptr_t>(handle))); }
+
 std::filesystem::path executable_path() {
 #ifdef __APPLE__
     std::uint32_t size = 0;

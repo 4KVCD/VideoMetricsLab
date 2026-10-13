@@ -28,18 +28,17 @@ on every such GPU.
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (21 runs covering the ways the app
+other: it runs the cases in `cases.json` (24 runs covering the ways the app
 scores videos) with either app, each with a fresh profile, and compares the
 exit codes, the tables, the per-frame CSV files character for character, and
 the JSON results. The clips are 2-second cuts of real test videos
 (`clips.json`; `golden.py clips` makes them, outside the repository). Two
 runs of the Python app on this PC give identical results in every case, the
 GPU metrics included, so the C++ app is held to identical results here too.
-One difference is the Python app's by design: a video it decodes itself and
-scales is not exactly what FFmpeg's scale filter gives (gpu_frames.py's
-plan_decode). Until the C++ app decodes videos itself, its runs that scale
-for VMAF on the GPU match the Python app's FFmpeg route, which the
-`...-by-ffmpeg` case asks both apps for.
+A video the app decodes itself and scales is, by the Python app's design,
+not exactly what FFmpeg's scale filter gives (gpu_frames.py's plan_decode);
+both apps scale it the same way, and the `...-by-ffmpeg` case holds them to
+each other on FFmpeg's route too.
 
     python cpp\tests\golden\golden.py run --out python-run
     python cpp\tests\golden\golden.py run --out cpp-run --app path\to\vml-cli.exe
@@ -57,23 +56,31 @@ for VMAF on the GPU match the Python app's FFmpeg route, which the
 | `tests/golden` | The comparison of the two apps' command lines on real videos. |
 | `third_party` | Vendored libraries: see its README. |
 
-The decoders, the presenters and the window join as they are ported.
+The presenters and the window join as they are ported.
 
 ## The command line
 
 `vml-cli` takes the Python app's commands and options (`vml-cli compare
 --help`), and reads them as its argparse parser does. So far it compares on
 the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
-PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`), and scores
-VMAF and NEG on the GPU with Vulkan, the app's default, each video decoded
-by an FFmpeg of its own. The GPU's work runs in a process of its own (the
-program again, with `--vml-isolated`), so that a crash in the GPU's driver
-ends that process and the CPU calculates VMAF instead, as in the Python
-app. For a run it cannot do yet (VMAF v1 or PSNR, SSIM
-and XPSNR with VMAF on the GPU, libvmaf's CUDA code, the perceptual
-metrics), it says what it cannot do and exits with code 2, rather than
-giving other answers than the Python app. It neither reads nor saves the
-app's saved scores yet, and calculates every score.
+PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`), and scores VMAF
+and NEG on the GPU with Vulkan, the app's default. For that it decodes the
+videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
+Intel's or AMD's, through the app's libraries in `vmaf_app/native`), or with
+FFmpeg's decoders built into the app for a video FFmpeg would decode in
+software; FFmpeg only copies the compressed stream out of its container. A
+video it cannot decode is decoded by an FFmpeg of its own. (The Python app
+takes dav1d, the software decoder's AV1 decoder, from its bundled GStreamer;
+the C++ app looks for it beside FFmpeg's libraries in `vmaf_app/tools/ffmpeg`,
+where a development build has none, so an AV1 video FFmpeg would decode in
+software is decoded by FFmpeg.) The GPU's work runs in a process of its own
+(the program again, with `--vml-isolated`), so that a crash in the GPU's
+driver ends that process and the CPU calculates VMAF instead, as in the Python
+app. For a run it cannot do yet (VMAF v1 or PSNR, SSIM and XPSNR with VMAF on
+the GPU, libvmaf's CUDA code, the perceptual metrics), it says what it cannot
+do and exits with code 2, rather than giving other answers than the Python
+app. It neither reads nor saves the app's saved scores yet, and calculates
+every score.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu

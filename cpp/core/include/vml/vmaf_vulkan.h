@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -43,6 +44,8 @@ struct VulkanDevice {
 // The engine's state for one comparison; only the engine knows its layout.
 struct VulkanContext;
 
+class GpuFrameStream;  // gpu_frames.h
+
 // The bundled engine and the functions of it the app calls. The engine has
 // no header: these are its functions as fast/vulkan/vmaf_vulkan.cpp
 // defines them.
@@ -60,6 +63,16 @@ struct VulkanEngine {
     int (*flush)(VulkanContext* context);
     int (*features)(VulkanContext* context, unsigned index, double* out);
     int (*sums)(VulkanContext* context, unsigned index, std::uint64_t* out, int count);
+    // The memory to write the next pair's luma planes to, rows `stride`
+    // bytes apart, and the call that scores them once they are written:
+    // submit without its copy.
+    int (*staging)(VulkanContext* context, std::uint8_t** reference, std::uint8_t** distorted, std::uint32_t* stride);
+    int (*commit)(VulkanContext* context, int score);
+    // For a context whose frames come from GPU memory: each slot's buffer,
+    // exported for a decoder on the same GPU to import, and where the next
+    // pair's planes go in it.
+    int (*export_memory)(VulkanContext* context, int slot, void** handle, std::uint64_t* bytes);
+    int (*shared_next)(VulkanContext* context, int* slot, std::uint32_t* stride, std::uint32_t* distorted_offset);
 };
 
 // Where the bundled engine is.
@@ -94,15 +107,20 @@ struct VulkanFeatures {
 // Calculates VMAF's features with Vulkan for frame pairs given in order:
 // 4:2:0 frames with luma and chroma planes, packed as FFmpeg's rawvideo
 // writes them, at `bit_depth` bits (16-bit little-endian samples above 8
-// bits). Only the luma is used, as in VMAF.
+// bits). Only the luma is used, as in VMAF. Frames a decoder in this
+// process writes itself go straight into the engine's memory instead
+// (add_decoded), or, from NVIDIA's decoder, stay on the GPU (add_shared).
 class VulkanScorer {
 public:
     // `models` are libvmaf models to score, each a name and the version of
     // a model libvmaf has built in ({"vmaf", "vmaf_v0.6.1"}). Every
     // `n_subsample`th frame is scored. `device` is Vulkan's number for the
-    // GPU; nothing picks best_vulkan_device(). Throws VmafVulkanError.
+    // GPU; nothing picks best_vulkan_device(). With `shared`, the frames
+    // come from GPU memory that decoder imports and writes (add_shared).
+    // Throws VmafVulkanError, also when the decoder and Vulkan cannot share
+    // memory (another GPU, an old driver).
     VulkanScorer(int width, int height, int bit_depth, std::vector<std::pair<std::string, std::string>> models,
-                 int n_subsample = 1, std::optional<int> device = std::nullopt);
+                 int n_subsample = 1, std::optional<int> device = std::nullopt, GpuFrameStream* shared = nullptr);
     ~VulkanScorer();
     VulkanScorer(const VulkanScorer&) = delete;
     VulkanScorer& operator=(const VulkanScorer&) = delete;
@@ -113,6 +131,20 @@ public:
     // Scores one more pair. Its frame number is the number of pairs given
     // before it.
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted);
+
+    // Scores one more pair that a decoder writes in itself: `reference` and
+    // `distorted` are each called with the address to write a luma plane to,
+    // its rows packed, and return once it is written. A frame that is not
+    // scored (n_subsample) needs only the source's plane, for motion.
+    void add_decoded(const std::function<void(std::uint8_t*)>& reference,
+                     const std::function<void(std::uint8_t*)>& distorted);
+
+    // Scores one more pair that the decoder given as `shared` copies on the
+    // GPU: `reference` and `distorted` are each called with the GPU address
+    // to copy a luma plane to and the bytes from one row to the next, and
+    // return once the plane is there.
+    void add_shared(const std::function<void(std::uint64_t, std::int64_t)>& reference,
+                    const std::function<void(std::uint64_t, std::int64_t)>& distorted);
 
     // The frames scored and their features. Call it once every frame has
     // been given.
@@ -133,6 +165,8 @@ public:
 
 private:
     void check(int error, const std::string& what) const;
+    // Gives the decoder's imports back and the engine's context.
+    void release();
 
     const VulkanEngine& engine_;
     std::vector<std::pair<std::string, std::string>> models_;
@@ -142,6 +176,13 @@ private:
     std::ptrdiff_t luma_stride_ = 0;
     std::size_t luma_bytes_ = 0;
     std::size_t frame_bytes_ = 0;
+    // With frames from GPU memory: the decoder, and each slot's memory as it
+    // imported it (its address there, and what it takes to give it back).
+    GpuFrameStream* shared_ = nullptr;
+    std::vector<std::pair<std::uint64_t, void*>> imports_;
+    // add_decoded's plane, written packed for a width whose rows the engine
+    // pads.
+    std::vector<std::uint8_t> packed_;
 };
 
 // The probe's frame pairs (reference frames, distorted frames): flat,

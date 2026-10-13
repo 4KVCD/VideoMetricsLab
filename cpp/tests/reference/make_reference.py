@@ -4,8 +4,9 @@ its statistics (vmaf_app/core/stats.py), its metric registry
 ffprobe's output (ffprobe.py), of settings.json (settings.py) and of
 FFmpeg's version (ffmpeg_locate.py), a run's decisions (gpu.py,
 frame_sync.py, geometry.py, model_select.py), FFmpeg's commands for a run
-(vmaf_runner.py, vmaf_gpu.py) and the reading of its logs, VMAF predicted
-from features by the bundled libvmaf and scored with the Vulkan engine
+(vmaf_runner.py, vmaf_gpu.py) and the reading of its logs, the decoding of
+videos in the app (gpu_frames.py, vmaf_runner.py), VMAF predicted from
+features by the bundled libvmaf and scored with the Vulkan engine
 (vmaf_vulkan.py), its command line's reading of arguments and patterns
 (cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
 that Vulkan scores VMAF on.
@@ -915,7 +916,96 @@ def vulkan_cases() -> dict:
     return {"probe_sums": list(vmaf_vulkan._PROBE_SUMS), "cases": cases}
 
 
+def decoding_cases() -> dict:
+    """How the app plans to decode a video itself (gpu_frames.plan_decode),
+    over sizes, crops, depths and codecs, and what it leaves to FFmpeg;
+    FFmpeg's command that copies a video's packets out of its container for
+    the decoders (gpu_frames._PacketReader), its program, video and
+    listing's pipe written as <ffmpeg>, <video> and <listing>; and the
+    decoders the videos of a run are decoded with (vmaf_runner._decoders_here),
+    with VML_SOFTWARE_DECODE unset and set to ffmpeg."""
+    from vmaf_app.core import gpu_frames, vmaf_runner
+    from vmaf_app.core.gpu import HwAccelPlan
+    from vmaf_app.core.models import CropBox, VideoInfo
+
+    def video(**fields) -> VideoInfo:
+        base = {"path": Path("video.mkv"), "width": 1920, "height": 1080, "fps": 24.0, "duration": 10.0,
+                "nb_frames": 240, "codec_name": "hevc", "pix_fmt": "yuv420p10le"}
+        base.update(fields)
+        return VideoInfo(**base)
+
+    plans = []
+    for name, info, crop, options in (
+            ("whole", video(), None, {}),
+            ("a crop rounded as FFmpeg's crop filter rounds it", video(), CropBox(1917, 1077, 3, 1), {}),
+            ("a crop that keeps the whole picture", video(), CropBox(1920, 1080, 0, 0), {}),
+            ("a letterbox scaled, luma only", video(width=3840, height=2160), CropBox(3840, 1608, 0, 276),
+             {"shift": 6, "luma_only": True, "size": (1920, 804), "algorithm": "lanczos"}),
+            ("8-bit, with no shift", video(codec_name="h264", pix_fmt="yuv420p"), None, {"shift": 6}),
+            ("full range, codec in capitals", video(codec_name="H264", pix_fmt="yuvj420p"), None, {}),
+            ("10-bit big-endian", video(codec_name="av1", pix_fmt="yuv420p10be"), None, {"shift": 6}),
+            ("an algorithm the decoders do not have", video(codec_name="vvc"), None,
+             {"size": (1280, 720), "algorithm": "area"}),
+            ("scaled up, odd size", video(codec_name="mpeg2video", pix_fmt="yuv420p", width=720, height=576), None,
+             {"size": (1023, 767), "algorithm": "spline"}),
+            ("ffv1, bilinear", video(codec_name="ffv1", pix_fmt="yuv420p"), None, {"algorithm": "bilinear"}),
+            ("another codec", video(codec_name="mpeg4"), None, {}),
+            ("no codec", video(codec_name=""), None, {}),
+            ("4:2:2", video(pix_fmt="yuv422p10le"), None, {}),
+            ("12-bit", video(pix_fmt="yuv420p12le"), None, {}),
+            ("no pixel format", video(pix_fmt=""), None, {}),
+            ("no size", video(width=0), None, {}),
+            ("an odd width", video(width=1919), None, {}),
+            ("an odd height", video(height=1079), None, {}),
+            ("a crop past the picture", video(), CropBox(1920, 1080, 2, 0), {}),
+            ("a crop one column wide", video(), CropBox(1, 1080, 0, 0), {}),
+            ("scaled to nothing", video(), None, {"size": (0, 720)})):
+        made = {"name": name, "codec_name": info.codec_name, "pix_fmt": info.pix_fmt, "width": info.width,
+                "height": info.height, "crop": None if crop is None else [crop.w, crop.h, crop.x, crop.y],
+                "shift": options.get("shift", 0), "luma_only": options.get("luma_only", False),
+                "size": list(options["size"]) if "size" in options else None,
+                "algorithm": options.get("algorithm", "bicubic")}
+        try:
+            plan = gpu_frames.plan_decode(info, crop, **options)
+            made["plan"] = {"codec": plan.codec, "bit_depth": plan.bit_depth, "width": plan.width,
+                            "height": plan.height, "crop": [plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h],
+                            "shift": plan.shift, "luma_only": plan.luma_only, "out": [plan.out_w, plan.out_h],
+                            "scaler": plan.scaler, "scaled": plan.scaled, "frame_bytes": plan.frame_bytes}
+        except gpu_frames.GpuDecodeUnavailableError as error:
+            made["error"] = str(error)
+        plans.append(made)
+
+    commands = {}
+    for codec in gpu_frames._CODECS:
+        reader = gpu_frames._PacketReader(Path("video.mkv"), codec)
+        try:
+            command = list(reader.command)
+        finally:
+            reader.close()
+        command[0] = "<ffmpeg>"
+        commands[codec] = ["<video>" if part == str(Path("video.mkv").resolve()) else
+                           "<listing>" if part == reader.pipe_path else part for part in command]
+
+    decoders = []
+    real_software = os.environ.pop(gpu_frames.SOFTWARE_VARIABLE, None)
+    try:
+        for software in ("", "ffmpeg"):
+            os.environ[gpu_frames.SOFTWARE_VARIABLE] = software
+            bundled = gpu_frames.software_bundled()
+            for source in (None, "cuda", "qsv", "d3d11va", "vulkan"):
+                for test in (None, "cuda", "qsv", "d3d11va"):
+                    here = vmaf_runner._decoders_here(HwAccelPlan(source, test))
+                    decoders.append({"software_decode": software, "bundled": bundled, "source": source,
+                                     "test": test, "decoders": None if here is None else list(here)})
+    finally:
+        os.environ.pop(gpu_frames.SOFTWARE_VARIABLE, None)
+        if real_software is not None:
+            os.environ[gpu_frames.SOFTWARE_VARIABLE] = real_software
+    return {"plans": plans, "packet_commands": commands, "decoders": decoders}
+
+
 if __name__ == "__main__":
+    write("decoding.json", decoding_cases())
     write("vulkan.json", vulkan_cases())
     write("predict.json", predict_cases())
     write("python_json.json", json_cases())

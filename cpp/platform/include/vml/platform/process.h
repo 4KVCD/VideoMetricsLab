@@ -9,7 +9,9 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -43,6 +45,15 @@ std::string error_tail(const std::string& kept);
 struct ProcessOptions {
     // The folder the program runs in; empty is ours.
     std::filesystem::path working_directory;
+    // How much the pipe of the program's standard output holds before the
+    // program waits for this process to read it; 0 is the system's size.
+    // On Linux it is asked for and may be cut to the system's limit; macOS
+    // keeps its own size.
+    std::size_t output_pipe_bytes = 0;
+    // Called with each line of the program's standard error as it comes,
+    // without its line ending, on the thread that reads it. Its end is kept
+    // for standard_error() all the same.
+    std::function<void(std::string_view)> on_error_line = nullptr;
 };
 
 // A program run to its end: its exit code, everything it wrote to standard
@@ -71,6 +82,11 @@ public:
     // The next line of standard output without its line ending, or nothing
     // once the program has closed it.
     std::optional<std::string> read_line();
+
+    // Reads up to `bytes` of standard output into `into`, for a program
+    // that writes data rather than lines: how many were read, 0 once the
+    // program has closed it.
+    std::size_t read(void* into, std::size_t bytes);
 
     // Waits for the program to end, and returns its exit code.
     int wait();

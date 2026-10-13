@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "vml/frame_sync.h"
+#include "vml/gpu_frames.h"
 #include "vml/isolated.h"
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
@@ -34,6 +35,16 @@ constexpr std::size_t read_ahead = 3;
 constexpr std::size_t pipe_bytes = 64 * 1024 * 1024;
 
 constexpr unsigned nvidia = 0x10DE;  // its PCI vendor ID
+
+// ASCII text in lower case, as Python's casefold() makes FFmpeg's names.
+std::string ascii_lower(std::string text) {
+    for (char& c : text) {
+        if (c >= 'A' && c <= 'Z') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+    }
+    return text;
+}
 
 // A queue of frame buffers between two threads. nullptr in it says that no
 // more will come.
@@ -469,6 +480,116 @@ std::optional<VulkanScorer::Scores> GpuAttempt::finish(bool ffmpeg_succeeded) {
         throw LibvmafError("GPU VMAF failed: " + message_of(s.error));
     }
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;
+}
+
+VulkanScorer::Scores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
+                                   const std::optional<CropBox>& source_crop,
+                                   const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
+                                   int n_subsample, const std::optional<std::string>& duration_limit,
+                                   long long total_frames, const std::string& scale_algorithm,
+                                   const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
+                                   const std::string& ffprobe,
+                                   const std::function<void(long long, long long, double)>& on_progress,
+                                   const CancelToken& cancel) {
+    const std::vector<VulkanDevice> found = vulkan_devices();
+    const auto chosen =
+        std::find_if(found.begin(), found.end(), [&](const VulkanDevice& device) { return device.index == plan.device; });
+    if (chosen == found.end()) {
+        throw VmafVulkanError("no GPU that Vulkan can calculate VMAF on");
+    }
+    const auto& [source_backend, test_backend] = decoders;
+    for (const std::string& library : {source_backend, test_backend}) {
+        if (library.empty() || !decoder_available(library)) {
+            throw GpuDecodeUnavailableError("no decoder library for " + chosen->name);
+        }
+    }
+    // Each video's plan, the test video's first: its luma alone, at the size
+    // and depth compared at, 10-bit samples in the low bits as FFmpeg's
+    // yuv420p10le has them.
+    std::vector<DecodePlan> plans;
+    for (const bool test_video : {true, false}) {
+        const VideoInfo& info = test_video ? distorted : source;
+        DecodePlan decoded = plan_decode(info, test_video ? distorted_crop : source_crop, 6, true,
+                                         std::pair(plan.width, plan.height), scale_algorithm);
+        if (decoded.bit_depth < plan.bit_depth) {
+            // Widened as FFmpeg widens it: full-range luma with its top bits
+            // repeated in the bottom ones.
+            const std::string range = ascii_lower(info.color_range);
+            const bool full = range == "pc" || range == "jpeg" || range == "full" ||
+                              (range.empty() && ascii_lower(info.pix_fmt).starts_with("yuvj"));
+            decoded.widen = full ? widen_repeat : widen_shift;
+        }
+        if (decoded.bit_depth > plan.bit_depth) {
+            throw GpuDecodeUnavailableError("the videos are compared at " + std::to_string(plan.bit_depth) +
+                                            " bits and one is " + std::to_string(decoded.bit_depth) + "-bit");
+        }
+        const auto [supported, refusal] = decoder_supports(0, decoded, test_video ? test_backend : source_backend);
+        if (!supported) {
+            throw GpuDecodeUnavailableError(refusal);
+        }
+        plans.push_back(decoded);
+    }
+    // The decoders write each luma plane into memory of the size compared at.
+    const std::size_t luma_bytes = static_cast<std::size_t>(plan.width) * static_cast<std::size_t>(plan.height) *
+                                   (plan.bit_depth > 8 ? 2 : 1);
+    if (std::any_of(plans.begin(), plans.end(), [&](const DecodePlan& p) { return p.frame_bytes() != luma_bytes; })) {
+        throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
+    }
+    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
+    GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);
+    // Declared after the streams so that it goes first: it holds on to the
+    // decoder's memory.
+    std::optional<VulkanScorer> scorer;
+    // The planes stay on the GPU when the decoder and Vulkan share memory,
+    // which needs NVIDIA's decoder for both videos.
+    bool shared = false;
+    if (source_backend == "nvidia" && test_backend == "nvidia") {
+        try {
+            scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
+            shared = true;
+        } catch (const VmafVulkanError&) {
+            // The frames go through system memory instead.
+        }
+    }
+    if (!scorer) {
+        scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device);
+    }
+    test.start();
+    reference.start();
+    const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
+    const auto started = std::chrono::steady_clock::now();
+    auto reported = started;
+    long long count = 0;
+    while (!limit || count < *limit) {
+        const std::optional<GpuFrameStream::Picture> test_picture = test.next(cancel);
+        if (!test_picture) {
+            break;
+        }
+        const std::optional<GpuFrameStream::Picture> reference_picture = reference.next(cancel);
+        if (!reference_picture) {
+            test.release(test_picture->slot);
+            break;
+        }
+        const int test_slot = test_picture->slot, reference_slot = reference_picture->slot;
+        if (shared) {
+            scorer->add_shared(
+                [&](std::uint64_t address, std::int64_t pitch) { reference.copy_luma(reference_slot, address, pitch); },
+                [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); });
+        } else {
+            scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
+                                [&](std::uint8_t* plane) { test.download(test_slot, plane); });
+        }
+        test.release(test_slot);
+        reference.release(reference_slot);
+        ++count;
+        const auto now = std::chrono::steady_clock::now();
+        if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
+            reported = now;
+            const double seconds = std::chrono::duration<double>(now - started).count();
+            on_progress(count, total_frames, static_cast<double>(count) / seconds);
+        }
+    }
+    return scorer->finish();
 }
 
 }  // namespace vml

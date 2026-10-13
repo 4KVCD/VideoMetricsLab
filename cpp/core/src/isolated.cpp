@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "vml/ffmpeg_run.h"
+#include "vml/gpu_frames.h"
 #include "vml/platform/console.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -181,6 +182,7 @@ void send_isolated_message(const nlohmann::json& message) {
 
 int run_isolated_task(std::string_view task, const std::filesystem::path& request_file) {
     platform::crash_quietly();  // its parent reports a crash; no dialog waits for the user
+    int exit_code = 0;
     try {
         std::ifstream file(request_file, std::ios::binary);
         const nlohmann::json request = nlohmann::json::parse(file);
@@ -210,11 +212,17 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             throw std::invalid_argument("there is no task " + std::string(task));
         }
         send_isolated_message({{"result", result}});
-        return 0;
     } catch (const std::exception& error) {
         send_isolated_message({{"error", error.what()}});
-        return 1;
+        exit_code = 1;
     }
+    if (stuck_decoders() > 0) {
+        // A decoder never finished closing, and its thread holds the
+        // driver's locks, which a normal exit, unloading every library in
+        // turn, could wait on forever. What the parent needs has been sent.
+        platform::end_process_now(exit_code);
+    }
+    return exit_code;
 }
 
 }  // namespace vml

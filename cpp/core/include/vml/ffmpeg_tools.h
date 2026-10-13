@@ -2,6 +2,7 @@
 // A port of vmaf_app/core/ffmpeg_locate.py.
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -15,6 +16,11 @@ namespace vml {
 // is not a picture. FFmpeg lists cover art as a video stream too ("v:0"
 // could be the cover); "V" leaves pictures out.
 inline constexpr std::string_view video_stream = "V:0";
+
+// A video's path for FFmpeg's -i: absolute, as Python's Path.resolve()
+// makes it, because FFmpeg may run in a folder of its own (a plain
+// argument, so a Windows path with its drive works).
+std::string input_path(const std::filesystem::path& path);
 
 // The oldest FFmpeg the app's filter graphs work with.
 inline const std::vector<int> minimum_ffmpeg_version{9};

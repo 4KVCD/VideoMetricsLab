@@ -84,6 +84,12 @@ std::string strip(std::string text) {
 
 }  // namespace
 
+std::string input_path(const std::filesystem::path& path) {
+    std::error_code error;
+    const std::filesystem::path resolved = std::filesystem::weakly_canonical(std::filesystem::absolute(path), error);
+    return platform::path_text(error ? std::filesystem::absolute(path) : resolved);
+}
+
 std::string find_tool(std::string_view name, const Settings& settings) {
     const std::string program = platform::executable_name(name);
     if (const std::optional<std::filesystem::path> folder = settings.ffmpeg_dir_path()) {

@@ -49,6 +49,10 @@ public:
 
     const std::filesystem::path& path() const { return path_; }
 
+    // The system's own handle of the library (an HMODULE on Windows), for a
+    // library that is handed another one to use.
+    void* native_handle() const { return handle_; }
+
 private:
     std::filesystem::path path_;
     std::string path_text_;  // for messages

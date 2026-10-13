@@ -23,6 +23,16 @@ std::filesystem::path executable_path();
 // parent reports.
 void crash_quietly();
 
+// Ends this process at once with `exit_code`, without unloading its
+// libraries: for a process one of whose threads may hold a driver's locks
+// forever, which a normal exit could wait on.
+[[noreturn]] void end_process_now(int exit_code);
+
+// Closes a handle a library gave this process to pass on, such as the Vulkan
+// engine's GPU memory exported for a decoder to import: a HANDLE on Windows,
+// a file descriptor elsewhere.
+void close_native_handle(void* handle);
+
 // An environment variable's value, or nothing when it is not set.
 std::optional<std::string> environment_variable(std::string_view name);
 

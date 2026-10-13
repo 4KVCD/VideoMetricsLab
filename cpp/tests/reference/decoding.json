@@ -1,0 +1,1049 @@
+{
+ "plans": [
+  {
+   "name": "whole",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "plan": {
+    "codec": "hevc",
+    "bit_depth": 10,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1920,
+     1080
+    ],
+    "scaler": "bicubic",
+    "scaled": false,
+    "frame_bytes": 6220800
+   }
+  },
+  {
+   "name": "a crop rounded as FFmpeg's crop filter rounds it",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": [
+    1917,
+    1077,
+    3,
+    1
+   ],
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "plan": {
+    "codec": "hevc",
+    "bit_depth": 10,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     2,
+     0,
+     1916,
+     1076
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1916,
+     1076
+    ],
+    "scaler": "bicubic",
+    "scaled": false,
+    "frame_bytes": 6184848
+   }
+  },
+  {
+   "name": "a crop that keeps the whole picture",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": [
+    1920,
+    1080,
+    0,
+    0
+   ],
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "plan": {
+    "codec": "hevc",
+    "bit_depth": 10,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1920,
+     1080
+    ],
+    "scaler": "bicubic",
+    "scaled": false,
+    "frame_bytes": 6220800
+   }
+  },
+  {
+   "name": "a letterbox scaled, luma only",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 3840,
+   "height": 2160,
+   "crop": [
+    3840,
+    1608,
+    0,
+    276
+   ],
+   "shift": 6,
+   "luma_only": true,
+   "size": [
+    1920,
+    804
+   ],
+   "algorithm": "lanczos",
+   "plan": {
+    "codec": "hevc",
+    "bit_depth": 10,
+    "width": 3840,
+    "height": 2160,
+    "crop": [
+     0,
+     276,
+     3840,
+     1608
+    ],
+    "shift": 6,
+    "luma_only": true,
+    "out": [
+     1920,
+     804
+    ],
+    "scaler": "lanczos",
+    "scaled": true,
+    "frame_bytes": 3087360
+   }
+  },
+  {
+   "name": "8-bit, with no shift",
+   "codec_name": "h264",
+   "pix_fmt": "yuv420p",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 6,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "plan": {
+    "codec": "h264",
+    "bit_depth": 8,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1920,
+     1080
+    ],
+    "scaler": "bicubic",
+    "scaled": false,
+    "frame_bytes": 3110400
+   }
+  },
+  {
+   "name": "full range, codec in capitals",
+   "codec_name": "H264",
+   "pix_fmt": "yuvj420p",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "plan": {
+    "codec": "h264",
+    "bit_depth": 8,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1920,
+     1080
+    ],
+    "scaler": "bicubic",
+    "scaled": false,
+    "frame_bytes": 3110400
+   }
+  },
+  {
+   "name": "10-bit big-endian",
+   "codec_name": "av1",
+   "pix_fmt": "yuv420p10be",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 6,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "plan": {
+    "codec": "av1",
+    "bit_depth": 10,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 6,
+    "luma_only": false,
+    "out": [
+     1920,
+     1080
+    ],
+    "scaler": "bicubic",
+    "scaled": false,
+    "frame_bytes": 6220800
+   }
+  },
+  {
+   "name": "an algorithm the decoders do not have",
+   "codec_name": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": [
+    1280,
+    720
+   ],
+   "algorithm": "area",
+   "plan": {
+    "codec": "vvc",
+    "bit_depth": 10,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1280,
+     720
+    ],
+    "scaler": "bicubic",
+    "scaled": true,
+    "frame_bytes": 2764800
+   }
+  },
+  {
+   "name": "scaled up, odd size",
+   "codec_name": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "width": 720,
+   "height": 576,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": [
+    1023,
+    767
+   ],
+   "algorithm": "spline",
+   "plan": {
+    "codec": "mpeg2video",
+    "bit_depth": 8,
+    "width": 720,
+    "height": 576,
+    "crop": [
+     0,
+     0,
+     720,
+     576
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1023,
+     767
+    ],
+    "scaler": "spline",
+    "scaled": true,
+    "frame_bytes": 1177857
+   }
+  },
+  {
+   "name": "ffv1, bilinear",
+   "codec_name": "ffv1",
+   "pix_fmt": "yuv420p",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bilinear",
+   "plan": {
+    "codec": "ffv1",
+    "bit_depth": 8,
+    "width": 1920,
+    "height": 1080,
+    "crop": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "shift": 0,
+    "luma_only": false,
+    "out": [
+     1920,
+     1080
+    ],
+    "scaler": "bilinear",
+    "scaled": false,
+    "frame_bytes": 3110400
+   }
+  },
+  {
+   "name": "another codec",
+   "codec_name": "mpeg4",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "mpeg4 is decoded by FFmpeg"
+  },
+  {
+   "name": "no codec",
+   "codec_name": "",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "this codec is decoded by FFmpeg"
+  },
+  {
+   "name": "4:2:2",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv422p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "yuv422p10le is decoded by FFmpeg"
+  },
+  {
+   "name": "12-bit",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p12le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "yuv420p12le is decoded by FFmpeg"
+  },
+  {
+   "name": "no pixel format",
+   "codec_name": "hevc",
+   "pix_fmt": "",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "this pixel format is decoded by FFmpeg"
+  },
+  {
+   "name": "no size",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 0,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "the video's size is unknown"
+  },
+  {
+   "name": "an odd width",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1919,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "an odd-sized video is decoded by FFmpeg"
+  },
+  {
+   "name": "an odd height",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1079,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "an odd-sized video is decoded by FFmpeg"
+  },
+  {
+   "name": "a crop past the picture",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": [
+    1920,
+    1080,
+    2,
+    0
+   ],
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "the crop is outside the picture"
+  },
+  {
+   "name": "a crop one column wide",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": [
+    1,
+    1080,
+    0,
+    0
+   ],
+   "shift": 0,
+   "luma_only": false,
+   "size": null,
+   "algorithm": "bicubic",
+   "error": "the crop is outside the picture"
+  },
+  {
+   "name": "scaled to nothing",
+   "codec_name": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "width": 1920,
+   "height": 1080,
+   "crop": null,
+   "shift": 0,
+   "luma_only": false,
+   "size": [
+    0,
+    720
+   ],
+   "algorithm": "bicubic",
+   "error": "the size it is scaled to is empty"
+  }
+ ],
+ "packet_commands": {
+  "h264": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "h264_mp4toannexb,dump_extra=freq=keyframe",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "h264_mp4toannexb,dump_extra=freq=keyframe",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ],
+  "hevc": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "hevc_mp4toannexb,dump_extra=freq=keyframe",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "hevc_mp4toannexb,dump_extra=freq=keyframe",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ],
+  "av1": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ],
+  "vvc": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "vvc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "vvc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ],
+  "vp9": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ],
+  "mpeg2video": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "dump_extra=freq=keyframe",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-bsf:v",
+   "dump_extra=freq=keyframe",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ],
+  "ffv1": [
+   "<ffmpeg>",
+   "-hide_banner",
+   "-nostdin",
+   "-y",
+   "-loglevel",
+   "warning",
+   "-i",
+   "<video>",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-f",
+   "data",
+   "pipe:1",
+   "-map",
+   "0:V:0",
+   "-c:v",
+   "copy",
+   "-copyinkf",
+   "-flush_packets",
+   "1",
+   "-f",
+   "framecrc",
+   "<listing>"
+  ]
+ },
+ "decoders": [
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": null,
+   "test": null,
+   "decoders": [
+    "software",
+    "software"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": null,
+   "test": "cuda",
+   "decoders": [
+    "software",
+    "nvidia"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": null,
+   "test": "qsv",
+   "decoders": [
+    "software",
+    "intel"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": null,
+   "test": "d3d11va",
+   "decoders": [
+    "software",
+    "amd"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "cuda",
+   "test": null,
+   "decoders": [
+    "nvidia",
+    "software"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "cuda",
+   "test": "cuda",
+   "decoders": [
+    "nvidia",
+    "nvidia"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "cuda",
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "cuda",
+   "test": "d3d11va",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "qsv",
+   "test": null,
+   "decoders": [
+    "intel",
+    "software"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "qsv",
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "qsv",
+   "test": "qsv",
+   "decoders": [
+    "intel",
+    "intel"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "qsv",
+   "test": "d3d11va",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "d3d11va",
+   "test": null,
+   "decoders": [
+    "amd",
+    "software"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "d3d11va",
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "d3d11va",
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "d3d11va",
+   "test": "d3d11va",
+   "decoders": [
+    "amd",
+    "amd"
+   ]
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "vulkan",
+   "test": null,
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "vulkan",
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "vulkan",
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "",
+   "bundled": true,
+   "source": "vulkan",
+   "test": "d3d11va",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": null,
+   "test": null,
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": null,
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": null,
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": null,
+   "test": "d3d11va",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "cuda",
+   "test": null,
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "cuda",
+   "test": "cuda",
+   "decoders": [
+    "nvidia",
+    "nvidia"
+   ]
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "cuda",
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "cuda",
+   "test": "d3d11va",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "qsv",
+   "test": null,
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "qsv",
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "qsv",
+   "test": "qsv",
+   "decoders": [
+    "intel",
+    "intel"
+   ]
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "qsv",
+   "test": "d3d11va",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "d3d11va",
+   "test": null,
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "d3d11va",
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "d3d11va",
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "d3d11va",
+   "test": "d3d11va",
+   "decoders": [
+    "amd",
+    "amd"
+   ]
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "vulkan",
+   "test": null,
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "vulkan",
+   "test": "cuda",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "vulkan",
+   "test": "qsv",
+   "decoders": null
+  },
+  {
+   "software_decode": "ffmpeg",
+   "bundled": false,
+   "source": "vulkan",
+   "test": "d3d11va",
+   "decoders": null
+  }
+ ]
+}
