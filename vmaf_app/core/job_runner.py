@@ -490,34 +490,37 @@ class JobScheduler:
     def _finish(self, run: JobRun) -> None:
         """Builds the video's result from its tasks and reports it, or
         reports why it failed or that it was cancelled. Then releases the
-        video's process handle."""
-        run.finalized = True
-        index = run.index
-        try:
-            result, failure = run.finish()
-        except (Cancelled, PerceptualCancelled):
-            _log.info("%s: cancelled", run.name)
-            self._report_cancelled_once()
-            return
-        except (VmafRunError, PerceptualRunError) as e:
-            _log.error("%s failed: %s%s", run.name, e, _stderr_note(e))
-            self.events.job_failed(index, str(e), e.stderr_tail)
-            return
-        except Exception as e:
-            _log.error("%s failed: %s", run.name, e, exc_info=e)
-            self.events.job_failed(index, str(e), "")
-            return
-        finally:
-            self._release_handle(index)
-        metrics = ", ".join(metric_definition(key).label for key in result.metric_results)
-        if failure is None:
-            _log.info("%s finished: %s", run.name, metrics)
-            self.events.job_finished(index, result)
-        else:
-            message, tail, _reasons = failure
-            _log.warning("%s finished with failed metrics (kept: %s):\n%s%s", run.name, metrics or "none",
-                         message, f"\nLast output:\n{tail}" if tail else "")
-            self.events.job_partially_failed(index, result, *failure)
+        video's process handle. All of it under the video's emit lock, as its
+        result so far is sent (JobRun._send_result_so_far): the two go out in
+        the order they were made, and no result so far after this."""
+        with run.emit_lock:
+            run.finalized = True
+            index = run.index
+            try:
+                result, failure = run.finish()
+            except (Cancelled, PerceptualCancelled):
+                _log.info("%s: cancelled", run.name)
+                self._report_cancelled_once()
+                return
+            except (VmafRunError, PerceptualRunError) as e:
+                _log.error("%s failed: %s%s", run.name, e, _stderr_note(e))
+                self.events.job_failed(index, str(e), e.stderr_tail)
+                return
+            except Exception as e:
+                _log.error("%s failed: %s", run.name, e, exc_info=e)
+                self.events.job_failed(index, str(e), "")
+                return
+            finally:
+                self._release_handle(index)
+            metrics = ", ".join(metric_definition(key).label for key in result.metric_results)
+            if failure is None:
+                _log.info("%s finished: %s", run.name, metrics)
+                self.events.job_finished(index, result)
+            else:
+                message, tail, _reasons = failure
+                _log.warning("%s finished with failed metrics (kept: %s):\n%s%s", run.name, metrics or "none",
+                             message, f"\nLast output:\n{tail}" if tail else "")
+                self.events.job_partially_failed(index, result, *failure)
 
 
 class JobRun:
@@ -920,12 +923,24 @@ class JobRun:
 
     def _send_result_so_far(self) -> None:
         """Sends the video's result so far, so that finished scores are shown
-        and saved before the whole video is done."""
-        with self.lock:
-            task_results = dict(self.task_results)
-        result = self._merged(task_results, self.perceptual_so_far(task_results))
-        if result is not None:
-            self.scheduler.events.result_updated(self.index, result)
+        and saved before the whole video is done.
+
+        The emit lock is held from taking the tasks' results until the result
+        is sent, and the video's whole result is sent under it too
+        (JobScheduler._finish). Otherwise a result so far taken just before
+        the last task stored its result could be sent after the whole result
+        and replace it: the command line's table and JSON then lacked that
+        task's metrics, and the saved comparison's context.json (its VMAF
+        model, its frames compared) was the result so far's. Once the whole
+        result is out, nothing is sent."""
+        with self.emit_lock:
+            if self.finalized:
+                return
+            with self.lock:
+                task_results = dict(self.task_results)
+            result = self._merged(task_results, self.perceptual_so_far(task_results))
+            if result is not None:
+                self.scheduler.events.result_updated(self.index, result)
 
     def run_task(self, task) -> bool:
         """Runs one task. Returns True when it was the video's last task to
