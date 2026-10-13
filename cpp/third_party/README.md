@@ -1,21 +1,36 @@
 # Third-party code in the C++ port
 
-Vendored, so that a build needs no download. GoogleTest and nlohmann/json
-were downloaded once, with Brian's OK, and checked against the SHA-256 their
-projects publish. libvmaf-fast's headers are copied from that project's own
-repository at the commit of the release the app ships.
+Vendored, so that a build needs no download. GoogleTest, nlohmann/json and
+miniz were downloaded once, with Brian's OK, and checked against the SHA-256
+their projects publish. libvmaf-fast's headers are copied from that
+project's own repository at the commit of the release the app ships.
 
 | Library | Version | Used for | Licence | Source | SHA-256 of the download |
 | --- | --- | --- | --- | --- | --- |
 | [GoogleTest](https://github.com/google/googletest) | 1.18.0 | The tests (not shipped) | BSD 3-Clause (`googletest/LICENSE`) | `googletest-1.18.0.tar.gz` from the v1.18.0 release | `6e3191c1455468b3fc35a417fb565c1c5071aee1b7e7f85e30cf48a98d37d8b5` |
 | [nlohmann/json](https://github.com/nlohmann/json) | 3.12.0 | Reading and writing JSON | MIT (`nlohmann/LICENSE.MIT`) | `json.hpp` from the v3.12.0 release | `aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63` |
 | [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast) | v1 | Calling the libvmaf the app ships (`vmaf_app/tools/libvmaf`): its functions and structures | BSD-2-Clause-Patent (`libvmaf-fast/LICENSE`) | `libvmaf/include/libvmaf/*.h` and `LICENSE` at commit `867efb83` (tag `libvmaf-fast-v1`) | Not downloaded; each file's is below |
+| [miniz](https://github.com/richgel999/miniz) | 3.1.2 | The saved scores' .npz files: zip archives of deflated numpy arrays (`core/npz.h`) | MIT (`miniz/LICENSE`) | `miniz-3.1.2.zip` (101,958 bytes) from the 3.1.2 release | `f0446d863f9c19926ad9483c523fdc42e42b8d4a6a431d27e09d49c79a140d9a` |
 
 Only what a build needs is kept: of GoogleTest, the `googletest` folder's
 `CMakeLists.txt`, `cmake`, `include` and `src` (no Google Mock, samples,
 tests or docs); of nlohmann/json, the single header and its licence; of
 libvmaf-fast, the five headers that declare its functions and its licence
-(not `version.h.in` or `meson.build`, which only its own build uses).
+(not `version.h.in` or `meson.build`, which only its own build uses); of
+miniz, the release's single source file, its header and its licence (not
+its examples, change log or readme). miniz is built without its file
+functions (`MINIZ_NO_STDIO`): the app reads and writes the files itself, so
+that a path with any characters works on Windows. In a Release build with
+MSVC, what the app uses of it (reading and writing zip files, deflate both
+ways) takes about 41 KB.
+
+miniz's files, each identical to the file in `miniz-3.1.2.zip`:
+
+| File | SHA-256 |
+| --- | --- |
+| `miniz.c` | `e2c1aeb66eef9191d8c3feb164db2def2335a61d039bf04ed849f6b042433b30` |
+| `miniz.h` | `b53b62ed122e559b8f679e3cb787a0b0035fe87a58f909da0e44931678f4e85f` |
+| `LICENSE` | `0115478d567121238cf6cc1c0c361926cf07a49d9e4c9e66da97fac6a01646b3` |
 
 libvmaf-fast's files, each identical to the file at `867efb83`:
 
@@ -35,6 +50,6 @@ has the same headers as long as the fork has not changed them since:
 `git diff 867efb83 HEAD -- libvmaf/include` in the fork shows whether it
 has.
 
-nlohmann/json is compiled into the app, so it belongs in the app's
-`docs/THIRD_PARTY.md` once the C++ app ships. GoogleTest is only in the tests.
-libvmaf itself already ships with the app and is listed there.
+nlohmann/json and miniz are compiled into the app, so they belong in the
+app's `docs/THIRD_PARTY.md` once the C++ app ships. GoogleTest is only in the
+tests. libvmaf itself already ships with the app and is listed there.

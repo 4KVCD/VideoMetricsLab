@@ -1,9 +1,10 @@
-// JSON written as the Python app's json.dumps(value, indent=2) writes it
-// (reference/python_json.json).
+// JSON written as the Python app's json.dumps(value, indent=2) writes it,
+// and as its saved scores write it (reference/python_json.json).
 #include "vml/python_json.h"
 
 #include <gtest/gtest.h>
 
+#include <stdexcept>
 #include <string>
 
 #include "reference.h"
@@ -51,6 +52,14 @@ TEST(PythonJson, WritesAsPythonsJsonDumps) {
         const std::string value = expected["value"];
         SCOPED_TRACE(value);
         EXPECT_EQ(python_json_dumps(decoded(Ordered::parse(value))), expected["text"].get<std::string>());
+        // The saved scores' form: keys sorted, no spaces, and no NaN or
+        // infinity, which Python refuses (null in the reference).
+        const nlohmann::json sorted = decoded(Ordered::parse(value));
+        if (expected["compact"].is_null()) {
+            EXPECT_THROW(python_json_compact(sorted), std::invalid_argument);
+        } else {
+            EXPECT_EQ(python_json_compact(sorted), expected["compact"].get<std::string>());
+        }
     }
 }
 

@@ -2,7 +2,8 @@
 # and their tests; the window joins when it is ported. README.md describes
 # the layout, how to build, and the rules the code follows.
 cmake_minimum_required(VERSION 3.25)
-project(VideoMetricsLab VERSION 3.0.0 LANGUAGES CXX)
+# C only for miniz (third_party/miniz): the app itself is C++.
+project(VideoMetricsLab VERSION 3.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +30,15 @@ endif()
 # not ours to fix.
 add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json SYSTEM INTERFACE third_party/nlohmann/include)
+
+# miniz, vendored (third_party/README.md): the zip files and the deflate of
+# the saved scores (.npz files, npz.h). Compiled without our warnings, which
+# are not ours to fix, and without its file functions: the app reads and
+# writes the files itself, so that every path works on Windows.
+add_library(vml_miniz STATIC third_party/miniz/miniz.c)
+target_include_directories(vml_miniz SYSTEM PUBLIC third_party/miniz)
+target_compile_definitions(vml_miniz PUBLIC MINIZ_NO_STDIO MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+set_target_properties(vml_miniz PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(platform)
 add_subdirectory(core)

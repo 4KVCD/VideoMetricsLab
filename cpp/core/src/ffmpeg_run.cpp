@@ -1668,13 +1668,15 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         result.model_choice_v1 = options.model_choice_v1;
     }
     for (const std::string& key : scores->order) {
+        // Each parameter's JSON text, as every provenance keeps them
+        // (results.h): the saved scores write them out as JSON.
         std::map<std::string, std::string> parameters;
         if (key == "vmaf_neg") {
-            parameters["model"] = "version=vmaf_v0.6.1neg";
+            parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
         } else if (key == "vmaf") {
-            parameters["model"] = model;
+            parameters["model"] = nlohmann::json(model).dump();
         } else if (key == "vmaf_v1") {
-            parameters["model"] = options.model_v1;
+            parameters["model"] = nlohmann::json(options.model_v1).dump();
         }
         MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
         if (cpu_keys.contains(key)) {

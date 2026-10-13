@@ -16,6 +16,7 @@ add_executable(vml_tests
     unit/library_test.cpp
     unit/libvmaf_cpu_test.cpp
     unit/libvmaf_test.cpp
+    unit/metric_cache_test.cpp
     unit/metrics_test.cpp
     unit/number_format_test.cpp
     unit/perceptual_cpu_test.cpp

@@ -13,8 +13,10 @@ seconds (cvvdp.py, perceptual_vship.py), the pairing of frames by
 timestamp (frame_sync_by_time.py), SSIMULACRA2 and Butteraugli on the CPU
 (perceptual_cpu.py, colour.py), the line that says how far a video is
 (ui/run_line.py), its command line's reading of arguments and patterns and
-its devices command (cli.py), and Python's json.dumps. The Vulkan engine's
-cases need a GPU that Vulkan scores VMAF on.
+its devices command (cli.py), Python's json.dumps, and the saved scores'
+names, files and rules (metric_cache.py), with a comparison folder of them
+it saves in metric_cache/. The Vulkan engine's cases need a GPU that Vulkan
+scores VMAF on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -987,8 +989,20 @@ def json_cases() -> list[dict]:
         [{"$float": exact(number)} for number in floats],
         {"empty object": {}, "empty list": [], "nested": {"a": [{"b": None, "c": True, "d": False}]}},
         [], {}, "a string alone", None,
+        # Keys out of order, for the saved scores' sorted form.
+        {"b": 1, "a": {"d": [3, {"z": 1, "y": 2}], "c": {"$float": exact(2.5)}}, "B": True, "é": "x"},
     ]
-    return [{"value": json.dumps(value, ensure_ascii=False), "text": json.dumps(decoded(value), indent=2)}
+
+    def compact(value) -> str | None:
+        """The saved scores' form (metric_cache._canonical), or None where
+        Python refuses the value (NaN and infinities)."""
+        try:
+            return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except ValueError:
+            return None
+
+    return [{"value": json.dumps(value, ensure_ascii=False), "text": json.dumps(decoded(value), indent=2),
+             "compact": compact(decoded(value))}
             for value in values]
 
 
@@ -1771,7 +1785,264 @@ def devices_cases() -> list[dict]:
     return cases
 
 
+# ---------------------------------------------------------------- saved scores
+
+#: The comparison folder metric_cache_cases saves, from which the C++ test
+#: loads scores as the Python app does.
+SAVED_SCORES = HERE / "metric_cache"
+
+
+def metric_cache_cases() -> dict:
+    """The saved scores as the Python app names, writes and reads them
+    (metric_cache.py): each request's identity and hash and the recipe's
+    (ffmpeg_request.py, comparison_recipe.py); the context.json and score
+    files a stored result makes; which scores answer a request (answers,
+    made_as_chosen, reusable); and the scores requests load from a
+    comparison folder this saves in metric_cache/, which the C++ test lays
+    under the folder name its own hashing gives."""
+    import shutil
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from vmaf_app.core import metric_cache
+    from vmaf_app.core.builtin_models import builtin_choice
+    from vmaf_app.core.cvvdp import CvvdpDisplay, CvvdpSettings
+    from vmaf_app.core.ffmpeg_request import analysis_request_from_vmaf_options
+    from vmaf_app.core.metric_results import (
+        FrameMetricResult,
+        MetricProvenance,
+        MetricResultSet,
+        SequenceMetricResult,
+        provenance_to_dict,
+    )
+    from vmaf_app.core.models import ComparisonResult, CropBox, CropMode, ScaleDirection, VideoInfo, VmafOptions
+
+    def options_of(fields: dict) -> VmafOptions:
+        options = VmafOptions()
+        for name, value in fields.items():
+            setattr(options, name, CropMode(value) if name == "crop_mode"
+                    else ScaleDirection(value) if name == "scale_direction" else value)
+        return options
+
+    def options_json(options: VmafOptions) -> dict:
+        return {"n_subsample": options.n_subsample, "model_choice": options.model_choice,
+                "model_choice_v1": options.model_choice_v1, "crop_mode": options.crop_mode.value,
+                "scale_direction": options.scale_direction.value, "scale_algorithm": options.scale_algorithm,
+                "duration_limit": exact(options.duration_limit)}
+
+    hdr_display = CvvdpSettings(CvvdpDisplay(width=1920, height=1080, diagonal_inches=55.0, viewing_distance_m=2.1,
+                                             peak_luminance=1000.0, contrast=100000.0, ambient_lux=10.0,
+                                             reflectivity=0.01, exposure=1.0, hdr=True), resize_to_display=True)
+
+    def request_json(name: str, fields: dict, metrics: tuple, backends: dict, cvvdp) -> tuple[dict, object]:
+        options = options_of(fields)
+        request = analysis_request_from_vmaf_options(options, metrics, backends or None, cvvdp)
+        return {"name": name, "options": options_json(options), "metrics": list(metrics), "backends": backends,
+                "cvvdp": None if cvvdp is None else dict(cvvdp.spec_parameters())}, request
+
+    requests = []
+    for name, fields, metrics, backends, cvvdp in (
+            ("VMAF on Auto", {}, ("vmaf",), {}, None),
+            ("libvmaf's metrics subsampled", {"n_subsample": 3}, ("vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr"), {}, None),
+            ("XPSNR alone, subsampled", {"n_subsample": 3}, ("xpsnr",), {}, None),
+            ("a chosen model", {"model_choice": "version=vmaf_4k_v0.6.1"}, ("vmaf", "vmaf_v1"), {}, None),
+            ("a bundled VMAF v1 model", {"model_choice_v1": builtin_choice("vmaf_v1_1d5h_2160")},
+             ("vmaf_v1", "psnr"), {}, None),
+            ("perceptual, subsampled, SSIMULACRA2 on the CPU", {"n_subsample": 2}, ("ssimulacra2", "butteraugli"),
+             {"ssimulacra2": "cpu"}, None),
+            ("CVVDP on an HDR display it fills", {}, ("cvvdp", "vmaf"), {}, hdr_display),
+            ("another recipe", {"crop_mode": "none", "scale_direction": "distorted_to_source",
+                                "scale_algorithm": "lanczos", "duration_limit": 30.5},
+             ("vmaf", "ssimulacra2"), {"butteraugli": "cpu"}, None)):
+        case, request = request_json(name, fields, metrics, backends, cvvdp)
+        identity = request.recipe.identity_dict()
+        case.update(perceptual_backends=dict(request.execution.perceptual_backends),
+                    recipe=metric_cache._canonical(identity), recipe_hash=metric_cache._hash("S", "D", identity),
+                    specs=[{"identity": metric_cache._canonical(spec.identity_dict()),
+                            "hash": metric_cache.metric_identity_hash(spec)} for spec in request.metrics])
+        requests.append(case)
+
+    fps = 24000 / 1001
+
+    def info(name: str, pix_fmt: str = "yuv420p", transfer: str = "") -> VideoInfo:
+        return VideoInfo(path=Path(name), width=1920, height=1080, fps=fps, duration=10.01, nb_frames=240,
+                         codec_name="hevc", sar="1:1", pix_fmt=pix_fmt, bit_rate=4_500_000, nominal_fps=fps,
+                         average_fps=fps, color_range="tv", color_space="bt709", color_transfer=transfer,
+                         color_primaries="bt709", chroma_location="left")
+
+    def frame_metric(key: str, values: list[float], provenance: MetricProvenance, count: int = 0):
+        frames = np.arange(count or len(values), dtype=np.int32)
+        return FrameMetricResult(key, frames, frames / fps, np.array(values, dtype=np.float32), provenance)
+
+    def metric_json(metric) -> dict:
+        data = {"key": metric.key, "provenance": provenance_to_dict(metric.provenance)}
+        if isinstance(metric, SequenceMetricResult):
+            data.update(kind="sequence", score=exact(metric.score))
+            if not metric.has_timeline:
+                return data
+        else:
+            data["kind"] = "frame"
+        data.update(frame=[int(f) for f in metric.frame], time=[exact(float(t)) for t in metric.time],
+                    values=[exact(float(v)) for v in metric.values])
+        return data
+
+    def result_json(result: ComparisonResult) -> dict:
+        def video(details: VideoInfo) -> dict:
+            return {"path": str(details.path), "width": details.width, "height": details.height,
+                    "fps": exact(details.fps), "duration": exact(details.duration), "nb_frames": details.nb_frames,
+                    "codec_name": details.codec_name, "sar": details.sar, "pix_fmt": details.pix_fmt,
+                    "bit_rate": details.bit_rate, "bit_rate_whole_file": details.bit_rate_whole_file,
+                    "nominal_fps": exact(details.nominal_fps), "average_fps": exact(details.average_fps),
+                    "color_range": details.color_range, "color_space": details.color_space,
+                    "color_transfer": details.color_transfer, "color_primaries": details.color_primaries,
+                    "chroma_location": details.chroma_location}
+
+        def crop(box) -> list | None:
+            return None if box is None else [box.w, box.h, box.x, box.y]
+
+        return {"source": str(result.source), "distorted": str(result.distorted), "fps": exact(result.fps),
+                "model": result.model, "source_crop": crop(result.source_crop),
+                "distorted_crop": crop(result.distorted_crop), "source_info": video(result.source_info),
+                "distorted_info": video(result.distorted_info), "scale_direction": result.scale_direction.value,
+                "scale_algorithm": result.scale_algorithm, "compared_frame_count": result.compared_frame_count,
+                "model_choice": result.model_choice, "model_v1": result.model_v1,
+                "model_choice_v1": result.model_choice_v1,
+                "metrics": [metric_json(result.metric_results.get(key)) for key in result.metric_results]}
+
+    def result_of(metrics: list, source_info: VideoInfo, distorted_info: VideoInfo, **fields) -> ComparisonResult:
+        results = MetricResultSet()
+        for metric in metrics:
+            results.add(metric)
+        values = {"source_crop": None, "distorted_crop": None, "model_choice": "__auto__", **fields}
+        return ComparisonResult(source=Path("s.mp4"), distorted=Path("t.mp4"), frames=[], fps=fps,
+                                model="version=vmaf_v0.6.1", source_info=source_info, distorted_info=distorted_info,
+                                compared_frame_count=240, metric_results=results, **values)
+
+    gpu_vmaf = MetricProvenance("libvmaf/vulkan", "libvmaf-fast v1", "gpu", "ffmpeg-libvmaf-v1",
+                                {"model": "version=vmaf_v0.6.1"})
+    cpu_libvmaf = MetricProvenance("libvmaf", "libvmaf-fast v1", "cpu", "ffmpeg-libvmaf-v1")
+    vship = MetricProvenance("Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
+                             {"coverage_step": 1, "color_tags": metric_cache.VSHIP_COLOR_TAGS})
+    libjxl = MetricProvenance("ssimulacra2", "libjxl 0.11.1", "cpu", "ssimulacra2-libjxl-cpu-v1",
+                              {"intermediate": "png/rgb48le", "coverage_step": 1,
+                               "color_tags": metric_cache.CPU_COLOR_TAGS})
+    cvvdp_made = MetricProvenance("Vship/cvvdp", "Vship 5.1.2", "gpu", "cvvdp-vship-gpu-v1",
+                                  {"display": CvvdpSettings().display.identity(), "resize_to_display": False,
+                                   "color_tags": metric_cache.VSHIP_COLOR_TAGS})
+
+    # What storing a result writes: its context.json and each score's file.
+    stored = result_of(
+        [frame_metric("vmaf", [91.5, 92.25, 90.125, 93.0], gpu_vmaf),
+         frame_metric("psnr", [41.25, 40.5, 42.0, 39.75], cpu_libvmaf),
+         frame_metric("ssimulacra2", [80.5, 81.25, 79.0, 82.75], vship),
+         SequenceMetricResult("cvvdp", 8.75, cvvdp_made, np.array([0, 24], np.int32), np.array([0.0, 24 / fps]),
+                              np.array([8.5, 9.0], np.float32))],
+        info("s.mp4", "yuv420p10le", "smpte2084"), info("t.mp4", "yuv420p10le", "smpte2084"),
+        source_crop=CropBox(1920, 800, 0, 140), model_choice_v1=None)
+    store_case, store_request = request_json("stored", {}, ("vmaf", "psnr", "ssimulacra2", "cvvdp"), {}, None)
+    with tempfile.TemporaryDirectory() as folder:
+        source, distorted = Path(folder) / "s.mp4", Path(folder) / "t.mp4"
+        source.write_bytes(b"s")
+        distorted.write_bytes(b"t")
+        directory = metric_cache.store_result(Path(folder) / "cache", source, distorted, store_request.recipe,
+                                              stored, "t", store_request.metrics)
+        store_case.update(result=result_json(stored), label="t",
+                          context=(directory / "context.json").read_text(encoding="utf-8"),
+                          files={path.name: str(np.load(path)["metadata"].item())
+                                 for path in sorted(directory.glob("*.npz"))})
+
+    # Which scores answer a request.
+    rgb, yuv = info("s.mp4", "gbrp10le", ""), info("t.mp4", "yuv420p", "bt709")
+    perceptual_request = request_json("perceptual", {}, ("ssimulacra2", "xpsnr", "vmaf"), {}, None)[1]
+    old_vship = MetricProvenance("Vship/ssimulacra2", "Vship 5.1.0", "gpu", "ssimulacra2-vship-5.1.0-gpu-v1")
+    answer_cases = []
+    for key, provenance, infos in (
+            ("vmaf", MetricProvenance("unknown", "", "unknown", "unversioned"), ()),
+            ("xpsnr", MetricProvenance("unknown", "", "unknown", "unversioned"), ()),
+            ("xpsnr", MetricProvenance("ffmpeg/xpsnr", "ffmpeg 8.0", "cpu", "ffmpeg-xpsnr-v1"), ()),
+            ("xpsnr", MetricProvenance("ffmpeg/xpsnr", "ffmpeg 9.0", "cpu", "ffmpeg-xpsnr-v2"), ()),
+            ("ssimulacra2", vship, ()),
+            ("ssimulacra2", libjxl, ()),
+            ("ssimulacra2", MetricProvenance("ssimulacra2", "libjxl 0.11.1", "cpu", "ssimulacra2-libjxl-cpu-v1"), ()),
+            ("ssimulacra2", old_vship, (rgb, yuv)),
+            ("ssimulacra2", old_vship, (yuv, yuv)),
+            ("ssimulacra2", MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0", "cpu", "ffmpeg-libvmaf-v1"), ())):
+        spec = perceptual_request.metric(key)
+        tags = metric_cache.video_infos(*infos)
+        answer_cases.append({"key": key, "provenance": provenance_to_dict(provenance), "infos": list(tags),
+                             "answers": metric_cache.answers(spec, SimpleNamespace(provenance=provenance), tags)})
+    chosen_cases = [{"key": key, "choice": choice, "produced": produced, "gpu_can_score": gpu_can,
+                     "counts": metric_cache.made_as_chosen(key, choice, produced, lambda _key, can=gpu_can: can)}
+                    for key in ("ssimulacra2",) for choice in ("gpu", "cpu", None)
+                    for produced in ("gpu", "cpu") for gpu_can in (True, False)]
+    reused = result_of(
+        [frame_metric("vmaf", [math.nan, math.nan], gpu_vmaf),
+         frame_metric("psnr", [math.nan, 40.0], cpu_libvmaf),
+         frame_metric("ssimulacra2", [70.0, 71.0], libjxl),
+         frame_metric("butteraugli", [1.5, 1.25], MetricProvenance("butteraugli", "libjxl 0.11.1", "cpu",
+                                                                     "butteraugli-libjxl-cpu-v1",
+                                                                     {"color_tags": metric_cache.CPU_COLOR_TAGS})),
+         SequenceMetricResult("cvvdp", math.nan, cvvdp_made)],
+        info("s.mp4"), info("t.mp4"))
+    reuse_cases = []
+    for backends, gpu_can in (({"ssimulacra2": "gpu", "butteraugli": "gpu"}, True),
+                              ({"ssimulacra2": "gpu", "butteraugli": "cpu"}, False)):
+        case, request = request_json("reused", {}, ("vmaf", "psnr", "ssimulacra2", "butteraugli", "cvvdp"),
+                                     backends, None)
+        kept = metric_cache.reusable(reused, request.metrics, backends, lambda _key, can=gpu_can: can,
+                                     metric_cache.video_infos(reused.source_info, reused.distorted_info))
+        case.update(gpu_can_score=gpu_can, kept=list(kept))
+        reuse_cases.append(case)
+
+    # A comparison folder of saved scores, and what requests load from it.
+    shutil.rmtree(SAVED_SCORES, ignore_errors=True)
+    SAVED_SCORES.mkdir()
+    saved = result_of([], info("s.mp4"), info("t.mp4"))
+    metric_cache._atomic_json(SAVED_SCORES / "context.json", metric_cache._context_from_result(
+        saved, "t", request_json("saved", {}, ("vmaf",), {}, None)[1].recipe))
+
+    def save(fields: dict, key: str, metric, cvvdp=None) -> None:
+        spec = request_json("saved", fields, (key,), {}, cvvdp)[1].metric(key)
+        metric_cache.store_metric(SAVED_SCORES, metric, spec)
+
+    save({}, "vmaf", frame_metric("vmaf", [90.5, 91.0, 89.25, 92.5, 90.0, 91.75], gpu_vmaf))
+    save({}, "psnr", frame_metric("psnr", [40.5, 41.0, 39.25, 42.5, 40.0, 41.75], cpu_libvmaf))
+    save({"n_subsample": 2}, "psnr", frame_metric("psnr", [30.5, 31.0, 29.25, 32.5, 30.0, 31.75], cpu_libvmaf))
+    save({}, "xpsnr", frame_metric("xpsnr", [44.0, 45.5, 43.25, 44.75, 45.0, 46.0],
+                                   MetricProvenance("ffmpeg/xpsnr", "ffmpeg 9.0", "cpu", "ffmpeg-xpsnr-v2")))
+    save({}, "ssimulacra2", frame_metric("ssimulacra2", [80.0, 81.5, 79.25, 82.0, 80.75, 81.0], vship))
+    save({}, "ssimulacra2", frame_metric("ssimulacra2", [78.0, 79.5, 77.25, 80.0, 78.75, 79.0], libjxl))
+    save({}, "butteraugli", frame_metric("butteraugli", [1.5, 1.25, 1.75, 1.0, 1.5, 1.25],
+                                         MetricProvenance("butteraugli", "libjxl 0.11.1", "cpu",
+                                                          "butteraugli-libjxl-cpu-v1")))
+    save({}, "cvvdp", SequenceMetricResult("cvvdp", 9.25, cvvdp_made, np.array([0, 24], np.int32),
+                                           np.array([0.0, 24 / fps]), np.array([9.0, 9.5], np.float32)))
+    save({}, "cvvdp", SequenceMetricResult("cvvdp", 7.5, cvvdp_made), hdr_display)
+    old_v1 = builtin_choice("vmaf_v1_3d0h")
+    save({"model_choice": old_v1}, "vmaf", frame_metric("vmaf", [88.0, 89.5, 87.25, 90.0, 88.75, 89.0], cpu_libvmaf))
+
+    loads = []
+    for name, fields, metrics, backends, cvvdp in (
+            ("everything, on Auto", {}, ("vmaf", "vmaf_v1", "psnr", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp"),
+             {}, None),
+            ("the model Auto ran, chosen", {"model_choice": "version=vmaf_v0.6.1"}, ("vmaf",), {}, None),
+            ("another model chosen", {"model_choice": "version=vmaf_4k_v0.6.1"}, ("vmaf",), {}, None),
+            ("SSIMULACRA2 on the CPU", {}, ("ssimulacra2",), {"ssimulacra2": "cpu"}, None),
+            ("subsampled", {"n_subsample": 2}, ("psnr", "ssimulacra2"), {}, None),
+            ("CVVDP on another display", {}, ("cvvdp",), {}, hdr_display)):
+        case, request = request_json(name, fields, metrics, backends, cvvdp)
+        loaded = metric_cache.load_metrics(SAVED_SCORES, request.metrics, dict(request.execution.perceptual_backends))
+        case["loaded"] = [metric_json(loaded.get(key)) for key in loaded]
+        loads.append(case)
+
+    return {"requests": requests, "stored": store_case, "answers": answer_cases, "made_as_chosen": chosen_cases,
+            "reusable": {"result": result_json(reused), "cases": reuse_cases},
+            "saved": {"folder": SAVED_SCORES.name, "label": "t", "loads": loads}}
+
+
 if __name__ == "__main__":
+    write("metric_cache.json", metric_cache_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

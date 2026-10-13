@@ -1,6 +1,7 @@
 #include "vml/python_json.h"
 
 #include <cmath>
+#include <stdexcept>
 
 #include "vml/number_format.h"
 
@@ -175,11 +176,71 @@ void write_value(std::string& out, const nlohmann::ordered_json& value, int inde
     }
 }
 
+// `value` with separators (",", ":"): no space anywhere. A sorted json's
+// keys come in the order Python's sort_keys gives (UTF-8's byte order is
+// the code points' order).
+void write_compact(std::string& out, const nlohmann::json& value) {
+    switch (value.type()) {
+        case nlohmann::json::value_t::object: {
+            out += '{';
+            bool first = true;
+            for (auto item = value.begin(); item != value.end(); ++item) {
+                out += first ? "" : ",";
+                first = false;
+                write_string(out, item.key());
+                out += ':';
+                write_compact(out, item.value());
+            }
+            out += '}';
+            return;
+        }
+        case nlohmann::json::value_t::array: {
+            out += '[';
+            bool first = true;
+            for (const auto& item : value) {
+                out += first ? "" : ",";
+                first = false;
+                write_compact(out, item);
+            }
+            out += ']';
+            return;
+        }
+        case nlohmann::json::value_t::string:
+            write_string(out, value.get_ref<const std::string&>());
+            return;
+        case nlohmann::json::value_t::boolean:
+            out += value.get<bool>() ? "true" : "false";
+            return;
+        case nlohmann::json::value_t::number_integer:
+            out += std::to_string(value.get<long long>());
+            return;
+        case nlohmann::json::value_t::number_unsigned:
+            out += std::to_string(value.get<unsigned long long>());
+            return;
+        case nlohmann::json::value_t::number_float: {
+            const double number = value.get<double>();
+            if (!std::isfinite(number)) {
+                throw std::invalid_argument("Out of range float values are not JSON compliant");
+            }
+            out += python_repr(number);
+            return;
+        }
+        default:
+            out += "null";
+    }
+}
+
 }  // namespace
 
 std::string python_json_dumps(const nlohmann::ordered_json& value, int indent) {
     std::string out;
     write_value(out, value, indent, 0);
+    return out;
+}
+
+std::string python_json_compact(const nlohmann::json& value) {
+    std::string out;
+    write_compact(out, value);
     return out;
 }
 

@@ -1,0 +1,144 @@
+#include "vml/analysis_request.h"
+
+#include <algorithm>
+#include <stdexcept>
+#include <system_error>
+
+#include "vml/metrics.h"
+#include "vml/platform/system.h"
+
+namespace vml {
+
+namespace {
+
+// The id of the XPSNR filter's scores as they are weighted now
+// (metric_results.XPSNR_COMPATIBILITY_ID).
+constexpr const char* xpsnr_compatibility_id = "ffmpeg-xpsnr-v2";
+
+// A custom VMAF model file's identity, as the Python app files a request
+// under it: its resolved path, size and modification time, or the path
+// alone when the file cannot be read.
+std::string custom_model_identity(const std::string& path) {
+    std::error_code error;
+    const std::filesystem::path given = platform::path_from_text(path);
+    const std::filesystem::path absolute = std::filesystem::absolute(given, error);
+    std::filesystem::path resolved = std::filesystem::weakly_canonical(error ? given : absolute, error);
+    if (error) {
+        resolved = absolute;
+    }
+    const auto size = std::filesystem::file_size(resolved, error);
+    const std::optional<long long> modified = platform::modified_ns(resolved);
+    if (error || !modified) {
+        return platform::path_text(resolved);
+    }
+    return platform::path_text(resolved) + ":" + std::to_string(size) + ":" + std::to_string(*modified);
+}
+
+}  // namespace
+
+nlohmann::json ComparisonRecipe::identity() const {
+    return {{"crop_mode", crop_mode == CropMode::automatic ? "auto" : "none"},
+            {"scale_direction",
+             scale_direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source"},
+            {"duration_limit", duration_limit},
+            {"resample_test", nullptr},
+            {"manual_source_crop", nullptr},
+            {"manual_distorted_crop", nullptr}};
+}
+
+nlohmann::json MetricRequestSpec::identity() const {
+    return {{"key", key},
+            {"parameters", parameters},
+            {"coverage", coverage ? nlohmann::json{{"mode", coverage->mode}, {"step", coverage->step}} : nullptr},
+            {"implementation_compatibility_id", implementation_compatibility_id}};
+}
+
+const MetricRequestSpec* AnalysisRequest::metric(const std::string& key) const {
+    const auto found = std::find_if(metrics.begin(), metrics.end(), [&key](const auto& spec) { return spec.key == key; });
+    return found == metrics.end() ? nullptr : &*found;
+}
+
+AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<std::string>& metric_keys,
+                                 const std::map<std::string, std::string>& perceptual_backends,
+                                 const CvvdpSettings& cvvdp) {
+    AnalysisRequest request;
+    request.recipe = {options.crop_mode, options.scale_algorithm, options.scale_direction, options.duration_limit};
+    request.perceptual_backends = {{"butteraugli", "gpu"}, {"ssimulacra2", "gpu"}};
+    for (const auto& [key, backend] : perceptual_backends) {
+        if (!request.perceptual_backends.contains(key)) {
+            throw std::invalid_argument("Unknown perceptual metric backend setting: '" + key + "'");
+        }
+        if (backend != "gpu" && backend != "cpu") {
+            throw std::invalid_argument("Unsupported " + key + " compute backend: '" + backend + "'");
+        }
+        request.perceptual_backends[key] = backend;
+    }
+    // libvmaf's metrics share its subsampling; XPSNR alone is scored every
+    // frame by its own filter.
+    const bool libvmaf_requested = std::any_of(metric_keys.begin(), metric_keys.end(), [](const std::string& key) {
+        return metric_definition(key).ffmpeg_binding.has_value() && key != "xpsnr";
+    });
+    const bool subsampled = options.n_subsample > 1;
+    for (const std::string& key : metric_keys) {
+        const MetricDefinition& definition = metric_definition(key);
+        MetricRequestSpec spec;
+        spec.key = key;
+        if (!definition.ffmpeg_binding) {
+            if (definition.backend_id.empty()) {
+                throw std::invalid_argument("No executable backend is registered for metric '" + key + "'");
+            }
+            spec.backend_id = std::string(definition.backend_id);
+            if (key == "cvvdp") {
+                // GPU only (Vship), and every frame: the display and whether
+                // frames fill it are part of what the score means.
+                spec.parameters = cvvdp.parameters();
+                spec.coverage = FrameCoverage{"full", 1};
+                spec.implementation_compatibility_id = "cvvdp-vship-gpu-v1";
+            } else {
+                spec.coverage = FrameCoverage{subsampled ? "sampled" : "full", options.n_subsample};
+                spec.implementation_compatibility_id = key + "-auto-or-libjxl-cpu-v1";
+            }
+            request.metrics.push_back(std::move(spec));
+            continue;
+        }
+        spec.backend_id = "ffmpeg";
+        spec.coverage = libvmaf_requested && subsampled ? FrameCoverage{"sampled", options.n_subsample}
+                                                        : FrameCoverage{"full", 1};
+        if (key == "vmaf") {
+            // Only what decides the score: an explicit or bundled choice is
+            // the model that runs, while Auto's model is known only once the
+            // size compared at is, and is recorded with the score instead.
+            const std::string& choice = options.model_choice;
+            const bool chosen_by_the_run = choice == auto_model_choice || choice == custom_model_choice;
+            spec.parameters = {{"model", chosen_by_the_run ? std::string() : choice},
+                               {"model_choice", choice},
+                               {"custom_model", options.custom_model_path.empty()
+                                                    ? std::string()
+                                                    : custom_model_identity(options.custom_model_path)}};
+        } else if (key == "vmaf_v1") {
+            const std::string& choice = options.model_choice_v1;
+            spec.parameters = {{"model", choice == auto_model_choice ? std::string() : choice}, {"model_choice", choice}};
+        } else if (key == "vmaf_neg") {
+            spec.parameters = {{"model", "version=vmaf_v0.6.1neg"}};
+        }
+        spec.implementation_compatibility_id = key == "xpsnr" ? xpsnr_compatibility_id : "ffmpeg-libvmaf-v1";
+        request.metrics.push_back(std::move(spec));
+    }
+    return request;
+}
+
+std::string file_identity(const std::filesystem::path& path) {
+    std::error_code error;
+    const std::filesystem::path absolute = std::filesystem::absolute(path, error);
+    std::filesystem::path resolved = std::filesystem::weakly_canonical(error ? path : absolute, error);
+    if (error) {
+        resolved = absolute;
+    }
+    const auto size = std::filesystem::file_size(resolved, error);
+    const std::optional<long long> modified = platform::modified_ns(resolved);
+    const bool read = !error && modified;
+    return platform::path_text(resolved) + ":" + (read ? std::to_string(size) : "-1") + ":" +
+           (read ? std::to_string(*modified) : "-1");
+}
+
+}  // namespace vml

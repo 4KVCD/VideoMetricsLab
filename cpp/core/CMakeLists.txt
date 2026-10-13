@@ -1,6 +1,7 @@
 # vml_core: the engine. No Qt and no operating-system headers, so the same
 # code runs under the command line and the window on every system.
 add_library(vml_core
+    src/analysis_request.cpp
     src/colour.cpp
     src/crop_detect.cpp
     src/cvvdp.cpp
@@ -18,8 +19,10 @@ add_library(vml_core
     src/job_runner.cpp
     src/libvmaf.cpp
     src/libvmaf_cpu.cpp
+    src/metric_cache.cpp
     src/metrics.cpp
     src/model_select.cpp
+    src/npz.cpp
     src/number_format.cpp
     src/options.cpp
     src/perceptual.cpp
@@ -45,7 +48,7 @@ target_include_directories(vml_core PUBLIC include)
 # libvmaf-fast's public headers, at the commit of the library the app ships
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)
-target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options)
+target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz)
 # The app's own files (VMAF models, bundled tools) in a development build:
 # the repository's vmaf_app folder. An installed app sets VML_RESOURCES.
 cmake_path(SET resources NORMALIZE "${PROJECT_SOURCE_DIR}/../vmaf_app")

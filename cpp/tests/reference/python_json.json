@@ -1,38 +1,52 @@
 [
  {
   "value": "{\"plain\": \"text\", \"quotes\": \"a \\\"b\\\" \\\\ c\", \"controls\": \"\\t\\n\\r\\b\\f\\u0001\\u001f\u007f\", \"accents\": \"r\u00e9f \u00e4\", \"cjk\": \"\u52d5\u753b\", \"emoji\": \"\ud83c\udfac\"}",
-  "text": "{\n  \"plain\": \"text\",\n  \"quotes\": \"a \\\"b\\\" \\\\ c\",\n  \"controls\": \"\\t\\n\\r\\b\\f\\u0001\\u001f\\u007f\",\n  \"accents\": \"r\\u00e9f \\u00e4\",\n  \"cjk\": \"\\u52d5\\u753b\",\n  \"emoji\": \"\\ud83c\\udfac\"\n}"
+  "text": "{\n  \"plain\": \"text\",\n  \"quotes\": \"a \\\"b\\\" \\\\ c\",\n  \"controls\": \"\\t\\n\\r\\b\\f\\u0001\\u001f\\u007f\",\n  \"accents\": \"r\\u00e9f \\u00e4\",\n  \"cjk\": \"\\u52d5\\u753b\",\n  \"emoji\": \"\\ud83c\\udfac\"\n}",
+  "compact": "{\"accents\":\"r\\u00e9f \\u00e4\",\"cjk\":\"\\u52d5\\u753b\",\"controls\":\"\\t\\n\\r\\b\\f\\u0001\\u001f\\u007f\",\"emoji\":\"\\ud83c\\udfac\",\"plain\":\"text\",\"quotes\":\"a \\\"b\\\" \\\\ c\"}"
  },
  {
   "value": "{\"path\": {\"$bytes\": \"66ff80c0afe08080eda080f4908080e2826261c3a9f09f8eac\"}}",
-  "text": "{\n  \"path\": \"f\\udcff\\udc80\\udcc0\\udcaf\\udce0\\udc80\\udc80\\udced\\udca0\\udc80\\udcf4\\udc90\\udc80\\udc80\\udce2\\udc82ba\\u00e9\\ud83c\\udfac\"\n}"
+  "text": "{\n  \"path\": \"f\\udcff\\udc80\\udcc0\\udcaf\\udce0\\udc80\\udc80\\udced\\udca0\\udc80\\udcf4\\udc90\\udc80\\udc80\\udce2\\udc82ba\\u00e9\\ud83c\\udfac\"\n}",
+  "compact": "{\"path\":\"f\\udcff\\udc80\\udcc0\\udcaf\\udce0\\udc80\\udc80\\udced\\udca0\\udc80\\udcf4\\udc90\\udc80\\udc80\\udce2\\udc82ba\\u00e9\\ud83c\\udfac\"}"
  },
  {
   "value": "[1, -2, 0, 12345678901234]",
-  "text": "[\n  1,\n  -2,\n  0,\n  12345678901234\n]"
+  "text": "[\n  1,\n  -2,\n  0,\n  12345678901234\n]",
+  "compact": "[1,-2,0,12345678901234]"
  },
  {
   "value": "[{\"$float\": \"0x1.999999999999ap-4\"}, {\"$float\": \"0x1.1c37937e08000p+53\"}, {\"$float\": \"0x1.4f8b588e368f1p-17\"}, {\"$float\": \"0x1.edd2f1a9fbe77p+6\"}, {\"$float\": \"0x1.0f0cf064dd592p+73\"}, {\"$float\": \"-0x0.0p+0\"}, {\"$float\": \"0x0.0000000000001p-1022\"}, {\"$float\": \"inf\"}, {\"$float\": \"-inf\"}, {\"$float\": \"nan\"}, {\"$float\": \"0x1.4000000000000p+1\"}, {\"$float\": \"0x1.9000000000000p+6\"}]",
-  "text": "[\n  0.1,\n  1e+16,\n  1e-05,\n  123.456,\n  1e+22,\n  -0.0,\n  5e-324,\n  Infinity,\n  -Infinity,\n  NaN,\n  2.5,\n  100.0\n]"
+  "text": "[\n  0.1,\n  1e+16,\n  1e-05,\n  123.456,\n  1e+22,\n  -0.0,\n  5e-324,\n  Infinity,\n  -Infinity,\n  NaN,\n  2.5,\n  100.0\n]",
+  "compact": null
  },
  {
   "value": "{\"empty object\": {}, \"empty list\": [], \"nested\": {\"a\": [{\"b\": null, \"c\": true, \"d\": false}]}}",
-  "text": "{\n  \"empty object\": {},\n  \"empty list\": [],\n  \"nested\": {\n    \"a\": [\n      {\n        \"b\": null,\n        \"c\": true,\n        \"d\": false\n      }\n    ]\n  }\n}"
+  "text": "{\n  \"empty object\": {},\n  \"empty list\": [],\n  \"nested\": {\n    \"a\": [\n      {\n        \"b\": null,\n        \"c\": true,\n        \"d\": false\n      }\n    ]\n  }\n}",
+  "compact": "{\"empty list\":[],\"empty object\":{},\"nested\":{\"a\":[{\"b\":null,\"c\":true,\"d\":false}]}}"
  },
  {
   "value": "[]",
-  "text": "[]"
+  "text": "[]",
+  "compact": "[]"
  },
  {
   "value": "{}",
-  "text": "{}"
+  "text": "{}",
+  "compact": "{}"
  },
  {
   "value": "\"a string alone\"",
-  "text": "\"a string alone\""
+  "text": "\"a string alone\"",
+  "compact": "\"a string alone\""
  },
  {
   "value": "null",
-  "text": "null"
+  "text": "null",
+  "compact": "null"
+ },
+ {
+  "value": "{\"b\": 1, \"a\": {\"d\": [3, {\"z\": 1, \"y\": 2}], \"c\": {\"$float\": \"0x1.4000000000000p+1\"}}, \"B\": true, \"\u00e9\": \"x\"}",
+  "text": "{\n  \"b\": 1,\n  \"a\": {\n    \"d\": [\n      3,\n      {\n        \"z\": 1,\n        \"y\": 2\n      }\n    ],\n    \"c\": 2.5\n  },\n  \"B\": true,\n  \"\\u00e9\": \"x\"\n}",
+  "compact": "{\"B\":true,\"a\":{\"c\":2.5,\"d\":[3,{\"y\":2,\"z\":1}]},\"b\":1,\"\\u00e9\":\"x\"}"
  }
 ]
