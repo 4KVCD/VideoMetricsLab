@@ -10,6 +10,7 @@ add_executable(vml_tests
     unit/gpu_frames_test.cpp
     unit/gpu_vmaf_test.cpp
     unit/isolated_test.cpp
+    unit/job_runner_test.cpp
     unit/library_test.cpp
     unit/libvmaf_cpu_test.cpp
     unit/libvmaf_test.cpp
@@ -17,6 +18,7 @@ add_executable(vml_tests
     unit/number_format_test.cpp
     unit/process_test.cpp
     unit/python_json_test.cpp
+    unit/run_line_test.cpp
     unit/settings_test.cpp
     unit/sha256_test.cpp
     unit/stats_test.cpp

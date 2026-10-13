@@ -7,9 +7,10 @@ frame_sync.py, geometry.py, model_select.py), FFmpeg's commands for a run
 (vmaf_runner.py, vmaf_gpu.py) and the reading of its logs, the decoding of
 videos in the app (gpu_frames.py, vmaf_runner.py), VMAF predicted from
 features by the bundled libvmaf and scored with the Vulkan engine
-(vmaf_vulkan.py), its command line's reading of arguments and patterns
-(cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
-that Vulkan scores VMAF on.
+(vmaf_vulkan.py), the line that says how far a video is (ui/run_line.py),
+its command line's reading of arguments and patterns (cli.py), and
+Python's json.dumps. The Vulkan engine's cases need a GPU that Vulkan
+scores VMAF on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -633,6 +634,101 @@ def run_cases() -> dict:
     return {"commands": cases, "gpu_commands": gpu_cases, "logs": parsed, "log_fps": exact(24000 / 1001)}
 
 
+# ----------------------------------------------------------------- run line
+
+def run_line_cases() -> dict:
+    """A video's run line (ui/run_line.py's metric_line) over snapshots of
+    its tasks as job_runner's JobRun makes them, for FFmpeg's task and
+    VMAF's on the GPU (and, for the line's wait for this video's own GPU
+    task, one of Vship's); and step_text and numbers_text."""
+    from vmaf_app.core.gpu import GPU_WAIT_MESSAGE, HwAccelPlan
+    from vmaf_app.core.status import GPU_VMAF_FAILED, GPU_WAIT, STARTING, Status
+    from vmaf_app.ui import run_line
+
+    steps = {
+        "none": "",
+        "ffmpeg starting": Status.decoding("Running ffmpeg", HwAccelPlan("cuda", None), ending="...", kind=STARTING),
+        "in the app": Status.decoding("Running PSNR, SSIM and XPSNR in the app", HwAccelPlan("cuda", "cuda"),
+                                      ending="..."),
+        "retrying": Status.decoding("GPU decode failed, retrying", HwAccelPlan(None, None), ending="..."),
+        "decoding failed": "GPU decoding failed (no decoder for the distorted video); decoding through FFmpeg "
+                           "instead…",
+        "gpu wait": Status(GPU_WAIT_MESSAGE, kind=GPU_WAIT),
+        "gpu failed": Status("VMAF on the GPU failed (device lost); calculating it on the CPU…",
+                             kind=GPU_VMAF_FAILED),
+        "spaces and dots": "  Detecting black bars in distorted . …..  ",
+        "only dots": "...",
+    }
+    kinds = {"": "step", STARTING: "starting", GPU_WAIT: "gpu_wait", GPU_VMAF_FAILED: "gpu_vmaf_failed"}
+
+    def status(message: str) -> dict:
+        brief = getattr(message, "brief", message)
+        return {"text": str(message), "kind": kinds[getattr(message, "kind", "")],
+                "brief": "" if brief == str(message) else brief}
+
+    def task(backend: str, keys: tuple[str, ...], state: str, *, lane: str | None = None, current: int = 0,
+             total: int = 0, fps: float = 0.0, done: tuple[str, ...] = (), cpu: tuple[str, ...] = (),
+             waiting: str | None = None, step: str = "none") -> dict:
+        """A task's snapshot, as JobRun.task_snapshots makes it."""
+        return {"backend": backend, "metric_keys": keys, "lane": lane or ("gpu" if backend == "vmaf_gpu" else "cpu"),
+                "passes": (keys,), "cpu_keys": cpu, "done_keys": done, "current": current, "total": total,
+                "fps": fps, "state": state, "waiting_for": waiting, "step": steps[step], "decode": "", "phase": None}
+
+    every = ("vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr")
+    cpu, gpu = ("psnr", "ssim", "xpsnr"), ("vmaf", "vmaf_neg")
+    lines = {
+        "one task starting": [task("ffmpeg", every, "starting")],
+        "one task, FFmpeg starting": [task("ffmpeg", every, "starting", step="ffmpeg starting")],
+        "one task, a step": [task("ffmpeg", cpu, "starting", step="in the app")],
+        "one task, a step in the test video": [task("ffmpeg", cpu, "starting", step="spaces and dots")],
+        "one task running": [task("ffmpeg", every, "running", current=120, total=515, fps=9.75)],
+        "one task running fast": [task("ffmpeg", cpu, "running", current=5, total=100000, fps=120.04999)],
+        "no speed yet": [task("ffmpeg", every, "running", current=3, total=515)],
+        "no frame count": [task("ffmpeg", every, "running", current=3, fps=24.0)],
+        "almost done": [task("ffmpeg", ("psnr",), "running", current=9999, total=10000, fps=0.05)],
+        "past the end": [task("ffmpeg", ("psnr",), "running", current=10001, total=10000, fps=50.0)],
+        "paused": [task("ffmpeg", every, "running", current=120, total=515, fps=9.75)],
+        "waiting for a CPU slot": [task("ffmpeg", cpu, "waiting", waiting="CPU"),
+                                   task("vmaf_gpu", gpu, "starting", step="ffmpeg starting")],
+        "both running": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
+                         task("vmaf_gpu", gpu, "running", current=75, total=100, fps=480.5)],
+        "waiting for the GPU": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
+                                task("vmaf_gpu", gpu, "waiting", waiting="GPU", step="gpu wait")],
+        "GPU waits, one task": [task("vmaf_gpu", gpu, "starting", step="gpu wait")],
+        "the CPU took over": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
+                              task("vmaf_gpu", gpu, "starting", cpu=gpu, step="gpu failed")],
+        "the CPU took over, running": [task("ffmpeg", cpu, "done", done=cpu),
+                                       task("vmaf_gpu", gpu, "running", current=10, total=100, fps=8.0, cpu=gpu)],
+        "the CPU took over, done": [task("ffmpeg", cpu, "done", done=cpu),
+                                    task("vmaf_gpu", gpu, "done", done=gpu, cpu=gpu)],
+        "CPU done, GPU running": [task("ffmpeg", cpu, "done", done=cpu),
+                                  task("vmaf_gpu", gpu, "running", current=30, total=100, fps=60.0)],
+        "CPU failed, GPU running": [task("ffmpeg", cpu, "failed"),
+                                    task("vmaf_gpu", gpu, "running", current=30, total=100, fps=60.0)],
+        "both done": [task("ffmpeg", cpu, "done", done=cpu), task("vmaf_gpu", gpu, "done", done=gpu)],
+        "a metric missing": [task("ffmpeg", cpu, "done", done=("psnr", "ssim")),
+                             task("vmaf_gpu", gpu, "starting", step="retrying")],
+        "GPU failed": [task("ffmpeg", cpu, "running", current=1, total=2, fps=1.0), task("vmaf_gpu", gpu, "failed")],
+        "this video holds the GPU": [task("vmaf_gpu", ("vmaf",), "running", current=10, total=100, fps=8.0,
+                                          cpu=("vmaf",)),
+                                     task("perceptual", ("ssimulacra2",), "waiting", lane="gpu", waiting="GPU",
+                                          step="gpu wait")],
+        "a step after decoding failed": [task("ffmpeg", every, "starting", step="decoding failed")],
+    }
+    return {
+        "lines": [{"name": name, "paused": name == "paused",
+                   "tasks": [{**{key: value for key, value in snapshot.items()
+                                 if key not in ("passes", "decode", "phase", "step", "waiting_for", "fps")},
+                              "fps": exact(snapshot["fps"]), "waiting_for": snapshot["waiting_for"] or "",
+                              "step": status(snapshot["step"])} for snapshot in snapshots],
+                   "line": run_line.metric_line(snapshots, name == "paused")[0]}
+                  for name, snapshots in lines.items()],
+        "steps": [{"status": status(message), "text": run_line.step_text(message)} for message in steps.values()],
+        "numbers": [{"numbers": numbers, "text": run_line.numbers_text(numbers)}
+                    for numbers in ([3], [1, 2], [1, 3], [2, 1, 3], [5, 6, 7, 9], [4, 5, 6])],
+    }
+
+
 # ------------------------------------------------------------- command line
 
 #: Command lines for argument_cases: right ones, and each way of being wrong.
@@ -1011,6 +1107,7 @@ if __name__ == "__main__":
     write("python_json.json", json_cases())
     write("cli.json", {"arguments": argument_cases(), "patterns": pattern_cases()})
     write("runs.json", run_cases())
+    write("run_line.json", run_line_cases())
     write("decisions.json", decision_cases())
     write("number_format.json", number_format_cases())
     write("metrics.json", metric_cases())

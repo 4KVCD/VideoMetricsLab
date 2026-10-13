@@ -12,6 +12,7 @@ add_library(vml_core
     src/gpu_vmaf.cpp
     src/hardware_decoding.cpp
     src/isolated.cpp
+    src/job_runner.cpp
     src/libvmaf.cpp
     src/libvmaf_cpu.cpp
     src/metrics.cpp
@@ -21,6 +22,7 @@ add_library(vml_core
     src/python_json.cpp
     src/python_text.cpp
     src/results.cpp
+    src/run_line.cpp
     src/settings.cpp
     src/sha256.cpp
     src/stats.cpp

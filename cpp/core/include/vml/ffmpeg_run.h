@@ -55,8 +55,16 @@ enum class StatusKind {
 struct RunStatus {
     std::string text;
     StatusKind kind = StatusKind::step;
+    // The text without the decode plan, which the run line shows apart;
+    // empty when the text has none.
+    std::string brief{};
 };
 using StatusCallback = std::function<void(const RunStatus&)>;
+
+// The status of a step that decodes: `brief`, then the decode plan, as in
+// "Running ffmpeg (GPU decode: source cuda, distorted cpu)...".
+RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding,
+                          StatusKind kind = StatusKind::step);
 
 // The status a run sends when VMAF on the GPU fails, after which FFmpeg's
 // libvmaf calculates it, starts with this.
@@ -136,11 +144,12 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
 
 // Compares two videos and returns the result, with every requested metric's
 // scores: VMAF and NEG on the GPU when they are the run's only metrics and
-// the GPU can score them (scores_on_gpu), with FFmpeg's metric filters
-// otherwise or when that fails. The GPU's part runs in a process of its own
-// where a program to run it is set (isolated.h). Throws VmafRunError when
-// the run fails, and Cancelled. `result_distorted_path` is the path the
-// result carries for the test video (by default, its own).
+// the GPU can score them (scores_on_gpu); PSNR, SSIM and XPSNR in the app
+// when they are its only metrics; with FFmpeg's metric filters otherwise or
+// when that fails. The GPU's and the app's parts run in a process of their
+// own where a program to run them is set (isolated.h). Throws VmafRunError
+// when the run fails, and Cancelled. `result_distorted_path` is the path
+// the result carries for the test video (by default, its own).
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,

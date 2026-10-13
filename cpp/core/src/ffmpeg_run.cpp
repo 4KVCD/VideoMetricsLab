@@ -653,7 +653,7 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
                          const VmafOptions& options, const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const std::string& model, double fps,
                          long long total_frames, const HardwareDecoding& decoding, const ProgressCallback& on_progress,
-                         const CancelToken& cancel) {
+                         const StatusCallback& on_status, const CancelToken& cancel) {
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
@@ -670,7 +670,13 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
         xpsnr_log_path ? std::optional(platform::path_text(xpsnr_log_path->filename())) : std::nullopt;
 
     FfmpegOutcome outcome;
-    for (const HardwareDecoding& plan : fallback_ladder(decoding)) {
+    const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
+    for (std::size_t attempt = 0; attempt < ladder.size(); ++attempt) {
+        const HardwareDecoding& plan = ladder[attempt];
+        if (on_status) {
+            on_status(attempt == 0 ? decoding_status("Running ffmpeg", plan, StatusKind::starting)
+                                   : decoding_status("GPU decode failed, retrying", plan));
+        }
         const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
                                                     "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
         const std::vector<std::string> command = build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path,
@@ -813,9 +819,8 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         const HardwareDecoding& decode = ladder[attempt_number];
         if (on_status) {
             on_status(attempt_number == 0
-                          ? RunStatus{"Running ffmpeg, " + doing(plan) + " (GPU decode: " + decode.describe() + ")...",
-                                      StatusKind::starting}
-                          : RunStatus{"GPU decode failed, retrying (GPU decode: " + decode.describe() + ")..."});
+                          ? decoding_status("Running ffmpeg, " + doing(plan), decode, StatusKind::starting)
+                          : decoding_status("GPU decode failed, retrying", decode));
         }
         // Each attempt has its own scorer and pipes: a failed attempt's
         // cannot be used again.
@@ -881,7 +886,7 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
     const double limit = gpu_duration_limit(options, fps);
     const std::optional<std::string> limit_text = limit > 0 ? std::optional(format_fixed(limit, 3)) : std::nullopt;
     if (on_status) {
-        on_status({"Running " + doing(plan) + " (GPU decode: " + decoding.describe() + ")..."});
+        on_status(decoding_status("Running " + doing(plan), decoding));
     }
     const PairScores scored =
         plan.backend == "cpu"
@@ -1292,7 +1297,8 @@ ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& envir
                 on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
             } else if (message.contains("status") && on_status) {
                 const nlohmann::json& status = message["status"];
-                on_status({status.at("text").get<std::string>(), static_cast<StatusKind>(status.at("kind").get<int>())});
+                on_status({status.at("text").get<std::string>(), static_cast<StatusKind>(status.at("kind").get<int>()),
+                           status.at("brief").get<std::string>()});
             }
         },
         cancel,
@@ -1374,7 +1380,7 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
             try {
                 ParsedScores found =
                     execute_run(environment, source, distorted, xpsnr_options, source_crop, distorted_crop, "", fps,
-                                total_frames, decoding, progress.part(1), stop);
+                                total_frames, decoding, progress.part(1), nullptr, stop);
                 const std::lock_guard lock(xpsnr_mutex);
                 xpsnr = std::move(found);
             } catch (...) {
@@ -1456,6 +1462,10 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
 }
 
 }  // namespace
+
+RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding, StatusKind kind) {
+    return {brief + " (GPU decode: " + decoding.describe() + ")...", kind, brief};
+}
 
 FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
                               const std::optional<std::filesystem::path>& xpsnr_log) {
@@ -1581,7 +1591,10 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
             send_isolated_message({{"progress", {done, whole, fps}}});
         },
         [](const RunStatus& status) {
-            send_isolated_message({{"status", {{"text", status.text}, {"kind", static_cast<int>(status.kind)}}}});
+            send_isolated_message({{"status",
+                                    {{"text", status.text},
+                                     {"kind", static_cast<int>(status.kind)},
+                                     {"brief", status.brief}}}});
         },
         CancelToken());  // the parent cancels by ending this process
     std::ofstream file(folder / scores_file, std::ios::binary);
@@ -1712,7 +1725,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     }
     if (!scores) {
         scores = execute_run(environment, source, distorted, options, source_crop, distorted_crop, model,
-                             distorted.fps, total_frames, decoding, on_progress, cancel);
+                             distorted.fps, total_frames, decoding, on_progress, on_status, cancel);
     }
     const long long compared = scores->frame.empty() ? 0 : static_cast<long long>(scores->frame.back()) + 1;
     if (const std::optional<std::string> short_run =
