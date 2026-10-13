@@ -901,11 +901,11 @@ V1Reference v1_cpu_reference(const std::filesystem::path& model, int width, int 
 }
 
 VulkanProbeFrames v1_probe_frames(int bits, int count) {
-    const int width = v1_probe_width, height = v1_probe_height;
+    constexpr int width = v1_probe_width, height = v1_probe_height;
     const std::int64_t peak = (std::int64_t{1} << bits) - 1;
     const bool wide = bits != 8;
     const auto pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-    const auto at = [width](int x, int y) {
+    const auto at = [](int x, int y) {
         return static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x);
     };
     // A sample as the frames hold it: scaled to `bits`, little-endian.
