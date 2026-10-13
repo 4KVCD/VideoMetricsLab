@@ -2,9 +2,21 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 
 namespace vml {
+
+namespace {
+
+// `number` with zeros in front up to `width` digits.
+std::string padded(long long number, int width) {
+    std::string digits = std::to_string(number);
+    if (static_cast<int>(digits.size()) < width) {
+        digits.insert(0, static_cast<std::size_t>(width) - digits.size(), '0');
+    }
+    return digits;
+}
+
+}  // namespace
 
 std::string format_hms(double seconds, int decimals) {
     seconds = std::max(0.0, seconds);
@@ -19,14 +31,9 @@ std::string format_hms(double seconds, int decimals) {
     } else {
         whole = static_cast<long long>(seconds);
     }
-    const long long hours = whole / 3600;
-    const long long minutes = whole % 3600 / 60;
-    const long long secs = whole % 60;
-    char text[64];
+    std::string text = std::to_string(whole / 3600) + ":" + padded(whole % 3600 / 60, 2) + ":" + padded(whole % 60, 2);
     if (decimals > 0) {
-        std::snprintf(text, sizeof text, "%lld:%02lld:%02lld.%0*lld", hours, minutes, secs, decimals, fraction);
-    } else {
-        std::snprintf(text, sizeof text, "%lld:%02lld:%02lld", hours, minutes, secs);
+        text += "." + padded(fraction, decimals);
     }
     return text;
 }
