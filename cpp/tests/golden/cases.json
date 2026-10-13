@@ -1,0 +1,30 @@
+{
+  "about": "Command-line runs that cover the ways the app scores videos. `golden.py run` runs each with a fresh profile (no settings, no saved scores); `golden.py compare` holds two apps' results to each other.",
+  "cases": [
+    { "name": "libvmaf-cpu-4k", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "vmaf,vmaf_neg,psnr,ssim,xpsnr", "--vmaf-on", "cpu", "--frames", "60"] },
+    { "name": "vmaf-gpu-4k", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "vmaf,vmaf_neg,vmaf_v1", "--vmaf-on", "gpu"] },
+    { "name": "vship-gpu-4k", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "ssimulacra2,butteraugli,cvvdp"] },
+    { "name": "perceptual-cpu-4k", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "ssimulacra2,butteraugli", "--cpu", "--frames", "12"] },
+    { "name": "scaled-to-test", "reference": "videoq_src.mp4", "tests": ["videoq_1080p_h265.mkv"],
+      "args": ["-m", "vmaf,psnr,ssimulacra2"] },
+    { "name": "scaled-to-reference", "reference": "videoq_src.mp4", "tests": ["videoq_1080p_h265.mkv"],
+      "args": ["-m", "vmaf,psnr", "--scale-to", "reference", "--scaler", "lanczos", "--frames", "60"] },
+    { "name": "vvc-software-decode", "reference": "videoq_src.mp4", "tests": ["videoq_1080p_vvc.mkv"],
+      "args": ["-m", "vmaf,psnr,cvvdp"] },
+    { "name": "no-gpu-decode", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "vmaf,ssimulacra2", "--no-gpu-decode", "--frames", "60"] },
+    { "name": "options", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "vmaf", "--model", "4k", "--subsample", "3", "--duration", "1.0", "--black-bars", "none"] },
+    { "name": "two-tests-sdr", "reference": "honeybee_src.mkv", "tests": ["honeybee_h264.mkv", "honeybee_h265.mkv"],
+      "args": ["-m", "vmaf,psnr,ssim,xpsnr,ssimulacra2", "--frames", "120"] },
+    { "name": "colour-and-displays", "reference": "honeybee_src.mkv", "tests": ["honeybee_h265.mkv"],
+      "args": ["-m", "psnr,cvvdp", "--colour", "bt709", "--cvvdp-display", "30-inch 4K monitor, office",
+               "--cvvdp-display", "6-inch phone"] },
+    { "name": "timestamp-pairing", "reference": "videoq_src.mp4", "tests": ["videoq_4k_h265.mkv"],
+      "args": ["-m", "vmaf,psnr,ssimulacra2", "--frames", "60"], "environment": { "VML_FRAME_PAIRING": "timestamp" } }
+  ]
+}

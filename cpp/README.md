@@ -25,6 +25,19 @@ run it again from the repository's root and commit what it writes:
 
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
+On real videos, `tests/golden/golden.py` holds the command lines to each
+other: it runs the cases in `cases.json` (12 runs covering the ways the app
+scores videos) with either app, each with a fresh profile, and compares the
+exit codes, the tables, the per-frame CSV files character for character, and
+the JSON results. The clips are 2-second cuts of real test videos
+(`clips.json`; `golden.py clips` makes them, outside the repository). Two
+runs of the Python app on this PC give identical results in every case, the
+GPU metrics included, so the C++ app is held to identical results here too.
+
+    python cpp\tests\golden\golden.py run --out python-run
+    python cpp\tests\golden\golden.py run --out cpp-run --app path\to\vml-cli.exe
+    python cpp\tests\golden\golden.py compare python-run cpp-run
+
 ## Layout
 
 | Folder | What it holds |
@@ -32,6 +45,7 @@ run it again from the repository's root and commit what it writes:
 | `core` | `vml_core`, the engine. No Qt and no operating-system headers, so the same code runs on every system, under the command line and the window. |
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/reference` | The Python app's answers, and the script that makes them. |
+| `tests/golden` | The comparison of the two apps' command lines on real videos. |
 | `third_party` | Vendored libraries: see its README. |
 
 The operating-system code (decoders, presenters), the command line and the
