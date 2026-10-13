@@ -225,7 +225,13 @@ def probe_cases() -> dict:
     before the video, missing or odd values, no video, and output that is
     not JSON."""
     cases = []
-    for clip in sorted(GOLDEN_CLIPS.glob("*.*")):
+    # The clips golden.py makes, and nothing else the folder may hold (an old
+    # cut kept beside them, say).
+    listed = json.loads((HERE.parent / "golden" / "clips.json").read_text(encoding="utf-8"))["clips"]
+    clips = sorted(GOLDEN_CLIPS / entry["name"] for entry in listed)
+    if missing := [clip.name for clip in clips if not clip.is_file()]:
+        raise SystemExit(f"{', '.join(missing)} not in {GOLDEN_CLIPS}: make the clips first (golden.py clips).")
+    for clip in clips:
         command = ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(clip)]
         data = json.loads(subprocess.run(command, capture_output=True, text=True, encoding="utf-8",
                                          check=True).stdout)
