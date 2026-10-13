@@ -192,8 +192,8 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             result = {{"available", probe.available},
                       {"device", probe.device ? nlohmann::json(*probe.device) : nlohmann::json(nullptr)},
                       {"text", probe.text}};
-        } else if (task == "gpu-run") {
-            result = gpu_run_task(request, request_file.parent_path());
+        } else if (task == "gpu-run" || task == "cpu-metrics") {
+            result = scoring_task(request, request_file.parent_path());
         } else if (task == "test-echo") {
             // For the tests of run_isolated: two messages, a file, and the
             // request back as the result.

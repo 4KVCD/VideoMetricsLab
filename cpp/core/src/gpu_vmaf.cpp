@@ -13,6 +13,7 @@
 #include "vml/frame_sync.h"
 #include "vml/gpu_frames.h"
 #include "vml/isolated.h"
+#include "vml/libvmaf_cpu.h"
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
@@ -36,15 +37,6 @@ constexpr std::size_t pipe_bytes = 64 * 1024 * 1024;
 
 constexpr unsigned nvidia = 0x10DE;  // its PCI vendor ID
 
-// ASCII text in lower case, as Python's casefold() makes FFmpeg's names.
-std::string ascii_lower(std::string text) {
-    for (char& c : text) {
-        if (c >= 'A' && c <= 'Z') {
-            c = static_cast<char>(c - 'A' + 'a');
-        }
-    }
-    return text;
-}
 
 // A queue of frame buffers between two threads. nullptr in it says that no
 // more will come.
@@ -391,18 +383,27 @@ void StreamReader::join() {
 // --------------------------------------------------------------- GpuAttempt
 
 struct GpuAttempt::State {
-    std::unique_ptr<VulkanScorer> scorer;
+    std::unique_ptr<PairScorer> scorer;
     std::unique_ptr<StreamReader> distorted;
     std::unique_ptr<StreamReader> reference;
     std::thread feeder;
     std::exception_ptr error;  // the feeder's, set before it ends
-    std::optional<VulkanScorer::Scores> result;
+    std::optional<PairScores> result;
 };
 
 GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_unique<State>()) {
     State& s = *state_;
-    s.scorer = std::make_unique<VulkanScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
-                                              plan.device);
+    if (plan.backend == "cpu") {
+        std::vector<std::string> metrics;
+        for (const auto& [key, same] : plan.models) {
+            metrics.push_back(key);
+        }
+        s.scorer = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
+                                               plan.threads, plan.frame_rate);
+    } else {
+        s.scorer = std::make_unique<VulkanScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
+                                                  plan.device);
+    }
     s.distorted = std::make_unique<StreamReader>("distorted", s.scorer->frame_bytes());
     s.reference = std::make_unique<StreamReader>("reference", s.scorer->frame_bytes());
     s.distorted->start();
@@ -464,7 +465,7 @@ void GpuAttempt::stop() {
     state_->reference->stop();
 }
 
-std::optional<VulkanScorer::Scores> GpuAttempt::finish(bool ffmpeg_succeeded) {
+std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
     State& s = *state_;
     if (!ffmpeg_succeeded) {
         stop();
@@ -482,15 +483,15 @@ std::optional<VulkanScorer::Scores> GpuAttempt::finish(bool ffmpeg_succeeded) {
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;
 }
 
-VulkanScorer::Scores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
-                                   const std::optional<CropBox>& source_crop,
-                                   const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
-                                   int n_subsample, const std::optional<std::string>& duration_limit,
-                                   long long total_frames, const std::string& scale_algorithm,
-                                   const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
-                                   const std::string& ffprobe,
-                                   const std::function<void(long long, long long, double)>& on_progress,
-                                   const CancelToken& cancel) {
+PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
+                         const std::optional<CropBox>& source_crop,
+                         const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
+                         int n_subsample, const std::optional<std::string>& duration_limit,
+                         long long total_frames, const std::string& scale_algorithm,
+                         const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
+                         const std::string& ffprobe,
+                         const std::function<void(long long, long long, double)>& on_progress,
+                         const CancelToken& cancel) {
     const std::vector<VulkanDevice> found = vulkan_devices();
     const auto chosen =
         std::find_if(found.begin(), found.end(), [&](const VulkanDevice& device) { return device.index == plan.device; });
@@ -511,18 +512,7 @@ VulkanScorer::Scores score_decoded(const VideoInfo& source, const VideoInfo& dis
         const VideoInfo& info = test_video ? distorted : source;
         DecodePlan decoded = plan_decode(info, test_video ? distorted_crop : source_crop, 6, true,
                                          std::pair(plan.width, plan.height), scale_algorithm);
-        if (decoded.bit_depth < plan.bit_depth) {
-            // Widened as FFmpeg widens it: full-range luma with its top bits
-            // repeated in the bottom ones.
-            const std::string range = ascii_lower(info.color_range);
-            const bool full = range == "pc" || range == "jpeg" || range == "full" ||
-                              (range.empty() && ascii_lower(info.pix_fmt).starts_with("yuvj"));
-            decoded.widen = full ? widen_repeat : widen_shift;
-        }
-        if (decoded.bit_depth > plan.bit_depth) {
-            throw GpuDecodeUnavailableError("the videos are compared at " + std::to_string(plan.bit_depth) +
-                                            " bits and one is " + std::to_string(decoded.bit_depth) + "-bit");
-        }
+        widen_to(decoded, info, plan.bit_depth);
         const auto [supported, refusal] = decoder_supports(0, decoded, test_video ? test_backend : source_backend);
         if (!supported) {
             throw GpuDecodeUnavailableError(refusal);
@@ -556,39 +546,21 @@ VulkanScorer::Scores score_decoded(const VideoInfo& source, const VideoInfo& dis
     }
     test.start();
     reference.start();
-    const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
-    const auto started = std::chrono::steady_clock::now();
-    auto reported = started;
-    long long count = 0;
-    while (!limit || count < *limit) {
-        const std::optional<GpuFrameStream::Picture> test_picture = test.next(cancel);
-        if (!test_picture) {
-            break;
-        }
-        const std::optional<GpuFrameStream::Picture> reference_picture = reference.next(cancel);
-        if (!reference_picture) {
-            test.release(test_picture->slot);
-            break;
-        }
-        const int test_slot = test_picture->slot, reference_slot = reference_picture->slot;
-        if (shared) {
-            scorer->add_shared(
-                [&](std::uint64_t address, std::int64_t pitch) { reference.copy_luma(reference_slot, address, pitch); },
-                [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); });
-        } else {
-            scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
-                                [&](std::uint8_t* plane) { test.download(test_slot, plane); });
-        }
-        test.release(test_slot);
-        reference.release(reference_slot);
-        ++count;
-        const auto now = std::chrono::steady_clock::now();
-        if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
-            reported = now;
-            const double seconds = std::chrono::duration<double>(now - started).count();
-            on_progress(count, total_frames, static_cast<double>(count) / seconds);
-        }
-    }
+    score_frame_pairs(
+        test, reference, distorted, duration_limit, total_frames,
+        [&](int test_slot, int reference_slot) {
+            if (shared) {
+                scorer->add_shared(
+                    [&](std::uint64_t address, std::int64_t pitch) {
+                        reference.copy_luma(reference_slot, address, pitch);
+                    },
+                    [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); });
+            } else {
+                scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
+                                    [&](std::uint8_t* plane) { test.download(test_slot, plane); });
+            }
+        },
+        on_progress, cancel);
     return scorer->finish();
 }
 

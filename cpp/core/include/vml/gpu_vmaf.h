@@ -58,13 +58,20 @@ GpuVmafBackend gpu_vmaf_backend();
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
                         int bit_depth, std::optional<std::pair<int, int>> size);
 
-// What a GPU run scores, and how.
+// What a run scores outside FFmpeg, and how (the Python app's _GpuPlan):
+// VMAF and NEG on the GPU, or PSNR, SSIM and XPSNR with libvmaf's CPU
+// extractors.
 struct GpuPlan {
-    GpuModels models;
-    int width = 0;  // the size and depth frames are compared at
+    GpuModels models;  // with backend "cpu": each metric's key with itself
+    int width = 0;     // the size and depth frames are compared at
     int height = 0;
     int bit_depth = 8;
     int device = 0;  // Vulkan's number for the GPU
+    // "vulkan", or "cpu" for PSNR, SSIM and XPSNR with libvmaf's CPU
+    // extractors (libvmaf_cpu.h), which take their frames the same way.
+    std::string backend = "vulkan";
+    int threads = 0;     // the CPU extractors' libvmaf threads
+    int frame_rate = 0;  // XPSNR's, in whole frames per second
 };
 
 // The GPU's turn: one GPU pass at a time in this process (the Python app's
@@ -130,13 +137,14 @@ private:
     std::unique_ptr<State> state_;
 };
 
-// The GPU side of one FFmpeg attempt: the pipes FFmpeg writes the two
+// The app's side of one FFmpeg attempt: the pipes FFmpeg writes the two
 // videos' frames to, and the thread that pairs them, frame N with frame N
-// until either video ends, and has the Vulkan scorer score each pair.
+// until either video ends, and has the plan's scorer score each pair: the
+// Vulkan engine, or libvmaf's CPU extractors.
 class GpuAttempt {
 public:
-    // Throws VmafVulkanError when the scorer cannot start, and
-    // platform::PipeError.
+    // Throws LibvmafError (VmafVulkanError) when the scorer cannot start,
+    // and platform::PipeError.
     GpuAttempt(const GpuPlan& plan, int n_subsample);
     ~GpuAttempt();
     GpuAttempt(const GpuAttempt&) = delete;
@@ -150,7 +158,7 @@ public:
     // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
     // (the caller then retries or gives up). Throws LibvmafError when the
     // scoring failed.
-    std::optional<VulkanScorer::Scores> finish(bool ffmpeg_succeeded);
+    std::optional<PairScores> finish(bool ffmpeg_succeeded);
 
 private:
     void feed();
@@ -171,14 +179,14 @@ private:
 // copies to the GPU. Throws GpuDecodeUnavailableError before the first
 // picture when the app cannot decode a video, GpuDecodeFailedError after
 // it, VmafVulkanError, and Cancelled.
-VulkanScorer::Scores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
-                                   const std::optional<CropBox>& source_crop,
-                                   const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
-                                   int n_subsample, const std::optional<std::string>& duration_limit,
-                                   long long total_frames, const std::string& scale_algorithm,
-                                   const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
-                                   const std::string& ffprobe,
-                                   const std::function<void(long long, long long, double)>& on_progress,
-                                   const CancelToken& cancel);
+PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
+                         const std::optional<CropBox>& source_crop,
+                         const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
+                         int n_subsample, const std::optional<std::string>& duration_limit,
+                         long long total_frames, const std::string& scale_algorithm,
+                         const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
+                         const std::string& ffprobe,
+                         const std::function<void(long long, long long, double)>& on_progress,
+                         const CancelToken& cancel);
 
 }  // namespace vml

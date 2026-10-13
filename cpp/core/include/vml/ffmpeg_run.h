@@ -127,11 +127,12 @@ std::vector<std::vector<std::string>> build_stream_commands(
 FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
                               const std::optional<std::filesystem::path>& xpsnr_log);
 
-// The child's side of VMAF on the GPU in a process of its own (isolated.h):
-// scores the run `request` describes, sending its progress and statuses,
-// leaves the scores in a file in `folder`, and returns what the parent
-// needs to read them.
-nlohmann::json gpu_run_task(const nlohmann::json& request, const std::filesystem::path& folder);
+// The child's side of a run's scoring in a process of its own (isolated.h):
+// VMAF and NEG on the GPU, or PSNR, SSIM and XPSNR in the app, as the plan
+// in `request` says. Scores the run `request` describes, sending its
+// progress and statuses, leaves the scores in a file in `folder`, and
+// returns what the parent needs to read them.
+nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder);
 
 // Compares two videos and returns the result, with every requested metric's
 // scores: VMAF and NEG on the GPU when they are the run's only metrics and

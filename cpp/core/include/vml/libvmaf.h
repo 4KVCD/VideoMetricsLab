@@ -9,6 +9,7 @@
 // structures the app shares with it are laid out as it lays them out.
 #pragma once
 
+#include <libvmaf/feature.h>
 #include <libvmaf/libvmaf.h>
 
 #include <filesystem>
@@ -44,6 +45,16 @@ struct Libvmaf {
     decltype(&::vmaf_model_destroy) model_destroy;
     decltype(&::vmaf_import_feature_score) import_feature_score;
     decltype(&::vmaf_score_at_index) score_at_index;
+    // Its own feature extractors, which the app runs for PSNR, SSIM and
+    // XPSNR, on pictures from a pool libvmaf allocates.
+    decltype(&::vmaf_use_feature) use_feature;
+    decltype(&::vmaf_feature_dictionary_set) feature_dictionary_set;
+    decltype(&::vmaf_feature_dictionary_free) feature_dictionary_free;
+    decltype(&::vmaf_preallocate_pictures) preallocate_pictures;
+    decltype(&::vmaf_fetch_preallocated_picture) fetch_preallocated_picture;
+    decltype(&::vmaf_picture_unref) picture_unref;
+    decltype(&::vmaf_read_pictures) read_pictures;
+    decltype(&::vmaf_feature_score_at_index) feature_score_at_index;
 };
 
 // Where the bundled library is, with its build record.

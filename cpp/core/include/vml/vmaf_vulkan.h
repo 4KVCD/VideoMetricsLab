@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "vml/libvmaf.h"
+#include "vml/pair_scorer.h"
 #include "vml/platform/library.h"
 
 namespace vml {
@@ -110,7 +111,7 @@ struct VulkanFeatures {
 // bits). Only the luma is used, as in VMAF. Frames a decoder in this
 // process writes itself go straight into the engine's memory instead
 // (add_decoded), or, from NVIDIA's decoder, stay on the GPU (add_shared).
-class VulkanScorer {
+class VulkanScorer : public PairScorer {
 public:
     // `models` are libvmaf models to score, each a name and the version of
     // a model libvmaf has built in ({"vmaf", "vmaf_v0.6.1"}). Every
@@ -121,16 +122,13 @@ public:
     // memory (another GPU, an old driver).
     VulkanScorer(int width, int height, int bit_depth, std::vector<std::pair<std::string, std::string>> models,
                  int n_subsample = 1, std::optional<int> device = std::nullopt, GpuFrameStream* shared = nullptr);
-    ~VulkanScorer();
+    ~VulkanScorer() override;
     VulkanScorer(const VulkanScorer&) = delete;
     VulkanScorer& operator=(const VulkanScorer&) = delete;
 
-    // The bytes of one packed frame.
-    std::size_t frame_bytes() const { return frame_bytes_; }
+    std::size_t frame_bytes() const override { return frame_bytes_; }
 
-    // Scores one more pair. Its frame number is the number of pairs given
-    // before it.
-    void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted);
+    void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
 
     // Scores one more pair that a decoder writes in itself: `reference` and
     // `distorted` are each called with the address to write a luma plane to,
@@ -156,12 +154,8 @@ public:
     std::vector<std::uint64_t> sums(unsigned frame) const;
 
     // The numbers of the frames scored, and each model's scores for them,
-    // in the order the models were given.
-    struct Scores {
-        std::vector<unsigned> frames;
-        std::vector<std::pair<std::string, std::vector<double>>> by_model;
-    };
-    Scores finish();
+    // in the order the models were given (by their names).
+    PairScores finish() override;
 
 private:
     void check(int error, const std::string& what) const;

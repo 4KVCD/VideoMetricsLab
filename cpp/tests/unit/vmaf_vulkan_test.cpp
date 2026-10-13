@@ -84,7 +84,7 @@ TEST(VmafVulkan, ScoresAsThePythonApp) {
         for (std::size_t i = 0; i < frames.reference.size(); ++i) {
             scorer.add(frames.reference[i], frames.distorted[i]);
         }
-        const VulkanScorer::Scores scores = scorer.finish();
+        const PairScores scores = scorer.finish();
         EXPECT_EQ(scores.frames, expected["frames"].get<std::vector<unsigned>>());
         const VulkanFeatures measured = scorer.features();
         ASSERT_EQ(measured.frames.size(), expected["rows"].size());
@@ -98,8 +98,8 @@ TEST(VmafVulkan, ScoresAsThePythonApp) {
                     << wanted[feature];
             }
         }
-        ASSERT_EQ(scores.by_model.size(), expected["scores"].size());
-        for (const auto& [name, values] : scores.by_model) {
+        ASSERT_EQ(scores.by_metric.size(), expected["scores"].size());
+        for (const auto& [name, values] : scores.by_metric) {
             const std::vector<double> wanted = test::reference_numbers(expected["scores"].at(name));
             ASSERT_EQ(values.size(), wanted.size()) << name;
             for (std::size_t i = 0; i < values.size(); ++i) {
@@ -150,13 +150,13 @@ TEST(VmafVulkan, NoFramesGiveNoScoresAndAShortFrameIsAnError) {
     VulkanScorer scorer(64, 32, 8, {{"vmaf", "vmaf_v0.6.1"}, {"vmaf_neg", "vmaf_v0.6.1neg"}});
     const std::vector<std::uint8_t> frame(64 * 32 - 1);
     EXPECT_THROW(scorer.add(frame, frame), VmafVulkanError);
-    const VulkanScorer::Scores scores = scorer.finish();
+    const PairScores scores = scorer.finish();
     EXPECT_TRUE(scores.frames.empty());
-    ASSERT_EQ(scores.by_model.size(), 2u);
-    EXPECT_EQ(scores.by_model[0].first, "vmaf");
-    EXPECT_EQ(scores.by_model[1].first, "vmaf_neg");
-    EXPECT_TRUE(scores.by_model[0].second.empty());
-    EXPECT_TRUE(scores.by_model[1].second.empty());
+    ASSERT_EQ(scores.by_metric.size(), 2u);
+    EXPECT_EQ(scores.by_metric[0].first, "vmaf");
+    EXPECT_EQ(scores.by_metric[1].first, "vmaf_neg");
+    EXPECT_TRUE(scores.by_metric[0].second.empty());
+    EXPECT_TRUE(scores.by_metric[1].second.empty());
 }
 
 }  // namespace

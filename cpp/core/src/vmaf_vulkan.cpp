@@ -310,11 +310,11 @@ std::vector<std::uint64_t> VulkanScorer::sums(unsigned frame) const {
     return out;
 }
 
-VulkanScorer::Scores VulkanScorer::finish() {
-    Scores result;
+PairScores VulkanScorer::finish() {
+    PairScores result;
     if (count_ == 0) {
         for (const auto& [name, version] : models_) {
-            result.by_model.emplace_back(name, std::vector<double>());
+            result.by_metric.emplace_back(name, std::vector<double>());
         }
         return result;
     }
@@ -324,7 +324,7 @@ VulkanScorer::Scores VulkanScorer::finish() {
         for (const auto& [feature, column] : model_features(is_neg_model(version))) {
             given.emplace_back(feature, measured.columns[column]);
         }
-        result.by_model.emplace_back(name, predict_scores(version, measured.frames, given));
+        result.by_metric.emplace_back(name, predict_scores(version, measured.frames, given));
     }
     result.frames = std::move(measured.frames);
     return result;

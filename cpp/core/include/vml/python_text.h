@@ -22,6 +22,11 @@ std::optional<long long> python_int(std::string_view text);
 // U+FFFD, as Python decodes with errors="replace".
 std::string replace_invalid_utf8(std::string_view text);
 
+// ASCII text in lower case, as Python's casefold() makes the ASCII names
+// the app compares: FFmpeg's codec and format names, an environment
+// variable's value.
+std::string ascii_lower(std::string_view text);
+
 // `text` without the whitespace around it, as Python's str.strip() takes it
 // off: the ASCII whitespace, which for str.strip() includes the separators
 // 0x1C to 0x1F (float() and int() do not take those off). Python also takes

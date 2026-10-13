@@ -16,6 +16,7 @@
 #include <thread>
 
 #include "vml/ffmpeg_tools.h"
+#include "vml/frame_sync.h"
 #include "vml/model_select.h"
 #include "vml/platform/library.h"
 #include "vml/platform/pipe.h"
@@ -103,18 +104,6 @@ bool is_scaler(std::string_view algorithm) {
     return algorithm == "bilinear" || algorithm == "bicubic" || algorithm == "lanczos" || algorithm == "spline";
 }
 
-// ASCII text in lower case (FFmpeg's names, and the variable's value), as
-// Python's casefold() makes it.
-std::string lowered(std::string_view text) {
-    std::string out(text);
-    for (char& c : out) {
-        if (c >= 'A' && c <= 'Z') {
-            c = static_cast<char>(c - 'A' + 'a');
-        }
-    }
-    return out;
-}
-
 // What the decoder libraries answer (native/gpu_frames.h).
 constexpr int nvf_frame = 1, nvf_end = 0, nvf_aborted = -2, nvf_timeout = 2;
 // Packet flags (AV_PKT_FLAG_*).
@@ -163,7 +152,7 @@ struct NativeParams {
 
 // A decoder library and the functions of it the app calls.
 struct DecoderLibrary {
-    DecoderLibrary(const std::filesystem::path& path, bool imports, bool takes_libraries)
+    DecoderLibrary(const std::filesystem::path& path, bool hands_over, bool takes_libraries)
         : library(path),
           open(library.function<decltype(open)>("nvf_open")),
           push(library.function<decltype(push)>("nvf_push")),
@@ -176,9 +165,12 @@ struct DecoderLibrary {
           close(library.function<decltype(close)>("nvf_close")),
           error(library.function<decltype(error)>("nvf_error")),
           supports(library.function<decltype(supports)>("nvf_supports")) {
-        if (imports) {
+        if (hands_over) {
             import_memory = library.function<decltype(import_memory)>("nvf_import");
             unimport = library.function<decltype(unimport)>("nvf_unimport");
+            pin = library.function<decltype(pin)>("nvf_pin");
+            unpin = library.function<decltype(unpin)>("nvf_unpin");
+            download_planes = library.function<decltype(download_planes)>("nvf_download_planes");
         }
         if (takes_libraries) {
             set_libraries = library.function<decltype(set_libraries)>("nvf_set_libraries");
@@ -197,10 +189,16 @@ struct DecoderLibrary {
     void (*close)(void* decoder);
     int (*error)(void* decoder, char* out, int size);
     int (*supports)(int device, int codec, int bit_depth, int width, int height, char* error, int error_size);
-    // NVIDIA's: GPU memory another API allocated, as memory copy_luma writes into.
+    // NVIDIA's, whose pictures stay on the GPU: GPU memory another API
+    // allocated, as memory copy_luma writes into; memory of this process
+    // page-locked for its copies; a picture's planes copied each to its own
+    // place.
     int (*import_memory)(void* decoder, void* handle, unsigned long long bytes, int dedicated,
                          unsigned long long* address, void** memory) = nullptr;
     void (*unimport)(void* decoder, void* memory) = nullptr;
+    int (*pin)(void* decoder, void* host, unsigned long long bytes) = nullptr;
+    int (*unpin)(void* decoder, void* host) = nullptr;
+    int (*download_planes)(void* decoder, int slot, void* const* planes, const long long* pitches) = nullptr;
     // The software decoder's: the libraries it decodes with (their handles).
     int (*set_libraries)(void* avutil, void* avcodec, void* dav1d) = nullptr;
 };
@@ -212,7 +210,7 @@ std::string buffer_text(const char* buffer, std::size_t size) {
 }
 
 bool software_decode_off() {
-    return lowered(platform::environment_variable(software_decode_variable).value_or("")) == "ffmpeg";
+    return ascii_lower(platform::environment_variable(software_decode_variable).value_or("")) == "ffmpeg";
 }
 
 std::filesystem::path library_path(std::string_view backend) {
@@ -735,12 +733,12 @@ std::size_t DecodePlan::frame_bytes() const {
 
 DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop, int shift, bool luma_only,
                        const std::optional<std::pair<int, int>>& size, const std::string& algorithm) {
-    const std::string codec = lowered(info.codec_name);
+    const std::string codec = ascii_lower(info.codec_name);
     if (find_codec(codec) == nullptr) {
         throw GpuDecodeUnavailableError((info.codec_name.empty() ? "this codec" : info.codec_name) +
                                         " is decoded by FFmpeg");
     }
-    const int depth = depth_of(lowered(info.pix_fmt));
+    const int depth = depth_of(ascii_lower(info.pix_fmt));
     if (depth == 0) {
         throw GpuDecodeUnavailableError((info.pix_fmt.empty() ? "this pixel format" : info.pix_fmt) +
                                         " is decoded by FFmpeg");
@@ -1118,6 +1116,31 @@ void GpuFrameStream::unimport(void* memory) {
     }
 }
 
+const std::string& GpuFrameStream::backend() const { return state_->backend; }
+
+bool GpuFrameStream::pin(void* host, std::uint64_t size) {
+    State& state = *state_;
+    return state.library->pin != nullptr && state.handle != nullptr &&
+           state.library->pin(state.handle, host, size) == 0;
+}
+
+void GpuFrameStream::unpin(void* host) {
+    if (state_->handle != nullptr && state_->library->unpin != nullptr) {
+        state_->library->unpin(state_->handle, host);
+    }
+}
+
+void GpuFrameStream::download_planes(int slot, const std::array<void*, 3>& planes,
+                                     const std::array<std::int64_t, 3>& pitches) {
+    State& state = *state_;
+    const std::array<long long, 3> rows{pitches[0], pitches[1], pitches[2]};
+    if (state.library->download_planes == nullptr ||
+        state.library->download_planes(state.handle, slot, planes.data(), rows.data()) != 0) {
+        const std::string said = state.library->download_planes == nullptr ? std::string() : state.error_text();
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+    }
+}
+
 void GpuFrameStream::close() {
     State& state = *state_;
     if (state.handle == nullptr) {
@@ -1141,6 +1164,51 @@ void GpuFrameStream::close() {
         close_decoder(*state.library, state.handle);
     }  // else (never seen): leaking the decoder is safer than freeing it under the running thread
     state.handle = nullptr;
+}
+
+void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth) {
+    if (plan.bit_depth < bit_depth) {
+        const std::string range = ascii_lower(info.color_range);
+        const bool full = range == "pc" || range == "jpeg" || range == "full" ||
+                          (range.empty() && ascii_lower(info.pix_fmt).starts_with("yuvj"));
+        plan.widen = full ? widen_repeat : widen_shift;
+    }
+    if (plan.bit_depth > bit_depth) {
+        throw GpuDecodeUnavailableError("the videos are compared at " + std::to_string(bit_depth) +
+                                        " bits and one is " + std::to_string(plan.bit_depth) + "-bit");
+    }
+}
+
+void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const VideoInfo& distorted,
+                       const std::optional<std::string>& duration_limit, long long total_frames,
+                       const std::function<void(int, int)>& score,
+                       const std::function<void(long long, long long, double)>& on_progress,
+                       const CancelToken& cancel) {
+    const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
+    const auto started = std::chrono::steady_clock::now();
+    auto reported = started;
+    long long count = 0;
+    while (!limit || count < *limit) {
+        const std::optional<GpuFrameStream::Picture> test_picture = test.next(cancel);
+        if (!test_picture) {
+            break;
+        }
+        const std::optional<GpuFrameStream::Picture> reference_picture = reference.next(cancel);
+        if (!reference_picture) {
+            test.release(test_picture->slot);
+            break;
+        }
+        score(test_picture->slot, reference_picture->slot);
+        test.release(test_picture->slot);
+        reference.release(reference_picture->slot);
+        ++count;
+        const auto now = std::chrono::steady_clock::now();
+        if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
+            reported = now;
+            const double seconds = std::chrono::duration<double>(now - started).count();
+            on_progress(count, total_frames, static_cast<double>(count) / seconds);
+        }
+    }
 }
 
 }  // namespace vml

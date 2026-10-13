@@ -8,13 +8,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <filesystem>
-#include <random>
 #include <string>
 #include <vector>
 
 #include "reference.h"
+#include "test_videos.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
@@ -26,26 +25,16 @@ namespace vml {
 namespace {
 
 using Json = nlohmann::json;
-
-void set_software_decode(const std::string& value) {
-#ifdef _WIN32
-    _putenv_s(std::string(software_decode_variable).c_str(), value.c_str());
-#else
-    setenv(std::string(software_decode_variable).c_str(), value.c_str(), 1);
-#endif
-}
+using test::Folder;
+using test::make_clip;
+using test::Tools;
+using test::tools;
 
 // VML_SOFTWARE_DECODE as a test sets it, put back as it was.
-class SoftwareDecode {
+class SoftwareDecode : public test::ScopedVariable {
 public:
     explicit SoftwareDecode(const std::string& value)
-        : previous_(platform::environment_variable(software_decode_variable).value_or("")) {
-        set_software_decode(value);
-    }
-    ~SoftwareDecode() { set_software_decode(previous_); }
-
-private:
-    std::string previous_;
+        : test::ScopedVariable(std::string(software_decode_variable), value) {}
 };
 
 TEST(GpuFrames, PlansAsThePythonAppDoes) {
@@ -179,65 +168,6 @@ TEST(GpuFrames, PicturesThatDoNotMatchThePacketsFailTheRun) {
 
 // ----------------------------------------------------- on the PC's decoders
 
-// FFmpeg and ffprobe, or nothing where they do not run (GitHub's runners).
-struct Tools {
-    std::string ffmpeg;
-    std::string ffprobe;
-    std::string version;
-};
-std::optional<Tools> tools() {
-    const ToolsStatus status = check_tools(Settings{});
-    if (!status.ok()) {
-        return std::nullopt;
-    }
-    return Tools{status.ffmpeg.path, status.ffprobe.path, format_version(status.ffmpeg.version)};
-}
-
-// A temporary folder of the test's own, deleted with it.
-class Folder {
-public:
-    Folder()
-        : path_(std::filesystem::temp_directory_path() /
-                ("vml_gpu_frames_test_" + std::to_string(std::random_device()()))) {
-        std::filesystem::create_directories(path_);
-    }
-    ~Folder() {
-        std::error_code ignored;
-        std::filesystem::remove_all(path_, ignored);
-    }
-    std::filesystem::path operator/(const std::string& name) const { return path_ / name; }
-
-private:
-    std::filesystem::path path_;
-};
-
-// Runs FFmpeg; its standard output, or the test fails.
-std::string ffmpeg_output(const Tools& found, std::vector<std::string> arguments) {
-    arguments.insert(arguments.begin(), {found.ffmpeg, "-nostdin", "-v", "error", "-y"});
-    const platform::ProcessOutput output = platform::run_program(arguments, std::chrono::minutes(2));
-    EXPECT_EQ(output.exit_code, 0) << output.standard_error;
-    return output.standard_output;
-}
-
-// A clip of FFmpeg's test pattern at 24000/1001 frames a second, with
-// B-frames, encoded by `encoder` ("libx264", "libx265").
-std::filesystem::path make_clip(const Tools& found, const std::filesystem::path& path, const std::string& encoder,
-                                const std::string& pix_fmt, double seconds, std::vector<std::string> extra = {},
-                                const std::string& size = "640x360") {
-    std::vector<std::string> arguments{"-f", "lavfi", "-i",
-                                       "testsrc2=s=" + size + ":r=24000/1001:d=" + std::to_string(seconds),
-                                       "-pix_fmt", pix_fmt, "-c:v", encoder};
-    if (encoder == "libx264") {
-        arguments.insert(arguments.end(), {"-preset", "veryfast", "-bf", "3"});
-    } else {
-        arguments.insert(arguments.end(), {"-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error"});
-    }
-    arguments.insert(arguments.end(), extra.begin(), extra.end());
-    arguments.push_back(platform::path_text(path));
-    ffmpeg_output(found, arguments);
-    return path;
-}
-
 // FFmpeg's decoding of the clip, cropped as the plan says, as raw pictures:
 // its standard output read as data (run_program reads it as text).
 std::string ffmpeg_pictures(const Tools& found, const std::filesystem::path& path, const DecodePlan& plan) {
@@ -290,7 +220,7 @@ TEST(GpuFrames, PicturesAreFfmpegsDecoding) {
     const std::filesystem::path whole =
         make_clip(*found, folder / "whole.mp4", "libx264", "yuv420p", 4.0, {"-g", "48"});
     const std::filesystem::path cut = folder / "cut.mp4";
-    ffmpeg_output(*found, {"-ss", "1.3", "-i", platform::path_text(whole), "-c", "copy", platform::path_text(cut)});
+    test::run_ffmpeg(*found, {"-ss", "1.3", "-i", platform::path_text(whole), "-c", "copy", platform::path_text(cut)});
     const std::vector<std::pair<std::filesystem::path, std::optional<CropBox>>> clips{
         {h264, std::nullopt}, {h264, CropBox{600, 300, 20, 30}}, {hevc, CropBox{638, 358, 2, 2}}, {cut, std::nullopt}};
     int decoded = 0;

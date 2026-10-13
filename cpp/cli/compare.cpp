@@ -29,6 +29,7 @@
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
+#include "vml/python_text.h"
 #include "vml/settings.h"
 #include "vml/time_format.h"
 
@@ -339,12 +340,17 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
     const bool vmaf = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
         return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
     });
-    if (!asked.empty() && !vmaf) {
-        // The Python app scores them itself, with its own libvmaf, unless
-        // VMAF runs on the CPU beside them in FFmpeg.
-        return "PSNR, SSIM or XPSNR without a VMAF";
-    }
     const std::optional<std::string> vmaf_on = where(arguments, "vmaf");
+    const bool cpu_metrics = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
+        return key == "psnr" || key == "ssim" || key == "xpsnr";
+    });
+    // The app scores PSNR, SSIM and XPSNR itself unless VMAF is calculated
+    // on the CPU beside them, in FFmpeg; with FFmpeg's frames, the C++ app
+    // pairs them itself only.
+    if (cpu_metrics && (!vmaf || (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) &&
+        ascii_lower(platform::environment_variable("VML_VMAF_PIPES").value_or("")) == "canvas") {
+        return "PSNR, SSIM or XPSNR with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)";
+    }
     if (std::find(asked.begin(), asked.end(), "vmaf_v1") != asked.end() &&
         (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) {
         return "VMAF v1 on the GPU (--vmaf-on cpu scores it on the CPU)";
@@ -395,10 +401,7 @@ GpuDecision gpu_decision(const VideoInfo& source, const VideoInfo& test, const V
     if (by_timestamp()) {
         return {false, "VMAF on the GPU with frames paired by timestamp (VML_FRAME_PAIRING)"};
     }
-    std::string pipes = platform::environment_variable("VML_VMAF_PIPES").value_or("");
-    std::transform(pipes.begin(), pipes.end(), pipes.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (pipes == "canvas") {
+    if (ascii_lower(platform::environment_variable("VML_VMAF_PIPES").value_or("")) == "canvas") {
         return {false, "VMAF on the GPU with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)"};
     }
     return {true, std::nullopt};

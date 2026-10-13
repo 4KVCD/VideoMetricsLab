@@ -48,7 +48,16 @@ Libvmaf::Libvmaf(const std::filesystem::path& path)
       model_load(library.function<decltype(model_load)>("vmaf_model_load")),
       model_destroy(library.function<decltype(model_destroy)>("vmaf_model_destroy")),
       import_feature_score(library.function<decltype(import_feature_score)>("vmaf_import_feature_score")),
-      score_at_index(library.function<decltype(score_at_index)>("vmaf_score_at_index")) {
+      score_at_index(library.function<decltype(score_at_index)>("vmaf_score_at_index")),
+      use_feature(library.function<decltype(use_feature)>("vmaf_use_feature")),
+      feature_dictionary_set(library.function<decltype(feature_dictionary_set)>("vmaf_feature_dictionary_set")),
+      feature_dictionary_free(library.function<decltype(feature_dictionary_free)>("vmaf_feature_dictionary_free")),
+      preallocate_pictures(library.function<decltype(preallocate_pictures)>("vmaf_preallocate_pictures")),
+      fetch_preallocated_picture(
+          library.function<decltype(fetch_preallocated_picture)>("vmaf_fetch_preallocated_picture")),
+      picture_unref(library.function<decltype(picture_unref)>("vmaf_picture_unref")),
+      read_pictures(library.function<decltype(read_pictures)>("vmaf_read_pictures")),
+      feature_score_at_index(library.function<decltype(feature_score_at_index)>("vmaf_feature_score_at_index")) {
     // VmafPicture gained its colour field with vmaf_picture_convert (Netflix/vmaf
     // 0497a0f2). A library without that function lays its pictures out
     // without the field, as the app's headers do not.

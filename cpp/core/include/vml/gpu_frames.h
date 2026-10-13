@@ -30,6 +30,7 @@
 // with them, which the Python app uses for VMAF v1 on the GPU.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -211,6 +212,9 @@ public:
     GpuFrameStream(const GpuFrameStream&) = delete;
     GpuFrameStream& operator=(const GpuFrameStream&) = delete;
 
+    // The decoder: "nvidia", "intel", "amd" or "software".
+    const std::string& backend() const;
+
     // Starts FFmpeg and the thread that feeds its packets to the decoder.
     void start();
 
@@ -247,6 +251,20 @@ public:
     // Undoes import_memory.
     void unimport(void* memory);
 
+    // Page-locks `size` bytes of this process's memory at `host`, so that
+    // NVIDIA's decoder copies pictures into it directly (otherwise the
+    // driver copies them through memory of its own). False where it cannot;
+    // downloads then work as before.
+    bool pin(void* host, std::uint64_t size);
+
+    // Undoes pin.
+    void unpin(void* host);
+
+    // Copies the slot's Y, U and V planes each to its own address, with rows
+    // `pitches` bytes apart (a libvmaf picture's planes); a null address
+    // skips that plane. NVIDIA's decoder only.
+    void download_planes(int slot, const std::array<void*, 3>& planes, const std::array<std::int64_t, 3>& pitches);
+
     // Stops decoding and frees everything; safe to call twice.
     void close();
 
@@ -254,5 +272,24 @@ private:
     struct State;
     std::shared_ptr<State> state_;  // shared with the feeding thread, which may outlive a close that gives up on it
 };
+
+// Readies `plan` for frames compared at `bit_depth` bits: an 8-bit video is
+// widened as FFmpeg converts it, full-range luma with its top bits repeated
+// in the bottom ones. Throws GpuDecodeUnavailableError for a video deeper
+// than the comparison.
+void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth);
+
+// Scores two videos decoded in the app pair by pair, as the Python app's
+// frame_sync.decoded_frame_pairs pairs them: frame N of the test video with
+// frame N of the source, until either video ends, or as far as
+// `duration_limit` (-t's text) keeps frames at the test video's rate.
+// `score` is called with each pair's slots (the test video's, then the
+// source's), which are given back to the decoders once it returns. Progress
+// goes to `on_progress` every quarter of a second.
+void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const VideoInfo& distorted,
+                       const std::optional<std::string>& duration_limit, long long total_frames,
+                       const std::function<void(int, int)>& score,
+                       const std::function<void(long long, long long, double)>& on_progress,
+                       const CancelToken& cancel);
 
 }  // namespace vml

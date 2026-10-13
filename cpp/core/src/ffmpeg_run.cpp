@@ -25,6 +25,7 @@
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/isolated.h"
+#include "vml/libvmaf_cpu.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -741,14 +742,14 @@ double gpu_duration_limit(const VmafOptions& options, double fps) {
 // The GPU's scores as the run's (the Python app's _gpu_frame_scores): each
 // kept as a float, as the Python app keeps FFmpeg's, the frames timed at
 // `fps`. Throws when no frame was scored or a requested metric has none.
-ParsedScores gpu_scores(const VulkanScorer::Scores& scored, double fps, const VmafOptions& options) {
+ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions& options) {
     if (scored.frames.empty()) {
         throw LibvmafError("GPU VMAF scored no frames");
     }
     ParsedScores scores;
     scores.frame.assign(scored.frames.begin(), scored.frames.end());
     scores.time = times_of(scores.frame, fps);
-    for (const auto& [key, values] : scored.by_model) {
+    for (const auto& [key, values] : scored.by_metric) {
         std::vector<float>& column = scores.metrics[key];
         for (const double value : values) {
             column.push_back(static_cast<float>(value));
@@ -771,9 +772,29 @@ ParsedScores gpu_scores(const VulkanScorer::Scores& scored, double fps, const Vm
     return scores;
 }
 
-// VMAF and NEG on the GPU: each video decoded by an FFmpeg of its own, whose
-// frames the app pairs and the Vulkan engine scores (GpuAttempt), falling
-// back to other decode plans when hardware decoding fails.
+// The plan's metrics in the run's own words: "PSNR, SSIM and XPSNR".
+std::string metric_names(const GpuPlan& plan) {
+    std::vector<std::string> names;
+    for (const auto& [key, model] : plan.models) {
+        names.push_back(key == "psnr" ? "PSNR" : key == "ssim" ? "SSIM" : key == "xpsnr" ? "XPSNR" : key);
+    }
+    std::string text;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        text += (i == 0 ? "" : i + 1 == names.size() ? " and " : ", ") + names[i];
+    }
+    return text;
+}
+
+// What a plan's run is doing, for its statuses: "VMAF on the GPU", or
+// "PSNR and SSIM in the app".
+std::string doing(const GpuPlan& plan) {
+    return plan.backend == "cpu" ? metric_names(plan) + " in the app" : "VMAF on the GPU";
+}
+
+// The plan's metrics scored outside FFmpeg's filters, each video decoded by
+// an FFmpeg of its own whose frames the app pairs and the plan's scorer
+// scores (GpuAttempt): VMAF and NEG on the GPU, or PSNR, SSIM and XPSNR in
+// the app. Falls back to other decode plans when hardware decoding fails.
 ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                              const VmafOptions& options, const std::optional<CropBox>& source_crop,
                              const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
@@ -783,16 +804,16 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
-    const RunFolder folder("vmaf_gpu_run_");
+    const RunFolder folder(plan.backend == "cpu" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
     const double limit = gpu_duration_limit(options, fps);
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
-    std::optional<VulkanScorer::Scores> scored;
+    std::optional<PairScores> scored;
     FfmpegOutcome outcome;
     for (std::size_t attempt_number = 0; attempt_number < ladder.size(); ++attempt_number) {
         const HardwareDecoding& decode = ladder[attempt_number];
         if (on_status) {
             on_status(attempt_number == 0
-                          ? RunStatus{"Running ffmpeg, VMAF on the GPU (GPU decode: " + decode.describe() + ")...",
+                          ? RunStatus{"Running ffmpeg, " + doing(plan) + " (GPU decode: " + decode.describe() + ")...",
                                       StatusKind::starting}
                           : RunStatus{"GPU decode failed, retrying (GPU decode: " + decode.describe() + ")..."});
         }
@@ -836,46 +857,64 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     return gpu_scores(*scored, fps, options);
 }
 
-// VMAF and NEG on the GPU with both videos decoded in this process
-// (score_decoded), over the same frames execute_gpu_run's FFmpegs would
-// give the scorer.
-ParsedScores score_decoded_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
-                                  const VideoInfo& distorted, const VmafOptions& options,
-                                  const std::optional<CropBox>& source_crop,
-                                  const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
-                                  long long total_frames, const HardwareDecoding& decoding,
-                                  const std::pair<std::string, std::string>& decoders,
-                                  const ProgressCallback& on_progress, const StatusCallback& on_status,
-                                  const CancelToken& cancel) {
-    const double limit = gpu_duration_limit(options, fps);
-    if (on_status) {
-        on_status({"Running VMAF on the GPU (GPU decode: " + decoding.describe() + ")..."});
+// The keys of the metrics a plan scores.
+std::vector<std::string> plan_keys(const GpuPlan& plan) {
+    std::vector<std::string> keys;
+    for (const auto& [key, model] : plan.models) {
+        keys.push_back(key);
     }
-    const VulkanScorer::Scores scored = score_decoded(
-        source, distorted, source_crop, distorted_crop, plan, options.n_subsample,
-        limit > 0 ? std::optional(format_fixed(limit, 3)) : std::nullopt, total_frames, options.scale_algorithm,
-        decoders, environment.ffmpeg, environment.ffprobe, on_progress, cancel);
+    return keys;
+}
+
+// The plan's metrics with both videos decoded in this process (the Python
+// app's _score_decoded_on_gpu): VMAF and NEG on the GPU (score_decoded), or
+// PSNR, SSIM and XPSNR in the app (score_decoded_cpu), over the same frames
+// execute_gpu_run's FFmpegs would give the scorer.
+ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoInfo& source,
+                                const VideoInfo& distorted, const VmafOptions& options,
+                                const std::optional<CropBox>& source_crop,
+                                const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                                long long total_frames, const HardwareDecoding& decoding,
+                                const std::pair<std::string, std::string>& decoders,
+                                const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                const CancelToken& cancel) {
+    const double limit = gpu_duration_limit(options, fps);
+    const std::optional<std::string> limit_text = limit > 0 ? std::optional(format_fixed(limit, 3)) : std::nullopt;
+    if (on_status) {
+        on_status({"Running " + doing(plan) + " (GPU decode: " + decoding.describe() + ")..."});
+    }
+    const PairScores scored =
+        plan.backend == "cpu"
+            ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
+                                plan.bit_depth, plan_keys(plan), options.n_subsample, limit_text, total_frames,
+                                decoders, plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
+                                environment.ffprobe, on_progress, cancel)
+            : score_decoded(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, limit_text,
+                            total_frames, options.scale_algorithm, decoders, environment.ffmpeg, environment.ffprobe,
+                            on_progress, cancel);
     return gpu_scores(scored, fps, options);
 }
 
-// The GPU run (the Python app's _score_on_gpu): where this process has a
-// decoder for each video (decoders_here), the videos are decoded here, by
-// the decoder FFmpeg would have used, or by the software decoder for a video
-// FFmpeg would decode in software. The frames are the same, without FFmpeg's
-// decoding and the CPU copies and pipes behind it. Otherwise, or when that
-// decoding fails after it has started, FFmpeg decodes them. (With libvmaf's
-// CUDA code, which the C++ app does not have yet, the Python app decodes
-// here only with NVIDIA's decoder and the software decoder.)
-ParsedScores score_on_gpu(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                          const VmafOptions& options, const std::optional<CropBox>& source_crop,
-                          const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
-                          long long total_frames, const HardwareDecoding& decoding,
-                          const ProgressCallback& on_progress, const StatusCallback& on_status,
-                          const CancelToken& cancel) {
+// The plan's metrics outside FFmpeg's filters (the Python app's
+// _score_on_gpu and _score_cpu_metrics, which choose alike for the Vulkan
+// backend): where this process has a decoder for each video
+// (decoders_here), the videos are decoded here, by the decoder FFmpeg would
+// have used, or by the software decoder for a video FFmpeg would decode in
+// software. The frames are the same, without FFmpeg's decoding and the CPU
+// copies and pipes behind it. Otherwise, or when that decoding fails after
+// it has started, FFmpeg decodes them. (With libvmaf's CUDA code, which the
+// C++ app does not have yet, the Python app decodes here for VMAF only with
+// NVIDIA's decoder and the software decoder.)
+ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                        const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                        const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                        long long total_frames, const HardwareDecoding& decoding,
+                        const ProgressCallback& on_progress, const StatusCallback& on_status,
+                        const CancelToken& cancel) {
     if (const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding)) {
         try {
-            return score_decoded_on_gpu(environment, source, distorted, options, source_crop, distorted_crop, plan,
-                                        fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
+            return score_decoded_here(environment, source, distorted, options, source_crop, distorted_crop, plan,
+                                      fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
         } catch (const GpuDecodeUnavailableError&) {
             // FFmpeg decodes the videos.
         } catch (const GpuDecodeFailedError& error) {
@@ -887,6 +926,175 @@ ParsedScores score_on_gpu(const RunEnvironment& environment, const VideoInfo& so
     return execute_gpu_run(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
                            total_frames, decoding, on_progress, on_status, cancel);
 }
+
+// ----------------------------------------------- PSNR, SSIM and XPSNR in the app
+
+// The environment variable that, set to "ffmpeg", leaves PSNR, SSIM and
+// XPSNR to FFmpeg's filters instead of the app's own libvmaf, to compare
+// the two.
+constexpr std::string_view cpu_metrics_variable = "VML_CPU_METRICS";
+
+// The metric FFmpeg's libvmaf feature is, where the app scores it itself.
+std::optional<std::string> cpu_metric_of_feature(const std::string& feature) {
+    if (feature == "name=psnr") {
+        return "psnr";
+    }
+    if (feature == "name=float_ssim") {
+        return "ssim";
+    }
+    return std::nullopt;
+}
+
+// Whether the app may score PSNR, SSIM and XPSNR itself: its libvmaf is
+// bundled, and VML_CPU_METRICS does not send them to FFmpeg.
+bool cpu_metrics_in_app() {
+    std::error_code ignored;
+    return ascii_lower(platform::environment_variable(cpu_metrics_variable).value_or("")) != "ffmpeg" &&
+           std::filesystem::is_regular_file(libvmaf_folder() / platform::shared_library_name("libvmaf"), ignored);
+}
+
+// XPSNR's frame rate, in whole frames per second, as FFmpeg's xpsnr filter
+// takes it from its second input, the test video: FFmpeg gives an input the
+// rate av_guess_frame_rate() returns, r_frame_rate when the average rate is
+// known and within a tenth of it. Otherwise that rate cannot be predicted
+// here, and FFmpeg's filter scores XPSNR.
+std::optional<int> xpsnr_frame_rate(const VideoInfo& info) {
+    const double average = info.average_fps, nominal = info.nominal_fps;
+    if (average <= 0 || nominal <= 0 || std::abs(1.0 - average / nominal) >= 0.09) {
+        return std::nullopt;
+    }
+    return static_cast<int>(nominal);
+}
+
+// Whether libvmaf-fast's port of FFmpeg's xpsnr filter gives exactly
+// FFmpeg's score for this comparison: up to 12 bits, and an even size above
+// 2048x1152 (FFmpeg's filter reads beyond the picture of an odd one).
+bool xpsnr_in_app(int width, int height, int bit_depth) {
+    const bool odd = width % 2 != 0 || height % 2 != 0;
+    if (bit_depth > 12 || (static_cast<long long>(width) * height > 2048LL * 1152 && odd)) {
+        return false;
+    }
+    return cpu_scores_xpsnr();
+}
+
+// Whether the app will decode both videos itself (score_decoded_cpu), as far
+// as can be known before it asks the decoders.
+bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const std::optional<CropBox>& source_crop,
+                    const std::optional<CropBox>& distorted_crop, std::pair<int, int> size,
+                    const HardwareDecoding& decoding) {
+    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
+    if (!decoders || !decodes_codec(ascii_lower(source.codec_name), decoders->first) ||
+        !decodes_codec(ascii_lower(distorted.codec_name), decoders->second)) {
+        return false;
+    }
+    try {
+        return !plan_decode(source, source_crop, 6, true, size).scaled() &&
+               !plan_decode(distorted, distorted_crop, 6, true, size).scaled();
+    } catch (const GpuDecodeUnavailableError&) {
+        return false;
+    }
+}
+
+// The plan for scoring PSNR, SSIM and XPSNR with the bundled libvmaf in the
+// app (run_cpu_metrics) instead of with FFmpeg's libvmaf and xpsnr filters,
+// or nothing to leave them to FFmpeg's filters. The app scores them when
+// they are the run's only metrics (VMAF on the CPU keeps them in FFmpeg's
+// filters, which it runs anyway). XPSNR stays with FFmpeg where libvmaf-fast's
+// score would not be FFmpeg's exactly (xpsnr_frame_rate, xpsnr_in_app),
+// while PSNR and SSIM are still scored in the app. `cores` are "Auto"'s
+// threads.
+std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<int, int> size,
+                                        const VideoInfo& source, const VideoInfo& distorted,
+                                        const HardwareDecoding& decoding,
+                                        const std::optional<CropBox>& source_crop,
+                                        const std::optional<CropBox>& distorted_crop, unsigned cores) {
+    if (!cpu_metrics_in_app() || uses_vmaf_model(options)) {
+        return std::nullopt;
+    }
+    std::vector<std::string> metrics;
+    for (const std::string& feature : options.extra_features) {
+        const std::optional<std::string> metric = cpu_metric_of_feature(feature);
+        if (!metric) {
+            return std::nullopt;
+        }
+        if (std::find(metrics.begin(), metrics.end(), *metric) == metrics.end()) {
+            metrics.push_back(*metric);
+        }
+    }
+    const auto [width, height] = size;
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
+    const std::optional<int> frame_rate = options.compute_xpsnr ? xpsnr_frame_rate(distorted) : std::nullopt;
+    if (frame_rate && xpsnr_in_app(width, height, depth)) {
+        metrics.emplace_back("xpsnr");
+    } else if (options.compute_xpsnr && !(decoding.source && decoding.distorted)) {
+        // XPSNR's FFmpeg beside them would decode the videos again, and a
+        // video the CPU decodes would then be decoded twice on the CPU: 70%
+        // more CPU per frame for a 4K film against its encode, and slower for
+        // a 4K film against a 1080p encode (97 fps against 112). FFmpeg's
+        // single run decodes each video once for both libvmaf and XPSNR.
+        return std::nullopt;
+    }
+    if (metrics.empty()) {
+        return std::nullopt;
+    }
+    if (metrics == std::vector<std::string>{"xpsnr"} &&
+        !decoded_in_app(source, distorted, source_crop, distorted_crop, size, decoding)) {
+        // XPSNR alone, with its frames from FFmpeg's pipes: FFmpeg's own
+        // filter keeps up with FFmpeg's decoding and uses far less (the
+        // Python app measured twice the CPU and 825 MB against 453 for a 4K
+        // film against a 1080p encode).
+        return std::nullopt;
+    }
+    GpuPlan plan;
+    for (const std::string& metric : metrics) {
+        plan.models.emplace_back(metric, metric);
+    }
+    plan.width = width;
+    plan.height = height;
+    plan.bit_depth = depth;
+    plan.backend = "cpu";
+    plan.threads = options.n_threads > 0 ? options.n_threads : static_cast<int>(cores);
+    plan.frame_rate = frame_rate.value_or(0);
+    return plan;
+}
+
+// Reports two runs' progress as one: that of whichever is behind (the
+// Python app's _Progress).
+class SlowerProgress {
+public:
+    SlowerProgress(ProgressCallback on_progress, std::size_t parts)
+        : on_progress_(std::move(on_progress)), latest_(parts) {}
+
+    // The progress callback of run number `index`.
+    ProgressCallback part(std::size_t index) {
+        if (!on_progress_) {
+            return nullptr;
+        }
+        return [this, index](long long done, long long whole, double fps) {
+            Progress behind;
+            {
+                const std::lock_guard lock(mutex_);
+                latest_[index] = Progress{done, whole, fps};
+                if (std::any_of(latest_.begin(), latest_.end(), [](const auto& latest) { return !latest; })) {
+                    return;
+                }
+                behind = **std::min_element(latest_.begin(), latest_.end(),
+                                            [](const auto& a, const auto& b) { return a->done < b->done; });
+            }
+            on_progress_(behind.done, behind.whole, behind.fps);
+        };
+    }
+
+private:
+    struct Progress {
+        long long done = 0;
+        long long whole = 0;
+        double fps = 0;
+    };
+    ProgressCallback on_progress_;
+    std::mutex mutex_;
+    std::vector<std::optional<Progress>> latest_;
+};
 
 // ------------------------------------------- the GPU's run in a process of its own
 
@@ -1022,18 +1230,82 @@ ParsedScores read_scores(const nlohmann::json& result, const std::filesystem::pa
         file.read(reinterpret_cast<char*>(values.data()), static_cast<std::streamsize>(count * sizeof(float)));
     }
     if (!file) {
-        throw std::runtime_error("The GPU's scores could not be read back.");
+        throw std::runtime_error("The scores could not be read back from the process that made them.");
     }
     scores.time = times_of(scores.frame, fps);
     return scores;
 }
 
-// VMAF and NEG on the GPU (execute_gpu_run), one GPU pass at a time, in a
-// process of its own where a program to run it is set, so that a crash in
-// the GPU's code or its driver ends that process and not the run (the
-// Python app's run_isolated(_score_on_gpu, what="libvmaf")). Nothing when
-// it fails, for any reason but Cancel: the run is then made again with VMAF
-// on the CPU, as on a PC without a GPU that scores it.
+nlohmann::json plan_json(const GpuPlan& plan) {
+    nlohmann::json models = nlohmann::json::array();
+    for (const auto& [key, version] : plan.models) {
+        models.push_back({key, version});
+    }
+    return {{"models", models},           {"width", plan.width},     {"height", plan.height},
+            {"bit_depth", plan.bit_depth}, {"device", plan.device},   {"backend", plan.backend},
+            {"threads", plan.threads},     {"frame_rate", plan.frame_rate}};
+}
+
+GpuPlan plan_from(const nlohmann::json& text) {
+    GpuPlan plan;
+    for (const nlohmann::json& model : text.at("models")) {
+        plan.models.emplace_back(model.at(0).get<std::string>(), model.at(1).get<std::string>());
+    }
+    text.at("width").get_to(plan.width);
+    text.at("height").get_to(plan.height);
+    text.at("bit_depth").get_to(plan.bit_depth);
+    text.at("device").get_to(plan.device);
+    text.at("backend").get_to(plan.backend);
+    text.at("threads").get_to(plan.threads);
+    text.at("frame_rate").get_to(plan.frame_rate);
+    return plan;
+}
+
+// The plan's metrics scored in a process of its own (score_plan in the
+// child, `task` "gpu-run" or "cpu-metrics"), so that a crash in libvmaf, the
+// GPU's code or its driver ends that process and not the run (the Python
+// app's run_isolated(..., what="libvmaf")). Throws what run_isolated throws.
+ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& environment, const VideoInfo& source,
+                              const VideoInfo& distorted, const VmafOptions& options,
+                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
+                              const GpuPlan& plan, double fps, long long total_frames,
+                              const HardwareDecoding& decoding, const ProgressCallback& on_progress,
+                              const StatusCallback& on_status, const CancelToken& cancel) {
+    const nlohmann::json request{
+        {"ffmpeg", environment.ffmpeg},
+        {"ffprobe", environment.ffprobe},
+        {"source", video_json(source)},
+        {"distorted", video_json(distorted)},
+        {"options", options_json(options)},
+        {"source_crop", crop_json(source_crop)},
+        {"distorted_crop", crop_json(distorted_crop)},
+        {"plan", plan_json(plan)},
+        {"fps", fps},
+        {"total_frames", total_frames},
+        {"decoding", {{"source", hwaccel_json(decoding.source)}, {"distorted", hwaccel_json(decoding.distorted)}}}};
+    ParsedScores scores;
+    run_isolated(
+        task, "libvmaf", request,
+        [&](const nlohmann::json& message) {
+            if (message.contains("progress") && on_progress) {
+                const nlohmann::json& counts = message["progress"];
+                on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
+            } else if (message.contains("status") && on_status) {
+                const nlohmann::json& status = message["status"];
+                on_status({status.at("text").get<std::string>(), static_cast<StatusKind>(status.at("kind").get<int>())});
+            }
+        },
+        cancel,
+        [&](const nlohmann::json& result, const std::filesystem::path& folder) {
+            scores = read_scores(result, folder, fps);
+        });
+    return scores;
+}
+
+// VMAF and NEG on the GPU (score_plan), one GPU pass at a time, in a process
+// of its own where a program to run it is set (score_plan_apart). Nothing
+// when it fails, for any reason but Cancel: the run is then made again with
+// VMAF on the CPU, as on a PC without a GPU that scores it.
 std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
                                        const VideoInfo& distorted, const VmafOptions& options,
                                        const std::optional<CropBox>& source_crop,
@@ -1052,47 +1324,11 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
     }
     try {
         if (!isolation_program()) {
-            return score_on_gpu(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
-                                total_frames, decoding, on_progress, on_status, cancel);
+            return score_plan(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                              total_frames, decoding, on_progress, on_status, cancel);
         }
-        nlohmann::json models = nlohmann::json::array();
-        for (const auto& [key, version] : plan.models) {
-            models.push_back({key, version});
-        }
-        const nlohmann::json request{
-            {"ffmpeg", environment.ffmpeg},
-            {"ffprobe", environment.ffprobe},
-            {"source", video_json(source)},
-            {"distorted", video_json(distorted)},
-            {"options", options_json(options)},
-            {"source_crop", crop_json(source_crop)},
-            {"distorted_crop", crop_json(distorted_crop)},
-            {"plan",
-             {{"models", models},
-              {"width", plan.width},
-              {"height", plan.height},
-              {"bit_depth", plan.bit_depth},
-              {"device", plan.device}}},
-            {"fps", fps},
-            {"total_frames", total_frames},
-            {"decoding", {{"source", hwaccel_json(decoding.source)}, {"distorted", hwaccel_json(decoding.distorted)}}}};
-        ParsedScores scores;
-        run_isolated(
-            "gpu-run", "libvmaf", request,
-            [&](const nlohmann::json& message) {
-                if (message.contains("progress") && on_progress) {
-                    const nlohmann::json& counts = message["progress"];
-                    on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
-                } else if (message.contains("status") && on_status) {
-                    const nlohmann::json& status = message["status"];
-                    on_status({status.at("text").get<std::string>(), static_cast<StatusKind>(status.at("kind").get<int>())});
-                }
-            },
-            cancel,
-            [&](const nlohmann::json& result, const std::filesystem::path& folder) {
-                scores = read_scores(result, folder, fps);
-            });
-        return scores;
+        return score_plan_apart("gpu-run", environment, source, distorted, options, source_crop, distorted_crop, plan,
+                                fps, total_frames, decoding, on_progress, on_status, cancel);
     } catch (const Cancelled&) {
         throw;
     } catch (const std::exception& error) {
@@ -1102,6 +1338,121 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
         }
         return std::nullopt;
     }
+}
+
+// PSNR, SSIM and XPSNR with the bundled libvmaf's CPU extractors (the Python
+// app's _run_cpu_metrics), in a process of its own where a program to run it
+// is set (score_plan_apart), on the frames that would reach FFmpeg's
+// filters, paired as those filters pair them. XPSNR that the plan leaves to
+// FFmpeg is scored by an FFmpeg of its own alongside, and its scores are
+// taken for the frames PSNR and SSIM were scored for. XPSNR alone is scored
+// for every frame, as FFmpeg's filter scores it whatever n_subsample is.
+// Nothing when it fails for any reason but Cancel: FFmpeg's filters then
+// calculate the metrics.
+std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, const VideoInfo& source,
+                                            const VideoInfo& distorted, const VmafOptions& options,
+                                            const std::optional<CropBox>& source_crop,
+                                            const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
+                                            double fps, long long total_frames, const HardwareDecoding& decoding,
+                                            const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                            const CancelToken& cancel) {
+    const std::vector<std::string> keys = plan_keys(plan);
+    const bool beside = options.compute_xpsnr && std::find(keys.begin(), keys.end(), "xpsnr") == keys.end();
+    SlowerProgress progress(on_progress, beside ? 2 : 1);
+    // XPSNR's FFmpeg, on a thread of its own, stopped with the run.
+    CancelToken stop;
+    std::optional<ParsedScores> xpsnr;
+    std::exception_ptr xpsnr_error;
+    std::mutex xpsnr_mutex;
+    std::condition_variable xpsnr_ended;
+    bool xpsnr_done = !beside;
+    std::thread xpsnr_thread;
+    if (beside) {
+        VmafOptions xpsnr_options = options;
+        xpsnr_options.extra_features.clear();  // only XPSNR: PSNR and SSIM would be scored there again
+        xpsnr_thread = std::thread([&, xpsnr_options] {
+            try {
+                ParsedScores found =
+                    execute_run(environment, source, distorted, xpsnr_options, source_crop, distorted_crop, "", fps,
+                                total_frames, decoding, progress.part(1), stop);
+                const std::lock_guard lock(xpsnr_mutex);
+                xpsnr = std::move(found);
+            } catch (...) {
+                const std::lock_guard lock(xpsnr_mutex);
+                xpsnr_error = std::current_exception();
+            }
+            const std::lock_guard lock(xpsnr_mutex);
+            xpsnr_done = true;
+            xpsnr_ended.notify_all();
+        });
+    }
+    // Waits for XPSNR's run, passing a Cancel on to it.
+    const auto wait_for_xpsnr = [&] {
+        if (!xpsnr_thread.joinable()) {
+            return;
+        }
+        std::unique_lock lock(xpsnr_mutex);
+        while (!xpsnr_ended.wait_for(lock, std::chrono::milliseconds(100), [&] { return xpsnr_done; })) {
+            if (cancel.cancelled()) {
+                stop.cancel();
+            }
+        }
+        lock.unlock();
+        xpsnr_thread.join();
+    };
+
+    VmafOptions scored = options;
+    if (beside) {
+        scored.compute_xpsnr = false;
+    } else if (options.extra_features.empty()) {  // XPSNR alone
+        scored.n_subsample = 1;
+    }
+    std::optional<ParsedScores> frames;
+    try {
+        frames = isolation_program()
+                     ? score_plan_apart("cpu-metrics", environment, source, distorted, scored, source_crop,
+                                        distorted_crop, plan, fps, total_frames, decoding, progress.part(0),
+                                        on_status, cancel)
+                     : score_plan(environment, source, distorted, scored, source_crop, distorted_crop, plan, fps,
+                                  total_frames, decoding, progress.part(0), on_status, cancel);
+    } catch (const Cancelled&) {
+        stop.cancel();
+        wait_for_xpsnr();
+        throw;
+    } catch (const std::exception& error) {
+        stop.cancel();
+        wait_for_xpsnr();
+        if (on_status) {
+            on_status(
+                {metric_names(plan) + " in the app failed (" + error.what() + "); calculating them with FFmpeg…"});
+        }
+        return std::nullopt;
+    }
+    wait_for_xpsnr();
+    cancel.throw_if_cancelled();
+    if (xpsnr_error) {
+        std::rethrow_exception(xpsnr_error);
+    }
+    if (xpsnr) {
+        std::map<int, float> by_frame;
+        const std::vector<float>& values = xpsnr->metrics.at("xpsnr");
+        for (std::size_t i = 0; i < xpsnr->frame.size(); ++i) {
+            by_frame[xpsnr->frame[i]] = values[i];
+        }
+        std::vector<float>& column = frames->metrics["xpsnr"];
+        column.clear();
+        for (const int frame : frames->frame) {
+            const auto found = by_frame.find(frame);
+            column.push_back(found == by_frame.end() ? std::numeric_limits<float>::quiet_NaN() : found->second);
+        }
+        frames->order.clear();
+        for (const char* key : column_keys) {
+            if (frames->has(key)) {
+                frames->order.emplace_back(key);
+            }
+        }
+    }
+    return frames;
 }
 
 }  // namespace
@@ -1215,24 +1566,15 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
     return command;
 }
 
-nlohmann::json gpu_run_task(const nlohmann::json& request, const std::filesystem::path& folder) {
+nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder) {
     RunEnvironment environment;
     environment.ffmpeg = request.at("ffmpeg").get<std::string>();
     environment.ffprobe = request.at("ffprobe").get<std::string>();
-    const nlohmann::json& plan_text = request.at("plan");
-    GpuPlan plan;
-    for (const nlohmann::json& model : plan_text.at("models")) {
-        plan.models.emplace_back(model.at(0).get<std::string>(), model.at(1).get<std::string>());
-    }
-    plan_text.at("width").get_to(plan.width);
-    plan_text.at("height").get_to(plan.height);
-    plan_text.at("bit_depth").get_to(plan.bit_depth);
-    plan_text.at("device").get_to(plan.device);
     const nlohmann::json& decoding = request.at("decoding");
-    const ParsedScores scores = score_on_gpu(
+    const ParsedScores scores = score_plan(
         environment, video_from(request.at("source")), video_from(request.at("distorted")),
         options_from(request.at("options")), crop_from(request.at("source_crop")),
-        crop_from(request.at("distorted_crop")), plan, request.at("fps").get<double>(),
+        crop_from(request.at("distorted_crop")), plan_from(request.at("plan")), request.at("fps").get<double>(),
         request.at("total_frames").get<long long>(),
         HardwareDecoding{hwaccel_from(decoding.at("source")), hwaccel_from(decoding.at("distorted"))},
         [](long long done, long long whole, double fps) {
@@ -1251,7 +1593,7 @@ nlohmann::json gpu_run_task(const nlohmann::json& request, const std::filesystem
                    static_cast<std::streamsize>(values.size() * sizeof(float)));
     }
     if (!file) {
-        throw std::runtime_error("The GPU's scores could not be written.");
+        throw std::runtime_error("The scores could not be written.");
     }
     return {{"frames", scores.frame.size()}, {"order", scores.order}};
 }
@@ -1352,6 +1694,22 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
             }
         }
     }
+    // PSNR, SSIM and XPSNR scored in the app, when they are the run's only
+    // metrics.
+    std::set<std::string, std::less<>> cpu_keys;
+    if (!scores) {
+        if (const std::optional<GpuPlan> cpu = cpu_metrics_plan(options, std::pair(width, height), source, distorted,
+                                                                decoding, source_crop, distorted_crop,
+                                                                environment.cores)) {
+            scores = run_cpu_metrics(environment, source, distorted, options, source_crop, distorted_crop, *cpu,
+                                     distorted.fps, total_frames, decoding, on_progress, on_status, cancel);
+            if (scores) {
+                for (const auto& [key, same] : cpu->models) {
+                    cpu_keys.insert(key);
+                }
+            }
+        }
+    }
     if (!scores) {
         scores = execute_run(environment, source, distorted, options, source_crop, distorted_crop, model,
                              distorted.fps, total_frames, decoding, on_progress, cancel);
@@ -1389,6 +1747,12 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
             parameters["model"] = options.model_v1;
         }
         MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
+        if (cpu_keys.contains(key)) {
+            // FFmpeg's libvmaf's scores and request, calculated by the
+            // bundled build's own extractors.
+            provenance.implementation = "libvmaf";
+            provenance.implementation_version = cpu_library_build();
+        }
         if (gpu_keys.contains(key)) {
             // The same request as FFmpeg's libvmaf (the scores agree to
             // within 4e-5), made on the GPU by the bundled build.

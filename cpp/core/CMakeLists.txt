@@ -13,6 +13,7 @@ add_library(vml_core
     src/hardware_decoding.cpp
     src/isolated.cpp
     src/libvmaf.cpp
+    src/libvmaf_cpu.cpp
     src/metrics.cpp
     src/model_select.cpp
     src/number_format.cpp

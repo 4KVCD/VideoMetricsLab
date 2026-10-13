@@ -198,6 +198,16 @@ std::string replace_invalid_utf8(std::string_view text) {
     return result;
 }
 
+std::string ascii_lower(std::string_view text) {
+    std::string out(text);
+    for (char& c : out) {
+        if (c >= 'A' && c <= 'Z') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+    }
+    return out;
+}
+
 std::string_view python_strip(std::string_view text) {
     const auto is_space = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r') || (c >= '\x1c' && c <= '\x1f'); };
     while (!text.empty() && is_space(text.front())) {

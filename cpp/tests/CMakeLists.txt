@@ -11,6 +11,7 @@ add_executable(vml_tests
     unit/gpu_vmaf_test.cpp
     unit/isolated_test.cpp
     unit/library_test.cpp
+    unit/libvmaf_cpu_test.cpp
     unit/libvmaf_test.cpp
     unit/metrics_test.cpp
     unit/number_format_test.cpp
@@ -21,6 +22,7 @@ add_executable(vml_tests
     unit/stats_test.cpp
     unit/vmaf_vulkan_test.cpp
     unit/reference.cpp
+    unit/test_videos.cpp
 )
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options nlohmann_json gtest gtest_main)
 target_compile_definitions(vml_tests PRIVATE
