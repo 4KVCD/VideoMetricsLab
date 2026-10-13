@@ -29,7 +29,11 @@ libvmaf-fast's files, each identical to the file at `867efb83`:
 | `LICENSE` | `a6fdb51d02b9dfe198e55534bb8047fe6d756eda117f4ff83de98f92c1952710` |
 
 When the app ships a newer libvmaf-fast, copy the same files from that
-release's commit and update this list.
+release's commit and update this list. A local build of the fork after the
+release (scripts/build_libvmaf_fast_local.ps1, while the app is developed)
+has the same headers as long as the fork has not changed them since:
+`git diff 867efb83 HEAD -- libvmaf/include` in the fork shows whether it
+has.
 
 nlohmann/json is compiled into the app, so it belongs in the app's
 `docs/THIRD_PARTY.md` once the C++ app ships. GoogleTest is only in the tests.

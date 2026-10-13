@@ -325,7 +325,8 @@ class VulkanScorer:
         return frames, rows
 
     def sums(self, frame: int) -> np.ndarray:
-        """A frame's raw sums, for tests."""
+        """A frame's raw sums, for the probe and tests. The engine keeps them
+        for the first 256 frames only; a later frame's raises VmafVulkanError."""
         out = np.zeros(128, dtype=np.uint64)
         count = self._lib.vv_sums(self._context, frame, out.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64)), 128)
         check(self._lib, count, f"Reading frame {frame}")

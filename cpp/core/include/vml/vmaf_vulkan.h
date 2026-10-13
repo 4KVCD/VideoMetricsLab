@@ -118,7 +118,9 @@ public:
     // been given.
     VulkanFeatures features();
 
-    // A frame's raw sums (at most 128), for tests and the probe.
+    // A frame's raw sums (at most 128), for the probe and tests. The engine
+    // keeps them for the first 256 frames only; a later frame's throws
+    // VmafVulkanError.
     std::vector<std::uint64_t> sums(unsigned frame) const;
 
     // The numbers of the frames scored, and each model's scores for them,
