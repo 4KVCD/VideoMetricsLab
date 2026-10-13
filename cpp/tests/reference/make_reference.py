@@ -7,10 +7,11 @@ frame_sync.py, geometry.py, model_select.py), FFmpeg's commands for a run
 (vmaf_runner.py, vmaf_gpu.py) and the reading of its logs, the decoding of
 videos in the app (gpu_frames.py, vmaf_runner.py), VMAF predicted from
 features by the bundled libvmaf and scored with the Vulkan engine
-(vmaf_vulkan.py), the line that says how far a video is (ui/run_line.py),
-its command line's reading of arguments and patterns (cli.py), and
-Python's json.dumps. The Vulkan engine's cases need a GPU that Vulkan
-scores VMAF on.
+(vmaf_vulkan.py), Vship's view of a video and its colours
+(perceptual_vship.py, colour.py), the line that says how far a video is
+(ui/run_line.py), its command line's reading of arguments and patterns
+(cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
+that Vulkan scores VMAF on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -638,11 +639,11 @@ def run_cases() -> dict:
 
 def run_line_cases() -> dict:
     """A video's run line (ui/run_line.py's metric_line) over snapshots of
-    its tasks as job_runner's JobRun makes them, for FFmpeg's task and
-    VMAF's on the GPU (and, for the line's wait for this video's own GPU
-    task, one of Vship's); and step_text and numbers_text."""
+    its tasks as job_runner's JobRun makes them, for FFmpeg's task, VMAF's
+    on the GPU and Vship's, in one or more passes, with SSIMULACRA2 and
+    Butteraugli on the CPU; and step_text and numbers_text."""
     from vmaf_app.core.gpu import GPU_WAIT_MESSAGE, HwAccelPlan
-    from vmaf_app.core.status import GPU_VMAF_FAILED, GPU_WAIT, STARTING, Status
+    from vmaf_app.core.status import GPU_PASS, GPU_VMAF_FAILED, GPU_WAIT, STARTING, Status
     from vmaf_app.ui import run_line
 
     steps = {
@@ -658,8 +659,12 @@ def run_line_cases() -> dict:
                              kind=GPU_VMAF_FAILED),
         "spaces and dots": "  Detecting black bars in distorted . …..  ",
         "only dots": "...",
+        "gpu pass": Status("GPU metric 2/3: Butteraugli", kind=GPU_PASS),
+        "vship": Status.decoding("Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2",
+                                 HwAccelPlan("cuda", None)),
     }
-    kinds = {"": "step", STARTING: "starting", GPU_WAIT: "gpu_wait", GPU_VMAF_FAILED: "gpu_vmaf_failed"}
+    kinds = {"": "step", STARTING: "starting", GPU_PASS: "gpu_pass", GPU_WAIT: "gpu_wait",
+             GPU_VMAF_FAILED: "gpu_vmaf_failed"}
 
     def status(message: str) -> dict:
         brief = getattr(message, "brief", message)
@@ -668,14 +673,18 @@ def run_line_cases() -> dict:
 
     def task(backend: str, keys: tuple[str, ...], state: str, *, lane: str | None = None, current: int = 0,
              total: int = 0, fps: float = 0.0, done: tuple[str, ...] = (), cpu: tuple[str, ...] = (),
-             waiting: str | None = None, step: str = "none") -> dict:
+             waiting: str | None = None, step: str = "none", passes: tuple[tuple[str, ...], ...] | None = None,
+             phase: tuple[int, int, int] | None = None) -> dict:
         """A task's snapshot, as JobRun.task_snapshots makes it."""
-        return {"backend": backend, "metric_keys": keys, "lane": lane or ("gpu" if backend == "vmaf_gpu" else "cpu"),
-                "passes": (keys,), "cpu_keys": cpu, "done_keys": done, "current": current, "total": total,
-                "fps": fps, "state": state, "waiting_for": waiting, "step": steps[step], "decode": "", "phase": None}
+        return {"backend": backend, "metric_keys": keys,
+                "lane": lane or ("gpu" if backend in ("vmaf_gpu", "perceptual") else "cpu"),
+                "passes": passes or (keys,), "cpu_keys": cpu, "done_keys": done, "current": current, "total": total,
+                "fps": fps, "state": state, "waiting_for": waiting, "step": steps[step], "decode": "", "phase": phase}
 
     every = ("vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr")
     cpu, gpu = ("psnr", "ssim", "xpsnr"), ("vmaf", "vmaf_neg")
+    perceptual = ("ssimulacra2", "butteraugli", "cvvdp")
+    one_each = (("ssimulacra2",), ("butteraugli",), ("cvvdp",))
     lines = {
         "one task starting": [task("ffmpeg", every, "starting")],
         "one task, FFmpeg starting": [task("ffmpeg", every, "starting", step="ffmpeg starting")],
@@ -714,11 +723,42 @@ def run_line_cases() -> dict:
                                      task("perceptual", ("ssimulacra2",), "waiting", lane="gpu", waiting="GPU",
                                           step="gpu wait")],
         "a step after decoding failed": [task("ffmpeg", every, "starting", step="decoding failed")],
+        # Vship's task: its passes, one at a time, sharing one progress count.
+        "Vship's first pass": [task("perceptual", perceptual, "running", current=50, total=300, fps=30.0,
+                                    passes=one_each, phase=(1, 3, 0), step="gpu pass")],
+        "Vship's second pass": [task("perceptual", perceptual, "running", current=150, total=300, fps=25.0,
+                                     passes=one_each, phase=(2, 3, 100))],
+        "Vship's last pass, no speed yet": [task("perceptual", perceptual, "running", current=200, total=300,
+                                                 passes=one_each, phase=(3, 3, 200))],
+        "Vship starting": [task("perceptual", perceptual, "starting", passes=one_each, step="vship")],
+        "Vship before its first pass": [task("perceptual", perceptual, "running", current=0, total=300,
+                                             passes=one_each)],
+        "Vship waiting": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
+                          task("perceptual", perceptual, "waiting", waiting="GPU", passes=one_each,
+                               step="gpu wait")],
+        "Vship done, one failed": [task("perceptual", perceptual, "done", done=("ssimulacra2", "cvvdp"),
+                                        passes=one_each)],
+        "Vship failed": [task("ffmpeg", cpu, "done", done=cpu),
+                         task("perceptual", perceptual, "failed", passes=one_each)],
+        "a shared pass, then a retry": [task("perceptual", ("ssimulacra2", "butteraugli"), "running", current=150,
+                                             total=200, fps=40.0,
+                                             passes=(("ssimulacra2", "butteraugli"), ("butteraugli",)),
+                                             phase=(2, 2, 100))],
+        "one pass with all three": [task("perceptual", perceptual, "running", current=10, total=100, fps=12.5,
+                                         passes=(perceptual,), phase=(1, 1, 0))],
+        "the CPU took over from Vship": [task("perceptual", perceptual, "running", current=5, total=100, fps=2.0,
+                                              cpu=("ssimulacra2", "butteraugli"), passes=(("cvvdp",),),
+                                              done=("cvvdp",))],
+        "Vship and the CPU's perceptual task": [
+            task("vmaf_gpu", gpu, "done", done=gpu),
+            task("perceptual", ("cvvdp",), "running", current=40, total=100, fps=20.0, passes=(("cvvdp",),),
+                 phase=(1, 1, 0)),
+            task("perceptual_cpu", ("ssimulacra2", "butteraugli"), "running", current=3, total=100, fps=0.5)],
     }
     return {
         "lines": [{"name": name, "paused": name == "paused",
                    "tasks": [{**{key: value for key, value in snapshot.items()
-                                 if key not in ("passes", "decode", "phase", "step", "waiting_for", "fps")},
+                                 if key not in ("decode", "step", "waiting_for", "fps")},
                               "fps": exact(snapshot["fps"]), "waiting_for": snapshot["waiting_for"] or "",
                               "step": status(snapshot["step"])} for snapshot in snapshots],
                    "line": run_line.metric_line(snapshots, name == "paused")[0]}
@@ -1100,7 +1140,177 @@ def decoding_cases() -> dict:
     return {"plans": plans, "packet_commands": commands, "decoders": decoders}
 
 
+def vship_cases() -> dict:
+    """Vship's view of a video (perceptual_vship.py), with colour.py's reading
+    of its tags: the layouts FFmpeg sends it in (_image_format,
+    _passthrough_format) and their frame layouts, the colour spaces Vship is
+    given (_vship_colorspace), the filter chains and output arguments
+    (_filter_chain, _piped_as), the sizes compared at (_scaled_sizes), and
+    the GPUs and sizes a metric is refused at (size_refusal)."""
+    from fractions import Fraction
+
+    from vmaf_app.core import perceptual_vship as vship
+    from vmaf_app.core.models import CropBox, GpuVendor, ScaleDirection, VideoInfo
+
+    def video(**fields) -> VideoInfo:
+        base = {"path": Path("video.mkv"), "width": 1920, "height": 1080, "fps": 24.0, "duration": 10.0,
+                "nb_frames": 240, "codec_name": "hevc", "pix_fmt": "yuv420p"}
+        base.update(fields)
+        return VideoInfo(**base)
+
+    def described(info: VideoInfo) -> dict:
+        return {"width": info.width, "height": info.height, "pix_fmt": info.pix_fmt,
+                "color_range": info.color_range, "color_space": info.color_space,
+                "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
+                "chroma_location": info.chroma_location}
+
+    def image_json(image) -> dict:
+        return {"pixel_format": image.pixel_format, "family": image.family, "sample": image.sample,
+                "subw": image.subw, "subh": image.subh, "full_range": image.full_range,
+                "plane_order": list(image.plane_order)}
+
+    formats = []
+    for pix_fmt in ("yuv420p", "yuv420p10le", "yuv420p10be", "yuvj420p", "yuva420p", "yuva444p12le", "yuv410p",
+                    "yuv411p", "yuv422p12le", "yuv440p", "yuv444p16le", "yuv420p9le", "yuv420p14le", "yuv420p10",
+                    "nv12", "nv21", "p010le", "p016be", "nv16", "p210le", "nv24", "p416le", "gray", "gray10le",
+                    "gray12be", "gbrp", "gbrap", "gbrp10le", "gbrp16be", "rgb24", "bgra", "0bgr", "rgb48le",
+                    "bgra64be", "xyz12le", "", " YUV420P "):
+        for version in (None, "5.1.1", "5.1.2", "5.2", "6.0.0", "5.1"):
+            made = {"pix_fmt": pix_fmt, "version": version}
+            try:
+                image = vship._image_format(video(pix_fmt=pix_fmt), version)
+                made["image"] = image_json(image)
+                for width, height in ((1920, 1080), (321, 193), (64, 32)):
+                    total, sizes, strides, _order = image.frame_layout(width, height)
+                    made.setdefault("layouts", []).append(
+                        {"width": width, "height": height, "frame_bytes": total, "plane_bytes": list(sizes),
+                         "strides": list(strides)})
+            except vship.VshipUnavailableError as error:
+                made["error"] = str(error)
+            formats.append(made)
+
+    passthrough = []
+    for pix_fmt, color_range, hwaccel in (
+            ("yuv420p", "", "cuda"), ("yuv420p", "pc", "cuda"), ("yuvj420p", "", "qsv"), ("yuv420p10le", "tv", "cuda"),
+            ("yuv420p10le", "", "d3d11va"), ("yuv420p10le", "pc", "cuda"), ("yuv420p10le", "jpeg", "cuda"),
+            ("yuv420p10le", "tv", None), ("yuv420p12le", "tv", "cuda"), ("yuv422p10le", "tv", "cuda"),
+            ("yuv444p", "", "cuda"), ("xyz12le", "", "cuda"), ("xyz12le", "", None)):
+        made = {"pix_fmt": pix_fmt, "color_range": color_range, "hwaccel": hwaccel}
+        try:
+            found = vship._passthrough_format(video(pix_fmt=pix_fmt, color_range=color_range), hwaccel)
+            made["passthrough"] = None if found is None else {"image": image_json(found[0]), "piped": found[1]}
+        except vship.VshipUnavailableError as error:
+            made["error"] = str(error)
+        passthrough.append(made)
+
+    colours = []
+    for name, info in (
+            ("untagged 1080p", video()),
+            ("untagged 576p", video(width=720, height=576)),
+            ("untagged 651 lines", video(height=651)),
+            ("BT.2020 matrix only", video(color_space="bt2020nc")),
+            ("ICtCp matrix only", video(color_space="ictcp")),
+            ("HDR10", video(pix_fmt="yuv420p10le", color_space="bt2020nc", color_transfer="smpte2084",
+                            color_primaries="bt2020", color_range="tv", chroma_location="topleft")),
+            ("HLG", video(pix_fmt="yuv420p10le", color_space="bt2020nc", color_transfer="arib-std-b67",
+                          color_primaries="bt2020")),
+            ("BT.709 full range", video(color_space="bt709", color_transfer="bt709", color_primaries="bt709",
+                                        color_range="pc")),
+            ("untagged yuvj", video(pix_fmt="yuvj420p")),
+            ("yuvj tagged limited", video(pix_fmt="yuvj420p", color_range="tv")),
+            ("BT.470BG tagged matrix", video(color_space="bt470bg")),
+            ("SMPTE 170M", video(color_space="smpte170m", color_transfer="smpte170m", color_primaries="smpte170m")),
+            ("upper-case tags", video(color_space="BT709", color_transfer="BT709", color_primaries="BT709")),
+            ("unspecified tags", video(color_space="unknown", color_transfer="unspecified", color_primaries="reserved",
+                                       color_range="unknown")),
+            ("BT.2020 10-bit curve", video(color_transfer="bt2020-10", color_primaries="bt2020")),
+            ("sRGB", video(color_transfer="iec61966-2-1")),
+            ("P3", video(color_primaries="smpte432")),
+            ("planar RGB untagged", video(pix_fmt="gbrp")),
+            ("planar RGB tagged limited", video(pix_fmt="gbrp10le", color_range="tv")),
+            ("4:2:2 centre siting", video(pix_fmt="yuv422p10le", chroma_location="center")),
+            ("top siting", video(chroma_location="top")),
+            ("top-left siting with a dash", video(chroma_location="top-left")),
+            ("unspecified siting", video(chroma_location="unspecified")),
+            ("bottom siting", video(chroma_location="bottom")),
+            ("an unknown matrix", video(color_space="fcc")),
+            ("an unknown transfer", video(color_transfer="log100")),
+            ("an unknown primaries", video(color_primaries="film")),
+            ("an unknown range", video(color_range="studio")),
+            ("4:1:0", video(pix_fmt="yuv410p"))):
+        made = {"name": name, "info": described(info)}
+        try:
+            image = vship._image_format(info, "5.1.2")
+            space = vship._vship_colorspace(info, image, 1280, 720)
+            made["colorspace"] = {
+                "width": space.width, "height": space.height, "target_width": space.target_width,
+                "target_height": space.target_height, "sample": space.sample, "range": space.range,
+                "subsampling": [space.subsampling.subw, space.subsampling.subh],
+                "chroma_location": space.chromaLocation, "family": space.colorFamily, "matrix": space.YUVMatrix,
+                "transfer": space.transferFunction, "primaries": space.primaries,
+                "crop": [space.crop.top, space.crop.bottom, space.crop.left, space.crop.right]}
+        except vship.VshipUnavailableError as error:
+            made["error"] = str(error)
+        colours.append(made)
+
+    chains = []
+    for name, info, crop, target, pixel_format, step, algorithm, hwaccel, numbered_at in (
+            ("as it is", video(), None, (1920, 1080), "yuv420p", 1, "bicubic", None, Fraction(24000, 1001)),
+            ("every third, from the GPU, cropped and scaled", video(pix_fmt="yuv420p10le", width=3840, height=2160),
+             CropBox(3840, 1608, 0, 276), (1920, 804), "p010le", 3, "lanczos", "cuda", Fraction(120)),
+            ("a crop that keeps it all", video(), CropBox(1920, 1080, 0, 0), (1920, 1080), "yuv444p16le", 1,
+             "bicubic", "qsv", Fraction(25)),
+            ("paired by timestamp", video(), None, (1280, 720), "yuv420p", 2, "bilinear", None, None)):
+        chains.append({"name": name, "info": described(info),
+                       "crop": None if crop is None else [crop.w, crop.h, crop.x, crop.y],
+                       "target": list(target), "pixel_format": pixel_format, "step": step, "algorithm": algorithm,
+                       "hwaccel": hwaccel,
+                       "numbered_at": None if numbered_at is None else [numbered_at.numerator,
+                                                                        numbered_at.denominator],
+                       "chain": vship._filter_chain(info, crop, target, pixel_format, step, algorithm, hwaccel,
+                                                    numbered_at)})
+
+    piped = {pixel_format: vship._piped_as(pixel_format)
+             for pixel_format in ("yuv420p", "yuv420p10le", "yuv410p", "yuv440p", "yuv411p", "yuv444p16le",
+                                  "yuv420p16le", "gbrp", "gbrp10le", "nv12", "p010le", "yuv422p12le", "yuv420p10be")}
+
+    sizes = []
+    for source_size, source_crop, test_size, test_crop in (
+            ((1920, 1080), None, (1920, 1080), None),
+            ((3840, 2160), None, (1920, 1080), None),
+            ((3840, 2160), CropBox(3840, 1608, 0, 276), (1920, 804), None),
+            ((1920, 1080), None, (1280, 720), CropBox(1280, 536, 0, 92))):
+        for direction in (ScaleDirection.SOURCE_TO_DISTORTED, ScaleDirection.DISTORTED_TO_SOURCE):
+            source, test = video(width=source_size[0], height=source_size[1]), video(width=test_size[0],
+                                                                                    height=test_size[1])
+            recipe = type("Recipe", (), {"scale_direction": direction})()
+            found = vship._scaled_sizes(source, test, recipe, source_crop, test_crop)
+            sizes.append({"source": list(source_size), "test": list(test_size),
+                          "source_crop": None if source_crop is None else [source_crop.w, source_crop.h,
+                                                                           source_crop.x, source_crop.y],
+                          "test_crop": None if test_crop is None else [test_crop.w, test_crop.h, test_crop.x,
+                                                                       test_crop.y],
+                          "to_source": direction is ScaleDirection.DISTORTED_TO_SOURCE,
+                          "sizes": [list(found[0]), list(found[1])]})
+
+    refusals = []
+    vendors = {"nvidia": GpuVendor.NVIDIA, "intel": GpuVendor.INTEL, "amd": GpuVendor.AMD, "none": GpuVendor.NONE,
+               "": None}
+    for backend, vendor in (("vulkan", "intel"), ("vulkan", ""), ("vulkan", "nvidia"), ("cuda", "nvidia"),
+                            ("vulkan", "none")):
+        device = vship.VshipDevice(backend, "a GPU", 0, "5.1.2", None, vendors[vendor])
+        for key in ("cvvdp", "ssimulacra2"):
+            for size, computed in (((1920, 1080), None), ((3840, 2160), None), ((1920, 1080), (3840, 2160)),
+                                   ((1920, 1088), (1920, 1088)), ((3840, 2160), (1920, 1080))):
+                refusals.append({"backend": backend, "vendor": vendor, "key": key, "size": list(size),
+                                 "computed": None if computed is None else list(computed),
+                                 "refusal": vship.size_refusal(device, key, size, computed)})
+    return {"formats": formats, "passthrough": passthrough, "colours": colours, "chains": chains, "piped": piped,
+            "sizes": sizes, "refusals": refusals}
+
+
 if __name__ == "__main__":
+    write("vship.json", vship_cases())
     write("decoding.json", decoding_cases())
     write("vulkan.json", vulkan_cases())
     write("predict.json", predict_cases())

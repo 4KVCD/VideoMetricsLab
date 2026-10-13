@@ -3,7 +3,8 @@
 // - a job is one video to compare with its source (VmafJob);
 // - a task is the part of a video's metrics that one program calculates in
 //   one place: FFmpeg's metrics on the CPU (PSNR, SSIM and XPSNR in the app
-//   among them), or VMAF on the GPU. Vship's metrics will be tasks too;
+//   among them), VMAF on the GPU, or Vship's metrics (SSIMULACRA2,
+//   Butteraugli, CVVDP) on the GPU in one or more passes;
 // - a lane is a thread that runs one task at a time. The CPU's queue has two
 //   lanes (one if it holds a single task), and the "parallel jobs" setting
 //   says how many of them may work at once. The GPU's queue has one lane.
@@ -14,9 +15,11 @@
 // saved scores (the C++ app keeps none yet).
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,6 +31,7 @@
 #include "vml/options.h"
 #include "vml/results.h"
 #include "vml/video.h"
+#include "vml/vship_run.h"
 
 namespace vml {
 
@@ -41,21 +45,33 @@ inline constexpr std::string_view gpu_vmaf_task = "vmaf_gpu";
 
 // The part of a video's metrics that one program calculates in one place.
 struct MetricTask {
-    std::string backend;                   // "ffmpeg", or gpu_vmaf_task
+    // "ffmpeg", gpu_vmaf_task, perceptual_task or perceptual_cpu_task
+    std::string backend;
     std::vector<std::string> metric_keys;  // in the registry's order
 
     // Whether it waits in the GPU's queue rather than the CPU's.
-    bool on_gpu() const { return backend == gpu_vmaf_task; }
+    bool on_gpu() const { return backend == gpu_vmaf_task || backend == perceptual_task; }
+
+    // Whether it calculates SSIMULACRA2, Butteraugli or CVVDP.
+    bool perceptual() const { return backend == perceptual_task || backend == perceptual_cpu_task; }
 };
 
-// The tasks FFmpeg's metrics (`metric_keys`) are calculated in for a video
-// (the Python app's JobRun._by_place): one task on the CPU, less VMAF, NEG
-// and VMAF v1 where the GPU scores them (scores_on_gpu), which make a task
-// of their own on the GPU. In the same FFmpeg as PSNR, SSIM and XPSNR they
-// would go at those metrics' pace. `options.model` is the run's model=
+// Where SSIMULACRA2 and Butteraugli are each set to run, "gpu" or "cpu"
+// ("gpu" where not given).
+using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
+
+// The tasks a video's metrics (`metric_keys`) are calculated in (the Python
+// app's JobRun._by_place), each in one place: FFmpeg's metrics in one task
+// on the CPU, less VMAF, NEG and VMAF v1 where the GPU scores them
+// (scores_on_gpu), which make a task of their own on the GPU (in the same
+// FFmpeg as PSNR, SSIM and XPSNR they would go at those metrics' pace); and
+// SSIMULACRA2, Butteraugli and CVVDP in Vship's task on the GPU, less
+// SSIMULACRA2 and Butteraugli set to the CPU (`perceptual_backends`), which
+// make a task of their own on the CPU. `options.model` is the run's model=
 // value; `options.model_v1` is empty while VMAF v1's Auto is not resolved.
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
-                                   const std::vector<std::string>& metric_keys);
+                                   const std::vector<std::string>& metric_keys,
+                                   const PerceptualBackends& perceptual_backends = {});
 
 // One video to compare with its source, with what to calculate.
 struct VmafJob {
@@ -66,6 +82,7 @@ struct VmafJob {
     std::optional<std::filesystem::path> result_distorted_path;
     std::vector<std::string> metric_keys;  // the metrics to calculate
     std::vector<MetricTask> tasks;         // which calculate them (plan_tasks)
+    PerceptualBackends perceptual_backends;
 };
 
 // The state of one of a video's tasks, for its run line (run_line.h).
@@ -77,6 +94,13 @@ struct TaskSnapshot {
     // progress figures are then theirs.
     std::vector<std::string> cpu_keys;
     std::vector<std::string> done_keys;  // the metrics it has scores for
+    // The metrics of each of its passes, in order: Vship's as planned, then
+    // as each starts, with any retry after the others; any other task's
+    // metrics as one pass.
+    std::vector<std::vector<std::string>> passes;
+    // The pass under way: its number, how many there are, and the task's
+    // progress count when it started, from which the pass's own is counted.
+    std::optional<std::array<long long, 3>> phase;
     long long current = 0;
     long long total = 0;
     double fps = 0.0;
@@ -117,12 +141,27 @@ using TaskRunner = std::function<ComparisonResult(const VmafJob& job, const Vmaf
                                                   const ProgressCallback& on_progress,
                                                   const StatusCallback& on_status, const CancelToken& cancel)>;
 
+// Calculates one perceptual task's metrics (`keys`) for a video, reporting
+// through `hooks`, the GPU's metrics in one pass when `together`:
+// run_perceptual_task in the app; a stand-in in the tests.
+using PerceptualRunner =
+    std::function<PerceptualTaskOutput(const VmafJob& job, const std::vector<std::string>& keys, bool together,
+                                       const PerceptualHooks& hooks, const CancelToken& cancel)>;
+
 // Runs every job's tasks and returns once all are done or the run is
 // cancelled: the CPU's tasks on up to `parallel_jobs` lanes at once
 // (max_parallel_jobs at most), the GPU's on a lane of its own, each queue in
 // list order, with at most max_parallel_jobs + 1 videos in progress at once.
 // "Auto" libvmaf threads become an equal share of `cores` for each CPU lane.
-// A failed task leaves the video's other tasks to finish.
+// A failed task leaves the video's other tasks to finish. `runner`
+// calculates FFmpeg's and VMAF's tasks, `perceptual` the perceptual ones,
+// the GPU's in one pass when `gpu_metrics_together` (Settings > GPU
+// metrics).
+void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
+              const PerceptualRunner& perceptual, bool gpu_metrics_together, unsigned cores,
+              const CancelToken& cancel);
+
+// run_jobs for jobs without perceptual tasks.
 void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
               unsigned cores, const CancelToken& cancel);
 

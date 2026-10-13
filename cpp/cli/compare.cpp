@@ -32,6 +32,8 @@
 #include "vml/run_line.h"
 #include "vml/settings.h"
 #include "vml/time_format.h"
+#include "vml/vship.h"
+#include "vml/vship_run.h"
 
 namespace vml::cli {
 
@@ -187,6 +189,17 @@ bool has_colour_tags(const VideoInfo& info) {
     return !untagged(info.color_transfer) || !untagged(info.color_primaries);
 }
 
+// The note for a video read without colour tags: what the app took its
+// colours to be (colour.h's video_colour's guess).
+std::string guessed_colour_note(const VideoInfo& info, const std::string& which) {
+    const std::string guess = !untagged(info.color_space) ? "from its colour matrix, " + info.color_space
+                              : info.height > 650         ? "BT.709 SDR, as it is over 650 lines"
+                                                          : "BT.601 SDR, as it is 650 lines or fewer";
+    return which + " has no colour tags, so its colours were guessed (" + guess +
+           "). CVVDP, SSIMULACRA2 and Butteraugli depend on them: --colour says what they are, such as pq-bt2020 "
+           "for HDR10.";
+}
+
 // `info` with the colours --colour gives, when it has no colour tags of its
 // own: the transfer, primaries and matrix, as ffprobe names them. A matrix
 // it does say is kept.
@@ -280,6 +293,19 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     return options;
 }
 
+// Where SSIMULACRA2 and Butteraugli run: as asked on the command line, else
+// as saved in Settings.
+PerceptualBackends perceptual_backends(const CompareArguments& arguments, const Settings& settings) {
+    PerceptualBackends chosen;
+    for (const std::string key : {"ssimulacra2", "butteraugli"}) {
+        const std::optional<std::string> asked = where(arguments, key);
+        const std::string& saved =
+            key == "ssimulacra2" ? settings.default_ssimulacra2_backend : settings.default_butteraugli_backend;
+        chosen[key] = asked ? *asked : saved == "cpu" ? "cpu" : "gpu";
+    }
+    return chosen;
+}
+
 // What a video added to the window starts with ticked, less the metrics its
 // Metrics... picker hides (they are not calculated there).
 std::vector<std::string> default_metrics(const Settings& settings) {
@@ -324,14 +350,40 @@ std::vector<std::string> default_metrics(const Settings& settings) {
 std::optional<std::string> not_yet(const CompareArguments& arguments, const Settings& settings,
                                    const std::vector<std::string>& asked) {
     std::string others;
+    std::vector<std::string> perceptual;
     for (const std::string& key : asked) {
         const MetricDefinition& definition = metric_definition(key);
-        if (!definition.ffmpeg_binding) {
+        if (key == "ssimulacra2" || key == "butteraugli") {
+            perceptual.push_back(key);
+        } else if (!definition.ffmpeg_binding) {
             others += (others.empty() ? "" : ", ") + std::string(definition.label);
         }
     }
     if (!others.empty()) {
-        return others + " (only FFmpeg's metrics so far)";
+        return others + " (only FFmpeg's metrics, SSIMULACRA2 and Butteraugli so far)";
+    }
+    if (!perceptual.empty()) {
+        // SSIMULACRA2 and Butteraugli on the GPU only, so far: the Python app
+        // calculates them on the CPU when they are set to it, and where no
+        // GPU can.
+        const PerceptualBackends backends = perceptual_backends(arguments, settings);
+        std::string labels;
+        std::string on_cpu;
+        for (const std::string& key : perceptual) {
+            labels += (labels.empty() ? "" : " and ") + std::string(metric_definition(key).label);
+            if (backends.at(key) == "cpu") {
+                on_cpu += (on_cpu.empty() ? "" : " and ") + std::string(metric_definition(key).label);
+            }
+        }
+        if (!on_cpu.empty()) {
+            return on_cpu + " on the CPU";
+        }
+        if (by_timestamp()) {
+            return labels + " with frames paired by timestamp (VML_FRAME_PAIRING)";
+        }
+        if (const auto [device, reason] = detect_vship_device(); !device) {
+            return labels + " on the CPU, where no GPU can calculate them (" + reason + ")";
+        }
     }
     const bool vmaf = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
         return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
@@ -460,7 +512,8 @@ private:
 // video each job is), and showing the run's progress, as the Python app's
 // command line does (cli.run).
 void run(const RunEnvironment& environment, std::vector<TestVideo>& videos, const std::vector<VmafJob>& jobs,
-         const std::vector<std::size_t>& video_of_job, int parallel, Progress& progress, const CancelToken& cancel) {
+         const std::vector<std::size_t>& video_of_job, int parallel, bool gpu_metrics_together, Progress& progress,
+         const CancelToken& cancel) {
     const auto video = [&videos, &video_of_job](std::size_t index) -> TestVideo& {
         return videos[video_of_job[index]];
     };
@@ -500,7 +553,13 @@ void run(const RunEnvironment& environment, std::vector<TestVideo>& videos, cons
             return run_vmaf(environment, job.source_info, job.distorted_info, options, on_progress, on_status, token,
                             job.result_distorted_path);
         },
-        environment.cores, cancel);
+        [&environment](const VmafJob& job, const std::vector<std::string>& keys, bool together,
+                       const PerceptualHooks& hooks, const CancelToken& token) {
+            const PerceptualRequest request{environment, job.source_info, job.distorted_info, job.options,
+                                            job.perceptual_backends};
+            return run_perceptual_task(request, keys, together, hooks, token);
+        },
+        gpu_metrics_together, environment.cores, cancel);
 }
 
 std::string ffmpeg_problem(const ToolsStatus& status) {
@@ -623,6 +682,7 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
 int compare(const CompareArguments& arguments) {
     const Settings settings = Settings::load();
     set_gpu_backend(settings.gpu_backend);
+    set_vship_backend(settings.gpu_backend);
     const std::filesystem::path cache_folder =
         settings.cache_dir_path().value_or(platform::home_directory() / ".videometricslab" / "results_cache");
     set_crop_store([cache_folder] {
@@ -663,6 +723,7 @@ int compare(const CompareArguments& arguments) {
         return exit_usage;
     }
 
+    const PerceptualBackends backends = perceptual_backends(arguments, settings);
     std::vector<TestVideo> videos;
     std::vector<VmafJob> jobs;
     std::vector<std::size_t> video_of_job;
@@ -683,18 +744,32 @@ int compare(const CompareArguments& arguments) {
             video.error = "none of the metrics asked for can be calculated for it";
             continue;
         }
+        // What the reader should know about how the colours were read: a
+        // video's guessed.
+        if (!arguments.colour &&
+            std::any_of(video.metrics.begin(), video.metrics.end(), [](const std::string& key) {
+                return is_perceptual_metric(key);
+            })) {
+            for (const auto& [info, which] : {std::pair<const VideoInfo*, const char*>(&source, "the reference"),
+                                              std::pair<const VideoInfo*, const char*>(&*video.info, "the test video")}) {
+                if (!has_colour_tags(*info)) {
+                    video.notes.push_back(guessed_colour_note(*info, which));
+                }
+            }
+        }
         try {
             video.options = row_options(arguments, settings, video.metrics, *video.info);
             validate_video_pair(source, *video.info, video.options);
             const auto [width, height] = analysis_dimensions(source, *video.info, video.options);
             VmafOptions options = video.options;
             options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
-            std::vector<MetricTask> tasks = plan_tasks(source, *video.info, options, video.metrics);
+            std::vector<MetricTask> tasks = plan_tasks(source, *video.info, options, video.metrics, backends);
             if (const std::optional<std::string> missing = gpu_not_yet(tasks)) {
                 print_error("The C++ command line cannot do this yet: " + *missing + ".");
                 return exit_usage;
             }
-            jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks)});
+            jobs.push_back(
+                VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks), backends});
             video_of_job.push_back(videos.size() - 1);
         } catch (const std::exception& error) {
             video.error = error.what();
@@ -731,8 +806,8 @@ int compare(const CompareArguments& arguments) {
                                          gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path)
                                                     : DecodingCapabilities{},
                                          platform::logical_cores()};
-        run(environment, videos, jobs, video_of_job, arguments.parallel.value_or(settings.parallel_jobs), *progress,
-            cancel);
+        run(environment, videos, jobs, video_of_job, arguments.parallel.value_or(settings.parallel_jobs),
+            settings.gpu_metrics_together, *progress, cancel);
         progress->done();
         cancelled = cancel.cancelled();
         *running = false;

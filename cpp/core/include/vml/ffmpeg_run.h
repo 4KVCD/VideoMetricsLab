@@ -47,6 +47,7 @@ using ProgressCallback = std::function<void(long long, long long, double)>;
 enum class StatusKind {
     step,             // a step of the run
     starting,         // FFmpeg is starting: nothing to show as a step
+    gpu_pass,         // one of several GPU metric passes begins
     gpu_wait,         // waiting for another video's GPU pass to end
     gpu_vmaf_failed,  // VMAF on the GPU failed; the CPU takes over
 };
@@ -61,10 +62,11 @@ struct RunStatus {
 };
 using StatusCallback = std::function<void(const RunStatus&)>;
 
-// The status of a step that decodes: `brief`, then the decode plan, as in
-// "Running ffmpeg (GPU decode: source cuda, distorted cpu)...".
+// The status of a step that decodes: `brief`, then the decode plan, then
+// `ending`, as in "Running ffmpeg (GPU decode: source cuda, distorted
+// cpu)...".
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding,
-                          StatusKind kind = StatusKind::step);
+                          StatusKind kind = StatusKind::step, std::string_view ending = "...");
 
 // The status a run sends when VMAF on the GPU fails, after which FFmpeg's
 // libvmaf calculates it, starts with this.

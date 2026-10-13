@@ -138,6 +138,9 @@ struct ChildProcess::State {
     DWORD id = 0;
     std::string unread;  // read from the pipe, not yet given as lines
     bool output_ended = false;
+    // For gather's waits of a millisecond, as Python's time.sleep(0.001)
+    // makes them: a plain Sleep(1) can last a whole 15.6 ms tick.
+    Handle timer;
 
     // Standard error, read on a thread of its own so the program never
     // waits on a full pipe; its end is kept (keep_error_tail).
@@ -288,6 +291,40 @@ std::size_t ChildProcess::read(void* into, std::size_t bytes) {
     }
     state_->output_ended = true;
     return 0;
+}
+
+void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
+    if (!state_->unread.empty() || state_->output_ended) {
+        return;
+    }
+    DWORD held = 0;
+    if (!GetNamedPipeInfo(state_->output.get(), nullptr, nullptr, &held, nullptr)) {
+        return;
+    }
+    const std::size_t wanted = std::min<std::size_t>(bytes, held / 2);
+    if (!state_->timer) {
+        state_->timer.reset(
+            CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS));
+        if (!state_->timer) {  // before Windows 10 1803
+            state_->timer.reset(CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS));
+        }
+    }
+    while (!stop) {
+        DWORD available = 0;
+        if (!PeekNamedPipe(state_->output.get(), nullptr, 0, nullptr, &available, nullptr)) {
+            return;  // closed and empty: the read says so
+        }
+        if (available >= wanted || WaitForSingleObject(state_->process.get(), 0) == WAIT_OBJECT_0) {
+            return;
+        }
+        LARGE_INTEGER due;
+        due.QuadPart = -10'000;  // a millisecond from now, in 100 ns units
+        if (state_->timer && SetWaitableTimer(state_->timer.get(), &due, 0, nullptr, nullptr, FALSE)) {
+            WaitForSingleObject(state_->timer.get(), INFINITE);
+        } else {
+            Sleep(1);
+        }
+    }
 }
 
 int ChildProcess::wait() {

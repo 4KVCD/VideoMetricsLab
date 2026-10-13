@@ -4,9 +4,10 @@
 // So far the C++ version calculates FFmpeg's metrics: VMAF v0.6.1, NEG and
 // v1 with FFmpeg's libvmaf, VMAF, NEG and v1 on the GPU with Vulkan or
 // libvmaf's CUDA code, and PSNR, SSIM and XPSNR in the app or with FFmpeg's
-// filters, a video's VMAF on the GPU beside its other metrics on the CPU.
-// What it cannot do yet (SSIMULACRA2, Butteraugli, CVVDP, --cvvdp-display)
-// it says, and exits with code 2, rather than giving other answers than the
+// filters, a video's VMAF on the GPU beside its other metrics on the CPU;
+// and SSIMULACRA2 and Butteraugli on the GPU with Vship. What it cannot do
+// yet (CVVDP, --cvvdp-display, SSIMULACRA2 and Butteraugli on the CPU) it
+// says, and exits with code 2, rather than giving other answers than the
 // Python app would. It neither reads nor saves the
 // app's saved scores yet: it calculates every score, as the Python app does
 // with --recalculate, and keeps none.

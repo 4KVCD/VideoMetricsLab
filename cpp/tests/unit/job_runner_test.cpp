@@ -281,5 +281,123 @@ TEST(JobRunner, VideosShareTheCpusTwoLanesAndTheGpusOne) {
     EXPECT_EQ(reported.finished.size(), jobs.size());
 }
 
+// A perceptual task's output with these metrics, each scored on these frames.
+PerceptualTaskOutput output_with(const std::vector<std::pair<std::string, std::vector<int>>>& metrics,
+                                 long long compared = 0) {
+    PerceptualTaskOutput output;
+    output.metrics = result_with(metrics).metric_results;
+    output.source_crop = CropBox{3840, 1608, 0, 276};
+    output.compared_frame_count = compared;
+    return output;
+}
+
+// Vship's task, beside VMAF on the GPU: each of its passes' scores is kept
+// as the pass finishes, its run line shows its passes, and a metric that
+// failed while the others finished is reported like a failed task.
+// SSIMULACRA2 and Butteraugli chosen for the CPU are a task of their own;
+// CVVDP stays on the GPU.
+TEST(JobRunner, VshipsPassesAreKeptAsTheyFinish) {
+    VmafJob job = job_of({{std::string(gpu_vmaf_task), {"vmaf"}}});
+    job.metric_keys = {"vmaf", "ssimulacra2", "butteraugli"};
+    job.tasks.push_back({std::string(perceptual_task), {"ssimulacra2", "butteraugli"}});
+    const std::vector<VmafJob> jobs{job};
+    Reported reported;
+    std::mutex mutex;
+    std::vector<std::vector<std::vector<std::string>>> passes_shown;
+    RunEvents events = reported.events();
+    events.task_progress = [&](std::size_t, const std::vector<TaskSnapshot>& tasks) {
+        const std::lock_guard lock(mutex);
+        passes_shown.push_back(tasks.back().passes);
+    };
+    int updates_seen_by_second_pass = -1;
+    run_jobs(
+        jobs, 1, events,
+        [](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&, const CancelToken&) {
+            return result_with({{"vmaf", {0, 1}}});
+        },
+        [&](const VmafJob&, const std::vector<std::string>& keys, bool together, const PerceptualHooks& hooks,
+            const CancelToken&) {
+            EXPECT_EQ(keys, (std::vector<std::string>{"ssimulacra2", "butteraugli"}));
+            EXPECT_FALSE(together);
+            hooks.on_pass(1, 2, {"ssimulacra2"});
+            hooks.on_pass_done(output_with({{"ssimulacra2", {0, 1}}}, 2));
+            {
+                const std::lock_guard lock(reported.mutex);
+                updates_seen_by_second_pass = reported.updates;
+            }
+            hooks.on_pass(2, 2, {"butteraugli"});
+            PerceptualTaskOutput output = output_with({{"ssimulacra2", {0, 1}}}, 2);
+            output.failures = {{"butteraugli", "out of GPU memory"}};
+            return output;
+        },
+        false, 24, CancelToken());
+
+    EXPECT_GE(updates_seen_by_second_pass, 1);  // the first pass's scores, kept before the second started
+    // The planned passes from the start, while the task waits for VMAF.
+    const std::vector<std::vector<std::string>> one_each{{"ssimulacra2"}, {"butteraugli"}};
+    ASSERT_FALSE(passes_shown.empty());
+    EXPECT_EQ(passes_shown.front(), one_each);
+    EXPECT_EQ(passes_shown.back(), one_each);
+    ASSERT_EQ(reported.partial.size(), 1u);
+    const Reported::Partial& partial = reported.partial.at(0);
+    EXPECT_TRUE(partial.result.has_metric("vmaf"));
+    EXPECT_TRUE(partial.result.has_metric("ssimulacra2"));
+    EXPECT_FALSE(partial.result.has_metric("butteraugli"));
+    EXPECT_EQ(partial.message, "Butteraugli failed: out of GPU memory");
+    EXPECT_EQ(partial.failures, (MetricFailures{{"butteraugli", "out of GPU memory"}}));
+
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 3840;
+    source.height = 2160;
+    source.fps = 25.0;
+    source.codec_name = "hevc";
+    source.pix_fmt = "yuv420p10le";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    test.fps = 24.0;
+    VmafOptions options;
+    options.compute_vmaf = false;
+    const std::vector<MetricTask> planned = plan_tasks(source, test, options, {"ssimulacra2", "butteraugli", "cvvdp"},
+                                                       {{"ssimulacra2", "cpu"}, {"butteraugli", "gpu"}});
+    ASSERT_EQ(planned.size(), 2u);
+    EXPECT_EQ(planned[0].backend, perceptual_task);
+    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"butteraugli", "cvvdp"}));
+    EXPECT_EQ(planned[1].backend, perceptual_cpu_task);
+    EXPECT_EQ(planned[1].metric_keys, std::vector<std::string>{"ssimulacra2"});
+}
+
+// A video with perceptual metrics alone has a result made from its job, with
+// the perceptual task's black-bar crops and frame count.
+TEST(JobRunner, PerceptualMetricsAloneMakeAResult) {
+    VmafJob job = job_of({});
+    job.source_info.path = "reference.mkv";
+    job.source_info.fps = 25.0;
+    job.distorted_info.path = "encode.mkv";
+    job.result_distorted_path = "named encode.mkv";
+    job.metric_keys = {"ssimulacra2"};
+    job.tasks = {{std::string(perceptual_task), {"ssimulacra2"}}};
+    const std::vector<VmafJob> jobs{job};
+    Reported reported;
+    run_jobs(
+        jobs, 1, reported.events(),
+        [](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&,
+           const CancelToken&) -> ComparisonResult { throw std::logic_error("no FFmpeg task"); },
+        [](const VmafJob&, const std::vector<std::string>&, bool, const PerceptualHooks&, const CancelToken&) {
+            return output_with({{"ssimulacra2", {0, 3, 6}}}, 9);
+        },
+        false, 24, CancelToken());
+
+    ASSERT_EQ(reported.finished.size(), 1u);
+    const ComparisonResult& result = reported.finished.at(0);
+    EXPECT_EQ(result.source, std::filesystem::path("reference.mkv"));
+    EXPECT_EQ(result.distorted, std::filesystem::path("named encode.mkv"));
+    EXPECT_EQ(result.fps, 25.0);  // the source's, as the Python app has it
+    EXPECT_EQ(result.compared_frame_count, 9);
+    EXPECT_EQ(result.source_crop, (CropBox{3840, 1608, 0, 276}));
+    ASSERT_NE(result.metric_results.frame("ssimulacra2"), nullptr);
+    EXPECT_EQ(result.metric_results.frame("ssimulacra2")->frame, (std::vector<int>{0, 3, 6}));
+}
+
 }  // namespace
 }  // namespace vml

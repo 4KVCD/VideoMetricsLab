@@ -77,6 +77,8 @@ std::pair<std::string, std::string> failure_of(const std::exception_ptr& error) 
         std::rethrow_exception(error);
     } catch (const VmafRunError& failure) {
         return {failure.what(), failure.stderr_tail()};
+    } catch (const PerceptualRunError& failure) {
+        return {failure.what(), failure.stderr_tail()};
     } catch (const std::exception& failure) {
         return {failure.what(), ""};
     } catch (...) {
@@ -141,22 +143,42 @@ private:
 
     // One task as it runs.
     struct TaskState {
-        std::optional<ComparisonResult> result;  // once it has finished
-        std::exception_ptr error;                // once it has failed or was cancelled
+        // Once it has finished: FFmpeg's or VMAF's result, or a perceptual
+        // task's output.
+        std::optional<ComparisonResult> result;
+        std::optional<PerceptualTaskOutput> perceptual;
+        std::exception_ptr error;  // once it has failed or was cancelled
         std::optional<Counts> progress;
         // The task's metrics the CPU is calculating since the GPU failed;
         // its progress figures are then theirs.
         std::vector<std::string> cpu_keys;
+        // The metrics of each of its passes (Vship's: planned at the start,
+        // then updated as each starts), and the pass under way: its number,
+        // how many there are, and the progress count it started at.
+        std::optional<std::vector<std::vector<std::string>>> passes;
+        std::optional<std::array<long long, 3>> phase;
         std::string waiting_for;  // "GPU" or "CPU" while it waits
         RunStatus step;           // its latest status
+
+        bool finished() const { return result.has_value() || perceptual.has_value(); }
     };
 
     ComparisonResult execute_task(std::size_t task);
+    PerceptualTaskOutput execute_perceptual(std::size_t task);
     void report_progress(std::size_t task, long long current, long long total, double fps);
     void report_status(std::size_t task, const RunStatus& status);
+    // Keeps the scores of a GPU pass that finished while its task still runs,
+    // and sends the video's result so far.
+    void report_pass(const PerceptualTaskOutput& output);
+    // Records a GPU pass as it starts: the metrics it scores, and the task's
+    // progress count then, from which the pass's own is counted.
+    void report_pass_start(std::size_t task, int number, int count, const std::vector<std::string>& keys);
+    // From now on the task's progress figures are the CPU's, for `keys`.
+    void report_cpu(std::size_t task, const std::vector<std::string>& keys);
     // The rest are called with mutex_ held.
     std::vector<TaskSnapshot> snapshots() const;
     void send_snapshots() const;
+    std::optional<PerceptualTaskOutput> perceptual_so_far() const;
     std::optional<ComparisonResult> merged() const;
     void send_result_so_far() const;
 
@@ -170,6 +192,9 @@ private:
     // after the finished result would replace it.
     mutable std::mutex mutex_;
     std::vector<TaskState> tasks_;
+    // The scores of the GPU passes of Vship's task that have finished while
+    // the task still runs.
+    std::vector<PerceptualTaskOutput> pass_outputs_;
     std::vector<std::size_t> failed_;  // the tasks that failed, in the order they did
     std::size_t finished_tasks_ = 0;
     bool begun_ = false;
@@ -182,9 +207,12 @@ private:
 class Scheduler {
 public:
     Scheduler(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
-              unsigned cores, const CancelToken& cancel)
+              const PerceptualRunner& perceptual, bool gpu_metrics_together, unsigned cores,
+              const CancelToken& cancel)
         : events(events),
           runner(runner),
+          perceptual_runner(perceptual),
+          gpu_metrics_together(gpu_metrics_together),
           cancel(cancel),
           jobs_(jobs),
           parallel_jobs_(std::clamp(parallel_jobs, 1, max_parallel_jobs)),
@@ -219,6 +247,8 @@ public:
 
     const RunEvents& events;
     const TaskRunner& runner;
+    const PerceptualRunner& perceptual_runner;
+    const bool gpu_metrics_together;
     const CancelToken& cancel;
 
 private:
@@ -257,7 +287,16 @@ JobRun::JobRun(Scheduler& scheduler, std::size_t index, const VmafJob& job)
       index_(index),
       job_(job),
       options_(job.options),
-      tasks_(job.tasks.size()) {}
+      tasks_(job.tasks.size()) {
+    // Vship's passes come from the plan, and are updated as each starts
+    // (report_pass_start), with any retry after the others.
+    for (std::size_t task = 0; task < tasks_.size(); ++task) {
+        if (job.tasks[task].backend == perceptual_task) {
+            tasks_[task].passes =
+                vship_passes(job.tasks[task].metric_keys, job.options.n_subsample, scheduler.gpu_metrics_together);
+        }
+    }
+}
 
 bool JobRun::begin() {
     const std::lock_guard lock(mutex_);
@@ -292,7 +331,8 @@ bool JobRun::finalized() const {
 
 bool JobRun::has_results() const {
     const std::lock_guard lock(mutex_);
-    return std::any_of(tasks_.begin(), tasks_.end(), [](const TaskState& state) { return state.result.has_value(); });
+    return !pass_outputs_.empty() ||
+           std::any_of(tasks_.begin(), tasks_.end(), [](const TaskState& state) { return state.finished(); });
 }
 
 ComparisonResult JobRun::execute_task(std::size_t task) {
@@ -306,6 +346,60 @@ ComparisonResult JobRun::execute_task(std::size_t task) {
         [this, task](const RunStatus& status) { report_status(task, status); }, scheduler_.cancel);
     conform(result, job_);
     return result;
+}
+
+PerceptualTaskOutput JobRun::execute_perceptual(std::size_t task) {
+    if (!scheduler_.perceptual_runner) {
+        throw std::logic_error("no runner for the perceptual metrics");
+    }
+    PerceptualHooks hooks;
+    hooks.on_progress = [this, task](long long current, long long total, double fps) {
+        report_progress(task, current, total, fps);
+    };
+    hooks.on_status = [this, task](const RunStatus& status) { report_status(task, status); };
+    hooks.on_pass_done = [this](const PerceptualTaskOutput& output) { report_pass(output); };
+    hooks.on_pass = [this, task](int number, int count, const std::vector<std::string>& keys) {
+        report_pass_start(task, number, count, keys);
+    };
+    hooks.on_cpu = [this, task](const std::vector<std::string>& keys) { report_cpu(task, keys); };
+    return scheduler_.perceptual_runner(job_, job_.tasks[task].metric_keys, scheduler_.gpu_metrics_together, hooks,
+                                        scheduler_.cancel);
+}
+
+void JobRun::report_pass(const PerceptualTaskOutput& output) {
+    const std::lock_guard lock(mutex_);
+    pass_outputs_.push_back(output);
+    send_result_so_far();
+}
+
+void JobRun::report_pass_start(std::size_t task, int number, int count, const std::vector<std::string>& keys) {
+    const std::lock_guard lock(mutex_);
+    TaskState& state = tasks_[task];
+    if (!state.passes) {
+        state.passes.emplace();
+    }
+    std::vector<std::vector<std::string>>& passes = *state.passes;
+    if (passes.size() < static_cast<std::size_t>(number)) {
+        passes.resize(static_cast<std::size_t>(number));
+    }
+    passes[static_cast<std::size_t>(number) - 1] = keys;
+    passes.resize(std::min(passes.size(), static_cast<std::size_t>(std::max(count, number))));
+    state.phase = std::array<long long, 3>{number, count, state.progress ? state.progress->current : 0};
+    if (state.progress) {
+        // The new pass has no speed yet: the last pass's would be shown as
+        // its own, and used for its time left.
+        state.progress->fps = 0.0;
+    }
+    send_snapshots();
+}
+
+void JobRun::report_cpu(std::size_t task, const std::vector<std::string>& keys) {
+    const std::lock_guard lock(mutex_);
+    TaskState& state = tasks_[task];
+    state.cpu_keys = keys;
+    state.phase.reset();
+    state.progress.reset();
+    send_snapshots();
 }
 
 // The scorers report at most a few times a second, so every report is
@@ -338,9 +432,14 @@ bool JobRun::run_task(std::size_t task) {
         tasks_[task].waiting_for.clear();
     }
     std::optional<ComparisonResult> output;
+    std::optional<PerceptualTaskOutput> perceptual;
     std::exception_ptr error;
     try {
-        output = execute_task(task);
+        if (job_.tasks[task].perceptual()) {
+            perceptual = execute_perceptual(task);
+        } else {
+            output = execute_task(task);
+        }
     } catch (...) {
         // The video's other tasks are left to finish, so that one failing
         // does not lose the others' metrics too.
@@ -353,6 +452,7 @@ bool JobRun::run_task(std::size_t task) {
         failed_.push_back(task);
     } else {
         state.result = std::move(output);
+        state.perceptual = std::move(perceptual);
         state.waiting_for.clear();
         if (!state.progress) {
             state.progress = Counts{1, 1, 0.0};
@@ -362,7 +462,7 @@ bool JobRun::run_task(std::size_t task) {
         send_snapshots();  // or the task's part of the line would keep showing its last step
     }
     const bool last = ++finished_tasks_ == tasks_.size();
-    if (state.result && !last) {
+    if (state.finished() && !last) {
         // Another task still runs: this one's scores are kept now, not when
         // the whole video is done.
         send_result_so_far();
@@ -381,12 +481,18 @@ void JobRun::finish() {
             failed.push_back(task);
         }
     }
+    // A metric that failed while the rest of its task finished (CVVDP beside
+    // SSIMULACRA2 and Butteraugli, say) is reported like a failed task.
+    const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far();
+    const PerceptualFailures metric_failures = perceptual ? perceptual->failures : PerceptualFailures{};
     const std::optional<ComparisonResult> result = merged();
     // The tasks' own results are not needed once the video's is made: a
     // long list would otherwise hold every video's scores twice.
     for (TaskState& state : tasks_) {
         state.result.reset();
+        state.perceptual.reset();
     }
+    pass_outputs_.clear();
     if (!result) {
         if (cancelled || (!failed.empty() && is_cancel(tasks_[failed.front()].error))) {
             scheduler_.report_cancelled_once();
@@ -398,7 +504,7 @@ void JobRun::finish() {
         }
         return;
     }
-    if (failed.empty()) {
+    if (failed.empty() && metric_failures.empty()) {
         if (events.job_finished) {
             events.job_finished(index_, *result);
         }
@@ -406,18 +512,22 @@ void JobRun::finish() {
     }
     std::string message;
     std::string stderr_tail;
-    MetricFailures failures;
+    PerceptualFailures failures;  // each metric once, its last reason (the Python app's dict)
     for (const std::size_t task : failed) {
         const auto [why, tail] = failure_of(tasks_[task].error);
         std::string labels;
         for (const std::string& key : job_.tasks[task].metric_keys) {
             labels += (labels.empty() ? "" : ", ") + std::string(metric_definition(key).label);
-            failures.emplace_back(key, why);
+            set_failure(failures, key, why);
         }
         message += (message.empty() ? "" : "\n") + labels + " failed: " + why;
         if (stderr_tail.empty()) {
             stderr_tail = tail;
         }
+    }
+    for (const auto& [key, why] : metric_failures) {
+        message += (message.empty() ? "" : "\n") + std::string(metric_definition(key).label) + " failed: " + why;
+        set_failure(failures, key, why);
     }
     if (events.job_partially_failed) {
         events.job_partially_failed(index_, *result, message, stderr_tail, failures);
@@ -434,11 +544,24 @@ std::vector<TaskSnapshot> JobRun::snapshots() const {
         snapshot.metric_keys = planned.metric_keys;
         snapshot.lane = pool_of(task) == gpu_pool ? "gpu" : "cpu";
         snapshot.cpu_keys = state.cpu_keys;
-        if (state.result) {
-            for (const std::string& key : planned.metric_keys) {
-                if (state.result->has_metric(key)) {
-                    snapshot.done_keys.push_back(key);
-                }
+        snapshot.passes = state.passes.value_or(std::vector<std::vector<std::string>>{planned.metric_keys});
+        snapshot.phase = state.phase;
+        // Its metrics that have scores: all that it scored once it is done,
+        // or those of its finished passes while it runs.
+        const auto scored = [&](const std::string& key) {
+            if (state.result) {
+                return state.result->has_metric(key);
+            }
+            if (state.perceptual) {
+                return state.perceptual->metrics.has(key);
+            }
+            return planned.backend == perceptual_task &&
+                   std::any_of(pass_outputs_.begin(), pass_outputs_.end(),
+                               [&key](const PerceptualTaskOutput& output) { return output.metrics.has(key); });
+        };
+        for (const std::string& key : planned.metric_keys) {
+            if (scored(key)) {
+                snapshot.done_keys.push_back(key);
             }
         }
         if (state.progress) {
@@ -446,7 +569,7 @@ std::vector<TaskSnapshot> JobRun::snapshots() const {
             snapshot.total = state.progress->total;
             snapshot.fps = state.progress->fps;
         }
-        snapshot.state = state.result                 ? "done"
+        snapshot.state = state.finished()             ? "done"
                          : state.error                ? "failed"
                          : !state.waiting_for.empty() ? "waiting"
                          : state.progress             ? "running"
@@ -463,37 +586,112 @@ void JobRun::send_snapshots() const {
     }
 }
 
+// The scores of SSIMULACRA2, Butteraugli and CVVDP so far: the output of
+// Vship's task (or, until it has one, of its finished passes), with that of
+// the CPU's perceptual task. Nothing until one has scores.
+std::optional<PerceptualTaskOutput> JobRun::perceptual_so_far() const {
+    const PerceptualTaskOutput* gpu_task = nullptr;
+    const PerceptualTaskOutput* cpu_task = nullptr;
+    for (std::size_t task = 0; task < tasks_.size(); ++task) {
+        if (tasks_[task].perceptual) {
+            (job_.tasks[task].backend == perceptual_task ? gpu_task : cpu_task) = &*tasks_[task].perceptual;
+        }
+    }
+    std::vector<const PerceptualTaskOutput*> parts;
+    if (gpu_task != nullptr) {
+        parts.push_back(gpu_task);
+    } else {
+        for (const PerceptualTaskOutput& output : pass_outputs_) {
+            parts.push_back(&output);
+        }
+    }
+    if (cpu_task != nullptr) {
+        parts.push_back(cpu_task);
+    }
+    if (parts.empty()) {
+        return std::nullopt;
+    }
+    if (parts.size() == 1 && (gpu_task != nullptr || cpu_task != nullptr)) {
+        return *parts.front();
+    }
+    PerceptualTaskOutput combined;
+    combined.source_crop = parts.front()->source_crop;
+    combined.distorted_crop = parts.front()->distorted_crop;
+    for (const PerceptualTaskOutput* part : parts) {
+        for (const std::string& key : part->metrics.keys()) {
+            if (const FrameMetricResult* frame = part->metrics.frame(key)) {
+                combined.metrics.add(*frame);
+            } else {
+                combined.metrics.add(*part->metrics.sequence(key));
+            }
+        }
+        for (const auto& [key, reason] : part->failures) {
+            set_failure(combined.failures, key, reason);
+        }
+        combined.compared_frame_count = std::max(combined.compared_frame_count, part->compared_frame_count);
+    }
+    return combined;
+}
+
 // The video's result from its finished tasks (the Python app's
 // JobRun._merged): FFmpeg's, with VMAF, NEG and VMAF v1 from the GPU's task
-// beside it. Nothing until a task has finished.
+// beside it, and the perceptual metrics so far. Nothing until a task, or a
+// pass of Vship's, has finished.
 std::optional<ComparisonResult> JobRun::merged() const {
     const ComparisonResult* ffmpeg = nullptr;
     const ComparisonResult* gpu = nullptr;
     for (std::size_t task = 0; task < tasks_.size(); ++task) {
         if (tasks_[task].result) {
-            (pool_of(task) == gpu_pool ? gpu : ffmpeg) = &*tasks_[task].result;
+            (job_.tasks[task].backend == gpu_vmaf_task ? gpu : ffmpeg) = &*tasks_[task].result;
         }
     }
     if (ffmpeg == nullptr) {
-        return gpu == nullptr ? std::nullopt : std::optional(*gpu);
+        std::swap(ffmpeg, gpu);
     }
-    ComparisonResult result = *ffmpeg;
-    if (gpu != nullptr) {
+    std::optional<ComparisonResult> result;
+    if (ffmpeg != nullptr) {
+        result = *ffmpeg;
+    }
+    if (result && gpu != nullptr) {
         for (const std::string& key : gpu->metric_results.keys()) {
             if (const FrameMetricResult* frame = gpu->metric_results.frame(key)) {
-                result.metric_results.add(*frame);
+                result->metric_results.add(*frame);
             } else {
-                result.metric_results.add(*gpu->metric_results.sequence(key));
+                result->metric_results.add(*gpu->metric_results.sequence(key));
             }
         }
         // Each VMAF's model comes from the task that calculated it: VMAF with
         // a custom model file is FFmpeg's.
         if (gpu->has_metric("vmaf")) {
-            result.model = gpu->model;
+            result->model = gpu->model;
         }
         if (gpu->has_metric("vmaf_v1")) {
-            result.model_v1 = gpu->model_v1;
-            result.model_choice_v1 = gpu->model_choice_v1;
+            result->model_v1 = gpu->model_v1;
+            result->model_choice_v1 = gpu->model_choice_v1;
+        }
+    }
+    if (const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far()) {
+        if (!result) {
+            // Only perceptual metrics: the result is made from the job, with
+            // the perceptual task's crops and frame count.
+            result.emplace();
+            result->source = job_.source_info.path;
+            result->distorted = job_.result_distorted_path.value_or(job_.distorted_info.path);
+            result->fps = job_.source_info.fps;
+            result->source_crop = perceptual->source_crop;
+            result->distorted_crop = perceptual->distorted_crop;
+            result->source_info = job_.source_info;
+            result->distorted_info = job_.distorted_info;
+            result->scale_direction = options_.scale_direction;
+            result->scale_algorithm = options_.scale_algorithm;
+            result->compared_frame_count = perceptual->compared_frame_count;
+        }
+        for (const std::string& key : perceptual->metrics.keys()) {
+            if (const FrameMetricResult* frame = perceptual->metrics.frame(key)) {
+                result->metric_results.add(*frame);
+            } else {
+                result->metric_results.add(*perceptual->metrics.sequence(key));
+            }
         }
     }
     return result;
@@ -635,7 +833,8 @@ void Scheduler::drain_queue(Pool pool) {
 }  // namespace
 
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
-                                   const std::vector<std::string>& metric_keys) {
+                                   const std::vector<std::string>& metric_keys,
+                                   const PerceptualBackends& perceptual_backends) {
     const bool vmaf = contains(metric_keys, "vmaf");
     const bool neg = contains(metric_keys, "vmaf_neg");
     const bool v1 = contains(metric_keys, "vmaf_v1");
@@ -654,13 +853,24 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     }
     MetricTask ffmpeg{"ffmpeg", {}};
     MetricTask gpu{std::string(gpu_vmaf_task), {}};
+    // SSIMULACRA2 and Butteraugli chosen for the CPU make a task of their own,
+    // in the CPU's queue: in Vship's task they would be calculated after its
+    // GPU passes, holding the GPU meanwhile. CVVDP runs on the GPU only.
+    MetricTask vship{std::string(perceptual_task), {}};
+    MetricTask perceptual_cpu{std::string(perceptual_cpu_task), {}};
     for (const std::string& key : metric_keys) {
+        if (is_perceptual_metric(key)) {
+            const auto chosen = perceptual_backends.find(key);
+            const bool cpu = key != "cvvdp" && chosen != perceptual_backends.end() && chosen->second == "cpu";
+            (cpu ? perceptual_cpu : vship).metric_keys.push_back(key);
+            continue;
+        }
         const bool scored_on_gpu = std::any_of(on_gpu.begin(), on_gpu.end(),
                                                [&key](const auto& model) { return model.first == key; });
         (scored_on_gpu ? gpu : ffmpeg).metric_keys.push_back(key);
     }
     std::vector<MetricTask> tasks;
-    for (MetricTask* task : {&ffmpeg, &gpu}) {
+    for (MetricTask* task : {&ffmpeg, &gpu, &vship, &perceptual_cpu}) {
         if (!task->metric_keys.empty()) {
             tasks.push_back(std::move(*task));
         }
@@ -669,8 +879,14 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
 }
 
 void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
+              const PerceptualRunner& perceptual, bool gpu_metrics_together, unsigned cores,
+              const CancelToken& cancel) {
+    Scheduler(jobs, parallel_jobs, events, runner, perceptual, gpu_metrics_together, cores, cancel).run();
+}
+
+void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
               unsigned cores, const CancelToken& cancel) {
-    Scheduler(jobs, parallel_jobs, events, runner, cores, cancel).run();
+    run_jobs(jobs, parallel_jobs, events, runner, PerceptualRunner(), false, cores, cancel);
 }
 
 }  // namespace vml

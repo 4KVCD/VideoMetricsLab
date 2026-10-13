@@ -22,10 +22,15 @@ constexpr std::string_view ellipsis = "…";
 struct MetricUnit {
     std::string place;  // "CPU" or "GPU": where the metrics are calculated now
     std::vector<std::string> keys;
-    std::string state;  // "running", "starting", "waiting", "done" or "failed"
+    // "running", "starting", "waiting", "queued" (a later pass of a task),
+    // "done" or "failed"
+    std::string state;
     const TaskSnapshot* task = nullptr;
     long long done = 0;  // progress is done / whole; the line rounds it down
     long long whole = 0;
+    // whole / scale is the pass's frame count, so (whole - done) / scale /
+    // fps is the seconds left.
+    long long scale = 1;
     double fps = 0.0;
 };
 
@@ -42,10 +47,11 @@ std::string labels_of(const std::vector<std::string>& keys) {
 }
 
 // Splits a video's metrics into the units they are calculated in, in the
-// order they run. Each metric appears in one unit only: the last one it is
-// in. When the CPU takes over the metrics of a task in the GPU's queue
-// (after a GPU failure), they are shown as CPU metrics, with the CPU's
-// figures.
+// order they run. A unit is one pass of one or more metrics, in one place.
+// Each metric appears in one unit only: the last one it is in, for example
+// its retry. When the CPU takes over the metrics of a task in the GPU's
+// queue (after a GPU failure), they are shown as CPU metrics, with the
+// CPU's figures.
 std::vector<MetricUnit> metric_units(const std::vector<TaskSnapshot>& tasks) {
     std::vector<MetricUnit> units;
     for (const TaskSnapshot& task : tasks) {
@@ -63,28 +69,70 @@ std::vector<MetricUnit> metric_units(const std::vector<TaskSnapshot>& tasks) {
                 units.push_back({place, failed, "failed", &task});
             }
         };
+        // Adds the unit for metrics still being calculated.
+        const auto under_way = [&units, &task](const std::vector<std::string>& keys, const std::string& place) {
+            units.push_back({place, keys, task.state, &task, task.current, task.total, 1, task.fps});
+        };
         const bool ended = task.state == "done" || task.state == "failed";
-        std::string place = "GPU";
-        const std::vector<std::string>* keys = &task.metric_keys;
         if (task.lane == "cpu" || !task.cpu_keys.empty()) {
-            // On the CPU: the task's metrics, or those the CPU took over from
-            // the GPU, after those the GPU had finished.
-            place = "CPU";
+            // One pass of the task's metrics on the CPU, after any passes on
+            // the GPU.
             if (!task.cpu_keys.empty()) {
-                std::vector<std::string> on_gpu;
-                for (const std::string& key : task.metric_keys) {
-                    if (!contains(task.cpu_keys, key)) {
-                        on_gpu.push_back(key);
+                for (const std::vector<std::string>& group : task.passes) {
+                    std::vector<std::string> on_gpu;
+                    for (const std::string& key : group) {
+                        if (!contains(task.cpu_keys, key)) {
+                            on_gpu.push_back(key);
+                        }
                     }
+                    finished(on_gpu, "GPU");
                 }
-                finished(on_gpu, "GPU");
-                keys = &task.cpu_keys;
+            }
+            const std::vector<std::string>& keys = task.cpu_keys.empty() ? task.metric_keys : task.cpu_keys;
+            if (ended) {
+                finished(keys, "CPU");
+            } else {
+                under_way(keys, "CPU");
+            }
+            continue;
+        }
+        std::vector<std::vector<std::string>> passes;
+        for (const std::vector<std::string>& group : task.passes) {
+            if (!group.empty()) {
+                passes.push_back(group);
             }
         }
+        if (passes.empty()) {
+            passes.push_back(task.metric_keys);
+        }
         if (ended) {
-            finished(*keys, place);
-        } else {
-            units.push_back({place, *keys, task.state, &task, task.current, task.total, task.fps});
+            for (const std::vector<std::string>& group : passes) {
+                finished(group, "GPU");
+            }
+            continue;
+        }
+        if (task.state != "running" || !task.phase) {
+            under_way(passes.front(), "GPU");
+            for (std::size_t position = 1; position < passes.size(); ++position) {
+                units.push_back({"GPU", passes[position], "queued", &task});
+            }
+            continue;
+        }
+        const auto [number, count, start] = *task.phase;
+        for (std::size_t position = 1; position <= passes.size(); ++position) {
+            const auto at = static_cast<long long>(position);
+            if (at < number) {
+                finished(passes[position - 1], "GPU");
+            } else if (at == number) {
+                // All of the task's passes share one progress count (Vship's
+                // task). This pass counts from `start`, out of `left` passes
+                // of the same length.
+                const long long left = std::max(1LL, count - number + 1);
+                units.push_back({"GPU", passes[position - 1], "running", &task, (task.current - start) * left,
+                                 task.total - start, left, task.fps});
+            } else {
+                units.push_back({"GPU", passes[position - 1], "queued", &task});
+            }
         }
     }
     std::vector<MetricUnit> kept;
@@ -125,8 +173,8 @@ std::string unit_text(const std::string& head, const MetricUnit& unit, bool paus
         }
         return head + " queued (another video is using the GPU)";
     }
-    if (unit.state == "starting") {
-        const std::string step = step_text(unit.task->step);
+    if (unit.state == "starting" || unit.state == "queued") {
+        const std::string step = unit.state == "starting" ? step_text(unit.task->step) : "";
         return step.empty() ? head + " starting" : head + " (" + step + ")";
     }
     if (unit.state == "done") {
@@ -140,7 +188,8 @@ std::string unit_text(const std::string& head, const MetricUnit& unit, bool paus
         // The last speed and time left would read as if it were still running.
         details = "paused";
     } else if (unit.fps > 0 && unit.whole > 0) {
-        const double seconds = static_cast<double>(std::max(0LL, unit.whole - unit.done)) / unit.fps;
+        const double seconds =
+            static_cast<double>(std::max(0LL, unit.whole - unit.done)) / static_cast<double>(unit.scale) / unit.fps;
         details = format_fixed(unit.fps, 1) + " fps, " + format_hms(seconds) + " remaining";
     }
     return head + " " + percent(unit) + (details.empty() ? "" : " (" + details + ")");
@@ -149,7 +198,7 @@ std::string unit_text(const std::string& head, const MetricUnit& unit, bool paus
 }  // namespace
 
 std::string step_text(const RunStatus& status) {
-    if (status.kind == StatusKind::starting) {
+    if (status.kind == StatusKind::starting || status.kind == StatusKind::gpu_pass) {
         return "";
     }
     std::string text = status.brief.empty() ? status.text : status.brief;
@@ -241,12 +290,16 @@ std::vector<std::string> metric_line(const std::vector<TaskSnapshot>& tasks, boo
             }
             return found;
         };
-        // The units under way; else the first that waits; else those that
-        // failed.
+        // The units under way; else the first that waits; else the first
+        // queued; else those that failed.
         std::vector<const MetricUnit*> shown =
             in_place([](const MetricUnit& unit) { return unit.state == "running" || unit.state == "starting"; });
         if (shown.empty()) {
             shown = in_place([](const MetricUnit& unit) { return unit.state == "waiting"; });
+            shown.resize(std::min<std::size_t>(shown.size(), 1));
+        }
+        if (shown.empty()) {
+            shown = in_place([](const MetricUnit& unit) { return unit.state == "queued"; });
             shown.resize(std::min<std::size_t>(shown.size(), 1));
         }
         if (shown.empty()) {

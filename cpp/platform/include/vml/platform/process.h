@@ -8,6 +8,7 @@
 // the app. (On Linux and macOS that is still to do.)
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -87,6 +88,15 @@ public:
     // that writes data rather than lines: how many were read, 0 once the
     // program has closed it.
     std::size_t read(void* into, std::size_t bytes);
+
+    // Waits until `bytes` of standard output are waiting to be read, the
+    // program has ended, or `stop` is set, so that one read takes a whole
+    // frame: read as it comes, a 4K frame arrives in some 300 pieces, each
+    // waking the reading thread (6 ms of CPU per frame, against 4). It never
+    // waits for more than half of what the pipe holds, or a program waiting
+    // for room in a full pipe would be waited for in turn. Only on Windows,
+    // as the Python app gathers; elsewhere it returns at once.
+    void gather(std::size_t bytes, const std::atomic<bool>& stop);
 
     // Waits for the program to end, and returns its exit code.
     int wait();

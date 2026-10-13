@@ -28,10 +28,11 @@ on every such GPU.
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (37 runs covering the ways the app
-scores videos) with either app, each with a fresh profile, and compares the
-exit codes, the tables, the per-frame CSV files character for character, and
-the JSON results. The clips are 2-second cuts of real test videos
+other: it runs the cases in `cases.json` (51 runs covering the ways the app
+scores videos) with either app, each with a fresh profile (and the case's
+own settings, where it has any), and compares the exit codes, the tables,
+the per-frame CSV files character for character, and the JSON results. The
+clips are 2-second cuts of real test videos
 (`clips.json`; `golden.py clips` makes them, outside the repository). Two
 runs of the Python app on this PC give identical results in every case, the
 GPU metrics included, so the C++ app is held to identical results here too.
@@ -66,10 +67,13 @@ the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
 PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
 NEG and v1 on the GPU, the app's default, with Vulkan or, where the GPU
 backend setting says CUDA or Vulkan cannot, with libvmaf's CUDA code on an
-NVIDIA GPU; and scores PSNR, SSIM and XPSNR in the app, with its libvmaf's
-own extractors, as the Python app does. With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on
-the CPU, and the two run at once, as the Python app runs a video's tasks.
-For VMAF on the GPU and PSNR, SSIM and XPSNR in the app it decodes the
+NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
+extractors, as the Python app does; and scores SSIMULACRA2 and Butteraugli
+on the GPU with Vship, in a pass each or (Settings > GPU metrics) in one.
+With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on the
+CPU, and the two run at once, as the Python app runs a video's tasks; so
+are Vship's metrics, in the GPU's queue after VMAF. For VMAF and Vship's
+metrics on the GPU, and PSNR, SSIM and XPSNR in the app, it decodes the
 videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
 Intel's or AMD's, through the app's libraries in `vmaf_app/native`), or with
 FFmpeg's decoders built into the app for a video FFmpeg would decode in
@@ -79,13 +83,15 @@ takes dav1d, the software decoder's AV1 decoder, from its bundled GStreamer;
 the C++ app looks for it beside FFmpeg's libraries in `vmaf_app/tools/ffmpeg`,
 where a development build has none, so an AV1 video FFmpeg would decode in
 software is decoded by FFmpeg.) That work runs in a process of its own (the
-program again, with `--vml-isolated`), so that a crash in libvmaf or the
-GPU's driver ends that process and not the run: FFmpeg's filters then
-calculate the scores on the CPU, as in the Python app. For a run it cannot
-do yet (the perceptual metrics), it says what it cannot do and exits with
-code 2, rather than giving other answers than the Python
-app. It neither reads nor saves the app's saved scores yet, and calculates
-every score.
+program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
+or the GPU's driver ends that process and not the run: FFmpeg's filters
+then calculate VMAF and the others on the CPU, as in the Python app (the
+Python app's CPU tools for SSIMULACRA2 and Butteraugli are not in the C++
+app yet, so a Vship metric whose GPU pass fails is reported as failed). For
+a run it cannot do yet (CVVDP, and SSIMULACRA2 and Butteraugli on the CPU),
+it says what it cannot do and exits with code 2, rather than giving other
+answers than the Python app. It neither reads nor saves the app's saved
+scores yet, and calculates every score.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu

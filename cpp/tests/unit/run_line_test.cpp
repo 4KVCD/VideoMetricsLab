@@ -19,6 +19,7 @@ RunStatus status_from(const Json& item) {
     const std::string kind = item["kind"].get<std::string>();
     return {item["text"].get<std::string>(),
             kind == "starting"          ? StatusKind::starting
+            : kind == "gpu_pass"        ? StatusKind::gpu_pass
             : kind == "gpu_wait"        ? StatusKind::gpu_wait
             : kind == "gpu_vmaf_failed" ? StatusKind::gpu_vmaf_failed
                                         : StatusKind::step,
@@ -32,6 +33,10 @@ TaskSnapshot snapshot_from(const Json& item) {
     snapshot.lane = item["lane"].get<std::string>();
     snapshot.cpu_keys = item["cpu_keys"].get<std::vector<std::string>>();
     snapshot.done_keys = item["done_keys"].get<std::vector<std::string>>();
+    snapshot.passes = item["passes"].get<std::vector<std::vector<std::string>>>();
+    if (!item["phase"].is_null()) {
+        snapshot.phase = item["phase"].get<std::array<long long, 3>>();
+    }
     snapshot.current = item["current"].get<long long>();
     snapshot.total = item["total"].get<long long>();
     snapshot.fps = test::reference_number(item["fps"]).value();

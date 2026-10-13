@@ -272,6 +272,13 @@ std::size_t ChildProcess::read(void* into, std::size_t bytes) {
     return 0;
 }
 
+void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
+    // Each read wakes the reading thread here too, but the Python app
+    // gathers on Windows only, and so does this.
+    static_cast<void>(bytes);
+    static_cast<void>(stop);
+}
+
 int ChildProcess::wait() {
     state_->reap(true);
     return state_->exit_code;

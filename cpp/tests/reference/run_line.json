@@ -14,11 +14,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -46,11 +56,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -76,11 +96,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -106,11 +134,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -138,11 +174,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 120,
      "total": 515,
      "state": "running",
+     "phase": null,
      "fps": "0x1.3800000000000p+3",
      "waiting_for": "",
      "step": {
@@ -168,11 +214,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 5,
      "total": 100000,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e03330941c821p+6",
      "waiting_for": "",
      "step": {
@@ -200,11 +254,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 3,
      "total": 515,
      "state": "running",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -232,11 +296,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 3,
      "total": 0,
      "state": "running",
+     "phase": null,
      "fps": "0x1.8000000000000p+4",
      "waiting_for": "",
      "step": {
@@ -260,11 +334,17 @@
       "psnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 9999,
      "total": 10000,
      "state": "running",
+     "phase": null,
      "fps": "0x1.999999999999ap-5",
      "waiting_for": "",
      "step": {
@@ -288,11 +368,17 @@
       "psnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 10001,
      "total": 10000,
      "state": "running",
+     "phase": null,
      "fps": "0x1.9000000000000p+5",
      "waiting_for": "",
      "step": {
@@ -320,11 +406,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 120,
      "total": 515,
      "state": "running",
+     "phase": null,
      "fps": "0x1.3800000000000p+3",
      "waiting_for": "",
      "step": {
@@ -350,11 +446,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "waiting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "CPU",
      "step": {
@@ -370,11 +474,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -401,11 +512,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 50,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e000000000000p+4",
      "waiting_for": "",
      "step": {
@@ -421,11 +540,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 75,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e080000000000p+8",
      "waiting_for": "",
      "step": {
@@ -452,11 +578,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 50,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e000000000000p+4",
      "waiting_for": "",
      "step": {
@@ -472,11 +606,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "waiting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "GPU",
      "step": {
@@ -502,11 +643,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -532,11 +680,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 50,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e000000000000p+4",
      "waiting_for": "",
      "step": {
@@ -552,6 +708,12 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [
       "vmaf",
       "vmaf_neg"
@@ -560,6 +722,7 @@
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -586,6 +749,13 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [
       "psnr",
@@ -595,6 +765,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -610,6 +781,12 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [
       "vmaf",
       "vmaf_neg"
@@ -618,6 +795,7 @@
      "current": 10,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.0000000000000p+3",
      "waiting_for": "",
      "step": {
@@ -643,6 +821,13 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [
       "psnr",
@@ -652,6 +837,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -667,6 +853,12 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [
       "vmaf",
       "vmaf_neg"
@@ -678,6 +870,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -703,6 +896,13 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [
       "psnr",
@@ -712,6 +912,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -727,11 +928,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 30,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e000000000000p+5",
      "waiting_for": "",
      "step": {
@@ -758,11 +966,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "failed",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -778,11 +994,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 30,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.e000000000000p+5",
      "waiting_for": "",
      "step": {
@@ -809,6 +1032,13 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [
       "psnr",
@@ -818,6 +1048,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -833,6 +1064,12 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [
       "vmaf",
@@ -841,6 +1078,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -867,6 +1105,13 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [
       "psnr",
@@ -875,6 +1120,7 @@
      "current": 0,
      "total": 0,
      "state": "done",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -890,11 +1136,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -921,11 +1174,19 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 1,
      "total": 2,
      "state": "running",
+     "phase": null,
      "fps": "0x1.0000000000000p+0",
      "waiting_for": "",
      "step": {
@@ -941,11 +1202,18 @@
       "vmaf_neg"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "failed",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -970,6 +1238,11 @@
       "vmaf"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "vmaf"
+      ]
+     ],
      "cpu_keys": [
       "vmaf"
      ],
@@ -977,6 +1250,7 @@
      "current": 10,
      "total": 100,
      "state": "running",
+     "phase": null,
      "fps": "0x1.0000000000000p+3",
      "waiting_for": "",
      "step": {
@@ -991,11 +1265,17 @@
       "ssimulacra2"
      ],
      "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "waiting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "GPU",
      "step": {
@@ -1024,11 +1304,21 @@
       "xpsnr"
      ],
      "lane": "cpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg",
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
      "cpu_keys": [],
      "done_keys": [],
      "current": 0,
      "total": 0,
      "state": "starting",
+     "phase": null,
      "fps": "0x0.0p+0",
      "waiting_for": "",
      "step": {
@@ -1040,6 +1330,646 @@
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR (GPU decoding failed (no decoder for the test video video); decoding through FFmpeg instead)"
+   ]
+  },
+  {
+   "name": "Vship's first pass",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 50,
+     "total": 300,
+     "state": "running",
+     "phase": [
+      1,
+      3,
+      0
+     ],
+     "fps": "0x1.e000000000000p+4",
+     "waiting_for": "",
+     "step": {
+      "text": "GPU metric 2/3: Butteraugli",
+      "kind": "gpu_pass",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 1 of 3: SSIMULACRA2 50.0% (30.0 fps, 0:00:01 remaining)"
+   ]
+  },
+  {
+   "name": "Vship's second pass",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 150,
+     "total": 300,
+     "state": "running",
+     "phase": [
+      2,
+      3,
+      100
+     ],
+     "fps": "0x1.9000000000000p+4",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 2 of 3: Butteraugli 50.0% (25.0 fps, 0:00:02 remaining)"
+   ]
+  },
+  {
+   "name": "Vship's last pass, no speed yet",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 200,
+     "total": 300,
+     "state": "running",
+     "phase": [
+      3,
+      3,
+      200
+     ],
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 3 of 3: CVVDP 0.0%"
+   ]
+  },
+  {
+   "name": "Vship starting",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "starting",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)\u2026",
+      "kind": "step",
+      "brief": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2"
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 1 of 3: SSIMULACRA2 (Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2)"
+   ]
+  },
+  {
+   "name": "Vship before its first pass",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 300,
+     "state": "running",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 1 of 3: SSIMULACRA2 0.0%"
+   ]
+  },
+  {
+   "name": "Vship waiting",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "ffmpeg",
+     "metric_keys": [
+      "psnr",
+      "ssim",
+      "xpsnr"
+     ],
+     "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 50,
+     "total": 100,
+     "state": "running",
+     "phase": null,
+     "fps": "0x1.e000000000000p+4",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    },
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "waiting",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "GPU",
+     "step": {
+      "text": "Waiting for the GPU: another video's GPU pass is running\u2026",
+      "kind": "gpu_wait",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR 50.0% (30.0 fps, 0:00:01 remaining)",
+    "GPU metrics 1 of 3: SSIMULACRA2 queued (another video is using the GPU)"
+   ]
+  },
+  {
+   "name": "Vship done, one failed",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [
+      "ssimulacra2",
+      "cvvdp"
+     ],
+     "current": 0,
+     "total": 0,
+     "state": "done",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 2 of 3: Butteraugli failed"
+   ]
+  },
+  {
+   "name": "Vship failed",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "ffmpeg",
+     "metric_keys": [
+      "psnr",
+      "ssim",
+      "xpsnr"
+     ],
+     "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [
+      "psnr",
+      "ssim",
+      "xpsnr"
+     ],
+     "current": 0,
+     "total": 0,
+     "state": "done",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    },
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2"
+      ],
+      [
+       "butteraugli"
+      ],
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "failed",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "CPU metrics done",
+    "GPU metrics 1 of 3: SSIMULACRA2 failed",
+    "GPU metrics 2 of 3: Butteraugli failed",
+    "GPU metrics 3 of 3: CVVDP failed"
+   ]
+  },
+  {
+   "name": "a shared pass, then a retry",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2",
+       "butteraugli"
+      ],
+      [
+       "butteraugli"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 150,
+     "total": 200,
+     "state": "running",
+     "phase": [
+      2,
+      2,
+      100
+     ],
+     "fps": "0x1.4000000000000p+5",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 2 of 2: Butteraugli 50.0% (40.0 fps, 0:00:01 remaining)"
+   ]
+  },
+  {
+   "name": "one pass with all three",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "ssimulacra2",
+       "butteraugli",
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 10,
+     "total": 100,
+     "state": "running",
+     "phase": [
+      1,
+      1,
+      0
+     ],
+     "fps": "0x1.9000000000000p+3",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "GPU metrics 1\u20133 of 3: SSIMULACRA2, Butteraugli, CVVDP 10.0% (12.5 fps, 0:00:07 remaining)"
+   ]
+  },
+  {
+   "name": "the CPU took over from Vship",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli",
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [
+      "ssimulacra2",
+      "butteraugli"
+     ],
+     "done_keys": [
+      "cvvdp"
+     ],
+     "current": 5,
+     "total": 100,
+     "state": "running",
+     "phase": null,
+     "fps": "0x1.0000000000000p+1",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "CPU metrics 1\u20132 of 2: SSIMULACRA2, Butteraugli 5.0% (2.0 fps, 0:00:47 remaining)",
+    "GPU metrics done"
+   ]
+  },
+  {
+   "name": "Vship and the CPU's perceptual task",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "vmaf_gpu",
+     "metric_keys": [
+      "vmaf",
+      "vmaf_neg"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [
+      "vmaf",
+      "vmaf_neg"
+     ],
+     "current": 0,
+     "total": 0,
+     "state": "done",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    },
+    {
+     "backend": "perceptual",
+     "metric_keys": [
+      "cvvdp"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "cvvdp"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 40,
+     "total": 100,
+     "state": "running",
+     "phase": [
+      1,
+      1,
+      0
+     ],
+     "fps": "0x1.4000000000000p+4",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    },
+    {
+     "backend": "perceptual_cpu",
+     "metric_keys": [
+      "ssimulacra2",
+      "butteraugli"
+     ],
+     "lane": "cpu",
+     "passes": [
+      [
+       "ssimulacra2",
+       "butteraugli"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 3,
+     "total": 100,
+     "state": "running",
+     "phase": null,
+     "fps": "0x1.0000000000000p-1",
+     "waiting_for": "",
+     "step": {
+      "text": "",
+      "kind": "step",
+      "brief": ""
+     }
+    }
+   ],
+   "line": [
+    "CPU metrics 1\u20132 of 2: SSIMULACRA2, Butteraugli 3.0% (0.5 fps, 0:03:14 remaining)",
+    "GPU metrics 3 of 3: CVVDP 40.0% (20.0 fps, 0:00:03 remaining)"
    ]
   }
  ],
@@ -1115,6 +2045,22 @@
     "brief": ""
    },
    "text": ""
+  },
+  {
+   "status": {
+    "text": "GPU metric 2/3: Butteraugli",
+    "kind": "gpu_pass",
+    "brief": ""
+   },
+   "text": ""
+  },
+  {
+   "status": {
+    "text": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)\u2026",
+    "kind": "step",
+    "brief": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2"
+   },
+   "text": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2"
   }
  ],
  "numbers": [

@@ -25,6 +25,7 @@ add_executable(vml_tests
     unit/vmaf_cuda_test.cpp
     unit/vmaf_v1_gpu_test.cpp
     unit/vmaf_vulkan_test.cpp
+    unit/vship_test.cpp
     unit/reference.cpp
     unit/test_videos.cpp
 )

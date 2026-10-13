@@ -1,6 +1,7 @@
 # vml_core: the engine. No Qt and no operating-system headers, so the same
 # code runs under the command line and the window on every system.
 add_library(vml_core
+    src/colour.cpp
     src/crop_detect.cpp
     src/export_csv.cpp
     src/ffmpeg_run.cpp
@@ -19,15 +20,19 @@ add_library(vml_core
     src/model_select.cpp
     src/number_format.cpp
     src/options.cpp
+    src/perceptual.cpp
     src/python_json.cpp
     src/python_text.cpp
     src/results.cpp
+    src/run_json.cpp
     src/run_line.cpp
     src/settings.cpp
     src/sha256.cpp
     src/stats.cpp
     src/time_format.cpp
     src/video.cpp
+    src/vship.cpp
+    src/vship_run.cpp
     src/vmaf_cuda.cpp
     src/vmaf_v1_gpu.cpp
     src/vmaf_vulkan.cpp
