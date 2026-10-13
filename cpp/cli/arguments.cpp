@@ -696,6 +696,8 @@ std::string top_help() {
            top_sections + examples + "\n" + program + " compare --help lists every option.\n";
 }
 
+const std::string& version_line() { return version_text; }
+
 Arguments parse_arguments(const std::vector<std::string>& arguments) {
     Arguments parsed;
     std::vector<std::string> command_extras;

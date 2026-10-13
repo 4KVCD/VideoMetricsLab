@@ -99,6 +99,11 @@ long long estimate_total_frames(const VideoInfo& reference, const VmafOptions& o
 // was cut short), or nothing.
 std::optional<std::string> short_comparison(long long expected, long long compared, double fps, int step);
 
+// Whether the app may score PSNR, SSIM and XPSNR itself: its libvmaf is
+// bundled, and the environment variable VML_CPU_METRICS does not send them
+// to FFmpeg ("ffmpeg").
+bool cpu_metrics_in_app();
+
 // The filter graph of a comparison: each video downloaded from its GPU
 // decoder if need be, cropped, converted and scaled to the compared size,
 // its frames numbered, then libvmaf and xpsnr. With XPSNR beside libvmaf's

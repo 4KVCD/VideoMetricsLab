@@ -1,6 +1,7 @@
-// The command line reads its arguments and finds its test videos as the
-// Python app's does (reference/cli.json, made by its argparse parser and its
-// expand_tests).
+// The command line reads its arguments, finds its test videos and says where
+// each metric is calculated as the Python app's does (reference/cli.json,
+// made by its argparse parser and its expand_tests, and devices.json, by its
+// devices command).
 #include "arguments.h"
 
 #include <gtest/gtest.h>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include "compare.h"
+#include "devices.h"
 #include "reference.h"
 #include "vml/platform/system.h"
 
@@ -135,6 +137,48 @@ TEST(CommandLine, FindsTestVideosAsThePythonApp) {
     }
     std::error_code error;
     std::filesystem::remove_all(folder, error);
+}
+
+// The devices command says where each metric is calculated as the Python
+// app's says it (devices.json, made by its devices command with stand-ins
+// for what it checks), after the app's name and version, each app's own.
+TEST(CommandLine, SaysWhereEachMetricIsCalculatedAsThePythonApp) {
+    const auto tool = [](const Json& status) {
+        ToolStatus found{status["name"].get<std::string>(), status["path"].get<std::string>(),
+                         status["runnable"].get<bool>(), std::nullopt, status["error"].get<std::string>()};
+        if (!status["version"].is_null()) {
+            found.version = status["version"].get<std::vector<int>>();
+        }
+        return found;
+    };
+    for (const Json& expected : test::load_reference("devices.json")) {
+        SCOPED_TRACE(expected["name"].get<std::string>());
+        DeviceFindings found;
+        found.tools = ToolsStatus{tool(expected["tools"][0]), tool(expected["tools"][1])};
+        found.gpu_backend = expected["gpu_backend"].get<std::string>();
+        if (const Json& vship = expected["vship"]; !vship.is_null()) {
+            found.vship = VshipDevice{vship["backend"].get<std::string>(), vship["name"].get<std::string>(),
+                                      vship["gpu_id"].get<int>(), vship["version"].get<std::string>(), std::nullopt};
+        }
+        found.no_vship = expected["no_vship"].get<std::string>();
+        found.vmaf.backend = expected["vmaf"]["backend"].get<std::string>();
+        if (!expected["vmaf"]["device"].is_null()) {
+            found.vmaf.device = expected["vmaf"]["device"].get<int>();
+        }
+        found.vmaf.text = expected["vmaf"]["text"].get<std::string>();
+        found.v1 = V1Probe{expected["v1"]["available"].get<bool>(), expected["v1"]["text"].get<std::string>()};
+        found.cpu_metrics_in_app = expected["cpu_metrics_in_app"].get<bool>();
+        found.libvmaf_fast_version = expected["libvmaf_fast_version"].get<std::string>();
+        // The reference was made on Windows, where FFmpeg is ffmpeg.exe.
+        std::vector<std::string> lines;
+        for (std::string line : expected["lines"].get<std::vector<std::string>>()) {
+            if (const std::size_t at = line.find("ffmpeg.exe"); at != std::string::npos) {
+                line.replace(at, 10, platform::executable_name("ffmpeg"));
+            }
+            lines.push_back(line);
+        }
+        EXPECT_EQ(device_lines(found), lines);
+    }
 }
 
 }  // namespace

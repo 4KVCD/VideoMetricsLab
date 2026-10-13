@@ -65,4 +65,7 @@ Arguments parse_arguments(const std::vector<std::string>& arguments);
 // The top-level help, printed when no command is given.
 std::string top_help();
 
+// The app's name and version, as --version prints it.
+const std::string& version_line();
+
 }  // namespace vml::cli

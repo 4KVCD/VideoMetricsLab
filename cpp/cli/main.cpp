@@ -2,6 +2,7 @@
 // (vmaf_app/cli.py), as far as it has been ported (compare.h says how far).
 //
 //     vml-cli compare REFERENCE TEST [TEST ...] [options]
+//     vml-cli devices
 //     vml-cli --version
 //
 // Progress goes to stderr, results to stdout. Exit code 0 when every video
@@ -13,6 +14,7 @@
 
 #include "arguments.h"
 #include "compare.h"
+#include "devices.h"
 #include "vml/isolated.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
@@ -36,9 +38,7 @@ int main(int argc, char** argv) {
             case cli::Command::compare:
                 return cli::compare(arguments.compare);
             case cli::Command::devices:
-                platform::write_text(platform::Stream::error,
-                                     "The C++ command line cannot do this yet: the devices command.\n");
-                return cli::exit_usage;
+                return cli::devices();
             case cli::Command::none:
                 platform::write_text(platform::Stream::output, cli::top_help());
                 return cli::exit_usage;

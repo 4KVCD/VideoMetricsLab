@@ -3,6 +3,7 @@
 add_library(vml_cli STATIC
     arguments.cpp
     compare.cpp
+    devices.cpp
     report.cpp
 )
 target_include_directories(vml_cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

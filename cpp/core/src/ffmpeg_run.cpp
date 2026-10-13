@@ -966,13 +966,6 @@ std::optional<std::string> cpu_metric_of_feature(const std::string& feature) {
     return std::nullopt;
 }
 
-// Whether the app may score PSNR, SSIM and XPSNR itself: its libvmaf is
-// bundled, and VML_CPU_METRICS does not send them to FFmpeg.
-bool cpu_metrics_in_app() {
-    std::error_code ignored;
-    return ascii_lower(platform::environment_variable(cpu_metrics_variable).value_or("")) != "ffmpeg" &&
-           std::filesystem::is_regular_file(libvmaf_folder() / platform::shared_library_name("libvmaf"), ignored);
-}
 
 // XPSNR's frame rate, in whole frames per second, as FFmpeg's xpsnr filter
 // takes it from its second input, the test video: FFmpeg gives an input the
@@ -1440,6 +1433,12 @@ std::optional<std::string> short_comparison(long long expected, long long compar
            format_hms(static_cast<double>(compared) / std::max(fps, 1.0), 1) +
            ", though its file says it is longer. It may have been cut short: an encode that stopped early, or a "
            "copy that did not finish.";
+}
+
+bool cpu_metrics_in_app() {
+    std::error_code ignored;
+    return ascii_lower(platform::environment_variable(cpu_metrics_variable).value_or("")) != "ffmpeg" &&
+           std::filesystem::is_regular_file(libvmaf_folder() / platform::shared_library_name("libvmaf"), ignored);
 }
 
 std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,

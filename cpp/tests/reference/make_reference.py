@@ -12,9 +12,9 @@ features by the bundled libvmaf and scored with the Vulkan engine
 seconds (cvvdp.py, perceptual_vship.py), the pairing of frames by
 timestamp (frame_sync_by_time.py), SSIMULACRA2 and Butteraugli on the CPU
 (perceptual_cpu.py, colour.py), the line that says how far a video is
-(ui/run_line.py), its command line's reading of arguments and patterns
-(cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
-that Vulkan scores VMAF on.
+(ui/run_line.py), its command line's reading of arguments and patterns and
+its devices command (cli.py), and Python's json.dumps. The Vulkan engine's
+cases need a GPU that Vulkan scores VMAF on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -1701,7 +1701,78 @@ def perceptual_cpu_cases() -> dict:
             "chunks": chunks, "pictures": described_pictures}
 
 
+def devices_cases() -> list[dict]:
+    """The devices command's lines (cli.devices) for what its checks find,
+    which stand in for the PC's: FFmpeg usable, missing or too old; a GPU
+    for Vship, or none; VMAF on the GPU with Vulkan or CUDA, or on the CPU;
+    VMAF v1 with the GPU or not; PSNR, SSIM and XPSNR in the app or in
+    FFmpeg. The first line, the app's name and version, is left out: the
+    apps' versions differ."""
+    import io
+    from types import SimpleNamespace
+
+    from vmaf_app import cli
+    from vmaf_app.core import ffmpeg_locate, libvmaf, perceptual_vship, vmaf_gpu, vmaf_runner, vmaf_v1_gpu
+    from vmaf_app.core.models import GpuVendor
+
+    real_settings = cli.Settings
+
+    def tool(name: str, version: tuple[int, ...] | None = (9, 0, 2), error: str = "") -> ffmpeg_locate.ToolStatus:
+        return ffmpeg_locate.ToolStatus(name, name, not error, None if error else version, error)
+
+    def described_tool(status: ffmpeg_locate.ToolStatus) -> dict:
+        return {"name": status.name, "path": status.path, "runnable": status.runnable,
+                "version": None if status.version is None else list(status.version), "error": status.error}
+
+    nvidia = perceptual_vship.VshipDevice("cuda", "NVIDIA GeForce RTX 5090", 0, "5.1.2", None, GpuVendor.NVIDIA)
+    intel = perceptual_vship.VshipDevice("vulkan", "Intel(R) Graphics", 1, "5.1.2", None, GpuVendor.INTEL)
+    usable = (tool("ffmpeg"), tool("ffprobe"))
+    cases = []
+    for name, tools, backend, vship, vmaf, v1, in_app in (
+            ("every metric with the GPU", usable, "auto", (nvidia, ""),
+             (True, "Vulkan on NVIDIA GeForce RTX 5090", ("vulkan", 0)), (True, "NVIDIA GeForce RTX 5090"), True),
+            ("VMAF with CUDA, Vship with Vulkan", usable, "cuda", (intel, ""),
+             (True, "NVIDIA GeForce RTX 5090 with CUDA", ("cuda", None)), (False, "the GPU's shaders failed"), False),
+            ("no GPU", usable, "vulkan", (None, "no supported GPU"),
+             (False, "no GPU that scores VMAF here", None), (False, "no Vulkan GPU"), True),
+            ("FFmpeg missing", (tool("ffmpeg", error="not found"), tool("ffprobe")), "auto",
+             (None, "no supported GPU"), (False, "no GPU", None), (False, "no GPU"), False),
+            ("FFmpeg too old", (tool("ffmpeg", (8, 1)), tool("ffprobe", (8, 1))), "auto",
+             (nvidia, ""), (False, "no GPU", None), (False, "no GPU"), True)):
+        version = "v1-4-g994b1814"
+        patches = [(cli, "Settings", SimpleNamespace(load=lambda backend=backend: real_settings(gpu_backend=backend))),
+                   (cli, "_apply_settings", lambda settings: None),
+                   (cli, "check_tools", lambda tools=tools: ffmpeg_locate.ToolsStatus(*tools)),
+                   (perceptual_vship, "detect_vship_device", lambda vship=vship: vship),
+                   (vmaf_gpu, "gpu_vmaf_available", lambda vmaf=vmaf: vmaf[:2]),
+                   (vmaf_gpu, "gpu_vmaf_backend", lambda vmaf=vmaf: vmaf[2]),
+                   (vmaf_v1_gpu, "available", lambda v1=v1: v1),
+                   (vmaf_runner, "cpu_metrics_in_app", lambda in_app=in_app: in_app),
+                   (libvmaf, "LIBVMAF_FAST_VERSION", version)]
+        saved = [(owner, attribute, getattr(owner, attribute)) for owner, attribute, _value in patches]
+        for owner, attribute, value in patches:
+            setattr(owner, attribute, value)
+        try:
+            out = io.StringIO()
+            cli.devices(None, out=out)
+        finally:
+            for owner, attribute, value in saved:
+                setattr(owner, attribute, value)
+        device = vship[0]
+        cases.append({
+            "name": name, "tools": [described_tool(status) for status in tools], "gpu_backend": backend,
+            "vship": None if device is None else {"backend": device.backend, "name": device.name,
+                                                  "gpu_id": device.gpu_id, "version": device.version},
+            "no_vship": vship[1],
+            "vmaf": {"backend": vmaf[2][0] if vmaf[0] else "", "device": vmaf[2][1] if vmaf[0] else None,
+                     "text": vmaf[1]},
+            "v1": {"available": v1[0], "text": v1[1]}, "cpu_metrics_in_app": in_app,
+            "libvmaf_fast_version": version, "lines": out.getvalue().splitlines()[1:]})
+    return cases
+
+
 if __name__ == "__main__":
+    write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())
     write("cvvdp.json", cvvdp_cases())

@@ -1,0 +1,266 @@
+[
+ {
+  "name": "every metric with the GPU",
+  "tools": [
+   {
+    "name": "ffmpeg",
+    "path": "ffmpeg",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   },
+   {
+    "name": "ffprobe",
+    "path": "ffprobe",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   }
+  ],
+  "gpu_backend": "auto",
+  "vship": {
+   "backend": "cuda",
+   "name": "NVIDIA GeForce RTX 5090",
+   "gpu_id": 0,
+   "version": "5.1.2"
+  },
+  "no_vship": "",
+  "vmaf": {
+   "backend": "vulkan",
+   "device": 0,
+   "text": "Vulkan on NVIDIA GeForce RTX 5090"
+  },
+  "v1": {
+   "available": true,
+   "text": "NVIDIA GeForce RTX 5090"
+  },
+  "cpu_metrics_in_app": true,
+  "libvmaf_fast_version": "v1-4-g994b1814",
+  "lines": [
+   "FFmpeg: 9.0.2",
+   "GPU backend setting: auto",
+   "CVVDP: GPU: NVIDIA GeForce RTX 5090 (Vship 5.1.2, CUDA)",
+   "SSIMULACRA2: GPU: NVIDIA GeForce RTX 5090 (Vship 5.1.2, CUDA)",
+   "Butteraugli: GPU: NVIDIA GeForce RTX 5090 (Vship 5.1.2, CUDA)",
+   "VMAF v0.6.1, VMAF NEG: GPU (Vulkan, GPU 0)",
+   "VMAF v1: GPU (NVIDIA GeForce RTX 5090)",
+   "PSNR, SSIM, XPSNR: CPU (libvmaf-fast v1-4-g994b1814 in the app; FFmpeg beside VMAF on the CPU)"
+  ]
+ },
+ {
+  "name": "VMAF with CUDA, Vship with Vulkan",
+  "tools": [
+   {
+    "name": "ffmpeg",
+    "path": "ffmpeg",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   },
+   {
+    "name": "ffprobe",
+    "path": "ffprobe",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   }
+  ],
+  "gpu_backend": "cuda",
+  "vship": {
+   "backend": "vulkan",
+   "name": "Intel(R) Graphics",
+   "gpu_id": 1,
+   "version": "5.1.2"
+  },
+  "no_vship": "",
+  "vmaf": {
+   "backend": "cuda",
+   "device": null,
+   "text": "NVIDIA GeForce RTX 5090 with CUDA"
+  },
+  "v1": {
+   "available": false,
+   "text": "the GPU's shaders failed"
+  },
+  "cpu_metrics_in_app": false,
+  "libvmaf_fast_version": "v1-4-g994b1814",
+  "lines": [
+   "FFmpeg: 9.0.2",
+   "GPU backend setting: cuda",
+   "CVVDP: GPU: Intel(R) Graphics (Vship 5.1.2, Vulkan)",
+   "SSIMULACRA2: GPU: Intel(R) Graphics (Vship 5.1.2, Vulkan)",
+   "Butteraugli: GPU: Intel(R) Graphics (Vship 5.1.2, Vulkan)",
+   "VMAF v0.6.1, VMAF NEG: GPU (libvmaf CUDA)",
+   "VMAF v1: CPU (the GPU's shaders failed)",
+   "PSNR, SSIM, XPSNR: CPU (FFmpeg)"
+  ]
+ },
+ {
+  "name": "no GPU",
+  "tools": [
+   {
+    "name": "ffmpeg",
+    "path": "ffmpeg",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   },
+   {
+    "name": "ffprobe",
+    "path": "ffprobe",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   }
+  ],
+  "gpu_backend": "vulkan",
+  "vship": null,
+  "no_vship": "no supported GPU",
+  "vmaf": {
+   "backend": "",
+   "device": null,
+   "text": "no GPU that scores VMAF here"
+  },
+  "v1": {
+   "available": false,
+   "text": "no Vulkan GPU"
+  },
+  "cpu_metrics_in_app": true,
+  "libvmaf_fast_version": "v1-4-g994b1814",
+  "lines": [
+   "FFmpeg: 9.0.2",
+   "GPU backend setting: vulkan",
+   "CVVDP: not available (no supported GPU)",
+   "SSIMULACRA2: CPU (libjxl)",
+   "Butteraugli: CPU (libjxl)",
+   "VMAF v0.6.1, VMAF NEG: CPU (no GPU that scores VMAF here)",
+   "VMAF v1: CPU (no Vulkan GPU)",
+   "PSNR, SSIM, XPSNR: CPU (libvmaf-fast v1-4-g994b1814 in the app; FFmpeg beside VMAF on the CPU)"
+  ]
+ },
+ {
+  "name": "FFmpeg missing",
+  "tools": [
+   {
+    "name": "ffmpeg",
+    "path": "ffmpeg",
+    "runnable": false,
+    "version": null,
+    "error": "not found"
+   },
+   {
+    "name": "ffprobe",
+    "path": "ffprobe",
+    "runnable": true,
+    "version": [
+     9,
+     0,
+     2
+    ],
+    "error": ""
+   }
+  ],
+  "gpu_backend": "auto",
+  "vship": null,
+  "no_vship": "no supported GPU",
+  "vmaf": {
+   "backend": "",
+   "device": null,
+   "text": "no GPU"
+  },
+  "v1": {
+   "available": false,
+   "text": "no GPU"
+  },
+  "cpu_metrics_in_app": false,
+  "libvmaf_fast_version": "v1-4-g994b1814",
+  "lines": [
+   "FFmpeg: NOT USABLE: ffmpeg.exe could not be run (not found).",
+   "GPU backend setting: auto",
+   "CVVDP: not available (no supported GPU)",
+   "SSIMULACRA2: CPU (libjxl)",
+   "Butteraugli: CPU (libjxl)",
+   "VMAF v0.6.1, VMAF NEG: CPU (no GPU)",
+   "VMAF v1: CPU (no GPU)",
+   "PSNR, SSIM, XPSNR: CPU (FFmpeg)"
+  ]
+ },
+ {
+  "name": "FFmpeg too old",
+  "tools": [
+   {
+    "name": "ffmpeg",
+    "path": "ffmpeg",
+    "runnable": true,
+    "version": [
+     8,
+     1
+    ],
+    "error": ""
+   },
+   {
+    "name": "ffprobe",
+    "path": "ffprobe",
+    "runnable": true,
+    "version": [
+     8,
+     1
+    ],
+    "error": ""
+   }
+  ],
+  "gpu_backend": "auto",
+  "vship": {
+   "backend": "cuda",
+   "name": "NVIDIA GeForce RTX 5090",
+   "gpu_id": 0,
+   "version": "5.1.2"
+  },
+  "no_vship": "",
+  "vmaf": {
+   "backend": "",
+   "device": null,
+   "text": "no GPU"
+  },
+  "v1": {
+   "available": false,
+   "text": "no GPU"
+  },
+  "cpu_metrics_in_app": true,
+  "libvmaf_fast_version": "v1-4-g994b1814",
+  "lines": [
+   "FFmpeg: NOT USABLE: ffmpeg 8.1 is too old -- version 9 or newer is required.",
+   "GPU backend setting: auto",
+   "CVVDP: GPU: NVIDIA GeForce RTX 5090 (Vship 5.1.2, CUDA)",
+   "SSIMULACRA2: GPU: NVIDIA GeForce RTX 5090 (Vship 5.1.2, CUDA)",
+   "Butteraugli: GPU: NVIDIA GeForce RTX 5090 (Vship 5.1.2, CUDA)",
+   "VMAF v0.6.1, VMAF NEG: CPU (no GPU)",
+   "VMAF v1: CPU (no GPU)",
+   "PSNR, SSIM, XPSNR: CPU (libvmaf-fast v1-4-g994b1814 in the app; FFmpeg beside VMAF on the CPU)"
+  ]
+ }
+]

@@ -95,13 +95,15 @@ program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
 or the GPU's driver ends that process and not the run: FFmpeg's filters
 then calculate VMAF and the others on the CPU, and libjxl's tools
 SSIMULACRA2 and Butteraugli, as in the Python app. For a run it cannot do
-yet (FFmpeg pairing the frames with `VML_VMAF_PIPES=canvas`, and the
-`devices` command), it says what it cannot do and exits with code 2, rather
-than giving other answers than the Python app. It neither reads nor saves
-the app's saved scores yet, and calculates every score.
+yet (FFmpeg pairing the frames with `VML_VMAF_PIPES=canvas`), it says what it
+cannot do and exits with code 2, rather than giving other answers than the
+Python app. It neither reads nor saves the app's saved scores yet, and
+calculates every score. `vml-cli devices` says FFmpeg's version and where
+each metric is calculated on the PC, as the Python app's does.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu
+    build\windows\cli\Release\vml-cli.exe devices
 
 ## Building and testing
 
