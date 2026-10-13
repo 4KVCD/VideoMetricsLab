@@ -149,6 +149,9 @@ More examples:
 # The first 30 seconds only, everything calculated on the CPU
 .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv --duration 30 --cpu
 
+# HDR10 in files with no colour tags (y4m), the first 33 frames, CVVDP on an HDR display
+.\VideoMetricsLab-cli.exe compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33 --cvvdp-display "30-inch 4K HDR monitor, dim room"
+
 # A 1080p encode against a 4K reference, compared at 4K
 .\VideoMetricsLab-cli.exe compare reference_4k.mkv encode_1080p.mkv --scale-to reference
 
@@ -168,6 +171,9 @@ $run.videos[0].metrics.vmaf.score
 | `--scale-to test\|reference` | Which video's size the other is scaled to when they differ. |
 | `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
 | `--duration SECONDS` | Compare only the start of each video. |
+| `--frames N` | Compare only the first N frames of each video, such as a short encode of a longer reference. |
+| `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video is taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. These scores are not saved. |
+| `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
 | `--vmaf-on`, `--ssimulacra2-on`, `--butteraugli-on` `gpu\|cpu` | Where that one metric is calculated (`--vmaf-on` is VMAF v0.6.1, VMAF NEG and VMAF v1). Left out: as the app's Options panel was last set. |

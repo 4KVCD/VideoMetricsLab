@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 import threading
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,6 +24,7 @@ from vmaf_app.core.metric_results import (
     FrameMetricResult,
     MetricProvenance,
     MetricResultSet,
+    SequenceMetricResult,
     current_ffmpeg_provenance,
     results_from_frame_scores,
 )
@@ -228,10 +230,10 @@ def test_cpu_puts_every_metric_with_a_choice_on_the_cpu_unless_one_says_otherwis
     settings = Settings.load()
     args = parse(["compare", "r.mkv", "t.mkv", "--cpu"])
     assert cli._backends(args, settings) == {"ssimulacra2": "cpu", "butteraugli": "cpu"}
-    assert cli._row_options(args, settings, ("vmaf",)).vmaf_on_gpu is False
+    assert cli._row_options(args, settings, ("vmaf",), _info("t.mkv")).vmaf_on_gpu is False
     args = parse(["compare", "r.mkv", "t.mkv", "--cpu", "--butteraugli-on", "gpu", "--vmaf-on", "gpu"])
     assert cli._backends(args, settings) == {"ssimulacra2": "cpu", "butteraugli": "gpu"}
-    assert cli._row_options(args, settings, ("vmaf",)).vmaf_on_gpu is True
+    assert cli._row_options(args, settings, ("vmaf",), _info("t.mkv")).vmaf_on_gpu is True
 
 
 def test_per_frame_scores_are_written_as_the_windows_csv(videos):
@@ -296,6 +298,82 @@ def test_a_reference_that_cannot_be_read_or_no_ffmpeg_is_a_usage_error(videos, m
     monkeypatch.setattr(cli, "check_tools", lambda: SimpleNamespace(ok=False, problems=["ffmpeg.exe could not be run."]))
     code, _out, err = _run(videos.reference, videos.a)
     assert code == cli.EXIT_USAGE and "ffmpeg.exe could not be run." in err
+
+
+# ------------------------------------------------- frames, colours, displays
+
+def test_frames_compares_the_first_n_frames_and_a_length_mismatch_says_so(videos, monkeypatch):
+    def probe(path):  # the reference twice as long as the test videos
+        info = _info(path)
+        return replace(info, duration=10.0, nb_frames=300) if Path(path).name == "reference.mkv" else info
+
+    monkeypatch.setattr(cli, "probe_video", probe)
+    code, out, _err = _run(videos.reference, videos.a)
+    assert code == cli.EXIT_FAILED and "Durations do not match" in out and "--frames N" in out
+
+    limits = []
+    monkeypatch.setattr(job_runner, "run_vmaf", lambda s, d, o, *a, **k: limits.append(o.duration_limit)
+                        or _result(s, d, o))
+    assert _run(videos.reference, videos.a, "--frames", "33")[0] == cli.EXIT_OK
+    assert limits == [pytest.approx(32.5 / 30)]  # frames 0-32 start before it, frame 33 after
+    with pytest.raises(SystemExit):
+        _run(videos.reference, videos.a, "--frames", "33", "--duration", "1")
+
+
+def test_colour_says_what_untagged_videos_are_and_its_scores_are_not_saved(videos, monkeypatch):
+    seen = []
+
+    def vship(source, distorted, request, specs, **kwargs):
+        seen.append((source.color_transfer, distorted.color_primaries))
+        return _perceptual()
+
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
+    code, out, _err = _run(videos.reference, videos.a, "-m", "psnr,ssimulacra2")
+    assert code == cli.EXIT_OK and seen == [("", "")]
+    assert "note: the reference has no colour tags" in out and "--colour" in out
+
+    seen.clear()
+    code, out, _err = _run(videos.reference, videos.a, "-m", "psnr,ssimulacra2", "--colour", "pq-bt2020")
+    assert code == cli.EXIT_OK and seen == [("smpte2084", "bt2020")]
+    assert "no colour tags" not in out
+    # Scored with other colours than the saved ones, and not saved over them.
+    _run(videos.reference, videos.a, "-m", "psnr,ssimulacra2", "--colour", "pq-bt2020")
+    assert len(seen) == 2
+    videos.calls.clear()
+    _run(videos.reference, videos.a, "-m", "psnr,ssimulacra2")
+    assert videos.calls == []  # the first run's scores, untouched
+
+
+def test_cvvdp_display_scores_cvvdp_on_each_display_named(videos, monkeypatch):
+    monkeypatch.setattr(perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+
+    def vship(source, distorted, request, specs, **kwargs):
+        (spec,) = [spec for spec in specs if spec.key == "cvvdp"]
+        parameters = dict(spec.parameters)
+        hdr = parameters["display"]["peak_luminance"] > 300
+        score = SequenceMetricResult("cvvdp", 9.5 if hdr else 9.0,
+                                     MetricProvenance("Vship/cvvdp", "5.1.2", "gpu", "cvvdp-vship-gpu-v1",
+                                                      parameters))
+        return PerceptualTaskOutput(MetricResultSet([score]), None, None, 2)
+
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
+    sdr, hdr = "30-inch 4K monitor, office", "30-inch 4K HDR monitor, dim room"
+    code, out, _err = _run(videos.reference, videos.a, "-m", "psnr,cvvdp", "--cvvdp-display", sdr,
+                           "--cvvdp-display", hdr, "--json", "-")
+    assert code == cli.EXIT_OK
+    (video,) = json.loads(out)["videos"]
+    assert video["status"] == "ok" and video["cvvdp_display"] == sdr
+    assert [(entry["display"], entry["score"]) for entry in video["cvvdp_displays"]] == [(sdr, 9.0), (hdr, 9.5)]
+    videos.calls.clear()
+    code, out, _err = _run(videos.reference, videos.a, "-m", "psnr,cvvdp", "--cvvdp-display", sdr,
+                           "--cvvdp-display", hdr, "--json", "-")
+    (video,) = json.loads(out)["videos"]
+    assert videos.calls == []  # each display's score was saved under its own request
+    assert [(entry["score"], entry["from_saved_scores"]) for entry in video["cvvdp_displays"]] == [
+        (9.0, True), (9.5, True)]
+
+    code, _out, err = _run(videos.reference, videos.a, "--cvvdp-display", "a 9-inch CRT")
+    assert code == cli.EXIT_USAGE and "No CVVDP display preset is called 'a 9-inch CRT'" in err
 
 
 # ------------------------------------------------------------------- cancel
