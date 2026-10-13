@@ -2,10 +2,10 @@
 # GPUs), behind headers that are the same on all of them.
 add_library(vml_platform src/process.cpp)
 if(WIN32)
-    target_sources(vml_platform PRIVATE src/process_windows.cpp src/system_windows.cpp)
-    target_link_libraries(vml_platform PRIVATE dxgi)  # the GPUs' vendor IDs
+    target_sources(vml_platform PRIVATE src/console_windows.cpp src/process_windows.cpp src/system_windows.cpp)
+    target_link_libraries(vml_platform PRIVATE dxgi shell32)  # the GPUs' vendor IDs; the wide command line
 else()
-    target_sources(vml_platform PRIVATE src/process_posix.cpp src/system_posix.cpp)
+    target_sources(vml_platform PRIVATE src/console_posix.cpp src/process_posix.cpp src/system_posix.cpp)
 endif()
 target_include_directories(vml_platform PUBLIC include)
 target_link_libraries(vml_platform PRIVATE vml_compile_options)

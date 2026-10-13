@@ -2,6 +2,7 @@
 # code runs under the command line and the window on every system.
 add_library(vml_core
     src/crop_detect.cpp
+    src/export_csv.cpp
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
@@ -12,6 +13,7 @@ add_library(vml_core
     src/model_select.cpp
     src/number_format.cpp
     src/options.cpp
+    src/python_json.cpp
     src/python_text.cpp
     src/results.cpp
     src/settings.cpp
@@ -20,7 +22,7 @@ add_library(vml_core
     src/video.cpp
 )
 target_include_directories(vml_core PUBLIC include)
-target_link_libraries(vml_core PUBLIC vml_platform PRIVATE vml_compile_options nlohmann_json)
+target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options)
 # The app's own files (VMAF models, bundled tools) in a development build:
 # the repository's vmaf_app folder. An installed app sets VML_RESOURCES.
 cmake_path(SET resources NORMALIZE "${PROJECT_SOURCE_DIR}/../vmaf_app")

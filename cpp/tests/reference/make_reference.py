@@ -2,7 +2,8 @@
 its statistics (vmaf_app/core/stats.py), its metric registry
 (vmaf_app/core/metrics.py), Python's own number formatting, its reading of
 ffprobe's output (ffprobe.py), of settings.json (settings.py) and of
-FFmpeg's version (ffmpeg_locate.py).
+FFmpeg's version (ffmpeg_locate.py), its command line's reading of
+arguments and patterns (cli.py), and Python's json.dumps.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -586,7 +587,210 @@ def run_cases() -> dict:
     return {"commands": cases, "logs": parsed, "log_fps": exact(24000 / 1001)}
 
 
+# ------------------------------------------------------------- command line
+
+#: Command lines for argument_cases: right ones, and each way of being wrong.
+ARGUMENT_CASES = [
+    [], ["-h"], ["--help"], ["--version"], ["--vers"], ["--version", "compare"], ["frobnicate"], ["-x"],
+    ["devices"], ["devices", "extra"], ["devices", "-h"],
+    ["compare"], ["compare", "-h"], ["compare", "ref.mkv"], ["compare", "ref.mkv", "a.mkv"],
+    ["compare", "ref.mkv", "a.mkv", "b.mkv", "-m", "vmaf,psnr"],
+    ["compare", "ref.mkv", "a.mkv", "b.mkv", "-m", " SSIM, vmaf ,ssim", "--model", "4k", "--black-bars", "none",
+     "--scale-to", "reference", "--scaler", "lanczos", "--duration", "12.5", "--colour", "pq-bt2020",
+     "--cvvdp-display", "6-inch phone", "--cvvdp-display", "30-inch 4K monitor, office", "--subsample", "3",
+     "--threads", "8", "--vmaf-on", "cpu", "--ssimulacra2-on", "gpu", "--butteraugli-on", "cpu", "--cpu",
+     "--no-gpu-decode", "--parallel", "2", "--recalculate", "--csv", "out", "--json", "-", "-q", "-v"],
+    ["compare", "ref.mkv", "a.mkv", "-m", "all"],
+    ["compare", "ref.mkv", "a.mkv", "-m", "foo,vmaf,bar"],
+    ["compare", "ref.mkv", "a.mkv", "-m", ","],
+    ["compare", "ref.mkv", "a.mkv", "-mvmaf,ssim"],
+    ["compare", "ref.mkv", "a.mkv", "-m=vmaf"],
+    ["compare", "ref.mkv", "a.mkv", "--metrics=psnr"],
+    ["compare", "ref.mkv", "a.mkv", "--met", "psnr"],
+    ["compare", "ref.mkv", "a.mkv", "--s", "2"],
+    ["compare", "ref.mkv", "a.mkv", "--colo", "bt709"],
+    ["compare", "ref.mkv", "a.mkv", "--color", "bt709"],
+    ["compare", "ref.mkv", "a.mkv", "--colour", "rec2020"],
+    ["compare", "ref.mkv", "a.mkv", "--vmaf-on", "GPU"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "33"],
+    ["compare", "ref.mkv", "a.mkv", "--frames=0"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "-5"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "x"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "1_000"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "5", "--frames", "6"],
+    ["compare", "ref.mkv", "a.mkv", "--duration", "nan"],
+    ["compare", "ref.mkv", "a.mkv", "--duration", "inf"],
+    ["compare", "ref.mkv", "a.mkv", "--duration", " 1e-3 "],
+    ["compare", "ref.mkv", "a.mkv", "--duration", "2", "--frames", "3"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "3", "--duration", "2"],
+    ["compare", "ref.mkv", "a.mkv", "--duration", "2", "--frames", "x"],
+    ["compare", "ref.mkv", "a.mkv", "--frames"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "--cpu"],
+    ["compare", "ref.mkv", "a.mkv", "-m"],
+    ["compare", "ref.mkv", "a.mkv", "--subsample", "0"],
+    ["compare", "ref.mkv", "a.mkv", "--threads", "+4"],
+    ["compare", "ref.mkv", "a.mkv", "--parallel", "3"],
+    ["compare", "ref.mkv", "a.mkv", "--parallel", "02"],
+    ["compare", "ref.mkv", "a.mkv", "--parallel", "two"],
+    ["compare", "ref.mkv", "a.mkv", "-qv"],
+    ["compare", "ref.mkv", "a.mkv", "-qmvmaf"],
+    ["compare", "ref.mkv", "a.mkv", "-qm", "psnr"],
+    ["compare", "ref.mkv", "a.mkv", "-qx"],
+    ["compare", "ref.mkv", "a.mkv", "-q=v"],
+    ["compare", "ref.mkv", "a.mkv", "--cpu=yes"],
+    ["compare", "ref.mkv", "a.mkv", "--no-gpu"],
+    ["compare", "ref.mkv", "a.mkv", "--bogus"],
+    ["compare", "ref.mkv", "a.mkv", "--version"],
+    ["compare", "-m", "vmaf", "ref.mkv", "a.mkv", "b.mkv"],
+    ["compare", "ref.mkv", "--frames", "5", "a.mkv", "b.mkv"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "5", "b.mkv"],
+    ["compare", "--", "-ref.mkv", "-a.mkv"],
+    ["compare", "ref.mkv", "--", "a.mkv", "--cpu"],
+    ["compare", "ref.mkv", "a.mkv", "--", "--", "b.mkv"],
+    ["compare", "-5.mkv", "a.mkv"],
+    ["compare", "ref.mkv", "a.mkv", "-"],
+    ["compare", "", "a.mkv"],
+    ["compare", "ref.mkv", "a.mkv", "--json", "-"],
+    ["compare", "ref.mkv", "a.mkv", "-h", "--frames", "x"],
+    ["compare", "ref.mkv", "a.mkv", "--frames", "x", "-h"],
+    ["compare", "ref.mkv", "a.mkv", "--he"],
+    ["compare", "ref.mkv", "a.mkv", "--model", "my model.json"],
+    ["compare", "ref.mkv", "a.mkv", "--cvvdp-display", "-phone"],
+    ["compare", "ref.mkv", "a.mkv", "--cvvdp-display", "-6-inch phone"],
+    ["compare", "ref.mkv", "a.mkv", "--scaler", "it's"],
+    ["compare", "réf.mkv", "ä.mkv", "--cvvdp-display", "écran"],
+]
+
+
+def _plain(value):
+    """A parsed value as JSON holds it: paths as text, numbers exactly."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    if isinstance(value, float):
+        return exact(value)
+    return value
+
+
+def argument_cases() -> list[dict]:
+    """What the command line does with each of ARGUMENT_CASES before it runs
+    a command (vmaf_app/cli.py: its argparse parser, and main() for no
+    command): the values it reads, or what it prints and its exit code.
+    Help is as wide as where the output is not a terminal (80 columns). The
+    app's name and version is written as {version}, as the C++ app has its
+    own."""
+    import contextlib
+    import io
+
+    from vmaf_app import APP_NAME, __version__
+    from vmaf_app.cli import build_parser
+
+    version = f"{APP_NAME} {__version__}"
+    saved = {name: os.environ.get(name) for name in ("COLUMNS", "NO_COLOR")}
+    os.environ.update(COLUMNS="80", NO_COLOR="1")
+    cases = []
+    try:
+        for argv in ARGUMENT_CASES:
+            parser = build_parser()
+            out, err = io.StringIO(), io.StringIO()
+            values = None
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                try:
+                    args = parser.parse_args(argv)
+                except SystemExit as stop:
+                    code = stop.code
+                else:
+                    code = 0
+                    if args.command is None:  # main() prints the help
+                        parser.print_help()
+                        code = 2
+                    else:
+                        values = {key: _plain(value) for key, value in vars(args).items()}
+            cases.append({"argv": argv, "exit": code, "stdout": out.getvalue().replace(version, "{version}"),
+                          "stderr": err.getvalue().replace(version, "{version}"), "values": values})
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+    return cases
+
+
+#: The files of pattern_cases' folder ("empty/" is a folder), and the
+#: patterns: lists of TEST arguments, with ref.mkv the reference. "windows"
+#: marks a case that only Windows answers so (names ignore case there).
+PATTERN_FILES = ["ref.mkv", "a.mkv", "b.mkv", "c.mp4", ".hidden.mkv", "x[1].mkv", "notes.txt",
+                 "enc/d.mkv", "enc/e.mkv", "enc a/f.mkv", "empty/"]
+PATTERN_CASES = [
+    {"tests": ["*.mkv"]}, {"tests": ["a.mkv", "*.mkv"]}, {"tests": ["*.mkv", "a.mkv"]},
+    {"tests": ["ref.mkv"]}, {"tests": ["missing.mkv"]}, {"tests": ["nothing*.mkv"]},
+    {"tests": ["?.mkv"]}, {"tests": ["[ab].mkv"]}, {"tests": ["[!a].mkv"]}, {"tests": ["x[1].mkv"]},
+    {"tests": ["enc*/*.mkv"]}, {"tests": ["*"]}, {"tests": [".*.mkv"]},
+    {"tests": ["enc/../a.mkv", "a.mkv"]}, {"tests": ["empty/*"]},
+    {"tests": ["*.MKV"], "windows": True},
+]
+
+
+def pattern_cases() -> dict:
+    """The test videos expand_tests finds for each of PATTERN_CASES, in a
+    folder holding PATTERN_FILES: paths within the folder, with "/"."""
+    from vmaf_app.cli import expand_tests
+
+    cases = []
+    with tempfile.TemporaryDirectory() as made:
+        folder = Path(made)
+        for name in PATTERN_FILES:
+            if name.endswith("/"):
+                (folder / name).mkdir(parents=True, exist_ok=True)
+            else:
+                (folder / name).parent.mkdir(parents=True, exist_ok=True)
+                (folder / name).write_bytes(b"")
+        for case in PATTERN_CASES:
+            found = expand_tests([str(folder / test) for test in case["tests"]], folder / "ref.mkv")
+            cases.append({**case, "found": [path.relative_to(folder).as_posix() for path in found]})
+    return {"files": PATTERN_FILES, "cases": cases}
+
+
+def json_cases() -> list[dict]:
+    """json.dumps(value, indent=2), as --json writes the results, over values
+    that show each of its rules: escapes, characters past ASCII, bytes that
+    are not UTF-8 (a POSIX file name can hold any), numbers, empty and
+    nested containers. Each value is given as JSON text, keeping its keys'
+    order; in it {"$float": hex} is a number (JSON has no NaN) and
+    {"$bytes": hex} a string of those bytes, read as Python reads a file
+    name's."""
+    def decoded(value):
+        if isinstance(value, dict):
+            if list(value) == ["$float"]:
+                return float.fromhex(value["$float"])
+            if list(value) == ["$bytes"]:
+                return bytes.fromhex(value["$bytes"]).decode("utf-8", "surrogateescape")
+            return {key: decoded(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [decoded(item) for item in value]
+        return value
+
+    floats = (0.1, 1e16, 1e-5, 123.456, 1e22, -0.0, 5e-324, math.inf, -math.inf, math.nan, 2.5, 100.0)
+    values = [
+        {"plain": "text", "quotes": 'a "b" \\ c', "controls": "\t\n\r\b\f\x01\x1f\x7f", "accents": "réf ä",
+         "cjk": "動画", "emoji": "🎬"},
+        # Not UTF-8: a lone byte, a lone continuation, overlong forms, a
+        # surrogate, past U+10FFFF, a cut sequence; then good ones.
+        {"path": {"$bytes": "66ff80c0afe08080eda080f4908080e2826261c3a9f09f8eac"}},
+        [1, -2, 0, 12345678901234],
+        [{"$float": exact(number)} for number in floats],
+        {"empty object": {}, "empty list": [], "nested": {"a": [{"b": None, "c": True, "d": False}]}},
+        [], {}, "a string alone", None,
+    ]
+    return [{"value": json.dumps(value, ensure_ascii=False), "text": json.dumps(decoded(value), indent=2)}
+            for value in values]
+
+
 if __name__ == "__main__":
+    write("python_json.json", json_cases())
+    write("cli.json", {"arguments": argument_cases(), "patterns": pattern_cases()})
     write("runs.json", run_cases())
     write("decisions.json", decision_cases())
     write("number_format.json", number_format_cases())

@@ -20,13 +20,13 @@ The C++ code must give the Python app's answers:
 
 The tests read the Python app's answers from `tests/reference`, which
 `tests/reference/make_reference.py` makes by running the Python app's own
-code. After changing that code (`vmaf_app/core/stats.py`, `metrics.py`),
-run it again from the repository's root and commit what it writes:
+code. After changing the Python code it uses (its docstring lists it), run
+it again from the repository's root and commit what it writes:
 
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (12 runs covering the ways the app
+other: it runs the cases in `cases.json` (19 runs covering the ways the app
 scores videos) with either app, each with a fresh profile, and compares the
 exit codes, the tables, the per-frame CSV files character for character, and
 the JSON results. The clips are 2-second cuts of real test videos
@@ -43,13 +43,27 @@ GPU metrics included, so the C++ app is held to identical results here too.
 | Folder | What it holds |
 | --- | --- |
 | `core` | `vml_core`, the engine. No Qt and no operating-system headers, so the same code runs on every system, under the command line and the window. |
+| `platform` | `vml_platform`: what differs between the systems (starting programs, the console, the PATH, the GPUs), behind headers that are the same on all of them. |
+| `cli` | `vml-cli`, the command line, and its code (`vml_cli`), which the tests use too. |
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/reference` | The Python app's answers, and the script that makes them. |
 | `tests/golden` | The comparison of the two apps' command lines on real videos. |
 | `third_party` | Vendored libraries: see its README. |
 
-The operating-system code (decoders, presenters), the command line and the
-window join as they are ported.
+The decoders, the presenters and the window join as they are ported.
+
+## The command line
+
+`vml-cli` takes the Python app's commands and options (`vml-cli compare
+--help`), and reads them as its argparse parser does. So far it compares on
+the CPU path: VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf, with
+PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`; the app's
+default is the GPU). For a run it cannot do yet, it says what it cannot do
+and exits with code 2, rather than giving other answers than the Python
+app. It neither reads nor saves the app's saved scores yet, and calculates
+every score.
+
+    build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu
 
 ## Building and testing
 

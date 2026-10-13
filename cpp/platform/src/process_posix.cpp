@@ -109,7 +109,10 @@ struct ChildProcess::State {
             return true;
         }
         int status = 0;
-        const pid_t done = waitpid(id, &status, block ? 0 : WNOHANG);
+        pid_t done = waitpid(id, &status, block ? 0 : WNOHANG);
+        while (done < 0 && errno == EINTR) {  // a signal (Ctrl+C) came while it waited
+            done = waitpid(id, &status, block ? 0 : WNOHANG);
+        }
         if (done == id) {
             ended = true;
             exit_code = exit_code_of(status);

@@ -1,6 +1,6 @@
-# VideoMetricsLab in C++: the engine (vml_core) and its tests; the command
-# line and the window join as they are ported. README.md describes the
-# layout, how to build, and the rules the code follows.
+# VideoMetricsLab in C++: the engine (vml_core), the command line (vml-cli)
+# and their tests; the window joins when it is ported. README.md describes
+# the layout, how to build, and the rules the code follows.
 cmake_minimum_required(VERSION 3.25)
 project(VideoMetricsLab VERSION 3.0.0 LANGUAGES CXX)
 
@@ -32,6 +32,7 @@ target_include_directories(nlohmann_json SYSTEM INTERFACE third_party/nlohmann/i
 
 add_subdirectory(platform)
 add_subdirectory(core)
+add_subdirectory(cli)
 
 if(VML_BUILD_TESTS)
     enable_testing()
