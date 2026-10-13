@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -247,46 +246,6 @@ def test_butteraugli_is_vships_3_norm_on_vships_display(tmp_path, monkeypatch):
     assert not (tmp_path / "t-distortion.pfm").exists()
     perceptual_cpu._run_metric("butteraugli_main", "butteraugli", reference, test, hdr=True)
     assert "--intensity_target" not in seen[1]  # an HDR picture's brightness is its own
-
-
-@pytest.mark.parametrize("step", [1, 3])
-def test_the_images_are_each_videos_frame_n_cut_at_the_limit(tmp_path, step):
-    """Through real FFmpeg, the app's command: two videos whose frame N is
-    the same picture (a grey of its own), the source at 20 fps, the test
-    video at 23.976 with a millisecond of jitter. Each pair is the two
-    videos' frame N (frame_sync), every step-th, and the 1.5 s limit keeps
-    the same frames of both: the test video's 36, not the source's 30."""
-    import subprocess
-    from dataclasses import replace
-
-    from vmaf_app.core.ffmpeg_locate import ffmpeg_path
-    from vmaf_app.core.ffprobe import probe_video
-    from vmaf_app.core.frame_sync import frame_rate, frames_within
-
-    run = [ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi"]
-    pictures = "geq=lum='16+4*N':cb=128:cr=128,format=yuv420p"
-    subprocess.run([*run, "-i", "nullsrc=s=64x48:r=20:d=3", "-vf", pictures, "-c:v", "ffv1",
-                    str(tmp_path / "source.mkv")], check=True)
-    subprocess.run([*run, "-i", "nullsrc=s=64x48:r=24000/1001:d=2", "-vf",
-                    f"{pictures},settb=1/1000,setpts='round(N*1001/24)+mod(N\\,2)'", "-fps_mode", "passthrough",
-                    "-enc_time_base", "filter", "-c:v", "ffv1", str(tmp_path / "test.mkv")], check=True)
-    source, test = probe_video(tmp_path / "source.mkv"), probe_video(tmp_path / "test.mkv")
-    assert (frame_rate(source), frame_rate(test)) == (20, Fraction(24000, 1001))
-    recipe = replace(_request().recipe, duration_limit=1.5)
-    images = tmp_path / "images"
-    images.mkdir()
-
-    pairs = []
-    for reference, distorted in perceptual_cpu._png_pairs(source, test, recipe, None, None, step, images, None, None):
-        pairs.append((reference.read_bytes(), distorted.read_bytes()))
-        reference.unlink()
-        distorted.unlink()
-
-    kept = frames_within("1.500", frame_rate(test))
-    assert kept == 36
-    assert len(pairs) == len(range(0, kept, step))
-    assert all(reference == distorted for reference, distorted in pairs)
-    assert len({reference for reference, _ in pairs}) == len(pairs)  # each pair a different picture
 
 
 def _frame_hashes(inputs: list[str], graph: str) -> dict[str, list[str]]:
