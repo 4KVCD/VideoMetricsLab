@@ -136,7 +136,7 @@ struct ChildProcess::State {
     bool output_ended = false;
 
     // Standard error, read on a thread of its own so the program never
-    // waits on a full pipe.
+    // waits on a full pipe; its end is kept (keep_error_tail).
     std::thread error_reader;
     std::mutex error_mutex;
     std::condition_variable error_ended_signal;
@@ -219,7 +219,7 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
         DWORD count = 0;
         while (ReadFile(pipe.get(), buffer, sizeof buffer, &count, nullptr) && count > 0) {
             const std::lock_guard lock(raw->error_mutex);
-            raw->error_text.append(buffer, count);
+            keep_error_tail(raw->error_text, std::string_view(buffer, count));
         }
         const std::lock_guard lock(raw->error_mutex);
         raw->error_ended = true;
@@ -278,7 +278,7 @@ std::string ChildProcess::standard_error() {
     // Once the program has ended its error output ends with it, unless a
     // program it started still holds the pipe: then what came is enough.
     state_->error_ended_signal.wait_for(lock, std::chrono::seconds(5), [this] { return state_->error_ended; });
-    return state_->error_text;
+    return error_tail(state_->error_text);
 }
 
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }

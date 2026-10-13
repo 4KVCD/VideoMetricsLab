@@ -178,7 +178,7 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
         while ((count = read(pipe.get(), buffer, sizeof buffer)) > 0 || (count < 0 && errno == EINTR)) {
             if (count > 0) {
                 const std::lock_guard lock(raw->error_mutex);
-                raw->error_text.append(buffer, static_cast<std::size_t>(count));
+                keep_error_tail(raw->error_text, std::string_view(buffer, static_cast<std::size_t>(count)));
             }
         }
         const std::lock_guard lock(raw->error_mutex);
@@ -245,7 +245,7 @@ void ChildProcess::terminate() {
 std::string ChildProcess::standard_error() {
     std::unique_lock lock(state_->error_mutex);
     state_->error_ended_signal.wait_for(lock, std::chrono::seconds(5), [this] { return state_->error_ended; });
-    return state_->error_text;
+    return error_tail(state_->error_text);
 }
 
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }

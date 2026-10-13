@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <random>
 #include <regex>
@@ -272,13 +273,6 @@ std::string last_lines(const std::string& text, std::size_t count) {
     return joined(std::vector<std::string>(lines.begin() + static_cast<std::ptrdiff_t>(first), lines.end()), "\n");
 }
 
-std::string read_file(const std::filesystem::path& path) {
-    std::ifstream file(path, std::ios::binary);
-    std::stringstream text;
-    text << file.rdbuf();
-    return text.str();
-}
-
 // XPSNR's luma score per frame from the xpsnr filter's stats file, by frame
 // number counted from 0 (the file counts from 1).
 std::map<int, double> parse_xpsnr_log(const std::filesystem::path& path) {
@@ -314,71 +308,200 @@ std::vector<double> times_of(const std::vector<int>& frames, double fps) {
     return times;
 }
 
+// The columns of the scores read, in the Python app's order.
+enum Column { vmaf_column, psnr_column, ssim_column, xpsnr_column, neg_column, v1_column, column_count };
+constexpr std::array<const char*, column_count> column_keys{"vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg", "vmaf_v1"};
+
+// Reads libvmaf's JSON log as it streams past, keeping only the per-frame
+// scores the app uses. A feature-length log runs to hundreds of megabytes,
+// and a parsed copy of the whole of it to gigabytes; this keeps four bytes
+// per score. It reads what the Python app's _parse_log reads: the root's
+// "frames", each frame's "frameNum" and its "metrics", the last of a key
+// given twice.
+class LogReader final : public nlohmann::json::json_sax_t {
+public:
+    explicit LogReader(const std::map<int, double>& xpsnr) : xpsnr_(xpsnr) {}
+
+    std::vector<int> frames;
+    std::array<std::vector<float>, column_count> columns;
+    std::array<bool, column_count> scored{};  // whether any frame has a score in the column
+
+    bool null() override { return value(std::nullopt); }
+    bool boolean(bool) override { return value(std::nullopt); }
+    bool number_integer(number_integer_t number) override { return value(static_cast<double>(number)); }
+    bool number_unsigned(number_unsigned_t number) override { return value(static_cast<double>(number)); }
+    bool number_float(number_float_t number, const string_t&) override { return value(number); }
+    bool string(string_t&) override { return value(std::nullopt); }
+    bool binary(binary_t&) override { return value(std::nullopt); }
+
+    bool key(string_t& name) override {
+        next_ = Next::other;
+        switch (open_.empty() ? Place::other : open_.back()) {
+            case Place::root:
+                next_ = name == "frames" ? Next::frames : Next::other;
+                break;
+            case Place::frame:
+                if (name == "frameNum") {
+                    next_ = Next::frame_number;
+                } else if (name == "metrics") {
+                    next_ = Next::metrics;
+                    frame_.metrics_is_object = false;  // until it is seen to be one
+                    frame_.present.fill(false);
+                    frame_.number_of.fill(std::nullopt);
+                }
+                break;
+            case Place::metrics:
+                metric_ = index_of(name);
+                if (metric_) {
+                    frame_.present[*metric_] = true;
+                    frame_.number_of[*metric_].reset();
+                }
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    bool start_object(std::size_t) override {
+        Place place = Place::other;
+        if (open_.empty()) {
+            place = Place::root;
+        } else if (open_.back() == Place::frames) {
+            place = Place::frame;
+            frame_ = Frame{};
+        } else if (open_.back() == Place::frame && next_ == Next::metrics) {
+            place = Place::metrics;
+            frame_.metrics_is_object = true;
+        }
+        open_.push_back(place);
+        next_ = Next::other;
+        return true;
+    }
+
+    bool start_array(std::size_t) override {
+        const bool frames_array = !open_.empty() && open_.back() == Place::root && next_ == Next::frames;
+        if (frames_array) {
+            // The last "frames" is the one read, as by a parser that keeps the
+            // last of a key given twice.
+            frames.clear();
+            for (std::vector<float>& column : columns) {
+                column.clear();
+            }
+            scored.fill(false);
+        }
+        open_.push_back(frames_array ? Place::frames : Place::other);
+        next_ = Next::other;
+        return true;
+    }
+
+    bool end_object() override { return close(); }
+    bool end_array() override { return close(); }
+
+    bool parse_error(std::size_t, const std::string&, const nlohmann::detail::exception& error) override {
+        throw std::runtime_error(error.what());
+    }
+
+private:
+    // What an open object or array is.
+    enum class Place { root, frames, frame, metrics, other };
+    // What the value after a key is.
+    enum class Next { other, frames, frame_number, metrics };
+
+    // The metric keys whose presence and numbers a frame is read for.
+    static constexpr std::array<const char*, 7> metric_keys{"vmaf",   "vmaf_neg",   "vmaf_v1", "psnr_y",
+                                                            "psnr",   "float_ssim", "ssim"};
+    enum Metric { vmaf, vmaf_neg, vmaf_v1, psnr_y, psnr, float_ssim, ssim };
+
+    static std::optional<std::size_t> index_of(const std::string& name) {
+        for (std::size_t i = 0; i < metric_keys.size(); ++i) {
+            if (name == metric_keys[i]) {
+                return i;
+            }
+        }
+        return std::nullopt;
+    }
+
+    struct Frame {
+        std::optional<int> number;
+        bool metrics_is_object = false;
+        std::array<bool, metric_keys.size()> present{};
+        std::array<std::optional<double>, metric_keys.size()> number_of{};
+    };
+
+    bool value(std::optional<double> number) {
+        constexpr double int_min = std::numeric_limits<int>::min();
+        constexpr double int_max = std::numeric_limits<int>::max();
+        if (!open_.empty() && open_.back() == Place::frame && next_ == Next::frame_number && number &&
+            *number >= int_min && *number <= int_max) {
+            frame_.number = static_cast<int>(*number);
+        } else if (!open_.empty() && open_.back() == Place::metrics && metric_ && number) {
+            frame_.number_of[*metric_] = number;
+        }
+        next_ = Next::other;
+        return true;
+    }
+
+    bool close() {
+        const Place closed = open_.back();
+        open_.pop_back();
+        if (closed == Place::frame) {
+            finish_frame();
+        }
+        return true;
+    }
+
+    // Keeps a frame's scores, if it has any of the metrics the app reads.
+    void finish_frame() {
+        const bool has_any =
+            frame_.metrics_is_object && std::any_of(frame_.present.begin(), frame_.present.end(), [](bool p) { return p; });
+        if (!has_any) {
+            return;
+        }
+        const int frame_number = frame_.number.value_or(static_cast<int>(frames.size()));
+        // A real 0.0 is a score: "psnr" is read only where "psnr_y" has no
+        // number, not where it is zero.
+        const auto first = [this](Metric a, Metric b) {
+            return frame_.number_of[a] ? frame_.number_of[a] : frame_.number_of[b];
+        };
+        const auto at = xpsnr_.find(frame_number);
+        const std::array<std::optional<double>, column_count> values{
+            frame_.number_of[vmaf], first(psnr_y, psnr), first(float_ssim, ssim),
+            at == xpsnr_.end() ? std::nullopt : std::optional<double>(at->second), frame_.number_of[vmaf_neg],
+            frame_.number_of[vmaf_v1]};
+        frames.push_back(frame_number);
+        for (std::size_t column = 0; column < column_count; ++column) {
+            columns[column].push_back(values[column] ? static_cast<float>(*values[column]) : std::nanf(""));
+            scored[column] = scored[column] || values[column].has_value();
+        }
+    }
+
+    const std::map<int, double>& xpsnr_;
+    std::vector<Place> open_;  // the objects and arrays open, outermost first
+    Next next_ = Next::other;
+    std::optional<std::size_t> metric_;  // the metric key just read, if it is one
+    Frame frame_;
+};
+
 // The scores in libvmaf's JSON log, with XPSNR's from its stats file.
 ParsedScores parse_log(const std::filesystem::path& log_path, double fps,
                        const std::optional<std::filesystem::path>& xpsnr_log_path) {
-    const nlohmann::json data = nlohmann::json::parse(read_file(log_path));
     const std::map<int, double> xpsnr = xpsnr_log_path ? parse_xpsnr_log(*xpsnr_log_path) : std::map<int, double>{};
+    LogReader reader(xpsnr);
+    std::ifstream log(log_path, std::ios::binary);
+    nlohmann::json::sax_parse(log, &reader);
     ParsedScores parsed;
-    // Each metric's scores as read (nothing where a frame has none).
-    std::map<std::string, std::vector<std::optional<double>>> columns;
-    const std::vector<std::string> keys{"vmaf", "vmaf_neg", "vmaf_v1", "psnr", "ssim", "xpsnr"};
-    const auto number = [](const nlohmann::json& metrics, const char* key) -> std::optional<double> {
-        const auto found = metrics.find(key);
-        if (found == metrics.end() || !found->is_number()) {
-            return std::nullopt;
-        }
-        return found->get<double>();
-    };
-    // A frame without any of these has no score the app reads.
-    constexpr std::array<const char*, 7> scored_keys{"vmaf", "vmaf_neg", "vmaf_v1", "psnr_y", "psnr", "float_ssim",
-                                                     "ssim"};
-    if (data.contains("frames")) {
-        for (const nlohmann::json& frame : data["frames"]) {
-            const nlohmann::json metrics = frame.value("metrics", nlohmann::json::object());
-            const bool has_any = std::any_of(scored_keys.begin(), scored_keys.end(),
-                                             [&metrics](const char* key) { return metrics.contains(key); });
-            const int frame_number = frame.contains("frameNum") ? frame["frameNum"].get<int>()
-                                                                : static_cast<int>(parsed.frame.size());
-            if (!has_any) {
-                continue;
-            }
-            // A real 0.0 is a score: "psnr" is read only where "psnr_y" is
-            // missing, not where it is zero.
-            std::optional<double> psnr = number(metrics, "psnr_y");
-            if (!psnr) {
-                psnr = number(metrics, "psnr");
-            }
-            std::optional<double> ssim = number(metrics, "float_ssim");
-            if (!ssim) {
-                ssim = number(metrics, "ssim");
-            }
-            const auto at = xpsnr.find(frame_number);
-            parsed.frame.push_back(frame_number);
-            columns["vmaf"].push_back(number(metrics, "vmaf"));
-            columns["vmaf_neg"].push_back(number(metrics, "vmaf_neg"));
-            columns["vmaf_v1"].push_back(number(metrics, "vmaf_v1"));
-            columns["psnr"].push_back(psnr);
-            columns["ssim"].push_back(ssim);
-            columns["xpsnr"].push_back(at == xpsnr.end() ? std::nullopt : std::optional<double>(at->second));
-        }
-    }
-    if (parsed.frame.empty()) {
+    if (reader.frames.empty()) {
         return parsed;
     }
+    parsed.frame = std::move(reader.frames);
     parsed.time = times_of(parsed.frame, fps);
-    // The Python app's order: vmaf, psnr, ssim, xpsnr, vmaf_neg, then vmaf_v1.
-    for (const char* key : {"vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg", "vmaf_v1"}) {
-        const std::vector<std::optional<double>>& column = columns[key];
-        if (std::none_of(column.begin(), column.end(), [](const auto& value) { return value.has_value(); })) {
+    for (std::size_t column = 0; column < column_count; ++column) {
+        if (!reader.scored[column]) {
             continue;  // the run did not ask for this metric
         }
-        std::vector<float> values;
-        for (const std::optional<double>& value : column) {
-            values.push_back(value ? static_cast<float>(*value) : std::nanf(""));
-        }
-        parsed.metrics[key] = std::move(values);
-        parsed.order.emplace_back(key);
+        parsed.metrics[column_keys[column]] = std::move(reader.columns[column]);
+        parsed.order.emplace_back(column_keys[column]);
     }
     return parsed;
 }

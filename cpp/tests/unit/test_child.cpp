@@ -4,6 +4,8 @@
 //                                  CR LF, in UTF-8; "to standard error" on
 //                                  standard error; then exits with code 3
 //     vml_test_child sleep         sleeps for a minute
+//     vml_test_child warn N        "warning i of N" on N lines of standard
+//                                  error, then "the last line"
 //
 // On Windows it reads its arguments as Unicode, as FFmpeg does, and writes
 // bytes as they are (no text-mode line endings added).
@@ -37,6 +39,15 @@ int run(const std::vector<std::string>& arguments) {
         std::this_thread::sleep_for(std::chrono::minutes(1));
         return 0;
     }
+    if (arguments.size() >= 3 && arguments[1] == "warn") {
+        const int count = std::stoi(arguments[2]);
+        for (int i = 0; i < count; ++i) {
+            const std::string line = "warning " + std::to_string(i) + " of " + arguments[2] + "\n";
+            std::fwrite(line.data(), 1, line.size(), stderr);
+        }
+        std::fputs("the last line\n", stderr);
+        return 0;
+    }
     return 1;
 }
 
@@ -45,6 +56,7 @@ int run(const std::vector<std::string>& arguments) {
 #ifdef _WIN32
 int wmain(int argc, wchar_t** argv) {
     _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
     std::vector<std::string> arguments;
     for (int i = 0; i < argc; ++i) {
         const int length = WideCharToMultiByte(CP_UTF8, 0, argv[i], -1, nullptr, 0, nullptr, nullptr);

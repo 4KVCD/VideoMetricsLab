@@ -24321,6 +24321,106 @@
    "frames": [],
    "times": [],
    "metrics": {}
+  },
+  {
+   "name": "libvmaf's layout, xpsnr none",
+   "log": "{\"version\": \"3.0.0\", \"fps\": 23.98, \"frames\": [{\"frameNum\": 0, \"metrics\": {\"integer_adm2\": 0.98, \"integer_motion2\": 0.0, \"vmaf\": 97.25, \"psnr_y\": 48.5}}, {\"frameNum\": 1, \"metrics\": {\"integer_adm2\": 0.97, \"integer_motion2\": 1.5, \"vmaf\": 96.5, \"psnr_y\": 47.75}}], \"pooled_metrics\": {\"vmaf\": {\"min\": 96.5, \"max\": 97.25, \"mean\": 96.875}, \"psnr_y\": {\"min\": 47.75, \"max\": 48.5, \"mean\": 48.125}}, \"aggregate_metrics\": {}}",
+   "xpsnr_log": null,
+   "frames": [
+    0,
+    1
+   ],
+   "times": [
+    "0x0.0p+0",
+    "0x1.55acb6f46508ep-5"
+   ],
+   "metrics": {
+    "vmaf": [
+     "0x1.8500000000000p+6",
+     "0x1.8200000000000p+6"
+    ],
+    "psnr": [
+     "0x1.8400000000000p+5",
+     "0x1.7e00000000000p+5"
+    ]
+   }
+  },
+  {
+   "name": "libvmaf's layout, xpsnr some",
+   "log": "{\"version\": \"3.0.0\", \"fps\": 23.98, \"frames\": [{\"frameNum\": 0, \"metrics\": {\"integer_adm2\": 0.98, \"integer_motion2\": 0.0, \"vmaf\": 97.25, \"psnr_y\": 48.5}}, {\"frameNum\": 1, \"metrics\": {\"integer_adm2\": 0.97, \"integer_motion2\": 1.5, \"vmaf\": 96.5, \"psnr_y\": 47.75}}], \"pooled_metrics\": {\"vmaf\": {\"min\": 96.5, \"max\": 97.25, \"mean\": 96.875}, \"psnr_y\": {\"min\": 47.75, \"max\": 48.5, \"mean\": 48.125}}, \"aggregate_metrics\": {}}",
+   "xpsnr_log": "n:    1  XPSNR y: 61.6992  XPSNR u: 63.1  XPSNR v: 64.2\nn:    2  XPSNR y: inf  XPSNR u: inf  XPSNR v: inf\nn:    4  XPSNR Y: 45.25\nnot a line\n",
+   "frames": [
+    0,
+    1
+   ],
+   "times": [
+    "0x0.0p+0",
+    "0x1.55acb6f46508ep-5"
+   ],
+   "metrics": {
+    "vmaf": [
+     "0x1.8500000000000p+6",
+     "0x1.8200000000000p+6"
+    ],
+    "psnr": [
+     "0x1.8400000000000p+5",
+     "0x1.7e00000000000p+5"
+    ],
+    "xpsnr": [
+     "0x1.ed97f60000000p+5",
+     "inf"
+    ]
+   }
+  },
+  {
+   "name": "nulls, xpsnr none",
+   "log": "{\"frames\": [{\"frameNum\": 0, \"metrics\": {\"vmaf\": null, \"psnr_y\": null, \"psnr\": 40.0}}, {\"frameNum\": 1, \"metrics\": {\"float_ssim\": 0.5}}]}",
+   "xpsnr_log": null,
+   "frames": [
+    0,
+    1
+   ],
+   "times": [
+    "0x0.0p+0",
+    "0x1.55acb6f46508ep-5"
+   ],
+   "metrics": {
+    "psnr": [
+     "0x1.4000000000000p+5",
+     "nan"
+    ],
+    "ssim": [
+     "nan",
+     "0x1.0000000000000p-1"
+    ]
+   }
+  },
+  {
+   "name": "nulls, xpsnr some",
+   "log": "{\"frames\": [{\"frameNum\": 0, \"metrics\": {\"vmaf\": null, \"psnr_y\": null, \"psnr\": 40.0}}, {\"frameNum\": 1, \"metrics\": {\"float_ssim\": 0.5}}]}",
+   "xpsnr_log": "n:    1  XPSNR y: 61.6992  XPSNR u: 63.1  XPSNR v: 64.2\nn:    2  XPSNR y: inf  XPSNR u: inf  XPSNR v: inf\nn:    4  XPSNR Y: 45.25\nnot a line\n",
+   "frames": [
+    0,
+    1
+   ],
+   "times": [
+    "0x0.0p+0",
+    "0x1.55acb6f46508ep-5"
+   ],
+   "metrics": {
+    "psnr": [
+     "0x1.4000000000000p+5",
+     "nan"
+    ],
+    "ssim": [
+     "nan",
+     "0x1.0000000000000p-1"
+    ],
+    "xpsnr": [
+     "0x1.ed97f60000000p+5",
+     "inf"
+    ]
+   }
   }
  ],
  "log_fps": "0x1.7f9dcb5112287p+4"

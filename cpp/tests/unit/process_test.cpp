@@ -32,6 +32,17 @@ TEST(Process, RunsAProgramAndReturnsWhatItWrote) {
     EXPECT_FALSE(output.timed_out);
 }
 
+// Of a program that writes a warning for every frame of a long video, only
+// the end of its error output is kept, from the start of a line, however
+// much it writes.
+TEST(Process, KeepsTheEndOfALongErrorOutput) {
+    const ProcessOutput output = run_program({VML_TEST_CHILD, "warn", "50000"}, 60s);  // about 1 MB
+    EXPECT_LE(output.standard_error.size(), error_tail_bytes);
+    EXPECT_GT(output.standard_error.size(), error_tail_bytes / 2);
+    EXPECT_TRUE(output.standard_error.starts_with("warning "));
+    EXPECT_TRUE(output.standard_error.ends_with("warning 49999 of 50000\nthe last line\n"));
+}
+
 TEST(Process, AProgramRunningTooLongIsEnded) {
     const auto started = std::chrono::steady_clock::now();
     const ProcessOutput output = run_program({VML_TEST_CHILD, "sleep"}, 300ms);

@@ -564,6 +564,17 @@ def run_cases() -> dict:
         "holes": {"frames": [frame(0, vmaf=99.0), frame(3, integer_motion=1.0), {"metrics": {"vmaf": 97.0}},
                              frame(7, vmaf=96.25, psnr_y=44.5)]},
         "none": {"frames": []},
+        # libvmaf's own layout: the frames between other keys, and pooled
+        # scores after them under the same names, which are not frames.
+        "libvmaf's layout": {
+            "version": "3.0.0", "fps": 23.98,
+            "frames": [frame(0, integer_adm2=0.98, integer_motion2=0.0, vmaf=97.25, psnr_y=48.5),
+                       frame(1, integer_adm2=0.97, integer_motion2=1.5, vmaf=96.5, psnr_y=47.75)],
+            "pooled_metrics": {"vmaf": {"min": 96.5, "max": 97.25, "mean": 96.875},
+                               "psnr_y": {"min": 47.75, "max": 48.5, "mean": 48.125}},
+            "aggregate_metrics": {}},
+        # No number where a metric is named.
+        "nulls": {"frames": [frame(0, vmaf=None, psnr_y=None, psnr=40.0), frame(1, float_ssim=0.5)]},
     }
     xpsnr_logs = {"none": None,
                   "some": "n:    1  XPSNR y: 61.6992  XPSNR u: 63.1  XPSNR v: 64.2\n"
