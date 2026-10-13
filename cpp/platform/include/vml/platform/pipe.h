@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -59,11 +60,8 @@ public:
 
 private:
     std::string path_;
-    // Each system uses its own of these.
-    [[maybe_unused]] std::size_t buffer_bytes_ = 0;
-    [[maybe_unused]] void* handle_ = nullptr;  // the pipe (Windows)
-    [[maybe_unused]] void* timer_ = nullptr;   // a waitable timer for gather's short waits (Windows)
-    [[maybe_unused]] int descriptor_ = -1;     // the FIFO, once its writer opened it (elsewhere)
+    struct State;  // each system's own (pipe_windows.cpp, pipe_posix.cpp)
+    std::unique_ptr<State> state_;
 };
 
 }  // namespace vml::platform

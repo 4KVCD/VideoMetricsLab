@@ -12,6 +12,10 @@
 
 namespace vml::platform {
 
+struct InboundPipe::State {
+    int descriptor = -1;  // the FIFO, once its writer opened it
+};
+
 namespace {
 
 // 12 random hexadecimal digits, which make a pipe's name unique.
@@ -27,11 +31,11 @@ std::string random_part() {
 
 }  // namespace
 
-InboundPipe::InboundPipe(std::string_view name, std::size_t buffer_bytes)
+InboundPipe::InboundPipe(std::string_view name, std::size_t)
     : path_((std::filesystem::temp_directory_path() / ("vml-vmaf-" + std::to_string(getpid()) + "-" +
                                                         random_part() + "-" + std::string(name)))
                 .string()),
-      buffer_bytes_(buffer_bytes) {
+      state_(std::make_unique<State>()) {
     if (mkfifo(path_.c_str(), 0600) != 0) {
         throw PipeError("The pipe " + path_ + " could not be made: " + std::strerror(errno));
     }
@@ -45,9 +49,9 @@ InboundPipe::~InboundPipe() {
 void InboundPipe::connect() {
     // Opening a FIFO to read waits for its writer.
     do {
-        descriptor_ = open(path_.c_str(), O_RDONLY);
-    } while (descriptor_ < 0 && errno == EINTR);
-    if (descriptor_ < 0) {
+        state_->descriptor = open(path_.c_str(), O_RDONLY);
+    } while (state_->descriptor < 0 && errno == EINTR);
+    if (state_->descriptor < 0) {
         throw PipeError("Waiting for the writer of " + path_ + " failed: " + std::strerror(errno));
     }
 }
@@ -55,11 +59,11 @@ void InboundPipe::connect() {
 void InboundPipe::gather(std::size_t, const std::atomic<bool>&, const std::atomic<bool>&) {}
 
 std::size_t InboundPipe::read(void* into, std::size_t bytes) {
-    if (descriptor_ < 0) {
+    if (state_->descriptor < 0) {
         return 0;
     }
     while (true) {
-        const ssize_t got = ::read(descriptor_, into, bytes);
+        const ssize_t got = ::read(state_->descriptor, into, bytes);
         if (got >= 0) {
             return static_cast<std::size_t>(got);
         }
@@ -70,9 +74,9 @@ std::size_t InboundPipe::read(void* into, std::size_t bytes) {
 }
 
 void InboundPipe::close() {
-    if (descriptor_ >= 0) {
-        ::close(descriptor_);
-        descriptor_ = -1;
+    if (state_->descriptor >= 0) {
+        ::close(state_->descriptor);
+        state_->descriptor = -1;
     }
 }
 
