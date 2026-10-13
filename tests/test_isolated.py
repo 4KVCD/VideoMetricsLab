@@ -3,9 +3,12 @@
 The targets are module-level: the child imports them from here."""
 import faulthandler
 import logging
+import os
 import subprocess
+import tempfile
 import threading
 import time
+from pathlib import Path
 
 import psutil
 import pytest
@@ -53,24 +56,41 @@ def _fail():
     raise VmafRunError("libvmaf failed", "the last lines FFmpeg wrote")
 
 
-def _start_and_wait(process_handle=None, cancel_event=None):
-    child = subprocess.Popen([STDLIB_PYTHON, "-S", "-c", "import time; time.sleep(60)"])
+def _start_and_wait(process_handle=None, cancel_event=None, on_status=None):
+    # Like a Vship pass's FFmpeg: a program the child started, writing to a
+    # temporary file the child made.
+    descriptor, name = tempfile.mkstemp(prefix="vml-vship-pts-", suffix=".txt")
+    os.close(descriptor)
+    child = subprocess.Popen(
+        [STDLIB_PYTHON, "-S", "-c", "import sys, time; f = open(sys.argv[1], 'w'); print(flush=True); time.sleep(60)",
+         name], stdout=subprocess.PIPE)
+    child.stdout.readline()  # the file is open
+    on_status(name)
     process_handle.attach(child.pid)
     time.sleep(60)
+
+
+def _crash_after_a_temporary_file(on_status=None):
+    _descriptor, name = tempfile.mkstemp(prefix="vml-vship-pts-", suffix=".txt")
+    on_status(name)
+    faulthandler._sigsegv()
 
 
 def test_a_crash_in_the_child_is_an_error_here(caplog, tmp_path, monkeypatch):
     """An access violation in Vship or the GPU driver ended the app. Ending
     the child instead, it left no trace of where: its threads at the crash
-    are now logged with the error, and the file they were written to is
-    removed."""
+    are now logged with the error. The file they were written to is
+    removed, and so is every temporary file the child made: a crashed Vship
+    pass left its files of FFmpeg's timestamps in the temporary folder."""
     monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    made = []
     with (caplog.at_level(logging.ERROR, logger="vmaf_app.core.isolated"),
           pytest.raises(IsolatedCrashError, match="Vship crashed")):
-        run_isolated(faulthandler._sigsegv, what="Vship")
+        run_isolated(_crash_after_a_temporary_file, what="Vship", callbacks=("on_status",), on_status=made.append)
     assert "its threads at the crash" in caplog.text
     assert "_child_main" in caplog.text  # the crashed thread's Python stack
-    assert list(tmp_path.glob("vml-isolated-*")) == []
+    assert made and not Path(made[0]).exists()
+    assert list(tmp_path.glob("vml-*")) == []
 
 
 def test_the_result_callbacks_logs_and_errors_come_back(caplog):
@@ -88,11 +108,12 @@ def test_the_result_callbacks_logs_and_errors_come_back(caplog):
 
 def test_cancel_ends_the_child_and_what_it_started(tmp_path, monkeypatch):
     """The child's FFmpeg is attached to the caller's handle, so Pause and
-    Cancel reach it; Cancel also ends the child, and takes away the file
-    its threads would be written to in a crash -- one was left in the temp
-    folder by every cancelled GPU pass."""
+    Cancel reach it; Cancel also ends the child. The child's temporary
+    files are removed, even one its FFmpeg still has open: a cancelled GPU
+    pass left the file for its crash report in the temporary folder, and a
+    Vship pass its files of FFmpeg's timestamps."""
     monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
-    attached = []
+    attached, made = [], []
 
     class Handle:
         def attach(self, pid):
@@ -104,10 +125,11 @@ def test_cancel_ends_the_child_and_what_it_started(tmp_path, monkeypatch):
     cancel = threading.Event()
     threading.Thread(target=lambda: (_wait_for(lambda: attached), cancel.set()), daemon=True).start()
     with pytest.raises(PerceptualCancelled):
-        run_isolated(_start_and_wait, what="test", process_handle=Handle(), cancel_event=cancel,
-                     cancelled=PerceptualCancelled)
+        run_isolated(_start_and_wait, what="test", callbacks=("on_status",), on_status=made.append,
+                     process_handle=Handle(), cancel_event=cancel, cancelled=PerceptualCancelled)
     assert _wait_for(lambda: not psutil.pid_exists(attached[0])), "the child's process kept running"
-    assert list(tmp_path.glob("vml-isolated-*")) == []
+    assert made and not Path(made[0]).exists()
+    assert list(tmp_path.glob("vml-*")) == []
 
 
 def _wait_for(condition, seconds=10.0):

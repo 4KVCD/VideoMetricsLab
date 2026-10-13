@@ -15,10 +15,12 @@ pytestmark = pytest.mark.skipif(os.name != "nt", reason="a Windows job object")
 ROOT = Path(__file__).resolve().parents[1]
 
 # The "app": starts a long-running program and an isolated child, says their
-# process ids, and waits to be killed.
+# process ids, and waits to be killed. Killed, it leaves its isolated child's
+# folder, so its temporary files go in the test's own folder.
 _APP = textwrap.dedent("""
-    import sys, threading, time
+    import sys, tempfile, threading, time
     sys.path.insert(0, sys.argv[1])
+    tempfile.tempdir = sys.argv[2]
     from vmaf_app.core import isolated, proc
 
     def main():
@@ -41,7 +43,7 @@ _APP = textwrap.dedent("""
 def test_what_the_app_started_ends_when_the_app_is_killed(tmp_path):
     script = tmp_path / "app.py"
     script.write_text(_APP, encoding="utf-8")
-    app = subprocess.Popen([sys.executable, str(script), str(ROOT)], stdout=subprocess.PIPE, text=True)
+    app = subprocess.Popen([sys.executable, str(script), str(ROOT), str(tmp_path)], stdout=subprocess.PIPE, text=True)
     started = []
     try:
         started = [psutil.Process(int(pid)) for pid in app.stdout.readline().split()]
