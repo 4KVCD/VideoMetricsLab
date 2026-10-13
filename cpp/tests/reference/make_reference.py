@@ -3,12 +3,12 @@ its statistics (vmaf_app/core/stats.py), its metric registry
 (vmaf_app/core/metrics.py), Python's own number formatting, its reading of
 ffprobe's output (ffprobe.py), of settings.json (settings.py) and of
 FFmpeg's version (ffmpeg_locate.py), a run's decisions (gpu.py,
-frame_sync.py, geometry.py, model_select.py), FFmpeg's command for a run
-and the reading of its logs (vmaf_runner.py), VMAF predicted from features
-by the bundled libvmaf and scored with the Vulkan engine (vmaf_vulkan.py),
-its command line's reading of arguments and patterns (cli.py), and Python's
-json.dumps. The Vulkan engine's cases need a GPU that Vulkan scores VMAF
-on.
+frame_sync.py, geometry.py, model_select.py), FFmpeg's commands for a run
+(vmaf_runner.py, vmaf_gpu.py) and the reading of its logs, VMAF predicted
+from features by the bundled libvmaf and scored with the Vulkan engine
+(vmaf_vulkan.py), its command line's reading of arguments and patterns
+(cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
+that Vulkan scores VMAF on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -479,12 +479,14 @@ def run_cases() -> dict:
     """FFmpeg's filter graph and command for a comparison on the CPU
     (vmaf_runner._build_filtergraph and _build_ffmpeg_cmd), over video
     pairs, crops, decode plans, metrics, scaling, limits and both ways of
-    pairing; and libvmaf's log and XPSNR's stats file read back
-    (_parse_log). The command's program and input paths are written as
-    <ffmpeg>, <test> and <source>, which differ between PCs."""
+    pairing; the two FFmpeg commands of VMAF on the GPU (_build_stream_cmds
+    with vmaf_gpu.GpuAttempt's outputs); and libvmaf's log and XPSNR's stats
+    file read back (_parse_log). The commands' program and input paths are
+    written as <ffmpeg>, <test> and <source>, which differ between PCs."""
     from fractions import Fraction  # noqa: F401  (frame_sync needs it imported)
+    from types import SimpleNamespace
 
-    from vmaf_app.core import frame_sync, vmaf_runner
+    from vmaf_app.core import frame_sync, vmaf_gpu, vmaf_runner
     from vmaf_app.core.gpu import HwAccelPlan
     from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo, VmafOptions
 
@@ -522,6 +524,7 @@ def run_cases() -> dict:
         "auto threads": dict(n_threads=0),
     }
     cases = []
+    gpu_cases = []
     real_pairing = os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
     try:
         for pairing in ("", "timestamp"):
@@ -553,6 +556,32 @@ def run_cases() -> dict:
                                     "pairing": pairing, "pair": pair_name, "crop": crop_name, "plan": plan_name,
                                     "choice": choice_name, "setting": setting_name, "model": model,
                                     "cores": os.cpu_count(), "command": command})
+        # VMAF on the GPU, each video decoded by an FFmpeg of its own whose
+        # frames the app pairs (vmaf_gpu.GpuAttempt): the two commands, the
+        # outputs' pipes written as <test pipe> and <source pipe>.
+        os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
+        attempt = SimpleNamespace(paired=False, _by_time=False, distorted=SimpleNamespace(path="<test pipe>"),
+                                  reference=SimpleNamespace(path="<source pipe>"))
+        for pair_name, (source, test) in pairs.items():
+            for crop_name, (source_crop, test_crop) in crops.items():
+                if crop_name == "letterbox" and pair_name != "4k against 1080p":
+                    continue
+                for plan_name, plan in plans.items():
+                    for setting_name in ("plain", "subsample, lanczos, upscale", "limit"):
+                        options = VmafOptions(compute_vmaf=True, compute_vmaf_neg=True, **settings[setting_name])
+                        graphs = vmaf_runner._build_filtergraph(
+                            source, test, options, source_crop, test_crop, plan, Path("vmaf_log.json"),
+                            gpu_vmaf=True, gpu_paired=False)
+                        # As vmaf_runner._execute_run: one frame past the limit.
+                        limit = options.duration_limit + 1 / test.fps if options.duration_limit > 0 else 0.0
+                        commands = vmaf_runner._build_stream_cmds(
+                            test.path, source.path, graphs, plan, vmaf_gpu.GpuAttempt.output_args(attempt, limit))
+                        commands = [["<ffmpeg>"] + ["<test>" if part == str(test.path.resolve()) else
+                                                    "<source>" if part == str(source.path.resolve()) else part
+                                                    for part in command[1:]] for command in commands]
+                        gpu_cases.append({"name": f"{pair_name}; {crop_name}; {plan_name}; {setting_name}",
+                                          "pair": pair_name, "crop": crop_name, "plan": plan_name,
+                                          "setting": setting_name, "limit": exact(limit), "commands": commands})
     finally:
         os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
         if real_pairing is not None:
@@ -600,7 +629,7 @@ def run_cases() -> dict:
                     "name": f"{log_name}, xpsnr {xpsnr_name}", "log": json.dumps(log), "xpsnr_log": xpsnr_text,
                     "frames": [int(n) for n in frames.frame], "times": [exact(t) for t in frames.time],
                     "metrics": {key: [exact(v) for v in frames.values(key)] for key in frames.metric_keys}})
-    return {"commands": cases, "logs": parsed, "log_fps": exact(24000 / 1001)}
+    return {"commands": cases, "gpu_commands": gpu_cases, "logs": parsed, "log_fps": exact(24000 / 1001)}
 
 
 # ------------------------------------------------------------- command line

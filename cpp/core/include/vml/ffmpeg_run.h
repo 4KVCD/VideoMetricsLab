@@ -1,8 +1,10 @@
-// Comparing two videos with FFmpeg's own metric filters: libvmaf (VMAF
-// v0.6.1, NEG and v1, PSNR, SSIM) and xpsnr, all on the CPU. A port of the
-// CPU path of vmaf_app/core/vmaf_runner.py: the same checks, the same
-// filter graph and command, the same fallback from GPU decoding, and the
-// same reading of the logs.
+// Comparing two videos: with FFmpeg's own metric filters, libvmaf (VMAF
+// v0.6.1, NEG and v1, PSNR, SSIM) and xpsnr, on the CPU; or with VMAF and
+// NEG scored on the GPU by the Vulkan engine from FFmpeg's frames
+// (gpu_vmaf.h), and FFmpeg's filters taking over if that fails. A port of
+// vmaf_app/core/vmaf_runner.py: the same checks, the same filter graphs and
+// commands, the same fallback from GPU decoding, and the same reading of
+// the logs.
 #pragma once
 
 #include <filesystem>
@@ -10,6 +12,8 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "vml/cancel.h"
@@ -34,6 +38,26 @@ private:
 
 // Called with (frames done, frames expected, frames per second).
 using ProgressCallback = std::function<void(long long, long long, double)>;
+
+// What a status tells the run line, beside its text (the Python app's
+// status kinds).
+enum class StatusKind {
+    step,             // a step of the run
+    starting,         // FFmpeg is starting: nothing to show as a step
+    gpu_wait,         // waiting for another video's GPU pass to end
+    gpu_vmaf_failed,  // VMAF on the GPU failed; the CPU takes over
+};
+
+// A run's status, as the Python app words it.
+struct RunStatus {
+    std::string text;
+    StatusKind kind = StatusKind::step;
+};
+using StatusCallback = std::function<void(const RunStatus&)>;
+
+// The status a run sends when VMAF on the GPU fails, after which FFmpeg's
+// libvmaf calculates it, starts with this.
+inline constexpr std::string_view vmaf_gpu_failed = "VMAF on the GPU failed";
 
 // What a run needs to know about this PC, found once.
 struct RunEnvironment {
@@ -77,17 +101,37 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
                                               const std::filesystem::path& source, const std::string& filtergraph,
                                               const HardwareDecoding& decoding, double duration_limit);
 
+// For VMAF on the GPU, the filter graph of each video's own FFmpeg (the test
+// video's, then the source's): its chain as build_filtergraph's, giving its
+// frames as [vmaf_dist] or [vmaf_ref], which the app pairs itself.
+std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source, const VideoInfo& distorted,
+                                                        const VmafOptions& options,
+                                                        const std::optional<CropBox>& source_crop,
+                                                        const std::optional<CropBox>& distorted_crop,
+                                                        const HardwareDecoding& decoding);
+
+// The two FFmpeg commands of VMAF on the GPU, the test video's first: each
+// decodes its video, runs its graph (build_stream_graphs) and writes it to
+// its outputs (GpuAttempt::output_args).
+std::vector<std::vector<std::string>> build_stream_commands(
+    const std::string& ffmpeg, const std::filesystem::path& distorted, const std::filesystem::path& source,
+    const std::pair<std::string, std::string>& graphs, const HardwareDecoding& decoding,
+    const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs);
+
 // The per-frame scores in libvmaf's JSON log, and XPSNR's from the xpsnr
 // filter's stats file when there is one, timed at `fps`.
 FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
                               const std::optional<std::filesystem::path>& xpsnr_log);
 
-// Compares two videos with FFmpeg's metric filters and returns the result,
-// with every requested metric's scores. Throws VmafRunError when the run
-// fails, and Cancelled. `result_distorted_path` is the path the result
-// carries for the test video (by default, its own).
+// Compares two videos and returns the result, with every requested metric's
+// scores: VMAF and NEG on the GPU when they are the run's only metrics and
+// the GPU can score them (scores_on_gpu), with FFmpeg's metric filters
+// otherwise or when that fails. Throws VmafRunError when the run fails, and
+// Cancelled. `result_distorted_path` is the path the result carries for the
+// test video (by default, its own).
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                          VmafOptions options, const ProgressCallback& on_progress, const CancelToken& cancel,
+                          VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
+                          const CancelToken& cancel,
                           const std::optional<std::filesystem::path>& result_distorted_path = std::nullopt);
 
 }  // namespace vml

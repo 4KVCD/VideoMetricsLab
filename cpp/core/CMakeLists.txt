@@ -8,6 +8,7 @@ add_library(vml_core
     src/ffprobe.cpp
     src/frame_sync.cpp
     src/geometry.cpp
+    src/gpu_vmaf.cpp
     src/hardware_decoding.cpp
     src/libvmaf.cpp
     src/metrics.cpp

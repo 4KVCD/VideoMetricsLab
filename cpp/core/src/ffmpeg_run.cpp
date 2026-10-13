@@ -4,19 +4,25 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <fstream>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <random>
 #include <regex>
+#include <set>
 #include <sstream>
+#include <thread>
 #include <tuple>
 
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -173,14 +179,77 @@ std::vector<std::string> output_args(const std::string& filtergraph, double dura
     return args;
 }
 
+// Each video's filters before the two are paired: downloaded from its GPU
+// decoder if need be (in a run of several graphs, a decoder that downloads
+// its pictures itself does it once for all of them), cropped, converted to
+// the analysis format (the deeper video's), scaled to the compared size,
+// and its frames numbered.
+struct VideoChains {
+    std::vector<std::string> test;    // the test video's (input 0)
+    std::vector<std::string> source;  // the source's
+};
+
+VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
+                         const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
+                         const HardwareDecoding& decoding, bool split) {
+    const auto [distorted_w, distorted_h] = content_size(distorted, distorted_crop);
+    const auto [source_w, source_h] = content_size(source, source_crop);
+    const bool sizes_differ = source_w != distorted_w || source_h != distorted_h;
+    const bool upscale_distorted = sizes_differ && options.scale_direction == ScaleDirection::distorted_to_source;
+    const std::string analysis_format = analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt});
+    const std::vector<std::string> numbering = pairing_filters(frame_rate(distorted));
+    VideoChains chains;
+
+    if (decoding.distorted && !(split && decoder_downloads(decoding.distorted))) {
+        // Frames come as GPU surfaces and must come back to system memory
+        // before any other filter can use them.
+        chains.test.emplace_back("hwdownload");
+        chains.test.push_back("format=" + hw_native_format(distorted.pix_fmt));
+    }
+    if (distorted_crop && !distorted_crop->is_noop(distorted.width, distorted.height)) {
+        chains.test.push_back(distorted_crop->as_filter());
+    }
+    chains.test.push_back("format=" + analysis_format);
+    if (upscale_distorted) {
+        chains.test.push_back("scale=" + std::to_string(source_w) + ":" + std::to_string(source_h) +
+                              ":flags=" + options.scale_algorithm);
+    }
+    chains.test.insert(chains.test.end(), numbering.begin(), numbering.end());
+
+    // The source is cropped before the format conversion, as the test video
+    // is, so chroma at a crop's edge is not filtered with the bars' samples.
+    if (decoding.source && !(split && decoder_downloads(decoding.source))) {
+        chains.source.emplace_back("hwdownload");
+        chains.source.push_back("format=" + hw_native_format(source.pix_fmt));
+    }
+    if (source_crop && !source_crop->is_noop(source.width, source.height)) {
+        chains.source.push_back(source_crop->as_filter());
+    }
+    chains.source.push_back("format=" + analysis_format);
+    if (sizes_differ && !upscale_distorted) {
+        chains.source.push_back("scale=" + std::to_string(distorted_w) + ":" + std::to_string(distorted_h) +
+                                ":flags=" + options.scale_algorithm);
+    }
+    chains.source.insert(chains.source.end(), numbering.begin(), numbering.end());
+    return chains;
+}
+
+// A video's path for FFmpeg's -i: absolute, because FFmpeg runs in the run's
+// own folder (a plain argument, so a Windows path with its drive works).
+std::string input_path(const std::filesystem::path& path) {
+    std::error_code error;
+    const std::filesystem::path resolved = std::filesystem::weakly_canonical(std::filesystem::absolute(path), error);
+    return platform::path_text(error ? std::filesystem::absolute(path) : resolved);
+}
+
 // A folder of its own for one run's logs, deleted with it.
 class RunFolder {
 public:
-    RunFolder() {
+    explicit RunFolder(const std::string& prefix) {
         std::random_device random;
         for (int attempt = 0; attempt < 100; ++attempt) {
             std::filesystem::path candidate =
-                std::filesystem::temp_directory_path() / ("vmaf_run_" + std::to_string(random()));
+                std::filesystem::temp_directory_path() / (prefix + std::to_string(random()));
             std::error_code error;
             if (std::filesystem::create_directory(candidate, error)) {
                 path_ = candidate;
@@ -231,32 +300,109 @@ struct FfmpegOutcome {
     std::string errors;
 };
 
+// FFmpeg's -progress output, which writes each update as key=value lines:
+// the latest fps is reported with every frame= line.
+class ProgressLines {
+public:
+    void read(const std::string& line, long long total_frames, const ProgressCallback& on_progress) {
+        static const std::regex frame_line(R"(^frame=(\d+))");
+        static const std::regex fps_line(R"(^fps=\s*([\d.]+))");
+        std::smatch match;
+        if (std::regex_search(line, match, fps_line)) {
+            last_fps_ = python_float(match[1].str()).value_or(last_fps_);
+        } else if (std::regex_search(line, match, frame_line) && on_progress) {
+            on_progress(std::stoll(match[1].str()), total_frames, last_fps_);
+        }
+    }
+
+private:
+    double last_fps_ = 0.0;
+};
+
 // Runs one FFmpeg command, reporting its progress. Throws Cancelled.
 FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long total_frames,
                          const ProgressCallback& on_progress, const CancelToken& cancel,
                          const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();  // not one more FFmpeg after a Cancel
     platform::ChildProcess ffmpeg = platform::ChildProcess::start(command, platform::ProcessOptions{folder});
-    // -progress writes each update as key=value lines; the latest fps is
-    // reported with every frame= line.
-    static const std::regex frame_line(R"(^frame=(\d+))");
-    static const std::regex fps_line(R"(^fps=\s*([\d.]+))");
-    double last_fps = 0.0;
+    ProgressLines progress;
     while (const std::optional<std::string> line = ffmpeg.read_line()) {
         if (cancel.cancelled()) {
             ffmpeg.terminate();
             break;
         }
-        std::smatch match;
-        if (std::regex_search(*line, match, fps_line)) {
-            last_fps = python_float(match[1].str()).value_or(last_fps);
-        } else if (std::regex_search(*line, match, frame_line) && on_progress) {
-            on_progress(std::stoll(match[1].str()), total_frames, last_fps);
-        }
+        progress.read(*line, total_frames, on_progress);
     }
     const int code = ffmpeg.wait();
     cancel.throw_if_cancelled();
     return FfmpegOutcome{code, ffmpeg.standard_error()};
+}
+
+// Runs the two FFmpegs of VMAF on the GPU side by side, as run_ffmpeg runs
+// one: the first reports the progress, and one that fails ends the other.
+// Returns the failed one's outcome, or the first's. Throws Cancelled, and
+// platform::ProcessError when one cannot start.
+FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands, long long total_frames,
+                              const ProgressCallback& on_progress, const CancelToken& cancel,
+                              const std::filesystem::path& folder) {
+    cancel.throw_if_cancelled();
+    std::vector<platform::ChildProcess> processes;
+    for (const std::vector<std::string>& command : commands) {
+        processes.push_back(platform::ChildProcess::start(command, platform::ProcessOptions{folder}));
+    }
+    std::vector<FfmpegOutcome> outcomes(processes.size());
+    std::vector<char> done(processes.size(), 0);
+    std::vector<char> ended_here(processes.size(), 0);  // ended because of the other, or Cancel
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool failed = false;
+    std::vector<std::thread> readers;
+    for (std::size_t index = 0; index < processes.size(); ++index) {
+        readers.emplace_back([&, index] {
+            platform::ChildProcess& ffmpeg = processes[index];
+            ProgressLines progress;
+            while (const std::optional<std::string> line = ffmpeg.read_line()) {
+                if (index == 0) {
+                    progress.read(*line, total_frames, on_progress);
+                }
+            }
+            const int code = ffmpeg.wait();
+            std::string errors = ffmpeg.standard_error();
+            {
+                const std::lock_guard lock(mutex);
+                outcomes[index] = FfmpegOutcome{code, std::move(errors)};
+                done[index] = 1;
+                failed = failed || code != 0;
+            }
+            changed.notify_all();
+        });
+    }
+    {
+        // Cancel ends both, and one failing ends the other: its frames would
+        // have nothing to be paired with.
+        std::unique_lock lock(mutex);
+        while (std::find(done.begin(), done.end(), 0) != done.end()) {
+            changed.wait_for(lock, std::chrono::milliseconds(100));
+            if (cancel.cancelled() || failed) {
+                for (std::size_t index = 0; index < processes.size(); ++index) {
+                    if (done[index] == 0 && ended_here[index] == 0) {
+                        processes[index].terminate();
+                        ended_here[index] = 1;
+                    }
+                }
+            }
+        }
+    }
+    for (std::thread& reader : readers) {
+        reader.join();
+    }
+    cancel.throw_if_cancelled();
+    for (std::size_t index = 0; index < outcomes.size(); ++index) {
+        if (outcomes[index].exit_code != 0 && ended_here[index] == 0) {
+            return outcomes[index];
+        }
+    }
+    return outcomes[0];
 }
 
 // The last `count` lines of `text`.
@@ -516,7 +662,7 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
-    const RunFolder folder;
+    const RunFolder folder("vmaf_run_");
     const std::filesystem::path log_path = folder.path() / "vmaf_log.json";
     const std::optional<std::filesystem::path> xpsnr_log_path =
         options.compute_xpsnr ? std::optional(folder.path() / "xpsnr_log.txt") : std::nullopt;
@@ -590,6 +736,130 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
     return scores;
 }
 
+// VMAF and NEG on the GPU: each video decoded by an FFmpeg of its own, whose
+// frames the app pairs and the Vulkan engine scores (GpuAttempt), falling
+// back to other decode plans when hardware decoding fails.
+ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                             const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                             const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                             long long total_frames, const HardwareDecoding& decoding,
+                             const ProgressCallback& on_progress, const StatusCallback& on_status,
+                             const CancelToken& cancel) {
+    if (options.requested_metrics().empty()) {
+        throw VmafRunError("Select at least one metric to calculate.");
+    }
+    const RunFolder folder("vmaf_gpu_run_");
+    // One frame more than the limit: FFmpeg's libvmaf filter also scores the
+    // first frame at or past the limit before its output stops there, and
+    // the GPU must be given the same frames.
+    const double limit = options.duration_limit > 0 && fps > 0 ? options.duration_limit + 1 / fps : 0.0;
+    const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
+    std::optional<VulkanScorer::Scores> scored;
+    FfmpegOutcome outcome;
+    for (std::size_t attempt_number = 0; attempt_number < ladder.size(); ++attempt_number) {
+        const HardwareDecoding& decode = ladder[attempt_number];
+        if (on_status) {
+            on_status(attempt_number == 0
+                          ? RunStatus{"Running ffmpeg, VMAF on the GPU (GPU decode: " + decode.describe() + ")...",
+                                      StatusKind::starting}
+                          : RunStatus{"GPU decode failed, retrying (GPU decode: " + decode.describe() + ")..."});
+        }
+        // Each attempt has its own scorer and pipes: a failed attempt's
+        // cannot be used again.
+        GpuAttempt attempt(plan, options.n_subsample);
+        const auto abandon = [&attempt] {
+            try {
+                attempt.finish(false);
+            } catch (const std::exception&) {
+                // The failure that ends the attempt is the one to report.
+            }
+        };
+        try {
+            const std::vector<std::vector<std::string>> commands = build_stream_commands(
+                environment.ffmpeg, distorted.path, source.path,
+                build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
+                attempt.output_args(limit));
+            outcome = run_ffmpeg_pair(commands, total_frames, on_progress, cancel, folder.path());
+        } catch (const platform::ProcessError& error) {
+            abandon();
+            throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());
+        } catch (...) {
+            abandon();
+            throw;
+        }
+        // It throws when the scoring failed: FFmpeg's failure is then caused
+        // by it, and no other decode plan would help.
+        scored = attempt.finish(outcome.exit_code == 0);
+        if (outcome.exit_code == 0) {
+            break;
+        }
+    }
+    if (outcome.exit_code != 0) {
+        throw VmafRunError("ffmpeg exited with code " + std::to_string(outcome.exit_code),
+                           last_lines(outcome.errors, 25));
+    }
+    if (!scored || scored->frames.empty()) {
+        throw LibvmafError("GPU VMAF scored no frames");
+    }
+    ParsedScores scores;
+    scores.frame.assign(scored->frames.begin(), scored->frames.end());
+    scores.time = times_of(scores.frame, fps);
+    for (const auto& [key, values] : scored->by_model) {
+        std::vector<float>& column = scores.metrics[key];
+        for (const double value : values) {
+            column.push_back(static_cast<float>(value));  // as the Python app keeps every score
+        }
+    }
+    for (const char* key : column_keys) {
+        if (scores.has(key)) {
+            scores.order.emplace_back(key);
+        }
+    }
+    std::vector<std::string> missing;
+    for (const std::string& key : options.requested_metrics()) {
+        if (!scores.has(key)) {
+            missing.push_back(key);
+        }
+    }
+    if (!missing.empty()) {
+        throw VmafRunError("No results for requested metrics: " + joined(missing, ", "));
+    }
+    return scores;
+}
+
+// VMAF and NEG on the GPU (execute_gpu_run), one GPU pass at a time.
+// Nothing when it fails, for any reason but Cancel: the run is then made
+// again with VMAF on the CPU, as on a PC without a GPU that scores it.
+std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
+                                       const VideoInfo& distorted, const VmafOptions& options,
+                                       const std::optional<CropBox>& source_crop,
+                                       const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
+                                       long long total_frames, const HardwareDecoding& decoding,
+                                       const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                       const CancelToken& cancel) {
+    std::unique_lock pass(gpu_pass(), std::defer_lock);
+    if (!pass.try_lock()) {
+        if (on_status) {
+            on_status({std::string(gpu_wait_message), StatusKind::gpu_wait});
+        }
+        while (!pass.try_lock_for(std::chrono::milliseconds(100))) {
+            cancel.throw_if_cancelled();
+        }
+    }
+    try {
+        return execute_gpu_run(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                               total_frames, decoding, on_progress, on_status, cancel);
+    } catch (const Cancelled&) {
+        throw;
+    } catch (const std::exception& error) {
+        if (on_status) {
+            on_status({std::string(vmaf_gpu_failed) + " (" + error.what() + "); calculating it on the CPU…",
+                       StatusKind::gpu_vmaf_failed});
+        }
+        return std::nullopt;
+    }
+}
+
 }  // namespace
 
 FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
@@ -661,99 +931,76 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
                               const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                               const HardwareDecoding& decoding, const std::string& log_name, const std::string& model,
                               const std::optional<std::string>& xpsnr_log_name, unsigned cores) {
-    const auto [distorted_w, distorted_h] = content_size(distorted, distorted_crop);
-    const auto [source_w, source_h] = content_size(source, source_crop);
-    const bool sizes_differ = source_w != distorted_w || source_h != distorted_h;
-    const bool upscale_distorted = sizes_differ && options.scale_direction == ScaleDirection::distorted_to_source;
-    // Both videos reach libvmaf in one format, the deeper video's.
-    const std::string analysis_format = analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt});
     // XPSNR beside libvmaf's metrics: each in a graph of its own, which
     // FFmpeg runs on a thread of its own (44 fps at 4K, against 31 chained).
     const bool split = options.compute_xpsnr && xpsnr_log_name &&
                        (uses_vmaf_model(options) || !options.extra_features.empty());
-    const std::vector<std::string> numbering = pairing_filters(frame_rate(distorted));
+    const VideoChains chains = video_chains(source, distorted, options, source_crop, distorted_crop, decoding, split);
     const std::string stream = std::string(video_stream);
-
-    // The test video's chain (input 0).
-    std::vector<std::string> main_ops;
-    if (decoding.distorted && !(split && decoder_downloads(decoding.distorted))) {
-        // Frames come as GPU surfaces and must come back to system memory
-        // before any other filter can use them.
-        main_ops.emplace_back("hwdownload");
-        main_ops.push_back("format=" + hw_native_format(distorted.pix_fmt));
-    }
-    if (distorted_crop && !distorted_crop->is_noop(distorted.width, distorted.height)) {
-        main_ops.push_back(distorted_crop->as_filter());
-    }
-    main_ops.push_back("format=" + analysis_format);
-    if (upscale_distorted) {
-        main_ops.push_back("scale=" + std::to_string(source_w) + ":" + std::to_string(source_h) +
-                           ":flags=" + options.scale_algorithm);
-    }
-    main_ops.insert(main_ops.end(), numbering.begin(), numbering.end());
-    const std::string main_chain = "[0:" + stream + "]" + joined(main_ops, ",") + "[main]";
-
-    // The source's chain (input 1): cropped before the format conversion, as
-    // the test video's, so chroma at a crop's edge is not filtered with the
-    // bars' samples.
-    std::vector<std::string> ref_ops;
-    if (decoding.source && !(split && decoder_downloads(decoding.source))) {
-        ref_ops.emplace_back("hwdownload");
-        ref_ops.push_back("format=" + hw_native_format(source.pix_fmt));
-    }
-    if (source_crop && !source_crop->is_noop(source.width, source.height)) {
-        ref_ops.push_back(source_crop->as_filter());
-    }
-    ref_ops.push_back("format=" + analysis_format);
-    if (sizes_differ && !upscale_distorted) {
-        ref_ops.push_back("scale=" + std::to_string(distorted_w) + ":" + std::to_string(distorted_h) +
-                          ":flags=" + options.scale_algorithm);
-    }
-    ref_ops.insert(ref_ops.end(), numbering.begin(), numbering.end());
-    const std::string ref_chain = "[1:" + stream + "]" + joined(ref_ops, ",") + "[ref]";
-
     if (split) {
         // The graphs decode nothing themselves: FFmpeg gives every graph
         // that reads an input the same decoded frames.
-        const auto chains = [&](const std::string& suffix) {
-            return "[0:" + stream + "]" + joined(main_ops, ",") + "[main_" + suffix + "];[1:" + stream + "]" +
-                   joined(ref_ops, ",") + "[ref_" + suffix + "]";
+        const auto both = [&](const std::string& suffix) {
+            return "[0:" + stream + "]" + joined(chains.test, ",") + "[main_" + suffix + "];[1:" + stream + "]" +
+                   joined(chains.source, ",") + "[ref_" + suffix + "]";
         };
-        return chains("v") + ";[main_v][ref_v]libvmaf=" + joined(libvmaf_options(options, log_name, model, cores), ":") +
-               "[graph0]" + graph_separator + chains("x") + ";" + xpsnr_filter("ref_x", "main_x", *xpsnr_log_name) +
+        return both("v") + ";[main_v][ref_v]libvmaf=" + joined(libvmaf_options(options, log_name, model, cores), ":") +
+               "[graph0]" + graph_separator + both("x") + ";" + xpsnr_filter("ref_x", "main_x", *xpsnr_log_name) +
                "[graph1]";
     }
-    return main_chain + ";" + ref_chain + ";" + libvmaf_stage(options, log_name, model, xpsnr_log_name, cores);
+    return "[0:" + stream + "]" + joined(chains.test, ",") + "[main];[1:" + stream + "]" + joined(chains.source, ",") +
+           "[ref];" + libvmaf_stage(options, log_name, model, xpsnr_log_name, cores);
 }
 
 std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const std::filesystem::path& distorted,
                                               const std::filesystem::path& source, const std::string& filtergraph,
                                               const HardwareDecoding& decoding, double duration_limit) {
-    // The inputs are plain arguments, so absolute Windows paths work here;
-    // absolute because FFmpeg runs in the run's own folder.
     const bool several_graphs = filtergraph.find(graph_separator) != std::string::npos;
     const auto decode = [several_graphs](const std::optional<std::string>& hwaccel) {
         return several_graphs ? split_hwaccel_args(hwaccel) : hwaccel_args(hwaccel);
-    };
-    const auto absolute = [](const std::filesystem::path& path) {
-        std::error_code error;
-        const std::filesystem::path resolved = std::filesystem::weakly_canonical(std::filesystem::absolute(path), error);
-        return platform::path_text(error ? std::filesystem::absolute(path) : resolved);
     };
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
     for (const auto& [hwaccel, path] :
          {std::pair{decoding.distorted, distorted}, std::pair{decoding.source, source}}) {
         const std::vector<std::string> options = decode(hwaccel);
         command.insert(command.end(), options.begin(), options.end());
-        command.insert(command.end(), {"-i", absolute(path)});
+        command.insert(command.end(), {"-i", input_path(path)});
     }
     const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
     command.insert(command.end(), outputs.begin(), outputs.end());
     return command;
 }
 
+std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source, const VideoInfo& distorted,
+                                                        const VmafOptions& options,
+                                                        const std::optional<CropBox>& source_crop,
+                                                        const std::optional<CropBox>& distorted_crop,
+                                                        const HardwareDecoding& decoding) {
+    const VideoChains chains = video_chains(source, distorted, options, source_crop, distorted_crop, decoding, false);
+    const std::string input = "[0:" + std::string(video_stream) + "]";  // each FFmpeg has its video alone
+    return {input + joined(chains.test, ",") + "[vmaf_dist]", input + joined(chains.source, ",") + "[vmaf_ref]"};
+}
+
+std::vector<std::vector<std::string>> build_stream_commands(
+    const std::string& ffmpeg, const std::filesystem::path& distorted, const std::filesystem::path& source,
+    const std::pair<std::string, std::string>& graphs, const HardwareDecoding& decoding,
+    const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs) {
+    const auto command = [&ffmpeg](const std::filesystem::path& path, const std::optional<std::string>& hwaccel,
+                                   const std::string& graph, const std::vector<std::string>& output) {
+        std::vector<std::string> made{ffmpeg, "-nostdin", "-hide_banner", "-y"};
+        const std::vector<std::string> decode = hwaccel_args(hwaccel);
+        made.insert(made.end(), decode.begin(), decode.end());
+        made.insert(made.end(), {"-i", input_path(path), "-lavfi", graph, "-progress", "pipe:1", "-nostats"});
+        made.insert(made.end(), output.begin(), output.end());
+        return made;
+    };
+    return {command(distorted, decoding.distorted, graphs.first, outputs.first),
+            command(source, decoding.source, graphs.second, outputs.second)};
+}
+
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                          VmafOptions options, const ProgressCallback& on_progress, const CancelToken& cancel,
+                          VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
+                          const CancelToken& cancel,
                           const std::optional<std::filesystem::path>& result_distorted_path) {
     validate_video_pair(source, distorted, options);
     // The decode plan comes before black-bar detection, so the detection
@@ -783,9 +1030,48 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         options.model_v1 = resolve_v1_model(options, width, height);
     }
     const long long total_frames = estimate_total_frames(distorted, options, &source);
-    const ParsedScores scores = execute_run(environment, source, distorted, options, source_crop, distorted_crop,
-                                            model, distorted.fps, total_frames, decoding, on_progress, cancel);
-    const long long compared = scores.frame.empty() ? 0 : static_cast<long long>(scores.frame.back()) + 1;
+
+    // VMAF is scored on the GPU only when VMAF and NEG are all the run
+    // scores: the command line puts them in a run of their own, apart from
+    // FFmpeg's other metrics.
+    const std::vector<std::string> requested = options.requested_metrics();
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
+    GpuModels gpu;
+    if (std::all_of(requested.begin(), requested.end(), [](const std::string& key) {
+            return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
+        })) {
+        if (options.compute_vmaf_v1 && options.vmaf_on_gpu) {
+            // The command line refuses such a run before it starts.
+            throw VmafRunError("VMAF v1 on the GPU is not in the C++ app yet");
+        }
+        gpu = scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, model, options.vmaf_on_gpu, depth,
+                            std::pair(width, height));
+        if (gpu.size() != requested.size()) {
+            gpu.clear();  // one is calculated on the CPU: FFmpeg's libvmaf calculates them all together
+        }
+    }
+    std::optional<ParsedScores> scores;
+    std::set<std::string, std::less<>> gpu_keys;
+    if (!gpu.empty()) {
+        const GpuVmafBackend backend = gpu_vmaf_backend();
+        if (backend.backend != "vulkan" || !backend.device) {
+            // The command line refuses such a run before it starts.
+            throw VmafRunError("VMAF on the GPU with libvmaf's CUDA code is not in the C++ app yet");
+        }
+        scores = run_on_gpu(environment, source, distorted, options, source_crop, distorted_crop,
+                            GpuPlan{gpu, width, height, depth, *backend.device}, distorted.fps, total_frames,
+                            decoding, on_progress, on_status, cancel);
+        if (scores) {
+            for (const auto& [key, version] : gpu) {
+                gpu_keys.insert(key);
+            }
+        }
+    }
+    if (!scores) {
+        scores = execute_run(environment, source, distorted, options, source_crop, distorted_crop, model,
+                             distorted.fps, total_frames, decoding, on_progress, cancel);
+    }
+    const long long compared = scores->frame.empty() ? 0 : static_cast<long long>(scores->frame.back()) + 1;
     if (const std::optional<std::string> short_run =
             short_comparison(total_frames, compared, distorted.fps, options.n_subsample)) {
         throw VmafRunError(*short_run);
@@ -808,7 +1094,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     if (options.compute_vmaf_v1) {
         result.model_choice_v1 = options.model_choice_v1;
     }
-    for (const std::string& key : scores.order) {
+    for (const std::string& key : scores->order) {
         std::map<std::string, std::string> parameters;
         if (key == "vmaf_neg") {
             parameters["model"] = "version=vmaf_v0.6.1neg";
@@ -817,9 +1103,16 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         } else if (key == "vmaf_v1") {
             parameters["model"] = options.model_v1;
         }
-        result.metric_results.add(FrameMetricResult{key, scores.frame, scores.time, scores.metrics.at(key),
-                                                    current_ffmpeg_provenance(key, environment.ffmpeg_version,
-                                                                              std::move(parameters))});
+        MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
+        if (gpu_keys.contains(key)) {
+            // The same request as FFmpeg's libvmaf (the scores agree to
+            // within 4e-5), made on the GPU by the bundled build.
+            provenance.implementation = "libvmaf/vulkan";
+            provenance.compute_backend = "gpu";
+            provenance.implementation_version = vulkan_library_build();
+        }
+        result.metric_results.add(
+            FrameMetricResult{key, scores->frame, scores->time, scores->metrics.at(key), std::move(provenance)});
     }
     return result;
 }

@@ -1,0 +1,160 @@
+// VMAF and VMAF NEG on the GPU: which runs score them there, the check of
+// the GPU, and the frames' way from FFmpeg to the Vulkan scorer. A port of
+// the parts of vmaf_app/core/vmaf_gpu.py the C++ app has so far: the Vulkan
+// backend, fed by one FFmpeg per video whose frames the app pairs itself,
+// frame N with frame N. Not yet: libvmaf's CUDA code, VMAF v1 on the GPU,
+// the videos decoded in the app, frames paired by timestamp
+// (VML_FRAME_PAIRING) and FFmpeg pairing them (VML_VMAF_PIPES=canvas).
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "vml/vmaf_vulkan.h"
+
+namespace vml {
+
+// The models a run scores on the GPU: each metric's key ("vmaf",
+// "vmaf_neg") with the libvmaf model it is scored with ("vmaf_v0.6.1").
+using GpuModels = std::vector<std::pair<std::string, std::string>>;
+
+// The models of VMAF and NEG a run scores on the GPU, or none. VMAF with a
+// custom model file is calculated on the CPU, and so is NEG beside it.
+// `model` is the run's model= value ("version=vmaf_v0.6.1").
+GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model);
+
+// The GPU backend setting ("auto", "vulkan" or "cuda"): which backend is
+// tried first. The GPU is checked again when it changes that.
+void set_gpu_backend(const std::string& preference);
+
+// What scores VMAF on this PC's GPU, as the Python app's probe finds it.
+struct GpuVmafBackend {
+    // "vulkan" when Vulkan scores it here; "cuda" when the Python app would
+    // try libvmaf's CUDA code (an NVIDIA GPU, with CUDA first or Vulkan
+    // failing), which this app does not have yet; "" when the CPU scores it.
+    std::string backend;
+    std::optional<int> device;  // Vulkan's number for the GPU
+    std::string text;           // what scores it ("Vulkan on ..."), or why the GPU does not
+};
+
+// The GPU's answer, found once (in this process: the Python app checks in a
+// process of its own) and kept.
+GpuVmafBackend gpu_vmaf_backend();
+
+// The models a run scores on the GPU (gpu_models), or none when its VMAF is
+// calculated on the CPU: VMAF set to the CPU (`enabled`), a custom model, a
+// comparison deeper than 10 bits, an odd width or height (`size`, where
+// known), or no GPU that scores VMAF here (gpu_vmaf_backend).
+GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
+                        int bit_depth, std::optional<std::pair<int, int>> size);
+
+// What a GPU run scores, and how.
+struct GpuPlan {
+    GpuModels models;
+    int width = 0;  // the size and depth frames are compared at
+    int height = 0;
+    int bit_depth = 8;
+    int device = 0;  // Vulkan's number for the GPU
+};
+
+// The GPU's turn: one GPU pass at a time in this process (the Python app's
+// gpu.GPU_PASS), so that no video's GPU metrics run beside another's.
+std::timed_mutex& gpu_pass();
+
+// FFmpeg's output options for VMAF on the GPU, the test video's FFmpeg's and
+// the source's: the video's frames ([vmaf_dist] or [vmaf_ref]) as they come,
+// cut at `duration_limit` seconds (0: none), as YUV4MPEG into the pipe at
+// `test_pipe` or `source_pipe` (GpuAttempt's).
+std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(double duration_limit,
+                                                                              const std::string& test_pipe,
+                                                                              const std::string& source_pipe);
+
+// The status a run waiting for the GPU's turn sends.
+inline constexpr std::string_view gpu_wait_message = "Waiting for the GPU: another video's GPU pass is running…";
+
+// One video as FFmpeg's filter chain gives it: its frames as a YUV4MPEG
+// stream (FFmpeg's yuv4mpegpipe output) on a pipe this process serves. A
+// thread reads the frames ahead into a few buffers; pull() gives them in
+// order, and each is given back with release().
+class StreamReader {
+public:
+    // A reader of frames of `frame_bytes` each, its pipe's path ending in
+    // `name`. Throws platform::PipeError.
+    StreamReader(std::string_view name, std::size_t frame_bytes);
+    ~StreamReader();
+    StreamReader(const StreamReader&) = delete;
+    StreamReader& operator=(const StreamReader&) = delete;
+
+    // The path FFmpeg writes to.
+    const std::string& path() const;
+
+    // Starts the reading thread.
+    void start();
+
+    // The next frame, or nullptr at the video's end. Throws LibvmafError
+    // when the stream is not what FFmpeg writes.
+    std::vector<std::uint8_t>* pull();
+
+    // Gives a frame's buffer back for the next frame.
+    void release(std::vector<std::uint8_t>* frame);
+
+    // Says the comparison is over: whatever FFmpeg still writes is read and
+    // dropped.
+    void drop_rest();
+
+    // Says FFmpeg has gone, so the reader stops waiting for more. FFmpeg
+    // opens no output that got no frame, so a pipe it never opened is
+    // opened here to end the wait for it.
+    void ffmpeg_ended();
+
+    // Stops reading, even while waiting for FFmpeg.
+    void stop();
+
+    // Waits for the reading thread to end, and throws its error, if any.
+    void join();
+
+private:
+    void read_frames();
+
+    struct State;
+    std::unique_ptr<State> state_;
+};
+
+// The GPU side of one FFmpeg attempt: the pipes FFmpeg writes the two
+// videos' frames to, and the thread that pairs them, frame N with frame N
+// until either video ends, and has the Vulkan scorer score each pair.
+class GpuAttempt {
+public:
+    // Throws VmafVulkanError when the scorer cannot start, and
+    // platform::PipeError.
+    GpuAttempt(const GpuPlan& plan, int n_subsample);
+    ~GpuAttempt();
+    GpuAttempt(const GpuAttempt&) = delete;
+    GpuAttempt& operator=(const GpuAttempt&) = delete;
+
+    // FFmpeg's output options for the test video's FFmpeg and the source's:
+    // the video's frames ([vmaf_dist] or [vmaf_ref]) as they come, cut at
+    // `duration_limit` seconds (0: none), as YUV4MPEG into its pipe.
+    std::pair<std::vector<std::string>, std::vector<std::string>> output_args(double duration_limit) const;
+
+    // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
+    // (the caller then retries or gives up). Throws LibvmafError when the
+    // scoring failed.
+    std::optional<VulkanScorer::Scores> finish(bool ffmpeg_succeeded);
+
+private:
+    void feed();
+    void stop();
+
+    struct State;
+    std::unique_ptr<State> state_;
+};
+
+}  // namespace vml

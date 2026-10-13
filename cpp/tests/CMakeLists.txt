@@ -7,6 +7,7 @@ add_executable(vml_tests
     unit/ffmpeg_run_test.cpp
     unit/ffmpeg_tools_test.cpp
     unit/ffprobe_test.cpp
+    unit/gpu_vmaf_test.cpp
     unit/library_test.cpp
     unit/libvmaf_test.cpp
     unit/metrics_test.cpp

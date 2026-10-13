@@ -11,6 +11,7 @@
 
 #include "reference.h"
 #include "vml/frame_sync.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -129,6 +130,34 @@ TEST(FfmpegRun, BuildsThePythonAppsFilterGraphAndCommand) {
         EXPECT_EQ(command, item["command"].get<std::vector<std::string>>());
     }
     set_pairing("");
+}
+
+// VMAF on the GPU: each video's own FFmpeg, decoding it, giving its frames
+// as the app pairs them, and writing them into the app's pipe.
+TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
+    const Json reference = test::load_reference("runs.json");
+    ASSERT_FALSE(reference["gpu_commands"].empty());
+    for (const Json& item : reference["gpu_commands"]) {
+        SCOPED_TRACE(item["name"].get<std::string>());
+        const auto [source, test] = pair_named(item["pair"].get<std::string>());
+        const auto [source_crop, test_crop] = crops_named(item["crop"].get<std::string>());
+        const HardwareDecoding plan = plan_named(item["plan"].get<std::string>());
+        const VmafOptions options = options_named("vmaf, neg", item["setting"].get<std::string>());
+        std::vector<std::vector<std::string>> commands = build_stream_commands(
+            "<ffmpeg>", test.path, source.path,
+            build_stream_graphs(source, test, options, source_crop, test_crop, plan), plan,
+            gpu_output_args(test::reference_number(item["limit"]).value(), "<test pipe>", "<source pipe>"));
+        for (std::vector<std::string>& command : commands) {
+            for (std::string& part : command) {
+                if (part == platform::path_text(std::filesystem::absolute(test.path))) {
+                    part = "<test>";
+                } else if (part == platform::path_text(std::filesystem::absolute(source.path))) {
+                    part = "<source>";
+                }
+            }
+        }
+        EXPECT_EQ(commands, item["commands"].get<std::vector<std::vector<std::string>>>());
+    }
 }
 
 TEST(FfmpegRun, ReadsLibvmafsLogAsThePythonAppDoes) {

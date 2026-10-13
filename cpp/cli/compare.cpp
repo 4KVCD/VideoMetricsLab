@@ -19,7 +19,10 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
+#include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_vmaf.h"
+#include "vml/hardware_decoding.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -342,13 +345,63 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
         return "PSNR, SSIM or XPSNR without a VMAF";
     }
     const std::optional<std::string> vmaf_on = where(arguments, "vmaf");
-    if (vmaf && (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) {
-        return "VMAF on the GPU (--vmaf-on cpu scores it on the CPU)";
+    if (std::find(asked.begin(), asked.end(), "vmaf_v1") != asked.end() &&
+        (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) {
+        return "VMAF v1 on the GPU (--vmaf-on cpu scores it on the CPU)";
     }
     if (!arguments.cvvdp_displays.empty()) {
         return "--cvvdp-display";
     }
     return std::nullopt;
+}
+
+// Where a video's VMAF and NEG are scored, as the Python app's scheduler
+// decides it (job_runner's _by_place): on the GPU in a run of their own, or
+// with FFmpeg's other metrics on the CPU. `not_yet` says what this C++
+// version cannot do yet of what the Python app would do.
+struct GpuDecision {
+    bool on_gpu = false;
+    std::optional<std::string> not_yet;
+};
+
+GpuDecision gpu_decision(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
+                         const std::vector<std::string>& metrics) {
+    const auto is_vmaf = [](const std::string& key) { return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1"; };
+    if (!options.vmaf_on_gpu || std::none_of(metrics.begin(), metrics.end(), is_vmaf)) {
+        return {};
+    }
+    // The size frames are compared at, where it is known before the run:
+    // with black bars kept.
+    std::optional<std::pair<int, int>> size;
+    if (options.crop_mode == CropMode::none) {
+        size = analysis_dimensions(source, test, options);
+    }
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt}));
+    const GpuModels gpu =
+        scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, options.model, true, depth, size);
+    if (gpu.empty()) {
+        return {};
+    }
+    if (gpu_vmaf_backend().backend != "vulkan") {
+        return {false, "VMAF on the GPU with libvmaf's CUDA code (the GPU backend setting is CUDA, or Vulkan cannot "
+                       "score VMAF on this GPU)"};
+    }
+    for (const std::string& key : metrics) {
+        if (std::none_of(gpu.begin(), gpu.end(), [&key](const auto& model) { return model.first == key; })) {
+            return {false, "PSNR, SSIM or XPSNR beside VMAF on the GPU (--vmaf-on cpu calculates them together on "
+                           "the CPU)"};
+        }
+    }
+    if (by_timestamp()) {
+        return {false, "VMAF on the GPU with frames paired by timestamp (VML_FRAME_PAIRING)"};
+    }
+    std::string pipes = platform::environment_variable("VML_VMAF_PIPES").value_or("");
+    std::transform(pipes.begin(), pipes.end(), pipes.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (pipes == "canvas") {
+        return {false, "VMAF on the GPU with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)"};
+    }
+    return {true, std::nullopt};
 }
 
 // ------------------------------------------------------------------ progress
@@ -371,14 +424,15 @@ std::string first_characters(const std::string& text, std::size_t count) {
 }
 
 // A job's run line, as the window shows it under the Run button
-// (vmaf_app/ui/run_line.py). Here a job is one unit, FFmpeg's metrics on the
-// CPU: "CPU metrics 1–5 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR 23.3%
-// (9.8 fps, 0:00:22 remaining)", or "... starting" before FFmpeg counts
-// frames.
-std::string run_line(const std::vector<std::string>& keys, bool counting, long long done, long long whole,
-                     double fps) {
+// (vmaf_app/ui/run_line.py). Here a job is one unit, its metrics all in one
+// place, "CPU" or "GPU": "CPU metrics 1–5 of 5: VMAF v0.6.1, VMAF NEG, PSNR,
+// SSIM, XPSNR 23.3% (9.8 fps, 0:00:22 remaining)", or "... starting" before
+// FFmpeg counts frames.
+std::string run_line(std::string_view place, const std::vector<std::string>& keys, bool counting, long long done,
+                     long long whole, double fps) {
     const std::string count = std::to_string(keys.size());
-    std::string text = "CPU metrics " + (keys.size() == 1 ? "1" : "1\u2013" + count) + " of " + count + ": ";
+    std::string text =
+        std::string(place) + " metrics " + (keys.size() == 1 ? "1" : "1\u2013" + count) + " of " + count + ": ";
     for (std::size_t i = 0; i < keys.size(); ++i) {
         text += (i == 0 ? "" : ", ") + std::string(metric_definition(keys[i]).label);
     }
@@ -462,52 +516,81 @@ private:
 
 // ------------------------------------------------------------------- the run
 
-// One video to score: which test video, and the options its run uses.
+// One video to score: which test video, the options its run uses, and
+// whether its VMAF and NEG are scored on the GPU (gpu_decision).
 struct Job {
     std::size_t video;
     VmafOptions options;
+    bool on_gpu = false;
 };
 
-// Runs the jobs on up to `parallel` lanes at once, keeping each video's
-// result, or why it failed, in its TestVideo.
+// Runs the jobs, keeping each video's result, or why it failed, in its
+// TestVideo, as the Python app's scheduler runs a video's tasks (here each
+// video is one): those on the CPU on up to `parallel` lanes at once, in list
+// order, and those on the GPU on a lane of their own, one at a time.
 void run_jobs(const RunEnvironment& environment, const VideoInfo& source, std::vector<TestVideo>& videos,
               const std::vector<Job>& jobs, int parallel, Progress& progress, const CancelToken& cancel) {
-    const int lanes = std::max(1, std::min({std::max(1, parallel), max_parallel_jobs, static_cast<int>(jobs.size())}));
-    std::atomic<std::size_t> next{0};
-    const auto lane = [&] {
-        for (std::size_t index = next++; index < jobs.size() && !cancel.cancelled(); index = next++) {
-            TestVideo& video = videos[jobs[index].video];
-            VmafOptions options = jobs[index].options;
-            // Two videos at once share the cores: "Auto" threads become half
-            // of them each. A thread count the user chose is kept.
-            if (options.n_threads <= 0 && lanes > 1) {
-                options.n_threads = static_cast<int>(std::max(1u, environment.cores / static_cast<unsigned>(lanes)));
-            }
-            progress.message(video.name() + ": started");
-            const auto show = [&](bool counting, long long done, long long whole, double fps) {
-                progress.job(index, video.name() + ": " + run_line(video.metrics, counting, done, whole, fps));
-            };
-            show(false, 0, 0, 0.0);
-            try {
-                video.result = run_vmaf(
-                    environment, source, *video.info, options,
-                    [&show](long long done, long long whole, double fps) { show(true, done, whole, fps); }, cancel,
-                    video.path);
-                progress.message(video.name() + ": done");
-            } catch (const Cancelled&) {
-                return;
-            } catch (const std::exception& error) {
-                video.error = error.what();
-                progress.message(video.name() + ": FAILED: " + video.error);
-            }
+    std::vector<std::size_t> cpu_jobs;
+    std::vector<std::size_t> gpu_jobs;
+    for (std::size_t index = 0; index < jobs.size(); ++index) {
+        (jobs[index].on_gpu ? gpu_jobs : cpu_jobs).push_back(index);
+    }
+    const int cpu_lanes = std::min({std::max(1, parallel), max_parallel_jobs, static_cast<int>(cpu_jobs.size())});
+    // Videos on the CPU at once share the cores: "Auto" threads become an
+    // equal share each (a video on the GPU gets the same share for its CPU
+    // fallback). A thread count the user chose is kept.
+    const unsigned sharing = static_cast<unsigned>(std::max(1, cpu_lanes));
+
+    const auto run_job = [&](std::size_t index) {
+        TestVideo& video = videos[jobs[index].video];
+        VmafOptions options = jobs[index].options;
+        if (options.n_threads <= 0 && sharing > 1) {
+            options.n_threads = static_cast<int>(std::max(1u, environment.cores / sharing));
+        }
+        progress.message(video.name() + ": started");
+        // Where the job's metrics are being calculated: the GPU's VMAF moves
+        // to the CPU when it fails there.
+        auto place = std::make_shared<std::atomic<bool>>(jobs[index].on_gpu);
+        const auto show = [&video, &progress, index, place](bool counting, long long done, long long whole,
+                                                            double fps) {
+            progress.job(index, video.name() + ": " +
+                                    run_line(*place ? "GPU" : "CPU", video.metrics, counting, done, whole, fps));
+        };
+        show(false, 0, 0, 0.0);
+        try {
+            video.result = run_vmaf(
+                environment, source, *video.info, options,
+                [&show](long long done, long long whole, double fps) { show(true, done, whole, fps); },
+                [&show, place](const RunStatus& status) {
+                    if (status.kind == StatusKind::gpu_vmaf_failed) {
+                        *place = false;  // FFmpeg's libvmaf takes over on the CPU, from frame 0
+                        show(false, 0, 0, 0.0);
+                    }
+                },
+                cancel, video.path);
+            progress.message(video.name() + ": done");
+        } catch (const Cancelled&) {
+        } catch (const std::exception& error) {
+            video.error = error.what();
+            progress.message(video.name() + ": FAILED: " + video.error);
         }
     };
-    std::vector<std::thread> others;
-    for (int i = 1; i < lanes; ++i) {
-        others.emplace_back(lane);
+    // Each lane takes the next job of its queue until the queue is empty.
+    std::atomic<std::size_t> next_cpu{0};
+    std::atomic<std::size_t> next_gpu{0};
+    const auto lane = [&](const std::vector<std::size_t>& queue, std::atomic<std::size_t>& next) {
+        for (std::size_t at = next++; at < queue.size() && !cancel.cancelled(); at = next++) {
+            run_job(queue[at]);
+        }
+    };
+    std::vector<std::thread> lanes;
+    for (int i = 0; i < (cpu_jobs.empty() ? 0 : cpu_lanes); ++i) {
+        lanes.emplace_back(lane, std::cref(cpu_jobs), std::ref(next_cpu));
     }
-    lane();
-    for (std::thread& thread : others) {
+    if (!gpu_jobs.empty()) {
+        lanes.emplace_back(lane, std::cref(gpu_jobs), std::ref(next_gpu));
+    }
+    for (std::thread& thread : lanes) {
         thread.join();
     }
 }
@@ -631,6 +714,7 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
 
 int compare(const CompareArguments& arguments) {
     const Settings settings = Settings::load();
+    set_gpu_backend(settings.gpu_backend);
     const std::filesystem::path cache_folder =
         settings.cache_dir_path().value_or(platform::home_directory() / ".videometricslab" / "results_cache");
     set_crop_store([cache_folder] {
@@ -696,7 +780,12 @@ int compare(const CompareArguments& arguments) {
             const auto [width, height] = analysis_dimensions(source, *video.info, video.options);
             VmafOptions options = video.options;
             options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
-            jobs.push_back(Job{videos.size() - 1, std::move(options)});
+            const GpuDecision gpu = gpu_decision(source, *video.info, options, video.metrics);
+            if (gpu.not_yet) {
+                print_error("The C++ command line cannot do this yet: " + *gpu.not_yet + ".");
+                return exit_usage;
+            }
+            jobs.push_back(Job{videos.size() - 1, std::move(options), gpu.on_gpu});
         } catch (const std::exception& error) {
             video.error = error.what();
             if (video.error.starts_with("Durations do not match")) {
