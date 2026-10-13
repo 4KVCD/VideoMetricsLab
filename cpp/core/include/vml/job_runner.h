@@ -35,8 +35,8 @@ namespace vml {
 // (the Python app's MAX_PARALLEL_JOBS, measured there).
 inline constexpr int max_parallel_jobs = 2;
 
-// The task of VMAF and NEG calculated on the GPU (plan_tasks); the other one
-// is FFmpeg's, "ffmpeg".
+// The task of VMAF, NEG and VMAF v1 calculated on the GPU (plan_tasks); the
+// other one is FFmpeg's, "ffmpeg".
 inline constexpr std::string_view gpu_vmaf_task = "vmaf_gpu";
 
 // The part of a video's metrics that one program calculates in one place.
@@ -49,12 +49,11 @@ struct MetricTask {
 };
 
 // The tasks FFmpeg's metrics (`metric_keys`) are calculated in for a video
-// (the Python app's JobRun._by_place): one task on the CPU, less VMAF and
-// NEG where the GPU scores them (scores_on_gpu), which make a task of their
-// own on the GPU. In the same FFmpeg as PSNR, SSIM and XPSNR they would go
-// at those metrics' pace. `options.model` is the run's model= value. (The
-// Python app's GPU task takes VMAF v1 too; the C++ app does not score it
-// on the GPU yet.)
+// (the Python app's JobRun._by_place): one task on the CPU, less VMAF, NEG
+// and VMAF v1 where the GPU scores them (scores_on_gpu), which make a task
+// of their own on the GPU. In the same FFmpeg as PSNR, SSIM and XPSNR they
+// would go at those metrics' pace. `options.model` is the run's model=
+// value; `options.model_v1` is empty while VMAF v1's Auto is not resolved.
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys);
 

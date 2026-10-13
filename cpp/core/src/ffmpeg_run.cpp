@@ -33,6 +33,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/time_format.h"
+#include "vml/vmaf_v1_gpu.h"
 
 namespace vml {
 
@@ -799,8 +800,9 @@ std::string doing(const GpuPlan& plan) {
 
 // The plan's metrics scored outside FFmpeg's filters, each video decoded by
 // an FFmpeg of its own whose frames the app pairs and the plan's scorer
-// scores (GpuAttempt): VMAF and NEG on the GPU, or PSNR, SSIM and XPSNR in
-// the app. Falls back to other decode plans when hardware decoding fails.
+// scores (GpuAttempt): VMAF, NEG and VMAF v1 on the GPU, or PSNR, SSIM and
+// XPSNR in the app. Falls back to other decode plans when hardware decoding
+// fails.
 ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                              const VmafOptions& options, const std::optional<CropBox>& source_crop,
                              const std::optional<CropBox>& distorted_crop, const GpuPlan& plan, double fps,
@@ -872,9 +874,10 @@ std::vector<std::string> plan_keys(const GpuPlan& plan) {
 }
 
 // The plan's metrics with both videos decoded in this process (the Python
-// app's _score_decoded_on_gpu): VMAF and NEG on the GPU (score_decoded), or
-// PSNR, SSIM and XPSNR in the app (score_decoded_cpu), over the same frames
-// execute_gpu_run's FFmpegs would give the scorer.
+// app's _score_decoded_on_gpu): VMAF and NEG on the GPU (score_decoded),
+// with VMAF v1 from whole frames (score_decoded_v1), or PSNR, SSIM and XPSNR
+// in the app (score_decoded_cpu), over the same frames execute_gpu_run's
+// FFmpegs would give the scorer.
 ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoInfo& source,
                                 const VideoInfo& distorted, const VmafOptions& options,
                                 const std::optional<CropBox>& source_crop,
@@ -888,12 +891,17 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
     if (on_status) {
         on_status(decoding_status("Running " + doing(plan), decoding));
     }
+    const std::vector<std::string> keys = plan_keys(plan);
     const PairScores scored =
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
-                                plan.bit_depth, plan_keys(plan), options.n_subsample, limit_text, total_frames,
-                                decoders, plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
+                                plan.bit_depth, keys, options.n_subsample, limit_text, total_frames, decoders,
+                                plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
                                 environment.ffprobe, on_progress, cancel)
+        : std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end()
+            ? score_decoded_v1(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, limit_text,
+                               total_frames, options.scale_algorithm, decoders, environment.ffmpeg,
+                               environment.ffprobe, on_progress, cancel)
             : score_decoded(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, limit_text,
                             total_frames, options.scale_algorithm, decoders, environment.ffmpeg, environment.ffprobe,
                             on_progress, cancel);
@@ -1308,10 +1316,10 @@ ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& envir
     return scores;
 }
 
-// VMAF and NEG on the GPU (score_plan), one GPU pass at a time, in a process
-// of its own where a program to run it is set (score_plan_apart). Nothing
-// when it fails, for any reason but Cancel: the run is then made again with
-// VMAF on the CPU, as on a PC without a GPU that scores it.
+// VMAF, NEG and VMAF v1 on the GPU (score_plan), one GPU pass at a time, in
+// a process of its own where a program to run it is set (score_plan_apart).
+// Nothing when it fails, for any reason but Cancel: the run is then made
+// again with VMAF on the CPU, as on a PC without a GPU that scores it.
 std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
                                        const VideoInfo& distorted, const VmafOptions& options,
                                        const std::optional<CropBox>& source_crop,
@@ -1671,21 +1679,17 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     }
     const long long total_frames = estimate_total_frames(distorted, options, &source);
 
-    // VMAF is scored on the GPU only when VMAF and NEG are all the run
-    // scores: the command line puts them in a run of their own, apart from
-    // FFmpeg's other metrics.
+    // VMAF is scored on the GPU only when VMAF, NEG and VMAF v1 are all the
+    // run scores: the command line puts them in a run of their own, apart
+    // from FFmpeg's other metrics.
     const std::vector<std::string> requested = options.requested_metrics();
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     GpuModels gpu;
     if (std::all_of(requested.begin(), requested.end(), [](const std::string& key) {
             return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
         })) {
-        if (options.compute_vmaf_v1 && options.vmaf_on_gpu) {
-            // The command line refuses such a run before it starts.
-            throw VmafRunError("VMAF v1 on the GPU is not in the C++ app yet");
-        }
         gpu = scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, model, options.vmaf_on_gpu, depth,
-                            std::pair(width, height));
+                            std::pair(width, height), options.compute_vmaf_v1, options.model_v1);
         if (gpu.size() != requested.size()) {
             gpu.clear();  // one is calculated on the CPU: FFmpeg's libvmaf calculates them all together
         }
@@ -1694,13 +1698,18 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     std::set<std::string, std::less<>> gpu_keys;
     if (!gpu.empty()) {
         const GpuVmafBackend backend = gpu_vmaf_backend();
-        if (backend.backend != "vulkan" || !backend.device) {
+        // VMAF v1 runs on Vulkan, on the best GPU when VMAF v0.6.1 is not
+        // scored on the GPU here.
+        const bool v1_alone =
+            std::all_of(gpu.begin(), gpu.end(), [](const auto& entry) { return entry.first == "vmaf_v1"; });
+        if (!v1_alone && (backend.backend != "vulkan" || !backend.device)) {
             // The command line refuses such a run before it starts.
             throw VmafRunError("VMAF on the GPU with libvmaf's CUDA code is not in the C++ app yet");
         }
+        const int device = backend.backend == "vulkan" && backend.device ? *backend.device : -1;
         scores = run_on_gpu(environment, source, distorted, options, source_crop, distorted_crop,
-                            GpuPlan{gpu, width, height, depth, *backend.device}, distorted.fps, total_frames,
-                            decoding, on_progress, on_status, cancel);
+                            GpuPlan{gpu, width, height, depth, device}, distorted.fps, total_frames, decoding,
+                            on_progress, on_status, cancel);
         if (scores) {
             for (const auto& [key, version] : gpu) {
                 gpu_keys.insert(key);
@@ -1771,7 +1780,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
             // within 4e-5), made on the GPU by the bundled build.
             provenance.implementation = "libvmaf/vulkan";
             provenance.compute_backend = "gpu";
-            provenance.implementation_version = vulkan_library_build();
+            provenance.implementation_version = key == "vmaf_v1" ? v1_library_build() : vulkan_library_build();
         }
         result.metric_results.add(
             FrameMetricResult{key, scores->frame, scores->time, scores->metrics.at(key), std::move(provenance)});

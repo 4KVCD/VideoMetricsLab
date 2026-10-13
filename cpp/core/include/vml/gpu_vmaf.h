@@ -1,10 +1,10 @@
-// VMAF and VMAF NEG on the GPU: which runs score them there, the check of
-// the GPU, and the frames' way to the Vulkan scorer, from one FFmpeg per
-// video or from the app's own decoders, paired frame N with frame N. A port
-// of the parts of vmaf_app/core/vmaf_gpu.py and vmaf_vulkan.py the C++ app
-// has so far. Not yet: libvmaf's CUDA code, VMAF v1 on the GPU, frames
-// paired by timestamp (VML_FRAME_PAIRING) and FFmpeg pairing them
-// (VML_VMAF_PIPES=canvas).
+// VMAF and VMAF NEG on the GPU: which runs score them there (VMAF v1 with
+// them, vmaf_v1_gpu.h), the check of the GPU, and the frames' way to the
+// Vulkan scorer, from one FFmpeg per video or from the app's own decoders,
+// paired frame N with frame N. A port of the parts of
+// vmaf_app/core/vmaf_gpu.py and vmaf_vulkan.py the C++ app has so far. Not
+// yet: libvmaf's CUDA code, frames paired by timestamp (VML_FRAME_PAIRING)
+// and FFmpeg pairing them (VML_VMAF_PIPES=canvas).
 #pragma once
 
 #include <cstddef>
@@ -25,13 +25,16 @@
 namespace vml {
 
 // The models a run scores on the GPU: each metric's key ("vmaf",
-// "vmaf_neg") with the libvmaf model it is scored with ("vmaf_v0.6.1").
+// "vmaf_neg") with the libvmaf model it is scored with ("vmaf_v0.6.1"), and
+// VMAF v1's ("vmaf_v1") with its model's "path=<file>".
 using GpuModels = std::vector<std::pair<std::string, std::string>>;
 
-// The models of VMAF and NEG a run scores on the GPU, or none. VMAF with a
-// custom model file is calculated on the CPU, and so is NEG beside it.
-// `model` is the run's model= value ("version=vmaf_v0.6.1").
-GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model);
+// The models of VMAF, NEG and VMAF v1 a run scores on the GPU, or none.
+// VMAF with a custom model file is calculated on the CPU, and so is NEG
+// beside it. `model` is the run's model= value ("version=vmaf_v0.6.1");
+// `model_v1`, VMAF v1's "path=<file>".
+GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model,
+                     bool compute_vmaf_v1 = false, const std::string& model_v1 = "");
 
 // The GPU backend setting ("auto", "vulkan" or "cuda"): which backend is
 // tried first. The GPU is checked again when it changes that.
@@ -54,19 +57,24 @@ GpuVmafBackend gpu_vmaf_backend();
 // The models a run scores on the GPU (gpu_models), or none when its VMAF is
 // calculated on the CPU: VMAF set to the CPU (`enabled`), a custom model, a
 // comparison deeper than 10 bits, an odd width or height (`size`, where
-// known), or no GPU that scores VMAF here (gpu_vmaf_backend).
+// known), or no GPU that scores VMAF here (gpu_vmaf_backend). VMAF v1 is
+// included where the GPU calculates it (vmaf_v1_gpu.h's v1_on_gpu). What
+// the GPU does not score is left out, and FFmpeg's libvmaf calculates it.
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
-                        int bit_depth, std::optional<std::pair<int, int>> size);
+                        int bit_depth, std::optional<std::pair<int, int>> size, bool compute_vmaf_v1 = false,
+                        const std::string& model_v1 = "");
 
 // What a run scores outside FFmpeg, and how (the Python app's _GpuPlan):
-// VMAF and NEG on the GPU, or PSNR, SSIM and XPSNR with libvmaf's CPU
-// extractors.
+// VMAF, NEG and VMAF v1 on the GPU, or PSNR, SSIM and XPSNR with libvmaf's
+// CPU extractors.
 struct GpuPlan {
     GpuModels models;  // with backend "cpu": each metric's key with itself
     int width = 0;     // the size and depth frames are compared at
     int height = 0;
     int bit_depth = 8;
-    int device = 0;  // Vulkan's number for the GPU
+    // Vulkan's number for the GPU; -1 for the best one, for VMAF v1 alone
+    // where VMAF v0.6.1 would not be scored on the GPU.
+    int device = 0;
     // "vulkan", or "cpu" for PSNR, SSIM and XPSNR with libvmaf's CPU
     // extractors (libvmaf_cpu.h), which take their frames the same way.
     std::string backend = "vulkan";

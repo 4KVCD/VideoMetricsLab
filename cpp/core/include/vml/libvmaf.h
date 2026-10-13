@@ -55,6 +55,12 @@ struct Libvmaf {
     decltype(&::vmaf_picture_unref) picture_unref;
     decltype(&::vmaf_read_pictures) read_pictures;
     decltype(&::vmaf_feature_score_at_index) feature_score_at_index;
+    // For VMAF v1 (vmaf_v1_gpu.h): a model from its file, the extractors it
+    // reads, the output that names their scores, and pictures for the probe.
+    decltype(&::vmaf_model_load_from_path) model_load_from_path;
+    decltype(&::vmaf_use_features_from_model) use_features_from_model;
+    decltype(&::vmaf_write_output) write_output;
+    decltype(&::vmaf_picture_alloc) picture_alloc;
 };
 
 // Where the bundled library is, with its build record.
@@ -81,5 +87,13 @@ using FeatureValues = std::pair<std::string, std::span<const double>>;
 // decimals, as the Python app keeps it. Throws LibvmafError.
 std::vector<double> predict_scores(const std::string& version, const std::vector<unsigned>& frames,
                                    const std::vector<FeatureValues>& features);
+
+// predict_scores for the model in the file `model` (VMAF v1's).
+std::vector<double> predict_model_file_scores(const std::filesystem::path& model, const std::vector<unsigned>& frames,
+                                              const std::vector<FeatureValues>& features);
+
+// A file's path as libvmaf opens it (platform::fopen_path). Throws
+// LibvmafError when it cannot name it.
+std::string libvmaf_path(const std::filesystem::path& file);
 
 }  // namespace vml

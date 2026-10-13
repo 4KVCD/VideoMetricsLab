@@ -17,6 +17,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
+#include "vml/vmaf_v1_gpu.h"
 
 namespace vml {
 
@@ -162,23 +163,26 @@ GpuVmafBackend probe_backends(const std::string& preference) {
 
 }  // namespace
 
-GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model) {
+GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool compute_vmaf_v1,
+                     const std::string& model_v1) {
     GpuModels models;
-    if (!compute_vmaf && !compute_vmaf_neg) {
-        return models;
-    }
-    std::optional<std::string> version("");
-    if (compute_vmaf) {
-        const auto built_in = built_in_gpu_models.find(model);
-        version = built_in != built_in_gpu_models.end() ? std::optional(built_in->second) : std::nullopt;
-    }
-    if (version) {
+    if (compute_vmaf || compute_vmaf_neg) {
+        std::optional<std::string> version("");
         if (compute_vmaf) {
-            models.emplace_back("vmaf", *version);
+            const auto built_in = built_in_gpu_models.find(model);
+            version = built_in != built_in_gpu_models.end() ? std::optional(built_in->second) : std::nullopt;
         }
-        if (compute_vmaf_neg) {
-            models.emplace_back("vmaf_neg", neg_model);
+        if (version) {
+            if (compute_vmaf) {
+                models.emplace_back("vmaf", *version);
+            }
+            if (compute_vmaf_neg) {
+                models.emplace_back("vmaf_neg", neg_model);
+            }
         }
+    }
+    if (compute_vmaf_v1) {
+        models.emplace_back("vmaf_v1", model_v1);
     }
     return models;
 }
@@ -202,15 +206,21 @@ GpuVmafBackend gpu_vmaf_backend() {
 }
 
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
-                        int bit_depth, std::optional<std::pair<int, int>> size) {
+                        int bit_depth, std::optional<std::pair<int, int>> size, bool compute_vmaf_v1,
+                        const std::string& model_v1) {
     // Deeper than 10 bits, or at an odd size, the frame pairs could not
     // cross FFmpeg's overlay, which the Python app can pair them with.
     if (!enabled || bit_depth > 10 || (size && ((size->first & 1) != 0 || (size->second & 1) != 0))) {
         return {};
     }
-    GpuModels models = gpu_models(compute_vmaf, compute_vmaf_neg, model);
-    if (models.empty() || gpu_vmaf_backend().backend.empty()) {
-        return {};
+    GpuModels models = gpu_models(compute_vmaf, compute_vmaf_neg, model, compute_vmaf_v1, model_v1);
+    const auto is_v1 = [](const auto& entry) { return entry.first == "vmaf_v1"; };
+    if (std::any_of(models.begin(), models.end(), is_v1) && !v1_on_gpu(model_v1, size)) {
+        std::erase_if(models, is_v1);
+    }
+    // VMAF v1 runs on Vulkan whatever scores VMAF v0.6.1 and NEG.
+    if (!std::all_of(models.begin(), models.end(), is_v1) && gpu_vmaf_backend().backend.empty()) {
+        std::erase_if(models, [&](const auto& entry) { return !is_v1(entry); });
     }
     return models;
 }
@@ -400,6 +410,10 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
         }
         s.scorer = std::make_unique<CpuScorer>(plan.width, plan.height, plan.bit_depth, metrics, n_subsample,
                                                plan.threads, plan.frame_rate);
+    } else if (std::any_of(plan.models.begin(), plan.models.end(),
+                           [](const auto& model) { return model.first == "vmaf_v1"; })) {
+        s.scorer = std::make_unique<MultiScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
+                                                 plan.device >= 0 ? std::optional(plan.device) : std::nullopt);
     } else {
         s.scorer = std::make_unique<VulkanScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
                                                   plan.device);

@@ -1,8 +1,8 @@
 // Comparing two videos: with FFmpeg's own metric filters, libvmaf (VMAF
-// v0.6.1, NEG and v1, PSNR, SSIM) and xpsnr, on the CPU; or with VMAF and
-// NEG scored on the GPU by the Vulkan engine (gpu_vmaf.h), from frames the
-// app decodes itself (gpu_frames.h) or FFmpeg's, and FFmpeg's filters
-// taking over if that fails. A port of
+// v0.6.1, NEG and v1, PSNR, SSIM) and xpsnr, on the CPU; or with VMAF, NEG
+// and VMAF v1 scored on the GPU by the Vulkan engine (gpu_vmaf.h,
+// vmaf_v1_gpu.h), from frames the app decodes itself (gpu_frames.h) or
+// FFmpeg's, and FFmpeg's filters taking over if that fails. A port of
 // vmaf_app/core/vmaf_runner.py: the same checks, the same filter graphs and
 // commands, the same fallback from GPU decoding, and the same reading of
 // the logs.
@@ -136,17 +136,17 @@ FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
                               const std::optional<std::filesystem::path>& xpsnr_log);
 
 // The child's side of a run's scoring in a process of its own (isolated.h):
-// VMAF and NEG on the GPU, or PSNR, SSIM and XPSNR in the app, as the plan
-// in `request` says. Scores the run `request` describes, sending its
-// progress and statuses, leaves the scores in a file in `folder`, and
+// VMAF, NEG and VMAF v1 on the GPU, or PSNR, SSIM and XPSNR in the app, as
+// the plan in `request` says. Scores the run `request` describes, sending
+// its progress and statuses, leaves the scores in a file in `folder`, and
 // returns what the parent needs to read them.
 nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder);
 
 // Compares two videos and returns the result, with every requested metric's
-// scores: VMAF and NEG on the GPU when they are the run's only metrics and
-// the GPU can score them (scores_on_gpu); PSNR, SSIM and XPSNR in the app
-// when they are its only metrics; with FFmpeg's metric filters otherwise or
-// when that fails. The GPU's and the app's parts run in a process of their
+// scores: VMAF, NEG and VMAF v1 on the GPU when they are the run's only
+// metrics and the GPU can score them (scores_on_gpu); PSNR, SSIM and XPSNR
+// in the app when they are its only metrics; with FFmpeg's metric filters
+// otherwise or when that fails. The GPU's and the app's parts run in a process of their
 // own where a program to run them is set (isolated.h). Throws VmafRunError
 // when the run fails, and Cancelled. `result_distorted_path` is the path
 // the result carries for the test video (by default, its own).

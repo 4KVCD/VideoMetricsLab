@@ -16,6 +16,7 @@
 #include "vml/platform/console.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/vmaf_v1_gpu.h"
 #include "vml/vmaf_vulkan.h"
 
 namespace vml {
@@ -192,6 +193,9 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             result = {{"available", probe.available},
                       {"device", probe.device ? nlohmann::json(*probe.device) : nlohmann::json(nullptr)},
                       {"text", probe.text}};
+        } else if (task == "vmaf-v1-probe") {
+            const V1Probe probe = probe_v1();
+            result = {{"available", probe.available}, {"text", probe.text}};
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());
         } else if (task == "test-echo") {

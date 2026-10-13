@@ -3,6 +3,8 @@
 #include <nlohmann/json.hpp>
 
 #include <fstream>
+#include <functional>
+#include <optional>
 
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -32,6 +34,55 @@ struct ContextAndModel {
 // A score kept to 6 decimals, as the Python app keeps it: float(f"{v:.6f}").
 double to_6_decimals(double value) { return python_float(format_fixed(value, 6)).value_or(value); }
 
+// A model's scores for frames, predicted by libvmaf from `features`, the
+// model loaded by `load` (which gets the model's handle to set and its
+// configuration, and returns libvmaf's answer). `model_name` is for
+// messages.
+std::vector<double> predict(const std::function<int(VmafModel**, VmafModelConfig*)>& load,
+                            const std::string& model_name, const std::vector<unsigned>& frames,
+                            const std::vector<FeatureValues>& features) {
+    for (const auto& [name, values] : features) {
+        if (values.size() != frames.size()) {
+            throw std::invalid_argument(name + " has " + std::to_string(values.size()) + " values for " +
+                                        std::to_string(frames.size()) + " frames");
+        }
+    }
+    const Libvmaf& library = libvmaf();
+    ContextAndModel handles{library};
+    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0};
+    // When vmaf_init fails it frees the context it made but leaves the
+    // pointer to it set, so the context is only kept once it has started.
+    VmafContext* context = nullptr;
+    check_libvmaf(library.init(&context, configuration), "Starting libvmaf");
+    handles.context = context;
+    // Loading a model can fail after making it, and leaves it set; it is
+    // then destroyed like a loaded one.
+    VmafModelConfig model_config{"vmaf", 0};
+    check_libvmaf(load(&handles.model, &model_config), "Loading the " + model_name + " model");
+    // These calls are made for every frame, so what failed is only put into
+    // words when one does.
+    const auto check_frame = [](int error, const char* what, unsigned frame) {
+        if (error != 0) {
+            check_libvmaf(error, what + std::to_string(frame));
+        }
+    };
+    for (const auto& [name, values] : features) {
+        for (std::size_t i = 0; i < frames.size(); ++i) {
+            check_frame(library.import_feature_score(handles.context, name.c_str(), values[i], frames[i]),
+                        "Giving libvmaf frame ", frames[i]);
+        }
+    }
+    std::vector<double> scores;
+    scores.reserve(frames.size());
+    for (const unsigned frame : frames) {
+        double score = 0.0;
+        check_frame(library.score_at_index(handles.context, handles.model, &score, frame), "Predicting frame ",
+                    frame);
+        scores.push_back(to_6_decimals(score));
+    }
+    return scores;
+}
+
 }  // namespace
 
 void check_libvmaf(int error, const std::string& what) {
@@ -57,7 +108,11 @@ Libvmaf::Libvmaf(const std::filesystem::path& path)
           library.function<decltype(fetch_preallocated_picture)>("vmaf_fetch_preallocated_picture")),
       picture_unref(library.function<decltype(picture_unref)>("vmaf_picture_unref")),
       read_pictures(library.function<decltype(read_pictures)>("vmaf_read_pictures")),
-      feature_score_at_index(library.function<decltype(feature_score_at_index)>("vmaf_feature_score_at_index")) {
+      feature_score_at_index(library.function<decltype(feature_score_at_index)>("vmaf_feature_score_at_index")),
+      model_load_from_path(library.function<decltype(model_load_from_path)>("vmaf_model_load_from_path")),
+      use_features_from_model(library.function<decltype(use_features_from_model)>("vmaf_use_features_from_model")),
+      write_output(library.function<decltype(write_output)>("vmaf_write_output")),
+      picture_alloc(library.function<decltype(picture_alloc)>("vmaf_picture_alloc")) {
     // VmafPicture gained its colour field with vmaf_picture_convert (Netflix/vmaf
     // 0497a0f2). A library without that function lays its pictures out
     // without the field, as the app's headers do not.
@@ -94,47 +149,29 @@ std::string libvmaf_fast_version() {
 
 std::vector<double> predict_scores(const std::string& version, const std::vector<unsigned>& frames,
                                    const std::vector<FeatureValues>& features) {
-    for (const auto& [name, values] : features) {
-        if (values.size() != frames.size()) {
-            throw std::invalid_argument(name + " has " + std::to_string(values.size()) + " values for " +
-                                        std::to_string(frames.size()) + " frames");
-        }
-    }
     const Libvmaf& library = libvmaf();
-    ContextAndModel handles{library};
-    const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0};
-    // When vmaf_init fails it frees the context it made but leaves the
-    // pointer to it set, so the context is only kept once it has started.
-    VmafContext* context = nullptr;
-    check_libvmaf(library.init(&context, configuration), "Starting libvmaf");
-    handles.context = context;
-    // vmaf_model_load can fail after making the model, and leaves it set;
-    // it is then destroyed like a loaded one.
-    VmafModelConfig model_config{"vmaf", 0};
-    check_libvmaf(library.model_load(&handles.model, &model_config, version.c_str()),
-                  "Loading the " + version + " model");
-    // These calls are made for every frame, so what failed is only put into
-    // words when one does.
-    const auto check_frame = [](int error, const char* what, unsigned frame) {
-        if (error != 0) {
-            check_libvmaf(error, what + std::to_string(frame));
-        }
-    };
-    for (const auto& [name, values] : features) {
-        for (std::size_t i = 0; i < frames.size(); ++i) {
-            check_frame(library.import_feature_score(handles.context, name.c_str(), values[i], frames[i]),
-                        "Giving libvmaf frame ", frames[i]);
-        }
+    return predict(
+        [&](VmafModel** model, VmafModelConfig* config) { return library.model_load(model, config, version.c_str()); },
+        version, frames, features);
+}
+
+std::vector<double> predict_model_file_scores(const std::filesystem::path& model, const std::vector<unsigned>& frames,
+                                              const std::vector<FeatureValues>& features) {
+    const Libvmaf& library = libvmaf();
+    const std::string path = libvmaf_path(model);
+    return predict(
+        [&](VmafModel** loaded, VmafModelConfig* config) {
+            return library.model_load_from_path(loaded, config, path.c_str());
+        },
+        platform::path_text(model.filename()), frames, features);
+}
+
+std::string libvmaf_path(const std::filesystem::path& file) {
+    if (std::optional<std::string> path = platform::fopen_path(file)) {
+        return *path;
     }
-    std::vector<double> scores;
-    scores.reserve(frames.size());
-    for (const unsigned frame : frames) {
-        double score = 0.0;
-        check_frame(library.score_at_index(handles.context, handles.model, &score, frame), "Predicting frame ",
-                    frame);
-        scores.push_back(to_6_decimals(score));
-    }
-    return scores;
+    throw LibvmafError("libvmaf cannot open " + platform::path_text(file) +
+                       ": its name has letters outside this PC's code page");
 }
 
 }  // namespace vml

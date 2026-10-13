@@ -347,10 +347,6 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
         ascii_lower(platform::environment_variable("VML_VMAF_PIPES").value_or("")) == "canvas") {
         return "PSNR, SSIM or XPSNR with FFmpeg pairing the frames (VML_VMAF_PIPES=canvas)";
     }
-    if (std::find(asked.begin(), asked.end(), "vmaf_v1") != asked.end() &&
-        (vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu)) {
-        return "VMAF v1 on the GPU (--vmaf-on cpu scores it on the CPU)";
-    }
     if (!arguments.cvvdp_displays.empty()) {
         return "--cvvdp-display";
     }
@@ -360,10 +356,13 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
 // What this C++ version cannot do yet of a video's VMAF on the GPU (a task
 // of its own, plan_tasks), or nothing.
 std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
-    if (std::none_of(tasks.begin(), tasks.end(), [](const MetricTask& task) { return task.on_gpu(); })) {
+    const auto on_gpu = std::find_if(tasks.begin(), tasks.end(), [](const MetricTask& task) { return task.on_gpu(); });
+    if (on_gpu == tasks.end()) {
         return std::nullopt;
     }
-    if (gpu_vmaf_backend().backend != "vulkan") {
+    // VMAF v1 runs on Vulkan, whatever scores VMAF v0.6.1 and NEG.
+    const bool v1_alone = on_gpu->metric_keys == std::vector<std::string>{"vmaf_v1"};
+    if (!v1_alone && gpu_vmaf_backend().backend != "vulkan") {
         return "VMAF on the GPU with libvmaf's CUDA code (the GPU backend setting is CUDA, or Vulkan cannot score "
                "VMAF on this GPU)";
     }

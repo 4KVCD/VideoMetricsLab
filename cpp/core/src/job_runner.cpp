@@ -638,8 +638,9 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                    const std::vector<std::string>& metric_keys) {
     const bool vmaf = contains(metric_keys, "vmaf");
     const bool neg = contains(metric_keys, "vmaf_neg");
+    const bool v1 = contains(metric_keys, "vmaf_v1");
     GpuModels on_gpu;
-    if (vmaf || neg) {
+    if (vmaf || neg || v1) {
         // The size frames are compared at, where it is known before the run:
         // with black bars kept. Pictures with their black bars cut are
         // always even-sized.
@@ -648,7 +649,8 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
             size = analysis_dimensions(source, test, options);
         }
         on_gpu = scores_on_gpu(vmaf, neg, options.model, options.vmaf_on_gpu,
-                               bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt})), size);
+                               bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt})), size, v1,
+                               options.model_v1);
     }
     MetricTask ffmpeg{"ffmpeg", {}};
     MetricTask gpu{std::string(gpu_vmaf_task), {}};

@@ -157,4 +157,33 @@ std::string path_text(const std::filesystem::path& path) { return narrow(path.na
 
 std::filesystem::path path_from_text(std::string_view utf8) { return std::filesystem::path(widen(utf8)); }
 
+std::optional<std::string> fopen_path(const std::filesystem::path& path) {
+    // The ANSI code page's bytes for the name, when it has every letter.
+    const auto in_code_page = [](const std::wstring& name) -> std::optional<std::string> {
+        if (name.empty()) {
+            return std::string();
+        }
+        BOOL lost = FALSE;
+        const int bytes = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, name.data(), static_cast<int>(name.size()),
+                                              nullptr, 0, nullptr, &lost);
+        if (bytes <= 0 || lost) {
+            return std::nullopt;
+        }
+        std::string text(static_cast<std::size_t>(bytes), '\0');
+        WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, name.data(), static_cast<int>(name.size()), text.data(),
+                            bytes, nullptr, nullptr);
+        return text;
+    };
+    if (std::optional<std::string> text = in_code_page(path.native())) {
+        return text;
+    }
+    std::wstring short_name(32768, L'\0');
+    const DWORD length = GetShortPathNameW(path.c_str(), short_name.data(), static_cast<DWORD>(short_name.size()));
+    if (length == 0 || length >= short_name.size()) {
+        return std::nullopt;
+    }
+    short_name.resize(length);
+    return in_code_page(short_name);
+}
+
 }  // namespace vml::platform

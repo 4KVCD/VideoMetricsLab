@@ -64,4 +64,10 @@ std::optional<long long> modified_ns(const std::filesystem::path& file);
 std::string path_text(const std::filesystem::path& path);
 std::filesystem::path path_from_text(std::string_view utf8);
 
+// An existing file's path as a library that opens files with fopen() needs
+// it (libvmaf): on Windows in the ANSI code page, or, for a name with
+// letters the code page lacks, as its short 8.3 path, where the drive keeps
+// those; nothing when neither names it. Elsewhere, the path itself.
+std::optional<std::string> fopen_path(const std::filesystem::path& path);
+
 }  // namespace vml::platform

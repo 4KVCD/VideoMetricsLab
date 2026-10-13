@@ -74,7 +74,33 @@ struct VulkanEngine {
     // pair's planes go in it.
     int (*export_memory)(VulkanContext* context, int slot, void** handle, std::uint64_t* bytes);
     int (*shared_next)(VulkanContext* context, int* slot, std::uint32_t* stride, std::uint32_t* distorted_offset);
+    // VMAF v1's (vmaf_v1_gpu.h), each nullptr in an engine without it: a
+    // context for ADM3 and motion3 and their values; CAMBI and SpEED chroma
+    // on the GPU, started with the model's options, and their scores; a pair
+    // with its chroma; where a pair's chroma goes when a decoder writes it
+    // in, in system memory or in the shared buffers.
+    int (*create_v1)(VulkanContext** out, int device, int width, int height, int bit_depth, int flags,
+                     const double* options);
+    int (*features_v1)(VulkanContext* context, double* out, unsigned frames);
+    int (*v1_cambi)(VulkanContext* context, const double* options);
+    int (*v1_cambi_scores)(VulkanContext* context, double* out, unsigned frames);
+    int (*v1_speed)(VulkanContext* context, const double* options);
+    int (*v1_speed_scores)(VulkanContext* context, double* out, unsigned frames);
+    int (*submit_v1)(VulkanContext* context, const std::uint8_t* const* planes, const std::ptrdiff_t* strides,
+                     int score);
+    int (*chroma_staging)(VulkanContext* context, std::uint8_t** planes, std::uint32_t* stride);
+    int (*shared_chroma)(VulkanContext* context, std::uint64_t* offset, std::uint32_t* spacing, std::uint32_t* stride);
 };
+
+// How many frames the engine works on at once, as the Python app asks for
+// (bits 8 to 15 of a context's flags).
+inline constexpr int vulkan_frames_in_flight = 3;
+// The flag of a context whose frames come from GPU memory (SharedSlots).
+inline constexpr int vulkan_shared_flag = 1 << 19;
+
+// Throws VmafVulkanError saying that `what` failed, with the engine's
+// message, when `error` is one of the engine's errors (negative).
+void check_vulkan(const VulkanEngine& engine, int error, const std::string& what);
 
 // Where the bundled engine is.
 std::filesystem::path vulkan_engine_path();
@@ -93,6 +119,45 @@ std::vector<VulkanDevice> vulkan_devices();
 // The GPU to score on: a discrete one before an integrated one, each the
 // first Vulkan lists; nothing when no GPU can.
 std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& found);
+
+// The buffers that a context made with vulkan_shared_flag reads each pair's
+// planes from: GPU memory that a decoder on the same GPU imports and copies
+// the planes into, so that they never leave the GPU (the Python app's
+// SharedLumas). Only NVIDIA's decoder imports it.
+class SharedSlots {
+public:
+    // Throws VmafVulkanError when the decoder and Vulkan cannot share memory
+    // (another GPU, an old driver); the caller then scores from system memory.
+    SharedSlots(const VulkanEngine& engine, VulkanContext* context, GpuFrameStream& decoder);
+    // Gives the memory back to the decoder: before the decoder and the
+    // context are closed.
+    ~SharedSlots();
+    SharedSlots(const SharedSlots&) = delete;
+    SharedSlots& operator=(const SharedSlots&) = delete;
+
+    // Where the next pair's planes go: the source's and the test video's
+    // luma, rows `pitch` bytes apart, in the slot's memory starting at
+    // `base`. vv_commit scores them once they are written.
+    struct Next {
+        std::uint64_t reference = 0;
+        std::uint64_t distorted = 0;
+        std::uint32_t pitch = 0;
+        std::uint64_t base = 0;
+    };
+    Next next();
+
+    // How many slots there are: starting a pair waits until the pair this
+    // many before it is done.
+    std::size_t count() const { return imports_.size(); }
+
+private:
+    const VulkanEngine& engine_;
+    VulkanContext* context_;
+    GpuFrameStream& decoder_;
+    // Per slot: its address as the decoder imported it, and what it takes
+    // to give it back.
+    std::vector<std::pair<std::uint64_t, void*>> imports_;
+};
 
 // How many features the engine gives for each frame.
 inline constexpr std::size_t vulkan_feature_count = 12;
@@ -170,10 +235,8 @@ private:
     std::ptrdiff_t luma_stride_ = 0;
     std::size_t luma_bytes_ = 0;
     std::size_t frame_bytes_ = 0;
-    // With frames from GPU memory: the decoder, and each slot's memory as it
-    // imported it (its address there, and what it takes to give it back).
-    GpuFrameStream* shared_ = nullptr;
-    std::vector<std::pair<std::uint64_t, void*>> imports_;
+    // With frames from GPU memory: the memory the decoder imported.
+    std::optional<SharedSlots> shared_;
     // add_decoded's plane, written packed for a width whose rows the engine
     // pads.
     std::vector<std::uint8_t> packed_;

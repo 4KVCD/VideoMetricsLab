@@ -27,7 +27,7 @@
 // GpuDecodeFailedError after it.
 //
 // Not yet: AMD's pictures handed over on the GPU, and Windows' own decoders
-// with them, which the Python app uses for VMAF v1 on the GPU.
+// with them, which the Python app's VMAF v1 on the GPU reads in place.
 #pragma once
 
 #include <array>
@@ -240,6 +240,15 @@ public:
     // Copies the slot's luma plane to GPU memory at `address` that
     // import_memory imported, with rows `pitch` bytes apart (NVIDIA's).
     void copy_luma(int slot, std::uint64_t address, std::int64_t pitch);
+
+    // Whether copy_planes can copy this decoder's pictures (NVIDIA's).
+    bool copies_planes() const;
+
+    // As copy_luma, for the slot's Y, U and V planes, each to its own
+    // address in imported memory with rows `pitches` bytes apart; an address
+    // of 0 skips that plane.
+    void copy_planes(int slot, const std::array<std::uint64_t, 3>& addresses,
+                     const std::array<std::int64_t, 3>& pitches);
 
     // Imports GPU memory that Vulkan allocated on this GPU and exported (a
     // Win32 handle to one buffer's allocation of `size` bytes), so that

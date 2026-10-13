@@ -171,6 +171,7 @@ struct DecoderLibrary {
             pin = library.function<decltype(pin)>("nvf_pin");
             unpin = library.function<decltype(unpin)>("nvf_unpin");
             download_planes = library.function<decltype(download_planes)>("nvf_download_planes");
+            copy_planes = library.function<decltype(copy_planes)>("nvf_copy_planes");
         }
         if (takes_libraries) {
             set_libraries = library.function<decltype(set_libraries)>("nvf_set_libraries");
@@ -192,13 +193,14 @@ struct DecoderLibrary {
     // NVIDIA's, whose pictures stay on the GPU: GPU memory another API
     // allocated, as memory copy_luma writes into; memory of this process
     // page-locked for its copies; a picture's planes copied each to its own
-    // place.
+    // place, in this process's memory or in imported GPU memory.
     int (*import_memory)(void* decoder, void* handle, unsigned long long bytes, int dedicated,
                          unsigned long long* address, void** memory) = nullptr;
     void (*unimport)(void* decoder, void* memory) = nullptr;
     int (*pin)(void* decoder, void* host, unsigned long long bytes) = nullptr;
     int (*unpin)(void* decoder, void* host) = nullptr;
     int (*download_planes)(void* decoder, int slot, void* const* planes, const long long* pitches) = nullptr;
+    int (*copy_planes)(void* decoder, int slot, const unsigned long long* addresses, const long long* pitches) = nullptr;
     // The software decoder's: the libraries it decodes with (their handles).
     int (*set_libraries)(void* avutil, void* avcodec, void* dav1d) = nullptr;
 };
@@ -1093,6 +1095,20 @@ void GpuFrameStream::copy_luma(int slot, std::uint64_t address, std::int64_t pit
     State& state = *state_;
     if (state.library->copy_luma(state.handle, slot, address, pitch) != 0) {
         const std::string said = state.error_text();
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+    }
+}
+
+bool GpuFrameStream::copies_planes() const { return state_->library->copy_planes != nullptr; }
+
+void GpuFrameStream::copy_planes(int slot, const std::array<std::uint64_t, 3>& addresses,
+                                 const std::array<std::int64_t, 3>& pitches) {
+    State& state = *state_;
+    const std::array<unsigned long long, 3> places{addresses[0], addresses[1], addresses[2]};
+    const std::array<long long, 3> rows{pitches[0], pitches[1], pitches[2]};
+    if (state.library->copy_planes == nullptr ||
+        state.library->copy_planes(state.handle, slot, places.data(), rows.data()) != 0) {
+        const std::string said = state.library->copy_planes == nullptr ? std::string() : state.error_text();
         throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
     }
 }

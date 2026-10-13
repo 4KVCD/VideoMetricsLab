@@ -49,11 +49,6 @@ bool is_neg_model(const std::string& version) {
 // and CPU renderers.
 constexpr std::uint32_t type_integrated = 1, type_discrete = 2;
 
-// How many frames the engine works on at once, as the Python app asks for.
-constexpr int frames_in_flight = 3;
-// The engine's flag for a context whose frames come from GPU memory.
-constexpr int shared_flag = 1 << 19;
-
 // Vulkan's number for the GPU to score on, instead of the one
 // best_vulkan_device() picks. It is for testing an integrated GPU on a PC
 // that also has a discrete one.
@@ -81,10 +76,11 @@ constexpr int probe_width = 320, probe_height = 192;
     throw VmafVulkanError(what + " failed: " + replace_invalid_utf8(said != nullptr ? said : ""));
 }
 
-void check(const VulkanEngine& engine, int error, const std::string& what) {
-    if (error < 0) {
-        fail(engine, what);
-    }
+// The engine's function `name` as a pointer of type F, or nullptr when the
+// engine has none.
+template <typename F>
+F optional_function(const platform::DynamicLibrary& library, const char* name) {
+    return reinterpret_cast<F>(library.find(name));
 }
 
 // A sample of the probe's frames, as the engine reads it: a byte at 8 bits,
@@ -111,7 +107,22 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       staging(library.function<decltype(staging)>("vv_staging")),
       commit(library.function<decltype(commit)>("vv_commit")),
       export_memory(library.function<decltype(export_memory)>("vv_export")),
-      shared_next(library.function<decltype(shared_next)>("vv_shared_next")) {}
+      shared_next(library.function<decltype(shared_next)>("vv_shared_next")),
+      create_v1(optional_function<decltype(create_v1)>(library, "vv_create_v1")),
+      features_v1(optional_function<decltype(features_v1)>(library, "vv_features_v1")),
+      v1_cambi(optional_function<decltype(v1_cambi)>(library, "vv_v1_cambi")),
+      v1_cambi_scores(optional_function<decltype(v1_cambi_scores)>(library, "vv_v1_cambi_scores")),
+      v1_speed(optional_function<decltype(v1_speed)>(library, "vv_v1_speed")),
+      v1_speed_scores(optional_function<decltype(v1_speed_scores)>(library, "vv_v1_speed_scores")),
+      submit_v1(optional_function<decltype(submit_v1)>(library, "vv_submit_v1")),
+      chroma_staging(optional_function<decltype(chroma_staging)>(library, "vv_chroma_staging")),
+      shared_chroma(optional_function<decltype(shared_chroma)>(library, "vv_shared_chroma")) {}
+
+void check_vulkan(const VulkanEngine& engine, int error, const std::string& what) {
+    if (error < 0) {
+        fail(engine, what);
+    }
+}
 
 std::filesystem::path vulkan_engine_path() {
     return resource_folder() / "tools" / "vmaf_vulkan" / platform::shared_library_name("vmaf_vulkan");
@@ -131,7 +142,7 @@ std::string vulkan_library_build() { return "libvmaf-fast " + libvmaf_fast_versi
 std::vector<VulkanDevice> vulkan_devices() {
     const VulkanEngine& engine = vulkan_engine();
     const int count = engine.device(-1, nullptr, 0, nullptr, nullptr, nullptr);
-    check(engine, count, "Listing the GPUs");
+    check_vulkan(engine, count, "Listing the GPUs");
     std::vector<VulkanDevice> found;
     for (int index = 0; index < count; ++index) {
         std::array<char, 256> name{};
@@ -154,6 +165,46 @@ std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& 
     return best;
 }
 
+SharedSlots::SharedSlots(const VulkanEngine& engine, VulkanContext* context, GpuFrameStream& decoder)
+    : engine_(engine), context_(context), decoder_(decoder) {
+    try {
+        void* handle = nullptr;
+        std::uint64_t size = 0;
+        while (engine_.export_memory(context_, static_cast<int>(imports_.size()), &handle, &size) == 0) {
+            const std::optional<std::pair<std::uint64_t, void*>> imported = decoder_.import_memory(handle, size);
+            platform::close_native_handle(handle);
+            if (!imported) {
+                throw VmafVulkanError("the decoder cannot write into Vulkan's memory");
+            }
+            imports_.push_back(*imported);
+        }
+        if (imports_.empty()) {
+            const char* said = engine_.error();
+            throw VmafVulkanError("Vulkan's memory is not shared: " + replace_invalid_utf8(said != nullptr ? said : ""));
+        }
+    } catch (...) {
+        for (const auto& [address, memory] : imports_) {
+            decoder_.unimport(memory);
+        }
+        throw;
+    }
+}
+
+SharedSlots::~SharedSlots() {
+    for (const auto& [address, memory] : imports_) {
+        decoder_.unimport(memory);
+    }
+}
+
+SharedSlots::Next SharedSlots::next() {
+    int slot = 0;
+    std::uint32_t stride = 0;
+    std::uint32_t distorted_offset = 0;
+    check_vulkan(engine_, engine_.shared_next(context_, &slot, &stride, &distorted_offset), "Scoring a frame");
+    const std::uint64_t base = imports_.at(static_cast<std::size_t>(slot)).first;
+    return {base, base + distorted_offset, stride, base};
+}
+
 VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
                            std::vector<std::pair<std::string, std::string>> models, int n_subsample,
                            std::optional<int> device, GpuFrameStream* shared)
@@ -166,28 +217,11 @@ VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
         }
         device = chosen->index;
     }
-    const int flags = (frames_in_flight << 8) | (shared != nullptr ? shared_flag : 0);
+    const int flags = (vulkan_frames_in_flight << 8) | (shared != nullptr ? vulkan_shared_flag : 0);
     check(engine_.create(&context_, *device, width, height, bit_depth, flags), "Starting Vulkan");
     if (shared != nullptr) {
-        // Each slot's buffer, imported by the decoder that copies the planes
-        // into it.
-        shared_ = shared;
         try {
-            void* handle = nullptr;
-            std::uint64_t size = 0;
-            while (engine_.export_memory(context_, static_cast<int>(imports_.size()), &handle, &size) == 0) {
-                const std::optional<std::pair<std::uint64_t, void*>> imported = shared->import_memory(handle, size);
-                platform::close_native_handle(handle);
-                if (!imported) {
-                    throw VmafVulkanError("the decoder cannot write into Vulkan's memory");
-                }
-                imports_.push_back(*imported);
-            }
-            if (imports_.empty()) {
-                const char* said = engine_.error();
-                throw VmafVulkanError("Vulkan's memory is not shared: " +
-                                      replace_invalid_utf8(said != nullptr ? said : ""));
-            }
+            shared_.emplace(engine_, context_, *shared);
         } catch (...) {
             release();
             throw;
@@ -203,18 +237,14 @@ VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
 VulkanScorer::~VulkanScorer() { release(); }
 
 void VulkanScorer::release() {
-    // The imported memory goes back before the context that allocated it.
-    for (const auto& [address, memory] : imports_) {
-        shared_->unimport(memory);
-    }
-    imports_.clear();
+    shared_.reset();  // the imported memory goes back before the context that allocated it
     if (context_ != nullptr) {
         engine_.destroy(context_);
         context_ = nullptr;
     }
 }
 
-void VulkanScorer::check(int error, const std::string& what) const { vml::check(engine_, error, what); }
+void VulkanScorer::check(int error, const std::string& what) const { check_vulkan(engine_, error, what); }
 
 void VulkanScorer::add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) {
     const bool score = count_ % step_ == 0;
@@ -264,16 +294,10 @@ void VulkanScorer::add_decoded(const std::function<void(std::uint8_t*)>& referen
 void VulkanScorer::add_shared(const std::function<void(std::uint64_t, std::int64_t)>& reference,
                               const std::function<void(std::uint64_t, std::int64_t)>& distorted) {
     const bool score = count_ % step_ == 0;
-    int slot = 0;
-    std::uint32_t stride = 0;
-    std::uint32_t distorted_offset = 0;
-    if (engine_.shared_next(context_, &slot, &stride, &distorted_offset) < 0) {
-        fail(engine_, "Scoring frame " + std::to_string(count_));
-    }
-    const std::uint64_t address = imports_.at(static_cast<std::size_t>(slot)).first;
-    reference(address, stride);
+    const SharedSlots::Next next = shared_->next();
+    reference(next.reference, next.pitch);
     if (score) {
-        distorted(address + distorted_offset, stride);
+        distorted(next.distorted, next.pitch);
     }
     if (engine_.commit(context_, score ? 1 : 0) < 0) {
         fail(engine_, "Scoring frame " + std::to_string(count_));
