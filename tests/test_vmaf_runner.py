@@ -1,6 +1,8 @@
+import json
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from vmaf_app.core.gpu import HwAccelPlan
@@ -214,6 +216,71 @@ def test_parse_xpsnr_log_converts_1_indexed_to_0_indexed_frames(tmp_path):
 
     assert result[0] == 17.3121  # xpsnr's n=1 -> our frame 0
     assert result[1] == -0.8422  # xpsnr's n=2 -> our frame 1 (also confirms negative values parse)
+
+
+# --------------------------------------------------------- libvmaf's log
+
+def _write_libvmaf_log(path: Path, frames) -> None:
+    """A JSON log laid out as libvmaf writes it: its head, the frames, and
+    pooled scores after them under the same names, which are not frames."""
+    with open(path, "w", encoding="utf-8") as log:
+        log.write('{\n  "version": "4991d2b5",\n  "fps": 24.0,\n  "frames": [\n')
+        for number, frame in enumerate(frames):
+            log.write(("" if number == 0 else ",\n") + json.dumps(frame, indent=2))
+        log.write('\n  ],\n  "pooled_metrics": {"vmaf": {"min": 0.0, "max": 99.4, "mean": 65.4}},\n'
+                  '  "aggregate_metrics": {}\n}\n')
+
+
+def test_libvmafs_log_reads_the_same_however_it_is_cut(tmp_path, monkeypatch, subtests):
+    """The log is read a piece at a time, and a piece can end inside any
+    token, even inside a number that would read as a shorter one ("0." as
+    0). The scores are those of the whole log, however it is cut."""
+    import vmaf_app.core.vmaf_runner as vr
+
+    log = tmp_path / "vmaf_log.json"
+    _write_libvmaf_log(log, [
+        {"frameNum": 0, "metrics": {"integer_adm2": 0.98, "psnr_y": 56.146637, "float_ssim": 0.999746,
+                                    "vmaf": 99.356133, "vmaf_neg": 94.537025}},
+        # A real 0.0 is a score: psnr_y's 0.0 is kept, not replaced by psnr.
+        {"frameNum": 1, "metrics": {"psnr_y": 0.0, "psnr": 50.0, "float_ssim": 0.0, "vmaf": 0.0,
+                                    "vmaf_neg": 1e-05}},
+        {"frameNum": 2, "metrics": {"integer_motion2": 1.5}},  # none of the scores read: left out
+        # No frameNum: numbered by the frames kept before it.
+        {"metrics": {"psnr_y": None, "psnr": 40.25, "ssim": 0.5, "vmaf": 97.0}},
+    ])
+    for size in (1, 2, 3, 7, 1 << 20):
+        with subtests.test(piece=size):
+            monkeypatch.setattr(vr, "_LOG_PIECE_CHARS", size)
+            frames = vr._parse_log(log, 24.0)
+            assert list(frames.frame) == [0, 1, 2]
+            assert list(frames.time) == [0.0, 1 / 24, 2 / 24]
+            np.testing.assert_array_equal(frames.vmaf, np.array([99.356133, 0.0, 97.0], dtype=np.float32))
+            np.testing.assert_array_equal(frames.vmaf_neg, np.array([94.537025, 1e-05, np.nan], dtype=np.float32))
+            np.testing.assert_array_equal(frames.psnr, np.array([56.146637, 0.0, 40.25], dtype=np.float32))
+            np.testing.assert_array_equal(frames.ssim, np.array([0.999746, 0.0, 0.5], dtype=np.float32))
+            assert not frames.has("vmaf_v1") and frames.xpsnr is None
+
+
+def test_a_long_libvmaf_log_is_read_without_holding_it_in_memory(tmp_path):
+    """A feature-length run's log is hundreds of megabytes. It is read a
+    piece at a time and its scores kept as numbers, so reading it takes far
+    less memory than the log's size (json.load took several times it)."""
+    import tracemalloc
+
+    from vmaf_app.core.vmaf_runner import _parse_log
+
+    names = [f"integer_feature_{i}" for i in range(24)] + ["psnr_y", "psnr_cb", "psnr_cr", "float_ssim",
+                                                           "vmaf", "vmaf_neg", "integer_motion2"]
+    log = tmp_path / "vmaf_log.json"
+    _write_libvmaf_log(log, ({"frameNum": n, "metrics": {name: 0.987654 for name in names}} for n in range(30_000)))
+    tracemalloc.start()
+    try:
+        frames = _parse_log(log, 24.0)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert len(frames.frame) == 30_000
+    assert peak < log.stat().st_size / 2
 
 
 # --------------------------------------------------- analysis bit depth

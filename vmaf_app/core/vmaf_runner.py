@@ -15,12 +15,14 @@ import contextlib
 import functools
 import json
 import logging
+import math
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 import threading
+from array import array
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -870,31 +872,120 @@ def _resolve_model_for_cwd(model: str, tmpdir: Path) -> str:
     return f"path={dest.name}"
 
 
+#: How much of libvmaf's log _parse_log reads at a time, in characters.
+_LOG_PIECE_CHARS = 1 << 20
+#: The most of the log _parse_log holds unread while it looks for the end of
+#: one value. A frame is about 1.3 KB; only a corrupt log reaches this, which
+#: would otherwise be read whole into memory looking for its end.
+_LOG_VALUE_LIMIT_CHARS = 64 << 20
+
+
+class _JsonReader:
+    """Reads one JSON text from a file a piece at a time, with the json
+    module's own decoder, so every number is read as json.load reads it.
+
+    A feature-length run's libvmaf log is hundreds of megabytes, and
+    json.load would hold it whole, and every frame of it as Python objects,
+    at once: about 2 GB for 3 hours at 60 fps. Read like this, the reading
+    holds only the piece being read and the frame being decoded."""
+
+    def __init__(self, file) -> None:
+        self._file = file
+        self._text = ""  # read from the file, from the first character not yet taken
+        self._at = 0
+        self._decoder = json.JSONDecoder()
+
+    def _read_more(self) -> bool:
+        """Adds the next piece of the file to what is unread; False at its end."""
+        piece = self._file.read(_LOG_PIECE_CHARS)
+        if not piece:
+            return False
+        self._text = self._text[self._at:] + piece
+        self._at = 0
+        return True
+
+    def peek(self) -> str:
+        """The next character that is not white space, without taking it;
+        "" at the end of the text."""
+        while True:
+            self._at = json.decoder.WHITESPACE.match(self._text, self._at).end()
+            if self._at < len(self._text):
+                return self._text[self._at]
+            if not self._read_more():
+                return ""
+
+    def take(self, expected: str) -> None:
+        """Takes the next character, which must be `expected`."""
+        if self.peek() != expected:
+            raise json.JSONDecodeError(f"Expecting {expected!r}", self._text, self._at)
+        self._at += 1
+
+    def value(self):
+        """Reads the next JSON value whole."""
+        self.peek()
+        while True:
+            try:
+                value, end = self._decoder.raw_decode(self._text, self._at)
+            except json.JSONDecodeError:
+                # Cut off at the end of what has been read, or not JSON.
+                if len(self._text) - self._at < _LOG_VALUE_LIMIT_CHARS and self._read_more():
+                    continue
+                raise
+            # A number cut at the end of what has been read is read short and
+            # without an error ("0." as 0, "1e+" as 1), so a value ending
+            # within two characters of the end may go on in the next piece.
+            if len(self._text) - end <= 2 and self._read_more():
+                continue
+            self._at = end
+            return value
+
+
+class _ScoreColumn:
+    """One metric's scores as they are read, kept as numbers in an array (NaN
+    where a frame has none) rather than as a Python object each."""
+
+    def __init__(self) -> None:
+        self.values = array("d")
+        self.scored = False  # whether any frame has a score
+
+    def append(self, value) -> None:
+        if value is None:
+            self.values.append(math.nan)
+        else:
+            self.values.append(value)
+            self.scored = True
+
+    def packed(self) -> np.ndarray | None:
+        """The scores as 32-bit floats, or None for a metric the run did not
+        calculate."""
+        return np.array(self.values, dtype=np.float32) if self.scored else None
+
+
 def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -> FrameScores:
     """Reads the per-frame scores from libvmaf's JSON log, and XPSNR's from
-    its stats file."""
-    with open(log_path, encoding="utf-8") as f:
-        data = json.load(f)
+    its stats file.
 
+    The log is read a frame at a time (_JsonReader) from the root's "frames";
+    the rest of the root (libvmaf's pooled scores) is read and passed over.
+    What is read is what json.load would give: the last of a key given twice,
+    and errors as json's."""
     xpsnr_by_frame = _parse_xpsnr_log(xpsnr_log_path) if xpsnr_log_path is not None else {}
+    frame_nums = array("i")
+    vmafs, negs, v1s, psnrs, ssims, xpsnrs = (_ScoreColumn() for _ in range(6))
 
-    # The scores are gathered in plain lists and packed into arrays at the
-    # end, rather than as one object per frame: a feature-length run has
-    # hundreds of thousands of frames.
-    frame_nums: list[int] = []
-    vmafs: list[float | None] = []
-    negs: list[float | None] = []
-    v1s: list[float | None] = []
-    psnrs: list[float | None] = []
-    ssims: list[float | None] = []
-    xpsnrs: list[float | None] = []
+    def start() -> None:
+        """Forgets the frames read so far: a later "frames" replaces them."""
+        nonlocal frame_nums, vmafs, negs, v1s, psnrs, ssims, xpsnrs
+        frame_nums = array("i")
+        vmafs, negs, v1s, psnrs, ssims, xpsnrs = (_ScoreColumn() for _ in range(6))
 
-    for fr in data.get("frames", []):
+    def add(fr) -> None:
+        """Keeps one frame's scores, if it has any of the metrics read."""
         metrics = fr.get("metrics", {})
         frame_num = int(fr.get("frameNum", len(frame_nums)))
         vmaf = metrics.get("vmaf")
         if not any(k in metrics for k in ("vmaf", "vmaf_neg", "vmaf_v1", "psnr_y", "psnr", "float_ssim", "ssim")):
-            continue
+            return
         # Checked with "is None", not "or": libvmaf reports a real 0.0 for
         # badly degraded frames, and "or" would discard it and fall through
         # to the other key (or to None).
@@ -912,26 +1003,51 @@ def _parse_log(log_path: Path, fps: float, xpsnr_log_path: Path | None = None) -
         ssims.append(ssim)
         xpsnrs.append(xpsnr_by_frame.get(frame_num))
 
+    with open(log_path, encoding="utf-8") as f:
+        reader = _JsonReader(f)
+        reader.take("{")
+        more = reader.peek() != "}"
+        while more:
+            key = reader.value()
+            if not isinstance(key, str):
+                raise json.JSONDecodeError("Expecting property name enclosed in double quotes", "", 0)
+            reader.take(":")
+            if key == "frames" and reader.peek() == "[":
+                start()
+                reader.take("[")
+                more_frames = reader.peek() != "]"
+                while more_frames:
+                    add(reader.value())
+                    more_frames = reader.peek() == ","
+                    if more_frames:
+                        reader.take(",")
+                reader.take("]")
+            elif key == "frames":  # not a list, as json.load would give it
+                frames = reader.value()
+                start()
+                for fr in frames:
+                    add(fr)
+            else:
+                reader.value()
+            more = reader.peek() == ","
+            if more:
+                reader.take(",")
+        reader.take("}")
+        if reader.peek():
+            raise json.JSONDecodeError("Extra data", "", 0)
+
     if not frame_nums:
         return FrameScores.empty()
 
     frame_arr = np.array(frame_nums, dtype=np.int32)
     time_arr = frame_arr / fps if fps > 0 else np.zeros(len(frame_nums), dtype=np.float64)
-
-    def column(values: list[float | None]) -> np.ndarray | None:
-        """A metric's scores as an array (NaN where a frame has none), or
-        None for a metric the run did not calculate."""
-        if all(v is None for v in values):
-            return None  # the run did not ask for this metric
-        return np.array([np.nan if v is None else v for v in values], dtype=np.float32)
-
     return FrameScores(
         frame=frame_arr,
         time=time_arr,
-        vmaf=column(vmafs),
-        vmaf_neg=column(negs),
-        psnr=column(psnrs), ssim=column(ssims), xpsnr=column(xpsnrs),
-        metrics={"vmaf_v1": column(v1s)},
+        vmaf=vmafs.packed(),
+        vmaf_neg=negs.packed(),
+        psnr=psnrs.packed(), ssim=ssims.packed(), xpsnr=xpsnrs.packed(),
+        metrics={"vmaf_v1": v1s.packed()},
     )
 
 
