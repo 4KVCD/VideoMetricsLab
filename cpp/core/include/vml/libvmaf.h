@@ -1,0 +1,70 @@
+// The app's own libvmaf: libvmaf-fast (github.com/4KVCD/libvmaf-fast), a
+// fork of libvmaf shipped in vmaf_app/tools/libvmaf. The app calls it in its
+// own process: to have libvmaf predict VMAF from the features the Vulkan
+// engine measures, for VMAF and NEG with CUDA, and for PSNR, SSIM and XPSNR.
+// A port of vmaf_app/core/libvmaf.py.
+//
+// Its functions are declared by its own public headers, at the commit the
+// bundled library was built from (third_party/libvmaf-fast), so that the
+// structures the app shares with it are laid out as it lays them out.
+#pragma once
+
+#include <libvmaf/libvmaf.h>
+
+#include <filesystem>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "vml/platform/library.h"
+
+namespace vml {
+
+// A call into libvmaf failed. The caller then calculates the scores another
+// way, with FFmpeg.
+class LibvmafError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+// Throws LibvmafError if a libvmaf call returned an error, saying what failed.
+void check_libvmaf(int error, const std::string& what);
+
+// The bundled library and the functions of it the app calls.
+struct Libvmaf {
+    explicit Libvmaf(const std::filesystem::path& path);
+
+    platform::DynamicLibrary library;
+    decltype(&::vmaf_version) version;
+    decltype(&::vmaf_init) init;
+    decltype(&::vmaf_close) close;
+    decltype(&::vmaf_model_load) model_load;
+    decltype(&::vmaf_model_destroy) model_destroy;
+    decltype(&::vmaf_import_feature_score) import_feature_score;
+    decltype(&::vmaf_score_at_index) score_at_index;
+};
+
+// Where the bundled library is, with its build record.
+std::filesystem::path libvmaf_folder();
+
+// The bundled library, loaded the first time it is asked for. Throws
+// LibvmafError when it cannot be loaded, or when it is not the libvmaf-fast
+// whose headers the app was built with (its pictures would be laid out
+// otherwise, and libvmaf would write past the app's).
+const Libvmaf& libvmaf();
+
+// The libvmaf-fast release the bundled library is, as the script that
+// installed it recorded ("v1"; "v1-2-g211f80e0" for a local build two
+// commits after it), or "unknown" without a record.
+std::string libvmaf_fast_version();
+
+// A libvmaf model's scores for frames, predicted by libvmaf itself from
+// features given under the names its own extractors use, each feature a
+// value for every frame. `version` names a model libvmaf has built in, such
+// as "vmaf_v0.6.1". Each score is kept to 6 decimals, as the Python app keeps
+// it. Throws LibvmafError.
+std::vector<double> predict_scores(const std::string& version, const std::vector<unsigned>& frames,
+                                   const std::vector<std::pair<std::string, std::vector<double>>>& features);
+
+}  // namespace vml

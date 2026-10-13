@@ -21,6 +21,10 @@ std::optional<std::string> environment_variable(std::string_view name);
 // elsewhere.
 std::string executable_name(std::string_view name);
 
+// A shared library's file name on this system: "libvmaf.dll" on Windows,
+// "libvmaf.so" on Linux, "libvmaf.dylib" on macOS, for "libvmaf".
+std::string shared_library_name(std::string_view name);
+
 // The program `name` as Python's shutil.which finds it: in the current
 // folder and then each folder on the PATH on Windows (with PATHEXT's
 // extensions), on the PATH elsewhere. Nothing when it is not found.

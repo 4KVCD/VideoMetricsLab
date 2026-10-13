@@ -21,6 +21,14 @@ std::filesystem::path home_directory() { return environment_variable("HOME").val
 
 std::string executable_name(std::string_view name) { return std::string(name); }
 
+std::string shared_library_name(std::string_view name) {
+#ifdef __APPLE__
+    return std::string(name) + ".dylib";
+#else
+    return std::string(name) + ".so";
+#endif
+}
+
 std::optional<std::filesystem::path> find_on_path(std::string_view name) {
     const std::string path = environment_variable("PATH").value_or("");
     for (std::size_t start = 0; start <= path.size();) {

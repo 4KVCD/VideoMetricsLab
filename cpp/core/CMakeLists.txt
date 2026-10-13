@@ -9,6 +9,7 @@ add_library(vml_core
     src/frame_sync.cpp
     src/geometry.cpp
     src/hardware_decoding.cpp
+    src/libvmaf.cpp
     src/metrics.cpp
     src/model_select.cpp
     src/number_format.cpp
@@ -22,6 +23,9 @@ add_library(vml_core
     src/video.cpp
 )
 target_include_directories(vml_core PUBLIC include)
+# libvmaf-fast's public headers, at the commit of the library the app ships
+# (third_party/README.md). SYSTEM: their warnings are not ours to fix.
+target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)
 target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options)
 # The app's own files (VMAF models, bundled tools) in a development build:
 # the repository's vmaf_app folder. An installed app sets VML_RESOURCES.

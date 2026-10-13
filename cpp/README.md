@@ -43,7 +43,7 @@ GPU metrics included, so the C++ app is held to identical results here too.
 | Folder | What it holds |
 | --- | --- |
 | `core` | `vml_core`, the engine. No Qt and no operating-system headers, so the same code runs on every system, under the command line and the window. |
-| `platform` | `vml_platform`: what differs between the systems (starting programs, the console, the PATH, the GPUs), behind headers that are the same on all of them. |
+| `platform` | `vml_platform`: what differs between the systems (starting programs, loading libraries, the console, the PATH, the GPUs), behind headers that are the same on all of them. |
 | `cli` | `vml-cli`, the command line, and its code (`vml_cli`), which the tests use too. |
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/reference` | The Python app's answers, and the script that makes them. |

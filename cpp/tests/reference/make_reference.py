@@ -2,7 +2,10 @@
 its statistics (vmaf_app/core/stats.py), its metric registry
 (vmaf_app/core/metrics.py), Python's own number formatting, its reading of
 ffprobe's output (ffprobe.py), of settings.json (settings.py) and of
-FFmpeg's version (ffmpeg_locate.py), its command line's reading of
+FFmpeg's version (ffmpeg_locate.py), a run's decisions (gpu.py,
+frame_sync.py, geometry.py, model_select.py), FFmpeg's command for a run
+and the reading of its logs (vmaf_runner.py), VMAF predicted from features
+by the bundled libvmaf (vmaf_vulkan.predict), its command line's reading of
 arguments and patterns (cli.py), and Python's json.dumps.
 
 The ffprobe cases use ffprobe's real output on the golden clips
@@ -800,7 +803,43 @@ def json_cases() -> list[dict]:
             for value in values]
 
 
+# --------------------------------------------------------------- libvmaf
+
+def predict_cases() -> list[dict]:
+    """VMAF's scores predicted by the bundled libvmaf from features, as the
+    Python app has it predict them from the Vulkan engine's
+    (vmaf_vulkan.predict): for VMAF, its 4K model and VMAF NEG, over frames
+    with features across their ranges and at their ends, so that some
+    scores are clipped at 0 and one at 100. The features are given under
+    the names libvmaf's extractors use."""
+    import numpy as np
+
+    from vmaf_app.core import vmaf_vulkan
+
+    values = random.Random(11)
+    frames = np.array([0, 1, 2, 5, 9, 10, 11, 1000])
+    cases = []
+    for version in ("vmaf_v0.6.1", "vmaf_4k_v0.6.1", "vmaf_v0.6.1neg"):
+        rows = np.zeros((len(frames), vmaf_vulkan.FEATURE_COUNT))
+        for row in rows[:-2]:
+            row[0:4] = [values.uniform(0.0, 1.0) for _ in range(4)]  # VIF's scales
+            row[4] = values.uniform(0.3, 1.0)  # ADM2
+            row[5] = values.uniform(0.0, 40.0)  # motion2
+            row[6:10] = [values.uniform(0.0, 1.0) for _ in range(4)]  # NEG's VIF
+            row[10] = values.uniform(0.3, 1.0)  # NEG's ADM2
+            row[11] = values.uniform(0.0, 40.0)  # motion
+        rows[-2] = 0.0  # every feature at its lowest
+        rows[-1, [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]] = 1.0  # VIF and ADM at their highest, no motion
+        scores = vmaf_vulkan.predict(version, frames, rows)
+        columns = vmaf_vulkan._MODEL_FEATURES[version in vmaf_vulkan._NEG_MODELS]
+        cases.append({"version": version, "frames": [int(frame) for frame in frames],
+                      "features": {name: [exact(row[column]) for row in rows] for name, column in columns.items()},
+                      "scores": [exact(score) for score in scores]})
+    return cases
+
+
 if __name__ == "__main__":
+    write("predict.json", predict_cases())
     write("python_json.json", json_cases())
     write("cli.json", {"arguments": argument_cases(), "patterns": pattern_cases()})
     write("runs.json", run_cases())

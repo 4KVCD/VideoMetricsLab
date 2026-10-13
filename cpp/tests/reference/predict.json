@@ -1,0 +1,257 @@
+[
+ {
+  "version": "vmaf_v0.6.1",
+  "frames": [
+   0,
+   1,
+   2,
+   5,
+   9,
+   10,
+   11,
+   1000
+  ],
+  "features": {
+   "VMAF_integer_feature_adm2_score": [
+    "0x1.4f9c3d6cb4bf5p-1",
+    "0x1.f99e3d3e8c478p-1",
+    "0x1.377c819413320p-1",
+    "0x1.0a9869285ba2ep-1",
+    "0x1.dfd769dbf1ad6p-1",
+    "0x1.87c6c47f42851p-2",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_motion2_score": [
+    "0x1.77ed215f31318p+4",
+    "0x1.34b8f51a1eaadp+5",
+    "0x1.0d93a15fd0174p+5",
+    "0x1.25f8ec320fc12p+3",
+    "0x1.2ccab71e097c8p+4",
+    "0x1.3b6067311f605p+3",
+    "0x0.0p+0",
+    "0x0.0p+0"
+   ],
+   "VMAF_integer_feature_vif_scale0_score": [
+    "0x1.cf3c95eed0a4ap-2",
+    "0x1.7362f313cfa28p-4",
+    "0x1.858be8e12b2b8p-3",
+    "0x1.fecccb2347f87p-1",
+    "0x1.ea84880114bbcp-1",
+    "0x1.64f1509f56de0p-4",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_vif_scale1_score": [
+    "0x1.1e9a7c76d6d7ep-1",
+    "0x1.9e89ba78fbfe7p-1",
+    "0x1.ef7fd19980920p-3",
+    "0x1.fdcb4b7ba0bb0p-1",
+    "0x1.b1d2962bd55c3p-1",
+    "0x1.54915381f06b4p-2",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_vif_scale2_score": [
+    "0x1.d9322131ff7a0p-1",
+    "0x1.630a5e689adfdp-1",
+    "0x1.ecdf863990e60p-6",
+    "0x1.ae30bb855334ap-1",
+    "0x1.1db436a80bc00p-11",
+    "0x1.ed9b65da3e463p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_vif_scale3_score": [
+    "0x1.dcd35f39d5a42p-2",
+    "0x1.57156e61ba1b0p-5",
+    "0x1.db11a2a9c3fb0p-2",
+    "0x1.6a6605d041732p-1",
+    "0x1.ad8052ed52a24p-3",
+    "0x1.841de2fb0fefdp-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ]
+  },
+  "scores": [
+   "0x1.6af6ddaceee0fp+4",
+   "0x1.03977af64063ap+6",
+   "0x1.001634dad31fdp+5",
+   "0x0.0p+0",
+   "0x1.69cfdb09a671fp+5",
+   "0x0.0p+0",
+   "0x1.158c0485a0be5p+2",
+   "0x1.85b650e779208p+6"
+  ]
+ },
+ {
+  "version": "vmaf_4k_v0.6.1",
+  "frames": [
+   0,
+   1,
+   2,
+   5,
+   9,
+   10,
+   11,
+   1000
+  ],
+  "features": {
+   "VMAF_integer_feature_adm2_score": [
+    "0x1.86b68249c7638p-2",
+    "0x1.7b1e571d5f73bp-2",
+    "0x1.1ed1984f12814p-1",
+    "0x1.a29c15629403cp-1",
+    "0x1.eb677dff4e17cp-2",
+    "0x1.e261c368fd5acp-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_motion2_score": [
+    "0x1.0d4899af34451p+4",
+    "0x1.3c939855dab64p+5",
+    "0x1.220d9daa2d7cep+4",
+    "0x1.2cedf81628416p+5",
+    "0x1.0796f74c3165fp+5",
+    "0x1.0517cc97d66e2p+3",
+    "0x0.0p+0",
+    "0x0.0p+0"
+   ],
+   "VMAF_integer_feature_vif_scale0_score": [
+    "0x1.86858cfc3b66cp-3",
+    "0x1.af88d72ff3600p-3",
+    "0x1.711eb46adf178p-4",
+    "0x1.d11cea4e9dd54p-1",
+    "0x1.3d00620ca7010p-5",
+    "0x1.1e6543e9d3118p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_vif_scale1_score": [
+    "0x1.76bad6b13fd93p-1",
+    "0x1.93bcbaff778b6p-2",
+    "0x1.2a5c3728bdd91p-1",
+    "0x1.a2b6efe711872p-1",
+    "0x1.ece4975054d8dp-1",
+    "0x1.b46dc1a76a6c5p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_vif_scale2_score": [
+    "0x1.0c38786b52b08p-3",
+    "0x1.b570e3a687789p-1",
+    "0x1.f1b0c203f8670p-3",
+    "0x1.fef91ab9b338cp-3",
+    "0x1.e84207bd65690p-3",
+    "0x1.3a85ecc4beb60p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_vif_scale3_score": [
+    "0x1.499507588f63ap-1",
+    "0x1.489eaee4ece8fp-1",
+    "0x1.33db79d7985fep-1",
+    "0x1.84b6362891dd0p-3",
+    "0x1.68bea39910277p-1",
+    "0x1.1ef1d51b2fee6p-2",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ]
+  },
+  "scores": [
+   "0x1.993dfb0d51f82p+3",
+   "0x1.be7c5b4aa9718p+5",
+   "0x1.277fc5cdd50a9p+5",
+   "0x1.1797dae81882bp+6",
+   "0x1.7056b3bb83cf3p+5",
+   "0x1.ab9f5f0b28523p+5",
+   "0x1.ab404ea4a8c15p+2",
+   "0x1.9000000000000p+6"
+  ]
+ },
+ {
+  "version": "vmaf_v0.6.1neg",
+  "frames": [
+   0,
+   1,
+   2,
+   5,
+   9,
+   10,
+   11,
+   1000
+  ],
+  "features": {
+   "integer_adm2_egl_1": [
+    "0x1.4006ccaa8a9bfp-2",
+    "0x1.a1be2621fdf5ap-1",
+    "0x1.cf11902fff25cp-1",
+    "0x1.a109a4f8b2bdep-1",
+    "0x1.75d68523f9512p-1",
+    "0x1.0ec85e18887a9p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "VMAF_integer_feature_motion2_score": [
+    "0x1.a46fbf1aa1e57p+4",
+    "0x1.d384ca08e2924p+4",
+    "0x1.b67e5035dcbe0p+4",
+    "0x1.993800a93f15dp+4",
+    "0x1.80d293e704c1ap+4",
+    "0x1.b231be7134f16p+2",
+    "0x0.0p+0",
+    "0x0.0p+0"
+   ],
+   "integer_vif_scale0_egl_1": [
+    "0x1.61e7cbe16772bp-1",
+    "0x1.468ee6117c4c8p-2",
+    "0x1.cd3a5e44f888ap-1",
+    "0x1.fc94b9d07604bp-1",
+    "0x1.ec7ff182da6bap-2",
+    "0x1.cfbabdd5ebeaep-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "integer_vif_scale1_egl_1": [
+    "0x1.2b3bc13c9942dp-1",
+    "0x1.ffabcd84a2ba1p-1",
+    "0x1.be00fbf6ddee4p-1",
+    "0x1.c274131aa3c77p-1",
+    "0x1.d77e71f517e38p-3",
+    "0x1.51ea35bb8a0f0p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "integer_vif_scale2_egl_1": [
+    "0x1.1f6e58970216cp-3",
+    "0x1.3446dee7fb830p-4",
+    "0x1.ab2a3178dcd5ap-2",
+    "0x1.74d78ed5212cfp-1",
+    "0x1.658c1f873981bp-1",
+    "0x1.c489f2bfc8a7ep-2",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ],
+   "integer_vif_scale3_egl_1": [
+    "0x1.1f6137b1c0e30p-5",
+    "0x1.1799cf9789a3ep-1",
+    "0x1.94c09c41eff02p-1",
+    "0x1.8dc240f7958d6p-2",
+    "0x1.fd2f4163d5466p-2",
+    "0x1.c8906e4f74781p-1",
+    "0x0.0p+0",
+    "0x1.0000000000000p+0"
+   ]
+  },
+  "scores": [
+   "0x0.0p+0",
+   "0x1.3e423b7952d23p+5",
+   "0x1.2453b29a1b9fap+6",
+   "0x1.543c8b86b15f9p+5",
+   "0x1.3d3bc98a222d5p+5",
+   "0x0.0p+0",
+   "0x1.158c0485a0be5p+2",
+   "0x1.85b650e779208p+6"
+  ]
+ }
+]

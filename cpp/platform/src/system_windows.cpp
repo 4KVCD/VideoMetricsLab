@@ -33,6 +33,8 @@ std::filesystem::path home_directory() {
 
 std::string executable_name(std::string_view name) { return std::string(name) + ".exe"; }
 
+std::string shared_library_name(std::string_view name) { return std::string(name) + ".dll"; }
+
 std::optional<std::filesystem::path> find_on_path(std::string_view name) {
     // The extensions to try, from PATHEXT; none when the name has one of them.
     std::vector<std::wstring> extensions;
