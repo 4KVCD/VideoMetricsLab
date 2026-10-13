@@ -188,6 +188,7 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     startup.StartupInfo.hStdInput = input.get();
     startup.StartupInfo.hStdOutput = output.write.get();
     startup.StartupInfo.hStdError = error.write.get();
+    startup.lpAttributeList = attributes;
 
     std::wstring line = command_line(arguments);
     const std::wstring folder = options.working_directory.empty() ? std::wstring() : options.working_directory.wstring();

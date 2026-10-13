@@ -63,16 +63,24 @@ struct Pipe {
     Descriptor write;
 };
 
-// A pipe neither of whose ends survives into another program (FD_CLOEXEC):
-// the program gets its own copy of the write end, made in the spawn.
+// A pipe neither of whose ends survives into another program (close on
+// exec): the program gets its own copy of the write end, made in the spawn.
+// On Linux the pipe is made so; elsewhere it is so a moment later, and the
+// spawn hands a program nothing else meanwhile (start).
 Pipe make_pipe() {
     int ends[2];
+#ifdef __linux__
+    if (pipe2(ends, O_CLOEXEC) != 0) {
+        fail("a pipe could not be made");
+    }
+#else
     if (pipe(ends) != 0) {
         fail("a pipe could not be made");
     }
     for (const int end : ends) {
         fcntl(end, F_SETFD, FD_CLOEXEC);
     }
+#endif
     return Pipe{Descriptor(ends[0]), Descriptor(ends[1])};
 }
 
@@ -156,10 +164,19 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     if (!folder.empty()) {
         posix_spawn_file_actions_addchdir_np(&actions, folder.c_str());
     }
+    // The program gets its three descriptors and none of the app's others,
+    // whatever their close-on-exec flag: given another program's pipe, it
+    // would make that program's output last as long as its own copy.
+    short flags = POSIX_SPAWN_SETPGROUP;
+#ifdef __APPLE__
+    flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
+#elif defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 34))
+    posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1);
+#endif
     posix_spawnattr_t attributes;
     posix_spawnattr_init(&attributes);
     // A process group of its own, which terminate() ends as one.
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setflags(&attributes, flags);
     posix_spawnattr_setpgroup(&attributes, 0);
 
     std::vector<char*> argv;

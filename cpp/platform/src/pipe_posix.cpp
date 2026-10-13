@@ -47,9 +47,11 @@ InboundPipe::~InboundPipe() {
 }
 
 void InboundPipe::connect() {
-    // Opening a FIFO to read waits for its writer.
+    // Opening a FIFO to read waits for its writer. A copy of the reading end
+    // in a program started meanwhile would keep the FIFO open after this
+    // side closes it, so none goes to another program (close on exec).
     do {
-        state_->descriptor = open(path_.c_str(), O_RDONLY);
+        state_->descriptor = open(path_.c_str(), O_RDONLY | O_CLOEXEC);
     } while (state_->descriptor < 0 && errno == EINTR);
     if (state_->descriptor < 0) {
         throw PipeError("Waiting for the writer of " + path_ + " failed: " + std::strerror(errno));
@@ -83,7 +85,7 @@ void InboundPipe::close() {
 void InboundPipe::touch(const std::string& path) {
     // A reader waiting in open() counts as the FIFO's reader, so a writer
     // that does not wait for one can open it then (and fails, ENXIO, before).
-    const int writer = open(path.c_str(), O_WRONLY | O_NONBLOCK);
+    const int writer = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (writer >= 0) {
         ::close(writer);
     }
