@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -319,7 +320,12 @@ struct ProbeState {
     std::mutex mutex;
     std::string backend = "auto";
     std::optional<std::pair<std::optional<VshipDevice>, std::string>> probed;
+    std::chrono::steady_clock::time_point probed_at;
 };
+
+// How long a probe that found no GPU is kept before a run probes again
+// (forget_failed_vship_probe).
+constexpr std::chrono::seconds failed_probe_retry{60};
 
 ProbeState& probe_state() {
     static ProbeState state;
@@ -610,8 +616,18 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
     const std::lock_guard lock(state.mutex);
     if (!state.probed) {
         state.probed = isolation_program() ? probe_isolated(state.backend) : probe_vship_device(state.backend);
+        state.probed_at = std::chrono::steady_clock::now();
     }
     return *state.probed;
+}
+
+void forget_failed_vship_probe() {
+    ProbeState& state = probe_state();
+    const std::lock_guard lock(state.mutex);
+    if (state.probed && !state.probed->first &&
+        std::chrono::steady_clock::now() - state.probed_at >= failed_probe_retry) {
+        state.probed.reset();
+    }
 }
 
 bool gpu_can_score(const std::string& key) {

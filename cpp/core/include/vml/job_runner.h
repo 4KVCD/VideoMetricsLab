@@ -3,8 +3,9 @@
 // - a job is one video to compare with its source (VmafJob);
 // - a task is the part of a video's metrics that one program calculates in
 //   one place: FFmpeg's metrics on the CPU (PSNR, SSIM and XPSNR in the app
-//   among them), VMAF on the GPU, or Vship's metrics (SSIMULACRA2,
-//   Butteraugli, CVVDP) on the GPU in one or more passes;
+//   among them), VMAF on the GPU, Vship's metrics (SSIMULACRA2,
+//   Butteraugli, CVVDP) on the GPU in one or more passes, or SSIMULACRA2
+//   and Butteraugli set to the CPU, with libjxl's tools;
 // - a lane is a thread that runs one task at a time. The CPU's queue has two
 //   lanes (one if it holds a single task), and the "parallel jobs" setting
 //   says how many of them may work at once. The GPU's queue has one lane.
@@ -143,11 +144,13 @@ using TaskRunner = std::function<ComparisonResult(const VmafJob& job, const Vmaf
                                                   const StatusCallback& on_status, const CancelToken& cancel)>;
 
 // Calculates one perceptual task's metrics (`keys`) for a video, reporting
-// through `hooks`, the GPU's metrics in one pass when `together`:
+// through `hooks`, the GPU's metrics in one pass when `together`, with
+// `concurrent_cpu_tasks` the number of tasks the CPU's queue may run at once
+// (which the CPU's perceptual tools share the cores and memory with):
 // run_perceptual_task in the app; a stand-in in the tests.
-using PerceptualRunner =
-    std::function<PerceptualTaskOutput(const VmafJob& job, const std::vector<std::string>& keys, bool together,
-                                       const PerceptualHooks& hooks, const CancelToken& cancel)>;
+using PerceptualRunner = std::function<PerceptualTaskOutput(const VmafJob& job, const std::vector<std::string>& keys,
+                                                            bool together, int concurrent_cpu_tasks,
+                                                            const PerceptualHooks& hooks, const CancelToken& cancel)>;
 
 // Runs every job's tasks and returns once all are done or the run is
 // cancelled: the CPU's tasks on up to `parallel_jobs` lanes at once

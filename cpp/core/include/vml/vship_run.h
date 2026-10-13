@@ -10,8 +10,9 @@
 // scored in one pass or several. Frames are paired frame N with frame N, or
 // by timestamp (frame_sync_by_time.h) when VML_FRAME_PAIRING says so.
 //
-// Not yet: the CPU calculating SSIMULACRA2 and Butteraugli (the command line
-// refuses such a run before it starts).
+// A task's metrics go where each is set to run, and to the CPU's tools
+// (perceptual_cpu.h) where the GPU cannot calculate them
+// (run_perceptual_task).
 #pragma once
 
 #include <nlohmann/json.hpp>
@@ -19,8 +20,10 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "vml/cancel.h"
@@ -39,32 +42,6 @@ inline constexpr std::string_view perceptual_cpu_task = "perceptual_cpu";
 // Whether `key` is one of the perceptual metrics: SSIMULACRA2, Butteraugli
 // and CVVDP.
 bool is_perceptual_metric(std::string_view key);
-
-// What a perceptual task is given: the two videos, the run's options (black
-// bars, scaling, the duration limit, frame subsampling, decoding), where
-// SSIMULACRA2 and Butteraugli are each set to run, and the display CVVDP
-// models.
-struct PerceptualRequest {
-    RunEnvironment environment;
-    VideoInfo source;
-    VideoInfo distorted;
-    VmafOptions options;
-    // "gpu" or "cpu" for SSIMULACRA2 and Butteraugli; "gpu" where not given.
-    std::map<std::string, std::string, std::less<>> backends;
-    CvvdpSettings cvvdp;
-
-    // Where `key` is set to run: CVVDP on the GPU only (its official CPU
-    // implementation needs PyTorch, almost 1 GB, and takes seconds per 4K
-    // frame); the others as set.
-    std::string backend_of(std::string_view key) const;
-
-    // Every how many frames `key` is scored (perceptual_step).
-    int step_of(std::string_view key) const;
-};
-
-// Every how many frames perceptual metric `key` is scored: every
-// `n_subsample`-th frame; CVVDP, which models motion over time, every frame.
-int perceptual_step(std::string_view key, int n_subsample);
 
 // What a task reports beside its progress and statuses: each GPU pass's
 // scores as soon as the pass finishes (on_pass_done), so that they are
@@ -86,16 +63,45 @@ struct PerceptualHooks {
 std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string>& keys, int n_subsample,
                                                    bool together);
 
+// The steps run_perceptual_task takes a task's metrics through, each a
+// function, so that the tests can stand in for them (the Python app's tests
+// replace the same functions): finding the GPU Vship uses, finding the
+// black bars, Vship's passes on that GPU, and the CPU's tools with the
+// black bars already found, if they were.
+struct PerceptualRoutes {
+    std::function<std::pair<std::optional<VshipDevice>, std::string>()> find_gpu;
+    std::function<CropPair(const PerceptualRequest&, const StatusCallback&, const CancelToken&)> find_crops;
+    std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
+                                       const VshipDevice&, const CropPair&, bool together, const PerceptualHooks&,
+                                       const CancelToken&)>
+        run_gpu;
+    std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
+                                       const std::optional<CropPair>&, const ProgressCallback&,
+                                       const StatusCallback&, const CancelToken&)>
+        run_cpu;
+};
+
+// The app's routes: the Vship probe (after forgetting one that failed a
+// while ago, forget_failed_vship_probe), resolve_crops, Vship's passes, and
+// run_cpu_perceptual_task.
+PerceptualRoutes app_perceptual_routes();
+
 // Calculates `keys` (SSIMULACRA2, Butteraugli, CVVDP) where each is set to
 // run (the Python app's apply_vship_cpu_fallback): on the GPU through
-// Vship, each in a pass of its own, or with `together` in one pass. A
-// metric that fails while the others finish is in the output's failures;
-// when every pass fails, the PerceptualRunError thrown says why, CVVDP's
-// own reason apart, as it runs on the GPU only. Throws Cancelled,
+// Vship, each in a pass of its own, or with `together` in one pass; or on
+// the CPU. A metric moves from the GPU to the CPU where the GPU cannot
+// calculate it: without a GPU Vship can use, on a GPU whose Vship build
+// scores it wrongly, and after it failed on the GPU, unless the comparison
+// is longer than long_cpu_run_seconds, which nobody agreed to on the CPU.
+// CVVDP runs on the GPU only, and fails with its own reason. A metric that
+// fails while others finish is in the output's failures. `hooks.on_cpu`
+// gets the metrics the CPU is about to calculate, just before it starts;
+// the progress after it is the CPU's own, from 0. Throws Cancelled,
 // ComparisonCutShortError (a video ends long before its stated length),
 // PerceptualRunError, and CropDetectError.
 PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
-                                         bool together, const PerceptualHooks& hooks, const CancelToken& cancel);
+                                         bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
+                                         const PerceptualRoutes& routes = app_perceptual_routes());
 
 // The isolated "vship-pass" task's work (isolated.cpp): one pass, in this
 // process, from the request the parent wrote; the scores are left in

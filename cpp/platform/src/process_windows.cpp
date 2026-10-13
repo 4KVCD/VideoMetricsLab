@@ -15,10 +15,13 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <cstddef>
 #include <cstring>
 #include <mutex>
+#include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "error_lines.h"
 #include "text_windows.h"
@@ -129,6 +132,50 @@ Handle make_job() {
     return job;
 }
 
+// The ids of the processes in `job`, in the order they joined it: the
+// program, then what it started.
+std::vector<DWORD> job_processes(HANDLE job) {
+    // The two counts, then room for far more ids than a program starts.
+    std::vector<ULONG_PTR> buffer(256);
+    auto* list = reinterpret_cast<JOBOBJECT_BASIC_PROCESS_ID_LIST*>(buffer.data());
+    if (!QueryInformationJobObject(job, JobObjectBasicProcessIdList, list,
+                                   static_cast<DWORD>(buffer.size() * sizeof(ULONG_PTR)), nullptr)) {
+        return {};
+    }
+    const std::size_t first = offsetof(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList) / sizeof(ULONG_PTR);
+    std::vector<DWORD> ids;
+    for (DWORD i = 0; i < list->NumberOfProcessIdsInList; ++i) {
+        ids.push_back(static_cast<DWORD>(buffer[first + i]));
+    }
+    return ids;
+}
+
+// Whether the process is a console host (conhost.exe), which Windows starts
+// for each console program: it does no work, so it is not suspended.
+bool is_console_host(HANDLE process) {
+    wchar_t path[MAX_PATH];
+    DWORD length = MAX_PATH;
+    if (!QueryFullProcessImageNameW(process, 0, path, &length)) {
+        return false;
+    }
+    const std::wstring_view name = std::wstring_view(path, length).substr(
+        std::wstring_view(path, length).find_last_of(L'\\') + 1);
+    return CompareStringOrdinal(name.data(), static_cast<int>(name.size()), L"conhost.exe", -1, TRUE) == CSTR_EQUAL;
+}
+
+// ntdll's NtSuspendProcess or NtResumeProcess, which suspend or resume every
+// thread of a process at once, as psutil does it for the Python app (Windows
+// documents no call that does); nullptr if ntdll lacks it.
+using ProcessCall = LONG(WINAPI*)(HANDLE);
+ProcessCall ntdll_call(const char* name) {
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (ntdll == nullptr) {
+        return nullptr;
+    }
+    // Through void (*)(), which any function type may be cast from and to.
+    return reinterpret_cast<ProcessCall>(reinterpret_cast<void (*)()>(GetProcAddress(ntdll, name)));
+}
+
 }  // namespace
 
 struct ChildProcess::State {
@@ -141,6 +188,9 @@ struct ChildProcess::State {
     // For gather's waits of a millisecond, as Python's time.sleep(0.001)
     // makes them: a plain Sleep(1) can last a whole 15.6 ms tick.
     Handle timer;
+    // The processes suspend() has suspended, each once, in that order. The
+    // handles keep their ids from going to other processes meanwhile.
+    std::vector<std::pair<DWORD, Handle>> suspended;
 
     // Standard error, read on a thread of its own so the program never
     // waits on a full pipe; its end is kept (keep_error_tail).
@@ -339,6 +389,39 @@ bool ChildProcess::wait_for(std::chrono::milliseconds timeout) {
 }
 
 void ChildProcess::terminate() { TerminateJobObject(state_->job.get(), 1); }
+
+void ChildProcess::suspend() {
+    static const ProcessCall suspend_process = ntdll_call("NtSuspendProcess");
+    if (suspend_process == nullptr) {
+        return;
+    }
+    for (const DWORD id : job_processes(state_->job.get())) {
+        if (std::any_of(state_->suspended.begin(), state_->suspended.end(),
+                        [id](const auto& done) { return done.first == id; })) {
+            continue;
+        }
+        Handle process(OpenProcess(PROCESS_SUSPEND_RESUME | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, id));
+        // The id may have gone to another process since the job listed it.
+        BOOL in_job = FALSE;
+        if (!process || !IsProcessInJob(process.get(), state_->job.get(), &in_job) || !in_job ||
+            is_console_host(process.get())) {
+            continue;
+        }
+        if (suspend_process(process.get()) >= 0) {
+            state_->suspended.emplace_back(id, std::move(process));
+        }
+    }
+}
+
+void ChildProcess::resume() {
+    static const ProcessCall resume_process = ntdll_call("NtResumeProcess");
+    if (resume_process != nullptr) {
+        for (auto done = state_->suspended.rbegin(); done != state_->suspended.rend(); ++done) {
+            resume_process(done->second.get());
+        }
+    }
+    state_->suspended.clear();
+}
 
 std::string ChildProcess::standard_error() {
     std::unique_lock lock(state_->error_mutex);

@@ -10,7 +10,8 @@ features by the bundled libvmaf and scored with the Vulkan engine
 (vmaf_vulkan.py), Vship's view of a video and its colours
 (perceptual_vship.py, colour.py), CVVDP's displays and the pooling of its
 seconds (cvvdp.py, perceptual_vship.py), the pairing of frames by
-timestamp (frame_sync_by_time.py), the line that says how far a video is
+timestamp (frame_sync_by_time.py), SSIMULACRA2 and Butteraugli on the CPU
+(perceptual_cpu.py, colour.py), the line that says how far a video is
 (ui/run_line.py), its command line's reading of arguments and patterns
 (cli.py), and Python's json.dumps. The Vulkan engine's cases need a GPU
 that Vulkan scores VMAF on.
@@ -30,6 +31,7 @@ files only change when the code that makes them does.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import random
@@ -40,8 +42,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2]))  # the repository's root, for vmaf_app
 
 import os
+import struct
 import subprocess
 import tempfile
+import warnings
 
 from vmaf_app.core import ffprobe as ffprobe_module
 from vmaf_app.core import settings as settings_module
@@ -1502,7 +1506,203 @@ def timed_pairing_cases() -> dict:
     return {"rescales": rescales, "durations": durations, "pairings": pairings}
 
 
+def perceptual_cpu_cases() -> dict:
+    """SSIMULACRA2 and Butteraugli on the CPU (perceptual_cpu.py, with
+    colour.py's PNG chunks): the filter graphs and the FFmpeg commands that
+    make the pictures (_image_filtergraph, _png_pairs), with frames paired
+    by number and by timestamp; the scores read from the tools' output
+    (parse_score); how many pairs are scored at a time (scoring_workers);
+    Butteraugli's 3-norm of a distortion map (_butteraugli_norm3); and the
+    colour chunks the pictures are given (png_colour_chunks, describe_png)."""
+    from vmaf_app.core import colour, perceptual_cpu
+    from vmaf_app.core.comparison_recipe import ComparisonRecipe
+    from vmaf_app.core.models import CropBox, CropMode, ScaleDirection, VideoInfo
+
+    def video(**fields) -> VideoInfo:
+        base = {"path": Path("video.mkv"), "width": 1920, "height": 1080, "fps": 24.0, "duration": 10.0,
+                "nb_frames": 240, "codec_name": "hevc", "pix_fmt": "yuv420p"}
+        base.update(fields)
+        return VideoInfo(**base)
+
+    def described(info: VideoInfo) -> dict:
+        return {"width": info.width, "height": info.height, "fps": exact(info.fps), "pix_fmt": info.pix_fmt,
+                "color_range": info.color_range, "color_space": info.color_space,
+                "color_transfer": info.color_transfer, "color_primaries": info.color_primaries,
+                "chroma_location": info.chroma_location}
+
+    def box(crop: CropBox | None) -> list[int] | None:
+        return None if crop is None else [crop.w, crop.h, crop.x, crop.y]
+
+    def recipe(direction: ScaleDirection = ScaleDirection.SOURCE_TO_DISTORTED, algorithm: str = "bicubic",
+               limit: float = 0.0) -> ComparisonRecipe:
+        return ComparisonRecipe(CropMode.NONE, algorithm, direction, limit, None)
+
+    hd, uhd = video(), video(width=3840, height=2160, pix_fmt="yuv420p10le", fps=120.0)
+    hdr10 = {"color_space": "bt2020nc", "color_transfer": "smpte2084", "color_primaries": "bt2020",
+             "color_range": "tv", "chroma_location": "topleft"}
+    to_source = ScaleDirection.DISTORTED_TO_SOURCE
+    graph_cases = (
+        ("the same size, untagged", hd, video(fps=24000 / 1001), None, None, 1, recipe(), False),
+        ("4K source scaled to the test video's 1080p, every third", uhd, hd, None, None, 3,
+         recipe(algorithm="lanczos"), False),
+        ("the test video scaled to the 4K source", uhd, hd, None, None, 1, recipe(to_source), False),
+        ("black bars cropped from both", video(width=3840, height=2160, **hdr10),
+         video(width=1920, height=1080, pix_fmt="yuv420p10le", **hdr10), CropBox(3840, 1608, 0, 276),
+         CropBox(1920, 804, 0, 138), 2, recipe(), False),
+        ("a crop that keeps it all", hd, hd, CropBox(1920, 1080, 0, 0), None, 1, recipe(), False),
+        ("full-range yuvj beside HD", video(width=640, height=480, pix_fmt="yuvj420p", codec_name="mjpeg"), hd,
+         None, None, 1, recipe(), False),
+        ("planar RGB and an unknown matrix", video(pix_fmt="gbrp"), video(color_space="fcc"), None, None, 1,
+         recipe(), False),
+        ("by timestamp, blended", video(pix_fmt="yuv420p10le", **hdr10), video(pix_fmt="yuv420p10le", **hdr10),
+         None, None, 1, recipe(), True),
+        ("by timestamp, odd-sized, every third", hd, video(width=853, height=480), None, None, 3, recipe(), True),
+        ("by timestamp, scaled to the source and cropped", uhd, hd, CropBox(3840, 1600, 0, 280), None, 2,
+         recipe(to_source, "bilinear"), True),
+        ("by timestamp, an NV12 source by position", video(pix_fmt="nv12"), hd, None, None, 2, recipe(), True),
+        ("by timestamp, a siting setparams has no name for", video(chroma_location="top-left"), hd, None, None, 1,
+         recipe(), True),
+        ("by timestamp, a full-range yuvj source by position", video(pix_fmt="yuvj420p"), hd, None, None, 1,
+         recipe(), True),
+    )
+    graphs = []
+    for name, source, test, source_crop, test_crop, step, made_with, by_time in graph_cases:
+        if by_time:
+            os.environ["VML_FRAME_PAIRING"] = "timestamp"
+        try:
+            graph = perceptual_cpu._image_filtergraph(source, test, made_with, source_crop, test_crop, step)
+        finally:
+            os.environ.pop("VML_FRAME_PAIRING", None)
+        graphs.append({"name": name, "source": described(source), "test": described(test),
+                       "source_crop": box(source_crop), "test_crop": box(test_crop), "step": step,
+                       "to_source": made_with.scale_direction is to_source, "algorithm": made_with.scale_algorithm,
+                       "by_time": by_time, "graph": graph})
+
+    class StartedError(Exception):
+        """Stops _png_pairs once FFmpeg's command is known."""
+
+    commands = []
+    seen: list[list[str]] = []
+
+    def popen(command, **_kwargs):
+        seen.append(list(command))
+        raise StartedError
+
+    real_popen, real_ffmpeg = perceptual_cpu.proc_util.popen, perceptual_cpu.ffmpeg_path
+    perceptual_cpu.proc_util.popen, perceptual_cpu.ffmpeg_path = popen, lambda: "ffmpeg"
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            for limit, step in ((0.0, 1), (1.5, 3), (10.0, 1), (0.0417, 2)):
+                seen.clear()
+                source, test = video(path=Path("source.mkv")), video(path=Path("test.mkv"))
+                with contextlib.suppress(StartedError):
+                    next(perceptual_cpu._png_pairs(source, test, recipe(limit=limit), None, None, step,
+                                                   Path(folder), None, None))
+                places = {str(source.path.resolve()): "<source>", str(test.path.resolve()): "<test>"}
+                command = [places.get(argument, argument.replace(folder + os.sep, "<folder>/"))
+                           for argument in seen[0]]
+                commands.append({"limit": exact(limit), "step": step, "command": command})
+    finally:
+        perceptual_cpu.proc_util.popen, perceptual_cpu.ffmpeg_path = real_popen, real_ffmpeg
+
+    score_texts = ("SSIMULACRA2: 91.75", "butteraugli score = 0.2345", "  87.12345678\n", "3-norm: 1.234\n",
+                   "a-5", "1.5.3", "5e", "x1e3 2E-2", ".5", "+.5e+2", "value_7", "", "no number here", "nan",
+                   "1e999", "-0", "étape 5", "é5", "12. ", "-.25e-3x", "87.5\n\nwarning: 2 of 3\n",
+                   "word " * 80, "1.0e+", "Infinity 4", "0x1F")
+    scores = []
+    for text in score_texts:
+        try:
+            scores.append({"text": text, "score": exact(perceptual_cpu.parse_score("ssimulacra2", text))})
+        except perceptual_cpu.PerceptualRunError as error:
+            scores.append({"text": text, "error": str(error)})
+
+    uhd_pixels, gigabyte = 3840 * 2160, 1_000_000_000
+    workers = []
+    for pixels, metrics, concurrent, cores, free in (
+            (uhd_pixels, ("ssimulacra2",), 1, 24, 64 * gigabyte),
+            (uhd_pixels, ("ssimulacra2", "butteraugli"), 1, 24, 64 * gigabyte),
+            (uhd_pixels, ("butteraugli",), 2, 24, 64 * gigabyte),
+            (uhd_pixels, ("ssimulacra2",), 1, 24, 4 * gigabyte),
+            (uhd_pixels, ("butteraugli",), 2, 24, 5 * gigabyte),
+            (1920 * 1080, ("ssimulacra2",), 3, 16, 64 * gigabyte),
+            (uhd_pixels, ("ssimulacra2",), 1, 1, 64 * gigabyte),
+            (uhd_pixels, ("ssimulacra2",), 1, 24, 0),
+            (0, ("butteraugli",), 1, 128, 64 * gigabyte),
+            (64 * 48, ("ssimulacra2", "butteraugli"), 0, 24, 2 ** 40)):
+        workers.append({"pixels": pixels, "metrics": list(metrics), "concurrent": concurrent, "cores": cores,
+                        "free_memory": free,
+                        "workers": perceptual_cpu.scoring_workers(pixels, metrics, concurrent, cores=cores,
+                                                                  free_memory=free)})
+
+    randoms = random.Random(20261013)
+
+    def pfm(header: bytes, values: list[float], byte_order: str = "<") -> bytes:
+        return header + struct.pack(f"{byte_order}{len(values)}f", *values)
+
+    maps = [
+        ("four values", pfm(b"Pf\n2 2\n-1.0\n", [1.0, 2.0, 3.0, 4.0])),
+        ("big-endian", pfm(b"Pf\n3 1\n1.0\n", [0.5, 1.5, 2.5], ">")),
+        ("no values", b"Pf\n0 0\n-1.0\n"),
+        ("negative, zero and tiny values", pfm(b"Pf\n4 2\n-1.0\n", [-2.0, 0.0, -0.0, 1e-30, 3.25, 7.0, 1e-3, 1e4])),
+        ("64x48 at random", pfm(b"Pf\n64 48\n-1.0\n", [randoms.uniform(0.0, 10.0) for _ in range(64 * 48)])),
+        ("1000x7 at random, with spaces", pfm(b"Pf \n 1000  7 \n-1.000000\n",
+                                              [randoms.uniform(0.0, 3.0) for _ in range(7000)])),
+        ("Windows line ends", pfm(b"Pf\r\n5 1\r\n-1.0\r\n", [1.0, 1.0, 2.0, 3.0, 5.0])),
+        ("more data than the size", pfm(b"Pf\n2 1\n-1.0\n", [1.0, 2.0, 99.0])),
+        ("colour", pfm(b"PF\n1 1\n-1.0\n", [1.0, 1.0, 1.0])),
+        ("cut short", pfm(b"Pf\n4 4\n-1.0\n", [1.0, 2.0])),
+        ("no header", b"Pf\n2 2"),
+        ("a size of one number", pfm(b"Pf\n4\n-1.0\n", [1.0] * 4)),
+        ("a scale that is no number", pfm(b"Pf\n1 1\nminus\n", [1.0])),
+    ]
+    norms = []
+    with tempfile.TemporaryDirectory() as folder, warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # numpy's, for the mean of no values
+        for name, data in maps:
+            path = Path(folder) / "map.pfm"
+            path.write_bytes(data)
+            made = {"name": name, "bytes": data.hex()}
+            try:
+                made["norm"] = exact(perceptual_cpu._butteraugli_norm3(path))
+            except perceptual_cpu.PerceptualRunError as error:
+                made["error"] = str(error)
+            except ValueError:
+                made["error"] = "unreadable"  # _run_metric says the tool wrote no readable distortion map
+            norms.append(made)
+
+    chunks = []
+    for transfer in (1, 4, 5, 6, 7, 8, 13, 16, 17, 18):
+        for primaries in (1, 4, 5, 6, 7, 9, 12):
+            chunks.append({"transfer": transfer, "primaries": primaries,
+                           "chunks": colour.png_colour_chunks(colour.VideoColour(1, transfer, primaries, False)).hex()})
+
+    chunk = colour._png_chunk
+    signature = b"\x89PNG\r\n\x1a\n"
+    header = chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 2, 16, 2, 0, 0, 0))
+    pictures = [
+        ("FFmpeg's chunks replaced", signature + header + chunk(b"gAMA", b"\x00\x00\xb1\x8f")
+         + chunk(b"cHRM", bytes(32)) + chunk(b"pHYs", bytes(9)) + chunk(b"IDAT", bytes(range(40)))
+         + chunk(b"cICP", b"\x09\x10\x00\x01") + chunk(b"IEND", b"")),
+        ("no colour chunks", signature + header + chunk(b"IDAT", b"\x01\x02") + chunk(b"IEND", b"")),
+        ("shorter than a signature", bytes([0x89]) + b"PNG"),
+        ("a chunk longer than the file", signature + header + struct.pack(">I", 1000) + b"IDAT" + bytes(10)),
+    ]
+    described_pictures = []
+    with tempfile.TemporaryDirectory() as folder:
+        for name, data in pictures:
+            for picture_colour in (colour.VideoColour(9, 16, 9, False), colour.VideoColour(1, 1, 1, False)):
+                path = Path(folder) / "picture.png"
+                path.write_bytes(data)
+                colour.describe_png(path, picture_colour)
+                described_pictures.append({"name": name, "transfer": picture_colour.transfer,
+                                           "primaries": picture_colour.primaries, "bytes": data.hex(),
+                                           "described": path.read_bytes().hex()})
+    return {"graphs": graphs, "commands": commands, "scores": scores, "workers": workers, "norms": norms,
+            "chunks": chunks, "pictures": described_pictures}
+
+
 if __name__ == "__main__":
+    write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())
     write("cvvdp.json", cvvdp_cases())
     write("vship.json", vship_cases())

@@ -5,11 +5,13 @@
 #include <unistd.h>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
+#include <mach/mach.h>
 #endif
 
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <thread>
 
 namespace vml::platform {
@@ -57,6 +59,32 @@ unsigned logical_cores() {
     const unsigned cores = std::thread::hardware_concurrency();
     return cores == 0 ? 1 : cores;
 }
+
+std::optional<unsigned long long> available_memory() {
+#ifdef __APPLE__
+    vm_statistics64_data_t statistics{};
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    const mach_port_t host = mach_host_self();
+    const kern_return_t result =
+        host_statistics64(host, HOST_VM_INFO64, reinterpret_cast<host_info64_t>(&statistics), &count);
+    mach_port_deallocate(mach_task_self(), host);
+    if (result != KERN_SUCCESS) {
+        return std::nullopt;
+    }
+    const auto page = static_cast<unsigned long long>(sysconf(_SC_PAGESIZE));
+    return (static_cast<unsigned long long>(statistics.free_count) + statistics.inactive_count) * page;
+#else
+    std::ifstream meminfo("/proc/meminfo");
+    for (std::string line; std::getline(meminfo, line);) {
+        if (line.starts_with("MemAvailable:")) {  // "MemAvailable:   12345678 kB"
+            return std::strtoull(line.c_str() + 13, nullptr, 10) * 1024;
+        }
+    }
+    return std::nullopt;
+#endif
+}
+
+void raise_thread_priority() {}
 
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
 

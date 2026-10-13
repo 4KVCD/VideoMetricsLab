@@ -7,6 +7,20 @@
 
 namespace vml {
 
+std::string PerceptualRequest::backend_of(std::string_view key) const {
+    if (key == "cvvdp") {
+        return "gpu";
+    }
+    const auto found = backends.find(key);
+    return found != backends.end() ? found->second : "gpu";
+}
+
+int PerceptualRequest::step_of(std::string_view key) const { return perceptual_step(key, options.n_subsample); }
+
+int perceptual_step(std::string_view key, int n_subsample) {
+    return key == "cvvdp" ? 1 : std::max(1, n_subsample);
+}
+
 void set_failure(PerceptualFailures& failures, const std::string& key, const std::string& reason) {
     const auto found =
         std::find_if(failures.begin(), failures.end(), [&key](const auto& failure) { return failure.first == key; });
@@ -37,9 +51,8 @@ void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double d
     }
 }
 
-std::pair<std::optional<CropBox>, std::optional<CropBox>> resolve_crops(
-    const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted, CropMode crop_mode,
-    const CancelToken& cancel, const StatusCallback& on_status) {
+CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
+                       CropMode crop_mode, const CancelToken& cancel, const StatusCallback& on_status) {
     if (crop_mode == CropMode::none) {
         return {std::nullopt, std::nullopt};
     }

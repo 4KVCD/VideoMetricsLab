@@ -400,33 +400,6 @@ std::vector<std::string> default_metrics(const Settings& settings) {
 // nothing.
 std::optional<std::string> not_yet(const CompareArguments& arguments, const Settings& settings,
                                    const std::vector<std::string>& asked) {
-    // SSIMULACRA2 and Butteraugli on the GPU only, so far: the Python app
-    // calculates them on the CPU when they are set to it, and where no GPU
-    // can. (CVVDP runs on the GPU only, and is left out with a note where it
-    // cannot be calculated: compare's preparation.)
-    std::vector<std::string> perceptual;
-    for (const std::string& key : asked) {
-        if (key == "ssimulacra2" || key == "butteraugli") {
-            perceptual.push_back(key);
-        }
-    }
-    if (!perceptual.empty()) {
-        const PerceptualBackends backends = perceptual_backends(arguments, settings);
-        std::string labels;
-        std::string on_cpu;
-        for (const std::string& key : perceptual) {
-            labels += (labels.empty() ? "" : " and ") + std::string(metric_definition(key).label);
-            if (backends.at(key) == "cpu") {
-                on_cpu += (on_cpu.empty() ? "" : " and ") + std::string(metric_definition(key).label);
-            }
-        }
-        if (!on_cpu.empty()) {
-            return on_cpu + " on the CPU";
-        }
-        if (const auto [device, reason] = detect_vship_device(); !device) {
-            return labels + " on the CPU, where no GPU can calculate them (" + reason + ")";
-        }
-    }
     const bool vmaf = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
         return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
     });
@@ -588,9 +561,10 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                             job.result_distorted_path);
         },
         [&environment](const VmafJob& job, const std::vector<std::string>& keys, bool together,
-                       const PerceptualHooks& hooks, const CancelToken& token) {
-            const PerceptualRequest request{environment, job.source_info, job.distorted_info, job.options,
-                                            job.perceptual_backends, job.cvvdp};
+                       int concurrent_cpu_tasks, const PerceptualHooks& hooks, const CancelToken& token) {
+            const PerceptualRequest request{environment,        job.source_info,         job.distorted_info,
+                                            job.options,        job.perceptual_backends, job.cvvdp,
+                                            concurrent_cpu_tasks};
             return run_perceptual_task(request, keys, together, hooks, token);
         },
         gpu_metrics_together, environment.cores, cancel);

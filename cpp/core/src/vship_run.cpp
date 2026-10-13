@@ -29,6 +29,7 @@
 #include "vml/isolated.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
+#include "vml/perceptual_cpu.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -2366,20 +2367,6 @@ bool is_perceptual_metric(std::string_view key) {
     return std::find(vship_metrics.begin(), vship_metrics.end(), key) != vship_metrics.end();
 }
 
-std::string PerceptualRequest::backend_of(std::string_view key) const {
-    if (key == "cvvdp") {
-        return "gpu";
-    }
-    const auto found = backends.find(key);
-    return found != backends.end() ? found->second : "gpu";
-}
-
-int PerceptualRequest::step_of(std::string_view key) const { return perceptual_step(key, options.n_subsample); }
-
-int perceptual_step(std::string_view key, int n_subsample) {
-    return key == "cvvdp" ? 1 : std::max(1, n_subsample);
-}
-
 std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string>& keys, int n_subsample,
                                                    bool together) {
     std::vector<std::vector<std::string>> passes;
@@ -2404,91 +2391,329 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
     return passes;
 }
 
+namespace {
+
+// The keys of `keys` that are not in `left_out`, in order.
+std::vector<std::string> without(const std::vector<std::string>& keys, const std::vector<std::string>& left_out) {
+    std::vector<std::string> kept;
+    std::copy_if(keys.begin(), keys.end(), std::back_inserter(kept), [&left_out](const std::string& key) {
+        return std::find(left_out.begin(), left_out.end(), key) == left_out.end();
+    });
+    return kept;
+}
+
+// The advice for a metric that failed on the GPU in a comparison too long
+// for the CPU to take over unasked: nobody agreed to a CPU run of this
+// length. Falling back without asking would mean days of CPU work and
+// terabytes of temporary pictures for a film.
+std::string not_retried(const std::string& reason, const std::string& labels) {
+    return "GPU scoring failed (" + reason +
+           "). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. "
+           "Choose CPU for " +
+           labels + " to calculate it on the CPU anyway.";
+}
+
+// Calculates a task's SSIMULACRA2, Butteraugli and CVVDP each where it is
+// set to run, and moves a metric from the GPU to the CPU when the GPU
+// cannot calculate it (the Python app's _MetricRouting).
+class MetricRouting {
+public:
+    MetricRouting(const PerceptualRequest& request, const std::vector<std::string>& keys, bool together,
+                  const PerceptualHooks& hooks, const CancelToken& cancel, const PerceptualRoutes& routes)
+        : request_(request), keys_(keys), together_(together), hooks_(hooks), cancel_(cancel), routes_(routes) {
+        for (const std::string& key : keys) {
+            (request.backend_of(key) == "gpu" ? gpu_ : cpu_).push_back(key);
+            if (key == "cvvdp") {
+                gpu_only_.push_back(key);
+            } else {
+                retryable_.push_back(key);  // what may be calculated on the CPU
+            }
+        }
+    }
+
+    PerceptualTaskOutput run() {
+        // A choice of the CPU alone does not probe Vship or touch a GPU.
+        if (gpu_.empty()) {
+            return on_cpu(cpu_, {}, std::nullopt);
+        }
+        const auto [device, reason] = routes_.find_gpu();
+        if (!device) {
+            return without_gpu(reason);
+        }
+        move_wrongly_scored(*device);
+        if (gpu_.empty()) {
+            return on_cpu(cpu_, {}, std::nullopt);
+        }
+        const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
+        PerceptualTaskOutput gpu_output;
+        try {
+            gpu_output = routes_.run_gpu(request_, gpu_, *device, crops, together_, hooks_, cancel_);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const ComparisonCutShortError&) {
+            // A video cut short (one that ends early) is not retried on the
+            // CPU: it would stop as short, after hours instead of the GPU's
+            // minutes.
+            throw;
+        } catch (const std::exception& error) {
+            if (cancel_.cancelled()) {
+                throw Cancelled();
+            }
+            return after_gpu_failure(error, crops);
+        }
+        return after_gpu(std::move(gpu_output), crops);
+    }
+
+private:
+    // ------------------------------------------------------------ the CPU
+
+    PerceptualTaskOutput run_on_cpu(const std::vector<std::string>& keys, const std::optional<CropPair>& crops) {
+        return routes_.run_cpu(request_, keys, crops, hooks_.on_progress, hooks_.on_status, cancel_);
+    }
+
+    // Reports the metrics the CPU is about to calculate (on_cpu).
+    void announce_cpu(const std::vector<std::string>& handed) {
+        if (hooks_.on_cpu && !handed.empty()) {
+            hooks_.on_cpu(handed);
+        }
+    }
+
+    // Calculates `keys` on the CPU, with `failures` added to the output.
+    PerceptualTaskOutput on_cpu(const std::vector<std::string>& keys, const PerceptualFailures& failures,
+                                const std::optional<CropPair>& crops) {
+        announce_cpu(keys);
+        PerceptualTaskOutput output = run_on_cpu(keys, crops);
+        for (const auto& [key, reason] : failures) {
+            set_failure(output.failures, key, reason);
+        }
+        return output;
+    }
+
+    // ------------------------------------------------------------ when the GPU cannot
+
+    // The failures of the GPU-only metrics (CVVDP), or, when nothing else
+    // was asked for, the PerceptualRunError with them. `no_gpu` means no
+    // usable GPU was found. Otherwise the GPU pass itself failed, possibly
+    // for a reason that has nothing to do with the GPU (the two videos'
+    // frame rates differing, say), so the message does not blame the GPU,
+    // which would send people looking for the wrong problem. `reasons` are
+    // each metric's own, where the passes gave them.
+    PerceptualFailures gpu_only_failed(const std::string& reason, bool no_gpu,
+                                       const PerceptualFailures* reasons = nullptr) {
+        PerceptualFailures messages;
+        std::string lines;
+        for (const std::string& key : gpu_only_) {
+            const std::string* found = reasons != nullptr ? failure_of(*reasons, key) : nullptr;
+            const std::string& own = found != nullptr ? *found : reason;
+            const std::string message = no_gpu ? label_of(key) + " needs a GPU that Vship can use, and could not use one: " + own
+                                               : label_of(key) + " could not be calculated: " + own;
+            set_failure(messages, key, message);
+            lines += (lines.empty() ? "" : "\n") + message;
+        }
+        if (retryable_.empty()) {
+            throw PerceptualRunError(lines);
+        }
+        return messages;
+    }
+
+    // Calculates on the CPU what can be, when no usable GPU was found.
+    PerceptualTaskOutput without_gpu(const std::string& reason) {
+        const PerceptualFailures failures = gpu_only_.empty() ? PerceptualFailures{} : gpu_only_failed(reason, true);
+        if (hooks_.on_status) {
+            hooks_.on_status({"Vship GPU unavailable (" + reason + "); using CPU reference metrics\xE2\x80\xA6"});
+        }
+        return on_cpu(retryable_, failures, std::nullopt);
+    }
+
+    // Moves to the CPU each metric this build of Vship scores wrongly on
+    // `device`, planned like a CPU choice.
+    void move_wrongly_scored(const VshipDevice& device) {
+        std::vector<std::string> wrong;
+        std::copy_if(gpu_.begin(), gpu_.end(), std::back_inserter(wrong),
+                     [&device](const std::string& key) { return !scores_correctly(device, key); });
+        gpu_ = without(gpu_, wrong);
+        cpu_.insert(cpu_.end(), wrong.begin(), wrong.end());
+    }
+
+    // Whether the comparison is too long to move to the CPU unasked.
+    bool too_long_for_cpu() const {
+        return compared_seconds(request_.source, request_.distorted, request_.options.duration_limit) >
+               long_cpu_run_seconds;
+    }
+
+    // Calculates every metric that can be on the CPU after the GPU task
+    // failed, unless the video is too long to do that unasked.
+    PerceptualTaskOutput after_gpu_failure(const std::exception& error, const CropPair& crops) {
+        const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
+        const PerceptualFailures failures =
+            gpu_only_.empty() ? PerceptualFailures{}
+                              : gpu_only_failed(error.what(), false, passes != nullptr ? &passes->failures() : nullptr);
+        const std::vector<std::string> gpu_retry = without(gpu_, gpu_only_);
+        if (!gpu_retry.empty() && too_long_for_cpu()) {
+            // CVVDP's own failure goes into the same message, because the
+            // advice about the CPU does not apply to a GPU-only metric.
+            std::string message = not_retried(error.what(), labels_of(gpu_retry, " and "));
+            std::vector<std::string> said;
+            for (const auto& [key, reason] : failures) {
+                if (std::find(said.begin(), said.end(), reason) == said.end()) {
+                    said.push_back(reason);
+                    message += "\n" + reason;
+                }
+            }
+            throw PerceptualRunError(message);
+        }
+        if (hooks_.on_status) {
+            hooks_.on_status({"Vship GPU compute failed (" + std::string(error.what()) +
+                              "); using CPU reference metrics\xE2\x80\xA6"});
+        }
+        // After a GPU failure, all metrics run together on the CPU, so that
+        // the frames are extracted only once and the result stays whole.
+        return on_cpu(retryable_, failures, crops);
+    }
+
+    // ------------------------------------------------------------ after the GPU task
+
+    // Calculates the CPU's metrics once the GPU task is done, with any metric
+    // that failed on the GPU, and combines the two.
+    PerceptualTaskOutput after_gpu(PerceptualTaskOutput gpu_output, const CropPair& crops) {
+        // A metric that failed on the GPU while the others finished is
+        // retried on the CPU on the same terms as a failed pass: only for
+        // videos up to ten minutes, which nobody has to agree to.
+        PerceptualFailures failures = gpu_output.failures;
+        std::vector<std::string> gpu_failed;
+        for (const std::string& key : gpu_) {
+            if (key != "cvvdp" && failure_of(failures, key) != nullptr) {
+                gpu_failed.push_back(key);
+            }
+        }
+        if (!gpu_failed.empty() && too_long_for_cpu()) {
+            for (const std::string& key : gpu_failed) {
+                set_failure(failures, key, not_retried(*failure_of(failures, key), label_of(key)));
+            }
+            gpu_failed.clear();
+        }
+        // Kept for the message if the CPU retry fails too: the GPU failure is
+        // the first cause, and without it a GPU user would be sent to fix a
+        // CPU tool.
+        PerceptualFailures gpu_reasons;
+        for (const std::string& key : gpu_failed) {
+            gpu_reasons.emplace_back(key, *failure_of(failures, key));
+            std::erase_if(failures, [&key](const auto& failure) { return failure.first == key; });
+        }
+        std::vector<std::string> cpu_keys = cpu_;
+        cpu_keys.insert(cpu_keys.end(), gpu_failed.begin(), gpu_failed.end());
+        if (cpu_keys.empty()) {
+            gpu_output.failures = failures;
+            return gpu_output;
+        }
+        announce_cpu(cpu_keys);
+        if (hooks_.on_status) {
+            hooks_.on_status({gpu_failed.empty() ? std::string("Calculating selected perceptual metric(s) on CPU\xE2\x80\xA6")
+                                                 : labels_of(gpu_failed, " and ") +
+                                                       " failed on the GPU; calculating it on the CPU\xE2\x80\xA6"});
+        }
+        // A CPU failure's message, with the GPU failure first if there was one.
+        const auto failed_on_cpu = [&gpu_reasons](const std::string& key, const std::string& reason) {
+            const std::string* gpu_reason = failure_of(gpu_reasons, key);
+            return gpu_reason != nullptr
+                       ? "GPU scoring failed (" + *gpu_reason + "); the CPU retry failed too: " + reason
+                       : reason;
+        };
+        // The GPU pass has finished, so a CPU failure from here on fails only
+        // the CPU metrics, and does not throw away what the GPU scored (a
+        // finished CVVDP pass lost to a missing libjxl tool, say). The
+        // progress from here is a stage of its own, from 0 (on_cpu).
+        PerceptualTaskOutput cpu_output;
+        try {
+            cpu_output = run_on_cpu(cpu_keys, crops);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const std::exception& error) {
+            if (cancel_.cancelled()) {
+                throw Cancelled();
+            }
+            if (gpu_output.metrics.empty()) {
+                if (!gpu_reasons.empty()) {
+                    throw PerceptualRunError(failed_on_cpu(cpu_keys.back(), error.what()));
+                }
+                throw;
+            }
+            for (const std::string& key : cpu_keys) {
+                set_failure(failures, key, failed_on_cpu(key, error.what()));
+            }
+            gpu_output.failures = failures;
+            return gpu_output;
+        }
+        return combined(gpu_output, cpu_output, failures);
+    }
+
+    // The GPU's and the CPU's scores as one output. Each metric keeps its own
+    // frames: Vship and the CPU tools can end a frame apart (each stops where
+    // the shorter video's pictures do), so a difference must not throw the
+    // CPU's finished scores away.
+    PerceptualTaskOutput combined(const PerceptualTaskOutput& gpu_output, const PerceptualTaskOutput& cpu_output,
+                                  const PerceptualFailures& failures) const {
+        PerceptualTaskOutput output{{}, gpu_output.source_crop, gpu_output.distorted_crop,
+                                    std::max(gpu_output.compared_frame_count, cpu_output.compared_frame_count),
+                                    failures};
+        for (const std::string& key : keys_) {
+            if (failure_of(failures, key) != nullptr) {
+                continue;
+            }
+            const MetricResultSet& found = gpu_output.metrics.has(key) ? gpu_output.metrics : cpu_output.metrics;
+            if (const FrameMetricResult* frame = found.frame(key)) {
+                output.metrics.add(*frame);
+            } else if (const SequenceMetricResult* sequence = found.sequence(key)) {
+                output.metrics.add(*sequence);
+            } else {
+                throw PerceptualRunError("Selected backend did not produce " + key + ".");
+            }
+        }
+        return output;
+    }
+
+    const PerceptualRequest& request_;
+    const std::vector<std::string>& keys_;
+    bool together_;
+    const PerceptualHooks& hooks_;
+    const CancelToken& cancel_;
+    const PerceptualRoutes& routes_;
+    std::vector<std::string> gpu_;        // the metrics set to run on the GPU
+    std::vector<std::string> cpu_;        // the metrics set to run on the CPU
+    std::vector<std::string> gpu_only_;   // the GPU's metrics that run on no CPU (CVVDP)
+    std::vector<std::string> retryable_;  // the metrics the CPU can take over
+};
+
+}  // namespace
+
+PerceptualRoutes app_perceptual_routes() {
+    PerceptualRoutes routes;
+    routes.find_gpu = [] {
+        forget_failed_vship_probe();
+        return detect_vship_device();
+    };
+    routes.find_crops = [](const PerceptualRequest& request, const StatusCallback& on_status,
+                           const CancelToken& cancel) {
+        return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, request.options.crop_mode,
+                             cancel, on_status);
+    };
+    routes.run_gpu = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
+                        const VshipDevice& device, const CropPair& crops, bool together, const PerceptualHooks& hooks,
+                        const CancelToken& cancel) {
+        return VshipTask(request, keys, device, crops.first, crops.second, together, hooks, cancel).run();
+    };
+    routes.run_cpu = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
+                        const std::optional<CropPair>& crops, const ProgressCallback& on_progress,
+                        const StatusCallback& on_status, const CancelToken& cancel) {
+        return run_cpu_perceptual_task(request, keys, crops, on_progress, on_status, cancel);
+    };
+    return routes;
+}
+
 PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
-                                         bool together, const PerceptualHooks& hooks, const CancelToken& cancel) {
-    std::vector<std::string> on_gpu;
-    std::vector<std::string> on_cpu;
-    for (const std::string& key : keys) {
-        (request.backend_of(key) == "gpu" ? on_gpu : on_cpu).push_back(key);
-    }
-    // The CPU's tools are not in the C++ app yet; the command line refuses a
-    // run that would need them before it starts.
-    if (!on_cpu.empty()) {
-        throw PerceptualRunError(labels_of(on_cpu, " and ") + " on the CPU is not in the C++ app yet.");
-    }
-    // CVVDP runs on the GPU only, and fails on its own where the GPU cannot
-    // calculate it; the Python app calculates the others on the CPU.
-    std::vector<std::string> retryable;
-    std::copy_if(on_gpu.begin(), on_gpu.end(), std::back_inserter(retryable),
-                 [](const std::string& key) { return key != "cvvdp"; });
-    const auto [device, no_device] = detect_vship_device();
-    if (!device) {
-        if (retryable.empty()) {
-            throw PerceptualRunError("CVVDP needs a GPU that Vship can use, and could not use one: " + no_device);
-        }
-        throw PerceptualRunError(labels_of(retryable, " and ") +
-                                 " on the CPU, without a GPU that Vship can use (" + no_device +
-                                 "), is not in the C++ app yet.");
-    }
-    const auto [source_crop, distorted_crop] =
-        resolve_crops(request.environment.ffmpeg, request.source, request.distorted, request.options.crop_mode,
-                      cancel, hooks.on_status);
-    PerceptualTaskOutput output;
-    try {
-        output = VshipTask(request, on_gpu, *device, source_crop, distorted_crop, together, hooks, cancel).run();
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const ComparisonCutShortError&) {
-        // Not retried on the CPU: it would stop as short, after hours
-        // instead of the GPU's minutes.
-        throw;
-    } catch (const std::exception& error) {
-        if (cancel.cancelled()) {
-            throw Cancelled();
-        }
-        // CVVDP fails with its own reason, which says nothing of the CPU (the
-        // Python app's _gpu_only_failed).
-        std::string cvvdp_failure;
-        if (retryable.size() != on_gpu.size()) {
-            const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
-            const std::string* own = passes != nullptr ? failure_of(passes->failures(), "cvvdp") : nullptr;
-            cvvdp_failure = "CVVDP could not be calculated: " + (own != nullptr ? *own : std::string(error.what()));
-        }
-        if (retryable.empty()) {
-            throw PerceptualRunError(cvvdp_failure);
-        }
-        const std::string cvvdp_line = cvvdp_failure.empty() ? "" : "\n" + cvvdp_failure;
-        // The Python app calculates the other metrics on the CPU after a GPU
-        // failure, for a video up to ten minutes long.
-        const bool too_long = compared_seconds(request.source, request.distorted, request.options.duration_limit) >
-                              long_cpu_run_seconds;
-        if (too_long) {
-            throw PerceptualRunError("GPU scoring failed (" + std::string(error.what()) +
-                                     "). It was not retried on the CPU, which would take hours to days for a video "
-                                     "over 10 minutes. Choose CPU for " +
-                                     labels_of(retryable, " and ") + " to calculate it on the CPU anyway." +
-                                     cvvdp_line);
-        }
-        throw PerceptualRunError("GPU scoring failed (" + std::string(error.what()) +
-                                 "); calculating it on the CPU instead is not in the C++ app yet." + cvvdp_line);
-    }
-    // A metric that failed on the GPU while the others finished is retried
-    // on the CPU in the Python app, for a video up to ten minutes long.
-    // CVVDP, which runs on the GPU only, keeps its own reason.
-    const bool too_long =
-        compared_seconds(request.source, request.distorted, request.options.duration_limit) > long_cpu_run_seconds;
-    for (auto& [key, reason] : output.failures) {
-        if (key == "cvvdp") {
-            continue;
-        }
-        reason = too_long ? "GPU scoring failed (" + reason +
-                                "). It was not retried on the CPU, which would take hours to days for a video "
-                                "over 10 minutes. Choose CPU for " +
-                                label_of(key) + " to calculate it on the CPU anyway."
-                          : "GPU scoring failed (" + reason +
-                                "); calculating it on the CPU instead is not in the C++ app yet.";
-    }
-    return output;
+                                         bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
+                                         const PerceptualRoutes& routes) {
+    return MetricRouting(request, keys, together, hooks, cancel, routes).run();
 }
 
 nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesystem::path& folder) {

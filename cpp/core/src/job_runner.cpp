@@ -224,12 +224,17 @@ public:
     // starts: a single video runs alone whatever the setting says, so it
     // keeps every core. A thread count the user chose is kept.
     VmafOptions share_cores(VmafOptions options) const {
-        const int concurrent = std::min(parallel_jobs_, lane_count_);
+        const int concurrent = concurrent_cpu_tasks();
         if (options.n_threads <= 0 && concurrent > 1) {
             options.n_threads = static_cast<int>(std::max(1u, cores_ / static_cast<unsigned>(concurrent)));
         }
         return options;
     }
+
+    // How many tasks the CPU's queue may run at once. The CPU's perceptual
+    // tools, which score several frame pairs at a time, divide the cores and
+    // memory by it, as share_cores divides libvmaf's threads.
+    int concurrent_cpu_tasks() const { return std::max(1, std::min(parallel_jobs_, lane_count_)); }
 
     // Which of a video's tasks lanes have taken.
     std::vector<bool> admitted(const JobRun& run) {
@@ -362,8 +367,8 @@ PerceptualTaskOutput JobRun::execute_perceptual(std::size_t task) {
         report_pass_start(task, number, count, keys);
     };
     hooks.on_cpu = [this, task](const std::vector<std::string>& keys) { report_cpu(task, keys); };
-    return scheduler_.perceptual_runner(job_, job_.tasks[task].metric_keys, scheduler_.gpu_metrics_together, hooks,
-                                        scheduler_.cancel);
+    return scheduler_.perceptual_runner(job_, job_.tasks[task].metric_keys, scheduler_.gpu_metrics_together,
+                                        scheduler_.concurrent_cpu_tasks(), hooks, scheduler_.cancel);
 }
 
 void JobRun::report_pass(const PerceptualTaskOutput& output) {

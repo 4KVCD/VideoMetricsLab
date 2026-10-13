@@ -86,6 +86,17 @@ std::optional<std::filesystem::path> find_on_path(std::string_view name) {
 
 unsigned logical_cores() { return std::max(1u, std::thread::hardware_concurrency()); }
 
+std::optional<unsigned long long> available_memory() {
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof status;
+    if (!GlobalMemoryStatusEx(&status)) {
+        return std::nullopt;
+    }
+    return status.ullAvailPhys;
+}
+
+void raise_thread_priority() { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST); }
+
 std::vector<unsigned> gpu_vendor_ids() {
     std::vector<unsigned> vendors;
     IDXGIFactory1* factory = nullptr;

@@ -65,6 +65,7 @@ struct ProcessOutput {
     std::string standard_output;
     std::string standard_error;
     bool timed_out = false;  // it was ended for taking too long
+    bool stopped = false;    // it was ended because the caller's `stop` said so
 };
 
 // A running program, its standard output read line by line here and its
@@ -107,6 +108,21 @@ public:
     // Ends the program, and every program it started.
     void terminate();
 
+    // Stops the program and every program it started from running, until
+    // resume(), as the Python app suspends a process tree (proc.py). Called
+    // again, it stops what was started since: a launcher's program found
+    // after the first call would otherwise run on. On Windows each process
+    // of its job is suspended once, less the console host Windows gives a
+    // console program; Windows counts suspends, so these nest with any made
+    // elsewhere. Elsewhere its process group is sent SIGSTOP. Not for use
+    // from two threads at once.
+    void suspend();
+
+    // Lets every process suspend() stopped run again: on Windows the last
+    // suspended first, so that a program never runs under a stopped
+    // launcher; elsewhere its process group is sent SIGCONT.
+    void resume();
+
     // The end of what the program wrote to standard error (error_tail),
     // complete once it has ended (after wait()).
     std::string standard_error();
@@ -120,9 +136,10 @@ private:
 };
 
 // Runs a program to its end and returns what it wrote. A program still
-// running after `timeout` is ended, and the result says so. Throws
+// running after `timeout`, or once `stop` returns true (asked every 100 ms,
+// before the time is checked), is ended, and the result says which. Throws
 // ProcessError if it cannot be started.
 ProcessOutput run_program(const std::vector<std::string>& arguments, std::chrono::milliseconds timeout,
-                          const ProcessOptions& options = {});
+                          const ProcessOptions& options = {}, const std::function<bool()>& stop = nullptr);
 
 }  // namespace vml::platform

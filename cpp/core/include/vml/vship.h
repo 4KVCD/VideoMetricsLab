@@ -259,6 +259,12 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 // is none.
 std::pair<std::optional<VshipDevice>, std::string> detect_vship_device();
 
+// Forgets a probe that found no GPU a minute or more ago, so that the next
+// run probes again: the failure may have been temporary (a driver being
+// updated or restarted, a GPU briefly unavailable), and without this every
+// GPU metric of a long run would go to the CPU.
+void forget_failed_vship_probe();
+
 // Whether SSIMULACRA2 or Butteraugli set to the GPU is calculated on the
 // GPU here: when Vship can use a GPU, and its build scores the metric
 // correctly.

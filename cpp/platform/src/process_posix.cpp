@@ -103,6 +103,7 @@ struct ChildProcess::State {
     std::mutex wait_mutex;
     bool ended = false;
     int exit_code = -1;
+    bool stopped = false;  // suspend() has stopped its process group
     Descriptor output;
     std::string unread;
     bool output_ended = false;
@@ -299,6 +300,22 @@ void ChildProcess::terminate() {
     if (!state_->reap(false)) {
         kill(-state_->id, SIGKILL);
     }
+}
+
+void ChildProcess::suspend() {
+    // Sent again each time: a process stopped already stays so, and one that
+    // joined the group since stops too.
+    if (!state_->reap(false)) {
+        kill(-state_->id, SIGSTOP);
+        state_->stopped = true;
+    }
+}
+
+void ChildProcess::resume() {
+    if (state_->stopped && !state_->reap(false)) {
+        kill(-state_->id, SIGCONT);
+    }
+    state_->stopped = false;
 }
 
 std::string ChildProcess::standard_error() {

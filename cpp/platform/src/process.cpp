@@ -1,6 +1,7 @@
 // What every system's ChildProcess shares.
 #include "vml/platform/process.h"
 
+#include <algorithm>
 #include <thread>
 
 namespace vml::platform {
@@ -28,7 +29,7 @@ void keep_error_tail(std::string& kept, std::string_view written) {
 }
 
 ProcessOutput run_program(const std::vector<std::string>& arguments, std::chrono::milliseconds timeout,
-                          const ProcessOptions& options) {
+                          const ProcessOptions& options, const std::function<bool()>& stop) {
     ChildProcess child = ChildProcess::start(arguments, options);
     // Read on a thread of its own, so that a program writing a lot is never
     // held up by a full pipe while this one waits for it to end.
@@ -40,9 +41,24 @@ ProcessOutput run_program(const std::vector<std::string>& arguments, std::chrono
         }
     });
     ProcessOutput result;
-    if (!child.wait_for(timeout)) {
-        child.terminate();
-        result.timed_out = true;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true) {
+        const auto left = std::max(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       deadline - std::chrono::steady_clock::now()),
+                                   std::chrono::milliseconds(0));
+        if (child.wait_for(stop ? std::min(left, std::chrono::milliseconds(100)) : left)) {
+            break;
+        }
+        if (stop && stop()) {
+            child.terminate();
+            result.stopped = true;
+            break;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            child.terminate();
+            result.timed_out = true;
+            break;
+        }
     }
     result.exit_code = child.wait();
     reader.join();

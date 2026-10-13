@@ -9,9 +9,11 @@
 // colours differently, they scored the same frames far apart.
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "vml/video.h"
 
@@ -60,5 +62,22 @@ bool is_rgb_format(const std::string& pix_fmt);
 // The video's colours as both implementations read them, or nothing for a
 // tag neither can read.
 std::optional<VideoColour> colour_of(const VideoInfo& info);
+
+// FFmpeg's name for an H.273 matrix (setparams' colorspace=), for the
+// matrices FFmpeg can convert with; nothing for the others.
+std::optional<std::string_view> ffmpeg_matrix_name(int matrix);
+
+// The PNG chunks that make libjxl's tools read an RGB picture's values as
+// Vship reads the video's. Vship takes BT.709 (and BT.2020's SDR curves) as
+// a display's 2.4 gamma (BT.1886), not as the camera curve H.273 defines,
+// and no H.273 code means a plain power curve, so such a curve is described
+// with gAMA and cHRM; every other transfer (sRGB, linear, PQ, HLG) with
+// cICP.
+std::string png_colour_chunks(const VideoColour& colour);
+
+// Replaces the colour chunks of the PNG at `path` (one FFmpeg wrote) with
+// png_colour_chunks' for `colour`. Throws std::runtime_error when the file
+// cannot be read or written.
+void describe_png(const std::filesystem::path& path, const VideoColour& colour);
 
 }  // namespace vml

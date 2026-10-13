@@ -23,6 +23,7 @@ add_library(vml_core
     src/number_format.cpp
     src/options.cpp
     src/perceptual.cpp
+    src/perceptual_cpu.cpp
     src/python_json.cpp
     src/python_text.cpp
     src/results.cpp

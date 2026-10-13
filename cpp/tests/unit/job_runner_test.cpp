@@ -315,10 +315,11 @@ TEST(JobRunner, VshipsPassesAreKeptAsTheyFinish) {
         [](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&, const CancelToken&) {
             return result_with({{"vmaf", {0, 1}}});
         },
-        [&](const VmafJob&, const std::vector<std::string>& keys, bool together, const PerceptualHooks& hooks,
-            const CancelToken&) {
+        [&](const VmafJob&, const std::vector<std::string>& keys, bool together, int concurrent_cpu_tasks,
+            const PerceptualHooks& hooks, const CancelToken&) {
             EXPECT_EQ(keys, (std::vector<std::string>{"ssimulacra2", "butteraugli"}));
             EXPECT_FALSE(together);
+            EXPECT_EQ(concurrent_cpu_tasks, 1);  // one parallel job
             hooks.on_pass(1, 2, {"ssimulacra2"});
             hooks.on_pass_done(output_with({{"ssimulacra2", {0, 1}}}, 2));
             {
@@ -383,7 +384,7 @@ TEST(JobRunner, PerceptualMetricsAloneMakeAResult) {
         jobs, 1, reported.events(),
         [](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&,
            const CancelToken&) -> ComparisonResult { throw std::logic_error("no FFmpeg task"); },
-        [](const VmafJob&, const std::vector<std::string>&, bool, const PerceptualHooks&, const CancelToken&) {
+        [](const VmafJob&, const std::vector<std::string>&, bool, int, const PerceptualHooks&, const CancelToken&) {
             return output_with({{"ssimulacra2", {0, 3, 6}}}, 9);
         },
         false, 24, CancelToken());

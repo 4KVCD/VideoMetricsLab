@@ -1,21 +1,57 @@
 // What SSIMULACRA2, Butteraugli and CVVDP share wherever they are
-// calculated: their errors, a task's output, and the checks made before a
-// run. A port of the shared parts of vmaf_app/core/perceptual_cpu.py.
+// calculated: what a task is given, their errors, a task's output, and the
+// checks made before a run. A port of the shared parts of
+// vmaf_app/core/perceptual_cpu.py.
 #pragma once
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/cvvdp.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/results.h"
 #include "vml/video.h"
 
 namespace vml {
+
+// What a perceptual task is given: the two videos, the run's options (black
+// bars, scaling, the duration limit, frame subsampling, decoding), where
+// SSIMULACRA2 and Butteraugli are each set to run, the display CVVDP models,
+// and how many tasks the CPU's queue runs at once, this one included, which
+// sets the share of the cores and memory SSIMULACRA2 and Butteraugli take
+// on the CPU (scoring_workers in perceptual_cpu.h).
+struct PerceptualRequest {
+    RunEnvironment environment;
+    VideoInfo source;
+    VideoInfo distorted;
+    VmafOptions options;
+    // "gpu" or "cpu" for SSIMULACRA2 and Butteraugli; "gpu" where not given.
+    std::map<std::string, std::string, std::less<>> backends;
+    CvvdpSettings cvvdp;
+    int concurrent_cpu_tasks = 1;
+
+    // Where `key` is set to run: CVVDP on the GPU only (its official CPU
+    // implementation needs PyTorch, almost 1 GB, and takes seconds per 4K
+    // frame); the others as set.
+    std::string backend_of(std::string_view key) const;
+
+    // Every how many frames `key` is scored (perceptual_step).
+    int step_of(std::string_view key) const;
+};
+
+// Every how many frames perceptual metric `key` is scored: every
+// `n_subsample`-th frame; CVVDP, which models motion over time, every frame.
+int perceptual_step(std::string_view key, int n_subsample);
+
+// The black-bar crops of the source and the test video.
+using CropPair = std::pair<std::optional<CropBox>, std::optional<CropBox>>;
 
 // SSIMULACRA2, Butteraugli or CVVDP could not be calculated.
 class PerceptualRunError : public std::runtime_error {
@@ -79,8 +115,7 @@ void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double d
 // bars are kept (`crop_mode`). Sends a status first, worded as for FFmpeg's
 // metrics, because a video's tasks share one detection. Throws
 // CropDetectError and Cancelled.
-std::pair<std::optional<CropBox>, std::optional<CropBox>> resolve_crops(
-    const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted, CropMode crop_mode,
-    const CancelToken& cancel, const StatusCallback& on_status);
+CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
+                       CropMode crop_mode, const CancelToken& cancel, const StatusCallback& on_status);
 
 }  // namespace vml

@@ -52,6 +52,17 @@ std::optional<std::filesystem::path> find_on_path(std::string_view name);
 // How many logical cores the CPU has (Python's os.cpu_count()), at least 1.
 unsigned logical_cores();
 
+// How many bytes of memory programs can be given now without the system
+// swapping, as psutil's virtual_memory().available gives it: the available
+// physical memory on Windows, MemAvailable on Linux, the free and inactive
+// pages on macOS. Nothing when the system does not say.
+std::optional<unsigned long long> available_memory();
+
+// Lets the calling thread run ahead of ordinary work (Windows'
+// THREAD_PRIORITY_HIGHEST), for a light thread whose timing matters. It does
+// nothing on other systems, as in the Python app, or if Windows refuses.
+void raise_thread_priority();
+
 // The PCI vendor IDs of the hardware GPUs DirectX lists (Windows only; empty
 // elsewhere): 0x10DE NVIDIA, 0x1002 and 0x1022 AMD, 0x8086 Intel.
 std::vector<unsigned> gpu_vendor_ids();
@@ -59,6 +70,11 @@ std::vector<unsigned> gpu_vendor_ids();
 // When a file was last written, in nanoseconds since 1970 (Python's
 // st_mtime_ns), or nothing when it cannot be read.
 std::optional<long long> modified_ns(const std::filesystem::path& file);
+
+// The whole of a file, in one read, as Python's read_bytes() reads it, or
+// nothing when it cannot be read. Read byte by byte through a stream, a 20 MB
+// picture of a 4K frame took 64 ms rather than 15.
+std::optional<std::string> read_file(const std::filesystem::path& path);
 
 // A path as UTF-8 text, and back; the app keeps paths as UTF-8.
 std::string path_text(const std::filesystem::path& path);
