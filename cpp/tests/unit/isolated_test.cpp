@@ -4,9 +4,12 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
+
+#include "vml/platform/system.h"
 
 namespace vml {
 namespace {
@@ -58,6 +61,26 @@ TEST(Isolated, RunsWorkInAProcessOfItsOwn) {
                      [&cancel](const nlohmann::json&) { cancel.cancel(); }, cancel),
                  Cancelled);
     set_isolation_program(std::nullopt);
+}
+
+// A program the child started can still have a file in the child's folder
+// open for a moment after a Cancel has ended them both (FFmpeg, its
+// timestamps): the folder goes all the same.
+TEST(Isolated, ItsFolderGoesWhenAProgramItStartedHadAFileThereOpen) {
+    set_isolation_program(std::filesystem::path(VML_CLI));
+    std::filesystem::path folder;
+    CancelToken cancel;
+    EXPECT_THROW(run_isolated(
+                     "test-hold", "the test", nlohmann::json::object(),
+                     [&](const nlohmann::json& message) {
+                         folder = platform::path_from_text(message.at("folder").get<std::string>());
+                         cancel.cancel();
+                     },
+                     cancel),
+                 Cancelled);
+    set_isolation_program(std::nullopt);
+    ASSERT_FALSE(folder.empty());
+    EXPECT_FALSE(std::filesystem::exists(folder));
 }
 
 TEST(Isolated, DescribesExitCodesAsThePythonAppDoes) {

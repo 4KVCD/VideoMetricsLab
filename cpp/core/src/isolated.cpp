@@ -35,6 +35,10 @@ std::optional<std::filesystem::path>& program() {
     return path;
 }
 
+// How long a child's folder is tried while a program the child started
+// (FFmpeg) is still ending with a file in it open.
+constexpr std::chrono::seconds folder_wait{5};
+
 // A folder of its own for a child's request and files, deleted with it.
 class ChildFolder {
 public:
@@ -51,9 +55,20 @@ public:
         }
         throw std::runtime_error("A folder for a process of its own could not be made.");
     }
+    // A program the child started can still have a file here open for a
+    // moment after the child has ended: FFmpeg, ended with it by a Cancel.
+    // Ending a program does not wait for it to end, so the folder is tried
+    // again until that program has ended too.
     ~ChildFolder() {
-        std::error_code ignored;
-        std::filesystem::remove_all(path_, ignored);
+        const auto deadline = std::chrono::steady_clock::now() + folder_wait;
+        while (true) {
+            std::error_code ignored;
+            std::filesystem::remove_all(path_, ignored);
+            if (!std::filesystem::exists(path_, ignored) || std::chrono::steady_clock::now() >= deadline) {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
     }
     ChildFolder(const ChildFolder&) = delete;
     ChildFolder& operator=(const ChildFolder&) = delete;
@@ -221,6 +236,26 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "test-wait") {
             // For the tests: waits to be cancelled.
             send_isolated_message({{"waiting", true}});
+            std::this_thread::sleep_for(std::chrono::minutes(1));
+        } else if (task == "test-hold") {
+            // For the tests: a program this one starts holds a file in this
+            // one's folder open, as FFmpeg holds its timestamps, and this
+            // waits to be cancelled.
+            const std::filesystem::path folder = request_file.parent_path();
+            const std::filesystem::path hold_request = folder / "hold.json";
+            std::ofstream(hold_request, std::ios::binary)
+                << nlohmann::json{{"file", platform::path_text(folder / "held.txt")}}.dump();
+            platform::ChildProcess holder = platform::ChildProcess::start(
+                {platform::path_text(platform::executable_path()), std::string(isolated_argument), "test-hold-file",
+                 platform::path_text(hold_request)});
+            holder.read_line();  // the file is open
+            send_isolated_message({{"waiting", true}, {"folder", platform::path_text(folder)}});
+            std::this_thread::sleep_for(std::chrono::minutes(1));
+        } else if (task == "test-hold-file") {
+            // For the tests: holds the request's file open.
+            const std::ofstream held(platform::path_from_text(request.at("file").get<std::string>()),
+                                     std::ios::binary);
+            send_isolated_message({{"holding", true}});
             std::this_thread::sleep_for(std::chrono::minutes(1));
         } else {
             throw std::invalid_argument("there is no task " + std::string(task));
