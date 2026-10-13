@@ -3,8 +3,13 @@
 add_library(vml_core
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
+    src/frame_sync.cpp
+    src/geometry.cpp
+    src/hardware_decoding.cpp
     src/metrics.cpp
+    src/model_select.cpp
     src/number_format.cpp
+    src/options.cpp
     src/python_text.cpp
     src/settings.cpp
     src/stats.cpp
@@ -12,3 +17,7 @@ add_library(vml_core
 )
 target_include_directories(vml_core PUBLIC include)
 target_link_libraries(vml_core PUBLIC vml_platform PRIVATE vml_compile_options nlohmann_json)
+# The app's own files (VMAF models, bundled tools) in a development build:
+# the repository's vmaf_app folder. An installed app sets VML_RESOURCES.
+cmake_path(SET resources NORMALIZE "${PROJECT_SOURCE_DIR}/../vmaf_app")
+target_compile_definitions(vml_core PRIVATE VML_DEFAULT_RESOURCES="${resources}")

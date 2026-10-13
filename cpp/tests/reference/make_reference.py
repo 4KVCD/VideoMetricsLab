@@ -313,7 +313,140 @@ def version_cases() -> dict:
                        "text": format_version(parse_version(output))} for output in outputs]}
 
 
+# ---------------------------------------------------------------- decisions
+
+def decision_cases() -> dict:
+    """The run's pure decisions, made by the Python app's own functions:
+    pixel formats and GPU decoding (gpu.py, with given -hwaccels and GPU
+    makers), frame rates as fractions and frame counts under a limit
+    (frame_sync.py, both ways of pairing), why two videos cannot be compared
+    and the shapes they are compared at (geometry.py), and the VMAF model
+    (model_select.py)."""
+    from fractions import Fraction
+
+    from vmaf_app.core import frame_sync, gpu
+    from vmaf_app.core.geometry import compared_dimensions, display_aspect_ratio, pair_problem
+    from vmaf_app.core.model_select import model_for_resolution, resolve_model, resolve_v1_model
+    from vmaf_app.core.models import GpuVendor, ScaleDirection, VideoInfo, VmafOptions
+
+    formats = ["", "yuv420p", "yuv420p10le", "yuv420p12le", "yuv420p16le", "yuvj420p", "yuv422p10le",
+               "yuv444p", "nv12", "p010le", "p016le", "p012be", "gray", "gray10le", "ya16be", "rgb24", "gbrp12be",
+               "bgr0", "YUV420P10LE", "x2rgb10le"]
+    pixel_formats = [{"format": f, "bit_depth": gpu.bit_depth(f), "hw_native": gpu.hw_native_format(f),
+                      "downloads": [gpu.downloads_from_gpu(f, w, h) for w, h in ((1920, 1080), (853, 480), (0, 0))]}
+                     for f in formats]
+    analysis = [{"formats": pair, "format": gpu.analysis_pix_fmt(*pair)}
+                for pair in (["yuv420p", "yuv420p"], ["yuv420p", "yuv420p10le"], ["p010le", "nv12"],
+                             ["yuv444p16le", "yuv420p"], [], ["gray12le"])]
+
+    real_hwaccels, real_vendors = gpu.available_hwaccels, gpu.detected_gpu_vendors
+    decode = []
+    try:
+        for hwaccels in (["cuda", "d3d11va", "qsv"], ["d3d11va"], ["qsv", "d3d11va"], []):
+            for vendors in ([GpuVendor.NVIDIA], [GpuVendor.INTEL, GpuVendor.AMD], [GpuVendor.AMD], []):
+                gpu.available_hwaccels = lambda h=hwaccels: set(h)
+                gpu.detected_gpu_vendors = lambda v=vendors: list(v)
+                for vendor in GpuVendor:
+                    for codec, pix_fmt, size in (("hevc", "yuv420p10le", (3840, 2160)), ("h264", "yuv420p10le", (1920, 1080)),
+                                                 ("h264", "yuv420p", (1920, 1080)), ("av1", "yuv420p10le", (853, 479)),
+                                                 ("vvc", "yuv420p10le", (1920, 1080)), ("HEVC", "yuv422p10le", (1920, 1080)),
+                                                 ("vp9", "", (0, 0)), ("mpeg2video", "yuv420p", (720, 576))):
+                        decode.append({"hwaccels": hwaccels, "vendors": [v.value for v in vendors],
+                                       "vendor": vendor.value, "codec": codec, "pix_fmt": pix_fmt, "size": list(size),
+                                       "hwaccel": gpu.pick_decode(vendor, codec, pix_fmt, *size)})
+    finally:
+        gpu.available_hwaccels, gpu.detected_gpu_vendors = real_hwaccels, real_vendors
+    hwaccel_args = [{"hwaccel": h, "args": gpu.hwaccel_args(h)} for h in (None, "cuda", "qsv", "d3d11va", "vulkan")]
+
+    rng = random.Random(613)
+    rates = [120.0, 24000 / 1001, 30000 / 1001, 60000 / 1001, 2997 / 125, 25.0, 23.976, 59.94, 0.5, 1e-3, 1000.0,
+             119.88011988011988, 10000000 / 417083, 1 / 3, math.pi, 47.952047952047955, 0.0]
+    rates += [rng.uniform(1, 240) for _ in range(40)]
+    fractions = [{"value": exact(r), "fraction": [Fraction(r).limit_denominator(1_000_000).numerator,
+                                                  Fraction(r).limit_denominator(1_000_000).denominator]}
+                 for r in rates]
+    real_pairing = os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
+    pairing = {}
+    try:
+        for mode in ("", "timestamp", " TimeStamp "):
+            os.environ[frame_sync.PAIRING_VARIABLE] = mode
+            rate = Fraction(24000, 1001)
+            pairing[mode] = {"framesync": frame_sync.framesync_opts(), "pairing": frame_sync.pairing_filters(rate),
+                             "numbering": frame_sync.numbering_filters(rate),
+                             "duration": frame_sync.duration_args("30.042"), "no_duration": frame_sync.duration_args(None)}
+    finally:
+        os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
+        if real_pairing is not None:
+            os.environ[frame_sync.PAIRING_VARIABLE] = real_pairing
+    within = [{"limit": limit, "rate": [rate.numerator, rate.denominator],
+               "frames": frame_sync.frames_within(limit, rate)}
+              for limit in ("0.271", "1.000", "30.042", "0.000", "0.0005", "86400.123456789", "2", "1.9999999")
+              for rate in (Fraction(120), Fraction(24000, 1001), Fraction(119999999, 1000000), Fraction(25))]
+    within.append({"limit": None, "rate": [120, 1], "frames": frame_sync.frames_within(None, Fraction(120))})
+
+    def video(**fields) -> VideoInfo:
+        base = {"path": Path("video.mkv"), "width": 1920, "height": 1080, "fps": 24000 / 1001, "duration": 60.0,
+                "nb_frames": 0, "codec_name": "hevc"}
+        base.update(fields)
+        return VideoInfo(**base)
+
+    pairs = []
+    for name, source, test, limit in (
+            ("same", video(), video(), 0.0),
+            ("ntsc against whole", video(fps=24.0), video(), 0.0),
+            ("two containers", video(fps=2997 / 125), video(), 0.0),
+            ("variable", video(nominal_fps=30.0, fps=24000 / 1001), video(), 0.0),
+            ("durations", video(duration=60.0), video(duration=30.0), 0.0),
+            ("durations, limit", video(duration=60.0), video(duration=30.0), 20.0),
+            ("limit past the end", video(duration=60.0), video(duration=30.0), 40.0),
+            ("two frames apart", video(duration=60.0), video(duration=60.08), 0.0),
+            ("raw stream", video(format_name="hevc", codec_name="hevc", fps=25.0, path=Path("raw.hevc")),
+             video(duration=30.0), 0.0),
+            ("raw h264", video(), video(format_name="h264", codec_name="h264", fps=25.0, path=Path("c.264")), 0.0),
+            ("unknown durations", video(duration=0.0), video(duration=30.0), 0.0)):
+        pairs.append({"name": name, "problem": pair_problem(source, test, limit),
+                      "source": {"fps": exact(source.fps), "duration": exact(source.duration), "nominal_fps":
+                                 exact(source.nominal_fps), "format_name": source.format_name,
+                                 "codec_name": source.codec_name, "path": str(source.path)},
+                      "test": {"fps": exact(test.fps), "duration": exact(test.duration), "nominal_fps":
+                               exact(test.nominal_fps), "format_name": test.format_name,
+                               "codec_name": test.codec_name, "path": str(test.path)},
+                      "limit": exact(limit)})
+    shapes = [{"width": w, "height": h, "sar": sar, "aspect": exact(display_aspect_ratio(video(width=w, height=h, sar=sar)))}
+              for w, h, sar in ((1920, 1080, "1:1"), (1440, 1080, "4:3"), (720, 576, "64:45"), (1920, 1080, "N/A"),
+                                (1920, 1080, "0:1"), (1920, 1080, "bad"), (1920, 0, "1:1"), (853, 480, "1:1"))]
+    compared = [{"source": list(s), "test": list(t), "direction": d.value,
+                 "size": list(compared_dimensions(video(width=s[0], height=s[1]), video(width=t[0], height=t[1]), d))}
+                for s, t in (((3840, 2160), (1920, 1080)), ((1920, 1080), (1920, 1080)), ((1920, 800), (3840, 1600)))
+                for d in ScaleDirection]
+    root = Path(__file__).resolve().parents[3] / "vmaf_app"
+
+    def model(choice: str, choice_v1: str, size: tuple[int, int]) -> dict:
+        options = VmafOptions(model_choice=choice, model_choice_v1=choice_v1, custom_model_path="C:/m/custom.json")
+        made = {"choice": choice, "choice_v1": choice_v1, "size": list(size)}
+        for key, resolve in (("model", resolve_model), ("model_v1", resolve_v1_model)):
+            try:
+                value = resolve(options, *size)
+                if value.startswith("path=") and Path(value[5:]).is_relative_to(root):
+                    value = "path=<resources>/" + Path(value[5:]).relative_to(root).as_posix()
+                made[key] = value
+            except (ValueError, FileNotFoundError) as error:
+                made[key] = {"error": str(error)}
+        return made
+
+    models = [model(choice, choice_v1, size)
+              for choice in ("__auto__", "version=vmaf_v0.6.1", "__custom__", "__builtin:vmaf_v1_5d0h", "__builtin:nope")
+              for choice_v1 in ("__auto__", "__builtin:vmaf_v1_hfr_3d0h", "version=vmaf_v0.6.1")
+              for size in ((1920, 1080), (3840, 2160), (3840, 1600), (2560, 2160))]
+    resolutions = [{"size": [w, h], "model": model_for_resolution(w, h)}
+                   for w, h in ((3839, 2159), (3840, 1), (1, 2160), (1920, 1080))]
+    return {"pixel_formats": pixel_formats, "analysis": analysis, "decode": decode, "hwaccel_args": hwaccel_args,
+            "fractions": fractions, "pairing": pairing, "within": within, "pairs": pairs, "shapes": shapes,
+            "compared": compared, "models": models, "resolutions": resolutions}
+
+
 if __name__ == "__main__":
+    write("decisions.json", decision_cases())
     write("number_format.json", number_format_cases())
     write("metrics.json", metric_cases())
     write("stats.json", stats_cases())
