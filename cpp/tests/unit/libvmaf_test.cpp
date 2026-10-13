@@ -28,9 +28,13 @@ TEST(Libvmaf, PredictsVmafFromFeaturesAsThePythonApp) {
     for (const nlohmann::json& expected : reference) {
         const std::string version = expected["version"];
         SCOPED_TRACE(version);
-        std::vector<std::pair<std::string, std::vector<double>>> features;
+        std::vector<std::pair<std::string, std::vector<double>>> columns;
         for (const auto& [name, values] : expected["features"].items()) {
-            features.emplace_back(name, test::reference_numbers(values));
+            columns.emplace_back(name, test::reference_numbers(values));
+        }
+        std::vector<FeatureValues> features;
+        for (const auto& [name, values] : columns) {
+            features.emplace_back(name, values);
         }
         const std::vector<double> scores =
             predict_scores(version, expected["frames"].get<std::vector<unsigned>>(), features);

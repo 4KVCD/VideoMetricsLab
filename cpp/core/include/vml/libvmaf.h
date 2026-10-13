@@ -12,6 +12,7 @@
 #include <libvmaf/libvmaf.h>
 
 #include <filesystem>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -59,12 +60,15 @@ const Libvmaf& libvmaf();
 // commits after it), or "unknown" without a record.
 std::string libvmaf_fast_version();
 
+// A feature's values for every frame, under the name libvmaf's own
+// extractor gives it. The values stay where they are, not copied.
+using FeatureValues = std::pair<std::string, std::span<const double>>;
+
 // A libvmaf model's scores for frames, predicted by libvmaf itself from
-// features given under the names its own extractors use, each feature a
-// value for every frame. `version` names a model libvmaf has built in, such
-// as "vmaf_v0.6.1". Each score is kept to 6 decimals, as the Python app keeps
-// it. Throws LibvmafError.
+// `features`, each with a value for every frame. `version` names a model
+// libvmaf has built in, such as "vmaf_v0.6.1". Each score is kept to 6
+// decimals, as the Python app keeps it. Throws LibvmafError.
 std::vector<double> predict_scores(const std::string& version, const std::vector<unsigned>& frames,
-                                   const std::vector<std::pair<std::string, std::vector<double>>>& features);
+                                   const std::vector<FeatureValues>& features);
 
 }  // namespace vml

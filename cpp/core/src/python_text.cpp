@@ -198,4 +198,15 @@ std::string replace_invalid_utf8(std::string_view text) {
     return result;
 }
 
+std::string_view python_strip(std::string_view text) {
+    const auto is_space = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r') || (c >= '\x1c' && c <= '\x1f'); };
+    while (!text.empty() && is_space(text.front())) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && is_space(text.back())) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
 }  // namespace vml

@@ -5,8 +5,10 @@ ffprobe's output (ffprobe.py), of settings.json (settings.py) and of
 FFmpeg's version (ffmpeg_locate.py), a run's decisions (gpu.py,
 frame_sync.py, geometry.py, model_select.py), FFmpeg's command for a run
 and the reading of its logs (vmaf_runner.py), VMAF predicted from features
-by the bundled libvmaf (vmaf_vulkan.predict), its command line's reading of
-arguments and patterns (cli.py), and Python's json.dumps.
+by the bundled libvmaf and scored with the Vulkan engine (vmaf_vulkan.py),
+its command line's reading of arguments and patterns (cli.py), and Python's
+json.dumps. The Vulkan engine's cases need a GPU that Vulkan scores VMAF
+on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -838,7 +840,54 @@ def predict_cases() -> list[dict]:
     return cases
 
 
+def vulkan_cases() -> dict:
+    """The Vulkan engine's features and VMAF's scores, as the Python app's
+    VulkanScorer gives them on this PC's GPU, for the probe's frames
+    (vmaf_vulkan.probe_frames, kept as each frame's SHA-256): VMAF and NEG
+    at 8 bits for every frame and at 10 bits for every second frame, and the
+    4K models at an odd size. With them, the SHA-256 of the sums the probe
+    expects. The engine gives the same numbers on every GPU its probe
+    accepts, so the file is the same whichever PC makes it, but making it
+    needs such a GPU."""
+    import hashlib
+
+    from vmaf_app.core import vmaf_vulkan
+
+    available, device, text = vmaf_vulkan.probe()
+    if not available:
+        raise SystemExit(f"vulkan.json needs a GPU that Vulkan scores VMAF on: {text}")
+    cases = []
+    for width, height, bits, count, n_subsample, models in (
+        (320, 192, 8, 3, 1, {"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg"}),
+        (320, 192, 10, 5, 2, {"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg"}),
+        (321, 193, 8, 4, 1, {"vmaf_4k": "vmaf_4k_v0.6.1", "vmaf_4k_neg": "vmaf_4k_v0.6.1neg"}),
+    ):
+        probe_size = vmaf_vulkan._PROBE_SIZE
+        vmaf_vulkan._PROBE_SIZE = (width, height)  # the size probe_frames makes
+        try:
+            reference, distorted = vmaf_vulkan.probe_frames(bits, count)
+        finally:
+            vmaf_vulkan._PROBE_SIZE = probe_size
+        scorer = vmaf_vulkan.VulkanScorer(width, height, bits, models, n_subsample, device=device)
+        try:
+            for ref, dis in zip(reference, distorted, strict=True):
+                scorer.add(ref, dis)
+            frames, scores = scorer.finish()
+            _frames, rows = scorer.features()
+        finally:
+            scorer.close()
+        cases.append({"width": width, "height": height, "bits": bits, "count": count, "n_subsample": n_subsample,
+                      "models": models,
+                      "reference": [hashlib.sha256(frame).hexdigest() for frame in reference],
+                      "distorted": [hashlib.sha256(frame).hexdigest() for frame in distorted],
+                      "frames": [int(frame) for frame in frames],
+                      "rows": [[exact(value) for value in row] for row in rows],
+                      "scores": {name: [exact(score) for score in values] for name, values in scores.items()}})
+    return {"probe_sums": list(vmaf_vulkan._PROBE_SUMS), "cases": cases}
+
+
 if __name__ == "__main__":
+    write("vulkan.json", vulkan_cases())
     write("predict.json", predict_cases())
     write("python_json.json", json_cases())
     write("cli.json", {"arguments": argument_cases(), "patterns": pattern_cases()})

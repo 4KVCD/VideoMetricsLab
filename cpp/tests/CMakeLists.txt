@@ -14,7 +14,9 @@ add_executable(vml_tests
     unit/process_test.cpp
     unit/python_json_test.cpp
     unit/settings_test.cpp
+    unit/sha256_test.cpp
     unit/stats_test.cpp
+    unit/vmaf_vulkan_test.cpp
     unit/reference.cpp
 )
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options nlohmann_json gtest gtest_main)

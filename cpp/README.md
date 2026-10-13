@@ -21,7 +21,9 @@ The C++ code must give the Python app's answers:
 The tests read the Python app's answers from `tests/reference`, which
 `tests/reference/make_reference.py` makes by running the Python app's own
 code. After changing the Python code it uses (its docstring lists it), run
-it again from the repository's root and commit what it writes:
+it again from the repository's root and commit what it writes. Its Vulkan
+cases need a GPU that Vulkan scores VMAF on; what they write is the same
+on every such GPU.
 
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
@@ -69,6 +71,8 @@ every score.
 
 Each system has a CMake preset. MSVC's Debug builds check every index and
 iterator, so run them too; on Linux, the sanitizer preset does that job.
+The tests that need a GPU, or a library the app does not ship for the
+system yet, are skipped without it, as on GitHub's runners.
 
 | System | Needs | Commands (from `cpp`) |
 | --- | --- | --- |

@@ -18,9 +18,11 @@ add_library(vml_core
     src/python_text.cpp
     src/results.cpp
     src/settings.cpp
+    src/sha256.cpp
     src/stats.cpp
     src/time_format.cpp
     src/video.cpp
+    src/vmaf_vulkan.cpp
 )
 target_include_directories(vml_core PUBLIC include)
 # libvmaf-fast's public headers, at the commit of the library the app ships

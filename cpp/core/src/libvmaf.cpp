@@ -84,7 +84,13 @@ std::string libvmaf_fast_version() {
 }
 
 std::vector<double> predict_scores(const std::string& version, const std::vector<unsigned>& frames,
-                                   const std::vector<std::pair<std::string, std::vector<double>>>& features) {
+                                   const std::vector<FeatureValues>& features) {
+    for (const auto& [name, values] : features) {
+        if (values.size() != frames.size()) {
+            throw std::invalid_argument(name + " has " + std::to_string(values.size()) + " values for " +
+                                        std::to_string(frames.size()) + " frames");
+        }
+    }
     const Libvmaf& library = libvmaf();
     ContextAndModel handles{library};
     const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, 0, 1, 0, 0};
@@ -107,7 +113,7 @@ std::vector<double> predict_scores(const std::string& version, const std::vector
     };
     for (const auto& [name, values] : features) {
         for (std::size_t i = 0; i < frames.size(); ++i) {
-            check_frame(library.import_feature_score(handles.context, name.c_str(), values.at(i), frames[i]),
+            check_frame(library.import_feature_score(handles.context, name.c_str(), values[i], frames[i]),
                         "Giving libvmaf frame ", frames[i]);
         }
     }
