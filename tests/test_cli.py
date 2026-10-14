@@ -376,6 +376,43 @@ def test_cvvdp_display_scores_cvvdp_on_each_display_named(videos, monkeypatch):
     assert code == cli.EXIT_USAGE and "No CVVDP display preset is called 'a 9-inch CRT'" in err
 
 
+def test_a_saved_vmaf_is_reported_with_the_model_it_was_made_with(videos, monkeypatch):
+    """Each save rewrites the comparison's context, which then has the models
+    of the result saved last: CVVDP alone, or VMAF with another model."""
+    monkeypatch.setattr(perceptual_vship, "detect_vship_device", lambda: (object(), ""))
+
+    def ffmpeg(source, distorted, options, *args, **kwargs):
+        made = _result(source, distorted, options)
+        # As the runner records them: the model VMAF ran with, and the choice.
+        metrics = results_from_frame_scores(made.frames, {
+            key: current_ffmpeg_provenance(key, "9.0", {"model": options.model} if key == "vmaf" else None)
+            for key in made.frames.metric_keys})
+        return replace(made, model_choice=options.model_choice, metric_results=metrics)
+
+    def vship(source, distorted, request, specs, **kwargs):
+        (spec,) = [spec for spec in specs if spec.key == "cvvdp"]
+        score = SequenceMetricResult("cvvdp", 9.0, MetricProvenance("Vship/cvvdp", "5.1.2", "gpu", "cvvdp-vship-gpu-v1",
+                                                                     dict(spec.parameters)))
+        return PerceptualTaskOutput(MetricResultSet([score]), None, None, 2)
+
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback", vship)
+
+    def vmaf_model(*arguments) -> tuple[str, bool]:
+        code, out, _err = _run(videos.reference, videos.a, "--json", "-", *arguments)
+        assert code == cli.EXIT_OK
+        (video,) = json.loads(out)["videos"]
+        return video.get("vmaf_model"), video["from_saved_scores"]
+
+    office = ("--cvvdp-display", "30-inch 4K monitor, office")
+    four_k = ("version=vmaf_4k_v0.6.1", True)
+    assert vmaf_model("-m", "vmaf,cvvdp", "--model", "4k", *office) == ("version=vmaf_4k_v0.6.1", False)
+    vmaf_model("-m", "cvvdp", "--cvvdp-display", "6-inch phone")  # CVVDP alone, saved last
+    assert vmaf_model("-m", "vmaf,cvvdp", "--model", "4k", *office) == four_k
+    assert vmaf_model("-m", "vmaf", "--model", "standard") == ("version=vmaf_v0.6.1", False)  # saved last
+    assert vmaf_model("-m", "vmaf", "--model", "4k") == four_k
+
+
 # ------------------------------------------------------------------- cancel
 
 def test_cancel_ends_the_run_and_exits_130_with_what_finished_saved(videos, monkeypatch):
