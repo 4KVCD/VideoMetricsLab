@@ -829,7 +829,10 @@ class VideoCompareView(QWidget):
         """Reports that a worker's video could not play."""
         if self._pool.get(key) is worker:
             self._failures[key] = error
-            self.status_changed.emit(f"Video {key} could not play: {error}")
+            # The source is always part of the pair shown; a test video is
+            # named by its number in the list, not by the view's key.
+            self.status_changed.emit(f"Selected video failed: {error}" if key[0] == "source"
+                                     else f"Video {key[1] + 1} could not play: {error}")
 
     def _stream_finished(self, key, worker):
         """Cleans up after a worker that ended, and starts any missing one."""
