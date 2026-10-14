@@ -302,6 +302,39 @@ def test_the_exported_png_is_written_and_readable(qapp, tmp_path, monkeypatch):
     assert not QPixmap(str(out)).isNull(), "the file is not a readable image"
 
 
+def _metrics_result(name: str, metrics: dict[str, list[float]]) -> ComparisonResult:
+    """A run with these metrics' scores, one per frame."""
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    count = len(next(iter(metrics.values())))
+    result = _values_result(name, [90.0] * count)
+    provenance = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1")
+    result.metric_results = MetricResultSet([
+        FrameMetricResult(key, list(range(count)), [i / 30.0 for i in range(count)], values, provenance)
+        for key, values in metrics.items()
+    ])
+    return result
+
+
+def test_a_line_with_no_scores_for_the_metric_shows_dashes_and_exports(qapp):
+    # b's VMAF scored no frame (every score NaN). Its statistics read as
+    # zeros, its band cells kept the PSNR page's shares under VMAF's "> 95",
+    # and exporting the graph raised IndexError. It comes first: the
+    # exported table took its bands from the first line.
+    panel = GraphPanel()
+    panel.add_run(_metrics_result("b.mp4", {"vmaf": [float("nan")] * 10, "psnr": [44.0] * 10}), "b")
+    panel.add_run(_metrics_result("a.mp4", {"vmaf": [90.0] * 10, "psnr": [40.0] * 10}), "a")
+    panel.tabs.setCurrentIndex(next(i for i, m in enumerate(METRICS) if m.key == "psnr"))
+    panel.tabs.setCurrentIndex(0)  # VMAF
+    row = _row_for(panel, "b").row()
+    details = range(1 + len(METRICS), panel.stats_table.columnCount() - 1)  # after the means, before the ✕
+    assert [panel.stats_table.item(row, column).text() for column in details] == ["\u2014"] * len(details)
+
+    headers, rows = panel._export_table()
+    assert [len(cells) for _label, _color, cells in rows] == [len(headers) - 1] * 2
+    assert not panel.render_export_image().isNull()
+
+
 # ------------------------------------------------------------------ lower-is-better (Butteraugli)
 
 def _butteraugli_result(name: str, values: list[float]) -> ComparisonResult:
