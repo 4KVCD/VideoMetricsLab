@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -552,7 +553,8 @@ double run_metric(const std::filesystem::path& executable, const std::string& me
 //
 // One FFmpeg decodes both videos and writes lossless 16-bit RGB PNG files
 // (png_pairs_command). Each picture is written under a temporary name and
-// renamed when complete, so a picture that exists is whole.
+// renamed when complete, so a picture that exists is whole; a pair is handed
+// out once FFmpeg has let go of both its pictures too (ready).
 //
 // FFmpeg is suspended while it has `backlog` complete pairs ready ahead of
 // the caller, and resumed when it has half as many. A thread of its own
@@ -601,16 +603,16 @@ public:
     PngPairs(const PngPairs&) = delete;
     PngPairs& operator=(const PngPairs&) = delete;
 
-    // The next pair once both its pictures are whole; nothing once the
-    // shorter video has ended, or when `stop` is set. Throws Cancelled, and
-    // PerceptualRunError when FFmpeg fails.
+    // The next pair once both its pictures are whole and FFmpeg has let go
+    // of them; nothing once the shorter video has ended, or when `stop` is
+    // set. Throws Cancelled, and PerceptualRunError when FFmpeg fails.
     std::optional<Pair> next() {
         if (ended_) {
             return std::nullopt;
         }
         consumed_ = index_;
         Pair found = pair(index_);
-        while (!complete(index_)) {
+        while (!ready(index_)) {
             cancel_.throw_if_cancelled();
             if (stop_) {
                 return std::nullopt;
@@ -650,6 +652,21 @@ private:
         const auto [reference, test] = pair(number);
         std::error_code error;
         return std::filesystem::exists(reference, error) && std::filesystem::exists(test, error);
+    }
+
+    // Whether both pictures of pair `number` have been written and can be
+    // opened, as describe_png and the tools open them. On Windows, FFmpeg
+    // can still hold a picture for a moment after giving it its name (up to
+    // 77 ms was seen), and an FFmpeg ended by Cancel until it is gone
+    // (2-4 ms). A picture opened then could not be read, so the task failed,
+    // even when it had been cancelled.
+    bool ready(long long number) const {
+        if (!complete(number)) {
+            return false;
+        }
+        const auto [reference, test] = pair(number);
+        return std::ifstream(reference, std::ios::binary).is_open() &&
+               std::ifstream(test, std::ios::binary).is_open();
     }
 
     // Suspends FFmpeg (`on`) or lets it run again.

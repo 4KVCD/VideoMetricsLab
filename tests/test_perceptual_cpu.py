@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import threading
 from fractions import Fraction
 from pathlib import Path
@@ -201,6 +202,63 @@ def test_cpu_extraction_of_different_lengths_keeps_the_frames_both_have(tmp_path
     assert [(r.name, t.name) for r, t in pairs] == [
         (f"reference-{i:08d}.png", f"test-{i:08d}.png") for i in range(1, 4)
     ]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="elsewhere, a file held open does not keep others from reading it")
+def test_a_pair_is_handed_out_once_ffmpeg_has_let_go_of_its_pictures(tmp_path, monkeypatch):
+    """On Windows, FFmpeg can still hold a picture for a moment after giving
+    it its name, and a picture opened then could not be read: the task
+    failed. The stand-in FFmpeg holds the first pair's second picture, with
+    delete access as FFmpeg does, until it has been asked three times
+    whether it is still running."""
+    import ctypes
+    from ctypes import wintypes
+
+    from vmaf_app.core.perceptual_cpu import _png_pairs
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                                     wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    held = []
+
+    class Running:
+        pid = 123  # never used: the process helpers below are stand-ins too
+        polls = 0
+
+        def poll(self):
+            self.polls += 1
+            if self.polls == 3:
+                kernel32.CloseHandle(held.pop())
+            return None if self.polls <= 3 else 0
+
+        def wait(self, timeout=None):
+            return 0
+
+    def fake_popen(args, **_kwargs):
+        (tmp_path / "reference-00000001.png").write_bytes(b"source picture")
+        (tmp_path / "test-00000001.png").write_bytes(b"test picture")
+        delete, share_all, open_existing = 0x10000, 0x7, 3
+        handle = kernel32.CreateFileW(str(tmp_path / "test-00000001.png"), delete, share_all, None, open_existing, 0,
+                                      None)
+        assert handle != wintypes.HANDLE(-1).value
+        held.append(handle)
+        return Running()
+
+    monkeypatch.setattr(perceptual_cpu.proc_util, "popen", fake_popen)
+    monkeypatch.setattr(perceptual_cpu.proc_util, "process_root", lambda pid: [])
+    monkeypatch.setattr(perceptual_cpu.proc_util, "process_tree", lambda pid: [])
+    monkeypatch.setattr(perceptual_cpu.proc_util, "terminate", lambda process: None)
+    pairs = _png_pairs(_info("source.mp4"), _info("test.mp4"), _request().recipe, None, None, 1, tmp_path, None, None)
+    try:
+        _, test = next(pairs)
+        assert not held  # handed out once FFmpeg had let go
+        assert test.read_bytes() == b"test picture"
+    finally:
+        pairs.close()
+        for handle in held:
+            kernel32.CloseHandle(handle)
 
 
 def test_pictures_are_converted_with_the_matrix_vship_reads_the_video_with():

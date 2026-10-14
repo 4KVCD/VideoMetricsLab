@@ -434,6 +434,37 @@ TEST(PerceptualCpu, CancelEndsEveryPairBeingScored) {
     EXPECT_GE(logged(log, "started").size(), at_once);
 }
 
+// A pair is scored once FFmpeg has let go of its pictures. On Windows,
+// FFmpeg can still hold a picture for a moment after giving it its name; a
+// picture opened then could not be read, and the task failed. The stand-in
+// FFmpeg holds the first pair's second picture for a second, while the
+// scoring looks for the pair every 20 ms.
+TEST(PerceptualCpu, APairIsScoredOnceFFmpegHasLetGoOfItsPictures) {
+    const std::optional<test::Tools> found = test::tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    const test::Folder folder;
+    const VideoInfo video = probe_video(
+        test::make_clip(*found, folder / "clip.mkv", "libx264", "yuv420p", 1.0, {}, "64x48"), found->ffprobe);
+    const std::filesystem::path picture = folder / "picture.png";
+    test::run_ffmpeg(*found, {"-i", platform::path_text(folder / "clip.mkv"), "-frames:v", "1", "-pix_fmt", "rgb48le",
+                              platform::path_text(picture)});
+    PerceptualRequest request = request_for(*found, video, 1);
+    request.environment.ffmpeg = VML_TEST_CHILD;
+    const test::ScopedVariable ffmpeg("VML_TEST_FFMPEG_PICTURE", platform::path_text(picture));
+    const test::ScopedVariable pairs("VML_TEST_FFMPEG_PAIRS", "24");
+    const test::ScopedVariable held("VML_TEST_FFMPEG_HOLD_MS", "1000");
+    const test::ScopedVariable tool("VML_TEST_TOOL", "score");
+    const test::ScopedVariable ssimulacra2("SSIMULACRA2_PATH", VML_TEST_CHILD);
+    const PerceptualTaskOutput output =
+        run_cpu_perceptual_task(request, {"ssimulacra2"}, std::nullopt, {}, {}, CancelToken());
+
+    const FrameMetricResult* scores = output.metrics.frame("ssimulacra2");
+    ASSERT_NE(scores, nullptr);
+    EXPECT_EQ(scores->values.size(), 24u);
+}
+
 // ------------------------------------------------------------ where they run
 
 // A task's output with `key`'s score, as one place or the other gives it.

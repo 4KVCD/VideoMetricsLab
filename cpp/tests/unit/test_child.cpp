@@ -21,8 +21,17 @@
 //                           VML_TEST_TOOL_LOG names, then sleeps for ten
 //                           minutes
 //
+// With VML_TEST_FFMPEG_PICTURE set, it stands in for FFmpeg writing the CPU
+// tools' frame pairs (png_pairs_command): it writes VML_TEST_FFMPEG_PAIRS
+// pairs, each picture a copy of the picture VML_TEST_FFMPEG_PICTURE names,
+// written under a temporary name and then renamed, as -atomic_writing does.
+// On Windows it holds the first pair's second picture for
+// VML_TEST_FFMPEG_HOLD_MS milliseconds once it has its name, as FFmpeg can
+// (elsewhere, a file held open does not keep others from reading it).
+//
 // On Windows it reads its arguments as Unicode, as FFmpeg does, and writes
 // bytes as they are (no text-mode line endings added).
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -30,6 +39,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <thread>
 #include <vector>
@@ -128,7 +138,58 @@ int tool(const std::string& mode, const std::vector<std::string>& arguments) {
     return 0;
 }
 
+// Holds the file `path` open for `milliseconds`, as FFmpeg can hold a
+// picture it has just renamed: with delete access, which keeps the readers
+// (who do not share deleting) from opening it.
+void hold(const std::filesystem::path& path, int milliseconds) {
+#ifdef _WIN32
+    const HANDLE file = CreateFileW(path.c_str(), DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                    nullptr, OPEN_EXISTING, 0, nullptr);
+    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+    if (file != INVALID_HANDLE_VALUE) {
+        CloseHandle(file);
+    }
+#else
+    static_cast<void>(path);
+    static_cast<void>(milliseconds);
+#endif
+}
+
+// FFmpeg writing the frame pairs, stood in for.
+int ffmpeg(const std::vector<std::string>& arguments) {
+    std::ifstream source(path_of(variable("VML_TEST_FFMPEG_PICTURE")), std::ios::binary);
+    const std::string picture{std::istreambuf_iterator<char>(source), std::istreambuf_iterator<char>()};
+    std::vector<std::string> patterns;  // the outputs, "...\test-%08d.png" and "...\reference-%08d.png"
+    for (const std::string& argument : arguments) {
+        if (argument.ends_with("%08d.png")) {
+            patterns.push_back(argument.substr(0, argument.size() - std::strlen("%08d.png")));
+        }
+    }
+    const int pairs = std::atoi(variable("VML_TEST_FFMPEG_PAIRS").c_str());
+    for (int number = 1; number <= pairs; ++number) {
+        for (const std::string& pattern : patterns) {
+            char digits[16];
+            std::snprintf(digits, sizeof digits, "%08d", number);
+            const std::filesystem::path name = path_of(pattern + digits + ".png");
+            std::filesystem::path temporary = name;
+            temporary += ".tmp";
+            std::ofstream(temporary, std::ios::binary) << picture;
+            std::filesystem::rename(temporary, name);
+            if (number == 1 && pattern == patterns.back()) {
+                hold(name, std::atoi(variable("VML_TEST_FFMPEG_HOLD_MS").c_str()));
+            }
+        }
+    }
+    return 0;
+}
+
 int run(const std::vector<std::string>& arguments) {
+    // While it stands in for FFmpeg it stands in for the tools too: FFmpeg's
+    // command is the one that writes pictures atomically.
+    if (!variable("VML_TEST_FFMPEG_PICTURE").empty() &&
+        std::find(arguments.begin(), arguments.end(), "-atomic_writing") != arguments.end()) {
+        return ffmpeg(arguments);
+    }
     if (const std::string mode = variable("VML_TEST_TOOL"); !mode.empty()) {
         return tool(mode, arguments);
     }
