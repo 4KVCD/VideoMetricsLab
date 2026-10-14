@@ -204,8 +204,10 @@ class FrameComparePanel(QWidget):
         self._syncing_video_position = False
         self._generation = 0
         self._workers: set[FrameExtractWorker] = set()
-        self._crop_workers: dict[object, CropDetectWorker] = {}
-        self._auto_crops: dict[object, tuple[object, object]] = {}
+        # Black bar detection under way and its findings, by pair and its two
+        # files (_pair_key), and by file.
+        self._crop_workers: dict[tuple, CropDetectWorker] = {}
+        self._auto_crops: dict[tuple, tuple[object, object]] = {}
         self._auto_crop_files: dict[tuple, object] = {}
         self._window_filters_installed = False
         try:
@@ -896,7 +898,7 @@ class FrameComparePanel(QWidget):
             # Say so rather than showing cropped-looking frames that are not:
             # auto-crop is measured during a run, so until one happens these
             # are the raw frames and a scored comparison would differ.
-            if entry.identity in self._crop_workers:
+            if self._pair_key(entry) in self._crop_workers:
                 parts.append(tr("detecting black bars…"))
             else:
                 parts.append(tr("black bars not detected yet — shown uncropped"))
@@ -1137,7 +1139,7 @@ class FrameComparePanel(QWidget):
         """The comparison with its detected black bars, once they are known."""
         if not entry.comparison.auto_crop_pending:
             return entry
-        crops = self._auto_crops.get(entry.identity)
+        crops = self._auto_crops.get(self._pair_key(entry))
         if crops is None:
             return entry
         source, distorted = crops
@@ -1176,7 +1178,8 @@ class FrameComparePanel(QWidget):
         if entry is None or not entry.comparison.auto_crop_pending:
             return
         identity = entry.identity
-        if identity in self._auto_crops:
+        key = self._pair_key(entry)
+        if key in self._auto_crops:
             # set_runs normally applies this before reaching the UI, but this
             # also handles an entry replaced while a result was arriving.
             for index, current in enumerate(self._entries):
@@ -1184,18 +1187,17 @@ class FrameComparePanel(QWidget):
                     self._entries[index] = self._apply_auto_crop(current)
                     break
             return
-        if identity in self._crop_workers:
+        if key in self._crop_workers:
             return
         source = entry.comparison.source_info
         distorted = entry.comparison.distorted_info
         if not source.path.is_file() or not distorted.path.is_file():
             return
-        source_key = self._crop_file_key(source.path)
-        distorted_key = self._crop_file_key(distorted.path)
+        _identity, source_key, distorted_key = key
         source_crop = self._auto_crop_files.get(source_key, _MISSING)
         distorted_crop = self._auto_crop_files.get(distorted_key, _MISSING)
         if source_crop is not _MISSING and distorted_crop is not _MISSING:
-            self._auto_crops[identity] = (source_crop, distorted_crop)
+            self._auto_crops[key] = (source_crop, distorted_crop)
             self._entries = [self._apply_auto_crop(item) for item in self._entries]
             self._update_labels()
             return
@@ -1204,11 +1206,11 @@ class FrameComparePanel(QWidget):
             source_crop=source_crop, distorted_crop=distorted_crop,
         )
         worker.ready.connect(
-            lambda source_crop, distorted_crop, identity=identity, worker=worker:
-                self._on_auto_crop_ready(identity, worker, source_crop, distorted_crop)
+            lambda source_crop, distorted_crop, key=key, worker=worker:
+                self._on_auto_crop_ready(key, worker, source_crop, distorted_crop)
         )
         worker.finished.connect(lambda worker=worker: self._on_crop_worker_finished(worker))
-        self._crop_workers[identity] = worker
+        self._crop_workers[key] = worker
         self._update_labels()
         worker.start()
 
@@ -1222,20 +1224,27 @@ class FrameComparePanel(QWidget):
         except OSError:
             return (str(path),)
 
-    def _on_auto_crop_ready(self, identity, worker, source_crop, distorted_crop) -> None:
-        """Keeps the detected black bars, and shows the comparison cropped."""
-        self._auto_crops[identity] = (source_crop, distorted_crop)
-        entry = next((item for item in self._entries if item.identity is identity), None)
-        if entry is not None:
-            self._auto_crop_files[self._crop_file_key(entry.comparison.source_info.path)] = source_crop
-            self._auto_crop_files[self._crop_file_key(entry.comparison.distorted_info.path)] = distorted_crop
+    def _pair_key(self, entry: FrameComparisonEntry) -> tuple:
+        """A pair's key for its black bars: the pair, and its two files (path,
+        size and time). A pair keeps its identity when another reference is
+        chosen, and the bars found against the old one are not the new one's."""
+        return (entry.identity, self._crop_file_key(entry.comparison.source_info.path),
+                self._crop_file_key(entry.comparison.distorted_info.path))
+
+    def _on_auto_crop_ready(self, key, worker, source_crop, distorted_crop) -> None:
+        """Keeps the black bars found for a pair and its two files (key), and
+        shows the comparison cropped if it is still that pair."""
+        self._auto_crops[key] = (source_crop, distorted_crop)
+        _identity, source_key, distorted_key = key
+        self._auto_crop_files[source_key] = source_crop
+        self._auto_crop_files[distorted_key] = distorted_crop
         previous = None
         for index, entry in enumerate(self._entries):
-            if entry.identity is identity:
+            if self._pair_key(entry) == key:
                 previous = entry
                 self._entries[index] = self._apply_auto_crop(entry)
                 break
-        if self.current_entry is not None and self.current_entry.identity is identity:
+        if self.current_entry is not None and self._pair_key(self.current_entry) == key:
             playing = (
                 self.video_view.is_playing or self.video_view.playback_requested
                 if self.video_view is not None else False
