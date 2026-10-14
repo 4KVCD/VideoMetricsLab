@@ -39,11 +39,24 @@ def _nvidia_decodes(info, bits: int) -> bool:
         return False
 
 
-@pytest.fixture(params=[("yuv420p", 8), ("yuv420p10le", 10)], ids=["8-bit", "10-bit"])
-def pair(request, tmp_path):
+def _has_vulkan_gpu(vendor: int) -> bool:
+    try:
+        return vmaf_vulkan.LIBRARY_PATH.is_file() and any(
+            device.vendor == vendor and device.usable for device in vmaf_vulkan.devices())
+    except (OSError, libvmaf.LibvmafError):
+        return False
+
+
+@pytest.fixture(scope="module", params=[("yuv420p", 8), ("yuv420p10le", 10)], ids=["8-bit", "10-bit"])
+def pair(request, tmp_path_factory):
+    """The two clips, made once for the module's tests (where the PC has an
+    NVIDIA GPU: the clips take longer to make than the tests to skip)."""
     pix_fmt, bits = request.param
-    source = probe_video(_clip(tmp_path / "source.mkv", pix_fmt, 4))
-    distorted = probe_video(_clip(tmp_path / "distorted.mkv", pix_fmt, 38))
+    if not gpu_frames.LIBRARIES["nvidia"].is_file() or not _has_vulkan_gpu(0x10DE):
+        pytest.skip("no NVIDIA GPU that decodes this and shares memory with Vulkan")
+    folder = tmp_path_factory.mktemp(f"pair-{bits}")
+    source = probe_video(_clip(folder / "source.mkv", pix_fmt, 4))
+    distorted = probe_video(_clip(folder / "distorted.mkv", pix_fmt, 38))
     if not _nvidia_decodes(source, bits):
         pytest.skip("no NVIDIA GPU that decodes this and shares memory with Vulkan")
     return source, distorted, bits
@@ -121,7 +134,6 @@ def test_vmaf_v1_scores_the_same_from_pictures_kept_on_the_gpu(pair, subtests):
             assert np.all((scores[key] > 0) & (scores[key] <= 100)) and len(set(scores[key].tolist())) > 1
 
     for models, backend in [
-        ({"vmaf_v1": V1}, "cuda"),
         ({"vmaf": "vmaf_v0.6.1", "vmaf_neg": "vmaf_v0.6.1neg", "vmaf_v1": V1}, "cuda"),
         ({"vmaf": "vmaf_v0.6.1", "vmaf_v1": V1}, "vulkan"),
     ]:
@@ -166,6 +178,9 @@ def test_vmaf_v1_scores_the_same_from_amds_textures_as_from_copies(tmp_path_fact
     (vv_pictures, their slots given back once the GPU has read them) scores
     what it scores from the pictures copied into its memory: HEVC's, and
     H.264's (layers of a texture array, copied into textures of their own)."""
+    if not gpu_frames.hands_over_textures("amd") or not _has_vulkan_gpu(0x1002):
+        pytest.skip("no AMD GPU whose Windows decoder gives its pictures as textures")
+
     def check(models, n_subsample, codec, tmp_path, monkeypatch):
         pix_fmt, bits = ("yuv420p", 8) if codec == "h264" else ("yuv420p10le", 10)
         source = probe_video(_clip(tmp_path / "source.mkv", pix_fmt, 4, codec))

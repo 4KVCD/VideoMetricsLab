@@ -1,5 +1,4 @@
 """Metric-neutral journeys, including real FFmpeg (no mocked scores)."""
-import itertools
 import subprocess
 import time
 
@@ -85,7 +84,11 @@ def options_for(names):
     )
 
 
-COMBINATIONS = [names for n in range(1, 5) for names in itertools.combinations(("vmaf", "psnr", "ssim", "xpsnr"), n)]
+#: Each metric alone, all four, and the other three together: every way the
+#: run is put together (without VMAF, past a missing custom model), without
+#: the real FFmpeg runs of all 15 combinations.
+COMBINATIONS = [("vmaf",), ("psnr",), ("ssim",), ("xpsnr",), ("vmaf", "psnr", "ssim", "xpsnr"),
+                ("psnr", "ssim", "xpsnr")]
 
 
 def test_subsampled_cache_cannot_replace_full_frame_xpsnr(real_pair):

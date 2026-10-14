@@ -93,10 +93,18 @@ CASES = {
 
 
 def test_frames_are_paired_by_number_whatever_their_timestamps(tmp_path_factory, subtests):
+    folder = tmp_path_factory.mktemp("clips")
+    made: dict[tuple, Path] = {}
+
+    def clip(spec: tuple) -> Path:
+        """Each clip the cases share, made once."""
+        if spec not in made:
+            made[spec] = _clip(folder / f"{len(made)}.{spec[3]}", *spec[:3])
+        return made[spec]
+
     def check(name, tmp_path):
         test_spec, source_spec, limit = CASES[name]
-        main = _clip(tmp_path / f"main.{test_spec[3]}", *test_spec[:3])
-        ref = _clip(tmp_path / f"ref.{source_spec[3]}", *source_spec[:3])
+        main, ref = clip(test_spec), clip(source_spec)
         rate = frame_rate(probe_video(main))
         kept = frames_within(limit, rate)
         count = min(test_spec[0], source_spec[0], *([kept] if kept is not None else []))
