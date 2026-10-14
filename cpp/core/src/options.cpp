@@ -29,6 +29,16 @@ bool VmafOptions::*bool_option(std::string_view name) {
 
 }  // namespace
 
+const std::vector<ResampleTarget>& resample_target_choices() {
+    static const std::vector<ResampleTarget> choices{
+        {2560, "1440p"},
+        {1920, "1080p"},
+        {1280, "720p"},
+        {854, "480p"},
+    };
+    return choices;
+}
+
 std::vector<std::string> VmafOptions::requested_metrics() const {
     std::vector<std::string> keys;
     for (const MetricDefinition& metric : metrics()) {

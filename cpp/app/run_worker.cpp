@@ -49,6 +49,11 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
         std::move(jobs), parallel_jobs, std::move(events),
         [this](const VmafJob& job, const VmafOptions& options, const ProgressCallback& on_progress,
                const StatusCallback& on_status, const CancelToken& token) {
+            // A resolution test has no test video of its own: it is made from
+            // the source during the run.
+            if (options.resample_test) {
+                return run_resample_test(environment_, job.source_info, options, on_progress, on_status, token);
+            }
             return run_vmaf(environment_, job.source_info, job.distorted_info, options, on_progress, on_status, token,
                             job.result_distorted_path);
         },

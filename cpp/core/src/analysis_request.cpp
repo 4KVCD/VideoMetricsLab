@@ -42,7 +42,9 @@ nlohmann::json ComparisonRecipe::identity() const {
             {"scale_direction",
              scale_direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source"},
             {"duration_limit", duration_limit},
-            {"resample_test", nullptr},
+            {"resample_test", resample_test ? nlohmann::json{{"width", resample_test->width},
+                                                             {"label", resample_test->label}}
+                                            : nlohmann::json(nullptr)},
             {"manual_source_crop", nullptr},
             {"manual_distorted_crop", nullptr}};
 }
@@ -63,7 +65,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                                  const std::map<std::string, std::string>& perceptual_backends,
                                  const CvvdpSettings& cvvdp) {
     AnalysisRequest request;
-    request.recipe = {options.crop_mode, options.scale_algorithm, options.scale_direction, options.duration_limit};
+    request.recipe = {options.crop_mode, options.scale_algorithm, options.scale_direction, options.duration_limit,
+                      options.resample_test};
     request.perceptual_backends = {{"butteraugli", "gpu"}, {"ssimulacra2", "gpu"}};
     for (const auto& [key, backend] : perceptual_backends) {
         if (!request.perceptual_backends.contains(key)) {

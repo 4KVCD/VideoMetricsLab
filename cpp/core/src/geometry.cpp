@@ -85,6 +85,12 @@ Size analysis_dimensions(const VideoInfo& source, const VideoInfo& distorted, co
     return compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
 }
 
+int resample_down_height(int width, Size size) {
+    // The half height rounded as Python's round() rounds it, a half to even.
+    const double half = static_cast<double>(width) * size.second / size.first / 2;
+    return std::max(2, static_cast<int>(std::nearbyint(half)) * 2);
+}
+
 std::pair<int, int> sar_fraction(const std::string& sar) {
     if (sar.empty() || sar == "N/A" || sar == "0:1") {
         return {1, 1};

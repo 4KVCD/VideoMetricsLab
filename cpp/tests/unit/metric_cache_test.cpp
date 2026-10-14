@@ -35,6 +35,9 @@ VmafOptions options_from(const nlohmann::json& fields) {
                                                                                     : ScaleDirection::source_to_distorted;
     options.scale_algorithm = fields.at("scale_algorithm").get<std::string>();
     options.duration_limit = *test::reference_number(fields.at("duration_limit"));
+    if (const nlohmann::json& target = fields.at("resample_test"); !target.is_null()) {
+        options.resample_test = ResampleTarget{target.at("width"), target.at("label")};
+    }
     return options;
 }
 
@@ -118,6 +121,9 @@ ComparisonResult result_from(const nlohmann::json& data) {
     result.model_choice = text_or_none(data.at("model_choice"));
     result.model_v1 = data.at("model_v1");
     result.model_choice_v1 = text_or_none(data.at("model_choice_v1"));
+    if (const nlohmann::json& target = data.at("resample_target"); !target.is_null()) {
+        result.resample_target = ResampleTarget{target.at("width"), target.at("label")};
+    }
     for (const nlohmann::json& metric : data.at("metrics")) {
         const std::string key = metric.at("key");
         if (metric.at("kind") == "sequence") {
@@ -221,26 +227,35 @@ TEST(MetricCache, FilesRequestsAndRecipesAsThePythonApp) {
 }
 
 // Storing a result writes the Python app's context.json and score files:
-// the same names, the same metadata to the byte.
+// the same names, the same metadata to the byte. A resolution test's keeps
+// its target, and comes back with it.
 TEST(MetricCache, StoresAResultAsThePythonApp) {
-    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
-    const test::Folder folder;
-    touch(folder / "s.mp4", "s");
-    touch(folder / "t.mp4", "t");
-    const AnalysisRequest request = request_from(stored);
-    const std::filesystem::path directory =
-        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
-                     result_from(stored.at("result")), stored.at("label"), request.metrics);
-    EXPECT_EQ(platform::read_file(directory / "context.json"), stored.at("context").get<std::string>());
-    std::map<std::string, std::string> files;
-    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
-        if (entry.path().extension() == ".npz") {
-            const auto arrays = read_npz(entry.path());
-            ASSERT_TRUE(arrays.has_value()) << entry.path();
-            files[platform::path_text(entry.path().filename())] = npy_text_value(arrays->at("metadata")).value_or("");
+    for (const char* name : {"stored", "stored_resolution_test"}) {
+        SCOPED_TRACE(name);
+        const nlohmann::json stored = test::load_reference("metric_cache.json").at(name);
+        const test::Folder folder;
+        touch(folder / "s.mp4", "s");
+        touch(folder / "t.mp4", "t");
+        const AnalysisRequest request = request_from(stored);
+        const ComparisonResult result = result_from(stored.at("result"));
+        const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                                             request.recipe, result, stored.at("label"), request.metrics);
+        EXPECT_EQ(platform::read_file(directory / "context.json"), stored.at("context").get<std::string>());
+        std::map<std::string, std::string> files;
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
+            if (entry.path().extension() == ".npz") {
+                const auto arrays = read_npz(entry.path());
+                ASSERT_TRUE(arrays.has_value()) << entry.path();
+                files[platform::path_text(entry.path().filename())] =
+                    npy_text_value(arrays->at("metadata")).value_or("");
+            }
         }
+        EXPECT_EQ(nlohmann::json(files), stored.at("files"));
+        const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                        request.metrics, request.perceptual_backends);
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(loaded->first.resample_target, result.resample_target);
     }
-    EXPECT_EQ(nlohmann::json(files), stored.at("files"));
 }
 
 // Which saved scores answer a request: made by a compatible implementation,

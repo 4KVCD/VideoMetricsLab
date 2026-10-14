@@ -971,6 +971,9 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     const VideoInfo& source = request.source;
     const VideoInfo& distorted = request.distorted;
     const VmafOptions& options = request.options;
+    if (options.resample_test) {
+        throw PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.");
+    }
     validate_pair(source, distorted, options.duration_limit);
     std::vector<std::filesystem::path> executables;
     for (const std::string& key : keys) {

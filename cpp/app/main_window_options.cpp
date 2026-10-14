@@ -261,6 +261,9 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
     // By value: adding rows does not change these, but the selection can.
     for (const int row : std::vector<int>(rows)) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (row_data.options.resample_test) {
+            continue;  // a resolution test scales the reference itself, in no direction
+        }
         if (row_data.scale_direction_pinned) {
             // Already a companion row: the row it was made from is the other
             // direction, so the pair is complete. Without this, "Test both" on
@@ -306,10 +309,9 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
         ++added;
     }
     if (added == 0) {
-        QMessageBox::information(this, app::tr("Nothing to add"),
-                                 app::tr("Selected row(s) either already have a matching-opposite row, don't have a "
-                                         "resolution mismatch against the reference, or aren't a normal comparison "
-                                         "(e.g. a resolution test)."));
+        inform_(app::tr("Nothing to add"),
+                app::tr("Selected row(s) either already have a matching-opposite row, don't have a resolution "
+                        "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test)."));
         return;
     }
     show_status(ntr("Added {count} row testing the opposite scaling direction -- check it and click Calculate "

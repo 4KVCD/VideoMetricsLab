@@ -15,6 +15,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QItemSelection>
 #include <QItemSelectionModel>
 #include <QLabel>
@@ -48,6 +49,7 @@
 #include "options_panel.h"
 #include "run_worker.h"
 #include "theme.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
@@ -389,7 +391,7 @@ void MainWindow::store_open_videos() {
     settings_.remembered_tests.clear();
     for (const std::shared_ptr<RowData>& row : rows_) {
         const std::string path = platform::path_text(row->path);
-        if (!row->scale_direction_pinned &&
+        if (!row->scale_direction_pinned && !row->options.resample_test &&
             std::find(settings_.remembered_tests.begin(), settings_.remembered_tests.end(), path) ==
                 settings_.remembered_tests.end()) {
             settings_.remembered_tests.push_back(path);
@@ -505,6 +507,7 @@ void MainWindow::build_ui() {
     connect(options_panel_, &OptionsPanel::scale_direction_chosen, this,
             [this](int index) { on_scale_direction_combo_changed(index); });
     run_cvvdp_dialog_ = [](CvvdpDisplayDialog& dialog) { return dialog.exec(); };
+    inform_ = [this](const QString& title, const QString& text) { QMessageBox::information(this, title, text); };
     splitter->addWidget(options_panel_);
     splitter->addWidget(build_run_panel());
     splitter->setSizes({380, 300, 120});
@@ -657,7 +660,7 @@ QWidget* MainWindow::build_files_panel() {
     add_resample_button->setToolTip(
         app::tr("Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back "
                 "up -- no separate test file needed."));
-    add_resample_button->setEnabled(false);  // not ported to C++ yet
+    connect(add_resample_button, &QPushButton::clicked, this, [this] { on_add_resample_test(); });
     auto* remove_button = new QPushButton(app::tr("Remove selected"));
     connect(remove_button, &QPushButton::clicked, this, [this] { on_remove_distorted(); });
     remove_all_button_ = new QPushButton(app::tr("Remove all"));
@@ -840,11 +843,10 @@ bool MainWindow::on_locate_ffmpeg() {
     const std::filesystem::path directory = path_of(chosen).parent_path();
     std::error_code error;
     if (!std::filesystem::exists(directory / platform::path_from_text(ffprobe_exe.toStdString()), error)) {
-        QMessageBox::information(
-            this, app::tr("ffprobe needed too"),
-            app::tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select "
-                    "{ffprobe_exe} as well (it normally ships in the same folder).",
-                    {{"ffprobe_exe", ffprobe_exe}, {"ffmpeg_exe", ffmpeg_exe}}));
+        inform_(app::tr("ffprobe needed too"),
+                app::tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select "
+                        "{ffprobe_exe} as well (it normally ships in the same folder).",
+                        {{"ffprobe_exe", ffprobe_exe}, {"ffmpeg_exe", ffmpeg_exe}}));
         const QString probe_chosen = QFileDialog::getOpenFileName(
             this, app::tr("Select {ffprobe_exe}", {{"ffprobe_exe", ffprobe_exe}}), text_of(directory),
             app::tr("{ffprobe_exe} ({ffprobe_exe});;All files (*)", {{"ffprobe_exe", ffprobe_exe}}));
@@ -1031,6 +1033,10 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
     source_edit_->setText(text_of(path));
     source_info_label_->setText(media_info_string(info) + ", " + bitrate_string(info) + "  (" +
                                 QString::fromStdString(format_hms(info.duration, 1)) + ")");
+    // A resolution test is made from the reference, while a test video is
+    // only compared with it, so a resolution test cannot outlive a change of
+    // reference.
+    const std::vector<QString> dropped = remove_rows_owned_by_the_previous_source();
     // Scores belong to a pair of videos: a new reference takes away every
     // score measured against another, which would otherwise stand in the
     // table as the new pair's, and keep a run from calculating it. Those
@@ -1053,6 +1059,42 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
         paths.push_back(rows_[static_cast<std::size_t>(row)]->path);
     }
     start_cache_lookup(paths);
+    if (!dropped.empty()) {
+        QStringList names;
+        for (const QString& name : dropped) {
+            names.append("  " + name);
+        }
+        inform_(app::tr("Resolution tests removed"),
+                ntr("{count} resolution test belonged to the previous source and has been removed:\n\n",
+                    "{count} resolution tests belonged to the previous source and have been removed:\n\n",
+                    static_cast<long long>(dropped.size())) +
+                    names.join("\n") + app::tr("\n\nAdd them again to test the new source."));
+    }
+}
+
+std::vector<QString> MainWindow::remove_rows_owned_by_the_previous_source() {
+    // Removes the resolution tests and returns their names, bottom to top.
+    // Such a row has no test video of its own: it scales the reference down
+    // and back up, and its name, media details, widths and saved scores'
+    // identity all come from the reference chosen when it was added. Left in
+    // place after the reference changes, the row would describe one video
+    // while its job ran on another. They are removed rather than moved to the
+    // new reference: the widths offered depend on the reference's width, two
+    // moved rows could become the same test, and quietly changing what a row
+    // means is worse than saying it is gone.
+    std::vector<QString> removed;
+    for (int row = static_cast<int>(rows_.size()) - 1; row >= 0; --row) {
+        if (!rows_[static_cast<std::size_t>(row)]->options.resample_test) {
+            continue;
+        }
+        removed.push_back(name_of(rows_[static_cast<std::size_t>(row)]->path));
+        distorted_table_->removeRow(row);
+        rows_.erase(rows_.begin() + row);
+    }
+    if (!removed.empty()) {
+        on_table_selection_changed();
+    }
+    return removed;
 }
 
 void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
@@ -1346,14 +1388,20 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
         return;
     }
     const ComparisonResult& result = row_data.completed_run->result;
-    if (!result.distorted_crop) {
+    // A resolution test has no test video of its own: both of its videos come
+    // from the reference, so the reference's bars are the answer.
+    const bool resample = row_data.options.resample_test.has_value();
+    const std::optional<CropBox>& subject_crop = resample ? result.source_crop : result.distorted_crop;
+    const VideoInfo& subject_info = resample ? result.source_info : result.distorted_info;
+    if (!subject_crop) {
         show(app::tr("Off"), app::tr("Black-bar detection was disabled for this run; no crop was applied."), true);
         return;
     }
-    show(result.distorted_crop->is_noop(result.distorted_info.width, result.distorted_info.height) ? app::tr("No")
-                                                                                                  : app::tr("Yes"),
-         crop_detail(app::tr("Test video"), result.distorted_info, result.distorted_crop) + "\n\n" +
-             crop_detail(app::tr("Reference"), result.source_info, result.source_crop),
+    QString tooltip = crop_detail(app::tr("Reference"), result.source_info, result.source_crop);
+    if (!resample) {
+        tooltip = crop_detail(app::tr("Test video"), result.distorted_info, result.distorted_crop) + "\n\n" + tooltip;
+    }
+    show(subject_crop->is_noop(subject_info.width, subject_info.height) ? app::tr("No") : app::tr("Yes"), tooltip,
          false);
 }
 
@@ -1532,6 +1580,76 @@ void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths
     }
     start_media_probe(added);
     start_cache_lookup(added);
+}
+
+void MainWindow::on_add_resample_test() {
+    // Adds a resolution test for the width the user picks.
+    if (!source_info_) {
+        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video first."));
+        return;
+    }
+    std::vector<ResampleTarget> targets;
+    for (const ResampleTarget& target : resample_target_choices()) {
+        if (target.width < source_info_->width) {
+            targets.push_back(target);
+        }
+    }
+    if (targets.empty()) {
+        inform_(app::tr("No smaller resolution available"),
+                app::tr("The smallest resolution test is {smallest} pixels wide, which is not below this "
+                        "reference's {width}-pixel width.",
+                        {{"smallest", resample_target_choices().back().width}, {"width", source_info_->width}}));
+        return;
+    }
+    QStringList labels;
+    for (const ResampleTarget& target : targets) {
+        labels.append(QString::fromStdString(target.label));
+    }
+    bool chosen = false;
+    const QString label =
+        QInputDialog::getItem(this, app::tr("Add resolution test"), app::tr("Downscale to (then scale back up):"),
+                              labels, std::min(1, static_cast<int>(labels.size()) - 1), false, &chosen);
+    if (!chosen) {
+        return;
+    }
+    add_resample_test(targets[static_cast<std::size_t>(labels.indexOf(label))]);
+}
+
+void MainWindow::add_resample_test(const ResampleTarget& target) {
+    // A row for a resolution test of the reference at `target`.
+    const std::filesystem::path path = synthetic_resample_distorted_path(source_info_->path, target);
+    if (row_index_of_path(path)) {
+        inform_(app::tr("Already added"), app::tr("A {label} resolution test for this reference is already in the list.",
+                                                  {{"label", QString::fromStdString(target.label)}}));
+        return;
+    }
+    const int row = add_table_row(path);
+    RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+    // A resolution test decodes only the reference; its test video is made in
+    // the filter graph. So the reference is the file the saved scores follow,
+    // and the target is part of the options.
+    row_data.media_path = source_info_->path;
+    row_data.options.resample_test = target;
+    row_data.video_info = *source_info_;
+    set_resample_row_info(row, target);
+    // Drawn again now it is a resolution test: drawn when added, its
+    // SSIMULACRA2, Butteraugli and CVVDP cells showed tick boxes, not n/a.
+    set_row_metrics(row);
+    start_cache_lookup({path});
+}
+
+void MainWindow::set_resample_row_info(int row, const ResampleTarget& target) {
+    // Shows what a resolution test scales the reference down to and back up
+    // to.
+    const VideoInfo& info = *source_info_;
+    const int down_h = resample_down_height(target.width, {info.width, info.height});
+    QTableWidgetItem* item = distorted_table_->item(row, col_info);
+    item->setText(app::tr("Downscale to {down}, upscale back to {back}",
+                          {{"down", size_text(target.width, down_h)}, {"back", size_text(info.width, info.height)}}));
+    item->setToolTip(QString::fromStdString(format_hms(info.duration, 1)));
+    distorted_table_->item(row, col_bitrate)->setText("N/A");
+    set_row_black_bars(row);
+    fit_columns({col_info, col_bitrate});
 }
 
 void MainWindow::start_media_probe(const std::vector<std::filesystem::path>& paths) {
@@ -1859,10 +1977,14 @@ std::vector<std::string> MainWindow::requested_metrics(const RowData& row_data) 
 }
 
 std::optional<QString> MainWindow::metric_unavailable_reason(const RowData& row_data, const std::string& key) {
-    // CVVDP needs every frame, as it judges each one together with the frames
-    // before it, and a supported GPU, as the app has no CPU version of it.
-    // (Resolution tests, which no perceptual metric takes, are not ported to
-    // C++ yet.)
+    // No perceptual metric takes a resolution test. CVVDP needs every frame,
+    // as it judges each one together with the frames before it, and a
+    // supported GPU, as the app has no CPU version of it.
+    if (row_data.options.resample_test && metric_definition(key).backend_id == "perceptual") {
+        return app::tr("{label} is not available for resolution round-trip tests; the other selected metrics are still "
+                       "calculated.",
+                       {{"label", qt_text(metric_definition(key).label)}});
+    }
     if (key == "cvvdp") {
         if (row_data.options.n_subsample > 1) {
             return app::tr("CVVDP judges each frame together with the frames before it, so it needs every frame: it is "

@@ -2,6 +2,7 @@
 // (the Python app's VmafOptions, a row's settings in the window).
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -14,6 +15,20 @@ namespace vml {
 // and a custom model file.
 inline constexpr std::string_view auto_model_choice = "__auto__";
 inline constexpr std::string_view custom_model_choice = "__custom__";
+
+// What a resolution test scales the reference down to (and back up from): a
+// width, the height following from the reference's shape, and a label
+// ("1080p"). A resolution test has no second file: both videos are made
+// from the reference during the run, to see what a resolution alone costs.
+struct ResampleTarget {
+    int width = 0;
+    std::string label;
+
+    bool operator==(const ResampleTarget&) const = default;
+};
+
+// The resolution tests offered, largest first.
+const std::vector<ResampleTarget>& resample_target_choices();
 
 struct VmafOptions {
     std::string model = "version=vmaf_v0.6.1";  // the FFmpeg model= value a run uses
@@ -41,6 +56,9 @@ struct VmafOptions {
     // VMAF v0.6.1, NEG and v1 on the GPU when a GPU can score them.
     bool vmaf_on_gpu = true;
     CropMode crop_mode = CropMode::automatic;
+    // When set, a resolution test (ResampleTarget) instead of a comparison
+    // of two files.
+    std::optional<ResampleTarget> resample_test;
 
     // The keys of FFmpeg's metrics these options ask for, in the registry's
     // order.

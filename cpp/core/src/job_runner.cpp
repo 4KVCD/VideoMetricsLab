@@ -915,7 +915,9 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     const bool neg = contains(keys, "vmaf_neg");
     const bool v1 = contains(keys, "vmaf_v1");
     GpuModels on_gpu;
-    if (vmaf || neg || v1) {
+    // A resolution test's VMAF is FFmpeg's: its test video is made in
+    // FFmpeg's filter graph, from the source.
+    if ((vmaf || neg || v1) && !options.resample_test) {
         // The size frames are compared at, where it is known before the run:
         // with black bars kept. Pictures with their black bars cut are
         // always even-sized.

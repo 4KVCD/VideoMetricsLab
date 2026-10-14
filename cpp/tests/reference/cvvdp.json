@@ -494,7 +494,7 @@
    }
   },
   {
-   "saved": "[{\"name\": \"defaults\", \"settings\": {}}, {\"name\": 7, \"settings\": {\"display\": {\"hdr\": 1}}}, {\"name\": 2.5, \"settings\": {\"display\": {\"width\": 1920.7, \"height\": 1080, \"unknown\": \"left out\"}}}, {\"name\": null, \"settings\": {\"display\": {\"hdr\": \"yes\"}, \"resize_to_display\": \"no\"}}, {\"name\": true, \"settings\": {\"display\": {\"hdr\": 0}, \"resize_to_display\": []}}, {\"name\": \"no settings\"}, {\"settings\": {}}, {\"name\": \"text width\", \"settings\": {\"display\": {\"width\": \"3840\"}}}, {\"name\": \"true width\", \"settings\": {\"display\": {\"width\": true}}}, {\"name\": \"null width\", \"settings\": {\"display\": {\"width\": null}}}, {\"name\": \"tiny\", \"settings\": {\"display\": {\"width\": 8}}}, {\"name\": \"no distance\", \"settings\": {\"display\": {\"viewing_distance_m\": 0}}}, {\"name\": \"negative light\", \"settings\": {\"display\": {\"ambient_lux\": -1}}}, {\"name\": \"a mirror\", \"settings\": {\"display\": {\"reflectivity\": 1}}}, {\"name\": \"list settings\", \"settings\": [1]}, {\"name\": \"null display\", \"settings\": {\"display\": null}}, {\"name\": \"30-inch 4K monitor, office\", \"settings\": {\"display\": {\"peak_luminance\": 400}}}]",
+   "saved": "[{\"name\": \"defaults\", \"settings\": {}}, {\"name\": 7, \"settings\": {\"display\": {\"hdr\": 1}}}, {\"name\": 2.5, \"settings\": {\"display\": {\"width\": 1920.7, \"height\": 1080, \"unknown\": \"left out\"}}}, {\"name\": null, \"settings\": {\"display\": {\"hdr\": \"yes\"}, \"resize_to_display\": \"no\"}}, {\"name\": true, \"settings\": {\"display\": {\"hdr\": 0}, \"resize_to_display\": []}}, {\"name\": \"empty texts\", \"settings\": {\"display\": {\"hdr\": \"\"}, \"resize_to_display\": \"\"}}, {\"name\": \"no settings\"}, {\"settings\": {}}, {\"name\": \"text width\", \"settings\": {\"display\": {\"width\": \"3840\"}}}, {\"name\": \"true width\", \"settings\": {\"display\": {\"width\": true}}}, {\"name\": \"null width\", \"settings\": {\"display\": {\"width\": null}}}, {\"name\": \"tiny\", \"settings\": {\"display\": {\"width\": 8}}}, {\"name\": \"no distance\", \"settings\": {\"display\": {\"viewing_distance_m\": 0}}}, {\"name\": \"negative light\", \"settings\": {\"display\": {\"ambient_lux\": -1}}}, {\"name\": \"a mirror\", \"settings\": {\"display\": {\"reflectivity\": 1}}}, {\"name\": \"list settings\", \"settings\": [1]}, {\"name\": \"null display\", \"settings\": {\"display\": null}}, {\"name\": \"30-inch 4K monitor, office\", \"settings\": {\"display\": {\"peak_luminance\": 400}}}]",
    "presets": [
     {
      "name": "30-inch 4K monitor, office",
@@ -750,6 +750,27 @@
     },
     {
      "name": "True",
+     "builtin": false,
+     "description": "",
+     "identity": {
+      "resolution": [
+       3840,
+       2160
+      ],
+      "diagonal_inches": 30.0,
+      "viewing_distance_m": 0.7472,
+      "peak_luminance": 200.0,
+      "contrast": 1000.0,
+      "ambient_lux": 250.0,
+      "reflectivity": 0.005,
+      "exposure": 1.0,
+      "hdr": false
+     },
+     "resize_to_display": false,
+     "vship_json": "{\n \"videometricslab_display\": {\n  \"name\": \"VideoMetricsLab display\",\n  \"colorspace\": \"SDR\",\n  \"resolution\": [\n   3840,\n   2160\n  ],\n  \"viewing_distance_meters\": 0.7472,\n  \"diagonal_size_inches\": 30.0,\n  \"max_luminance\": 200.0,\n  \"contrast\": 1000.0,\n  \"E_ambient\": 250.0,\n  \"k_refl\": 0.005,\n  \"exposure\": 1.0,\n  \"source\": \"VideoMetricsLab\"\n }\n}"
+    },
+    {
+     "name": "empty texts",
      "builtin": false,
      "description": "",
      "identity": {

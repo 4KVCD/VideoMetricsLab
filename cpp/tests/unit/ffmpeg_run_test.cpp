@@ -132,6 +132,38 @@ TEST(FfmpegRun, BuildsThePythonAppsFilterGraphAndCommand) {
     set_pairing("");
 }
 
+// A resolution test: its one input, the source, split into an untouched
+// reference and a test video scaled down to the target and back up.
+TEST(FfmpegRun, BuildsThePythonAppsResolutionTestCommands) {
+    const Json reference = test::load_reference("runs.json");
+    ASSERT_FALSE(reference["resample_commands"].empty());
+    const std::map<std::string, ResampleTarget> targets{
+        {"1080p", {1920, "1080p"}}, {"720p", {1280, "720p"}}, {"480p", {854, "480p"}}};
+    for (const Json& item : reference["resample_commands"]) {
+        SCOPED_TRACE(item["name"].get<std::string>());
+        set_pairing(item["pairing"].get<std::string>());
+        const VideoInfo source = pair_named(item["pair"].get<std::string>()).first;
+        const std::optional<CropBox> source_crop = crops_named(item["crop"].get<std::string>()).first;
+        const std::optional<std::string> hwaccel = plan_named(item["plan"].get<std::string>()).source;
+        VmafOptions options = options_named(item["choice"].get<std::string>(), item["setting"].get<std::string>());
+        options.resample_test = targets.at(item["target"].get<std::string>());
+        const std::optional<std::string> xpsnr_log =
+            options.compute_xpsnr ? std::optional<std::string>("xpsnr_log.txt") : std::nullopt;
+        const std::string graph =
+            build_resample_filtergraph(source, options, source_crop, hwaccel, "vmaf_log.json",
+                                       item["model"].get<std::string>(), xpsnr_log, item["cores"].get<unsigned>());
+        std::vector<std::string> command =
+            build_resample_command("<ffmpeg>", source.path, graph, hwaccel, options.duration_limit);
+        for (std::string& part : command) {
+            if (part == platform::path_text(std::filesystem::absolute(source.path))) {
+                part = "<source>";  // an absolute path, which differs between PCs
+            }
+        }
+        EXPECT_EQ(command, item["command"].get<std::vector<std::string>>());
+    }
+    set_pairing("");
+}
+
 // VMAF on the GPU: each video's own FFmpeg, decoding it, giving its frames
 // as the app pairs them, and writing them into the app's pipe.
 TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {

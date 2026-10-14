@@ -103,8 +103,7 @@ void MainWindow::on_run_clicked() {
         return;
     }
     if (source_probe_worker_ != nullptr && source_probe_worker_->isRunning()) {
-        QMessageBox::information(this, app::tr("Still reading reference"),
-                                 app::tr("Wait for the reference video to finish loading."));
+        inform_(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
         return;
     }
     if (!source_info_) {
@@ -155,9 +154,8 @@ void MainWindow::on_run_clicked() {
         if (!row_data->video_info) {
             if (std::any_of(probe_workers_.begin(), probe_workers_.end(),
                             [](ProbeWorker* worker) { return worker->isRunning(); })) {
-                QMessageBox::information(this, app::tr("Still reading videos"),
-                                         app::tr("Wait for every checked test video to finish loading before "
-                                                 "running."));
+                inform_(app::tr("Still reading videos"),
+                        app::tr("Wait for every checked test video to finish loading before running."));
                 return;
             }
             skipped.emplace_back(row_data, N_("It could not be read. Remove it or add the file again to retry."));
@@ -170,12 +168,16 @@ void MainWindow::on_run_clicked() {
         MetricResultSet kept = reusable_results(*row_data);
         std::vector<MetricTask> tasks;
         try {
-            validate_video_pair(*source_info_, info, options);
+            if (!options.resample_test) {
+                validate_video_pair(*source_info_, info, options);
+            }
             // Sized by what the run will compare, not by the test video's own
             // resolution, because one side is scaled to the other before
             // libvmaf sees it. The run works this out again after auto crop,
             // which cannot be known here.
-            const auto [width, height] = analysis_dimensions(*source_info_, info, options);
+            const auto [width, height] = options.resample_test
+                                             ? resample_analysis_dimensions(*source_info_, std::nullopt)
+                                             : analysis_dimensions(*source_info_, info, options);
             options.model = options.compute_vmaf ? resolve_model(options, width, height) : "";
             tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept);
         } catch (const std::exception& error) {
@@ -706,9 +708,9 @@ void MainWindow::render_job_progress(int index) {
         parts.append(qt_text(part));
     }
     if (!line.plans.empty()) {
-        // (A resolution test, which decodes only its source, is not ported
-        // to C++ yet.)
-        parts.append(qt_text(decoder_text(line.plans, false, window_wording())));
+        // A resolution test decodes only its source.
+        const bool source_only = job_rows_[static_cast<std::size_t>(index)]->options.resample_test.has_value();
+        parts.append(qt_text(decoder_text(line.plans, source_only, window_wording())));
     }
     set_job_line(index, job_label(index) + " — " + parts.join("   ·   "), qt_text(line.tooltip));
 }
@@ -801,7 +803,9 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     if (final) {
         row_data.analysis_status.reset();  // a result so far leaves the video in progress
     }
-    set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
+    if (!row_data.options.resample_test) {
+        set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
+    }
     if (final) {
         QStringList labels;
         for (const MetricDefinition& metric : metrics()) {

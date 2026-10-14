@@ -36,26 +36,6 @@ CvvdpPreset official(std::string name, std::string description, double width, do
     return {std::move(name), {display, false}, true, std::move(description)};
 }
 
-// Python's bool() of a value read from JSON.
-bool truthy(const nlohmann::json& value) {
-    switch (value.type()) {
-        case nlohmann::json::value_t::null:
-            return false;
-        case nlohmann::json::value_t::boolean:
-            return value.get<bool>();
-        case nlohmann::json::value_t::number_integer:
-        case nlohmann::json::value_t::number_unsigned:
-        case nlohmann::json::value_t::number_float:
-            return value.get<double>() != 0.0;
-        case nlohmann::json::value_t::string:
-        case nlohmann::json::value_t::array:
-        case nlohmann::json::value_t::object:
-            return !value.empty();
-        default:
-            return true;
-    }
-}
-
 // A saved preset's name, as Python's str() makes it of a value that is not
 // text; nothing for a list or an object.
 std::optional<std::string> name_of(const nlohmann::json& value) {
@@ -112,12 +92,12 @@ CvvdpSettings saved_settings(const nlohmann::json& data) {
             }
         }
         if (const auto hdr = display->find("hdr"); hdr != display->end()) {
-            into.hdr = truthy(*hdr);
+            into.hdr = python_truthy(*hdr);
         }
     }
     settings.display.validate();
     if (const auto resize = data.find("resize_to_display"); resize != data.end()) {
-        settings.resize_to_display = truthy(*resize);
+        settings.resize_to_display = python_truthy(*resize);
     }
     return settings;
 }

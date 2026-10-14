@@ -208,6 +208,7 @@ private:
     void show_ready();
     void on_source_probe_finished(int generation, ProbeWorker* worker);
     void retire(ProbeWorker* worker);
+    std::vector<QString> remove_rows_owned_by_the_previous_source();
 
     // ----------------------------------------------------- the test videos
     int add_table_row(const std::filesystem::path& path);
@@ -224,6 +225,9 @@ private:
     void on_add_distorted();
     void on_files_dropped_on_table(const QStringList& paths);
     void add_test_videos(const std::vector<std::filesystem::path>& paths);
+    void on_add_resample_test();
+    void add_resample_test(const ResampleTarget& target);
+    void set_resample_row_info(int row, const ResampleTarget& target);
     void start_media_probe(const std::vector<std::filesystem::path>& paths);
     void on_probed(const Probed& probed);
     void on_probe_finished(ProbeWorker* worker);
@@ -380,6 +384,9 @@ private:
     // Opens the CVVDP display editor and waits for it (exec); the tests
     // answer it in its place, as a user would.
     std::function<int(CvvdpDisplayDialog&)> run_cvvdp_dialog_;
+    // Shows a message with an OK button and waits for the click
+    // (QMessageBox::information); the tests read it in its place.
+    std::function<void(const QString& title, const QString& text)> inform_;
 
     // The lookup of saved scores under way: the rows it was asked about, and
     // a number each lookup raises, with which the window refuses the answers

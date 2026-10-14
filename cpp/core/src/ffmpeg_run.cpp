@@ -657,17 +657,22 @@ ParsedScores parse_log(const std::filesystem::path& log_path, double fps,
     return parsed;
 }
 
-// Runs the FFmpeg command to its end and parses its logs, falling back to
-// other decode plans when hardware decoding fails.
-ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                         const VmafOptions& options, const std::optional<CropBox>& source_crop,
-                         const std::optional<CropBox>& distorted_crop, const std::string& model, double fps,
-                         long long total_frames, const HardwareDecoding& decoding, const ProgressCallback& on_progress,
+// The FFmpeg command of a run for a decode plan, the run's model= value (by
+// its bare file name for a file) and XPSNR's stats file name, if any.
+using CommandBuilder = std::function<std::vector<std::string>(
+    const HardwareDecoding& plan, const std::string& run_model, const std::optional<std::string>& xpsnr_log_name)>;
+
+// Runs the FFmpeg command `build_command` makes to its end and parses its
+// logs, falling back to other decode plans when hardware decoding fails.
+// The logs are kept in a folder named from `folder_prefix`.
+ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions& options, const std::string& model,
+                         double fps, long long total_frames, const HardwareDecoding& decoding,
+                         const std::string& folder_prefix, const ProgressCallback& on_progress,
                          const StatusCallback& on_status, const CancelToken& cancel) {
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
-    const RunFolder folder("vmaf_run_");
+    const RunFolder folder(folder_prefix);
     const std::filesystem::path log_path = folder.path() / "vmaf_log.json";
     const std::optional<std::filesystem::path> xpsnr_log_path =
         options.compute_xpsnr ? std::optional(folder.path() / "xpsnr_log.txt") : std::nullopt;
@@ -687,10 +692,7 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
             on_status(attempt == 0 ? decoding_status("Running ffmpeg", plan, StatusKind::starting)
                                    : decoding_status("GPU decode failed, retrying", plan));
         }
-        const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
-                                                    "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
-        const std::vector<std::string> command = build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path,
-                                                                      graph, plan, options.duration_limit);
+        const std::vector<std::string> command = build_command(plan, run_model, xpsnr_log_name);
         try {
             outcome = run_ffmpeg(command, total_frames, on_progress, cancel, folder.path());
         } catch (const platform::ProcessError& error) {
@@ -745,6 +747,24 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
                            joined(missing.empty() ? options.requested_metrics() : missing, ", "));
     }
     return scores;
+}
+
+// execute_run for a comparison of two videos (build_filtergraph and
+// build_ffmpeg_command).
+ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                         const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                         const std::optional<CropBox>& distorted_crop, const std::string& model, double fps,
+                         long long total_frames, const HardwareDecoding& decoding, const ProgressCallback& on_progress,
+                         const StatusCallback& on_status, const CancelToken& cancel) {
+    const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
+                                   const std::optional<std::string>& xpsnr_log_name) {
+        const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
+                                                    "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
+        return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
+                                    options.duration_limit);
+    };
+    return execute_run(build_command, options, model, fps, total_frames, decoding, "vmaf_run_", on_progress, on_status,
+                       cancel);
 }
 
 // The duration limit of a GPU run, in seconds (0: none): one frame more
@@ -1368,6 +1388,20 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     return frames;
 }
 
+// The VMAF model a run uses, from the size its frames are compared at, which
+// is known only once black bars are: Auto's model comes from it, while an
+// explicit or custom choice is the user's. VMAF v1's model is resolved into
+// `options` the same way.
+std::string resolve_run_models(VmafOptions& options, int width, int height) {
+    if (options.compute_vmaf_v1) {
+        options.model_v1 = resolve_v1_model(options, width, height);
+    }
+    if (!options.compute_vmaf) {
+        return {};
+    }
+    return options.model_choice != auto_model_choice ? options.model : model_for_resolution(width, height);
+}
+
 }  // namespace
 
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding, StatusKind kind,
@@ -1509,6 +1543,64 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
     return command;
 }
 
+std::string build_resample_filtergraph(const VideoInfo& source, const VmafOptions& options,
+                                       const std::optional<CropBox>& source_crop,
+                                       const std::optional<std::string>& hwaccel, const std::string& log_name,
+                                       const std::string& model, const std::optional<std::string>& xpsnr_log_name,
+                                       unsigned cores) {
+    if (!options.resample_test) {
+        throw std::invalid_argument("not a resolution test");
+    }
+    const bool cropped = source_crop && !source_crop->is_noop(source.width, source.height);
+    const int original_w = cropped ? source_crop->w : source.width;
+    const int original_h = cropped ? source_crop->h : source.height;
+    const int down_w = options.resample_test->width;
+    const int down_h = resample_down_height(down_w, {original_w, original_h});
+    // One input, so the analysis format comes from the source alone.
+    const std::string analysis_format = analysis_pix_fmt({source.pix_fmt});
+
+    std::vector<std::string> base;
+    if (hwaccel) {
+        // As in build_filtergraph: hwdownload can only give the hardware
+        // surface's own format, not the analysis format.
+        base.emplace_back("hwdownload");
+        base.push_back("format=" + hw_native_format(source.pix_fmt));
+    }
+    if (cropped) {
+        base.push_back(source_crop->as_filter());  // before the conversion, as build_filtergraph's
+    }
+    base.push_back("format=" + analysis_format);
+    const std::string numbering = joined(pairing_filters(frame_rate(source)), ",");
+    const std::string scale_flags = ":flags=" + options.scale_algorithm;
+    return joined({"[0:" + std::string(video_stream) + "]" + joined(base, ",") + "[base]",
+                   "[base]split=2[ref_src][dist_src]", "[ref_src]" + numbering + "[ref]",
+                   "[dist_src]scale=" + std::to_string(down_w) + ":" + std::to_string(down_h) + scale_flags +
+                       ",scale=" + std::to_string(original_w) + ":" + std::to_string(original_h) + scale_flags + "," +
+                       numbering + "[main]",
+                   libvmaf_stage(options, log_name, model, xpsnr_log_name, cores)},
+                  ";");
+}
+
+std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
+                                                const std::string& filtergraph,
+                                                const std::optional<std::string>& hwaccel, double duration_limit) {
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
+    const std::vector<std::string> decode = hwaccel_args(hwaccel);
+    command.insert(command.end(), decode.begin(), decode.end());
+    command.insert(command.end(), {"-i", input_path(source)});
+    const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
+    command.insert(command.end(), outputs.begin(), outputs.end());
+    return command;
+}
+
+std::filesystem::path synthetic_resample_distorted_path(const std::filesystem::path& source,
+                                                        const ResampleTarget& target) {
+    std::filesystem::path name = source.stem();
+    name += " [downscale-" + target.label + "-upscale]";
+    name += source.extension();
+    return source.parent_path() / name;
+}
+
 nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder) {
     RunEnvironment environment;
     environment.ffmpeg = request.at("ffmpeg").get<std::string>();
@@ -1599,15 +1691,8 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     // and a cropped encode the same shape.
     validate_display_geometry(source, distorted, source_crop, distorted_crop);
 
-    // Auto's model comes from the size frames are compared at, known only
-    // now; an explicit or custom choice is the user's.
     const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
-    const std::string model = !options.compute_vmaf                       ? std::string()
-                              : options.model_choice != auto_model_choice ? options.model
-                                                                          : model_for_resolution(width, height);
-    if (options.compute_vmaf_v1) {
-        options.model_v1 = resolve_v1_model(options, width, height);
-    }
+    const std::string model = resolve_run_models(options, width, height);
     const long long total_frames = estimate_total_frames(distorted, options, &source);
 
     // VMAF is scored on the GPU only when VMAF, NEG and VMAF v1 are all the
@@ -1722,6 +1807,73 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         }
         result.metric_results.add(
             FrameMetricResult{key, scores->frame, scores->time, scores->metrics.at(key), std::move(provenance)});
+    }
+    return result;
+}
+
+ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
+                                   const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                   const CancelToken& cancel) {
+    if (!options.resample_test) {
+        throw std::invalid_argument("not a resolution test");
+    }
+    // One file: there is no test video to plan GPU decoding for.
+    HardwareDecoding decoding;
+    if (options.gpu_decode) {
+        decoding.source = pick_decode(environment.decoding, options.gpu_vendor, source.codec_name, source.pix_fmt,
+                                      source.width, source.height);
+    }
+    std::optional<CropBox> source_crop;
+    if (options.crop_mode == CropMode::automatic) {
+        if (on_status) {
+            on_status({"Detecting black bars in source..."});
+        }
+        source_crop = detect_crop(environment.ffmpeg, source, cancel, decoding.source);
+    }
+    // The comparison is at the source's own size, the downscale being undone
+    // before it: Auto's VMAF models come from that.
+    const auto [width, height] = resample_analysis_dimensions(source, source_crop);
+    const std::string model = resolve_run_models(options, width, height);
+    const long long total_frames = estimate_total_frames(source, options, nullptr);
+    const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
+                                   const std::optional<std::string>& xpsnr_log_name) {
+        const std::string graph = build_resample_filtergraph(source, options, source_crop, plan.source,
+                                                             "vmaf_log.json", run_model, xpsnr_log_name,
+                                                             environment.cores);
+        return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit);
+    };
+    const ParsedScores scores = execute_run(build_command, options, model, source.fps, total_frames, decoding,
+                                            "vmaf_resample_", on_progress, on_status, cancel);
+
+    ComparisonResult result;
+    result.source = source.path;
+    result.distorted = synthetic_resample_distorted_path(source.path, *options.resample_test);
+    result.fps = source.fps;
+    result.model = model;
+    result.source_crop = source_crop;
+    result.distorted_crop = source_crop;  // both branches come from the same source
+    result.source_info = source;
+    result.distorted_info = source;  // after the round trip, it is back at the source's own size
+    result.scale_algorithm = options.scale_algorithm;
+    result.resample_target = options.resample_test;
+    result.compared_frame_count = total_frames;
+    result.model_choice = options.model_choice;
+    result.model_v1 = options.model_v1;
+    if (options.compute_vmaf_v1) {
+        result.model_choice_v1 = options.model_choice_v1;
+    }
+    for (const std::string& key : scores.order) {
+        std::map<std::string, std::string> parameters;
+        if (key == "vmaf_neg") {
+            parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
+        } else if (key == "vmaf") {
+            parameters["model"] = nlohmann::json(model).dump();
+        } else if (key == "vmaf_v1") {
+            parameters["model"] = nlohmann::json(options.model_v1).dump();
+        }
+        result.metric_results.add(
+            FrameMetricResult{key, scores.frame, scores.time, scores.metrics.at(key),
+                              current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters))});
     }
     return result;
 }

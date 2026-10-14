@@ -524,7 +524,7 @@ def run_cases() -> dict:
 
     from vmaf_app.core import frame_sync, vmaf_gpu, vmaf_runner
     from vmaf_app.core.gpu import HwAccelPlan
-    from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo, VmafOptions
+    from vmaf_app.core.models import CropBox, ResampleTarget, ScaleDirection, VideoInfo, VmafOptions
 
     def video(name: str, width: int, height: int, pix_fmt: str, fps: float) -> VideoInfo:
         return VideoInfo(path=Path(name), width=width, height=height, fps=fps, duration=10.0, nb_frames=0,
@@ -561,6 +561,7 @@ def run_cases() -> dict:
     }
     cases = []
     gpu_cases = []
+    resample_cases = []
     real_pairing = os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
     try:
         for pairing in ("", "timestamp"):
@@ -627,6 +628,43 @@ def run_cases() -> dict:
                                         f"{setting_name}",
                                 "pairing": pairing, "pair": pair_name, "crop": crop_name, "plan": plan_name,
                                 "setting": setting_name, "limit": exact(limit), "commands": commands})
+        # A resolution test: one input, the source, split into an untouched
+        # reference and a test video scaled down to the target and back up
+        # (_build_resample_test_filtergraph and _build_resample_cmd). The
+        # pair's source, crop and decode plan are its.
+        targets = {"1080p": ResampleTarget(1920, "1080p"), "720p": ResampleTarget(1280, "720p"),
+                   "480p": ResampleTarget(854, "480p")}
+        for pairing in ("", "timestamp"):
+            os.environ[frame_sync.PAIRING_VARIABLE] = pairing
+            for pair_name, (source, _test) in pairs.items():
+                for crop_name, (source_crop, _test_crop) in crops.items():
+                    if crop_name == "letterbox" and pair_name != "4k against 1080p":
+                        continue
+                    for plan_name in ("software", "cuda", "qsv"):
+                        hwaccel = plans[plan_name].source
+                        for target_name, target in targets.items():
+                            for choice_name in ("vmaf", "vmaf, v1", "all", "xpsnr"):
+                                for setting_name in ("plain", "subsample, lanczos, upscale", "limit"):
+                                    if pairing and (plan_name != "cuda" or target_name != "720p"):
+                                        continue  # the other way of pairing changes only the frame filters
+                                    options = VmafOptions(**choices[choice_name], **settings[setting_name],
+                                                          resample_test=target)
+                                    xpsnr_log = Path("xpsnr_log.txt") if options.compute_xpsnr else None
+                                    model = "version=vmaf_v0.6.1" if options.compute_vmaf else ""
+                                    graph = vmaf_runner._build_resample_test_filtergraph(
+                                        source, options, source_crop, hwaccel, Path("vmaf_log.json"), model=model,
+                                        xpsnr_log_path=xpsnr_log)
+                                    command = vmaf_runner._build_resample_cmd(source.path, graph, hwaccel,
+                                                                              options.duration_limit)
+                                    command[0] = "<ffmpeg>"
+                                    command = ["<source>" if part == str(source.path.resolve()) else part
+                                               for part in command]
+                                    resample_cases.append({
+                                        "name": f"{pairing or 'frame number'}; {pair_name}; {crop_name}; "
+                                                f"{plan_name}; {target_name}; {choice_name}; {setting_name}",
+                                        "pairing": pairing, "pair": pair_name, "crop": crop_name, "plan": plan_name,
+                                        "target": target_name, "choice": choice_name, "setting": setting_name,
+                                        "model": model, "cores": os.cpu_count(), "command": command})
     finally:
         os.environ.pop(frame_sync.PAIRING_VARIABLE, None)
         if real_pairing is not None:
@@ -674,7 +712,8 @@ def run_cases() -> dict:
                     "name": f"{log_name}, xpsnr {xpsnr_name}", "log": json.dumps(log), "xpsnr_log": xpsnr_text,
                     "frames": [int(n) for n in frames.frame], "times": [exact(t) for t in frames.time],
                     "metrics": {key: [exact(v) for v in frames.values(key)] for key in frames.metric_keys}})
-    return {"commands": cases, "gpu_commands": gpu_cases, "logs": parsed, "log_fps": exact(24000 / 1001)}
+    return {"commands": cases, "gpu_commands": gpu_cases, "resample_commands": resample_cases, "logs": parsed,
+            "log_fps": exact(24000 / 1001)}
 
 
 # ----------------------------------------------------------------- run line
@@ -1413,6 +1452,7 @@ def cvvdp_cases() -> dict:
          {"name": 2.5, "settings": {"display": {"width": 1920.7, "height": 1080, "unknown": "left out"}}},
          {"name": None, "settings": {"display": {"hdr": "yes"}, "resize_to_display": "no"}},
          {"name": True, "settings": {"display": {"hdr": 0}, "resize_to_display": []}},
+         {"name": "empty texts", "settings": {"display": {"hdr": ""}, "resize_to_display": ""}},
          {"name": "no settings"},
          {"settings": {}},
          {"name": "text width", "settings": {"display": {"width": "3840"}}},
@@ -1886,7 +1926,15 @@ def metric_cache_cases() -> dict:
         SequenceMetricResult,
         provenance_to_dict,
     )
-    from vmaf_app.core.models import ComparisonResult, CropBox, CropMode, ScaleDirection, VideoInfo, VmafOptions
+    from vmaf_app.core.models import (
+        ComparisonResult,
+        CropBox,
+        CropMode,
+        ResampleTarget,
+        ScaleDirection,
+        VideoInfo,
+        VmafOptions,
+    )
 
     def options_of(fields: dict) -> VmafOptions:
         options = VmafOptions()
@@ -1899,7 +1947,9 @@ def metric_cache_cases() -> dict:
         return {"n_subsample": options.n_subsample, "model_choice": options.model_choice,
                 "model_choice_v1": options.model_choice_v1, "crop_mode": options.crop_mode.value,
                 "scale_direction": options.scale_direction.value, "scale_algorithm": options.scale_algorithm,
-                "duration_limit": exact(options.duration_limit)}
+                "duration_limit": exact(options.duration_limit),
+                "resample_test": None if options.resample_test is None else {
+                    "width": options.resample_test.width, "label": options.resample_test.label}}
 
     hdr_display = CvvdpSettings(CvvdpDisplay(width=1920, height=1080, diagonal_inches=55.0, viewing_distance_m=2.1,
                                              peak_luminance=1000.0, contrast=100000.0, ambient_lux=10.0,
@@ -1922,6 +1972,7 @@ def metric_cache_cases() -> dict:
             ("perceptual, subsampled, SSIMULACRA2 on the CPU", {"n_subsample": 2}, ("ssimulacra2", "butteraugli"),
              {"ssimulacra2": "cpu"}, None),
             ("CVVDP on an HDR display it fills", {}, ("cvvdp", "vmaf"), {}, hdr_display),
+            ("a resolution test", {"resample_test": ResampleTarget(1280, "720p")}, ("vmaf", "psnr"), {}, None),
             ("another recipe", {"crop_mode": "none", "scale_direction": "distorted_to_source",
                                 "scale_algorithm": "lanczos", "duration_limit": 30.5},
              ("vmaf", "ssimulacra2"), {"butteraugli": "cpu"}, None)):
@@ -1978,6 +2029,8 @@ def metric_cache_cases() -> dict:
                 "scale_algorithm": result.scale_algorithm, "compared_frame_count": result.compared_frame_count,
                 "model_choice": result.model_choice, "model_v1": result.model_v1,
                 "model_choice_v1": result.model_choice_v1,
+                "resample_target": None if result.resample_target is None else {
+                    "width": result.resample_target.width, "label": result.resample_target.label},
                 "metrics": [metric_json(result.metric_results.get(key)) for key in result.metric_results]}
 
     def result_of(metrics: list, source_info: VideoInfo, distorted_info: VideoInfo, **fields) -> ComparisonResult:
@@ -2021,6 +2074,25 @@ def metric_cache_cases() -> dict:
                           context=(directory / "context.json").read_text(encoding="utf-8"),
                           files={path.name: str(np.load(path)["metadata"].item())
                                  for path in sorted(directory.glob("*.npz"))})
+
+    # A resolution test's: its target in context.json, and in the recipe the
+    # folder is named by.
+    libvmaf = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1",
+                               {"model": "version=vmaf_v0.6.1"})
+    stored_resample = result_of([frame_metric("vmaf", [95.5, 96.25, 94.75, 97.0], libvmaf)], info("s.mp4"),
+                                info("s.mp4"), resample_target=ResampleTarget(1280, "720p"), model_choice_v1=None)
+    resample_case, resample_request = request_json(
+        "stored resolution test", {"resample_test": ResampleTarget(1280, "720p")}, ("vmaf",), {}, None)
+    with tempfile.TemporaryDirectory() as folder:
+        source, distorted = Path(folder) / "s.mp4", Path(folder) / "t.mp4"
+        source.write_bytes(b"s")
+        distorted.write_bytes(b"t")
+        directory = metric_cache.store_result(Path(folder) / "cache", source, distorted, resample_request.recipe,
+                                              stored_resample, "t", resample_request.metrics)
+        resample_case.update(result=result_json(stored_resample), label="t",
+                             context=(directory / "context.json").read_text(encoding="utf-8"),
+                             files={path.name: str(np.load(path)["metadata"].item())
+                                    for path in sorted(directory.glob("*.npz"))})
 
     # Which scores answer a request.
     rgb, yuv = info("s.mp4", "gbrp10le", ""), info("t.mp4", "yuv420p", "bt709")
@@ -2164,7 +2236,8 @@ def metric_cache_cases() -> dict:
         case.update(removed=removed, left=left)
         clears.append(case)
 
-    return {"requests": requests, "stored": store_case, "answers": answer_cases, "made_as_chosen": chosen_cases,
+    return {"requests": requests, "stored": store_case, "stored_resolution_test": resample_case,
+            "answers": answer_cases, "made_as_chosen": chosen_cases,
             "reusable": {"result": result_json(reused), "cases": reuse_cases},
             "saved": {"folder": SAVED_SCORES.name, "label": "t", "loads": loads, "window_loads": window_loads,
                       "clears": clears}}

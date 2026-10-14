@@ -54,7 +54,8 @@ namespace vml::app {
 class WindowTest : public ::testing::Test {
 protected:
     // Clips of FFmpeg's test pattern, made once for every test: a reference
-    // in one folder and two test videos in another, as videos often are.
+    // in one folder and two test videos in another, as videos often are, and
+    // a reference wider than the narrowest resolution test (854).
     static void SetUpTestSuite() {
         found_ = test::tools();
         if (!found_) {
@@ -66,6 +67,7 @@ protected:
         test::make_clip(*found_, *clips_ / "sources" / "ref.mkv", "libx264", "yuv420p", 0.5);
         test::make_clip(*found_, *clips_ / "encodes" / "a.mkv", "libx264", "yuv420p", 0.5);
         test::make_clip(*found_, *clips_ / "encodes" / "b.mkv", "libx265", "yuv420p", 0.5, {}, "480x270");
+        test::make_clip(*found_, *clips_ / "sources" / "wide.mkv", "libx264", "yuv420p", 0.5, {}, "1280x720");
     }
 
     static void TearDownTestSuite() { clips_.reset(); }
@@ -105,7 +107,7 @@ protected:
     }
 
     // A clip made for the tests (SetUpTestSuite): "sources/ref.mkv",
-    // "encodes/a.mkv" or "encodes/b.mkv".
+    // "sources/wide.mkv", "encodes/a.mkv" or "encodes/b.mkv".
     static std::filesystem::path clip(const std::string& name) {
         return (*clips_ / name).make_preferred();
     }
@@ -151,6 +153,18 @@ protected:
     // Shows a row's scores, as a finished video or its saved scores do.
     static void show_scores(MainWindow& window, int row) { window.set_row_metrics(row); }
     static void remove_selected(MainWindow& window) { window.on_remove_distorted(); }
+    // A resolution test of the reference, as Add resolution test adds the
+    // one chosen.
+    static void add_resample_test(MainWindow& window, const ResampleTarget& target) {
+        window.add_resample_test(target);
+    }
+    // The window's information messages, title and text: kept, in the order
+    // they come, rather than shown.
+    static std::shared_ptr<std::vector<std::pair<QString, QString>>> keep_information(MainWindow& window) {
+        auto kept = std::make_shared<std::vector<std::pair<QString, QString>>>();
+        window.inform_ = [kept](const QString& title, const QString& text) { kept->emplace_back(title, text); };
+        return kept;
+    }
     static OptionsPanel& options_panel(MainWindow& window) { return *window.options_panel_; }
     // Answers the CVVDP display editor in the user's place when it opens.
     static void answer_cvvdp_dialog(MainWindow& window, std::function<int(CvvdpDisplayDialog&)> answer) {
@@ -936,6 +950,70 @@ TEST_F(WindowTest, TestBothAddsARowScoringTheSameVideoTheOtherWayRound) {
     EXPECT_EQ(state(window, 1), RowState::complete);
     EXPECT_EQ(state(window, 2), RowState::complete);
     EXPECT_NE(table(window).item(1, col_psnr)->text(), table(window).item(2, col_psnr)->text());
+}
+
+TEST_F(WindowTest, AResolutionTestScoresTheReferenceScaledDownAndBackUp) {
+    // A resolution test has no test video of its own: the run scales the
+    // reference down and back up, and scores that against the reference. Its
+    // scores are saved under the reference, where the Python app files them,
+    // and come back when the same test is added again.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    choose_source(window, clip("sources/wide.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window).has_value() && !reading(window); }));
+    const ResampleTarget target{854, "480p"};
+    add_resample_test(window, target);
+    const std::string described = "Downscale to 854x480, upscale back to 1280x720";
+    ASSERT_EQ(names(window), std::vector<std::string>{"wide [downscale-480p-upscale].mkv"});
+    EXPECT_EQ(table(window).item(0, col_info)->text().toStdString(), described);
+    EXPECT_EQ(rows(window)[0]->identity_path(), clip("sources/wide.mkv"));
+
+    run_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    ASSERT_EQ(state(window, 0), RowState::complete) << rows(window)[0]->status_detail.toStdString();
+    // Not the reference against itself, which libvmaf scores 60 dB.
+    const QString psnr = table(window).item(0, col_psnr)->text();
+    bool number = false;
+    EXPECT_LT(psnr.toDouble(&number), 50) << psnr.toStdString();
+    EXPECT_TRUE(number) << psnr.toStdString();
+
+    ASSERT_TRUE(wait_for_writes(window));
+    select_rows(window, 0, 0);
+    remove_selected(window);
+    add_resample_test(window, target);
+    ASSERT_TRUE(wait_until([&] { return !reading(window); }));
+    EXPECT_EQ(state(window, 0), RowState::cached);
+    EXPECT_EQ(table(window).item(0, col_psnr)->text(), psnr);
+    EXPECT_EQ(table(window).item(0, col_info)->text().toStdString(), described);
+}
+
+TEST_F(WindowTest, ANewReferenceRemovesTheResolutionTestsMadeFromTheOldOne) {
+    // A resolution test is the old reference scaled down and back up: left
+    // in the list, it would describe that video while a run scaled the new
+    // one. The test videos stay, and the user is told which tests went.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    const auto information = keep_information(window);
+    choose_source(window, clip("sources/wide.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window).has_value() && !reading(window); }));
+    add_resample_test(window, {1280, "720p"});
+    drop(table(window).viewport(), {clip("encodes/a.mkv")});
+    add_resample_test(window, {854, "480p"});
+    ASSERT_EQ(names(window).size(), 3u);
+
+    choose_source(window, clip("sources/ref.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window)->path == clip("sources/ref.mkv") && !reading(window); }));
+    EXPECT_EQ(names(window), std::vector<std::string>{"a.mkv"});
+    ASSERT_EQ(information->size(), 1u);
+    EXPECT_EQ(information->front().first.toStdString(), "Resolution tests removed");
+    const QString& text = information->front().second;
+    EXPECT_TRUE(text.startsWith("2 resolution tests belonged to the previous source")) << text.toStdString();
+    EXPECT_TRUE(text.contains("\n  wide [downscale-720p-upscale].mkv")) << text.toStdString();
+    EXPECT_TRUE(text.contains("\n  wide [downscale-480p-upscale].mkv")) << text.toStdString();
 }
 
 TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {

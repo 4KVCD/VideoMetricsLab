@@ -128,6 +128,22 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
                                               const std::filesystem::path& source, const std::string& filtergraph,
                                               const HardwareDecoding& decoding, double duration_limit);
 
+// The filter graph of a resolution test (VmafOptions::resample_test), which
+// has a single input: the source is decoded once and split into an
+// untouched reference and a test video, which is scaled down to the target
+// width (keeping the source's shape) and back up to the source's own size.
+// `hwaccel` is the source's decoder.
+std::string build_resample_filtergraph(const VideoInfo& source, const VmafOptions& options,
+                                       const std::optional<CropBox>& source_crop,
+                                       const std::optional<std::string>& hwaccel, const std::string& log_name,
+                                       const std::string& model, const std::optional<std::string>& xpsnr_log_name,
+                                       unsigned cores);
+
+// FFmpeg's command for a resolution test's filter graph.
+std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
+                                                const std::string& filtergraph,
+                                                const std::optional<std::string>& hwaccel, double duration_limit);
+
 // For VMAF on the GPU, the filter graph of each video's own FFmpeg (the test
 // video's, then the source's): its chain as build_filtergraph's, giving its
 // frames as [vmaf_dist] or [vmaf_ref], which the app pairs itself.
@@ -169,5 +185,20 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,
                           const std::optional<std::filesystem::path>& result_distorted_path = std::nullopt);
+
+// A made-up path that stands for a resolution test's test video, which has
+// no file of its own (the Python app's synthetic_resample_distorted_path):
+// the target is in the name, so that two targets of one source are not
+// taken for the same comparison.
+std::filesystem::path synthetic_resample_distorted_path(const std::filesystem::path& source,
+                                                        const ResampleTarget& target);
+
+// Runs a resolution test (VmafOptions::resample_test): the source scaled
+// down to the target width and back up to its own size, compared with the
+// untouched source, with FFmpeg's metric filters. It needs only the source.
+// Throws VmafRunError when the run fails, and Cancelled.
+ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
+                                   const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                   const CancelToken& cancel);
 
 }  // namespace vml

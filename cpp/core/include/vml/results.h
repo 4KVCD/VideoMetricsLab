@@ -101,6 +101,8 @@ struct ComparisonResult {
     VideoInfo distorted_info;
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
     std::string scale_algorithm = "bicubic";
+    // A resolution test's target; its test video is made from the source.
+    std::optional<ResampleTarget> resample_target;
     long long compared_frame_count = 0;
     std::optional<std::string> model_choice;
     std::string model_v1;

@@ -23,11 +23,12 @@ struct ComparisonRecipe {
     std::string scale_algorithm = "bicubic";
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
     double duration_limit = 0.0;
+    std::optional<ResampleTarget> resample_test;
 
     // The settings that decide what the comparison is (identity_dict): the
     // scaling algorithm is not one (the Python app counts a comparison
-    // scaled another way as the same one), and the resolution test and the
-    // manual crops, which the command line never has, are null.
+    // scaled another way as the same one), and the manual crops, which the
+    // app no longer has, are null.
     nlohmann::json identity() const;
 };
 

@@ -30,6 +30,16 @@ Size analysis_dimensions(const VideoInfo& source, const VideoInfo& distorted, co
                          const std::optional<CropBox>& source_crop = std::nullopt,
                          const std::optional<CropBox>& distorted_crop = std::nullopt);
 
+// The size a resolution test compares at: the source's own (cropped) size,
+// as the downscale is undone before the comparison.
+inline Size resample_analysis_dimensions(const VideoInfo& source, const std::optional<CropBox>& source_crop) {
+    return content_size(source, source_crop);
+}
+
+// The height a resolution test scales a picture of `size` down to, `width`
+// wide: even, and the picture's own shape.
+int resample_down_height(int width, Size size);
+
 // A sample aspect ratio ("4:3") as a fraction; an unknown or unset one means
 // square pixels.
 std::pair<int, int> sar_fraction(const std::string& sar);

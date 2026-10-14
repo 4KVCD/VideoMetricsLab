@@ -22,4 +22,27 @@ std::string python_json_dumps(const nlohmann::ordered_json& value, int indent = 
 // std::invalid_argument for NaN or an infinity, which Python refuses too.
 std::string python_json_compact(const nlohmann::json& value);
 
+// Python's bool() of a value read from JSON: false for null, false, zero,
+// and an empty text, list or object.
+template <typename Json>
+bool python_truthy(const Json& value) {
+    switch (value.type()) {
+        case Json::value_t::null:
+            return false;
+        case Json::value_t::boolean:
+            return value.template get<bool>();
+        case Json::value_t::number_integer:
+        case Json::value_t::number_unsigned:
+        case Json::value_t::number_float:
+            return value.template get<double>() != 0.0;  // NaN is true, as in Python
+        case Json::value_t::string:
+            return !value.template get_ref<const std::string&>().empty();
+        case Json::value_t::array:
+        case Json::value_t::object:
+            return !value.empty();
+        default:
+            return true;
+    }
+}
+
 }  // namespace vml

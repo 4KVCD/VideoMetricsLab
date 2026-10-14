@@ -387,7 +387,9 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"distorted_info", video_json(result.distorted_info)},
             {"scale_direction", scale_direction_value(result.scale_direction)},
             {"scale_algorithm", result.scale_algorithm},
-            {"resample_target", nullptr},
+            {"resample_target", result.resample_target ? nlohmann::json{{"width", result.resample_target->width},
+                                                                        {"label", result.resample_target->label}}
+                                                       : nlohmann::json(nullptr)},
             {"compared_frame_count", result.compared_frame_count},
             {"model", result.model},
             {"model_choice", optional_text(result.model_choice)},
@@ -614,15 +616,20 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> auto_perceptual
 
 // The size this comparison's frames are compared at, worked out from the
 // sizes and black bars in its context.json, as the run works it out. Auto
-// picks VMAF's model by it. Nothing for a resolution test's comparison,
-// which the command line never makes.
+// picks VMAF's model by it.
 std::optional<Size> compared_size(const std::filesystem::path& directory) {
     try {
         const std::optional<nlohmann::json> context = read_json(directory / "context.json");
-        if (!context || !context->is_object() || !context->value("resample_target", nlohmann::json()).is_null()) {
+        if (!context || !context->is_object()) {
             return std::nullopt;
         }
         const VideoInfo source = video_from_json(context->at("source_info"));
+        if (python_truthy(context->value("resample_target", nlohmann::json()))) {
+            // A resolution test compares at the source's own (cropped) size:
+            // the downscale is undone before the comparison.
+            return resample_analysis_dimensions(source,
+                                                crop_from_json(context->value("source_crop", nlohmann::json())));
+        }
         const VideoInfo distorted = video_from_json(context->at("distorted_info"));
         return compared_dimensions(source, distorted,
                                    scale_direction_from(context->at("scale_direction").get<std::string>()),
@@ -1098,6 +1105,14 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         result.scale_algorithm = algorithm.is_string() && !algorithm.get<std::string>().empty()
                                      ? algorithm.get<std::string>()
                                      : recipe.scale_algorithm;
+        result.resample_target = recipe.resample_test;
+        if (const nlohmann::json target = context->value("resample_target", nlohmann::json()); python_truthy(target)) {
+            // As Python's ResampleTarget(**target): its two fields, no more.
+            if (!target.is_object() || target.size() != 2) {
+                return std::nullopt;
+            }
+            result.resample_target = ResampleTarget{target.at("width").get<int>(), target.at("label").get<std::string>()};
+        }
         result.compared_frame_count = context->value("compared_frame_count", 0LL);
         const auto optional_string = [&context](const char* name) -> std::optional<std::string> {
             const nlohmann::json value = context->value(name, nlohmann::json());

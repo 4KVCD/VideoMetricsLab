@@ -153,7 +153,11 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     row_data.analysis_status = has_requested_results(row_data) ? std::optional(RowState::cached) : std::nullopt;
     // The scores and crops come from the saved result, the video's details
     // from reading it now: an older result lacks tags a newer read has.
-    set_row_info(*row, row_data.video_info ? *row_data.video_info : found.result.distorted_info);
+    if (row_data.options.resample_test) {
+        set_resample_row_info(*row, *row_data.options.resample_test);
+    } else {
+        set_row_info(*row, row_data.video_info ? *row_data.video_info : found.result.distorted_info);
+    }
     set_row_metrics(*row);
 }
 
@@ -218,8 +222,9 @@ void MainWindow::recompute_rows(const std::vector<int>& rows) {
                                  });
         }
         // The Scaling cell for the row's settings again, not the cleared
-        // result's crops.
-        if (row_data.video_info) {
+        // result's crops. Not a resolution test's: its Info cell describes
+        // the test, not a video.
+        if (row_data.video_info && !row_data.options.resample_test) {
             set_row_info(row, *row_data.video_info);
         }
     }

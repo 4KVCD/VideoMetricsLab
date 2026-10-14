@@ -9,7 +9,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "vmaf"
@@ -38,7 +39,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "vmaf",
@@ -87,7 +89,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "xpsnr"
@@ -116,7 +119,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "vmaf",
@@ -150,7 +154,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "vmaf_v1",
@@ -184,7 +189,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "ssimulacra2",
@@ -220,7 +226,8 @@
     "crop_mode": "auto",
     "scale_direction": "source_to_distorted",
     "scale_algorithm": "bicubic",
-    "duration_limit": "0x0.0p+0"
+    "duration_limit": "0x0.0p+0",
+    "resample_test": null
    },
    "metrics": [
     "cvvdp",
@@ -262,6 +269,44 @@
    ]
   },
   {
+   "name": "a resolution test",
+   "options": {
+    "n_subsample": 1,
+    "model_choice": "__auto__",
+    "model_choice_v1": "__auto__",
+    "crop_mode": "auto",
+    "scale_direction": "source_to_distorted",
+    "scale_algorithm": "bicubic",
+    "duration_limit": "0x0.0p+0",
+    "resample_test": {
+     "width": 1280,
+     "label": "720p"
+    }
+   },
+   "metrics": [
+    "vmaf",
+    "psnr"
+   ],
+   "backends": {},
+   "cvvdp": null,
+   "perceptual_backends": {
+    "butteraugli": "gpu",
+    "ssimulacra2": "gpu"
+   },
+   "recipe": "{\"crop_mode\":\"auto\",\"duration_limit\":0.0,\"manual_distorted_crop\":null,\"manual_source_crop\":null,\"resample_test\":{\"label\":\"720p\",\"width\":1280},\"scale_direction\":\"source_to_distorted\"}",
+   "recipe_hash": "9a74459a73d5707d008417074c39e943c784f840539c2ac23694c12003d6f662",
+   "specs": [
+    {
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca"
+    },
+    {
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
+     "hash": "06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83"
+    }
+   ]
+  },
+  {
    "name": "another recipe",
    "options": {
     "n_subsample": 1,
@@ -270,7 +315,8 @@
     "crop_mode": "none",
     "scale_direction": "distorted_to_source",
     "scale_algorithm": "lanczos",
-    "duration_limit": "0x1.e800000000000p+4"
+    "duration_limit": "0x1.e800000000000p+4",
+    "resample_test": null
    },
    "metrics": [
     "vmaf",
@@ -307,7 +353,8 @@
    "crop_mode": "auto",
    "scale_direction": "source_to_distorted",
    "scale_algorithm": "bicubic",
-   "duration_limit": "0x0.0p+0"
+   "duration_limit": "0x0.0p+0",
+   "resample_test": null
   },
   "metrics": [
    "vmaf",
@@ -375,6 +422,7 @@
    "model_choice": "__auto__",
    "model_v1": "",
    "model_choice_v1": null,
+   "resample_target": null,
    "metrics": [
     {
      "key": "vmaf",
@@ -518,6 +566,123 @@
    "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz": "{\"format_version\":2,\"key\":\"psnr\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"cpu\",\"implementation\":\"libvmaf\",\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"implementation_version\":\"\",\"parameters\":{}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}}",
    "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz": "{\"format_version\":2,\"key\":\"ssimulacra2\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"Vship/ssimulacra2\",\"implementation_compatibility_id\":\"ssimulacra2-vship-gpu-v1\",\"implementation_version\":\"\",\"parameters\":{\"color_tags\":\"ffvship-5.1.1\",\"coverage_step\":1}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-vship-gpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}}",
    "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz": "{\"format_version\":2,\"key\":\"vmaf\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"libvmaf/vulkan\",\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"implementation_version\":\"libvmaf-fast v1\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1\"}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}}"
+  }
+ },
+ "stored_resolution_test": {
+  "name": "stored resolution test",
+  "options": {
+   "n_subsample": 1,
+   "model_choice": "__auto__",
+   "model_choice_v1": "__auto__",
+   "crop_mode": "auto",
+   "scale_direction": "source_to_distorted",
+   "scale_algorithm": "bicubic",
+   "duration_limit": "0x0.0p+0",
+   "resample_test": {
+    "width": 1280,
+    "label": "720p"
+   }
+  },
+  "metrics": [
+   "vmaf"
+  ],
+  "backends": {},
+  "cvvdp": null,
+  "result": {
+   "source": "s.mp4",
+   "distorted": "t.mp4",
+   "fps": "0x1.7f9dcb5112287p+4",
+   "model": "version=vmaf_v0.6.1",
+   "source_crop": null,
+   "distorted_crop": null,
+   "source_info": {
+    "path": "s.mp4",
+    "width": 1920,
+    "height": 1080,
+    "fps": "0x1.7f9dcb5112287p+4",
+    "duration": "0x1.4051eb851eb85p+3",
+    "nb_frames": 240,
+    "codec_name": "hevc",
+    "sar": "1:1",
+    "pix_fmt": "yuv420p",
+    "bit_rate": 4500000,
+    "bit_rate_whole_file": false,
+    "nominal_fps": "0x1.7f9dcb5112287p+4",
+    "average_fps": "0x1.7f9dcb5112287p+4",
+    "color_range": "tv",
+    "color_space": "bt709",
+    "color_transfer": "",
+    "color_primaries": "bt709",
+    "chroma_location": "left"
+   },
+   "distorted_info": {
+    "path": "s.mp4",
+    "width": 1920,
+    "height": 1080,
+    "fps": "0x1.7f9dcb5112287p+4",
+    "duration": "0x1.4051eb851eb85p+3",
+    "nb_frames": 240,
+    "codec_name": "hevc",
+    "sar": "1:1",
+    "pix_fmt": "yuv420p",
+    "bit_rate": 4500000,
+    "bit_rate_whole_file": false,
+    "nominal_fps": "0x1.7f9dcb5112287p+4",
+    "average_fps": "0x1.7f9dcb5112287p+4",
+    "color_range": "tv",
+    "color_space": "bt709",
+    "color_transfer": "",
+    "color_primaries": "bt709",
+    "chroma_location": "left"
+   },
+   "scale_direction": "source_to_distorted",
+   "scale_algorithm": "bicubic",
+   "compared_frame_count": 240,
+   "model_choice": "__auto__",
+   "model_v1": "",
+   "model_choice_v1": null,
+   "resample_target": {
+    "width": 1280,
+    "label": "720p"
+   },
+   "metrics": [
+    {
+     "key": "vmaf",
+     "provenance": {
+      "implementation": "ffmpeg/libvmaf",
+      "implementation_version": "ffmpeg 9.0.1",
+      "compute_backend": "cpu",
+      "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+      "parameters": {
+       "model": "version=vmaf_v0.6.1"
+      }
+     },
+     "kind": "frame",
+     "frame": [
+      0,
+      1,
+      2,
+      3
+     ],
+     "time": [
+      "0x0.0p+0",
+      "0x1.55acb6f46508ep-5",
+      "0x1.55acb6f46508ep-4",
+      "0x1.004189374bc6ap-3"
+     ],
+     "values": [
+      "0x1.7e00000000000p+6",
+      "0x1.8100000000000p+6",
+      "0x1.7b00000000000p+6",
+      "0x1.8400000000000p+6"
+     ]
+    }
+   ]
+  },
+  "label": "t",
+  "context": "{\"compared_frame_count\":240,\"distorted\":\"t.mp4\",\"distorted_crop\":null,\"distorted_info\":{\"average_fps\":23.976023976023978,\"bit_rate\":4500000,\"bit_rate_whole_file\":false,\"chroma_location\":\"left\",\"codec_name\":\"hevc\",\"color_primaries\":\"bt709\",\"color_range\":\"tv\",\"color_space\":\"bt709\",\"color_transfer\":\"\",\"duration\":10.01,\"fps\":23.976023976023978,\"height\":1080,\"nb_frames\":240,\"nominal_fps\":23.976023976023978,\"path\":\"s.mp4\",\"pix_fmt\":\"yuv420p\",\"sar\":\"1:1\",\"width\":1920},\"format_version\":2,\"fps\":23.976023976023978,\"label\":\"t\",\"model\":\"version=vmaf_v0.6.1\",\"model_choice\":\"__auto__\",\"model_choice_v1\":null,\"model_v1\":\"\",\"recipe\":{\"crop_mode\":\"auto\",\"duration_limit\":0.0,\"manual_distorted_crop\":null,\"manual_source_crop\":null,\"resample_test\":{\"label\":\"720p\",\"width\":1280},\"scale_direction\":\"source_to_distorted\"},\"resample_target\":{\"label\":\"720p\",\"width\":1280},\"scale_algorithm\":\"bicubic\",\"scale_direction\":\"source_to_distorted\",\"source\":\"s.mp4\",\"source_crop\":null,\"source_info\":{\"average_fps\":23.976023976023978,\"bit_rate\":4500000,\"bit_rate_whole_file\":false,\"chroma_location\":\"left\",\"codec_name\":\"hevc\",\"color_primaries\":\"bt709\",\"color_range\":\"tv\",\"color_space\":\"bt709\",\"color_transfer\":\"\",\"duration\":10.01,\"fps\":23.976023976023978,\"height\":1080,\"nb_frames\":240,\"nominal_fps\":23.976023976023978,\"path\":\"s.mp4\",\"pix_fmt\":\"yuv420p\",\"sar\":\"1:1\",\"width\":1920}}",
+  "files": {
+   "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz": "{\"format_version\":2,\"key\":\"vmaf\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"cpu\",\"implementation\":\"ffmpeg/libvmaf\",\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"implementation_version\":\"ffmpeg 9.0.1\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1\"}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}}"
   }
  },
  "answers": [
@@ -807,6 +972,7 @@
    "model_choice": "__auto__",
    "model_v1": "",
    "model_choice_v1": null,
+   "resample_target": null,
    "metrics": [
     {
      "key": "vmaf",
@@ -949,7 +1115,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf",
@@ -977,7 +1144,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf",
@@ -1013,7 +1181,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf",
@@ -1259,7 +1428,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf"
@@ -1315,7 +1485,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf"
@@ -1333,7 +1504,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "ssimulacra2"
@@ -1393,7 +1565,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "psnr",
@@ -1439,7 +1612,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "cvvdp"
@@ -1505,7 +1679,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf",
@@ -1799,7 +1974,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "ssim"
@@ -2091,7 +2267,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "psnr"
@@ -2267,7 +2444,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf"
@@ -2565,7 +2743,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf",
@@ -2594,7 +2773,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf"
@@ -2624,7 +2804,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "ssimulacra2"
@@ -2655,7 +2836,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "vmaf_v1"
@@ -2685,7 +2867,8 @@
      "crop_mode": "auto",
      "scale_direction": "source_to_distorted",
      "scale_algorithm": "bicubic",
-     "duration_limit": "0x0.0p+0"
+     "duration_limit": "0x0.0p+0",
+     "resample_test": null
     },
     "metrics": [
      "cvvdp"

@@ -2061,6 +2061,9 @@ PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const Pa
 PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const PassPlan& plan,
                                     const ProgressCallback& on_progress, const StatusCallback& on_status,
                                     const CancelToken& cancel) {
+    if (request.options.resample_test) {
+        throw VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.");
+    }
     if (!isolation_program()) {
         return score_vship_pass(request, plan, on_progress, on_status, cancel);
     }
