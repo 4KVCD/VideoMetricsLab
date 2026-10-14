@@ -119,7 +119,8 @@ or reopened from the last session, read off the window's thread, and
 dragged or sorted into order; each row's metrics are ticked in its cells or
 for every row in the headings, and hidden or shown from the metrics menu;
 the Options panel sets the selected videos' own settings, CVVDP's display
-and its presets among them ("Test both" is not ported yet). Calculate
+and its presets among them, and "Test both" adds a row scoring a video the
+other way round (resolution tests are not ported yet). Calculate
 metrics runs the ticked videos as the command line does, with each video's
 progress on a line of its own, Pause, Cancel and the videos in parallel
 changed while it runs, and shows their scores in the table, each metric's

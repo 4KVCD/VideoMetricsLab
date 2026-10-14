@@ -8,7 +8,6 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
-#include <QStandardItemModel>
 #include <QStringList>
 #include <QTime>
 #include <QTimeEdit>
@@ -145,11 +144,6 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     scale_direction_combo = new QComboBox;
     scale_direction_combo->addItems({app::tr("Source downscaled to test"), app::tr("Test upscaled to source"),
                                      app::tr("Test both (adds a comparison row)")});
-    // "Test both" adds a row for the other direction, which the C++ window
-    // cannot make yet: the entry is there, but cannot be chosen.
-    if (auto* entries = qobject_cast<QStandardItemModel*>(scale_direction_combo->model())) {
-        entries->item(2)->setEnabled(false);
-    }
     scale_direction_combo->setToolTip(
         app::tr("When the two resolutions differ: either evaluate quality at the resolution actually\n"
                 "delivered (source scaled to match test -- the default), or as if the test\n"

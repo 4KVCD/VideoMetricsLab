@@ -26,6 +26,23 @@
 // The window's text is app::tr's, as in main_window.cpp.
 namespace vml::app {
 
+namespace {
+
+// A made-up path that stands for a second run of the same test video with
+// the other scale direction (the Python app's
+// synthetic_scale_direction_variant_path). Both directions can then be rows
+// of their own, side by side, without one taking the other's saved scores.
+std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
+                                                             ScaleDirection direction) {
+    std::filesystem::path name = distorted.stem();
+    name += direction == ScaleDirection::distorted_to_source ? " [upscale-distorted-to-source]"
+                                                            : " [downscale-source-to-distorted]";
+    name += distorted.extension();
+    return distorted.parent_path() / name;
+}
+
+}  // namespace
+
 void MainWindow::on_table_selection_changed() {
     // Shows the selected rows' options in the Options panel.
     std::set<int> rows;
@@ -212,13 +229,94 @@ void MainWindow::on_model_changed(int index) {
 }
 
 void MainWindow::on_scale_direction_combo_changed(int index) {
-    // Sets which video the selected rows resize. "Test both" (index 2), which
-    // adds a row for the other direction, is not ported to C++ yet, and its
-    // entry cannot be chosen.
-    if (syncing_panel_ || index == 2) {
+    // Sets which video the selected rows resize, or adds the other direction
+    // for "Test both".
+    if (syncing_panel_) {
+        return;
+    }
+    if (index == 2) {
+        // "Test both" is not a value a row can have: it is an action that adds
+        // a row for the other direction and leaves this row's direction as it
+        // is, so the dropdown goes back to that direction.
+        add_opposite_scale_direction_rows(panel_target_rows_);
+        if (!panel_target_rows_.empty()) {
+            write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
+        }
         return;
     }
     on_panel_field_edited("scale_direction");
+}
+
+void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows) {
+    // For each of `rows` whose resolution differs from the reference's, adds
+    // a second row for the same test video with the other scale direction, so
+    // that "scale the source down" and "scale the test video up" can be run
+    // and compared side by side, rather than one picked and the other run
+    // again later.
+    if (!source_info_) {
+        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video first."));
+        return;
+    }
+    int added = 0;
+    // By value: adding rows does not change these, but the selection can.
+    for (const int row : std::vector<int>(rows)) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (row_data.scale_direction_pinned) {
+            // Already a companion row: the row it was made from is the other
+            // direction, so the pair is complete. Without this, "Test both" on
+            // a companion adds a needless third row named "x [upscale-...]
+            // [downscale-...]".
+            continue;
+        }
+        const std::optional<VideoInfo>& info = row_data.video_info;
+        if (!info || (info->width == source_info_->width && info->height == source_info_->height)) {
+            continue;  // not read yet, or the same size, so both directions are alike
+        }
+        const ScaleDirection opposite = row_data.options.scale_direction == ScaleDirection::source_to_distorted
+                                            ? ScaleDirection::distorted_to_source
+                                            : ScaleDirection::source_to_distorted;
+        const std::filesystem::path path = synthetic_scale_direction_variant_path(row_data.path, opposite);
+        if (row_index_of_path(path)) {
+            continue;  // already added
+        }
+        const std::shared_ptr<RowData> original = rows_[static_cast<std::size_t>(row)];
+        const int new_row = add_table_row(path);
+        RowData& companion = *rows_[static_cast<std::size_t>(new_row)];
+        companion.options = original->options;
+        companion.options.scale_direction = opposite;
+        // The same comparison in the other direction: the same metric ticks,
+        // GPU/CPU choices and CVVDP display. Don't take the defaults: a video
+        // set to CPU SSIMULACRA2 with CVVDP ticked would get a companion
+        // without CVVDP and with SSIMULACRA2 on the GPU.
+        companion.extra_metric_keys = original->extra_metric_keys;
+        companion.metric_backends = original->metric_backends;
+        companion.cvvdp = original->cvvdp;
+        companion.cvvdp_preset = original->cvvdp_preset;
+        companion.scale_direction_pinned = true;
+        // The companion decodes the same file as the row it came from; only
+        // the scale direction differs, which the saved scores tell apart
+        // through the options.
+        companion.media_path = original->identity_path();
+        companion.video_info = original->video_info;
+        set_row_info(new_row, *companion.video_info);
+        // Drawn again with the copied choices: the row was drawn with the
+        // defaults when added.
+        set_row_metrics(new_row);
+        start_cache_lookup({path});
+        ++added;
+    }
+    if (added == 0) {
+        QMessageBox::information(this, app::tr("Nothing to add"),
+                                 app::tr("Selected row(s) either already have a matching-opposite row, don't have a "
+                                         "resolution mismatch against the reference, or aren't a normal comparison "
+                                         "(e.g. a resolution test)."));
+        return;
+    }
+    show_status(ntr("Added {count} row testing the opposite scaling direction -- check it and click Calculate "
+                    "metrics.",
+                    "Added {count} rows testing the opposite scaling direction -- check them and click Calculate "
+                    "metrics.",
+                    added));
 }
 
 // --------------------------------------------------------------- CVVDP's display

@@ -8,7 +8,7 @@
 //
 // Ported so far: the window's frame, its tabs, the Videos tab's files panel
 // (the reference, the test-video table and its buttons, the best and worst
-// scores highlighted), the Options panel but for "Test both"
+// scores highlighted; resolution tests not yet), the Options panel
 // (main_window_options.cpp), runs: the ticked videos' metrics calculated,
 // with their progress, and the scores shown in the table
 // (main_window_run.cpp), and the saved scores: looked up for each row, saved
@@ -275,6 +275,7 @@ private:
     void on_metric_backend_changed(const QString& metric_key);
     void on_model_changed(int index);
     void on_scale_direction_combo_changed(int index);
+    void add_opposite_scale_direction_rows(const std::vector<int>& rows);
     void apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettings&)>& change,
                      const std::optional<std::vector<int>>& rows = std::nullopt,
                      const std::optional<std::string>& preset_name = std::nullopt);

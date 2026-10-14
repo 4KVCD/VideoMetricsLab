@@ -7,8 +7,6 @@
 // control the user edits is reported to the window with a signal, and the
 // window applies the change to the selected rows. Which metrics a video
 // calculates is not here: it is ticked in the table's own columns.
-//
-// Not ported yet: "Test both", whose entry is there but cannot be chosen.
 #pragma once
 
 #include <QGroupBox>

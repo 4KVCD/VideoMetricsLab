@@ -911,6 +911,33 @@ TEST_F(WindowTest, TheDisplayEditorKeepsTheValuesTheUserDidNotChange) {
     EXPECT_EQ(dialog.display().ambient_lux, 12.25);
 }
 
+TEST_F(WindowTest, TestBothAddsARowScoringTheSameVideoTheOtherWayRound) {
+    // The test video of a size of its own (b.mkv): its companion row decodes
+    // the same file, with the test video scaled up to the reference rather
+    // than the reference down to it, and the row it came from is left as it
+    // was.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    open_clips(window);
+    select_rows(window, 1, 1);
+    options_panel(window).scale_direction_combo->setCurrentIndex(2);  // Test both
+
+    ASSERT_EQ(rows(window).size(), 3u);
+    EXPECT_EQ(names(window)[2], "b [upscale-distorted-to-source].mkv");
+    EXPECT_EQ(rows(window)[1]->options.scale_direction, ScaleDirection::source_to_distorted);
+    EXPECT_EQ(rows(window)[2]->options.scale_direction, ScaleDirection::distorted_to_source);
+    EXPECT_EQ(options_panel(window).scale_direction_combo->currentIndex(), 0);  // the row's own direction again
+
+    table(window).item(0, col_check)->setCheckState(Qt::Unchecked);
+    run_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    EXPECT_EQ(state(window, 1), RowState::complete);
+    EXPECT_EQ(state(window, 2), RowState::complete);
+    EXPECT_NE(table(window).item(1, col_psnr)->text(), table(window).item(2, col_psnr)->text());
+}
+
 TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {
     // As in the Python app, a row's saved scores are looked up again when
     // its metrics are ticked or one is shown again. Otherwise scores saved
