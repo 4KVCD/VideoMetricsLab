@@ -232,6 +232,56 @@ def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, m
             panel.close()
 
 
+def test_a_frame_kept_is_not_shown_once_what_it_is_made_from_changes(qapp, subtests):
+    """A pair keeps its identity while its frames change: its black bars
+    found, its scaling edited, another reference chosen. The frames kept from
+    before were shown again (the uncropped one extracted while the bars were
+    looked for stayed on screen, while the line no longer said anything was
+    pending): they must be extracted again. A side whose frame is the same is
+    kept."""
+    from PySide6.QtGui import QImage
+
+    from vmaf_app.core.models import CropBox
+
+    def panel_with_frames_kept(entry):
+        panel = FrameComparePanel()
+        panel.set_runs([entry])
+        assert not panel.is_video_mode
+        for side in ("source", "distorted"):
+            image = QImage(1280, 720, QImage.Format.Format_RGB32)
+            image.fill(Qt.GlobalColor.red)
+            panel._cache[panel._cache_key(side)] = image
+        return panel
+
+    def kept(panel):
+        return {side for side in ("source", "distorted") if panel._cache_key(side) in panel._cache}
+
+    # The 1080p source scaled down to the 720p encode's size, which is not scaled.
+    pair = _unscored_entry("encode")
+
+    with subtests.test("black bars found"):
+        entry = replace(pair, comparison=replace(pair.comparison, auto_crop_pending=True))
+        panel = panel_with_frames_kept(entry)
+        panel._on_auto_crop_ready(entry.identity, None, CropBox(1920, 816, 0, 132), CropBox(1280, 544, 0, 88))
+        assert not panel.current_entry.comparison.auto_crop_pending
+        assert kept(panel) == set()
+        assert panel._current_image() is None, "the uncropped frame stands for the cropped one"
+        panel.close()
+
+    with subtests.test("scaling edited"):
+        panel = panel_with_frames_kept(pair)
+        panel.set_runs([replace(pair, comparison=replace(pair.comparison, scale_algorithm="bilinear"))])
+        assert kept(panel) == {"distorted"}
+        panel.close()
+
+    with subtests.test("another reference"):
+        panel = panel_with_frames_kept(pair)
+        source = replace(pair.comparison.source_info, path=Path("another source.mkv"))
+        panel.set_runs([replace(pair, comparison=replace(pair.comparison, source_info=source))])
+        assert kept(panel) == {"distorted"}
+        panel.close()
+
+
 def test_zoom_fits_by_default_and_takes_a_chosen_or_typed_percentage(qapp):
     """A user: "a comparison tool needs zoom". Fit to window as before, or
     a zoom chosen or typed in, which playback shares with the still frames."""
