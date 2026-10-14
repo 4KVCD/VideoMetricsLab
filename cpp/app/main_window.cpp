@@ -41,6 +41,7 @@
 #include <utility>
 #include <variant>
 
+#include "cvvdp_display_dialog.h"
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
@@ -494,8 +495,16 @@ void MainWindow::build_ui() {
     connect(options_panel_, &OptionsPanel::model_chosen, this, [this](int index) { on_model_changed(index); });
     connect(options_panel_, &OptionsPanel::metric_backend_changed, this,
             [this](const QString& key) { on_metric_backend_changed(key); });
+    connect(options_panel_, &OptionsPanel::cvvdp_preset_chosen, this,
+            [this](int index) { on_cvvdp_preset_chosen(index); });
+    connect(options_panel_, &OptionsPanel::cvvdp_resize_toggled, this,
+            [this](bool checked) { on_cvvdp_resize_toggled(checked); });
+    connect(options_panel_, &OptionsPanel::cvvdp_add_requested, this, [this] { on_cvvdp_add_preset(); });
+    connect(options_panel_, &OptionsPanel::cvvdp_edit_requested, this, [this] { on_cvvdp_edit_display(); });
+    connect(options_panel_, &OptionsPanel::cvvdp_delete_requested, this, [this] { on_cvvdp_delete_preset(); });
     connect(options_panel_, &OptionsPanel::scale_direction_chosen, this,
             [this](int index) { on_scale_direction_combo_changed(index); });
+    run_cvvdp_dialog_ = [](CvvdpDisplayDialog& dialog) { return dialog.exec(); };
     splitter->addWidget(options_panel_);
     splitter->addWidget(build_run_panel());
     splitter->setSizes({380, 300, 120});

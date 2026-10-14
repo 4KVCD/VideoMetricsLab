@@ -21,7 +21,7 @@ double rounded(double value, int digits) { return python_float(format_fixed(valu
 long long whole(double value) { return static_cast<long long>(value); }
 
 // A built-in preset made from an official display model.
-CvvdpPreset official(std::string name, double width, double height, double diagonal_inches,
+CvvdpPreset official(std::string name, std::string description, double width, double height, double diagonal_inches,
                      double viewing_distance_m, double peak_luminance, double contrast, double ambient_lux,
                      bool hdr = false) {
     CvvdpDisplay display;
@@ -33,7 +33,7 @@ CvvdpPreset official(std::string name, double width, double height, double diago
     display.contrast = contrast;
     display.ambient_lux = ambient_lux;
     display.hdr = hdr;
-    return {std::move(name), {display, false}, true};
+    return {std::move(name), {display, false}, true, std::move(description)};
 }
 
 // Python's bool() of a value read from JSON.
@@ -227,20 +227,24 @@ std::string vship_display_json(const CvvdpDisplay& display) {
 
 const std::vector<CvvdpPreset>& builtin_cvvdp_presets() {
     // The names are identifiers, saved in settings; the window shows them
-    // translated.
+    // translated, and the descriptions too.
     static const std::vector<CvvdpPreset> presets{
-        // Official 'standard_4k', the official tool's default display.
-        official("30-inch 4K monitor, office", 3840, 2160, 30, 0.7472, 200, 1000, 250),
-        official("24-inch 1080p monitor, office", 1920, 1080, 24, 0.6, 200, 1000, 250),  // 'standard_fhd'
-        // 'standard_hdr_pq' (HLG uses the same display).
-        official("30-inch 4K HDR monitor, dim room", 3840, 2160, 30, 0.7472, 1500, 1'000'000, 10, true),
-        official("30-inch 4K HDR monitor, dark room", 3840, 2160, 30, 0.7472, 1500, 1'000'000, 0, true),
-        official("65-inch 4K HDR TV, 1000 nits, living room", 3840, 2160, 65, 1.98, 1000, 1'000'000, 5, true),
-        official("65-inch 4K HDR TV, 2000 nits, living room", 3840, 2160, 65, 1.98, 2000, 1'000'000, 5, true),
-        official("65-inch 4K HDR TV, 4000 nits, living room", 3840, 2160, 65, 1.98, 4000, 1'000'000, 5, true),
-        // 'standard_phone' (contrast unspecified there: 1000:1, the
-        // official default).
-        official("6-inch phone", 2400, 1080, 6, 0.4, 500, 1000, 250),
+        official("30-inch 4K monitor, office", "Official 'standard_4k' -- the official tool's default display.",
+                 3840, 2160, 30, 0.7472, 200, 1000, 250),
+        official("24-inch 1080p monitor, office", "Official 'standard_fhd'.", 1920, 1080, 24, 0.6, 200, 1000, 250),
+        official("30-inch 4K HDR monitor, dim room", "Official 'standard_hdr_pq' (HLG uses the same display).", 3840,
+                 2160, 30, 0.7472, 1500, 1'000'000, 10, true),
+        official("30-inch 4K HDR monitor, dark room", "Official 'standard_hdr_dark'.", 3840, 2160, 30, 0.7472, 1500,
+                 1'000'000, 0, true),
+        official("65-inch 4K HDR TV, 1000 nits, living room", "Official '65inch_hdr_pq_1Knit'.", 3840, 2160, 65,
+                 1.98, 1000, 1'000'000, 5, true),
+        official("65-inch 4K HDR TV, 2000 nits, living room", "Official '65inch_hdr_pq_2Knit'.", 3840, 2160, 65,
+                 1.98, 2000, 1'000'000, 5, true),
+        official("65-inch 4K HDR TV, 4000 nits, living room", "Official '65inch_hdr_pq_4knit'.", 3840, 2160, 65,
+                 1.98, 4000, 1'000'000, 5, true),
+        official("6-inch phone",
+                 "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).", 2400, 1080,
+                 6, 0.4, 500, 1000, 250),
     };
     return presets;
 }
@@ -260,7 +264,7 @@ std::vector<CvvdpPreset> cvvdp_presets(const std::string& user_presets_json) {
             continue;
         }
         try {
-            found.push_back({*name, saved_settings(data.at("settings")), false});
+            found.push_back({*name, saved_settings(data.at("settings")), false, {}});
         } catch (const std::invalid_argument&) {
             continue;  // skipped, as the Python app skips it
         }
@@ -275,6 +279,56 @@ std::optional<CvvdpPreset> cvvdp_preset_named(const std::string& name, const std
         }
     }
     return std::nullopt;
+}
+
+std::string with_user_preset(const std::string& user_presets_json, const std::string& name,
+                             const CvvdpDisplay& display) {
+    const std::string kept_name(python_strip(name));
+    if (kept_name.empty()) {
+        throw std::invalid_argument("A preset needs a name.");
+    }
+    // Refused, so that a built-in preset always means what it says.
+    for (const CvvdpPreset& preset : builtin_cvvdp_presets()) {
+        if (preset.name == kept_name) {
+            throw std::invalid_argument("\"" + kept_name + "\" is a built-in preset; choose another name.");
+        }
+    }
+    display.validate();
+    Json presets = Json::parse(without_user_preset(user_presets_json, kept_name));
+    // As the Python app saves a display (asdict): the resolution as the
+    // whole numbers its editor gives, the rest as numbers with a fraction.
+    const auto resolution = [](double value) {
+        return value == std::floor(value) ? Json(static_cast<long long>(value)) : Json(value);
+    };
+    presets.push_back({{"name", kept_name},
+                       {"settings",
+                        {{"display",
+                          {{"width", resolution(display.width)},
+                           {"height", resolution(display.height)},
+                           {"diagonal_inches", display.diagonal_inches},
+                           {"viewing_distance_m", display.viewing_distance_m},
+                           {"peak_luminance", display.peak_luminance},
+                           {"contrast", display.contrast},
+                           {"ambient_lux", display.ambient_lux},
+                           {"reflectivity", display.reflectivity},
+                           {"exposure", display.exposure},
+                           {"hdr", display.hdr}}},
+                         {"resize_to_display", false}}}});
+    return presets.dump();
+}
+
+std::string without_user_preset(const std::string& user_presets_json, const std::string& name) {
+    const Json saved = Json::parse(user_presets_json, nullptr, false);
+    Json kept = Json::array();
+    if (saved.is_array()) {
+        for (const Json& data : saved) {
+            const bool named = data.is_object() && data.contains("name") && data.at("name") == name;
+            if (!named) {
+                kept.push_back(data);
+            }
+        }
+    }
+    return kept.dump();
 }
 
 std::optional<CvvdpPreset> matching_cvvdp_preset(const CvvdpSettings& settings, const std::string& user_presets_json,

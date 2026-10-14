@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDeadlineTimer>
+#include <QDoubleSpinBox>
 #include <QDropEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -35,6 +36,7 @@
 #include <string>
 #include <vector>
 
+#include "cvvdp_display_dialog.h"
 #include "file_writes.h"
 #include "i18n.h"
 #include "options_panel.h"
@@ -150,6 +152,15 @@ protected:
     static void show_scores(MainWindow& window, int row) { window.set_row_metrics(row); }
     static void remove_selected(MainWindow& window) { window.on_remove_distorted(); }
     static OptionsPanel& options_panel(MainWindow& window) { return *window.options_panel_; }
+    // Answers the CVVDP display editor in the user's place when it opens.
+    static void answer_cvvdp_dialog(MainWindow& window, std::function<int(CvvdpDisplayDialog&)> answer) {
+        window.run_cvvdp_dialog_ = std::move(answer);
+    }
+    // Chooses the CVVDP preset called `name` in the Options panel.
+    static void choose_cvvdp_preset(MainWindow& window, const std::string& name) {
+        QComboBox& presets = *options_panel(window).cvvdp_preset_combo;
+        presets.setCurrentIndex(presets.findData(QString::fromStdString(name)));
+    }
     // Selects rows `first` to `last`, as a drag over them does.
     static void select_rows(MainWindow& window, int first, int last) {
         table(window).clearSelection();
@@ -792,6 +803,112 @@ TEST_F(WindowTest, WhereSsimulacra2IsCalculatedIsSetForTheSelectedVideosAndKeptF
     EXPECT_EQ(saved_settings()["default_ssimulacra2_backend"], "cpu");
     EXPECT_EQ(rows(window)[static_cast<std::size_t>(add_row(window, "c.mp4"))]->metric_backends.at("ssimulacra2"),
               "cpu");
+}
+
+TEST_F(WindowTest, ChoosingAnotherDisplayDropsOnlyTheCvvdpScore) {
+    MainWindow window;
+    const int row = add_row(window, "test.mp4");
+    RowData& row_data = *rows(window)[static_cast<std::size_t>(row)];
+    row_data.extra_metric_keys.insert("cvvdp");
+    const auto run = std::make_shared<CompletedRun>();
+    run->result.metric_results.add(FrameMetricResult{
+        "vmaf", {0}, {0.0}, {90.0f}, MetricProvenance{"ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "vmaf", {}}});
+    run->result.metric_results.add(SequenceMetricResult{
+        "cvvdp", 9.5, MetricProvenance{"Vship/cvvdp", "Vship 5.1.2", "gpu", "cvvdp-vship-gpu-v1", {}}, {}, {}, {}});
+    row_data.completed_run = run;
+    show_scores(window, row);
+    select_rows(window, row, row);
+
+    const CvvdpPreset& hdr = builtin_cvvdp_presets()[2];
+    choose_cvvdp_preset(window, hdr.name);
+
+    EXPECT_TRUE(row_data.cvvdp.same_as(hdr.settings));
+    EXPECT_EQ(row_data.cvvdp_preset, hdr.name);
+    ASSERT_NE(row_data.completed_run, nullptr);
+    EXPECT_TRUE(row_data.completed_run->result.has_metric("vmaf"));
+    EXPECT_FALSE(row_data.completed_run->result.has_metric("cvvdp"));
+    EXPECT_FALSE(table(window).item(row, col_vmaf)->text().isEmpty());
+}
+
+TEST_F(WindowTest, SeveralVideosOnDifferentDisplaysShowAsMixedAndAPresetSetsThemAll) {
+    // Shown with the first video's preset, choosing it would change nothing
+    // (the dropdown already on it), and the second video would keep its own.
+    MainWindow window;
+    const int a = add_row(window, "a.mp4");
+    const int b = add_row(window, "b.mp4");
+    RowData& first = *rows(window)[static_cast<std::size_t>(a)];
+    RowData& second = *rows(window)[static_cast<std::size_t>(b)];
+    second.cvvdp.display = builtin_cvvdp_presets()[1].settings.display;
+    first.cvvdp.resize_to_display = true;
+    select_rows(window, a, b);
+    OptionsPanel& panel = options_panel(window);
+    EXPECT_EQ(panel.cvvdp_preset_combo->currentText().toStdString(),
+              "Mixed (the selected videos use different displays)");
+    EXPECT_EQ(panel.cvvdp_resize_check->checkState(), Qt::PartiallyChecked);
+
+    choose_cvvdp_preset(window, builtin_cvvdp_presets()[0].name);
+    EXPECT_TRUE(first.cvvdp.display.identity() == builtin_cvvdp_presets()[0].settings.display.identity());
+    EXPECT_TRUE(second.cvvdp.display.identity() == builtin_cvvdp_presets()[0].settings.display.identity());
+    EXPECT_TRUE(first.cvvdp.resize_to_display);  // each video's own
+    EXPECT_FALSE(second.cvvdp.resize_to_display);
+
+    panel.cvvdp_resize_check->setCheckState(Qt::Checked);
+    EXPECT_TRUE(first.cvvdp.resize_to_display);
+    EXPECT_TRUE(second.cvvdp.resize_to_display);
+}
+
+TEST_F(WindowTest, RenamingAPresetKeepsTheOtherVideosOnItWithoutAsking) {
+    // Its values unchanged, their scores still hold: there is nothing to ask
+    // (a question would be a dialog, and fail the test).
+    MainWindow window;
+    const int a = add_row(window, "a.mp4");
+    const int b = add_row(window, "b.mp4");
+    select_rows(window, a, a);
+    answer_cvvdp_dialog(window, [](CvvdpDisplayDialog& dialog) {
+        dialog.name_edit->setText("Desk");
+        dialog.peak_spin->setValue(300);
+        dialog.finish("save_new");
+        return dialog.result();
+    });
+    options_panel(window).cvvdp_add_button->click();
+    select_rows(window, a, b);
+    choose_cvvdp_preset(window, "Desk");
+    select_rows(window, a, a);
+
+    answer_cvvdp_dialog(window, [](CvvdpDisplayDialog& dialog) {
+        dialog.name_edit->setText("Desk monitor");
+        dialog.finish("save");
+        return dialog.result();
+    });
+    options_panel(window).cvvdp_edit_button->click();
+
+    const RowData& second = *rows(window)[static_cast<std::size_t>(b)];
+    EXPECT_EQ(second.cvvdp_preset, "Desk monitor");
+    EXPECT_EQ(second.cvvdp.display.peak_luminance, 300);
+    const nlohmann::json saved = saved_settings();
+    EXPECT_EQ(saved["cvvdp_default_preset"], "Desk monitor");
+    ASSERT_EQ(saved["cvvdp_presets"].size(), 1u);
+    EXPECT_EQ(saved["cvvdp_presets"][0]["name"], "Desk monitor");
+}
+
+TEST_F(WindowTest, TheDisplayEditorKeepsTheValuesTheUserDidNotChange) {
+    // Exactly, though its boxes show them rounded: "Apply without saving"
+    // with nothing changed must leave the display, and its CVVDP score, as
+    // they are.
+    CvvdpDisplay display;
+    display.viewing_distance_m = 0.74725;
+    display.peak_luminance = 350.5;
+    display.ambient_lux = 12.25;
+    display.reflectivity = 0.0123456789;
+    CvvdpDisplayDialog dialog(display, nullptr, std::nullopt, false, {});
+    const CvvdpDisplay shown = dialog.display();
+    EXPECT_EQ(shown.viewing_distance_m, 0.74725);
+    EXPECT_EQ(shown.peak_luminance, 350.5);
+    EXPECT_EQ(shown.ambient_lux, 12.25);
+    EXPECT_EQ(shown.reflectivity, 0.0123456789);
+    dialog.peak_spin->setValue(400);
+    EXPECT_EQ(dialog.display().peak_luminance, 400);
+    EXPECT_EQ(dialog.display().ambient_lux, 12.25);
 }
 
 TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {

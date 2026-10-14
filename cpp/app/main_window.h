@@ -8,9 +8,9 @@
 //
 // Ported so far: the window's frame, its tabs, the Videos tab's files panel
 // (the reference, the test-video table and its buttons, the best and worst
-// scores highlighted), the Options panel but for CVVDP's display and "Test
-// both" (main_window_options.cpp), runs: the ticked videos' metrics
-// calculated, with their progress, and the scores shown in the table
+// scores highlighted), the Options panel but for "Test both"
+// (main_window_options.cpp), runs: the ticked videos' metrics calculated,
+// with their progress, and the scores shown in the table
 // (main_window_run.cpp), and the saved scores: looked up for each row, saved
 // as a run goes, forgotten by Recalculate (main_window_saved_scores.cpp). The
 // other tabs are still the Python app's alone.
@@ -57,6 +57,7 @@ namespace vml::app {
 
 class CheckableHeaderView;
 class ElidedLabel;
+class CvvdpDisplayDialog;
 class FileWrites;
 class FillColumnTable;
 class OptionsPanel;
@@ -274,6 +275,17 @@ private:
     void on_metric_backend_changed(const QString& metric_key);
     void on_model_changed(int index);
     void on_scale_direction_combo_changed(int index);
+    void apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettings&)>& change,
+                     const std::optional<std::vector<int>>& rows = std::nullopt,
+                     const std::optional<std::string>& preset_name = std::nullopt);
+    void on_cvvdp_preset_chosen(int index);
+    void on_cvvdp_resize_toggled(bool checked);
+    std::set<std::string> cvvdp_preset_names() const;
+    void on_cvvdp_add_preset();
+    void on_cvvdp_edit_display();
+    void save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const CvvdpSettings& settings,
+                           const std::optional<std::string>& replacing, bool apply_to_rows = true);
+    void on_cvvdp_delete_preset();
 
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
@@ -364,6 +376,9 @@ private:
     OptionsPanel* options_panel_ = nullptr;
     std::vector<int> panel_target_rows_;
     std::vector<GpuVendor> detected_gpu_vendors_;
+    // Opens the CVVDP display editor and waits for it (exec); the tests
+    // answer it in its place, as a user would.
+    std::function<int(CvvdpDisplayDialog&)> run_cvvdp_dialog_;
 
     // The lookup of saved scores under way: the rows it was asked about, and
     // a number each lookup raises, with which the window refuses the answers

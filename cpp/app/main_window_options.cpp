@@ -4,16 +4,23 @@
 #include <QComboBox>
 #include <QFileDialog>
 #include <QLabel>
+#include <QMessageBox>
 
+#include <algorithm>
+#include <functional>
+#include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "cvvdp_display_dialog.h"
 #include "i18n.h"
 #include "main_window.h"
 #include "options_panel.h"
 #include "widgets.h"
 #include "window_helpers.h"
+#include "vml/cvvdp.h"
 #include "vml/metrics.h"
 
 // The window's text is app::tr's, as in main_window.cpp.
@@ -74,6 +81,15 @@ void MainWindow::write_panel_options(const VmafOptions& options) {
                                                                                 metric.key) != requested.end()
                                                                     : default_metric_ticked(metric.column));
     }
+    std::vector<CvvdpSettings> displays;
+    for (const int row : panel_target_rows_) {
+        displays.push_back(rows_[static_cast<std::size_t>(row)]->cvvdp);
+    }
+    if (displays.empty()) {
+        displays.push_back(default_cvvdp_);
+    }
+    options_panel_->show_cvvdp(displays, first != nullptr ? first->cvvdp_preset : settings_.cvvdp_default_preset,
+                               settings_.cvvdp_presets_json);
     syncing_panel_ = false;
 }
 
@@ -203,6 +219,241 @@ void MainWindow::on_scale_direction_combo_changed(int index) {
         return;
     }
     on_panel_field_edited("scale_direction");
+}
+
+// --------------------------------------------------------------- CVVDP's display
+
+void MainWindow::apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettings&)>& change,
+                             const std::optional<std::vector<int>>& rows, const std::optional<std::string>& preset_name) {
+    // Gives the selected rows (or `rows`) new CVVDP settings, `change(old)`,
+    // and `preset_name` as the preset they were given. Only CVVDP's score
+    // depends on them: a row keeps every other score, loses a CVVDP score
+    // made for the old settings, and gets back one saved for the new ones,
+    // if there is one.
+    if (syncing_panel_ || run_active_) {
+        return;
+    }
+    std::vector<int> changed;
+    for (const int row : rows ? *rows : panel_target_rows_) {
+        RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        const CvvdpSettings settings = change(row_data.cvvdp);
+        if (preset_name && *preset_name != row_data.cvvdp_preset) {
+            row_data.cvvdp_preset = *preset_name;
+            set_row_metrics(row);  // the score's tooltip names the preset
+        }
+        if (settings.same_as(row_data.cvvdp)) {
+            continue;
+        }
+        row_data.cvvdp = settings;
+        drop_metric_results(row, {"cvvdp"});
+        changed.push_back(row);
+    }
+    reload_saved_scores(changed);
+    if (!panel_target_rows_.empty()) {
+        write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
+    }
+}
+
+void MainWindow::on_cvvdp_preset_chosen(int index) {
+    // Gives the selected rows the display of the CVVDP preset chosen. The
+    // display only: "Scale the video to fill the display" is the video's own
+    // setting, which choosing a built-in preset must not switch off.
+    if (syncing_panel_) {
+        return;
+    }
+    const QVariant name = options_panel_->cvvdp_preset_combo->itemData(index);
+    if (!name.isValid()) {
+        return;  // "Mixed" or "Custom", which are no preset
+    }
+    if (const std::optional<CvvdpPreset> preset =
+            cvvdp_preset_named(name.toString().toStdString(), settings_.cvvdp_presets_json)) {
+        apply_cvvdp(
+            [&preset](const CvvdpSettings& old) {
+                CvvdpSettings settings = old;
+                settings.display = preset->settings.display;
+                return settings;
+            },
+            std::nullopt, preset->name);
+    }
+}
+
+void MainWindow::on_cvvdp_resize_toggled(bool checked) {
+    // Sets "Scale the video to fill the display" on the selected rows.
+    apply_cvvdp([checked](const CvvdpSettings& old) {
+        CvvdpSettings settings = old;
+        settings.resize_to_display = checked;
+        return settings;
+    });
+}
+
+std::set<std::string> MainWindow::cvvdp_preset_names() const {
+    // The names of every CVVDP preset, built-in and saved.
+    std::set<std::string> names;
+    for (const CvvdpPreset& preset : cvvdp_presets(settings_.cvvdp_presets_json)) {
+        names.insert(preset.name);
+    }
+    return names;
+}
+
+void MainWindow::on_cvvdp_add_preset() {
+    // A new preset of the user's own, starting from the first selected row's
+    // display. Like every preset they save, it becomes the default for new
+    // videos: someone who tunes CVVDP will keep using it.
+    if (panel_target_rows_.empty() || run_active_) {
+        return;
+    }
+    const CvvdpSettings settings = rows_[static_cast<std::size_t>(panel_target_rows_.front())]->cvvdp;
+    CvvdpDisplayDialog dialog(settings.display, this, std::nullopt, true, cvvdp_preset_names());
+    if (run_cvvdp_dialog_(dialog) != QDialog::Accepted) {
+        return;
+    }
+    save_cvvdp_preset(dialog, settings, std::nullopt, false);
+}
+
+void MainWindow::on_cvvdp_edit_display() {
+    // Edits the first selected row's display. Saving can rename and update
+    // the user's preset it came from, or keep it as a new one; "Apply without
+    // saving" only changes the selected rows.
+    if (panel_target_rows_.empty() || run_active_) {
+        return;
+    }
+    const RowData& first = *rows_[static_cast<std::size_t>(panel_target_rows_.front())];
+    const CvvdpSettings settings = first.cvvdp;
+    const std::optional<CvvdpPreset> match =
+        matching_cvvdp_preset(settings, settings_.cvvdp_presets_json, first.cvvdp_preset);
+    const std::optional<std::string> own = match && !match->builtin ? std::optional(match->name) : std::nullopt;
+    CvvdpDisplayDialog dialog(settings.display, this, own, false, cvvdp_preset_names());
+    if (run_cvvdp_dialog_(dialog) != QDialog::Accepted) {
+        return;
+    }
+    if (dialog.action == "apply") {
+        const CvvdpDisplay display = dialog.display();
+        apply_cvvdp([&display](const CvvdpSettings& old) {
+            CvvdpSettings changed = old;
+            changed.display = display;
+            return changed;
+        });
+        return;
+    }
+    save_cvvdp_preset(dialog, settings, dialog.action == "save" ? own : std::nullopt);
+}
+
+void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const CvvdpSettings& settings,
+                                   const std::optional<std::string>& replacing, bool apply_to_rows) {
+    // Saves the dialog's display as a user preset, and from the display
+    // editor gives it to the selected rows. With `replacing`, the new preset
+    // takes its place, and so renames it. A new preset becomes the default for
+    // new videos, and a renamed default stays the default under its new name.
+    //
+    // "Add preset..." does not change the rows (apply_to_rows false): making
+    // a preset is not choosing it, and applying it would drop the selected
+    // video's CVVDP score.
+    const std::string name = dialog.preset_name();
+    const CvvdpDisplay saved = dialog.display();  // a preset is a display, not the resize choice
+    std::string presets = settings_.cvvdp_presets_json;
+    // The other videos using the preset being replaced, found before it
+    // changes. Don't update only the selected ones: the rest would keep the
+    // old values and show as "Custom", unasked.
+    std::vector<int> others;
+    if (replacing && apply_to_rows) {
+        for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+            const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+            const std::optional<CvvdpPreset> match =
+                matching_cvvdp_preset(row_data.cvvdp, presets, row_data.cvvdp_preset);
+            if (std::find(panel_target_rows_.begin(), panel_target_rows_.end(), row) == panel_target_rows_.end() &&
+                match && match->name == *replacing) {
+                others.push_back(row);
+            }
+        }
+    }
+    if (replacing) {
+        presets = without_user_preset(presets, *replacing);
+    }
+    try {
+        settings_.cvvdp_presets_json = with_user_preset(presets, name, saved);
+    } catch (const std::invalid_argument& error) {
+        QMessageBox::warning(this, app::tr("CVVDP preset"), tr_message(QString::fromStdString(error.what())));
+        return;
+    }
+    if (!replacing || settings_.cvvdp_default_preset == *replacing) {
+        settings_.cvvdp_default_preset = name;
+    }
+    default_cvvdp_ = cvvdp_from_settings();
+    const std::optional<std::string> error = settings_.save();
+    const auto with_saved_display = [&saved](const CvvdpSettings& old) {
+        CvvdpSettings changed = old;
+        changed.display = saved;
+        return changed;
+    };
+    if (apply_to_rows) {
+        apply_cvvdp(with_saved_display, std::nullopt, name);
+    }
+    if (!others.empty()) {
+        if (saved.identity() == settings.display.identity()) {
+            // Renamed only: the videos keep their values, and the name.
+            apply_cvvdp([](const CvvdpSettings& old) { return old; }, others, name);
+        } else if (QMessageBox::question(
+                       this, app::tr("CVVDP preset"),
+                       ntr("{count} other video uses your preset \"{name}\". Update it to the saved values too?\n\n"
+                           "A CVVDP score made for the old values is cleared; one already saved for the new values "
+                           "is shown instead. Choose No to keep the old values (shown as Custom).",
+                           "{count} other videos use your preset \"{name}\". Update them to the saved values too?\n\n"
+                           "A CVVDP score made for the old values is cleared; one already saved for the new values "
+                           "is shown instead. Choose No to keep the old values (shown as Custom).",
+                           static_cast<long long>(others.size()), {{"name", QString::fromStdString(*replacing)}})) ==
+                   QMessageBox::Yes) {
+            apply_cvvdp(with_saved_display, others, name);
+        }
+    }
+    // apply_cvvdp shows the panel again only when a row changed; a rename
+    // changes no row but does change the dropdown.
+    if (!panel_target_rows_.empty()) {
+        write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
+    }
+    const QString quoted = QString::fromStdString(name);
+    QString done;
+    if (replacing) {
+        done = name == *replacing ? app::tr("Saved your CVVDP preset \"{name}\".", {{"name", quoted}})
+                                  : app::tr("Renamed your CVVDP preset \"{old}\" to \"{name}\" and saved it.",
+                                            {{"old", QString::fromStdString(*replacing)}, {"name", quoted}});
+    } else if (apply_to_rows) {
+        done = app::tr("Saved the CVVDP preset \"{name}\". Videos added from now on use it (change that in Settings).",
+                       {{"name", quoted}});
+    } else {
+        done = app::tr("Saved the CVVDP preset \"{name}\". Videos added from now on use it (change that in "
+                       "Settings); choose it in the CVVDP display list to use it for the selected videos.",
+                       {{"name", quoted}});
+    }
+    show_status(error ? tr_message(QString::fromStdString(*error)) : done);
+}
+
+void MainWindow::on_cvvdp_delete_preset() {
+    // Deletes the user's chosen CVVDP preset, after asking.
+    const QVariant chosen = options_panel_->cvvdp_preset_combo->currentData();
+    const std::string name = chosen.isValid() ? chosen.toString().toStdString() : std::string();
+    const std::optional<CvvdpPreset> preset =
+        name.empty() ? std::nullopt : cvvdp_preset_named(name, settings_.cvvdp_presets_json);
+    if (!preset || preset->builtin) {
+        return;
+    }
+    const QString quoted = QString::fromStdString(name);
+    if (QMessageBox::question(
+            this, app::tr("Delete CVVDP preset"),
+            app::tr("Delete your preset \"{name}\"?\n\nVideos using it keep their settings.", {{"name", quoted}})) !=
+        QMessageBox::Yes) {
+        return;
+    }
+    settings_.cvvdp_presets_json = without_user_preset(settings_.cvvdp_presets_json, name);
+    if (settings_.cvvdp_default_preset == name) {
+        settings_.cvvdp_default_preset.clear();
+    }
+    default_cvvdp_ = cvvdp_from_settings();
+    const std::optional<std::string> error = settings_.save();
+    if (!panel_target_rows_.empty()) {
+        write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
+    }
+    show_status(error ? tr_message(QString::fromStdString(*error))
+                      : app::tr("Deleted the CVVDP preset \"{name}\".", {{"name", quoted}}));
 }
 
 }  // namespace vml::app

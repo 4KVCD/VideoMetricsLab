@@ -5,6 +5,8 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardItemModel>
 #include <QStringList>
@@ -14,8 +16,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#include <set>
 #include <stdexcept>
 
+#include "formatting.h"
 #include "i18n.h"
 #include "theme.h"
 #include "vml/model_select.h"
@@ -156,7 +161,7 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
 }
 
 void OptionsPanel::build_metric_settings(QFormLayout* form) {
-    // The VMAF models and the frame subsample.
+    // The VMAF models, the frame subsample, and CVVDP's display.
     model_combo = new QComboBox;
     for (const ModelChoice& choice : model_choices()) {
         model_combo->addItem(app::tr(choice.name));
@@ -184,6 +189,60 @@ void OptionsPanel::build_metric_settings(QFormLayout* form) {
     subsample_spin->setToolTip(
         app::tr("1 = every frame. Applies to VMAF, PSNR and SSIM. XPSNR is computed every frame; combined runs retain "
                 "values at libvmaf's sampled frames."));
+
+    build_cvvdp(form);
+}
+
+void OptionsPanel::build_cvvdp(QFormLayout* form) {
+    // CVVDP's display: a preset, the display itself, the buttons that add,
+    // edit and delete presets, and whether the video is scaled to fill the
+    // display (see vml/cvvdp.h).
+    cvvdp_preset_combo = new QComboBox;
+    cvvdp_preset_combo->setToolTip(
+        app::tr("The display CVVDP predicts visible differences on. The score depends on the display as much as on "
+                "the videos, so compare videos scored for the same one.\n\nNew videos start with the preset chosen "
+                "in Settings. Saving a preset of your own makes it that default."));
+    connect(cvvdp_preset_combo, &QComboBox::currentIndexChanged, this, &OptionsPanel::cvvdp_preset_chosen);
+    form->addRow(app::tr("CVVDP display:"), cvvdp_preset_combo);
+    cvvdp_display_label = new QLabel;
+    theme::style(cvvdp_display_label, "color: {muted};");
+    cvvdp_display_label->setWordWrap(true);
+    form->addRow(QString(), cvvdp_display_label);
+
+    auto* buttons = new QHBoxLayout;
+    cvvdp_add_button = new QPushButton(app::tr("Add preset..."));
+    cvvdp_add_button->setToolTip(
+        app::tr("Make a new preset of your own, starting from the display shown here. It becomes the display newly "
+                "added videos start with; the selected videos keep theirs until you choose it for them."));
+    connect(cvvdp_add_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_add_requested);
+    cvvdp_edit_button = new QPushButton(app::tr("Edit display..."));
+    cvvdp_edit_button->setToolTip(
+        app::tr("Change the display's size, distance, brightness, room light and more; rename your preset or save "
+                "the display as a new one."));
+    connect(cvvdp_edit_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_edit_requested);
+    cvvdp_delete_button = new QPushButton(app::tr("Delete preset"));
+    cvvdp_delete_button->setToolTip(app::tr("Delete this preset of yours. Built-in presets cannot be deleted."));
+    connect(cvvdp_delete_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_delete_requested);
+    for (QPushButton* button : {cvvdp_add_button, cvvdp_edit_button, cvvdp_delete_button}) {
+        buttons->addWidget(button);
+    }
+    buttons->addStretch(1);
+    form->addRow(QString(), buttons);
+
+    cvvdp_resize_check = new QCheckBox(app::tr("Scale the video to fill the display"));
+    cvvdp_resize_check->setToolTip(
+        app::tr("Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter "
+                "of a 4K display. On: it is scaled, keeping its shape, to fill the display.\n\nSet per video: "
+                "choosing or saving a display preset does not change it."));
+    // checkStateChanged, not toggled: a partly ticked box (a mixed selection)
+    // already counts as checked, so ticking it fully would not toggle
+    // anything.
+    connect(cvvdp_resize_check, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState state) {
+        if (state != Qt::PartiallyChecked) {
+            emit cvvdp_resize_toggled(state == Qt::Checked);
+        }
+    });
+    form->addRow(QString(), cvvdp_resize_check);
 }
 
 void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVendor>& gpu_vendors) {
@@ -314,6 +373,52 @@ void OptionsPanel::show_backends(bool vmaf_on_gpu, const std::map<std::string, s
 
 void OptionsPanel::show_vmaf_backend(bool on_gpu) {
     vmaf_backend_combo->setCurrentIndex(on_gpu && vmaf_gpu_possible_ ? 0 : 1);
+}
+
+void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
+                              const std::string& user_presets_json) {
+    const CvvdpSettings& settings = selected.front();
+    std::set<std::string> displays;
+    std::set<bool> resizes;
+    for (const CvvdpSettings& item : selected) {
+        displays.insert(item.display.identity().dump());
+        resizes.insert(item.resize_to_display);
+    }
+    const bool mixed_display = displays.size() > 1;
+    const bool mixed_resize = resizes.size() > 1;
+    std::optional<CvvdpPreset> match;
+    {
+        const QSignalBlocker blocked(cvvdp_preset_combo);
+        cvvdp_preset_combo->clear();
+        for (const CvvdpPreset& preset : cvvdp_presets(user_presets_json)) {
+            cvvdp_preset_combo->addItem(preset_label(preset), QString::fromStdString(preset.name));
+            cvvdp_preset_combo->setItemData(cvvdp_preset_combo->count() - 1,
+                                            preset.description.empty() ? app::tr("Your saved preset.")
+                                                                       : app::tr(preset.description.c_str()),
+                                            Qt::ToolTipRole);
+        }
+        if (!mixed_display) {
+            match = matching_cvvdp_preset(settings, user_presets_json, preferred);
+        }
+        if (mixed_display) {
+            cvvdp_preset_combo->addItem(app::tr("Mixed (the selected videos use different displays)"), QVariant());
+            cvvdp_preset_combo->setCurrentIndex(cvvdp_preset_combo->count() - 1);
+        } else if (!match) {
+            cvvdp_preset_combo->addItem(app::tr("Custom (not saved as a preset)"), QVariant());
+            cvvdp_preset_combo->setCurrentIndex(cvvdp_preset_combo->count() - 1);
+        } else {
+            cvvdp_preset_combo->setCurrentIndex(cvvdp_preset_combo->findData(QString::fromStdString(match->name)));
+        }
+    }
+    cvvdp_delete_button->setEnabled(match && !match->builtin);
+    cvvdp_display_label->setText(
+        mixed_display ? app::tr("The selected videos use different displays; choosing a preset sets them all.")
+                      : display_description(settings.display));
+    const QSignalBlocker blocked(cvvdp_resize_check);
+    cvvdp_resize_check->setTristate(mixed_resize);
+    cvvdp_resize_check->setCheckState(mixed_resize                 ? Qt::PartiallyChecked
+                                      : settings.resize_to_display ? Qt::Checked
+                                                                   : Qt::Unchecked);
 }
 
 VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_features, bool compute_vmaf,

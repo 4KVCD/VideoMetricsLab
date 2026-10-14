@@ -118,19 +118,19 @@ Videos tab. The reference and the test videos are picked, dropped, pasted
 or reopened from the last session, read off the window's thread, and
 dragged or sorted into order; each row's metrics are ticked in its cells or
 for every row in the headings, and hidden or shown from the metrics menu;
-the Options panel sets the selected videos' own settings (all but CVVDP's
-display so far). Calculate metrics runs the ticked videos as the command
-line does, with each video's progress on a line of its own, Pause, Cancel
-and the videos in parallel changed while it runs, and shows their scores in
-the table, each metric's best and worst in green and red if asked
-(Highlight best/worst results). Scores are saved as a run goes, and a video
-added again shows them; the saved scores are the Python app's and the
-command line's too, and Recalculate (right-click) forgets a video's. It
-reads and writes the Python app's settings.json, and shows its text in the
-user's language from the Python app's catalogs (`vmaf_app/translations`),
-in the light or dark theme. The other tabs are still the Python app's
-alone. Like the command line, the program is also the process of its own
-that GPU code runs in.
+the Options panel sets the selected videos' own settings, CVVDP's display
+and its presets among them ("Test both" is not ported yet). Calculate
+metrics runs the ticked videos as the command line does, with each video's
+progress on a line of its own, Pause, Cancel and the videos in parallel
+changed while it runs, and shows their scores in the table, each metric's
+best and worst in green and red if asked (Highlight best/worst results).
+Scores are saved as a run goes, and a video added again shows them; the
+saved scores are the Python app's and the command line's too, and
+Recalculate (right-click) forgets a video's. It reads and writes the Python
+app's settings.json, and shows its text in the user's language from the
+Python app's catalogs (`vmaf_app/translations`), in the light or dark
+theme. The other tabs are still the Python app's alone. Like the command
+line, the program is also the process of its own that GPU code runs in.
 
 ## Building and testing
 

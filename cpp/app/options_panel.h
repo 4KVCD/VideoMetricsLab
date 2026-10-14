@@ -2,15 +2,13 @@
 // vmaf_app/ui/options_panel.py): the settings of the videos selected in the
 // table.
 //
-// The panel shows a video's options (show_options) and reads them back
-// (read_options). It decides nothing about the rows itself: each control the
-// user edits is reported to the window with a signal, and the window applies
-// the change to the selected rows. Which metrics a video calculates is not
-// here: it is ticked in the table's own columns.
+// The panel shows a video's options (show_options, show_cvvdp) and reads
+// them back (read_options). It decides nothing about the rows itself: each
+// control the user edits is reported to the window with a signal, and the
+// window applies the change to the selected rows. Which metrics a video
+// calculates is not here: it is ticked in the table's own columns.
 //
-// Not ported yet: CVVDP's display (its preset, its editor, "Scale the video
-// to fill the display"), and "Test both", whose entry is there but cannot be
-// chosen.
+// Not ported yet: "Test both", whose entry is there but cannot be chosen.
 #pragma once
 
 #include <QGroupBox>
@@ -20,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "vml/cvvdp.h"
 #include "vml/options.h"
 #include "vml/video.h"
 
@@ -27,6 +26,7 @@ class QCheckBox;
 class QComboBox;
 class QFormLayout;
 class QLabel;
+class QPushButton;
 class QSpinBox;
 class QTimeEdit;
 
@@ -63,6 +63,17 @@ public:
     // The VMAF GPU/CPU choice as a run would take it: CPU when there is no
     // GPU, whatever the video is set to.
     void show_vmaf_backend(bool on_gpu);
+    // Shows the selected videos' CVVDP settings: the preset they match (or
+    // "Custom"), the display in one line, and the resize box. `preferred` is
+    // the preset the first one was given, to tell apart presets with the
+    // same display; `user_presets_json` the user's own (Settings').
+    //
+    // Videos that differ show as "Mixed" in the dropdown and a partly ticked
+    // box. Don't show only the first video's values: choosing the preset it
+    // already has, or clicking the box, would then do nothing for the other
+    // videos, or set them the wrong way round.
+    void show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
+                    const std::string& user_presets_json);
 
     // The options the controls show. The metrics are not in the panel, so
     // the window gives them, from the table's column headings.
@@ -86,6 +97,12 @@ public:
     QComboBox* model_combo = nullptr;
     QComboBox* model_v1_combo = nullptr;
     QSpinBox* subsample_spin = nullptr;
+    QComboBox* cvvdp_preset_combo = nullptr;
+    QLabel* cvvdp_display_label = nullptr;
+    QPushButton* cvvdp_add_button = nullptr;
+    QPushButton* cvvdp_edit_button = nullptr;
+    QPushButton* cvvdp_delete_button = nullptr;
+    QCheckBox* cvvdp_resize_check = nullptr;
     QCheckBox* gpu_checkbox = nullptr;
     QComboBox* gpu_vendor_combo = nullptr;
     QComboBox* vmaf_backend_combo = nullptr;
@@ -101,12 +118,20 @@ signals:
     void model_chosen(int index);
     // A Vship metric's GPU/CPU choice changed ("ssimulacra2", "butteraugli").
     void metric_backend_changed(const QString& metric_key);
+    // The CVVDP preset dropdown changed to this index.
+    void cvvdp_preset_chosen(int index);
+    // "Scale the video to fill the display" was ticked (true) or unticked.
+    void cvvdp_resize_toggled(bool checked);
+    void cvvdp_add_requested();
+    void cvvdp_edit_requested();
+    void cvvdp_delete_requested();
     // The resolution mismatch dropdown changed to this index (2: "Test both").
     void scale_direction_chosen(int index);
 
 private:
     void build_preparation(QFormLayout* form);
     void build_metric_settings(QFormLayout* form);
+    void build_cvvdp(QFormLayout* form);
     void build_performance(QFormLayout* form, const std::vector<GpuVendor>& gpu_vendors);
 
     // Whether there is a GPU here for VMAF: without one, its choice is CPU.

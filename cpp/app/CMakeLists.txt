@@ -10,6 +10,7 @@ if(NOT Qt6_FOUND)
 endif()
 
 add_library(vml_app STATIC
+    cvvdp_display_dialog.cpp
     file_writes.cpp
     formatting.cpp
     i18n.cpp

@@ -1387,12 +1387,16 @@ def cvvdp_cases() -> dict:
     Settings holds them (malformed ones skipped), each display's identity
     and its JSON for Vship, a request's settings read back, the size CVVDP
     is calculated at (perceptual_vship.cvvdp_computed_size), and the whole
-    video's JOD pooled from its seconds (pool_cvvdp_windows)."""
+    video's JOD pooled from its seconds (pool_cvvdp_windows), and the user's
+    presets saved and deleted."""
+    from dataclasses import asdict
+
     from vmaf_app.core import cvvdp
     from vmaf_app.core.perceptual_vship import cvvdp_computed_size, pool_cvvdp_windows
 
     def described(preset) -> dict:
-        return {"name": preset.name, "builtin": preset.builtin, "identity": preset.settings.display.identity(),
+        return {"name": preset.name, "builtin": preset.builtin, "description": preset.description,
+                "identity": preset.settings.display.identity(),
                 "resize_to_display": preset.settings.resize_to_display,
                 "vship_json": cvvdp.vship_display_json(preset.settings.display)}
 
@@ -1458,7 +1462,35 @@ def cvvdp_cases() -> dict:
             first += frames
         pools.append({"windows": [[start, frames, exact(jod)] for start, frames, jod in windows],
                       "jod": exact(pool_cvvdp_windows(windows))})
-    return {"preset_lists": preset_lists, "read_back": read_back, "sizes": sizes, "pools": pools}
+
+    # The user's presets saved and deleted (with_user_preset,
+    # without_user_preset): added, put in place of one of the same name, the
+    # name's spaces dropped, and refused for no name, a built-in's name or a
+    # display CVVDP cannot model. The displays are as the app's editor gives
+    # them: whole-number resolutions, the rest numbers with a fraction.
+    def edited(**values) -> cvvdp.CvvdpDisplay:
+        display = {"width": 2560, "height": 1440, "diagonal_inches": 27.0, "viewing_distance_m": 0.65,
+                   "peak_luminance": 350.0, "contrast": 1200.0, "ambient_lux": 120.5, "reflectivity": 0.0075,
+                   "exposure": 1.25, "hdr": False}
+        return cvvdp.CvvdpDisplay(**{**display, **values})
+
+    saved_lists = ([], [tv], [tv, {"name": 7, "settings": {}}, {"name": "Desk", "settings": {}}])
+    edits = []
+    for saved in saved_lists:
+        for name, display in (("Desk", edited()), ("  Desk  ", edited(hdr=True)), ("Living room TV", edited()),
+                              ("", edited()), ("   ", edited()), ("30-inch 4K monitor, office", edited()),
+                              ("Tiny", edited(width=8)), ("Dark", edited(peak_luminance=-1.0))):
+            try:
+                result, error = cvvdp.with_user_preset(saved, name, cvvdp.CvvdpSettings(display, True)), None
+            except ValueError as problem:
+                result, error = None, str(problem)
+            edits.append({"saved": json.dumps(saved), "name": name, "display": asdict(display),
+                          "text": None if result is None else json.dumps(result, indent=2), "error": error})
+        for name in ("Desk", "Living room TV", "7", "missing"):
+            edits.append({"saved": json.dumps(saved), "deleted": name,
+                          "text": json.dumps(cvvdp.without_user_preset(saved, name), indent=2)})
+    return {"preset_lists": preset_lists, "read_back": read_back, "sizes": sizes, "pools": pools,
+            "user_presets": edits}
 
 
 def timed_pairing_cases() -> dict:

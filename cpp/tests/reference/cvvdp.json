@@ -6,6 +6,7 @@
     {
      "name": "30-inch 4K monitor, office",
      "builtin": true,
+     "description": "Official 'standard_4k' -- the official tool's default display.",
      "identity": {
       "resolution": [
        3840,
@@ -26,6 +27,7 @@
     {
      "name": "24-inch 1080p monitor, office",
      "builtin": true,
+     "description": "Official 'standard_fhd'.",
      "identity": {
       "resolution": [
        1920,
@@ -46,6 +48,7 @@
     {
      "name": "30-inch 4K HDR monitor, dim room",
      "builtin": true,
+     "description": "Official 'standard_hdr_pq' (HLG uses the same display).",
      "identity": {
       "resolution": [
        3840,
@@ -66,6 +69,7 @@
     {
      "name": "30-inch 4K HDR monitor, dark room",
      "builtin": true,
+     "description": "Official 'standard_hdr_dark'.",
      "identity": {
       "resolution": [
        3840,
@@ -86,6 +90,7 @@
     {
      "name": "65-inch 4K HDR TV, 1000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_1Knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -106,6 +111,7 @@
     {
      "name": "65-inch 4K HDR TV, 2000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_2Knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -126,6 +132,7 @@
     {
      "name": "65-inch 4K HDR TV, 4000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_4knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -146,6 +153,7 @@
     {
      "name": "6-inch phone",
      "builtin": true,
+     "description": "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
      "identity": {
       "resolution": [
        2400,
@@ -168,6 +176,7 @@
     "30-inch 4K monitor, office": {
      "name": "30-inch 4K monitor, office",
      "builtin": true,
+     "description": "Official 'standard_4k' -- the official tool's default display.",
      "identity": {
       "resolution": [
        3840,
@@ -188,6 +197,7 @@
     "6-inch phone": {
      "name": "6-inch phone",
      "builtin": true,
+     "description": "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
      "identity": {
       "resolution": [
        2400,
@@ -222,6 +232,7 @@
     {
      "name": "30-inch 4K monitor, office",
      "builtin": true,
+     "description": "Official 'standard_4k' -- the official tool's default display.",
      "identity": {
       "resolution": [
        3840,
@@ -242,6 +253,7 @@
     {
      "name": "24-inch 1080p monitor, office",
      "builtin": true,
+     "description": "Official 'standard_fhd'.",
      "identity": {
       "resolution": [
        1920,
@@ -262,6 +274,7 @@
     {
      "name": "30-inch 4K HDR monitor, dim room",
      "builtin": true,
+     "description": "Official 'standard_hdr_pq' (HLG uses the same display).",
      "identity": {
       "resolution": [
        3840,
@@ -282,6 +295,7 @@
     {
      "name": "30-inch 4K HDR monitor, dark room",
      "builtin": true,
+     "description": "Official 'standard_hdr_dark'.",
      "identity": {
       "resolution": [
        3840,
@@ -302,6 +316,7 @@
     {
      "name": "65-inch 4K HDR TV, 1000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_1Knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -322,6 +337,7 @@
     {
      "name": "65-inch 4K HDR TV, 2000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_2Knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -342,6 +358,7 @@
     {
      "name": "65-inch 4K HDR TV, 4000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_4knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -362,6 +379,7 @@
     {
      "name": "6-inch phone",
      "builtin": true,
+     "description": "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
      "identity": {
       "resolution": [
        2400,
@@ -382,6 +400,7 @@
     {
      "name": "Living room TV",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -404,6 +423,7 @@
     "30-inch 4K monitor, office": {
      "name": "30-inch 4K monitor, office",
      "builtin": true,
+     "description": "Official 'standard_4k' -- the official tool's default display.",
      "identity": {
       "resolution": [
        3840,
@@ -424,6 +444,7 @@
     "6-inch phone": {
      "name": "6-inch phone",
      "builtin": true,
+     "description": "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
      "identity": {
       "resolution": [
        2400,
@@ -444,6 +465,7 @@
     "Living room TV": {
      "name": "Living room TV",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -477,6 +499,7 @@
     {
      "name": "30-inch 4K monitor, office",
      "builtin": true,
+     "description": "Official 'standard_4k' -- the official tool's default display.",
      "identity": {
       "resolution": [
        3840,
@@ -497,6 +520,7 @@
     {
      "name": "24-inch 1080p monitor, office",
      "builtin": true,
+     "description": "Official 'standard_fhd'.",
      "identity": {
       "resolution": [
        1920,
@@ -517,6 +541,7 @@
     {
      "name": "30-inch 4K HDR monitor, dim room",
      "builtin": true,
+     "description": "Official 'standard_hdr_pq' (HLG uses the same display).",
      "identity": {
       "resolution": [
        3840,
@@ -537,6 +562,7 @@
     {
      "name": "30-inch 4K HDR monitor, dark room",
      "builtin": true,
+     "description": "Official 'standard_hdr_dark'.",
      "identity": {
       "resolution": [
        3840,
@@ -557,6 +583,7 @@
     {
      "name": "65-inch 4K HDR TV, 1000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_1Knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -577,6 +604,7 @@
     {
      "name": "65-inch 4K HDR TV, 2000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_2Knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -597,6 +625,7 @@
     {
      "name": "65-inch 4K HDR TV, 4000 nits, living room",
      "builtin": true,
+     "description": "Official '65inch_hdr_pq_4knit'.",
      "identity": {
       "resolution": [
        3840,
@@ -617,6 +646,7 @@
     {
      "name": "6-inch phone",
      "builtin": true,
+     "description": "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
      "identity": {
       "resolution": [
        2400,
@@ -637,6 +667,7 @@
     {
      "name": "defaults",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -657,6 +688,7 @@
     {
      "name": "7",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -677,6 +709,7 @@
     {
      "name": "2.5",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        1920,
@@ -697,6 +730,7 @@
     {
      "name": "None",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -717,6 +751,7 @@
     {
      "name": "True",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -737,6 +772,7 @@
     {
      "name": "30-inch 4K monitor, office",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -759,6 +795,7 @@
     "30-inch 4K monitor, office": {
      "name": "30-inch 4K monitor, office",
      "builtin": true,
+     "description": "Official 'standard_4k' -- the official tool's default display.",
      "identity": {
       "resolution": [
        3840,
@@ -779,6 +816,7 @@
     "6-inch phone": {
      "name": "6-inch phone",
      "builtin": true,
+     "description": "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).",
      "identity": {
       "resolution": [
        2400,
@@ -800,6 +838,7 @@
     "defaults": {
      "name": "defaults",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -820,6 +859,7 @@
     "7": {
      "name": "7",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -840,6 +880,7 @@
     "2.5": {
      "name": "2.5",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        1920,
@@ -860,6 +901,7 @@
     "None": {
      "name": "None",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -880,6 +922,7 @@
     "True": {
      "name": "True",
      "builtin": false,
+     "description": "",
      "identity": {
       "resolution": [
        3840,
@@ -4182,6 +4225,500 @@
     ]
    ],
    "jod": "0x1.2aee501b9f7cdp+3"
+  }
+ ],
+ "user_presets": [
+  {
+   "saved": "[]",
+   "name": "Desk",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": "[\n  {\n    \"name\": \"Desk\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": false\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[]",
+   "name": "  Desk  ",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": true
+   },
+   "text": "[\n  {\n    \"name\": \"Desk\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": true\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[]",
+   "name": "Living room TV",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": false\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[]",
+   "name": "",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "A preset needs a name."
+  },
+  {
+   "saved": "[]",
+   "name": "   ",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "A preset needs a name."
+  },
+  {
+   "saved": "[]",
+   "name": "30-inch 4K monitor, office",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "\"30-inch 4K monitor, office\" is a built-in preset; choose another name."
+  },
+  {
+   "saved": "[]",
+   "name": "Tiny",
+   "display": {
+    "width": 8,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "The display resolution must be at least 16 x 16."
+  },
+  {
+   "saved": "[]",
+   "name": "Dark",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": -1.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "The display's peak brightness must be greater than zero."
+  },
+  {
+   "saved": "[]",
+   "deleted": "Desk",
+   "text": "[]"
+  },
+  {
+   "saved": "[]",
+   "deleted": "Living room TV",
+   "text": "[]"
+  },
+  {
+   "saved": "[]",
+   "deleted": "7",
+   "text": "[]"
+  },
+  {
+   "saved": "[]",
+   "deleted": "missing",
+   "text": "[]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "Desk",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": false\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "  Desk  ",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": true
+   },
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": true\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "Living room TV",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": false\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "A preset needs a name."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "   ",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "A preset needs a name."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "30-inch 4K monitor, office",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "\"30-inch 4K monitor, office\" is a built-in preset; choose another name."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "Tiny",
+   "display": {
+    "width": 8,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "The display resolution must be at least 16 x 16."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "name": "Dark",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": -1.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "The display's peak brightness must be greater than zero."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "deleted": "Desk",
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  }\n]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "deleted": "Living room TV",
+   "text": "[]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "deleted": "7",
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  }\n]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}]",
+   "deleted": "missing",
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  }\n]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "Desk",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": 7,\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": false\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "  Desk  ",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": true
+   },
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": 7,\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": true\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "Living room TV",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": "[\n  {\n    \"name\": 7,\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 2560,\n        \"height\": 1440,\n        \"diagonal_inches\": 27.0,\n        \"viewing_distance_m\": 0.65,\n        \"peak_luminance\": 350.0,\n        \"contrast\": 1200.0,\n        \"ambient_lux\": 120.5,\n        \"reflectivity\": 0.0075,\n        \"exposure\": 1.25,\n        \"hdr\": false\n      },\n      \"resize_to_display\": false\n    }\n  }\n]",
+   "error": null
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "A preset needs a name."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "   ",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "A preset needs a name."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "30-inch 4K monitor, office",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "\"30-inch 4K monitor, office\" is a built-in preset; choose another name."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "Tiny",
+   "display": {
+    "width": 8,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": 350.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "The display resolution must be at least 16 x 16."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "name": "Dark",
+   "display": {
+    "width": 2560,
+    "height": 1440,
+    "diagonal_inches": 27.0,
+    "viewing_distance_m": 0.65,
+    "peak_luminance": -1.0,
+    "contrast": 1200.0,
+    "ambient_lux": 120.5,
+    "reflectivity": 0.0075,
+    "exposure": 1.25,
+    "hdr": false
+   },
+   "text": null,
+   "error": "The display's peak brightness must be greater than zero."
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "deleted": "Desk",
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": 7,\n    \"settings\": {}\n  }\n]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "deleted": "Living room TV",
+   "text": "[\n  {\n    \"name\": 7,\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {}\n  }\n]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "deleted": "7",
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": 7,\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {}\n  }\n]"
+  },
+  {
+   "saved": "[{\"name\": \"Living room TV\", \"settings\": {\"display\": {\"width\": 3840, \"height\": 2160, \"diagonal_inches\": 55.5, \"viewing_distance_m\": 2.25, \"peak_luminance\": 750, \"contrast\": 5000, \"ambient_lux\": 30.123456, \"reflectivity\": 0.0123456789, \"exposure\": 1.5, \"hdr\": true}, \"resize_to_display\": true}}, {\"name\": 7, \"settings\": {}}, {\"name\": \"Desk\", \"settings\": {}}]",
+   "deleted": "missing",
+   "text": "[\n  {\n    \"name\": \"Living room TV\",\n    \"settings\": {\n      \"display\": {\n        \"width\": 3840,\n        \"height\": 2160,\n        \"diagonal_inches\": 55.5,\n        \"viewing_distance_m\": 2.25,\n        \"peak_luminance\": 750,\n        \"contrast\": 5000,\n        \"ambient_lux\": 30.123456,\n        \"reflectivity\": 0.0123456789,\n        \"exposure\": 1.5,\n        \"hdr\": true\n      },\n      \"resize_to_display\": true\n    }\n  },\n  {\n    \"name\": 7,\n    \"settings\": {}\n  },\n  {\n    \"name\": \"Desk\",\n    \"settings\": {}\n  }\n]"
   }
  ]
 }

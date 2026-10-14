@@ -85,6 +85,9 @@ struct CvvdpPreset {
     std::string name;
     CvvdpSettings settings;
     bool builtin = false;
+    // Which official display a built-in preset is, for its tooltip; the
+    // window shows it translated. Empty for the user's own.
+    std::string description;
 };
 
 // The built-in presets, the first of them the default for every video.
@@ -97,6 +100,18 @@ std::vector<CvvdpPreset> cvvdp_presets(const std::string& user_presets_json);
 
 // The preset with this name, built-in or the user's, or nothing.
 std::optional<CvvdpPreset> cvvdp_preset_named(const std::string& name, const std::string& user_presets_json);
+
+// The user's presets (Settings' cvvdp_presets, the JSON text of its list)
+// with `name` added, or put in place of the preset so named (the Python
+// app's with_user_preset); the name without the spaces around it. Only the
+// display is saved: whether videos fill it is each video's own setting.
+// Throws std::invalid_argument for no name, a built-in preset's name, or a
+// display CVVDP cannot model.
+std::string with_user_preset(const std::string& user_presets_json, const std::string& name,
+                             const CvvdpDisplay& display);
+
+// The user's presets without the one called `name` (without_user_preset).
+std::string without_user_preset(const std::string& user_presets_json, const std::string& name);
 
 // The preset whose display `settings` model, or nothing (the Python app's
 // matching_preset): `preferred`, the preset the video was given, while its

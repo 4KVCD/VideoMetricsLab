@@ -336,6 +336,10 @@ class CvvdpDisplayDialog(QDialog):
         cancel = buttons.addButton(QDialogButtonBox.Cancel)
         cancel.clicked.connect(self.reject)
         form.addRow(buttons)
+        # What each box holds before the user changes anything (see display).
+        self._given = {box: box.value() for box in (
+            self.diagonal_spin, self.distance_spin, self.peak_spin, self.contrast_spin, self.ambient_spin,
+            self.reflectivity_spin, self.exposure_spin)}
         for box in (self.width_spin, self.height_spin, self.diagonal_spin, self.distance_spin):
             box.valueChanged.connect(self._update_distance_note)
         self._update_distance_note()
@@ -345,13 +349,14 @@ class CvvdpDisplayDialog(QDialog):
         exact original value: the boxes show fewer decimals than a display
         can have, and reading 0.7472 m back as 0.747 made "Apply without
         saving" with nothing changed drop the CVVDP score and turn the
-        preset into "Custom"."""
+        preset into "Custom". A box still holding what it was given was not
+        changed. Don't compare with round() instead: it rounds a half to
+        even where the box rounds it up, so 350.5 nits came back as 351."""
         original = self._original
 
         def value(box, before: float, scale: float = 1.0) -> float:
-            """The value in `box`, or `before` while the box still shows `before` rounded."""
-            shown = round(before * scale, box.decimals())
-            return before if abs(box.value() - shown) < 10 ** -(box.decimals() + 2) else box.value() / scale
+            """The value in `box`, or `before` while the box still holds what it was given."""
+            return before if box.value() == self._given[box] else box.value() / scale
 
         return CvvdpDisplay(
             width=self.width_spin.value(), height=self.height_spin.value(),
