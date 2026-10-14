@@ -2012,12 +2012,17 @@ def run_file_cases() -> dict:
             metric_results=every_kind, source_crop=CropBox(3840, 1600, 0, 280),
             distorted_crop=CropBox(1920, 800, 0, 140), scale_direction=ScaleDirection.DISTORTED_TO_SOURCE,
             scale_algorithm="lanczos", model_v1="path=C:\\models\\vmaf_v1.json", model_choice_v1=v1_choice)),
+        # Without a label, a file is named after its test video: plain file
+        # names, which every system's paths read alike (a Windows path's
+        # backslashes are no separators elsewhere).
         ("no label: the test video's name", "", result(
-            metric_results=MetricResultSet([every_kind.get("vmaf")]), model_choice=None)),
+            metric_results=MetricResultSet([every_kind.get("vmaf")]), model_choice=None,
+            source=Path("source.mkv"), distorted=Path("take 1.mkv"), source_info=info("source.mkv"),
+            distorted_info=info("take 1.mkv", 1920, 1080))),
         ("a resolution test", "", result(
-            metric_results=MetricResultSet([every_kind.get("vmaf")]),
-            distorted=Path("C:\\Videos\\K\u00e4se \u2013 source [downscale-720p-upscale].mkv"),
-            distorted_info=info(source_path), resample_target=ResampleTarget(1280, "720p"))),
+            metric_results=MetricResultSet([every_kind.get("vmaf")]), source=Path("source.mkv"),
+            distorted=Path("source [downscale-720p-upscale].mkv"), source_info=info("source.mkv"),
+            distorted_info=info("source.mkv"), resample_target=ResampleTarget(1280, "720p"))),
     ]
     saved = []
     texts = {}
