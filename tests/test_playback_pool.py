@@ -191,3 +191,20 @@ def test_a_video_that_cannot_play_is_named_as_the_user_knows_it(qapp, monkeypatc
     view._stream_failed(source_key, view._pool[source_key], "no such file")
     assert said == ["Video 1 could not play: device lost", "Selected video failed: no such file"]
     cleanup(view)
+
+
+def test_a_finished_decoder_no_longer_wanted_is_let_go(qapp, monkeypatch, tmp_path):
+    """A decoder that has finished (at the end of a short clip, or failed) is
+    deleted once the test video shown no longer needs it. It was kept until
+    the window closed, with the frames it had queued: one more decoder at
+    every switch of test video."""
+    import shiboken6
+
+    view, items = make_view(monkeypatch, tmp_path, 3)
+    view.set_decoded_videos(1)
+    finished = view._pool[("distorted", 0)]
+    finished.finish()
+    view.load(items[1], 1000, series=items)
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert not shiboken6.isValid(finished), "a finished decoder kept"
+    cleanup(view)

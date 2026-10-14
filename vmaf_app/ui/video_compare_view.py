@@ -777,7 +777,13 @@ class VideoCompareView(QWidget):
             if key not in desired:
                 worker = self._pool.pop(key)
                 worker.cancel()
-                self._retired_workers.add(worker)
+                # One that has finished (at the end of a short clip, or
+                # failed) goes now: kept, it held its queued frames until the
+                # window closed.
+                if worker.isRunning():
+                    self._retired_workers.add(worker)
+                else:
+                    worker.deleteLater()
                 self._history.pop(key, None)
                 self._details.pop(key, None)
                 self._failures.pop(key, None)
