@@ -50,7 +50,7 @@ _COL_USE, _COL_FILE, _COL_MEDIA, _COL_DURATION, _COL_FRAMES, _COL_AVG, _COL_MIN,
 @dataclass
 class BitrateEntry:
     """One file in the Bitrate tab: its path, colour, details, packets, whether
-    it is used, its status, and its graphs worked out so far."""
+    it is used, its status, why it failed, and its graphs worked out so far."""
 
     path: Path
     color: str
@@ -59,6 +59,7 @@ class BitrateEntry:
     data: BitrateData | None = None
     enabled: bool = True
     status: str = N_("Ready to analyze")
+    error: str = ""
     plots: dict[tuple[str, bool], BitratePlot] = field(default_factory=dict)
 
 
@@ -376,9 +377,8 @@ class BitratePanel(QWidget):
         if entry is None:
             return
         entry.status = N_("Failed")
-        row = self._row_for_key(_path_key(path))
+        entry.error = error
         self._refresh_table_values()
-        self.table.item(row, _COL_STATUS).setToolTip(error)
         self.status_label.setText(tr("Could not analyze {name}: {error}", name=path.name, error=error))
 
     def _on_worker_finished(self, worker: BitrateWorker) -> None:
@@ -475,6 +475,9 @@ class BitratePanel(QWidget):
             item.setText(value)
             if column == _COL_FILE:
                 item.setToolTip(str(entry.path))
+        # Why the file failed, on its own row: kept with the file, so that a
+        # row that moves up as another is removed shows its own.
+        self._cell(row, _COL_STATUS).setToolTip(entry.error if entry.status == "Failed" else "")
 
     def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
         """Shows or hides a file's line when its Use box is ticked."""
