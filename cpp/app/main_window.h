@@ -7,12 +7,12 @@
 // handling, model, GPU decoding and so on), not one setting shared by all.
 //
 // Ported so far: the window's frame, its tabs, the Videos tab's files panel
-// (the reference, the test-video table and its buttons), runs: the ticked
-// videos' metrics calculated, with their progress, and the scores shown in
-// the table (main_window_run.cpp), and the saved scores: looked up for each
-// row, saved as a run goes, forgotten by Recalculate
-// (main_window_saved_scores.cpp). The other tabs and the Options panel are
-// still the Python app's alone.
+// (the reference, the test-video table and its buttons, the best and worst
+// scores highlighted), runs: the ticked videos' metrics calculated, with
+// their progress, and the scores shown in the table (main_window_run.cpp),
+// and the saved scores: looked up for each row, saved as a run goes,
+// forgotten by Recalculate (main_window_saved_scores.cpp). The other tabs
+// and the Options panel are still the Python app's alone.
 #pragma once
 
 #include <QMainWindow>
@@ -233,6 +233,8 @@ private:
     void on_remove_all_distorted();
     void on_table_selection_changed();
     void on_highlight_toggled(bool on);
+    void schedule_best_worst();
+    void apply_best_worst();
 
     // ----------------------------------------------------------- the metrics
     bool default_metric_ticked(int column) const;
@@ -387,6 +389,10 @@ private:
     // and pass: (seconds, frames done).
     std::map<std::tuple<int, std::string, long long>, std::deque<std::pair<double, long long>>> rate_samples_;
     QTimer* run_tick_timer_ = nullptr;
+    // apply_best_worst once the window is next idle: one pass over the table
+    // for every change that lands in one go (a run's results, the saved
+    // scores', rows removed).
+    QTimer* best_worst_timer_ = nullptr;
     // Seconds on a steady clock; a clock of their own in the tests.
     std::function<double()> clock_;
 

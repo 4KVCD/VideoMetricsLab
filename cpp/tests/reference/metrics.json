@@ -90,6 +90,158 @@
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.68"
     }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      "worst",
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
+    }
    ]
   },
   {
@@ -181,6 +333,158 @@
     {
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.68"
+    }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      "worst",
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
     }
    ]
   },
@@ -274,6 +578,158 @@
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.68"
     }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      "worst",
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
+    }
    ]
   },
   {
@@ -365,6 +821,158 @@
     {
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.68"
+    }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      "worst",
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
     }
    ]
   },
@@ -458,6 +1066,158 @@
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.6780"
     }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
+    }
    ]
   },
   {
@@ -549,6 +1309,158 @@
     {
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.68"
+    }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      "worst",
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
     }
    ]
   },
@@ -642,6 +1554,158 @@
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.68"
     }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      "worst",
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
+    }
    ]
   },
   {
@@ -709,6 +1773,158 @@
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.6780"
     }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "best",
+      null,
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      "best",
+      "worst",
+      "best",
+      null
+     ]
+    }
    ]
   },
   {
@@ -775,6 +1991,158 @@
     {
      "value": "0x1.81cd6c8b43958p+13",
      "text": "12345.678"
+    }
+   ],
+   "best_and_worst": [
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      "0x1.7c00000000000p+6",
+      null,
+      "0x1.5400000000000p+6"
+     ],
+     "marks": [
+      null,
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.3333333333333p+0",
+      "0x1.ccccccccccccdp-1",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.7c010624dd2f2p+6",
+      "0x1.7bfef9db22d0ep+6",
+      "0x1.4000000000000p+6"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.68010624dd2f2p+6",
+      "0x1.67fef9db22d0ep+6"
+     ],
+     "marks": [
+      "best",
+      "worst"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.6800000000000p+6",
+      null,
+      "nan"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "inf",
+      "0x1.4000000000000p+5",
+      "0x1.e000000000000p+4",
+      "inf"
+     ],
+     "marks": [
+      "best",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "-inf",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x0.0p+0",
+      "-0x0.0p+0"
+     ],
+     "marks": [
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [
+      "0x1.00346dc5d6388p-1",
+      "0x1.004ea4a8c154dp-1",
+      "0x1.004189374bc6ap-1",
+      "0x1.ccccccccccccdp-1"
+     ],
+     "marks": [
+      "worst",
+      null,
+      "worst",
+      "best"
+     ]
+    },
+    {
+     "scores": [],
+     "marks": []
+    },
+    {
+     "scores": [
+      "0x1.4000000000000p+2"
+     ],
+     "marks": [
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2",
+      "0x1.c000000000000p+2"
+     ],
+     "marks": [
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "scores": [
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.8000000000000p+1",
+      "0x1.0000000000000p+0",
+      "0x1.0000000000000p+1"
+     ],
+     "marks": [
+      "best",
+      "worst",
+      "best",
+      "worst",
+      null
+     ]
     }
    ]
   }

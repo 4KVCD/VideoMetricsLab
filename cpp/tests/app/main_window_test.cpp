@@ -15,6 +15,7 @@
 #include <QTableWidgetSelectionRange>
 #include <QTest>
 #include <QThread>
+#include <QTimer>
 #include <QUrl>
 
 #include <gtest/gtest.h>
@@ -139,6 +140,12 @@ protected:
     }
     // The table menu's Recalculate, for `rows`.
     static void recalculate(MainWindow& window, const std::vector<int>& rows) { window.recompute_rows(rows); }
+    static QCheckBox& highlight_check(MainWindow& window) { return *window.highlight_check_; }
+    // Whether the best/worst pass is still to come.
+    static bool best_worst_due(MainWindow& window) { return window.best_worst_timer_->isActive(); }
+    // Shows a row's scores, as a finished video or its saved scores do.
+    static void show_scores(MainWindow& window, int row) { window.set_row_metrics(row); }
+    static void remove_selected(MainWindow& window) { window.on_remove_distorted(); }
     static QString dialog_folder(MainWindow& window, const QString& kind) { return window.video_dialog_dir(kind); }
 
     // Whether a video is still being read.
@@ -632,6 +639,62 @@ TEST_F(WindowTest, ARunsScoresAreSavedForTheNextTimeItsVideosAreAddedUnlessRecal
     EXPECT_EQ(shown, saved);
     EXPECT_EQ(state(reopened, 1), RowState::not_calculated);
     EXPECT_TRUE(table(reopened).item(1, col_psnr)->text().isEmpty());
+}
+
+TEST_F(WindowTest, HighlightBestWorstColoursEachMetricsBestAndWorstScore) {
+    // A user's request in the Python app, as FFMetrics colours its table:
+    // ticked, each metric's best score is green and its worst red among the
+    // test videos -- by the metric's direction (Butteraugli's lowest is its
+    // best), only where two or more have one, and not a score marked as the
+    // other implementation's. Off by default, and kept in the settings.
+    MainWindow window;
+    ASSERT_FALSE(highlight_check(window).isChecked());
+    const MetricProvenance libvmaf{"ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "vmaf-libvmaf-v1", {}};
+    const MetricProvenance vship{"Vship/butteraugli", "Vship 5.1.2", "gpu", "butteraugli-vship-gpu-v1", {}};
+    for (const auto& [name, vmaf, butteraugli] :
+         {std::tuple{"a.mp4", 90.0f, 1.2f}, std::tuple{"b.mp4", 95.0f, 0.9f}, std::tuple{"c.mp4", 85.0f, 2.0f}}) {
+        const int row = add_row(window, name);
+        auto run = std::make_shared<CompletedRun>();
+        run->result.metric_results.add(FrameMetricResult{"vmaf", {0}, {0.0}, {vmaf}, libvmaf});
+        run->result.metric_results.add(FrameMetricResult{"butteraugli", {0}, {0.0}, {butteraugli}, vship});
+        RowData& row_data = *rows(window)[static_cast<std::size_t>(row)];
+        row_data.completed_run = run;
+        row_data.metric_backends["butteraugli"] = "gpu";
+        show_scores(window, row);
+    }
+    const auto marks = [&window](int column) {
+        EXPECT_TRUE(wait_until([&] { return !best_worst_due(window); }));
+        std::vector<std::string> found;
+        for (int row = 0; row < table(window).rowCount(); ++row) {
+            const QColor colour = table(window).item(row, column)->background().color();
+            found.emplace_back(colour.alpha() == 0                  ? ""
+                               : colour == theme::color("best")  ? "best"
+                               : colour == theme::color("worst") ? "worst"
+                                                                 : colour.name().toStdString());
+        }
+        return found;
+    };
+    using Marks = std::vector<std::string>;
+
+    EXPECT_EQ(marks(col_vmaf), (Marks{"", "", ""}));
+    highlight_check(window).setChecked(true);
+    EXPECT_TRUE(saved_settings()["highlight_best_worst"].get<bool>());
+    EXPECT_EQ(marks(col_vmaf), (Marks{"", "best", "worst"}));
+    EXPECT_EQ(marks(col_butteraugli), (Marks{"", "best", "worst"}));
+    // b.mp4 set to the CPU: its GPU score shows "(GPU)", on another scale.
+    rows(window)[1]->metric_backends["butteraugli"] = "cpu";
+    show_scores(window, 1);
+    EXPECT_EQ(marks(col_butteraugli), (Marks{"best", "", "worst"}));
+    // The best video removed: the better of the two left is the best.
+    table(window).selectRow(1);
+    remove_selected(window);
+    EXPECT_EQ(marks(col_vmaf), (Marks{"best", "worst"}));
+    // One video left: nothing to compare.
+    table(window).selectRow(1);
+    remove_selected(window);
+    EXPECT_EQ(marks(col_vmaf), (Marks{""}));
+    highlight_check(window).setChecked(false);
+    EXPECT_FALSE(saved_settings()["highlight_best_worst"].get<bool>());
 }
 
 TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {

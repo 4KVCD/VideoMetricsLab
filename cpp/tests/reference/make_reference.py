@@ -98,8 +98,16 @@ def number_format_cases() -> dict:
 # ------------------------------------------------------------------ metrics
 
 def metric_cases() -> dict:
-    """The registry, and format_value() of numbers and of no number."""
+    """The registry, format_value() of numbers and of no number, and
+    best_and_worst() of the videos' scores."""
     probe_values = [None, math.nan, math.inf, -math.inf, 0.0, -0.0, 94.5, 0.98765, 45.351984, -1.25, 1e-9, 12345.678]
+    # Ordered, reversed, with gaps, equal as shown at some precisions and not
+    # at others, infinite, too few, and equal.
+    score_lists = [
+        [90.0, 95.0, None, 85.0], [1.2, 0.9, 2.0], [95.001, 94.999, 80.0], [90.001, 89.999],
+        [90.0, None, math.nan], [math.inf, 40.0, 30.0, math.inf], [-math.inf, 1.0, 2.0], [0.0, -0.0],
+        [0.5004, 0.5006, 0.5005, 0.9], [], [5.0], [7.0, 7.0, 7.0], [3.0, 1.0, 3.0, 1.0, 2.0],
+    ]
     metrics = []
     for metric in METRICS:
         metrics.append({
@@ -113,6 +121,8 @@ def metric_cases() -> dict:
             "libvmaf_feature": metric.ffmpeg_binding.libvmaf_feature if metric.ffmpeg_binding else None,
             "backend_id": metric.backend_id,
             "format_value": [{"value": exact(v), "text": metric.format_value(v)} for v in probe_values],
+            "best_and_worst": [{"scores": [exact(v) for v in scores], "marks": metric.best_and_worst(scores)}
+                               for scores in score_lists],
         })
     return {"metrics": metrics}
 

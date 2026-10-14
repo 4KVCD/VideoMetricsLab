@@ -2,8 +2,10 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "reference.h"
 
@@ -66,6 +68,31 @@ TEST(Metrics, FormatValueShowsScoresAsThePythonAppDoes) {
         for (const nlohmann::json& item : expected["format_value"]) {
             EXPECT_EQ(metric.format_value(test::reference_number(item["value"])), item["text"].get<std::string>())
                 << metric.key << " of " << item["value"];
+        }
+    }
+}
+
+// The videos' best and worst scores, as the Python app marks them for
+// Highlight best/worst results: by the metric's direction, compared as
+// shown, none with fewer than two scores or all showing the same.
+TEST(Metrics, BestAndWorstAreThePythonApps) {
+    const nlohmann::json reference = test::load_reference("metrics.json");
+    for (const nlohmann::json& expected : reference["metrics"]) {
+        const MetricDefinition& metric = metric_definition(expected["key"].get<std::string>());
+        for (const nlohmann::json& item : expected["best_and_worst"]) {
+            std::vector<std::optional<double>> scores;
+            for (const nlohmann::json& score : item["scores"]) {
+                scores.push_back(test::reference_number(score));
+            }
+            std::vector<std::string> marks;
+            for (const ScoreMark mark : metric.best_and_worst(scores)) {
+                marks.emplace_back(mark == ScoreMark::best ? "best" : mark == ScoreMark::worst ? "worst" : "");
+            }
+            std::vector<std::string> wanted;
+            for (const nlohmann::json& mark : item["marks"]) {
+                wanted.push_back(mark.is_null() ? "" : mark.get<std::string>());
+            }
+            EXPECT_EQ(marks, wanted) << metric.key << " of " << item["scores"];
         }
     }
 }

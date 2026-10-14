@@ -317,6 +317,7 @@ void MainWindow::apply_theme_colours() {
             }
         }
     }
+    apply_best_worst();  // the backgrounds, in the new theme's greens and reds
 }
 
 void MainWindow::close_when_idle() {
@@ -652,6 +653,11 @@ QWidget* MainWindow::build_files_panel() {
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
     buttons->addWidget(highlight_check_);
     files_layout->addLayout(buttons);
+    best_worst_timer_ = new QTimer(this);
+    best_worst_timer_->setSingleShot(true);
+    best_worst_timer_->setInterval(0);
+    connect(best_worst_timer_, &QTimer::timeout, this, [this] { apply_best_worst(); });
+    connect(distorted_table_->model(), &QAbstractItemModel::rowsRemoved, this, [this] { schedule_best_worst(); });
 
     // Frozen during a run one control at a time. Don't disable the whole box:
     // a disabled QGroupBox disables its children, the table's scroll bar
@@ -1218,6 +1224,7 @@ void MainWindow::set_row_metrics(int row) {
         item->setFont(QFont());
     }
     syncing_table_ = false;
+    schedule_best_worst();
     refresh_row_state(row);
     set_row_black_bars(row);
     set_row_scaling(row);
@@ -1768,6 +1775,42 @@ void MainWindow::on_table_selection_changed() {
 void MainWindow::on_highlight_toggled(bool on) {
     settings_.highlight_best_worst = on;
     save_settings();
+    apply_best_worst();
+}
+
+void MainWindow::schedule_best_worst() { best_worst_timer_->start(); }
+
+void MainWindow::apply_best_worst() {
+    // Colours each metric's best score green and its worst red, among the
+    // test videos' (MetricDefinition::best_and_worst), while Highlight
+    // best/worst results is ticked: only where two or more videos have a
+    // score to compare. A score from the other implementation than its row
+    // asks for, marked "(CPU)" or "(GPU)", is on another scale and is not
+    // compared (set_row_metrics gives it no score_role). Unticked, no cell
+    // has a colour.
+    const bool on = highlight_check_->isChecked();
+    const QColor none(0, 0, 0, 0);
+    // setData emits itemChanged, as a click's edit does.
+    const bool syncing = std::exchange(syncing_table_, true);
+    for (const MetricColumn& column : metric_columns()) {
+        std::vector<QTableWidgetItem*> items;
+        std::vector<std::optional<double>> scores;
+        for (int row = 0; row < distorted_table_->rowCount(); ++row) {
+            if (QTableWidgetItem* item = distorted_table_->item(row, column.column)) {
+                const QVariant score = item->data(score_role);
+                items.push_back(item);
+                scores.push_back(score.isValid() ? std::optional(score.toDouble()) : std::nullopt);
+            }
+        }
+        const std::vector<ScoreMark> marks = on ? metric_definition(column.key).best_and_worst(scores)
+                                                : std::vector<ScoreMark>(items.size(), ScoreMark::none);
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            items[index]->setData(Qt::BackgroundRole, marks[index] == ScoreMark::best    ? theme::color("best")
+                                                      : marks[index] == ScoreMark::worst ? theme::color("worst")
+                                                                                         : none);
+        }
+    }
+    syncing_table_ = syncing;
 }
 
 // ------------------------------------------------------------- the metrics

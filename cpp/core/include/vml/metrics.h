@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace vml {
 
@@ -27,6 +28,9 @@ struct Threshold {
     char comparison;
     double value;
 };
+
+// A score's place among the test videos' (MetricDefinition::best_and_worst).
+enum class ScoreMark { none, best, worst };
 
 // How an FFmpeg metric is switched on in a run's options: by an on/off
 // option, or by a libvmaf feature. One of the two is set.
@@ -55,6 +59,13 @@ struct MetricDefinition {
     // A score as shown: at the metric's precision, infinity as a sign, and
     // no value (or NaN) as a dash.
     std::string format_value(std::optional<double> value) const;
+
+    // Each of `scores` (one per video; none where a video has none) marked
+    // best, worst or neither, by the metric's direction. Scores are compared
+    // as shown (format_value), so scores that show the same number are
+    // equally best or worst. With fewer than two to compare, or all showing
+    // the same, there is neither.
+    std::vector<ScoreMark> best_and_worst(const std::vector<std::optional<double>>& scores) const;
 };
 
 // Every metric, in the order the app shows them.

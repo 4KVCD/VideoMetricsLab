@@ -1,5 +1,6 @@
 #include "vml/metrics.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <stdexcept>
@@ -68,6 +69,32 @@ std::string MetricDefinition::format_value(std::optional<double> value) const {
         return *value > 0 ? "∞" : "−∞";  // U+2212, the minus sign, as the app shows it
     }
     return format_fixed(*value, decimals);
+}
+
+std::vector<ScoreMark> MetricDefinition::best_and_worst(const std::vector<std::optional<double>>& scores) const {
+    std::vector<ScoreMark> marks(scores.size(), ScoreMark::none);
+    std::vector<std::size_t> order;  // the videos with a score, lowest first (equal ones in their order)
+    for (std::size_t index = 0; index < scores.size(); ++index) {
+        if (scores[index] && !std::isnan(*scores[index])) {
+            order.push_back(index);
+        }
+    }
+    if (order.size() < 2) {
+        return marks;
+    }
+    std::stable_sort(order.begin(), order.end(),
+                     [&scores](std::size_t a, std::size_t b) { return *scores[a] < *scores[b]; });
+    const bool lowest_best = direction == MetricDirection::lower_is_better;
+    const std::string best = format_value(scores[lowest_best ? order.front() : order.back()]);
+    const std::string worst = format_value(scores[lowest_best ? order.back() : order.front()]);
+    if (best == worst) {
+        return marks;
+    }
+    for (const std::size_t index : order) {
+        const std::string shown = format_value(scores[index]);
+        marks[index] = shown == best ? ScoreMark::best : shown == worst ? ScoreMark::worst : ScoreMark::none;
+    }
+    return marks;
 }
 
 std::span<const MetricDefinition> metrics() { return registry; }
