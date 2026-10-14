@@ -2499,7 +2499,9 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         info = row_data.video_info
         if column == COL_PATH:
-            return [int(part) if part.isdigit() else part.casefold()
+            # isdecimal, not isdigit: a superscript "²" is a digit to isdigit
+            # and not to int(), nor to \d, which leaves it in the text.
+            return [int(part) if part.isdecimal() else part.casefold()
                     for part in re.split(r"(\d+)", row_data.path.name)]
         if column == COL_INFO:
             return None if info is None else (info.width * info.height, info.fps, info.duration)
