@@ -53,12 +53,14 @@ each other on FFmpeg's route too.
 | `core` | `vml_core`, the engine. No Qt and no operating-system headers, so the same code runs on every system, under the command line and the window. |
 | `platform` | `vml_platform`: what differs between the systems (starting programs, pipes, loading libraries, the console, the PATH, the GPUs), behind headers that are the same on all of them. |
 | `cli` | `vml-cli`, the command line, and its code (`vml_cli`), which the tests use too. |
+| `app` | `VideoMetricsLab`, the window (Qt 6), and its code (`vml_app`), which its tests use too. |
 | `tests/unit` | The tests (GoogleTest). |
+| `tests/app` | The window's tests, run with no screen (Qt's offscreen platform), each in a profile of its own. |
 | `tests/reference` | The Python app's answers, and the script that makes them. |
 | `tests/golden` | The comparison of the two apps' command lines on real videos. |
 | `third_party` | Vendored libraries: see its README. |
 
-The presenters and the window join as they are ported.
+The presenters join as they are ported.
 
 ## The command line
 
@@ -108,6 +110,20 @@ does.
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu
     build\windows\cli\Release\vml-cli.exe devices
 
+## The window
+
+`VideoMetricsLab` is the Python app's window as far as it has been ported
+(`app/main_window.h` says how far): so far its frame and tabs, and the
+Videos tab's list of videos. The reference and the test videos are picked,
+dropped, pasted or reopened from the last session, read off the window's
+thread, and dragged or sorted into order; each row's metrics are ticked in
+its cells or for every row in the headings, and hidden or shown from the
+metrics menu. It reads and writes the Python app's settings.json, and shows
+its text in the user's language from the Python app's catalogs
+(`vmaf_app/translations`), in the light or dark theme. The other tabs, the
+Options panel and runs are still the Python app's alone. Like the command
+line, the program is also the process of its own that GPU code runs in.
+
 ## Building and testing
 
 Each system has a CMake preset. MSVC's Debug builds check every index and
@@ -121,8 +137,14 @@ system yet, are skipped without it, as on GitHub's runners.
 | Linux | GCC 11+, CMake 3.25+, Ninja | the same with `linux` and `linux-release`; `linux-sanitizers` and `linux-sanitizers-debug` add AddressSanitizer and UndefinedBehaviorSanitizer |
 | macOS | Xcode 15+, CMake 3.25+, Ninja | the same with `macos` and `macos-release` |
 
+The window and its tests are built where CMake finds Qt 6.5 or newer; name
+Qt's folder when configuring, as in
+`cmake --preset windows -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64`. On
+Windows the build puts Qt's libraries beside the window and its tests
+(windeployqt), so that they run from the build folder.
+
 GitHub builds and tests every push of the `cpp-port` branch on all three
-(`.github/workflows/cpp.yml`).
+(`.github/workflows/cpp.yml`), without Qt so far.
 
 ## Rules for the code
 

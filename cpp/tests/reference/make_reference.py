@@ -13,10 +13,10 @@ seconds (cvvdp.py, perceptual_vship.py), the pairing of frames by
 timestamp (frame_sync_by_time.py), SSIMULACRA2 and Butteraugli on the CPU
 (perceptual_cpu.py, colour.py), the line that says how far a video is
 (ui/run_line.py), its command line's reading of arguments and patterns and
-its devices command (cli.py), Python's json.dumps, and the saved scores'
-names, files and rules (metric_cache.py), with a comparison folder of them
-it saves in metric_cache/. The Vulkan engine's cases need a GPU that Vulkan
-scores VMAF on.
+its devices command (cli.py), Python's json.dumps, the saved scores' names,
+files and rules (metric_cache.py), with a comparison folder of them it saves
+in metric_cache/, and the window's text in each language (i18n.py). The
+Vulkan engine's cases need a GPU that Vulkan scores VMAF on.
 
 The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
@@ -37,6 +37,7 @@ import contextlib
 import json
 import math
 import random
+import re
 import sys
 from pathlib import Path
 
@@ -287,12 +288,15 @@ def settings_cases() -> dict:
     """Settings.load over files: right, with values of the wrong type (each
     keeps its default), with unknown keys, not an object, not JSON, none.
     parallel_jobs is null where it is the PC's default, which depends on the
-    PC's cores."""
+    PC's cores. And what Settings.save writes for the settings read, where
+    parallel_jobs is not the PC's default."""
     files = {
         "good": json.dumps({"ffmpeg_dir": "D:/tools/ffmpeg", "default_compute_xpsnr": False, "parallel_jobs": 2,
                             "gpu_backend": "vulkan", "hidden_metrics": ["psnr", "ssim"],
-                            "cvvdp_presets": [{"name": "Mine", "settings": {"display": {}}}],
-                            "cvvdp_default_preset": "Mine", "window_width": 1600}),
+                            "cvvdp_presets": [{"name": "Mine", "settings": {"display": {"z": 1, "a": 2}}}],
+                            "cvvdp_default_preset": "Mine", "window_width": 1600,
+                            "remembered_reference": "D:/vidéos/référence 動画.mkv",
+                            "remembered_tests": ["a.mkv", "b.mkv"]}),
         "wrong types": json.dumps({"parallel_jobs": "2", "hidden_metrics": "psnr", "use_cache": 1,
                                    "window_width": 1600.0, "default_vmaf_on_gpu": False, "language": 5,
                                    "cvvdp_presets": ["not an object"], "remembered_tests": ["a.mkv", 3]}),
@@ -311,11 +315,16 @@ def settings_cases() -> dict:
                 path.unlink(missing_ok=True)
                 if text is not None:
                     path.write_text(text, encoding="utf-8")
-                values = dict(vars(Settings.load()))
+                loaded = Settings.load()
+                values = dict(vars(loaded))
+                saved = None
                 if text is None or '"parallel_jobs": 2' not in text:
                     values["parallel_jobs"] = None  # the PC's default
+                else:
+                    assert loaded.save() is None
+                    saved = path.read_text(encoding="utf-8")
                 values["cvvdp_presets"] = json.dumps(values["cvvdp_presets"], separators=(",", ":"))
-                cases.append({"name": name, "file": text, "expected": values})
+                cases.append({"name": name, "file": text, "expected": values, "saved": saved})
         finally:
             settings_module.settings_file = real_file
     return {"cases": cases}
@@ -2041,7 +2050,143 @@ def metric_cache_cases() -> dict:
             "saved": {"folder": SAVED_SCORES.name, "label": "t", "loads": loads}}
 
 
+# ---------------------------------------------------------------------- i18n
+
+#: Language names as Windows gives them (QLocale's uiLanguages).
+I18N_WINDOWS_NAMES = (
+    "de-DE", "de", "fr-CA", "pt-BR", "pt-PT", "es-MX", "zh-Hans-CN", "zh-CN", "zh-SG", "zh-Hant-TW", "zh-TW",
+    "zh-HK", "zh-MO", "zh_TW", "ar-SA", "en-GB", "en-US", "sv-SE", "", "  ", "-", "JA-jp", "ko-KR", "ru-RU",
+    "uk-UA", "pl-PL", "cs-CZ", "hu-HU", "tr-TR", "nl-NL", "it-IT", "id-ID", "vi-VN", "th-TH", "nb-NO",
+)
+
+#: str.format over the format specs the catalogs use, and their edges.
+I18N_FORMATS = (
+    ("{count} done", {"count": 3}),
+    ("{count:,} frames", {"count": 1234567}),
+    ("{count:,}", {"count": 999}),
+    ("{count:,}", {"count": -1234567}),
+    ("{count:,}", {"count": 0}),
+    ("{size:,}", {"size": 12345678901}),
+    ("{fps:.2f} fps", {"fps": 23.976023976023978}),
+    ("{fps:.3f}", {"fps": 59.94005994005994}),
+    ("{x:.1f}", {"x": 0.05}),
+    ("{x:.1f}", {"x": 0.25}),
+    ("{x:.1f}", {"x": -0.04}),
+    ("{x:.0f}", {"x": 2.5}),
+    ("{x:.2f}", {"x": 1e21}),
+    ("{x:.1f}", {"x": 3}),
+    ("{x:g}", {"x": 2.5}),
+    ("{x:g}", {"x": 0.0001}),
+    ("{x:g}", {"x": 0.00001}),
+    ("{x:g}", {"x": 123456.0}),
+    ("{x:g}", {"x": 1234567.0}),
+    ("{x:g}", {"x": 100.0}),
+    ("{x:g}", {"x": 0.0}),
+    ("{x:g}", {"x": -1.5e-7}),
+    ("{x:g}", {"x": 3}),
+    ("{x:,.1f}", {"x": 1234567.891}),
+    ("{x:,.2f}", {"x": -9876.545}),
+    ("{n:>6}", {"n": 42}),
+    ("{n:>6}", {"n": 1234567}),
+    ("{n:>6,}", {"n": 12345}),
+    ("{n:<5}|", {"n": 42}),
+    ("{name:>8}|", {"name": "ab"}),
+    ("{name:<8}|", {"name": "ab"}),
+    ("{name:>3}|", {"name": "abcdef"}),
+    ("{x}", {"x": 2.5}),
+    ("{x}", {"x": 1 / 3}),
+    ("{x}", {"x": 1e16}),
+    ("{x}", {"x": 100.0}),
+    ("{x}", {"x": 1e-7}),
+    ("{x}", {"x": 12}),
+    ("{{literal}} {x}", {"x": 1}),
+    ("{a} and {b}", {"a": "x", "b": "y"}),
+    ("{a}{a}", {"a": "z"}),
+    ("Ünïcödé {name} 動画 }}", {"name": "ок"}),
+)
+
+#: The counts each counted text is shown for.
+I18N_COUNTS = (0, 1, 2, 3, 5, 11, 21, 22, 101, 1001)
+
+#: The catalogs whose every text is checked, one of each kind: two, three
+#: and six plural forms, right to left, ideographic full stops, no spaces.
+I18N_LANGUAGES = ("de", "ru", "ar", "ja", "zh_CN", "th")
+
+
+def _i18n_values(text: str) -> dict:
+    """A value for each of `text`'s fields, of the kind its format spec
+    takes: a number with a fraction for "f" and "g", a whole number for
+    other specs, and text where there is none."""
+    import string
+
+    values = {}
+    for _, field, spec, _ in string.Formatter().parse(text):
+        if not field or field in values:
+            continue
+        values[field] = 1234.5678 if spec and spec[-1] in "fg" else 1234567 if spec else f"<{field}>"
+    return values
+
+
+def _i18n_message(template: str, values: dict | None = None) -> str:
+    """`template` with each {field} filled in, as the engine writes it."""
+    return re.sub(r"\{(\w+)\}", lambda match: (values or {}).get(match[1], f"V{match[1]}"), template)
+
+
+def i18n_cases() -> dict:
+    """The window's text as vmaf_app/i18n.py gives it: the translation for
+    Windows' language names, each language's plural forms, str.format over
+    the format specs the catalogs use, and in I18N_LANGUAGES the texts with
+    fields, the counted texts, and the engine's messages (one of each
+    template, and the ways the window meets them: trimmed, with "..." for
+    "…", one inside another, several lines)."""
+    from scripts.i18n_catalog import keys
+    from vmaf_app import i18n
+
+    strings, plurals = keys()
+    counts = [*range(230), 1000, 1001, 1002, 1011, 1012, 1021, 1100, 1111, 10**6, 10**6 + 1, 2**31 + 1]
+    fielded = sorted(key for key in strings if "{" in key)
+    counted = sorted(plurals)
+    templates = list(i18n.MESSAGE_TEMPLATES)
+    plain = next(template for template in templates if "{" not in template)
+    messages = [_i18n_message(template) for template in templates]
+    messages += [i18n._bare(message) for message in messages if i18n._bare(message) != message]
+    messages += [message[:-1] + "..." for message in messages if message.endswith("…")]
+    messages += [_i18n_message(template, {field: plain for field in ("error", "reason", "detail")})
+                 for template in templates if re.search(r"\{(error|reason|detail)\}", template)]
+    messages += ["\n".join([messages[0], "", messages[1], "  ", "Not a message the window knows."]),
+                 "Ready.", "", "Not a message the window knows."]
+
+    languages = {}
+    for code in I18N_LANGUAGES:
+        assert i18n.set_language(code) == code
+        languages[code] = {
+            "fielded": [i18n.tr(key, **_i18n_values(key)) for key in fielded],
+            "counted": [[i18n.ntr(key, plurals[key], count, **{field: value for field, value in
+                                                                  _i18n_values(key).items() if field != "count"})
+                         for count in I18N_COUNTS] for key in counted],
+            "messages": [i18n.tr_message(message) for message in messages],
+        }
+    i18n.set_language("en")
+    return {
+        "windows": {name: i18n.language_for(name) for name in I18N_WINDOWS_NAMES},
+        "counts": counts,
+        # The form for each count, one digit each.
+        "plural": {code: "".join(str(i18n.plural_index(code, count)) for count in counts) for code in i18n.LANGUAGES},
+        "formats": [{"text": text, "values": values, "formatted": text.format(**values)}
+                    for text, values in I18N_FORMATS],
+        "fielded": [{"text": key, "values": _i18n_values(key)} for key in fielded],
+        "counted": [{"singular": key, "plural": plurals[key],
+                     "values": {field: value for field, value in _i18n_values(key).items() if field != "count"}}
+                    for key in counted],
+        "counted_counts": list(I18N_COUNTS),
+        "messages": messages,
+        "languages": languages,
+    }
+
+
 if __name__ == "__main__":
+    # Its texts as they are, not escaped: the file is a third the size.
+    (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     write("metric_cache.json", metric_cache_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())

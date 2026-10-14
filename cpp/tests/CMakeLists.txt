@@ -55,3 +55,31 @@ add_dependencies(vml_tests vml_test_child vml_test_library vml-cli)
 
 include(GoogleTest)
 gtest_discover_tests(vml_tests)
+
+# The window's tests, where the window is built (app/CMakeLists.txt). They
+# run with no screen, each in a profile of its own (app/main.cpp).
+if(TARGET vml_app)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_executable(vml_app_tests
+        app/i18n_test.cpp
+        app/main.cpp
+        app/main_window_test.cpp
+        unit/reference.cpp
+        unit/test_videos.cpp
+    )
+    target_include_directories(vml_app_tests PRIVATE unit)
+    target_link_libraries(vml_app_tests PRIVATE vml_app Qt6::Test vml_compile_options nlohmann_json gtest)
+    target_compile_definitions(vml_app_tests PRIVATE
+        VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
+        VML_CLI="$<TARGET_FILE:vml-cli>")  # the program isolated work runs in
+    add_dependencies(vml_app_tests vml-cli)
+    if(WIN32)
+        # Qt beside the tests, with the platform they run on; before the
+        # tests are listed, which starts them.
+        add_custom_command(TARGET vml_app_tests POST_BUILD
+            COMMAND Qt6::windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw
+                    --no-compiler-runtime --include-plugins qoffscreen $<TARGET_FILE:vml_app_tests>
+            VERBATIM)
+    endif()
+    gtest_discover_tests(vml_app_tests)
+endif()

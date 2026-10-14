@@ -1,0 +1,38 @@
+// How probe results and scores are rendered as text and colour in the table
+// (the Python app's vmaf_app/ui/formatting.py): data in, something to show
+// out, so the wording and thresholds are in one place.
+#pragma once
+
+#include <QColor>
+#include <QString>
+
+#include "vml/cvvdp.h"
+#include "vml/video.h"
+
+namespace vml::app {
+
+// Shown wherever a value genuinely doesn't exist, as opposed to being 0.
+inline const QString not_computed = QStringLiteral("N/A");
+
+// The one-line summary shown in the Media info column: "1920x1080, 23.98fps,
+// hevc".
+QString media_info_string(const VideoInfo& info);
+
+// Bitrate at a human scale: Mb/s once it is over a megabit, else kb/s; "≈"
+// when it is the whole file's, the soundtrack included (bitrate_note).
+QString bitrate_string(const VideoInfo& info);
+
+// The Bitrate cell's tooltip: what the figure is when it is not the video's
+// own.
+QString bitrate_note(const VideoInfo& info);
+
+// A soft background tint by VMAF band, so a column of encodes can be scanned
+// at a glance: ~95+ is visually transparent, 90-95 good, below that is where
+// artefacts show.
+QColor vmaf_band_colour(double mean);
+
+// A CVVDP preset's name as shown: a built-in one's translated, the user's own
+// as they wrote it. The name itself stays the identifier.
+QString preset_label(const CvvdpPreset& preset);
+
+}  // namespace vml::app

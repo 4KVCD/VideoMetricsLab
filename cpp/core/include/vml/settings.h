@@ -86,6 +86,17 @@ struct Settings {
     // Where settings.json is: the user's home/.videometricslab.
     static std::filesystem::path file();
 
+    // Saves the settings as the Python app does (json.dumps(asdict(self),
+    // indent=2)): every setting, in its order. The file is written whole
+    // beside the old one, then put in its place, so a crash or a full disk
+    // part-way through never leaves a cut-off file. Returns nothing on
+    // success, or a message to show the user.
+    std::optional<std::string> save() const;
+    // save() to a given file, for tests.
+    std::optional<std::string> save_to(const std::filesystem::path& file) const;
+    // The text save() writes.
+    std::string text() const;
+
     // The folders, or nothing when the setting is empty.
     std::optional<std::filesystem::path> ffmpeg_dir_path() const;
     std::optional<std::filesystem::path> cache_dir_path() const;

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "reference.h"
+#include "test_videos.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -92,6 +93,27 @@ TEST(Settings, LoadsSettingsJsonAsThePythonAppDoes) {
         }
     }
     std::filesystem::remove(file);
+}
+
+// The settings read are saved as the Python app saves them, to the byte:
+// every setting in its order, indented as json.dumps(indent=2) indents,
+// text past ASCII escaped, and the CVVDP presets' keys in their order.
+TEST(Settings, SavesSettingsJsonAsThePythonAppDoes) {
+    const nlohmann::json reference = test::load_reference("settings.json");
+    const test::Folder folder;
+    int saved = 0;
+    for (const nlohmann::json& item : reference["cases"]) {
+        if (item["saved"].is_null()) {
+            continue;
+        }
+        SCOPED_TRACE(item["name"].get<std::string>());
+        std::ofstream(folder / "read.json", std::ios::binary) << item["file"].get<std::string>();
+        const Settings settings = Settings::load_from(folder / "read.json");
+        ASSERT_EQ(settings.save_to(folder / "settings.json"), std::nullopt);
+        EXPECT_EQ(platform::read_file(folder / "settings.json"), item["saved"].get<std::string>());
+        ++saved;
+    }
+    EXPECT_GT(saved, 0);
 }
 
 }  // namespace

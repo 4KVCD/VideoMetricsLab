@@ -1,6 +1,6 @@
-# VideoMetricsLab in C++: the engine (vml_core), the command line (vml-cli)
-# and their tests; the window joins when it is ported. README.md describes
-# the layout, how to build, and the rules the code follows.
+# VideoMetricsLab in C++: the engine (vml_core), the command line (vml-cli),
+# the window (VideoMetricsLab, being ported) and their tests. README.md
+# describes the layout, how to build, and the rules the code follows.
 cmake_minimum_required(VERSION 3.25)
 # C only for miniz (third_party/miniz): the app itself is C++.
 project(VideoMetricsLab VERSION 3.0.0 LANGUAGES C CXX)
@@ -43,6 +43,7 @@ set_target_properties(vml_miniz PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(platform)
 add_subdirectory(core)
 add_subdirectory(cli)
+add_subdirectory(app)
 
 if(VML_BUILD_TESTS)
     enable_testing()
